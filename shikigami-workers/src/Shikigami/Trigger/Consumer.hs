@@ -619,6 +619,8 @@ prepareEventHits directory receivedAt agents payloadValue event =
                 parentRunWorkflowId = Nothing,
                 delegationDepth = Nothing,
                 lineage = [AgentName (agent ^. #name)],
+                executionRequest = Nothing,
+                executionPermissions = Nothing,
                 executionRootId = Nothing,
                 delegationBudgetId = Nothing
               }

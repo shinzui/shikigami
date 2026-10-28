@@ -36,6 +36,10 @@ Allocation capacity is held in its parent and cannot be widened or reduced below
 spent or held work. Nested allocations retain one root, and ancestor cutoffs still
 apply. Known completion releases active work, retains attempt counters and records
 measured usage. Unknown completion holds capacity until explicit reconciliation.
+The selection integration adds a terminal partial settlement: known billing
+dimensions settle and active work stops, while missing token/cost dimensions stay
+held and unknown. Final reconciliation preserves earlier known facts without
+counting attempts or active release twice. See [ADR 0052](0052-assignments-pin-whole-run-selection-and-account-every-provider-attempt.md).
 Neither lease expiry nor cancellation is a refund. Overage remains a fact and
 stops subsequent admission. Result recording remains possible after cancellation,
 cutoff and policy revision changes. Transaction-level hooks allow the execution

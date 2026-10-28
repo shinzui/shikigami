@@ -5,6 +5,7 @@ module Shikigami.Store.ExecutionResources
     reserveOperation,
     reserveOperationsTx,
     beginAttempt,
+    beginAttemptTx,
     settleAttempt,
     settleAttemptTx,
     reconcileAttempt,
@@ -88,7 +89,10 @@ reserveOperationsTx root expected requests now = do
                   go next Accepted rest
 
 beginAttempt :: (Store :> es) => ExecutionRootId -> Integer -> AttemptRequest -> UTCTime -> Eff es (Either ResourceError Admission)
-beginAttempt root expected request now = runTransaction $ withRoot root \state -> do
+beginAttempt root expected request now = runTransaction (beginAttemptTx root expected request now)
+
+beginAttemptTx :: ExecutionRootId -> Integer -> AttemptRequest -> UTCTime -> Transaction (Either ResourceError Admission)
+beginAttemptTx root expected request now = withRoot root \state -> do
   existing <- readAttempt root request.attemptId
   case existing of
     Just old | old.request == request -> pure (Right AlreadyAccepted)
@@ -133,8 +137,8 @@ recordSettlement reconcile root attemptId outcome = withRoot root \state -> do
     Nothing -> pure (Left AttemptMissing)
     Just attempt
       | attempt.outcome == Just outcome -> pure (Right AlreadyAccepted)
-      | isJust attempt.outcome && not (reconcile && wasUnknown attempt) -> pure (Left SettlementConflict)
-      | reconcile && not (wasUnknown attempt) -> pure (Left SettlementConflict)
+      | isJust attempt.outcome && not (reconcile && wasUncertain attempt) -> pure (Left SettlementConflict)
+      | reconcile && not (wasUncertain attempt) -> pure (Left SettlementConflict)
       | otherwise -> case outcome of
           UnknownUsage reason
             | Text.null reason || Text.length reason > 512 -> pure (Left (InvalidResourceRequest "unknown reason must contain 1..512 characters"))
@@ -148,30 +152,60 @@ recordSettlement reconcile root attemptId outcome = withRoot root \state -> do
               Nothing -> pure (Left OperationMissing)
               Just operationRequest -> do
                 scope <- loadScope root state operationRequest.allocationId
-                case scope >>= \(_, _, usage) -> validateQuantities (add state.known measured) >> settleUsage attempt.request.quantities measured usage of
+                let (reservation, newlyMeasured) = case attempt.outcome of
+                      Just (PartialUsage _ missing _) -> (Map.filterWithKey (\d _ -> d `elem` missing) attempt.request.quantities, Map.filterWithKey (\d _ -> d `elem` missing) measured)
+                      _ -> (attempt.request.quantities, measured)
+                    preservePartial =
+                      validateQuantities measured >> unless (all (`elem` [Tokens, CostMicroUsd]) (Map.keys measured)) (Left SettlementConflict) >> case attempt.outcome of
+                        Just (PartialUsage previous missing _) -> do
+                          unless (all (\(d, n) -> Map.lookup d measured == Just n) (Map.toList previous) && all (`Map.member` measured) missing) (Left SettlementConflict)
+                        _ -> Right ()
+                case scope >>= \(_, _, usage) -> preservePartial >> validateQuantities (add state.known newlyMeasured) >> settleUsage reservation newlyMeasured usage of
                   Left err -> pure (Left err)
                   Right usage -> do
                     next <- saveScopeUsage root state operationRequest.allocationId usage
-                    let exceeded = any (\(d, n) -> Map.member d attempt.request.quantities && n > Map.findWithDefault 0 d attempt.request.quantities) (Map.toList measured)
-                        counters = Map.filterWithKey (\d _ -> d `elem` [ModelAttempts, ToolAttempts]) attempt.request.quantities
+                    let exceeded = any (\(d, n) -> Map.member d reservation && n > Map.findWithDefault 0 d reservation) (Map.toList newlyMeasured)
+                        counters = Map.filterWithKey (\d _ -> d `elem` [ModelAttempts, ToolAttempts]) reservation
                         recorded =
                           next
                             & #active
                             .~ state.active
-                            - 1
+                            - (if wasPartial attempt then 0 else 1)
                               & #unknown
                               .~ state.unknown
-                            - (if wasUnknown attempt then 1 else 0)
+                            - (if wasUncertain attempt then 1 else 0)
                               & #known
-                              .~ add state.known (add counters measured)
+                              .~ add state.known (add counters newlyMeasured)
                               & #overage
                               .~ (state.overage || exceeded)
                     writeAttempt root (Attempt attempt.request (Just outcome))
                     saveRoot root recorded
                     pure (Right Accepted)
+          PartialUsage measured missing reason
+            | null missing || any (`notElem` [Tokens, CostMicroUsd]) missing || any (`Map.member` measured) missing || Text.null reason || Text.length reason > 512 -> pure (Left (InvalidResourceRequest "partial usage requires disjoint known measurements, unknown billing dimensions and a bounded reason"))
+            | otherwise -> do
+                operation <- readOperation root attempt.request.operationId
+                case operation of
+                  Nothing -> pure (Left OperationMissing)
+                  Just operationRequest -> do
+                    scope <- loadScope root state operationRequest.allocationId
+                    let knownReservation = Map.filterWithKey (\d _ -> d `notElem` missing) attempt.request.quantities
+                    case scope >>= \(_, _, usage) -> validateQuantities (add state.known measured) >> settleUsage knownReservation measured usage of
+                      Left err -> pure (Left err)
+                      Right usage -> do
+                        next <- saveScopeUsage root state operationRequest.allocationId usage
+                        let counters = Map.filterWithKey (\d _ -> d `elem` [ModelAttempts, ToolAttempts]) knownReservation
+                            exceeded = any (\(d, n) -> Map.member d knownReservation && n > Map.findWithDefault 0 d knownReservation) (Map.toList measured)
+                        writeAttempt root (Attempt attempt.request (Just outcome))
+                        saveRoot root (next & #active .~ (state.active - 1) & #unknown .~ (state.unknown + 1) & #known .~ add state.known (add counters measured) & #overage .~ (state.overage || exceeded))
+                        pure (Right Accepted)
   where
-    wasUnknown attempt = case attempt.outcome of
+    wasUncertain attempt = case attempt.outcome of
       Just (UnknownUsage _) -> True
+      Just (PartialUsage _ _ _) -> True
+      _ -> False
+    wasPartial attempt = case attempt.outcome of
+      Just (PartialUsage _ _ _) -> True
       _ -> False
 
 -- | Creating an allocation holds its entire finite ceiling in its parent.

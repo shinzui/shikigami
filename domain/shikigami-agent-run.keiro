@@ -15,6 +15,9 @@ workflow AgentRun
     step lookup-agent -> AgentDecl
     step resolve-profile -> ProfileResolution
     step resolve-capability-overlays -> CapabilityOverlayResolution
+    patch shikigami-execution-selection-v1 {
+      step resolve-execution-selection -> ExecutionSelectionResolution
+    }
     step resolve-approval-policy -> ApprovalPolicySnapshot
     step open-session -> SessionId
     step recall -> RecalledLearnings

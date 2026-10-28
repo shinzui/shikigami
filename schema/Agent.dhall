@@ -104,6 +104,8 @@ let RouterPolicy =
       , onAmbiguous : AmbiguousPolicy
       }
 
+let Execution = { defaultAlias : Text, permittedAliases : List Text }
+
 let Agent =
       { Type =
           { name : Text
@@ -112,6 +114,7 @@ let Agent =
           , behavior : Behavior
           , sinks : List Sink
           , delegates : List Text
+          , execution : Optional Execution
           , decisionModels : List Text
           , delegationBudget : Optional Natural
           , sanctionedProfile : Optional ProfileRequirement.Type
@@ -126,6 +129,7 @@ let Agent =
           { description = ""
           , sinks = [] : List Sink
           , delegates = [] : List Text
+          , execution = None Execution
           , decisionModels = [] : List Text
           , delegationBudget = None Natural
           , sanctionedProfile = None ProfileRequirement.Type
@@ -155,5 +159,6 @@ in  { SignalType
     , NoMatchPolicy
     , AmbiguousPolicy
     , RouterPolicy
+    , Execution
     , Agent
     }

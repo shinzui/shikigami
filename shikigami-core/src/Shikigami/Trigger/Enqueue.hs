@@ -83,6 +83,8 @@ runJobFromEnvelopeWithIdentity resolvedOccurredAt identity decl env =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [AgentName ((.name) decl)],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -167,6 +169,8 @@ addressedRunJob now identity agent route payload key =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [AgentName agent],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -193,6 +197,8 @@ enqueueScheduledRun pool identity agent dueAt =
         parentRunWorkflowId = Nothing,
         delegationDepth = Nothing,
         lineage = [AgentName agent],
+        executionRequest = Nothing,
+        executionPermissions = Nothing,
         executionRootId = Nothing,
         delegationBudgetId = Nothing
       }

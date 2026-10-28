@@ -50,6 +50,14 @@ Implementation baseline: `4ff109c7f6e9156fc948046e3e2aca3b40978e70`.
 
 ## Surprises & Discoveries
 
+2026-10-27 EP-2 integration refinement: terminal transport can be known while
+invoice usage is unavailable. `PartialUsage` releases active capacity and settles
+known dimensions without refunding unknown billing. Reconciliation preserves
+earlier facts and does not spend counters twice. `beginAttemptTx` exposes atomic
+attempt admission to the selection owner; the root-first lock order is unchanged.
+Evidence and the owning change are tracked in
+[plan 82](82-pin-governed-execution-settings-for-agent-assignments.md).
+
 
 The generated queue admits only required structural fields, including nullable ones. Adding a root field would reject retained jobs. The application now uses the public Keiro codec with version 2 and a v1 upcaster, carrying resource metadata inside the existing opaque trigger payload and restoring the original domain input on decode. Literal v1 fixtures remain accepted and cannot grant enrollment. See FRIC-9 in `docs/friction-log/`. The current Hackage keiro-dsl release (0.22.0.0, upstream tag verified) retains this required-field policy; no dependency bound changed.
 

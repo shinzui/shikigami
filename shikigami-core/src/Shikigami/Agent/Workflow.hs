@@ -99,7 +99,7 @@ import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
-import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, renderProfileResolutionError)
+import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile (..), renderProfileResolutionError)
 import Shikigami.Behavior.Error (RunError, TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Behavior.Provider (ProfileViolation, constrainBehaviorEnv, renderProfileViolation)
 import Shikigami.Behavior.Run (BehaviorEnv (..), BehaviorInput (..), behaviorModelId, runBehavior, runBehaviorAttemptWith, withCapabilityTools)
@@ -112,10 +112,15 @@ import Shikigami.Capability.Provider
     withCapabilityOverlays,
   )
 import Shikigami.Decision.Contract (renderDecisionFailure)
+import Shikigami.Decision.Contract qualified as DecisionContract
 import Shikigami.Decision.Evidence qualified as DecisionEvidence
+import Shikigami.Decision.ModelCatalog qualified as ModelCatalog
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
+import Shikigami.Execution.Request (ExecutionPolicy (..), ExecutionRequest (..))
 import Shikigami.Execution.Resources (ResourceError)
+import Shikigami.Execution.Selection qualified as Selection
+import Shikigami.Execution.SelectionRuntime qualified as SelectionRuntime
 import Shikigami.Flow qualified as Flow
 import Shikigami.Flow.Acknowledgement
   ( ApprovalAcknowledgementFailed (..),
@@ -375,10 +380,81 @@ runProfiledAgent ::
   Maybe ResolvedProfile ->
   ResolvedCapabilitySet ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
-runProfiledAgent deps job decl resolvedProfile resolvedOverlays =
-  case behaviorEnvForProfile decl resolvedProfile ((.behaviorEnv) deps) of
-    Left violation -> pure (Left (PermanentAgentRunFailure (renderProfileViolation violation)))
-    Right activeBehaviorEnv -> runProfiledAgentWith deps activeBehaviorEnv resolvedProfile resolvedOverlays job decl
+runProfiledAgent deps job decl resolvedProfile resolvedOverlays = do
+  enabled <- Workflow.patch (PatchId "shikigami-execution-selection-v1")
+  selected <-
+    if enabled
+      then runStep deps (StepName "resolve-execution-selection") do
+        now <- liftIO getCurrentTime
+        pure (resolveRunSelection deps job decl resolvedProfile now)
+      else pure (Right Nothing)
+  case selected of
+    Left refusal -> pure (Left (PermanentAgentRunFailure (selectionRefusalDetail deps job decl resolvedProfile Nothing refusal)))
+    Right Nothing -> runWith ((.behaviorEnv) deps) (if enabled then job & #executionPermissions .~ inheritedPermissions decl job else job)
+    Right (Just selection) -> do
+      built <- liftIO (SelectionRuntime.buildExecutionEnv (selectionRuntime deps job resolvedProfile) selection)
+      case built of
+        Left refusal -> pure (Left (PermanentAgentRunFailure (selectionRefusalDetail deps job decl resolvedProfile (Just selection) refusal)))
+        Right active ->
+          let permissions = case selection.source of
+                Selection.DeclaredAlias -> Just selection.permittedAliases
+                Selection.ProcessDefault -> inheritedPermissions decl job
+           in runWith active (job & #executionPermissions .~ permissions)
+  where
+    runWith active selectedJob = case behaviorEnvForProfile decl resolvedProfile active of
+      Left violation -> pure (Left (PermanentAgentRunFailure (renderProfileViolation violation)))
+      Right constrained -> runProfiledAgentWith deps constrained resolvedProfile resolvedOverlays selectedJob decl
+
+resolveRunSelection :: AgentRunDeps -> RunJob -> AgentDecl -> Maybe ResolvedProfile -> UTCTime -> Either Selection.ExecutionSelectionFailure (Maybe Selection.ExecutionSelection)
+resolveRunSelection deps job decl profile now
+  | usesDefaultModel decl = Just <$> Selection.resolveExecutionSelection (SelectionRuntime.assignmentIdFor ((runJobWorkflowId job).unWorkflowId)) deps.decisions.catalog (Selection.defaultBinding deps.behaviorEnv.model deps.behaviorEnv.options) decl.execution job.executionRequest job.executionPermissions profile job.executionRootId now
+  | isJust job.executionRequest = Left Selection.ExecutionBehaviorUnsupported
+  | otherwise = Right Nothing
+
+usesDefaultModel :: AgentDecl -> Bool
+usesDefaultModel decl = case decl.behavior of
+  Skill {} -> null decl.delegates || isJust decl.routing
+  Flow {name} -> maybe True (.requiresDefaultModel) (Flow.lookupFlow name)
+  _ -> isJust decl.routing
+
+inheritedPermissions :: AgentDecl -> RunJob -> Maybe [Text]
+inheritedPermissions decl job =
+  foldr
+    intersect
+    Nothing
+    [ job.executionPermissions,
+      job.executionRequest >>= (.permittedAliases),
+      (.permittedAliases) <$> decl.execution
+    ]
+  where
+    intersect Nothing current = current
+    intersect (Just allowed) Nothing = Just allowed
+    intersect (Just allowed) (Just current) = Just (filter (`elem` allowed) current)
+
+selectionRefusalDetail :: AgentRunDeps -> RunJob -> AgentDecl -> Maybe ResolvedProfile -> Maybe Selection.ExecutionSelection -> Selection.ExecutionSelectionFailure -> Text
+selectionRefusalDetail deps job decl profile selected refusal =
+  boundedBehaviorDetail
+    (Text.pack (show refusal) <> " model " <> model <> maybe "" (\p -> " profile " <> Text.pack (show p.ref)) profile)
+  where
+    model = case selected of
+      Just pinned -> pinned.descriptor.modelId
+      Nothing -> case decl.execution of
+        Nothing -> behaviorModelId deps.behaviorEnv
+        Just permission ->
+          let alias = fromMaybe permission.defaultAlias (job.executionRequest >>= (.alias))
+           in maybe alias (.modelId) (find (\d -> d.alias == DecisionContract.ModelAlias alias) (ModelCatalog.catalogDescriptors deps.decisions.catalog))
+
+selectionRuntime :: AgentRunDeps -> RunJob -> Maybe ResolvedProfile -> SelectionRuntime.SelectionRuntime
+selectionRuntime deps job profile =
+  SelectionRuntime.SelectionRuntime
+    { catalog = deps.decisions.catalog,
+      profile,
+      providers = deps.decisions.providers,
+      baseEnv = deps.behaviorEnv,
+      runId = runCorrelationId (jobIdempotencyKey job),
+      authorize = SelectionRuntime.currentExecutionAuthority (Directory.identityLifecycleAdmission (depsDirectory deps) job.identity) profile deps.resolveRunProfile,
+      transact = SelectionRuntime.selectionTransaction deps.appEnv deps.deliveryPool
+    }
 
 behaviorEnvForProfile ::
   AgentDecl ->
@@ -964,7 +1040,7 @@ runDeclaredSupervisor deps decl@AgentDecl {delegates = delegateTargets} currentS
     )
 
 delegateContext :: AgentRunDeps -> AgentDecl -> SessionId -> RunJob -> DelegateCtx
-delegateContext deps decl currentSession RunJob {agentName, identity, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, executionRootId} =
+delegateContext deps decl currentSession RunJob {agentName, identity, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, executionRootId, executionPermissions} =
   DelegateCtx
     { depth = fromMaybe (DelegationDepth 0) delegationDepth,
       identity,
@@ -974,6 +1050,7 @@ delegateContext deps decl currentSession RunJob {agentName, identity, parentSess
       lineage = if null lineage then [agentName] else lineage,
       delegationBudgetId,
       executionRootId,
+      executionPermissions,
       budgetLimit = fromMaybe (depsDelegationBudget deps) (declDelegationBudget decl)
     }
 

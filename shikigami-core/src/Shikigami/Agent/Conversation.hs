@@ -12,11 +12,13 @@ module Shikigami.Agent.Conversation
     deliverConversationInputFromApp,
     runConversationTurn,
     runConversationTurnWithIdentity,
+    runConversationTurnWithExecution,
   )
 where
 
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (parseMaybe)
 import Data.Bifunctor (first)
 import Data.Foldable (traverse_)
@@ -29,11 +31,13 @@ import Data.Time (NominalDiffTime, addUTCTime)
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (Error, runErrorNoCallStack)
+import Hasql.Pool (Pool)
 import Keiro.Command (defaultRunCommandOptions, runCommandWithSqlEvents)
 import Keiro.Projection (InlineProjection (InlineProjection, apply))
 import Keiro.Timer (TimerId (..), TimerRequest (..), TimerRow (..), scheduleTimerOnceTx)
 import Keiro.Workflow
-  ( StepName (..),
+  ( PatchId (..),
+    StepName (..),
     Workflow,
     WorkflowId (..),
     WorkflowJournalEvent (StepRecorded),
@@ -47,6 +51,7 @@ import Keiro.Workflow
     currentRunGeneration,
     currentWorkflow,
     loadStepIndex,
+    patch,
     restoreSeed,
     runWorkflowWith,
     step,
@@ -81,24 +86,36 @@ import Shikigami.Agent.Principal
   )
 import Shikigami.Agent.Run (renderLearning)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
-import Shikigami.Behavior.Run (BehaviorEnv, runBehaviorAttempt, triggerOnly)
+import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
+import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile (..), renderProfileResolutionError)
+import Shikigami.Behavior.Run (BehaviorEnv (..), runBehaviorAttempt, triggerOnly)
 import Shikigami.DanwaConversation.Generated.WorkflowRuntime qualified as ConversationGenerated
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
+import Shikigami.Execution.Request (ExecutionContext (..))
+import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.Selection qualified as Selection
+import Shikigami.Execution.SelectionRuntime qualified as SelectionRuntime
+import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Integration.Danwa (AddressedMessage (..))
+import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (DanwaConfig)
 import Shikigami.Sink.GrantStore (GrantSource)
 import Shikigami.Sink.Types (DanwaTarget (..), SinkOutcome (Delivered, Enqueued), SinkResult (..))
+import Shikigami.Store.ExecutionResources qualified as Resources
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Text.Read (readMaybe)
 
 data ConversationEnv = ConversationEnv
   { appEnv :: !AppEnv,
     behaviorEnv :: !BehaviorEnv,
+    decisions :: !FlowDecision.DecisionServices,
+    deliveryPool :: !(Maybe Pool),
+    resolveRunProfile :: !(ProfileId -> Maybe ProfileVersion -> IO (Either ProfileResolutionError ResolvedProfile)),
     runTimeout :: !NominalDiffTime,
     -- | How long a parked conversation waits for its next human message before
     -- ending its epoch. This is the /between-turns/ window; 'runTimeout' bounds
@@ -154,10 +171,17 @@ conversationTurnFailureDetail = \case
 data ConversationStart = ConversationStart
   { agentName :: !AgentName,
     identity :: !AgentIdentity,
-    initialMessage :: !AddressedMessage
+    initialMessage :: !AddressedMessage,
+    executionContext :: !(Maybe ExecutionContext)
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+
+instance ToJSON ConversationStart where
+  toJSON value = omitExecutionContext value.executionContext (Aeson.genericToJSON Aeson.defaultOptions value)
+
+instance FromJSON ConversationStart where
+  parseJSON = Aeson.withObject "ConversationStart" \fields ->
+    Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (if KeyMap.member "executionContext" fields then fields else KeyMap.insert "executionContext" Aeson.Null fields))
 
 data RecordedTurn = RecordedTurn
   { turnId :: !Text,
@@ -204,10 +228,17 @@ data ConversationSeed = ConversationSeed
     identity :: !AgentIdentity,
     turnsSoFar :: !Int,
     pendingMessage :: !(Maybe AddressedMessage),
-    lastMessageId :: !(Maybe Text)
+    lastMessageId :: !(Maybe Text),
+    executionContext :: !(Maybe ExecutionContext)
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON)
+
+instance ToJSON ConversationSeed where
+  toJSON value = omitExecutionContext value.executionContext (Aeson.genericToJSON Aeson.defaultOptions value)
+
+omitExecutionContext :: Maybe ExecutionContext -> Aeson.Value -> Aeson.Value
+omitExecutionContext Nothing (Aeson.Object fields) = Aeson.Object (KeyMap.delete "executionContext" fields)
+omitExecutionContext _ value = value
 
 -- The initial seed is an explicit unbound value, not an ingress agent name.
 -- Retain its bytes while requiring every field and rejecting an empty name in
@@ -219,10 +250,11 @@ instance FromJSON ConversationSeed where
     turnsSoFar <- obj Aeson..: "turnsSoFar"
     pendingMessage <- obj Aeson..: "pendingMessage"
     lastMessageId <- obj Aeson..: "lastMessageId"
-    let initial = identity == UnresolvedLegacyIdentity && turnsSoFar == 0 && pendingMessage == Nothing && lastMessageId == Nothing
+    executionContext <- obj Aeson..:? "executionContext"
+    let initial = identity == UnresolvedLegacyIdentity && turnsSoFar == 0 && pendingMessage == Nothing && lastMessageId == Nothing && executionContext == Nothing
     if Text.null rawName && not initial
       then fail "a carried conversation seed requires an agent name"
-      else pure ConversationSeed {agentName = AgentName rawName, identity, turnsSoFar, pendingMessage, lastMessageId}
+      else pure ConversationSeed {agentName = AgentName rawName, identity, turnsSoFar, pendingMessage, lastMessageId, executionContext}
 
 -- | The seed generation 0 starts from, before any rotation has happened.
 emptyConversationSeed :: ConversationSeed
@@ -232,7 +264,8 @@ emptyConversationSeed =
       identity = UnresolvedLegacyIdentity,
       turnsSoFar = 0,
       pendingMessage = Nothing,
-      lastMessageId = Nothing
+      lastMessageId = Nothing,
+      executionContext = Nothing
     }
 
 -- | The literal lives in @domain\/shikigami-conversation.keiro@ and reaches
@@ -289,13 +322,23 @@ runConversationTurn env decl msg = do
     Right identity -> runConversationTurnWithIdentity env decl identity msg
 
 runConversationTurnWithIdentity :: ConversationEnv -> AgentDecl -> AgentIdentity -> AddressedMessage -> IO (Either ConversationTurnFailure ConversationTurnResult)
-runConversationTurnWithIdentity env decl identity msg@AddressedMessage {conversationId = msgConversationId} = do
+runConversationTurnWithIdentity env decl identity = runConversationTurnWithExecution env decl identity Nothing
+
+runConversationTurnWithExecution :: ConversationEnv -> AgentDecl -> AgentIdentity -> Maybe ExecutionContext -> AddressedMessage -> IO (Either ConversationTurnFailure ConversationTurnResult)
+runConversationTurnWithExecution env decl identity executionContext msg@AddressedMessage {conversationId = msgConversationId} = do
   -- Which epoch is live is resolved once, before anything addresses the
   -- conversation, because the workflow id depends on it.
   epochE <- runKioku env (SessionIndex.lookupConversationEpoch msgConversationId)
   case epochE of
     Left err -> pure (Left (ConversationTransientFailure (Text.pack (show err))))
     Right epoch -> do
+      compatible <- compatibleExecutionContext env epoch msg executionContext
+      case compatible of
+        Left refusal -> pure (Left refusal)
+        Right False -> pure (Left (ConversationPermanentFailure "conversation execution context is pinned for its epoch"))
+        Right True -> drive epoch
+  where
+    drive epoch = do
       delivered <- deliverConversationInput env msg
       if delivered
         then driveConversationTurn env epoch msg conversationDriveBudget Nothing
@@ -314,7 +357,29 @@ runConversationTurnWithIdentity env decl identity msg@AddressedMessage {conversa
                         ("conversation is mid-turn; redelivering " <> (.messageId) msg)
                     )
                 )
-            else driveConversationTurn env epoch msg conversationDriveBudget (Just ConversationStart {agentName = AgentName ((.name) decl), identity, initialMessage = msg})
+            else driveConversationTurn env epoch msg conversationDriveBudget (Just ConversationStart {agentName = AgentName ((.name) decl), identity, initialMessage = msg, executionContext})
+
+-- | An unadorned follow-up keeps the epoch's admitted context. An explicitly
+-- different context is refused before a message can wake the live generation.
+compatibleExecutionContext :: ConversationEnv -> Int -> AddressedMessage -> Maybe ExecutionContext -> IO (Either ConversationTurnFailure Bool)
+compatibleExecutionContext _ _ _ Nothing = pure (Right True)
+compatibleExecutionContext env epoch msg wanted = do
+  loaded <- runKioku env do
+    let workflowId = conversationWorkflowId epoch msg
+    instanceRow <- lookupInstance conversationWorkflowName workflowId
+    case instanceRow of
+      Just WorkflowInstanceRow {status} | status `elem` [WfRunning, WfSuspended] -> do
+        generation <- currentGeneration conversationWorkflowName workflowId
+        index <- loadStepIndex conversationWorkflowName workflowId generation
+        pure (True, Map.lookup "ingest-start" index)
+      _ -> pure (False, Nothing)
+  pure case loaded of
+    Left _ -> Left (ConversationTransientFailure "conversation execution state unavailable")
+    Right (False, _) -> Right True
+    Right (True, Nothing) -> Left (ConversationBusy "conversation admission is still being recorded")
+    Right (True, Just value) -> case parseMaybe Aeson.parseJSON value of
+      Nothing -> Left (ConversationPermanentFailure "conversation execution context is unreadable")
+      Just start -> Right ((start :: ConversationStart).executionContext == wanted)
 
 -- | Is there a workflow instance for this epoch that could still accept work?
 --
@@ -429,7 +494,7 @@ rotatingConversation env mStart = do
   -- journaled step (@awkid:next-message@), so it is replay-stable: a resumed
   -- generation hands out the id it already handed out.
   (aid, awaitWake) <- ConversationGenerated.allocateDeclaredAwait ConversationGenerated.nextMessageAwait
-  turn <- processRotatingTurn env recordedIdentity decl ((.initialMessage) start)
+  turn <- processRotatingTurn env recordedIdentity decl ((.initialMessage) start) start.executionContext
   case turn of
     -- The promise was armed before we knew the turn would fail, so it is
     -- withdrawn rather than left pending on a workflow that is about to end.
@@ -465,22 +530,23 @@ resolveConversationIdentity env decl recorded =
 -- workflow was resumed before @ingest-start@ was ever journaled, which is not a
 -- state the runtime can invent an answer for.
 ingestStart :: (IOE :> es) => ConversationSeed -> Maybe ConversationStart -> Eff es ConversationStart
-ingestStart ConversationSeed {agentName = seedAgentName, identity = seedIdentity, pendingMessage} mStart =
+ingestStart ConversationSeed {agentName = seedAgentName, identity = seedIdentity, pendingMessage, executionContext} mStart =
   case (pendingMessage, mStart) of
-    (Just carried, _) -> pure ConversationStart {agentName = seedAgentName, identity = seedIdentity, initialMessage = carried}
+    (Just carried, _) -> pure ConversationStart {agentName = seedAgentName, identity = seedIdentity, initialMessage = carried, executionContext}
     (Nothing, Just start) -> pure start
     (Nothing, Nothing) ->
       liftIO (ioError (userError "danwa conversation workflow resumed before ingest-start was journaled"))
 
 -- | The seed the next generation starts from.
 nextConversationSeed :: ConversationSeed -> ConversationStart -> AddressedMessage -> ConversationSeed
-nextConversationSeed ConversationSeed {turnsSoFar} ConversationStart {agentName = startAgentName, identity, initialMessage = finished} next =
+nextConversationSeed ConversationSeed {turnsSoFar} ConversationStart {agentName = startAgentName, identity, initialMessage = finished, executionContext} next =
   ConversationSeed
     { agentName = startAgentName,
       identity,
       turnsSoFar = turnsSoFar + 1,
       pendingMessage = Just next,
-      lastMessageId = Just ((.messageId) finished)
+      lastMessageId = Just ((.messageId) finished),
+      executionContext
     }
 
 -- | End this epoch: close the kioku session, then let the workflow complete.
@@ -675,8 +741,58 @@ processRotatingTurn ::
   ResolvedAgentIdentity ->
   AgentDecl ->
   AddressedMessage ->
+  Maybe ExecutionContext ->
   Eff (Workflow : AppEffects) (Either Text ConversationTurnResult)
-processRotatingTurn env recordedIdentity decl msg@AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId, content = msgContent} = do
+processRotatingTurn env recordedIdentity decl msg executionContext = do
+  enabled <- patch (PatchId "shikigami-conversation-execution-selection-v1")
+  admitted <- if enabled then admitConversationExecution env recordedIdentity decl msg executionContext else pure (Right env.behaviorEnv)
+  case admitted of
+    Left refusal -> pure (Left refusal)
+    Right selected -> processSelectedTurn env selected recordedIdentity decl msg
+
+admitConversationExecution :: ConversationEnv -> ResolvedAgentIdentity -> AgentDecl -> AddressedMessage -> Maybe ExecutionContext -> Eff (Workflow : AppEffects) (Either Text BehaviorEnv)
+admitConversationExecution env recordedIdentity decl msg executionContext = do
+  profileResolution <- step (StepName "resolve-conversation-profile") $ liftIO case decl.sanctionedProfile of
+    Nothing -> pure (Right Nothing)
+    Just Agent.ProfileRequirement {profileId, version} -> fmap Just <$> env.resolveRunProfile (ProfileId profileId) (ProfileVersion <$> version)
+  case profileResolution of
+    Left refusal -> pure (Left (renderProfileResolutionError refusal))
+    Right profile -> do
+      (_, workflowId) <- currentWorkflow
+      let context = fromMaybe (ExecutionContext Nothing Nothing Nothing) executionContext
+          assignment = SelectionRuntime.conversationAssignmentIdFor workflowId.unWorkflowId msg.messageId
+      selected <- step (StepName "resolve-conversation-execution") do
+        now <- liftIO getCurrentTime
+        root <- traverse Resources.inspectRoot context.rootId
+        pure do
+          stored <- either (const (Left Selection.ExecutionRootUnavailable)) Right (sequence root)
+          forM_ stored \state -> either (const (Left Selection.ExecutionRootUnavailable)) Right (Resources.checkRoot now state.revision state)
+          case decl.behavior of
+            Agent.Skill {} -> Just <$> Selection.resolveExecutionSelection assignment env.decisions.catalog (Selection.defaultBinding env.behaviorEnv.model env.behaviorEnv.options) decl.execution context.request context.permittedAliases profile context.rootId now
+            _ | isJust context.request -> Left Selection.ExecutionBehaviorUnsupported
+            _ -> Right Nothing
+      case selected of
+        Left refusal -> pure (Left (Text.pack (show refusal)))
+        Right Nothing -> pure (Right env.behaviorEnv)
+        Right (Just selection) -> do
+          result <-
+            liftIO
+              ( SelectionRuntime.buildExecutionEnv
+                  SelectionRuntime.SelectionRuntime
+                    { catalog = env.decisions.catalog,
+                      profile,
+                      providers = env.decisions.providers,
+                      baseEnv = env.behaviorEnv,
+                      runId = runCorrelationId workflowId.unWorkflowId,
+                      authorize = SelectionRuntime.currentExecutionAuthority (Directory.identityLifecycleAdmission env.directory (resolvedIdentity recordedIdentity)) profile env.resolveRunProfile,
+                      transact = SelectionRuntime.selectionTransaction env.appEnv env.deliveryPool
+                    }
+                  selection
+              )
+          pure (either (Left . Text.pack . show) Right result)
+
+processSelectedTurn :: ConversationEnv -> BehaviorEnv -> ResolvedAgentIdentity -> AgentDecl -> AddressedMessage -> Eff (Workflow : AppEffects) (Either Text ConversationTurnResult)
+processSelectedTurn env selectedBehavior recordedIdentity decl msg@AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId, content = msgContent} = do
   sid <- step (StepName "resolve-session") (liftIO (requireRight =<< resolveSession env recordedIdentity decl msgConversationId))
   userTurn <-
     step (StepName "record-user") $
@@ -689,7 +805,7 @@ processRotatingTurn env recordedIdentity decl msg@AddressedMessage {conversation
       liftIO
         ( runBehaviorAttempt
             (conversationRunTimeout env)
-            ((.behaviorEnv) env)
+            selectedBehavior
             decl
             (triggerOnly (behaviorPayload msg prior))
         )

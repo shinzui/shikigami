@@ -73,6 +73,70 @@ configured response format supplies the Skill/default request preference. Eviden
 tool registry stay caller-owned. Endpoint/model reporting is a configured fact;
 a returned response is not automatically proof of the served model identity.
 
+## Governed assignment selection
+
+Use the existing operator `behavior.decisionModels` catalog for whole-run aliases
+as well as decision slots. Its historical configuration name does not grant an
+agent either permission. For example, a private worker configuration can declare:
+
+```yaml
+behavior:
+  decisionModels:
+    - {alias: coordinator, version: "1", bindingId: coordinator, bindingVersion: "1", provider: openai-responses, model: gpt-6.1-sol, thinking: high}
+    - {alias: worker-a, version: "1", bindingId: worker-a, bindingVersion: "1", provider: openai-responses, model: gpt-6.1-sol, thinking: medium}
+    - {alias: worker-b, version: "1", bindingId: worker-b, bindingVersion: "1", provider: openai-responses, model: gpt-6.1-sol, thinking: low}
+```
+
+Credentials use the same private provider settings as above. Catalog entries
+accept exact released models, explicit thinking (including `default`), optional
+`max_tokens` and `timeout_ms`, and immutable descriptor/binding identities.
+In an agent declaration, opt into whole-run selection with:
+
+```dhall
+execution = Some
+  { defaultAlias = "coordinator"
+  , permittedAliases = [ "coordinator", "worker-a", "worker-b" ]
+  }
+```
+
+Typed `RunJob.executionRequest` can require a permitted alias/thinking value and
+narrow permitted aliases. `executionPermissions` carries the parent's ceiling.
+Neither field accepts endpoints, keys or vendor flags. Decision-slot permission
+continues to use `decisionModels`; an unused default cannot grant or deny a slot.
+Historical declarations omit `execution` and keep the process default.
+
+New runs journal a complete immutable selection before calling a model. Changing
+an alias or process default cannot reroute pending work: retain its exact binding
+or the run reports `PinnedBindingUnavailable`. Credential rotation preserves the
+opaque binding identity; changed endpoint/model/options authority needs a new
+descriptor version. Each conversation message is an assignment; its admitted root
+and user constraints persist across generation rotation and cannot change within
+the live epoch. Overlays remain unavailable in conversations.
+
+Each actual provider attempt reserves the shared root and assignment limits before
+dispatch. Profile call/retry/concurrency/token limits survive retries and restart;
+duration is an absolute deadline from admission. Profile lifecycle is checked at
+dispatch using its exact pinned version/digest; revocation and expiry stop new
+calls without replacing the recorded policy. Unsupported hard invoice-cost caps
+refuse before dispatch because HTTP does not enforce an invoice ceiling.
+Finite token envelopes require an explicit output limit and enough capacity for a
+conservative model context plus output bound. Unknown billing remains unknown;
+catalog price estimates never become measured cost. A terminal transport releases
+its active slot while retaining missing billing holds. An uncertain transport keeps
+its active reservation until reconciliation.
+
+`shikigami runs show WORKFLOW_NAME WORKFLOW_ID --json` includes `execution` with
+descriptor, current binding availability and up to 100 normalized attempt facts.
+It keeps requested model identity separate from provider-reported identity and
+omits effective options, credentials and request bodies. This accounting boundary
+does not yet replay individual completed model/tool turns; the durable execution
+transcript owns that recovery.
+
+Apply migrations, upgrade queue readers to codec v3, then enable v3 producers.
+Both v1 and v2 remain readable and gain no selection authority from old metadata.
+Stop old workflow writers before enabling selection. After new selection journals
+exist, roll forward. Keep accounting facts beyond terminal workflow GC.
+
 ## Attended launches
 
 `shikigami-agent-launch interactive` is a foreground terminal session. It opens

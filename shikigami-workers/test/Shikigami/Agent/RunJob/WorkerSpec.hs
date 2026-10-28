@@ -377,6 +377,8 @@ sampleJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -397,6 +399,7 @@ drainAgent =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      execution = Nothing,
       decisionModels = [],
       routing = Nothing
     }

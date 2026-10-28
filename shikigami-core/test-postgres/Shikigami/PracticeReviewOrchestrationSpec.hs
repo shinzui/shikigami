@@ -365,6 +365,8 @@ agentRunSpecialistTests databaseFixture =
                   parentRunWorkflowId = Just (WorkflowId "architecture-practice-router-parent"),
                   delegationDepth = Just (DelegationDepth 1),
                   lineage = map AgentName ["architecture-practice-router", reviewerAgent],
+                  executionRequest = Nothing,
+                  executionPermissions = Nothing,
                   executionRootId = Nothing,
                   delegationBudgetId = Nothing
                 }
@@ -855,6 +857,7 @@ reviewerDecl =
       memory = defaultMemoryPolicy & #recordPolicy .~ Never,
       enabled = True,
       expertise = [],
+      execution = Nothing,
       decisionModels = [],
       routing = Nothing
     }

@@ -10,6 +10,10 @@ workflow DanwaConversation
   body
     step ingest-start -> ConversationStart
     step lookup-agent -> AgentDecl
+    patch shikigami-conversation-execution-selection-v1 {
+      step resolve-conversation-profile -> ProfileResolution
+      step resolve-conversation-execution -> ExecutionSelectionResolution
+    }
     step resolve-session -> SessionId
     step record-user -> RecordedTurn
     step run-behavior-v2 -> BehaviorOutput

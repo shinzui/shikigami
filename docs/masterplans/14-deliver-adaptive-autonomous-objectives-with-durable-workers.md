@@ -70,7 +70,7 @@ Relevant local decisions consulted include [ADR 0007](../adr/0007-a-resolved-pro
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | EP-1 | Enforce root resource reservations across durable work | [docs/plans/81-enforce-root-resource-reservations-across-durable-work.md](../plans/81-enforce-root-resource-reservations-across-durable-work.md) | None | None | Complete |
-| EP-2 | Pin governed execution settings for agent assignments | [docs/plans/82-pin-governed-execution-settings-for-agent-assignments.md](../plans/82-pin-governed-execution-settings-for-agent-assignments.md) | EP-1; external plan 73 | None | In Progress |
+| EP-2 | Pin governed execution settings for agent assignments | [docs/plans/82-pin-governed-execution-settings-for-agent-assignments.md](../plans/82-pin-governed-execution-settings-for-agent-assignments.md) | EP-1; external plan 73 | None | Complete |
 | EP-3 | Recover durable model and tool turns with composed policies | [docs/plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) | EP-1, EP-2 | None | Not Started |
 | EP-4 | Coordinate continuing worker sessions and fenced handoffs | [docs/plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) | EP-1, EP-2, EP-3; completion gates IR-11 and IR-13 providers | None | Not Started |
 | EP-5 | Adapt durable delivery through validated coordinator decisions | [docs/plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) | EP-4; external plan 76; completion gate IR-13 provider | None | Not Started |
@@ -130,13 +130,24 @@ Coordinate those prerequisite deliverables with their separate owning plans when
 ## Progress
 
 
-2026-10-27: Phase A is active: EP-1 is Complete and EP-2 is In Progress; the remaining five children are Not Started. EP-1 passed the full build, 464 core unit, 250 PostgreSQL, 63 server and 98 worker cases, migration isolation and the additive workflow gate. External plans 73–76 now have accepted implementation evidence in MasterPlan 13. IR-11 and IR-13 remain separately owned provider gates; fixture evidence cannot close them.
+2026-10-27: Phase A is complete: EP-1 and EP-2 are Complete; the remaining five children are Not Started. EP-2 passed the full build, 476 core, 260 PostgreSQL, 37 agent, 63 server and 98 worker cases, plus its final 10-case selection qualification, migration isolation and the additive workflow gate. EP-3 is the next eligible child. External plans 73–76 now have accepted implementation evidence in MasterPlan 13. IR-11 and IR-13 remain separately owned provider gates; fixture evidence cannot close them.
 
 
 ## Surprises & Discoveries
 
 
 EP-1 established an application-owned v2 run-input codec because the generated queue requires every structural field. Future selection and execution metadata must retain the v1/v2 decoder paths rather than adding undeclared required fields. [ADR 0051](../adr/0051-resource-roots-own-conservative-reservations-and-actual-attempts.md) records the shared identity, atomicity, retention and rollout contract; FRIC-9 in `docs/friction-log/` records the queue-interface detour. Resource inspection reports unknown attempts and exclusive allocation holds without reading operation histories.
+
+
+EP-2 integration: the resource ledger now distinguishes known transport stop from
+unknown billing with `PartialUsage`. The selected provider adapter commits
+normalized `Attestation.CallFacts` (the same facts used by decision evidence),
+assignment admission and root settlement together. EP-3 must consume those
+transaction hooks when adding transcript outcomes; EP-5 still owns reconciling
+typed-decision root accounting. Finite invoice-cost ceilings cannot be enforced
+by the released HTTP APIs and refuse dispatch. Queue v3 retains v1/v2 readers
+without granting selection authority to historical metadata. The durable
+contract is [ADR 0052](../adr/0052-assignments-pin-whole-run-selection-and-account-every-provider-attempt.md).
 
 
 ## Decision Log

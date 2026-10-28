@@ -13,6 +13,7 @@ module Shikigami.Behavior.Run
     newBehaviorEnvWithTraceSink,
     programArgs,
     runBehavior,
+    completeBehaviorRequest,
     runBehaviorAttempt,
     -- | Exported for "Shikigami.BehaviorRetrySpec", which supplies a slow or
     -- retryable action without registering a process-global model provider.
@@ -25,8 +26,11 @@ module Shikigami.Behavior.Run
   )
 where
 
+import Baikai.Context (Context)
 import Baikai.Model (Model, modelId)
 import Baikai.Options (Options, emptyOptions)
+import Baikai.Provider.Registry (ProviderRegistry, completeRequestWith, globalProviderRegistry)
+import Baikai.Response (Response)
 import Baikai.Trace (TraceSink)
 import Baikai.Trace qualified as BaikaiTrace
 import Control.Exception (throwIO)
@@ -37,6 +41,7 @@ import Data.Aeson.Text (encodeToLazyText)
 import Data.Generics.Labels ()
 import Data.Map (Map)
 import Data.Map qualified as Map
+import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -57,7 +62,7 @@ import Shikigami.Behavior.Error
     renderRunError,
   )
 import Shikigami.Behavior.Input (BehaviorInput (..), memoryContentText, triggerOnly)
-import Shikigami.Behavior.Skill (SkillDir (..), runSkill, runSkillWith)
+import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
 import Shikigami.Capability.Overlay (CapabilityId, ResolvedCapabilitySet, resolvedCapabilities)
 import Shikigami.Capability.Overlay qualified as Overlay
@@ -81,6 +86,7 @@ data BehaviorEnv = BehaviorEnv
     model :: !Model,
     options :: !Options,
     traceSink :: !(Maybe TraceSink),
+    providerRegistry :: !(Maybe ProviderRegistry),
     tools :: !ToolRegistry,
     activeOverlays :: !(Set CapabilityId),
     toolTurnLimit :: !Int
@@ -127,6 +133,7 @@ newBehaviorEnvWithTraceSink traceSink = do
         model = stubModel,
         options = emptyOptions,
         traceSink,
+        providerRegistry = Nothing,
         tools = mkRegistry [],
         activeOverlays = Set.empty,
         toolTurnLimit = defaultToolTurnLimit
@@ -161,14 +168,14 @@ runBehavior env decl input
           Nothing -> pure (Left (UnknownTask t))
           Just tk -> runProgramTask ((.runtime) env) tk input
       Skill {path = p} ->
-        runSkillWithTrace
-          ((.traceSink) env)
+        runSkillWith
           ((.model) env)
           ((.options) env)
           ((.tools) env)
           ((.toolTurnLimit) env)
           (SkillDir (Text.unpack p))
           input
+          (completeBehaviorRequest env)
       Flow {} ->
         pure (Left (UnsupportedBehavior "Flow"))
       Deterministic {} ->
@@ -252,8 +259,9 @@ envelopeToResult (Envelope {status = st, verdict = v, message = msg}) =
     ErrorS -> Left (ProgramRuntimeFailed msg)
     _ -> Right (maybe Aeson.Null id v)
 
-runSkillWithTrace :: Maybe TraceSink -> Model -> Options -> ToolRegistry -> Int -> SkillDir -> BehaviorInput -> IO (Either RunError Value)
-runSkillWithTrace Nothing model options registry turnLimit dir input =
-  runSkill model options registry turnLimit dir input
-runSkillWithTrace (Just sink) model options registry turnLimit dir input =
-  runSkillWith model options registry turnLimit dir input (BaikaiTrace.withTrace sink)
+completeBehaviorRequest :: BehaviorEnv -> Model -> Context -> Options -> IO Response
+completeBehaviorRequest env = case env.traceSink of
+  Nothing -> completeRequestWith registry
+  Just sink -> BaikaiTrace.withTraceWith registry sink
+  where
+    registry = fromMaybe globalProviderRegistry env.providerRegistry

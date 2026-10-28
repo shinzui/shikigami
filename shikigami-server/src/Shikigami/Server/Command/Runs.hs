@@ -91,10 +91,16 @@ import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, wit
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Agent.Workflow (StepResult (StepProduced, StepRefused))
-import Shikigami.App.Config (AppConfig, revealSecretText)
+import Shikigami.App.Config (AppConfig (..), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
+import Shikigami.Behavior.Provider (newBehaviorEnvFor)
+import Shikigami.Behavior.Run (BehaviorEnv (..))
+import Shikigami.Decision.ModelCatalog (modelDescriptor, pinnedBinding)
+import Shikigami.Execution.Selection (ExecutionSelection (..), ExecutionSelectionFailure, SelectionSource (..), defaultBinding)
+import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Migrations (verifyShikigamiMigrations)
+import Shikigami.Store.ExecutionSelection qualified as SelectionStore
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
@@ -155,12 +161,56 @@ runRunsShow wfName wfId asJson config = do
               _ -> pure (Right Nothing)
             case finalLifecycle of
               Left _ -> die "run lifecycle store is unavailable"
-              Right status -> LazyChar8.putStrLn (Aeson.encode (withLifecycle status (runJson row link)))
-        | otherwise -> TextIO.putStr (renderRun row link)
+              Right status -> do
+                execution <- either (const (die "execution inspection store is unavailable")) (executionInspection config store) steps
+                LazyChar8.putStrLn (Aeson.encode (withExecution execution (withLifecycle status (runJson row link))))
+        | otherwise -> do
+            TextIO.putStr (renderRun row link)
+            steps <- runStoreIO store (loadStepIndex (WorkflowName wfName) (WorkflowId wfId) (fromIntegral row.generation))
+            execution <- either (const (die "execution inspection store is unavailable")) (executionInspection config store) steps
+            TextIO.putStrLn "execution"
+            LazyChar8.putStrLn (Aeson.encode execution)
   where
     die message = do
       hPutStrLn stderr ("runs show: " <> Text.unpack message)
       exitFailure
+
+-- Inspect immutable public descriptors and at most 100 normalized call facts.
+-- Effective provider options and transcript payloads are intentionally absent.
+executionInspection :: AppConfig -> KirokuStore -> Map Text Value -> IO Value
+executionInspection config store steps =
+  case Map.lookup "resolve-execution-selection" steps <|> Map.lookup "resolve-conversation-execution" steps of
+    Nothing -> pure (object ["status" .= ("notSelected" :: Text)])
+    Just value -> case Aeson.fromJSON value :: Aeson.Result (Either ExecutionSelectionFailure (Maybe ExecutionSelection)) of
+      Aeson.Error _ -> pure (object ["status" .= ("unreadableSelection" :: Text)])
+      Aeson.Success (Left refusal) -> pure (object ["status" .= ("refused" :: Text), "reason" .= refusal])
+      Aeson.Success (Right Nothing) -> pure (object ["status" .= ("unusedDefault" :: Text)])
+      Aeson.Success (Right (Just selection)) -> do
+        base <- newBehaviorEnvFor Log.silentLogger config.behaviorProvider Nothing
+        let available = case selection.source of
+              ProcessDefault -> either (const False) ((== selection.descriptor) . modelDescriptor) (defaultBinding base.model base.options)
+              DeclaredAlias -> either (const False) (either (const False) (const True) . (`pinnedBinding` selection.descriptor)) config.decisionModelCatalog
+        facts <- runStoreIO store (SelectionStore.inspectSelection selection.assignmentId)
+        pure
+          ( object
+              [ "status" .= ("selected" :: Text),
+                "assignmentId" .= selection.assignmentId,
+                "descriptor" .= selection.descriptor,
+                "profile" .= selection.profile,
+                "rootId" .= selection.rootId,
+                "permittedAliases" .= selection.permittedAliases,
+                "admittedAt" .= selection.admittedAt,
+                "bindingAvailability" .= (if available then "available" else "PinnedBindingUnavailable" :: Text),
+                "calls" .= case facts of
+                  Left _ -> object ["status" .= ("unavailable" :: Text)]
+                  Right Nothing -> object ["attempts" .= (0 :: Int)]
+                  Right (Just (assignment, calls)) -> object ["attempts" .= assignment.attempts, "active" .= assignment.active, "unknown" .= assignment.unknown, "usage" .= assignment.usage, "facts" .= calls]
+              ]
+          )
+
+withExecution :: Value -> Value -> Value
+withExecution execution (Aeson.Object fields) = Aeson.Object (KeyMap.insert "execution" execution fields)
+withExecution _ value = value
 
 -- | Read both halves in one store session.
 gather ::

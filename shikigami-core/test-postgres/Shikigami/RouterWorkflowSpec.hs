@@ -374,6 +374,8 @@ routerJob key =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = map AgentName ["router"],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -394,6 +396,7 @@ routerDecl =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      execution = Nothing,
       decisionModels = [],
       routing = Just routerPolicy
     }
@@ -436,6 +439,7 @@ specialist specialistName specialistBehavior =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [expertiseEntry],
+      execution = Nothing,
       decisionModels = [],
       routing = Nothing
     }

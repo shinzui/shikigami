@@ -40,6 +40,7 @@ module Shikigami.Behavior.Provider
 
     -- * Building an environment for it
     newBehaviorEnvFor,
+    withModelBinding,
 
     -- * Saying which one is active
     describeProviderSelection,
@@ -63,7 +64,9 @@ import Baikai.Provider.Claude.Api qualified as Claude
 import Baikai.Provider.OpenAI.Api qualified as OpenAI
 import Baikai.Provider.OpenAI.Responses qualified as Responses
 import Baikai.Trace (TraceSink)
+import Control.Lens ((&), (.~))
 import Data.Aeson qualified as Aeson
+import Data.Generics.Labels ()
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Handan.Runtime (newRuntime)
@@ -73,6 +76,7 @@ import Shikigami.Behavior.Compatibility
 import Shikigami.Behavior.Provider.Call
 import Shikigami.Behavior.Run (BehaviorEnv (..), defaultToolTurnLimit)
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
+import Shikigami.Decision.ModelCatalog (ModelBinding, bindingCredential, bindingModel, bindingOptions, revealCredential)
 import Shikigami.Log qualified as Log
 import Shikumi.Tool (mkRegistry)
 
@@ -143,6 +147,7 @@ newBehaviorEnvFor logger selection traceSink = do
             model = stubModel,
             options = emptyOptions,
             traceSink,
+            providerRegistry = Nothing,
             tools = mkRegistry [],
             activeOverlays = Set.empty,
             toolTurnLimit = defaultToolTurnLimit
@@ -155,6 +160,7 @@ newBehaviorEnvFor logger selection traceSink = do
             model,
             options = credentialOptions credential,
             traceSink,
+            providerRegistry = Nothing,
             tools = mkRegistry [],
             activeOverlays = Set.empty,
             toolTurnLimit = defaultToolTurnLimit
@@ -171,6 +177,7 @@ newBehaviorEnvFor logger selection traceSink = do
             model,
             options = options {Options.apiKey = Just (ApiKeyLiteral (revealSecretText credential))},
             traceSink,
+            providerRegistry = Nothing,
             tools = mkRegistry [],
             activeOverlays = Set.empty,
             toolTurnLimit = defaultToolTurnLimit
@@ -181,6 +188,14 @@ validateProviderSelection = \case
   UseStub -> Right ()
   UseAnthropic model _ -> validateResponseOptions model emptyOptions
   UseHttp model options _ -> validateResponseOptions model options
+
+-- | The same compatible HTTP options builder, applied to an already pinned
+-- catalog binding. Credentials remain process-local and are never serialized.
+withModelBinding :: ModelBinding -> BehaviorEnv -> Either ResponseCompatibilityError BehaviorEnv
+withModelBinding binding env = do
+  validateResponseOptions (bindingModel binding) (bindingOptions binding)
+  let options = (bindingOptions binding) {Options.apiKey = ApiKeyLiteral . revealCredential <$> bindingCredential binding}
+  pure (env & #model .~ bindingModel binding & #options .~ options)
 
 -- | Lower a resolved credential into the per-call options baikai dispatches with.
 --

@@ -35,6 +35,7 @@ import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.DirectorySpec qualified as DirectorySpec
 import Shikigami.EnqueueHardeningSpec qualified as EnqueueHardeningSpec
 import Shikigami.ExecutionResourcesSpec qualified as ExecutionResourcesSpec
+import Shikigami.ExecutionSelectionSpec qualified as ExecutionSelectionSpec
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Fixture.SinkHttp (testSinkHttp, testSinkHttpFor)
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
@@ -96,6 +97,7 @@ main =
           DelegateContextSpec.tests,
           DelegationBatchSpec.tests,
           ExecutionResourcesSpec.tests,
+          ExecutionSelectionSpec.tests,
           DirectorySpec.tests,
           EnqueueHardeningSpec.tests,
           KeiroSpecificationSpec.tests,

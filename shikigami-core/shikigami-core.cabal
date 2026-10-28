@@ -91,7 +91,10 @@ library
     Shikigami.Directory.Store
     Shikigami.Execution.Admission
     Shikigami.Execution.Identity
+    Shikigami.Execution.Request
     Shikigami.Execution.Resources
+    Shikigami.Execution.Selection
+    Shikigami.Execution.SelectionRuntime
     Shikigami.Flow
     Shikigami.Flow.Acknowledgement
     Shikigami.Flow.AtRiskCustomer
@@ -150,6 +153,7 @@ library
     Shikigami.Sink.Wire
     Shikigami.Store.DelegationBudget
     Shikigami.Store.ExecutionResources
+    Shikigami.Store.ExecutionSelection
     Shikigami.Telemetry.Metrics
     Shikigami.Telemetry.TraceContext
     Shikigami.Trigger.Enqueue
@@ -281,6 +285,7 @@ test-suite shikigami-core-test
     Shikigami.DirectorySpec
     Shikigami.EnqueueHardeningSpec
     Shikigami.ExecutionResourcesSpec
+    Shikigami.ExecutionSelectionSpec
     Shikigami.Fixture.KawaStub
     Shikigami.Fixture.SinkHttp
     Shikigami.KanmonClientSpec
@@ -368,6 +373,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.DelegationBudgetSpec
     Shikigami.DirectoryStoreSpec
     Shikigami.ExecutionResourcesSpec
+    Shikigami.ExecutionSelectionWorkflowSpec
     Shikigami.Fixture.KawaStub
     Shikigami.Fixture.SinkHttp
     Shikigami.FlowLifecycleSpec

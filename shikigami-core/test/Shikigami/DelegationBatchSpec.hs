@@ -103,6 +103,7 @@ delegateCtx =
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       lineage = map AgentName ["router"],
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing,
       budgetLimit = defaultDelegationBudget
@@ -124,6 +125,7 @@ routerDecl =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      execution = Nothing,
       decisionModels = [],
       routing = Just routerPolicy
     }

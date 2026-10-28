@@ -1419,6 +1419,7 @@ tests databaseFixture =
                           parentSessionId = Nothing,
                           parentRunWorkflowId = Nothing,
                           lineage = map AgentName ["test-parent", "heartbeat"],
+                          executionPermissions = Nothing,
                           executionRootId = Nothing,
                           delegationBudgetId = Nothing,
                           budgetLimit = defaultDelegationBudget
@@ -1971,6 +1972,7 @@ parentDelegateContext currentSession =
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       lineage = map AgentName ["test-parent"],
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing,
       budgetLimit = defaultDelegationBudget
@@ -2178,6 +2180,9 @@ testConversationEnvIdle idleWindow appEnv behaviorEnv conversationAgents =
   Conversation.ConversationEnv
     { Conversation.appEnv = appEnv,
       Conversation.behaviorEnv = behaviorEnv,
+      Conversation.decisions = FlowDecision.emptyDecisionServices,
+      Conversation.deliveryPool = Nothing,
+      Conversation.resolveRunProfile = (testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks conversationAgents).resolveRunProfile,
       Conversation.runTimeout = secondsToNominalDiffTime 300,
       Conversation.idleTimeout = idleWindow,
       Conversation.danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
@@ -2531,6 +2536,7 @@ capabilityDecl agentName agentBehavior overlays agentIdentity agentSinks =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      execution = Nothing,
       decisionModels = [],
       routing = Nothing
     }
@@ -2552,6 +2558,8 @@ capabilityJob agentName key =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -2570,6 +2578,8 @@ expectedLifecycleSteps =
       "lookup-agent",
       "resolve-profile",
       "resolve-capability-overlays",
+      "patch:shikigami-execution-selection-v1",
+      "resolve-execution-selection",
       "resolve-approval-policy",
       "open-session",
       "recall",
@@ -2608,6 +2618,7 @@ decl =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      execution = Nothing,
       decisionModels = [],
       routing = Nothing
     }
@@ -2634,6 +2645,7 @@ missingTaskDecl =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      execution = Nothing,
       decisionModels = [],
       routing = Nothing
     }
@@ -2665,6 +2677,7 @@ profiledDecl =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      execution = Nothing,
       decisionModels = [],
       routing = Nothing
     }
@@ -2690,6 +2703,7 @@ profiledSkillDecl =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      execution = Nothing,
       decisionModels = [],
       routing = Nothing
     }
@@ -2710,6 +2724,7 @@ flowDecl =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      execution = Nothing,
       decisionModels = [],
       routing = Nothing
     }
@@ -2741,6 +2756,7 @@ flowDelegationDecl =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      execution = Nothing,
       decisionModels = [],
       routing = Nothing
     }
@@ -2849,6 +2865,8 @@ job =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -2867,6 +2885,8 @@ retryVersioningJob key =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -2888,6 +2908,8 @@ permanentFailureJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -2906,6 +2928,8 @@ crashJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -2924,6 +2948,8 @@ profileRefusalJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -2942,6 +2968,8 @@ profilePinningJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -2960,6 +2988,8 @@ profileViolationJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -3125,6 +3155,8 @@ recordBeforeCompleteCrashJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -3143,6 +3175,8 @@ flowJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -3163,6 +3197,8 @@ flowMemoryJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -3273,6 +3309,8 @@ approvalJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -3291,6 +3329,8 @@ rejectedJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -3309,6 +3349,8 @@ timeoutJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -3327,6 +3369,8 @@ answeredBeforeDeadlineJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -3345,6 +3389,8 @@ researchSupervisorJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = map AgentName ["research-supervisor"],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -3363,6 +3409,8 @@ flowDelegationJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = map AgentName ["flow-delegation-supervisor"],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }

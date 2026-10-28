@@ -35,10 +35,8 @@ module Shikigami.PracticeReview.Capability
 where
 
 import Baikai.Context (systemUser)
-import Baikai.Provider (completeRequest)
 import Baikai.Response (flattenAssistantBlocks, flattenAssistantText, responseError)
 import Baikai.ResponseFormat (ResponseFormat (JsonObject))
-import Baikai.Trace qualified as BaikaiTrace
 import Control.Exception qualified as Exception
 import Control.Monad (foldM)
 import Data.Aeson (Value)
@@ -59,7 +57,7 @@ import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
 import Kioku.Id (SessionId)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Behavior.Compatibility
-import Shikigami.Behavior.Run (BehaviorEnv (..))
+import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest)
 import Shikigami.PracticeReview
   ( PracticeAdoptionBinding,
     ValidatedPracticeReviewResolution,
@@ -295,15 +293,13 @@ failClosedPracticeReviewRuntime recipients =
 -- raw JSON proposal. The Flow replaces all trusted identity/evidence fields and
 -- runs the strict domain validator before the proposal can affect state.
 modelPracticeReviewEvaluator :: BehaviorEnv -> EvidenceBundle -> RecalledPracticeReviews -> IO (Either Text Value)
-modelPracticeReviewEvaluator BehaviorEnv {model, options, traceSink} evidence recalled = do
+modelPracticeReviewEvaluator env@BehaviorEnv {model, options} evidence recalled = do
   let context = systemUser practiceReviewSystemPrompt (practiceReviewUserPrompt evidence recalled)
       structuredOptions = options & #responseFormat .~ Just JsonObject
   case validateResponseRequest model structuredOptions context of
     Left refusal -> pure (Left (renderResponseCompatibilityError refusal))
     Right () -> do
-      response <- case traceSink of
-        Nothing -> completeRequest model context structuredOptions
-        Just sink -> BaikaiTrace.withTrace sink model context structuredOptions
+      response <- completeBehaviorRequest env model context structuredOptions
       case responseError response of
         Just failure -> pure (Left (boundedEvaluatorDetail (Text.pack (show failure))))
         Nothing ->

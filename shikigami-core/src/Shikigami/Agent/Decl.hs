@@ -41,6 +41,7 @@ import Dhall (Decoder (..), FromDhall (..))
 import Dhall qualified
 import Numeric.Natural (Natural)
 import Shikigami.Capability.Overlay (CapabilityId)
+import Shikigami.Execution.Request (ExecutionPolicy)
 import Shikigami.Prelude
 
 data IdentityDecl = IdentityDecl {principal :: !Text}
@@ -277,6 +278,7 @@ data AgentDecl = AgentDecl
     behavior :: !Behavior,
     sinks :: ![Sink],
     delegates :: ![Text],
+    execution :: !(Maybe ExecutionPolicy),
     decisionModels :: ![Text],
     delegationBudget :: !(Maybe DelegationBudget),
     sanctionedProfile :: !(Maybe ProfileRequirement),
@@ -293,11 +295,14 @@ data AgentDecl = AgentDecl
 -- Defaulted additions preserve the pre-change journal bytes.
 instance ToJSON AgentDecl where
   toJSON declaration = case Aeson.genericToJSON Aeson.defaultOptions declaration of
-    Aeson.Object fields | null declaration.decisionModels -> Aeson.Object (KeyMap.delete "decisionModels" fields)
+    Aeson.Object fields ->
+      let decisions = if null declaration.decisionModels then KeyMap.delete "decisionModels" fields else fields
+          execution = if isNothing declaration.execution then KeyMap.delete "execution" decisions else decisions
+       in Aeson.Object execution
     value -> value
 
 instance FromJSON AgentDecl where
   parseJSON = Aeson.withObject "AgentDecl" \fields ->
-    Aeson.genericParseJSON
-      Aeson.defaultOptions
-      (Aeson.Object (if KeyMap.member "decisionModels" fields then fields else KeyMap.insert "decisionModels" (Aeson.toJSON ([] :: [Text])) fields))
+    let decisions = if KeyMap.member "decisionModels" fields then fields else KeyMap.insert "decisionModels" (Aeson.toJSON ([] :: [Text])) fields
+        execution = if KeyMap.member "execution" decisions then decisions else KeyMap.insert "execution" Aeson.Null decisions
+     in Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object execution)

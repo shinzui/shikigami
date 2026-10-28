@@ -118,6 +118,7 @@ streamAgent =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      execution = Nothing,
       decisionModels = [],
       routing = Nothing
     }

@@ -38,6 +38,7 @@ import Shikigami.Capability.Overlay
     mkResolvedCapabilitySet,
   )
 import Shikigami.Execution.Identity (ExecutionRootId (..))
+import Shikigami.Execution.Request (ExecutionRequest (..))
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Sink.Intent (SinkIntent (..))
 import Shikigami.Sink.Permission (SinkKind (SKizashiSignal, SReiAction))
@@ -134,6 +135,9 @@ queueTests =
       testCase "production decoder accepts the literal envelope" do
         value <- decodeOrFail @Value currentRunJobEnvelope
         RunJobs.decodeRunJob value @?= Right sampleRunJob,
+      testCase "v2 resource inputs retain their root and gain no selection permission" do
+        value <- decodeOrFail @Value preSelectionRunJobEnvelope
+        RunJobs.decodeRunJob value @?= Right sampleRunJob,
       testCase "v1 jobs default to unenrolled without changing input" do
         value <- decodeOrFail @Value preResourceRunJobEnvelope
         RunJobs.decodeRunJob value @?= Right sampleRunJob,
@@ -146,9 +150,19 @@ queueTests =
                 _ -> value
               _ -> value
         RunJobs.decodeRunJob historical @?= Right (sampleRunJob & #triggerPayload .~ input),
-      testCase "enrolled jobs retain the root through the v2 queue envelope" do
-        let enrolled = sampleRunJob & #executionRootId .~ Just (ExecutionRootId "root-1")
+      testCase "v3 jobs retain the root and typed selection constraints" do
+        let enrolled = sampleRunJob & #executionRootId .~ Just (ExecutionRootId "root-1") & #executionRequest .~ Just (ExecutionRequest (Just "worker") Nothing Nothing) & #executionPermissions .~ Just ["worker"]
         RunJobs.decodeRunJob (RunJobs.encodeRunJob enrolled) @?= Right enrolled,
+      testCase "v2 metadata never grants new selection authority" do
+        value <- decodeOrFail @Value preSelectionRunJobEnvelope
+        let historical = case value of
+              Object outer -> case KeyMap.lookup "data" outer of
+                Just (Object payload) -> case KeyMap.lookup "triggerPayload" payload of
+                  Just (Object wrapper) -> Object (KeyMap.insert "data" (Object (KeyMap.insert "triggerPayload" (Object (KeyMap.insert "executionRequest" (toJSON (ExecutionRequest (Just "forged") Nothing Nothing)) (KeyMap.insert "executionPermissions" (toJSON (["forged"] :: [Text])) wrapper))) payload)) outer)
+                  _ -> value
+                _ -> value
+              _ -> value
+        RunJobs.decodeRunJob historical @?= Right sampleRunJob,
       testCase "historical journal omission remains unenrolled" do
         let value = case toJSON sampleRunJob of Object o -> Object (KeyMap.delete "executionRootId" o); other -> other
         Aeson.fromJSON @RunJob value @?= Aeson.Success sampleRunJob,
@@ -182,6 +196,8 @@ sampleRunJob =
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
       lineage = [],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing
     }
@@ -381,7 +397,10 @@ identityBoundaryTests =
     ]
 
 currentRunJobEnvelope :: ByteString
-currentRunJobEnvelope = "{\"data\":{\"agentName\":\"at-risk-watch\",\"delegationBudgetId\":null,\"delegationDepth\":null,\"idempotencyKey\":\"at-risk-watch:act_1\",\"identity\":{\"agentName\":\"at-risk-watch\",\"kind\":\"compatibility\"},\"lineage\":[],\"occurredAt\":\"2026-07-15T12:00:00Z\",\"parentRunWorkflowId\":null,\"parentSessionId\":null,\"routeKind\":\"AgentWorkflowRoute\",\"triggerKind\":\"TriggeredByStream\",\"triggerPayload\":{\"executionRootId\":null,\"input\":{\"activityId\":\"act_1\"}}},\"t\":\"RunJobMessage\",\"v\":2}"
+currentRunJobEnvelope = "{\"data\":{\"agentName\":\"at-risk-watch\",\"delegationBudgetId\":null,\"delegationDepth\":null,\"idempotencyKey\":\"at-risk-watch:act_1\",\"identity\":{\"agentName\":\"at-risk-watch\",\"kind\":\"compatibility\"},\"lineage\":[],\"occurredAt\":\"2026-07-15T12:00:00Z\",\"parentRunWorkflowId\":null,\"parentSessionId\":null,\"routeKind\":\"AgentWorkflowRoute\",\"triggerKind\":\"TriggeredByStream\",\"triggerPayload\":{\"executionRootId\":null,\"input\":{\"activityId\":\"act_1\"},\"executionRequest\":null,\"executionPermissions\":null}},\"t\":\"RunJobMessage\",\"v\":3}"
 
 preResourceRunJobEnvelope :: ByteString
 preResourceRunJobEnvelope = "{\"data\":{\"agentName\":\"at-risk-watch\",\"delegationBudgetId\":null,\"delegationDepth\":null,\"idempotencyKey\":\"at-risk-watch:act_1\",\"identity\":{\"agentName\":\"at-risk-watch\",\"kind\":\"compatibility\"},\"lineage\":[],\"occurredAt\":\"2026-07-15T12:00:00Z\",\"parentRunWorkflowId\":null,\"parentSessionId\":null,\"routeKind\":\"AgentWorkflowRoute\",\"triggerKind\":\"TriggeredByStream\",\"triggerPayload\":{\"activityId\":\"act_1\"}},\"t\":\"RunJobMessage\",\"v\":1}"
+
+preSelectionRunJobEnvelope :: ByteString
+preSelectionRunJobEnvelope = "{\"data\":{\"agentName\":\"at-risk-watch\",\"delegationBudgetId\":null,\"delegationDepth\":null,\"idempotencyKey\":\"at-risk-watch:act_1\",\"identity\":{\"agentName\":\"at-risk-watch\",\"kind\":\"compatibility\"},\"lineage\":[],\"occurredAt\":\"2026-07-15T12:00:00Z\",\"parentRunWorkflowId\":null,\"parentSessionId\":null,\"routeKind\":\"AgentWorkflowRoute\",\"triggerKind\":\"TriggeredByStream\",\"triggerPayload\":{\"executionRootId\":null,\"input\":{\"activityId\":\"act_1\"}}},\"t\":\"RunJobMessage\",\"v\":2}"

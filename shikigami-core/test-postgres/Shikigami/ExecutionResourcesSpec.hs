@@ -221,7 +221,29 @@ tests fixture =
         run env (reserveEnrolledDelegationSlots rid budgetId (Just (workflow, cap)) children now) >>= (@?= Right (DelegationBatchReserved 1 0))
         run env (reserveEnrolledDelegationSlots rid budgetId Nothing children now) >>= (@?= Right (DelegationBatchReserved 0 1))
         snapshot <- root env
-        Map.lookup LifetimeDescendants snapshot.usage.settled @?= Just 1
+        Map.lookup LifetimeDescendants snapshot.usage.settled @?= Just 1,
+      testCase "terminal transport releases active work while unknown cost remains held" $ withFixture fixture \env -> do
+        seed env [(ActiveWork, 1), (CostMicroUsd, 10)]
+        reserveModel env "one"
+        let request = AttemptRequest (AttemptId "a") (OperationId "one") (Map.fromList [(ActiveWork, 1), (ModelAttempts, 1), (Tokens, 10), (CostMicroUsd, 10)]) EnforcedCeiling
+            partial = PartialUsage (Map.singleton Tokens 3) [CostMicroUsd] "invoice usage unavailable"
+        run env (beginAttempt rid 0 request now) >>= (@?= Right Accepted)
+        run env (settleAttempt rid (AttemptId "a") partial) >>= (@?= Right Accepted)
+        run env (settleAttempt rid (AttemptId "a") partial) >>= (@?= Right AlreadyAccepted)
+        snapshot <- root env
+        snapshot.active @?= 0
+        snapshot.unknown @?= 1
+        Map.lookup CostMicroUsd snapshot.usage.held @?= Just 10
+        Map.lookup Tokens snapshot.known @?= Just 3
+        run env (beginAttempt rid 0 (AttemptRequest (AttemptId "b") (OperationId "one") (Map.fromList [(ActiveWork, 1), (ModelAttempts, 1), (Tokens, 10), (CostMicroUsd, 1)]) EnforcedCeiling) now) >>= (@?= Left (ResourceExhausted CostMicroUsd))
+        run env (reconcileAttempt rid (AttemptId "a") (Map.fromList [(Tokens, 4), (CostMicroUsd, 3)])) >>= (@?= Left SettlementConflict)
+        run env (reconcileAttempt rid (AttemptId "a") (Map.fromList [(Tokens, 3), (CostMicroUsd, 3)])) >>= (@?= Right Accepted)
+        final <- root env
+        final.active @?= 0
+        final.unknown @?= 0
+        Map.lookup ModelAttempts final.known @?= Just 1
+        Map.lookup Tokens final.known @?= Just 3
+        Map.lookup CostMicroUsd final.known @?= Just 3
     ]
 
 rid :: ExecutionRootId

@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-22T01:19:09Z
       mode: "update"
       note: "Consume plan 73 public descriptor fields and reusable tuple predicate from MasterPlan 13"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-28T04:13:04Z
+      mode: "implement"
+      note: "Consume the accepted resource ledger and shared model catalog for immutable whole-run selection"
 ---
 
 # Pin governed execution settings for agent assignments
@@ -35,19 +40,38 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 ## Purpose / Big Picture
 
 
-Allow one deployment to run a coordinator and workers with distinct admitted model and reasoning settings, then preserve those choices through suspension and restart. Fulfill [IR-17](../improvement-requests/select-governed-models-for-agent-runs.md) without allowing inbound credentials, endpoints or arbitrary model strings. Hard dependencies are `docs/plans/81-enforce-root-resource-reservations-across-durable-work.md` for attempt accounting and existing `docs/plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md` for the single operator catalog. Plan 73 is currently not started; this is an explicit prerequisite, not an existing implementation.
+Allow one deployment to run a coordinator and workers with distinct admitted model and reasoning settings, then preserve those choices through suspension and restart. Fulfill [IR-17](../improvement-requests/select-governed-models-for-agent-runs.md) without allowing inbound credentials, endpoints or arbitrary model strings. Hard dependencies are `docs/plans/81-enforce-root-resource-reservations-across-durable-work.md` for attempt accounting and existing `docs/plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md` for the single operator catalog. Plan 73 is Complete in MasterPlan 13; EP-1 completed at `e218691`. Its public descriptor, retained binding lookup and tuple predicate are the accepted prerequisites.
 
 
 ## Progress
 
 
-Implementation has not started. Seed unchecked milestone entries when implementation begins.
+- [x] Milestone 1: Pure immutable selection and separate whole-run permissions. The core suite passes 476 cases, including historical declaration/queue defaults, user/parent intersection, retained binding identity, profile refusal, fresh exact profile lifecycle checks and credential exclusion.
+- [x] Milestone 2: Assignment/conversation pinning and per-execution dispatch. PostgreSQL fixtures prove changed-default/catalog replay, unavailable-binding refusal, an actual old in-flight Skill branch, conversation rotation with unchanged root/user constraints and rejection of an in-epoch context change.
+- [x] Milestone 3: Actual-attempt correlation, bounded inspection and HTTP fixture qualification. Three HTTP aliases send distinct model/thinking tuples. Durable admission races, retry ceilings, authority revocation, strict binding evidence and unsupported hard-cost refusal pass; normalized compliance uses the existing decision fact codec.
+
+Implementation baseline: `e218691`. The accepted resource and queue compatibility contract is [ADR 0051](../adr/0051-resource-roots-own-conservative-reservations-and-actual-attempts.md).
 
 
 ## Surprises & Discoveries
 
 
-None recorded during implementation.
+The shared catalog and tuple predicate were sufficient without descriptor changes.
+`BehaviorEnv` now carries an optional private registry, so concurrent assignments
+do not mutate global selection. The ordinary completion and traced streaming
+paths both pass below the same accounting wrapper.
+
+Selection exposed a resource distinction needed by later transcript consumers:
+terminal transport and complete billing are separate facts. The resource owner
+now accepts `PartialUsage`; known usage and active release commit once while
+missing billing stays held. A PostgreSQL reconciliation test prevents double
+counting earlier tokens/counters. The public `beginAttemptTx` hook allows root
+reservation and assignment-call admission in one transaction.
+
+The released HTTP APIs have no enforceable invoice ceiling. Finite cost caps
+therefore refuse dispatch, and catalog estimates stay unknown billing. Finite
+token budgets use a conservative context/output ceiling and reject infeasible
+requests. This is an explicit transport constraint, not a budget refund.
 
 
 ## Decision Log
@@ -55,11 +79,51 @@ None recorded during implementation.
 
 2026-10-10: Use the already planned operator catalog rather than establish another provider configuration. Make plan 73 an explicit external hard dependency; reuse current HTTP dispatch without requiring all typed-decision work to finish first.
 
+2026-10-27: Use application queue codec v3, retaining v1/v2 upcasters that supply
+absent selection authority even when historical metadata resembles the new
+wrapper. Use real agent/conversation patch branches and static per-generation
+labels. Conversation roots/user constraints survive rotation unchanged within
+an epoch. [ADR 0052](../adr/0052-assignments-pin-whole-run-selection-and-account-every-provider-attempt.md)
+records selection, admission, uncertainty and rollout ownership.
+
 
 ## Outcomes & Retrospective
 
 
-To be filled during implementation. Do not claim request completion until every acceptance case below, including stated external integration gates, has evidence.
+Completed the whole-assignment selection boundary without changing catalog
+ownership or decision-slot authority. Added `Execution.Request`,
+`Execution.Selection`, `Execution.SelectionRuntime`, `Store.ExecutionSelection`,
+the additive selection-call migration, queue v3 upcasters, agent/conversation
+patches, bounded `runs show` inspection and the operator runbook. ADR 0052 owns
+the durable contract. Root partial billing settlement is the documented EP-1
+interface refinement; its reconciliation case passes in the resource suite.
+
+Validation from baseline `e218691` used the isolated Cabal project described by
+FRIC-8; the ordinary project still names unavailable baseline Kikan package paths.
+No dependency bounds changed. Commands were run inside `nix develop`:
+
+```bash
+cabal build --project-file=.dev/mp13.cabal.project all
+cabal test --project-file=.dev/mp13.cabal.project shikigami-core-test shikigami-core-postgres-test shikigami-agent-test shikigami-server-test shikigami-workers-test --test-show-details=direct --test-options='--num-threads=1'
+cabal test --project-file=.dev/mp13.cabal.project shikigami-core-postgres-test --test-show-details=direct --test-options='--num-threads=1 --pattern=ExecutionSelectionWorkflow'
+just migration-schema-isolation
+just keiro-gate e218691
+git diff --check
+```
+
+The full build passed. The full suites passed 476 core, 260 PostgreSQL, 37 agent,
+63 server and 98 worker cases. The final focused suite passed all 10 selection
+cases, adding the old in-flight Skill and persisted inspection-secret assertions.
+The gate used the same project through the existing local Cabal wrapper: check,
+inspect, deterministic regeneration, generated conformance and diff all passed.
+The diff reports exactly two additive `WorkflowEvolutionGuardAdded` findings and
+`breaking: false`. No new qualifying friction was recorded under this child.
+
+Call facts retain request digests and the shared versioned compliance records;
+the root owns conservative measured/unknown accounting. HTTP invoice ceilings
+remain an explicit pre-dispatch refusal. IR-17's individual-turn recovery,
+continuing assignments and coordinator escalation/real decision regression remain
+assigned to plans 83–85 by the MasterPlan acceptance matrix.
 
 
 ## Context and Orientation

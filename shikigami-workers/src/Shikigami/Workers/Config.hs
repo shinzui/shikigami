@@ -236,6 +236,9 @@ conversationEnv env =
   Conversation.ConversationEnv
     { Conversation.appEnv = (.appEnv) env,
       Conversation.behaviorEnv = (.behaviorEnv) env,
+      Conversation.decisions = env.decisions,
+      Conversation.deliveryPool = Just (envPool env),
+      Conversation.resolveRunProfile = (agentRunDeps env).resolveRunProfile,
       Conversation.runTimeout = envRunTimeout env,
       Conversation.idleTimeout = envConversationIdleTimeout env,
       Conversation.danwa = (.danwa) env,

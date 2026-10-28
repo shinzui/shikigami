@@ -196,6 +196,7 @@ routerDeclarationFixture delegates =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      execution = Nothing,
       decisionModels = [],
       routing =
         Just
@@ -233,6 +234,7 @@ specialistWithDescription description name enabled declaredPrincipal =
               evidenceHints = []
             }
         ],
+      execution = Nothing,
       decisionModels = [],
       routing = Nothing
     }

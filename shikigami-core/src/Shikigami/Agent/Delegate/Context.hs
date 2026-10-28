@@ -35,6 +35,7 @@ data DelegateCtx = DelegateCtx
     parentSessionId :: !(Maybe SessionId),
     parentRunWorkflowId :: !(Maybe WorkflowId),
     lineage :: ![AgentName],
+    executionPermissions :: !(Maybe [Text]),
     executionRootId :: !(Maybe ExecutionRootId),
     delegationBudgetId :: !(Maybe DelegationBudgetId),
     budgetLimit :: !DelegationBudget
@@ -76,7 +77,7 @@ checkCycle DelegateCtx {lineage} target
 
 -- | Validate that a child can be created and return the child's depth context.
 checkDepth :: DelegateCtx -> Either DelegationError DelegateCtx
-checkDepth DelegateCtx {depth, identity, sessionId, parentSessionId, parentRunWorkflowId, lineage, delegationBudgetId, executionRootId, budgetLimit} =
+checkDepth DelegateCtx {depth, identity, sessionId, parentSessionId, parentRunWorkflowId, lineage, delegationBudgetId, executionRootId, executionPermissions, budgetLimit} =
   let attemptedDepth = toInteger (depthInt depth) + 1
    in if attemptedDepth < toInteger maxDelegationDepth
         then
@@ -90,6 +91,7 @@ checkDepth DelegateCtx {depth, identity, sessionId, parentSessionId, parentRunWo
                 lineage,
                 delegationBudgetId,
                 executionRootId,
+                executionPermissions,
                 budgetLimit
               }
         else Left (DelegationDepthExceeded attemptedDepth)

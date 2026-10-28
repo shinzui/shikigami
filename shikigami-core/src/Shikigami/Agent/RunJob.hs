@@ -21,6 +21,7 @@ import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.Agent.Run.Key (RunKey, runKeyText)
 import Shikigami.Execution.Identity (ExecutionRootId)
+import Shikigami.Execution.Request (ExecutionRequest)
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 
@@ -55,6 +56,8 @@ data RunJob = RunJob
     parentRunWorkflowId :: !(Maybe WorkflowId),
     delegationDepth :: !(Maybe DelegationDepth),
     lineage :: ![AgentName],
+    executionRequest :: !(Maybe ExecutionRequest),
+    executionPermissions :: !(Maybe [Text]),
     executionRootId :: !(Maybe ExecutionRootId),
     delegationBudgetId :: !(Maybe DelegationBudgetId),
     routeKind :: !RunRouteKind
@@ -76,6 +79,8 @@ instance ToJSON RunJob where
         "parentRunWorkflowId" Aeson..= fmap (.unWorkflowId) job.parentRunWorkflowId,
         "delegationDepth" Aeson..= job.delegationDepth,
         "lineage" Aeson..= job.lineage,
+        "executionRequest" Aeson..= job.executionRequest,
+        "executionPermissions" Aeson..= job.executionPermissions,
         "executionRootId" Aeson..= job.executionRootId,
         "delegationBudgetId" Aeson..= job.delegationBudgetId,
         "routeKind" Aeson..= job.routeKind
@@ -96,10 +101,12 @@ instance FromJSON RunJob where
     parentRunWorkflowId <- value Aeson..: "parentRunWorkflowId" >>= traverse (either (fail . show) pure . mkWorkflowId)
     delegationDepth <- value Aeson..: "delegationDepth"
     lineage <- value Aeson..: "lineage"
+    executionRequest <- value Aeson..:? "executionRequest"
+    executionPermissions <- value Aeson..:? "executionPermissions"
     executionRootId <- value Aeson..:? "executionRootId"
     delegationBudgetId <- value Aeson..: "delegationBudgetId"
     routeKind <- value Aeson..: "routeKind"
-    pure RunJob {agentName, identity, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, executionRootId, routeKind}
+    pure RunJob {agentName, identity, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, executionRootId, executionRequest, executionPermissions, routeKind}
 
 -- | Preserve valid natural workflow keys. Keys containing Keiro journal
 -- separators become deterministic UUIDv5 technical identities; they are not

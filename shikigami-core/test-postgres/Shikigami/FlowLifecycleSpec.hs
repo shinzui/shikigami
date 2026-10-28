@@ -594,6 +594,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
                 parentSessionId = Nothing,
                 parentRunWorkflowId = Nothing,
                 lineage = map AgentName [flowAgent],
+                executionPermissions = Nothing,
                 executionRootId = Nothing,
                 delegationBudgetId = Nothing,
                 budgetLimit = defaultDelegationBudget
@@ -759,6 +760,7 @@ flowAgentDecl flowAgent =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      execution = Nothing,
       decisionModels = [],
       routing = Nothing
     }

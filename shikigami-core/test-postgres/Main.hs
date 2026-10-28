@@ -7,6 +7,7 @@ import Shikigami.DecisionWorkflowSpec qualified as DecisionWorkflowSpec
 import Shikigami.DelegationBudgetSpec qualified as DelegationBudgetSpec
 import Shikigami.DirectoryStoreSpec qualified as DirectoryStoreSpec
 import Shikigami.ExecutionResourcesSpec qualified as ExecutionResourcesSpec
+import Shikigami.ExecutionSelectionWorkflowSpec qualified as ExecutionSelectionWorkflowSpec
 import Shikigami.FlowLifecycleSpec qualified as FlowLifecycleSpec
 import Shikigami.GrantStoreSpec qualified as GrantStoreSpec
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
@@ -31,6 +32,7 @@ main = withShikigamiMigratedSuite \databaseFixture ->
           DecisionWorkflowSpec.tests databaseFixture,
           DelegationBudgetSpec.tests databaseFixture,
           ExecutionResourcesSpec.tests databaseFixture,
+          ExecutionSelectionWorkflowSpec.tests databaseFixture,
           DirectoryStoreSpec.tests databaseFixture,
           FlowLifecycleSpec.tests databaseFixture,
           GrantStoreSpec.tests databaseFixture,

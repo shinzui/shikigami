@@ -24,10 +24,8 @@ module Shikigami.Flow.Routing
 where
 
 import Baikai.Context (systemUser)
-import Baikai.Provider (completeRequest)
 import Baikai.Response (flattenAssistantBlocks, flattenAssistantText, responseError)
 import Baikai.ResponseFormat (ResponseFormat (JsonObject))
-import Baikai.Trace qualified as BaikaiTrace
 import Control.Exception (Exception, fromException)
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
@@ -45,7 +43,7 @@ import Shibuya.Telemetry.Effect (Span, Tracing, addAttribute, defaultSpanArgumen
 import Shikigami.Agent.Decl (AgentDecl (..), RouterConfidence (..))
 import Shikigami.Agent.Loader (AgentLoadReport)
 import Shikigami.Behavior.Compatibility
-import Shikigami.Behavior.Run (BehaviorEnv (..))
+import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest)
 import Shikigami.Directory (DirectoryHandle, readDirectorySnapshot, renderDirectorySourceKind)
 import Shikigami.Prelude
 import Shikigami.Router.Catalog (CandidateAvailability (..), CandidateCatalog (..), CandidateEntry (..), CatalogVersion (..), buildCandidateCatalog)
@@ -227,15 +225,13 @@ routingRuntime report directory =
 -- A sanctioned profile has already constrained this 'BehaviorEnv' before a
 -- Flow is interpreted, so routing cannot silently escape that call tuple.
 modelRouteEvaluator :: BehaviorEnv -> CandidateCatalog -> Value -> IO (Either RoutingFailure Value)
-modelRouteEvaluator BehaviorEnv {model, options, traceSink} catalog payload = do
+modelRouteEvaluator env@BehaviorEnv {model, options} catalog payload = do
   let context = systemUser routingSystemPrompt (routingUserPrompt catalog payload)
       structuredOptions = options & #responseFormat .~ Just JsonObject
   case validateResponseRequest model structuredOptions context of
     Left refusal -> pure (Left (RoutingEvaluationFailed (renderResponseCompatibilityError refusal)))
     Right () -> do
-      response <- case traceSink of
-        Nothing -> completeRequest model context structuredOptions
-        Just sink -> BaikaiTrace.withTrace sink model context structuredOptions
+      response <- completeBehaviorRequest env model context structuredOptions
       case responseError response of
         Just failure -> pure (Left (RoutingEvaluationFailed (boundedDetail (Text.pack (show failure)))))
         Nothing ->

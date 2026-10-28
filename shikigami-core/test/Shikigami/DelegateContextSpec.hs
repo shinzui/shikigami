@@ -52,6 +52,7 @@ ctxAt depth =
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       lineage = map AgentName ["root", "lead"],
+      executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing,
       budgetLimit = defaultDelegationBudget
@@ -73,6 +74,7 @@ delegatingAgent =
       memory = defaultMemoryPolicy,
       enabled = True,
       expertise = [],
+      execution = Nothing,
       decisionModels = [],
       routing = Nothing
     }

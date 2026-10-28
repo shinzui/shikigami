@@ -161,7 +161,9 @@ delegate declarations directory decl ctx delegationKey childAgent payload = do
             delegationDepth = Just childDepth,
             lineage = currentLineage <> [AgentName childAgent],
             delegationBudgetId = Just budgetId,
-            executionRootId = ctx.executionRootId
+            executionRootId = ctx.executionRootId,
+            executionRequest = Nothing,
+            executionPermissions = ctx.executionPermissions
           }
   handle <-
     spawnChild

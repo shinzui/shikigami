@@ -51,6 +51,7 @@ import Shikigami.AgentRun.Ledger (recordDeadLetter)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Directory.Store qualified as DirectoryStore
+import Shikigami.Execution.Request (ExecutionContext (..))
 import Shikigami.Integration.Danwa (AddressedMessage)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
@@ -278,7 +279,11 @@ runConversationAgent env job addressed =
         ]
       pure (deadOutcome "unknown_agent" detail)
     Just decl -> do
-      result <- Conversation.runConversationTurnWithIdentity (conversationEnv env) decl (job ^. #identity) addressed
+      let execution =
+            if isNothing job.executionRootId && isNothing job.executionRequest && isNothing job.executionPermissions
+              then Nothing
+              else Just (ExecutionContext job.executionRootId job.executionRequest job.executionPermissions)
+      result <- Conversation.runConversationTurnWithExecution (conversationEnv env) decl (job ^. #identity) execution addressed
       case result of
         Left (Conversation.ConversationTransientFailure err) -> do
           runMetric Metrics.recordRunFailed env job

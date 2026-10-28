@@ -96,7 +96,12 @@ data AttemptRequest = AttemptRequest
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data Settlement = KnownUsage !Quantities | UnknownUsage !Text
+data Settlement
+  = KnownUsage !Quantities
+  | UnknownUsage !Text
+  | -- | A terminal transport is known to have stopped, but some billing facts
+    -- remain unknown. Release active work; hold only uncertain usage ceilings.
+    PartialUsage !Quantities ![Dimension] !Text
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
