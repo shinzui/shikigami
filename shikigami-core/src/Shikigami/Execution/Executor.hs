@@ -247,14 +247,9 @@ modelContext :: ExecutionSnapshot -> Operation -> ModelOperationInput -> Either 
 modelContext snapshot operation input = do
   unless (input.format == 1 && input.view.context.systemPrompt == snapshot.initialContext.systemPrompt) (Left CorruptReplay)
   unless (Lazy.length (Aeson.encode input.view.context) <= fromIntegral snapshot.policy.contextBytes) (Left (ExecutionPolicyRefused "model context exceeds the pinned byte ceiling"))
-  unless (firstUser input.view.context.messages == firstUser snapshot.initialContext.messages) (Left CorruptReplay)
+  unless (contextRequest input.view.context.messages == contextRequest snapshot.initialContext.messages) (Left CorruptReplay)
   context <- restoreContext input.view.context
   tools <- case Aeson.fromJSON snapshot.offeredTools of Aeson.Success value -> Right (value :: [Tool.Tool]); _ -> Left UnsupportedReplay
   unless (length tools <= 128 && sort (map (\(tool :: Tool.Tool) -> tool.name) tools) == sort (map (\(binding :: ToolBinding) -> binding.name) snapshot.toolBindings) && all (\(tool :: Tool.Tool) -> any (\(binding :: ToolBinding) -> binding.name == tool.name && binding.schemaDigest == versionedDigest "shikigami.tool-schema/1" tool.parameters) snapshot.toolBindings) tools) (Left UnsupportedReplay)
   when (operation.specification.kind == ModelSummary && (isNothing snapshot.policy.summaryTokens || maybe True (\requested -> maybe True (requested >) snapshot.policy.summaryTokens) input.maxOutputTokens)) (Left (ExecutionPolicyRefused "summary output exceeds the pinned ceiling"))
   pure (context & #tools .~ if operation.specification.kind == ModelSummary then Vector.empty else Vector.fromList tools)
-
-firstUser :: [ReplayMessage] -> Maybe ReplayMessage
-firstUser [] = Nothing
-firstUser (message@UserTurn {} : _) = Just message
-firstUser (_ : rest) = firstUser rest

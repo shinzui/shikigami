@@ -40,7 +40,7 @@ awaitLabels :: [Text]
 awaitLabels = ["next-message"]
 
 declaredPatches :: Set PatchId
-declaredPatches = Set.fromList [PatchId "shikigami-conversation-execution-selection-v1"]
+declaredPatches = Set.fromList [PatchId "shikigami-conversation-execution-selection-v1", PatchId "shikigami-conversation-durable-execution-v1"]
 
 -- The journal keys the runtime records patch decisions under.
 declaredPatchStepNames :: [Text]

@@ -12,6 +12,7 @@ import Control.Concurrent.Async (concurrently)
 import Control.Exception (SomeException, try)
 import Control.Monad (when)
 import Data.Aeson (Value, eitherDecode, encode, object, toJSON, (.=))
+import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.IORef
@@ -19,9 +20,11 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as TextEncoding
 import Data.Time (UTCTime, addUTCTime, getCurrentTime)
 import Data.UUID qualified as UUID
 import Effectful (Eff)
+import Keiro.Outbox (listOutbox)
 import Keiro.Workflow (PatchId (..), StepName (..), WorkflowId (..), WorkflowOutcome (..), WorkflowRunOptions (..), loadStepIndex, runWorkflowWith)
 import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), lookupAwakeable, registerAwakeableTx)
@@ -388,12 +391,41 @@ tests fixture =
                     directory = dependencies.directory
                   }
               context = ExecutionContext (Just root) (Just (ExecutionRequest (Just "worker-a") Nothing Nothing)) (Just ["worker-a"])
-              message n = AddressedMessage "conv_selection" ("message" <> Text.pack (show n)) Nothing "human" "marker" "participant" ("emb" <> Text.pack (show n)) "human" now
-          first <- expectRight =<< Conversation.runConversationTurnWithExecution env declaration (compatibilityIdentity "router") (Just context) (message (1 :: Int))
-          second <- expectRight =<< Conversation.runConversationTurn env declaration (message (2 :: Int))
+              message n = AddressedMessage "conv_selection" ("message" <> Text.pack (show n)) Nothing "human" ("request-" <> Text.pack (show n)) "participant" ("emb" <> Text.pack (show n)) "human" now
+          _ <- expectRight =<< run app Catalog.registerProjectionCatalog
+          ensureRunQueue store.pool >>= expectRight
+          let firstMessage = message (1 :: Int)
+              secondMessage = message (2 :: Int)
+              workflowId = Conversation.conversationWorkflowId 0 firstMessage
+              execution msg = Replay.executionIdFor (conversationAssignmentIdFor workflowId.unWorkflowId msg.messageId)
+          Conversation.submitConversationTurnWithExecution env declaration (compatibilityIdentity "router") (Just context) firstMessage >>= (@?= Right Conversation.ConversationAccepted)
+          -- Repeated delivery observes its accepted turn and leaves the
+          -- successor's input promise pending, without another model attempt.
+          Conversation.submitConversationTurnWithExecution env declaration (compatibilityIdentity "router") (Just context) firstMessage >>= (@?= Right Conversation.ConversationAccepted)
+          observed >>= (@?= [])
+          index <- run app (loadStepIndex Conversation.conversationWorkflowName workflowId 0)
+          token <- case Map.lookup "awkid:next-message" index >>= (\value -> case Aeson.fromJSON value of Aeson.Success token -> Just token; _ -> Nothing) of
+            Just token -> pure (token :: AwakeableId)
+            Nothing -> assertFailure "missing successor wake" >> fail "wake"
+          let AwakeableId tokenId = token
+          Just awakeable <- run app (lookupAwakeable tokenId)
+          awakeable.status @?= Awakeable.Pending
+          _ <- driveExecutionChild app (Agent.executionRuntime dependencies) (execution firstMessage) 20
+          let retired = env {Conversation.decisions = Decision.defaultDecisionServices (mustRight (modelCatalog []))}
+          first <- expectRight =<< Conversation.runConversationTurnWithExecution retired declaration (compatibilityIdentity "router") (Just context) firstMessage
+          Conversation.runConversationTurn retired declaration firstMessage >>= (@?= Right first)
+          Conversation.submitConversationTurnWithExecution env declaration (compatibilityIdentity "router") Nothing secondMessage >>= (@?= Right Conversation.ConversationAccepted)
+          _ <- driveExecutionChild app (Agent.executionRuntime dependencies) (execution secondMessage) 20
+          second <- expectRight =<< Conversation.runConversationTurn env declaration secondMessage
+          Conversation.runConversationTurn env declaration firstMessage >>= (@?= Right first)
+          replies <- run app (listOutbox "shinzui/shikigami")
+          length replies @?= 2
           first.sessionId @?= second.sessionId
           bodies <- observed
           map (lookupField "model") bodies @?= replicate 2 (Just (Model.modelId (bindingModel (bindings !! 1))))
+          case bodies of
+            [_, secondBody] -> assertBool "prior accepted turns are frozen in the next assignment" ("request-1" `Text.isInfixOf` TextEncoding.decodeUtf8 (Lazy.toStrict (encode secondBody)))
+            _ -> assertFailure "conversation repeated provider work"
           refused <- Conversation.runConversationTurnWithExecution env declaration (compatibilityIdentity "router") (Just (context & #request .~ Just (ExecutionRequest (Just "worker-b") Nothing Nothing))) (message (3 :: Int))
           assertBool "context cannot change within epoch" (either (const True) (const False) refused)
           observed >>= (\after -> length after @?= 2)

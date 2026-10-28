@@ -509,6 +509,14 @@ forward across this patch introduction. See [ADR 0057](adr/0057-skill-parents-ad
 
 ## Undeclarable label families
 
+Conversations also declare `shikigami-conversation-durable-execution-v1`.
+Eligible new Skills admit a protected assignment and await the same execution
+child while old snapshots retain `run-behavior-v2`. The atomic assistant/reply
+owner remains unchanged. Ingress distinguishes accepted turns from completed
+replies, and asynchronous wakes append only to their publishing generation.
+Historical timer payloads remain readable. See
+[ADR 0058](adr/0058-conversation-acceptance-and-wakes-retain-their-generation.md).
+
 The checked specification cannot hold every name in the table above. A keiro-dsl
 workflow label is a compile-time wire word matching `[A-Za-z0-9][A-Za-z0-9_-]*`,
 so a label that carries a colon or is computed at run time cannot be declared —

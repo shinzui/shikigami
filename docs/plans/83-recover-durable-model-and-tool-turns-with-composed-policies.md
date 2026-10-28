@@ -70,8 +70,10 @@ Observation deadlines use the existing timer dispatcher and an explicit generati
 The automatic driver is now a callable, registered workflow with bounded decision
 generations, accepted-reference queue repair, replay-window reconstruction and
 the existing bound Approval child. The agent-run leaf Skill branch now admits and awaits this driver behind a real
-workflow patch. Conversation adoption and agent/operator configuration are still
-outstanding. Recorded summaries are accepted and replayed through that driver. Milestones 2
+workflow patch. The conversation Skill branch now adopts the same child behind
+its own patch, with durable ingress acceptance and unchanged atomic reply ownership.
+Agent/operator configuration and the ephemeral path are still outstanding.
+Recorded summaries are accepted and replayed through that driver. Milestones 2
 and 3 remain open.
 
 Implementation baseline: `a156a6f`. Plans 81 and 82 are Complete. ADR 0051/0052 define the accepted root/selection and partial-billing contracts.
@@ -113,6 +115,18 @@ through a global provider registry. Rich tool results preserve structured data a
 opaque extensions, including accepted-message references, before lease cleanup.
 
 ## Decision Log
+
+2026-10-28: Conversation ingress acknowledges a matching durable admission or
+recorded next-message wake separately from reply completion. Duplicate current
+input observes the accepted turn; new unaccepted input keeps backpressure.
+Both message and timer wakes publish through a fixed-generation transaction.
+Replay context format 2 explicitly marks the current request, leaving earlier
+turns independently compactable; format 1 retains its old codec and anchor.
+[ADR 0058](../adr/0058-conversation-acceptance-and-wakes-retain-their-generation.md)
+records these boundaries. [FRIC-12](../friction-log/12-awakeable-repair-requires-an-explicit-publishing-generation-transaction.md)
+records the dependency interface detour: the public convenience signal repairs
+into the current generation, requiring composition of public transaction hooks
+to retain the publishing generation.
 
 
 2026-10-10: Use a separate checked execution authority with Shikigami-owned replay records and atomic outcome/progress/resource settlement. Keep the existing terminal memory/sink/reply owners. Long work uses durable submission and observation so workflow concurrency is not a proxy for executor capacity.
@@ -282,6 +296,18 @@ Five explicit old-patch fixtures retain coarse lease/retry and selection-step
 crash coverage; production options activate the new branch. Conversation adoption,
 configuration/ephemeral policy and recovery-class qualification still prevent
 milestones 2 and 3 from closing.
+
+The conversation checkpoint passes 496 core, 303 PostgreSQL, 37 agent, 63 server
+and 98 worker cases. It qualifies accepted ingress redelivery without model IO,
+two driver-backed conversation turns with retained root/selection/session,
+completed replay after provider retirement, chronological frozen history,
+one reply per turn, and both historical and new stale idle timers leaving the
+successor journal untouched. Context and summary fixtures preserve the format-2
+request marker and historical format-1 bytes. Configuration, ephemeral/one-off
+adoption, class-specific recovery and operator inspection remain open; milestones
+2 and 3 are not complete. The full build passes. The complete gate against
+`7c3ed06` passes with one additive `WorkflowEvolutionGuardAdded` finding and
+`breaking: false`.
 
 ## Context and Orientation
 

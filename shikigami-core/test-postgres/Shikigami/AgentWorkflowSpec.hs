@@ -34,6 +34,7 @@ import Keiro.Integration.Event (decodeJsonIntegrationEvent)
 import Keiro.Outbox (OutboxRow (..), defaultPublishOptions, listOutbox, publishClaimedOutbox)
 import Keiro.Outbox qualified as Outbox
 import Keiro.PGMQ qualified as Job
+import Keiro.Timer qualified as Timer
 import Keiro.Workflow (PatchId (..), StepName (..), Workflow, WorkflowId (..), WorkflowInstanceRow (..), WorkflowName (..), WorkflowOutcome (..), WorkflowRunOptions (..), completedStepName, defaultWorkflowRunOptions, loadStepIndex, patchSetStepName, runWorkflow, runWorkflowWith)
 import Keiro.Workflow.Awakeable (AwakeableId (..), signalAwakeable)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
@@ -1178,14 +1179,22 @@ tests databaseFixture =
                   Right result -> pure ((.sessionId) result)
                   Left err -> assertFailure ("first turn should succeed, got " <> show err)
 
+                staleTimer <- captureConversationIdleTimer appEnv
                 -- The second message rotates generation 0 shut, which is what
                 -- makes generation 0's armed timer stale.
                 secondTurn <- Conversation.runConversationTurn env conversationDecl secondAddressedMessage
                 assertBool ("second turn should succeed, got " <> show secondTurn) (either (const False) (const True) secondTurn)
 
-                -- Fire every due timer, generation 0's included.
-                _ <- fireDueConversationIdleTimer appEnv
-                _ <- fireDueConversationIdleTimer appEnv
+                before <- conversationStepKeys appEnv secondAddressedMessage 1
+                runAppIO appEnv (Conversation.conversationIdleTimeoutFireAction staleTimer) >>= assertEqual "superseded timer is cancelled" (Right Nothing)
+                let legacy =
+                      staleTimer
+                        & #payload .~ case staleTimer.payload of
+                          Object fields -> Object (KeyMap.delete "generation" fields)
+                          value -> value
+                runAppIO appEnv (Conversation.conversationIdleTimeoutFireAction legacy) >>= assertEqual "legacy timer cannot target a successor" (Right Nothing)
+                after <- conversationStepKeys appEnv secondAddressedMessage 1
+                assertEqual "old timers append no orphan wake to the live generation" before after
 
                 stale <- conversationStepKeys appEnv firstAddressedMessage 0
                 assertBool "the superseded generation records no terminal step" (not (Map.member "idle-timeout" stale))
@@ -2301,6 +2310,21 @@ resumeConversationOnce appEnv env =
 -- declines it is left in @firing@ — which the claim query skips, so it costs one
 -- pass and does not spin. Draining is therefore how a test reaches its own timer
 -- without depending on which row sorted first.
+-- Hold the old timer's claimed row while its workflow rotates. Other timer
+-- kinds belong to their existing owners and are irrelevant in this fixture.
+captureConversationIdleTimer :: AppEnv -> IO Timer.TimerRow
+captureConversationIdleTimer app = go (8 :: Int)
+  where
+    go 0 = assertFailure "no conversation timer found" >> fail "timer"
+    go remaining = do
+      now <- getCurrentTime
+      claimed <- runAppIO app (Timer.claimDueTimer (addUTCTime 120 now))
+      case claimed of
+        Right (Just row) -> case row.payload of
+          Object fields | KeyMap.lookup "kind" fields == Just (String Conversation.conversationIdleTimeoutKind) -> pure row
+          _ -> go (remaining - 1)
+        other -> assertFailure (show other) >> fail "timer"
+
 fireDueConversationIdleTimer :: AppEnv -> IO Bool
 fireDueConversationIdleTimer appEnv = go (8 :: Int)
   where

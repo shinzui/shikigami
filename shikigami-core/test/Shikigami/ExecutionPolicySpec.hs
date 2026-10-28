@@ -45,6 +45,23 @@ tests =
         let policy = defaultHarnessPolicy & #contextBytes .~ 1024 & #keepRecentMessages .~ 1 & #summaryTokens .~ Just 64
             source = ReplayContext 1 Nothing [UserTurn [TextBlock "request"] Nothing, UserTurn [TextBlock (Text.replicate 3000 "x")] Nothing, AssistantTurn (answer "latest")]
         prepareModelOperationInput policy ModelTurn source Nothing Nothing @?= Left (ExecutionPolicyRefused "summary source exceeds the context ceiling"),
+      testCase "version-2 summary requests and accepted summaries retain the actual request" do
+        let policy = defaultHarnessPolicy & #contextBytes .~ 3000 & #keepRecentMessages .~ 1 & #summaryTokens .~ Just 64
+            request = RequestTurn [TextBlock "current request"] Nothing
+            source = ReplayContext 2 Nothing [UserTurn [TextBlock (Text.replicate 1000 "x")] Nothing, AssistantTurn (answer (Text.replicate 1000 "y")), request, AssistantTurn (answer (Text.replicate 1000 "z"))]
+            execution = ExecutionId "summary-fixture"
+            specification = OperationSpec (operationIdFor execution 0) ModelSummary RepeatableObservation "summary" "policy" "scope" Nothing
+            ref = PayloadRef "payload" "digest" 1
+            operation = Operation 1 execution 0 specification "fingerprint" ref (Just ref) (Just NeedModel) False Nothing
+        (kind, input) <- expectRight (prepareModelOperationInput policy ModelTurn source Nothing Nothing)
+        kind @?= ModelSummary
+        input.view.context.format @?= 2
+        contextRequest input.view.context.messages @?= Just request
+        (next, accepted) <- expectRight (prepareModelOperationInput policy ModelTurn source Nothing (Just (operation, input, answer "retained facts")))
+        next @?= ModelTurn
+        accepted.view.context.format @?= 2
+        contextRequest accepted.view.context.messages @?= Just request
+        assertBool "accepted summary is referenced" (maybe False (maybe False (const True) . (.summary)) accepted.provenance),
       testCase "an accepted summary with unsupported provenance is refused rather than resampled" do
         let policy = defaultHarnessPolicy & #contextBytes .~ 1024 & #keepRecentMessages .~ 1 & #summaryTokens .~ Just 64
             source = ReplayContext 1 Nothing [UserTurn [TextBlock "request"] Nothing, UserTurn [TextBlock (Text.replicate 3000 "x")] Nothing, AssistantTurn (answer "latest")]
@@ -92,6 +109,23 @@ tests =
         view.context.systemPrompt @?= Just "instructions"
         length source.messages @?= 5
         Aeson.eitherDecode (Aeson.encode view) @?= Right view,
+      testCase "version-2 request anchors survive compaction after newer messages" do
+        let request = RequestTurn [TextBlock "current request"] Nothing
+            source = ReplayContext 2 (Just "instructions") [UserTurn [TextBlock (Text.replicate 2000 "old")] Nothing, AssistantTurn (answer "old reply"), request, UserTurn [TextBlock (Text.replicate 2000 "repair")] Nothing, AssistantTurn (answer "latest")]
+            policy = defaultHarnessPolicy & #contextBytes .~ 1024 & #keepRecentMessages .~ 1
+        selected <- expectRight (selectContextView policy source)
+        selected.context.format @?= 2
+        contextRequest selected.context.messages @?= Just request
+        assertBool "old conversation context remains optional" (0 `elem` selected.omitted)
+        assertBool "the actual request is mandatory even outside the recent window" (2 `elem` selected.kept)
+        Aeson.eitherDecode (Aeson.encode selected.context) @?= Right selected.context,
+      testCase "context versions reject missing duplicate and misplaced request markers" do
+        let request = RequestTurn [TextBlock "request"] Nothing
+        mapM_
+          (\context -> assertBool "invalid context header refused" (isLeft (restoreContext context)))
+          [ReplayContext 1 Nothing [request], ReplayContext 2 Nothing [UserTurn [TextBlock "request"] Nothing], ReplayContext 2 Nothing [request, request], ReplayContext 3 Nothing [request]]
+        let legacy = ReplayContext 1 Nothing [UserTurn [TextBlock "original"] Nothing]
+        Aeson.eitherDecode (Aeson.encode legacy) @?= Right legacy,
       testCase "pending calls and signed continuations cannot be compacted away" do
         let opaque = ThinkingBlock "signed" (Just "sig") True (Just (ProviderReplay OpenAIResponses "model" [Aeson.String "opaque"]))
             assistant = (toolReply [("id", "observe", Aeson.object [])]) & #blocks %~ (opaque :)

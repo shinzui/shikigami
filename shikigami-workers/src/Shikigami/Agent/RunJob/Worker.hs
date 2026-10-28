@@ -298,7 +298,7 @@ runConversationAgent env job addressed =
             if isNothing job.executionRootId && isNothing job.executionRequest && isNothing job.executionPermissions
               then Nothing
               else Just (ExecutionContext job.executionRootId job.executionRequest job.executionPermissions)
-      result <- Conversation.runConversationTurnWithExecution (conversationEnv env) decl (job ^. #identity) execution addressed
+      result <- Conversation.submitConversationTurnWithExecution (conversationEnv env) decl (job ^. #identity) execution addressed
       case result of
         Left (Conversation.ConversationTransientFailure err) -> do
           runMetric Metrics.recordRunFailed env job
@@ -354,7 +354,8 @@ runConversationAgent env job addressed =
               [ "detail" Aeson..= detail,
                 "reason" Aeson..= ("conversation_busy" :: Text)
               ]
-        Right _ -> do
+        Right Conversation.ConversationAccepted -> jobLog env job Log.Info "worker.conversation.accepted" []
+        Right (Conversation.ConversationCompleted _) -> do
           runMetric Metrics.recordRunCompleted env job
           jobLog env job Log.Info "worker.conversation.completed" []
       pure (conversationJobOutcome result)

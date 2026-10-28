@@ -619,7 +619,7 @@ runDurableSkillStep deps profile overlays job _decl sid prior selection path = d
             capabilities = overlays,
             policy = Harness.defaultHarnessPolicy,
             skillDir = SkillDir (Text.unpack path),
-            input = BehaviorInput job.triggerPayload prior
+            input = pure (Right (ExecutionStart.SkillInput (BehaviorInput job.triggerPayload prior) []))
           }
   admitted <- runStep deps (StepName "admit-skill-execution") (liftIO (ExecutionStart.admitSkillExecution runtime describe assignment >>= executionResult))
   case admitted of

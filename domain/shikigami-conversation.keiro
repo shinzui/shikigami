@@ -16,6 +16,10 @@ workflow DanwaConversation
     }
     step resolve-session -> SessionId
     step record-user -> RecordedTurn
+    patch shikigami-conversation-durable-execution-v1 {
+      step admit-conversation-skill -> ExecutionAdmissionResult
+      child execution id input via executionWorkflowId -> ExecutionDriverResult
+    }
     step run-behavior-v2 -> BehaviorOutput
     step record-assistant-and-reply -> AssistantTurnAndReply
     step turn-result -> ConversationTurnResult

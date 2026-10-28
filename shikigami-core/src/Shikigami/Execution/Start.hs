@@ -3,6 +3,7 @@
 -- existing execution or its accepted terminal result.
 module Shikigami.Execution.Start
   ( SkillAssignment (..),
+    SkillInput (..),
     admitSkillExecution,
     readExecutionResult,
   )
@@ -40,7 +41,13 @@ data SkillAssignment = SkillAssignment
     capabilities :: !ResolvedCapabilitySet,
     policy :: !HarnessPolicy,
     skillDir :: !SkillDir,
-    input :: !BehaviorInput
+    input :: !(IO (Either ExecutionError SkillInput))
+  }
+  deriving stock (Generic)
+
+data SkillInput = SkillInput
+  { request :: !BehaviorInput,
+    history :: ![ReplayMessage]
   }
   deriving stock (Generic)
 
@@ -64,44 +71,48 @@ admitSkillExecution runtime describe assignment = do
       case manifest of
         Left _ -> pure (Left (ExecutionPolicyRefused "Skill instructions are unavailable or invalid"))
         Right skill -> do
-          let initial =
-                ExecutionSnapshot
-                  { format = 1,
-                    executionId = execution,
-                    runId = assignment.runId,
-                    agent = assignment.agent,
-                    identity = assignment.identity,
-                    sessionId = assignment.sessionId,
-                    selection = assignment.selection,
-                    sanctionedProfile = assignment.sanctionedProfile,
-                    instructions = SkillInstructions skill.name skill.description skill.body,
-                    initialContext = ReplayContext 1 (Just skill.description) [UserTurn [TextBlock (skillRequestText skill assignment.input)] Nothing],
-                    capabilities = assignment.capabilities,
-                    offeredTools = toJSON ([] :: [Aeson.Value]),
-                    policy = assignment.policy,
-                    toolBindings = []
-                  }
-          case validateSnapshot initial >> void (Store.payloadReference (toJSON initial)) of
+          supplied <- assignment.input
+          case supplied of
             Left err -> pure (Left err)
-            Right () -> do
-              authority <- runtime.authorize initial
-              case authority of
-                Left _ -> pure (Left (ExecutionPolicyRefused "fresh assignment authority refused"))
+            Right input -> do
+              let initial =
+                    ExecutionSnapshot
+                      { format = 1,
+                        executionId = execution,
+                        runId = assignment.runId,
+                        agent = assignment.agent,
+                        identity = assignment.identity,
+                        sessionId = assignment.sessionId,
+                        selection = assignment.selection,
+                        sanctionedProfile = assignment.sanctionedProfile,
+                        instructions = SkillInstructions skill.name skill.description skill.body,
+                        initialContext = ReplayContext 2 (Just skill.description) (input.history <> [RequestTurn [TextBlock (skillRequestText skill input.request)] Nothing]),
+                        capabilities = assignment.capabilities,
+                        offeredTools = toJSON ([] :: [Aeson.Value]),
+                        policy = assignment.policy,
+                        toolBindings = []
+                      }
+              case validateSnapshot initial >> void (Store.payloadReference (toJSON initial)) of
+                Left err -> pure (Left err)
                 Right () -> do
-                  described <- timeout (max 1 (min 30 runtime.timeoutSeconds) * 1000000) (describe initial)
-                  let menu = fromMaybe (Left (ExecutionPolicyRefused "tool menu description exceeded its admission deadline")) described
-                  case menu of
-                    Left err -> pure (Left err)
-                    Right frozen -> do
-                      let snapshot = initial & #offeredTools .~ frozen.offeredTools & #toolBindings .~ frozen.toolBindings
-                      admitted <- owned (Store.admitExecution snapshot)
-                      case admitted of
-                        Right _ -> pure (Right (ExecutionStart execution))
-                        -- Another admission may have won after the initial
-                        -- read. Its frozen snapshot wins even if the file or
-                        -- process configuration changed between attempts.
-                        Left ExecutionIdentityConflict -> admitSkillExecution runtime describe assignment
+                  authority <- runtime.authorize initial
+                  case authority of
+                    Left _ -> pure (Left (ExecutionPolicyRefused "fresh assignment authority refused"))
+                    Right () -> do
+                      described <- timeout (max 1 (min 30 runtime.timeoutSeconds) * 1000000) (describe initial)
+                      let menu = fromMaybe (Left (ExecutionPolicyRefused "tool menu description exceeded its admission deadline")) described
+                      case menu of
                         Left err -> pure (Left err)
+                        Right frozen -> do
+                          let snapshot = initial & #offeredTools .~ frozen.offeredTools & #toolBindings .~ frozen.toolBindings
+                          admitted <- owned (Store.admitExecution snapshot)
+                          case admitted of
+                            Right _ -> pure (Right (ExecutionStart execution))
+                            -- Another admission may have won after the initial
+                            -- read. Its frozen snapshot wins even if the file or
+                            -- process configuration changed between attempts.
+                            Left ExecutionIdentityConflict -> admitSkillExecution runtime describe assignment
+                            Left err -> pure (Left err)
   where
     execution = executionIdFor assignment.selection.assignmentId
     owned :: Eff AppEffects (Either ExecutionError a) -> IO (Either ExecutionError a)

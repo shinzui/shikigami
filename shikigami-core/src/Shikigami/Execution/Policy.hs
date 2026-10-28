@@ -142,10 +142,10 @@ prepareModelOperationInput policy kind source predecessor latestSummary = do
             pure (kind, ModelOperationInput 1 combined Nothing (Just (ContextProvenance 1 predecessor (Just reference) Nothing)))
       Just _ -> Left UnsupportedReplay
       Nothing -> do
-        anchor <- maybe (Left CorruptReplay) Right (listToMaybe [message | message@UserTurn {} <- source.messages])
+        anchor <- maybe (Left CorruptReplay) Right (contextRequest source.messages)
         let omitted = [message | (position, message) <- zip [0 ..] context.messages, position `elem` selected.omitted]
             instruction = UserTurn [TextBlock "Summarize the preceding omitted context as factual context for a later model turn. Preserve useful facts and unresolved questions. Return plain text. Do not request tools or claim new permissions."] Nothing
-        summary <- selectContextView policy (ReplayContext 1 source.systemPrompt ([anchor] <> omitted <> [instruction]))
+        summary <- selectContextView policy (ReplayContext source.format source.systemPrompt ([anchor] <> omitted <> [instruction]))
         unless (null summary.omitted) (Left (ExecutionPolicyRefused "summary source exceeds the context ceiling"))
         pure (ModelSummary, ModelOperationInput 1 summary policy.summaryTokens (Just (ContextProvenance 1 predecessor Nothing (Just selected.sourceDigest))))
 
@@ -174,7 +174,7 @@ selectContextView policy source = do
       weighted group = (group, sum [toInteger (Lazy.length (Aeson.encode message)) + 1 | (_, message) <- group], length group)
       required = map weighted (filter mandatory groups)
       optional = map weighted (reverse (filter (not . mandatory) groups))
-      fixedBytes = toInteger (Lazy.length (Aeson.encode (ReplayContext 1 source.systemPrompt [])))
+      fixedBytes = toInteger (Lazy.length (Aeson.encode (ReplayContext source.format source.systemPrompt [])))
       fits bytes size = fixedBytes + bytes - (if size > 0 then 1 else 0) <= toInteger policy.contextBytes
       requiredBytes = sum [bytes | (_, bytes, _) <- required]
       requiredCount = sum [size | (_, _, size) <- required]
@@ -186,9 +186,10 @@ selectContextView policy source = do
       kept = map fst retained
       keptSet = Set.fromList kept
   unless (fits requiredBytes requiredCount) (Left (ExecutionPolicyRefused "required context exceeds the configured byte ceiling"))
-  pure (ContextView (ReplayContext 1 source.systemPrompt (map snd retained)) (versionedDigest "shikigami.execution-context/1" (toJSON source)) kept (filter (`Set.notMember` keptSet) [0 .. count - 1]))
+  pure (ContextView (ReplayContext source.format source.systemPrompt (map snd retained)) (versionedDigest "shikigami.execution-context/1" (toJSON source)) kept (filter (`Set.notMember` keptSet) [0 .. count - 1]))
   where
-    firstUser = fromMaybe (-1) (listToMaybe [position | (position, UserTurn {}) <- zip [0 ..] source.messages])
+    request = contextRequest source.messages
+    firstUser = fromMaybe (-1) (listToMaybe [position | (position, message) <- zip [0 ..] source.messages, Just message == request])
     hasContinuation (AssistantTurn assistant) = any (\case ThinkingBlock _ signature redacted replay -> isJust signature || redacted || isJust replay; _ -> False) assistant.blocks
     hasContinuation _ = False
     pending group = case group of

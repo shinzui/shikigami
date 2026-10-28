@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-28
+* **Addition**: FRIC-12 records detour interface friction with mori://shinzui/keiro/packages/keiro: Awakeable repair requires an explicit publishing-generation transaction
 * **Update**: FRIC-11 resolved: Record the separately affected EP-2 occurrence after the producer was identified during EP-3.
 * **Addition**: FRIC-11 records detour tooling friction with mori://shinzui/shikigami: Selection migration inherited executable output from the recipe comment
 * **Update**: FRIC-10 resolved: The isolated migration recipe probe passed; applied migration bytes are unchanged.

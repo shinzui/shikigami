@@ -16,6 +16,7 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.List (nub, sort)
+import Data.Maybe (listToMaybe)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Data.UUID qualified as UUID
@@ -117,6 +118,7 @@ instance FromJSON ReplayAssistant where
 
 data ReplayMessage
   = UserTurn ![ReplayBlock] !(Maybe UTCTime)
+  | RequestTurn ![ReplayBlock] !(Maybe UTCTime)
   | AssistantTurn !ReplayAssistant
   | ToolTurn !Text !Text ![ReplayBlock] !Bool !(Maybe UTCTime)
   deriving stock (Eq, Generic)
@@ -137,8 +139,23 @@ instance Show ReplayContext where show context = "ReplayContext " <> show contex
 instance FromJSON ReplayContext where
   parseJSON value = do
     context <- Aeson.genericParseJSON Aeson.defaultOptions value
-    unless (context.format == 1 && length context.messages <= 10000) (fail "unsupported context replay version or size")
+    unless (validContextHeader context) (fail "unsupported context replay version or request anchor")
     either (const (fail "unsupported context replay content")) (const (pure context)) (restoreContext context)
+
+-- Version 1 keeps its original first-user anchor. Version 2 marks the current
+-- request explicitly, so earlier conversation turns can remain chronological
+-- and compactable without losing that request on later model/tool turns.
+contextRequest :: [ReplayMessage] -> Maybe ReplayMessage
+contextRequest messages = listToMaybe [message | message@RequestTurn {} <- messages] <|> listToMaybe [message | message@UserTurn {} <- messages]
+
+validContextHeader :: ReplayContext -> Bool
+validContextHeader context =
+  length context.messages <= 10000 && case context.format of
+    1 -> requests == 0
+    2 -> requests == 1
+    _ -> False
+  where
+    requests = length [() | RequestTurn {} <- context.messages]
 
 data SkillInstructions = SkillInstructions
   { name :: !Text,
@@ -427,11 +444,14 @@ restoreAssistant assistant = do
 
 restoreContext :: ReplayContext -> Either ExecutionError Context.Context
 restoreContext context = do
-  unless (context.format == 1) (Left UnsupportedReplay)
+  unless (validContextHeader context) (Left UnsupportedReplay)
   messages <- traverse restore context.messages
   pure (Context.emptyContext & #systemPrompt .~ context.systemPrompt & #messages .~ Vector.fromList messages)
   where
     restore = \case
+      RequestTurn blocks timestamp -> do
+        content <- traverse user blocks
+        pure (Message.UserMessage (Message.UserPayload (Vector.fromList content) timestamp))
       AssistantTurn assistant -> Message.AssistantMessage <$> restoreAssistant assistant
       UserTurn blocks timestamp -> do
         content <- traverse user blocks

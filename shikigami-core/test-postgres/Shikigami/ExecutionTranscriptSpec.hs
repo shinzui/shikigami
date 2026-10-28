@@ -101,7 +101,7 @@ tests fixture =
           (executor, _, _) <- driverRuntime env False
           described <- newIORef (0 :: Int)
           let snapshot = anotherSnapshot original "admitted-skill"
-              assignment = Start.SkillAssignment snapshot.runId snapshot.agent snapshot.identity snapshot.sessionId snapshot.selection snapshot.sanctionedProfile snapshot.capabilities snapshot.policy (SkillDir "test/fixtures/durable-skill") (triggerOnly (object ["private" .= ("PRIVATE_ASSIGNMENT_MARKER" :: Text)]))
+              assignment = Start.SkillAssignment snapshot.runId snapshot.agent snapshot.identity snapshot.sessionId snapshot.selection snapshot.sanctionedProfile snapshot.capabilities snapshot.policy (SkillDir "test/fixtures/durable-skill") (pure (Right (Start.SkillInput (triggerOnly (object ["private" .= ("PRIVATE_ASSIGNMENT_MARKER" :: Text)])) [])))
               tool = mkDynTool "observe" "Observe fixture." (object []) (\_ -> assertFailureTool)
               assertFailureTool = unsafeEff_ (assertFailure "menu admission invoked a native callback") >> pure (Right (ToolOutput.textToolOutput "unused"))
               factory =
@@ -119,9 +119,9 @@ tests fixture =
           frozen.instructions.name @?= "durable-fixture"
           frozen.toolBindings @?= [observationBinding]
           case frozen.initialContext.messages of
-            [UserTurn [TextBlock text] Nothing] -> assertBool "trigger frozen with instructions" ("PRIVATE_ASSIGNMENT_MARKER" `Text.isInfixOf` text)
+            [RequestTurn [TextBlock text] Nothing] -> assertBool "trigger frozen with instructions" ("PRIVATE_ASSIGNMENT_MARKER" `Text.isInfixOf` text)
             _ -> assertFailure "unexpected initial Skill context"
-          let retired = assignment & #skillDir .~ SkillDir "/missing-retired-skill" & #policy . #maxModelTurns .~ 1
+          let retired = assignment & #skillDir .~ SkillDir "/missing-retired-skill" & #policy . #maxModelTurns .~ 1 & #input .~ (assertFailure "existing execution reconstructed its input" >> pure (Left UnsupportedReplay))
           Start.admitSkillExecution executor (\_ -> assertFailure "existing assignment reacquired its menu" >> pure (Left UnsupportedReplay)) retired >>= (@?= Right accepted)
           readIORef described >>= (@?= 1)
           Start.admitSkillExecution executor describe (retired & #runId .~ "different-run") >>= (@?= Left ExecutionIdentityConflict),

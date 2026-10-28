@@ -1,6 +1,8 @@
 module Shikigami.Agent.Conversation
   ( ConversationEnv (..),
     ConversationTurnFailure (..),
+    ConversationSubmission (..),
+    submitConversationTurnWithExecution,
     conversationTurnFailureDetail,
     ConversationTurnResult (..),
     conversationIdleTimeoutFireAction,
@@ -16,6 +18,8 @@ module Shikigami.Agent.Conversation
   )
 where
 
+import Baikai.StopReason (StopReason (Stop))
+import Control.Exception (throwIO)
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -32,32 +36,37 @@ import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (Error, runErrorNoCallStack)
 import Hasql.Pool (Pool)
+import Hasql.Transaction qualified as Tx
 import Keiro.Command (defaultRunCommandOptions, runCommandWithSqlEvents)
 import Keiro.Projection (InlineProjection (InlineProjection, apply))
-import Keiro.Timer (TimerId (..), TimerRequest (..), TimerRow (..), scheduleTimerOnceTx)
+import Keiro.Timer (TimerId (..), TimerRequest (..), TimerRow (..), cancelTimer, scheduleTimerOnceTx)
 import Keiro.Workflow
-  ( PatchId (..),
+  ( JournalAppendOutcome (..),
+    PatchId (..),
     StepName (..),
     Workflow,
+    WorkflowError (..),
     WorkflowId (..),
     WorkflowJournalEvent (StepRecorded),
     WorkflowName (..),
     WorkflowOutcome (..),
-    appendJournalEntryReturningId,
     awakeableAllocStepPrefix,
     awakeableStepPrefix,
     continueAsNew,
     currentGeneration,
     currentRunGeneration,
     currentWorkflow,
+    deterministicJournalId,
     loadStepIndex,
     patch,
+    prepareJournalAppend,
     restoreSeed,
     runWorkflowWith,
     step,
   )
-import Keiro.Workflow.Awakeable (AwakeableId, awakeableIdText, awakeableIdToUuid, cancelAwakeable, signalAwakeable)
-import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), lookupAwakeable)
+import Keiro.Workflow.Awakeable (AwakeableId, awakeableIdText, awakeableIdToUuid, cancelAwakeable)
+import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), completeAwakeableTx, lookupAwakeable)
+import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
 import Keiro.Workflow.Instance (WorkflowInstanceRow (..), WorkflowStatus (..), lookupInstance)
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
 import Kioku.App (AppEffects, AppEnv (..), runAppIO)
@@ -73,6 +82,7 @@ import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId)
 import Shibuya.Telemetry.Effect (runTracing)
+import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
 import Shikigami.Agent.Decl qualified as Agent
@@ -88,17 +98,28 @@ import Shikigami.Agent.Run (renderLearning)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile (..), renderProfileResolutionError)
+import Shikigami.Behavior.Error (TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Behavior.Run (BehaviorEnv (..), runBehaviorAttempt, triggerOnly)
+import Shikigami.Behavior.Skill (SkillDir (..))
+import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
+import Shikigami.Capability.Provider (emptyCapabilityProviderRegistry)
 import Shikigami.DanwaConversation.Generated.WorkflowRuntime qualified as ConversationGenerated
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
+import Shikigami.Execution.Driver qualified as ExecutionDriver
+import Shikigami.Execution.Executor qualified as Executor
+import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Execution.Request (ExecutionContext (..))
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.Selection qualified as Selection
 import Shikigami.Execution.SelectionRuntime qualified as SelectionRuntime
+import Shikigami.Execution.Start qualified as ExecutionStart
+import Shikigami.Execution.Tools qualified as ExecutionTools
+import Shikigami.Execution.Transcript qualified as Execution
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Integration.Danwa (AddressedMessage (..))
+import Shikigami.Log qualified as Log
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
 import Shikigami.Memory.Scope (agentScope)
@@ -160,6 +181,49 @@ data ConversationTurnFailure
     -- agent is still answering.
     ConversationBusy !Text
   deriving stock (Eq, Show)
+
+-- Queue acceptance is separate from a finished reply. A durable workflow or
+-- recorded next-message wake owns accepted input after its delivery is ACKed.
+data ConversationSubmission = ConversationAccepted | ConversationCompleted !ConversationTurnResult
+  deriving stock (Eq, Show)
+
+submitConversationTurnWithExecution :: ConversationEnv -> AgentDecl -> AgentIdentity -> Maybe ExecutionContext -> AddressedMessage -> IO (Either ConversationTurnFailure ConversationSubmission)
+submitConversationTurnWithExecution env decl identity context msg = do
+  result <- runConversationTurnWithExecution env decl identity context msg
+  case result of
+    Right turn -> pure (Right (ConversationCompleted turn))
+    Left failure@ConversationBusy {} -> acceptedOrFailure failure
+    Left failure@ConversationTransientFailure {} -> acceptedOrFailure failure
+    Left failure -> pure (Left failure)
+  where
+    acceptedOrFailure failure = do
+      accepted <- conversationMessageAccepted env msg
+      pure $ case accepted of
+        Right True -> Right ConversationAccepted
+        Right False -> Left failure
+        Left err -> Left err
+
+conversationMessageAccepted :: ConversationEnv -> AddressedMessage -> IO (Either ConversationTurnFailure Bool)
+conversationMessageAccepted env msg = do
+  loaded <- runKioku env do
+    epoch <- SessionIndex.lookupConversationEpoch msg.conversationId
+    let workflowId = conversationWorkflowId epoch msg
+    generation <- currentGeneration conversationWorkflowName workflowId
+    indexes <- traverse (loadStepIndex conversationWorkflowName workflowId) [generation, generation - 1]
+    pure (any owns indexes)
+  pure (first (const (ConversationTransientFailure "conversation acceptance state unavailable")) loaded)
+  where
+    owns index = admitted index || queued index
+    admitted index = case (Map.lookup "ingest-start" index >>= parseMaybe Aeson.parseJSON, Map.lookup "admit-conversation-skill" index >>= parseMaybe Aeson.parseJSON) of
+      (Just (start :: ConversationStart), Just (Right (_ :: ExecutionDriver.ExecutionStart) :: Either Text ExecutionDriver.ExecutionStart)) -> start.initialMessage.messageId == msg.messageId
+      _ -> False
+    queued index =
+      or
+        [ case Map.lookup (awakeableStepPrefix <> awakeableIdText token) index >>= parseMaybe Aeson.parseJSON of
+            Just (NextMessage accepted) -> accepted.messageId == msg.messageId
+            _ -> False
+        | token <- pendingInputAids index
+        ]
 
 conversationTurnFailureDetail :: ConversationTurnFailure -> Text
 conversationTurnFailureDetail = \case
@@ -339,6 +403,17 @@ runConversationTurnWithExecution env decl identity executionContext msg@Addresse
         Right True -> drive epoch
   where
     drive epoch = do
+      recorded <- loadConversationResult env (conversationWorkflowId epoch msg) msg.messageId
+      case recorded of
+        Just result -> pure (Right result)
+        Nothing -> do
+          current <- currentConversationMessage env epoch msg
+          case current of
+            Left refusal -> pure (Left refusal)
+            Right (Just True) -> driveConversationTurn env epoch msg conversationDriveBudget Nothing
+            Right (Just False) -> pure (Left (ConversationBusy ("conversation is processing " <> msg.messageId)))
+            Right Nothing -> deliverNew epoch
+    deliverNew epoch = do
       delivered <- deliverConversationInput env msg
       if delivered
         then driveConversationTurn env epoch msg conversationDriveBudget Nothing
@@ -358,6 +433,25 @@ runConversationTurnWithExecution env decl identity executionContext msg@Addresse
                     )
                 )
             else driveConversationTurn env epoch msg conversationDriveBudget (Just ConversationStart {agentName = AgentName ((.name) decl), identity, initialMessage = msg, executionContext})
+
+-- A redelivery of the running turn must observe it, not complete the wake that
+-- belongs to its successor. This remains a bounded current-generation read.
+currentConversationMessage :: ConversationEnv -> Int -> AddressedMessage -> IO (Either ConversationTurnFailure (Maybe Bool))
+currentConversationMessage env epoch msg = do
+  loaded <- runKioku env do
+    let workflowId = conversationWorkflowId epoch msg
+    generation <- currentGeneration conversationWorkflowName workflowId
+    index <- loadStepIndex conversationWorkflowName workflowId generation
+    instanceRow <- lookupInstance conversationWorkflowName workflowId
+    let terminal = maybe False (\row -> row.status `elem` [WfCompleted, WfCancelled, WfFailed]) instanceRow
+        observable = Map.member "admit-conversation-skill" index || Map.member "run-behavior-v2" index || terminal
+    pure (Map.lookup "ingest-start" index, observable)
+  pure $ case loaded of
+    Left _ -> Left (ConversationTransientFailure "conversation input state unavailable")
+    Right (Nothing, _) -> Right Nothing
+    Right (Just value, observable) -> case parseMaybe Aeson.parseJSON value of
+      Just (start :: ConversationStart) -> Right (if start.initialMessage.messageId == msg.messageId then Just observable else Nothing)
+      Nothing -> Left (ConversationPermanentFailure "conversation input state is unreadable")
 
 -- | An unadorned follow-up keeps the epoch's admitted context. An explicitly
 -- different context is refused before a message can wake the live generation.
@@ -457,7 +551,7 @@ completedTurn env epoch msg = do
   loaded <- loadConversationResult env (conversationWorkflowId epoch msg) ((.messageId) msg)
   pure case loaded of
     Just result -> Right result
-    Nothing -> Left (ConversationTransientFailure ("conversation workflow recorded no turn result for " <> (.messageId) msg))
+    Nothing -> Left (ConversationBusy ("conversation is processing " <> (.messageId) msg))
 
 conversationRegistry :: ConversationEnv -> WorkflowRegistry AppEffects
 conversationRegistry env =
@@ -643,7 +737,7 @@ armConversationIdleTimeout deadline aid = do
             processManagerName = unWorkflowName workflowName,
             correlationId = unWorkflowId workflowId,
             fireAt = addUTCTime deadline now,
-            payload = Aeson.toJSON (conversationIdleTimeoutPayload aid)
+            payload = Aeson.toJSON (conversationIdleTimeoutPayload aid generation)
           }
   void (runTransaction (scheduleTimerOnceTx request))
 
@@ -656,65 +750,51 @@ conversationIdleTimeoutTimerId (WorkflowName workflowName) (WorkflowId workflowI
 
 data ConversationIdleTimeoutPayload = ConversationIdleTimeoutPayload
   { kind :: !Text,
-    awakeableId :: !AwakeableId
+    awakeableId :: !AwakeableId,
+    generation :: !(Maybe Int)
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-conversationIdleTimeoutPayload :: AwakeableId -> ConversationIdleTimeoutPayload
-conversationIdleTimeoutPayload aid =
+conversationIdleTimeoutPayload :: AwakeableId -> Int -> ConversationIdleTimeoutPayload
+conversationIdleTimeoutPayload aid generation =
   ConversationIdleTimeoutPayload
     { kind = conversationIdleTimeoutKind,
-      awakeableId = aid
+      awakeableId = aid,
+      generation = Just generation
     }
 
 -- | The discriminator that keeps one timer loop able to route three kinds of row.
 conversationIdleTimeoutKind :: Text
 conversationIdleTimeoutKind = "shikigami.conversation-idle-timeout"
 
-parseConversationIdleTimeoutPayload :: Value -> Maybe AwakeableId
+parseConversationIdleTimeoutPayload :: Value -> Maybe ConversationIdleTimeoutPayload
 parseConversationIdleTimeoutPayload value = do
-  ConversationIdleTimeoutPayload {kind, awakeableId} <- parseMaybe Aeson.parseJSON value
-  if kind == conversationIdleTimeoutKind
-    then Just awakeableId
-    else Nothing
+  timer <- parseMaybe Aeson.parseJSON value
+  if timer.kind == conversationIdleTimeoutKind && maybe True (>= 0) timer.generation then Just timer else Nothing
 
--- | Fire a due conversation idle timer.
---
--- Returns 'Nothing' for a row that is not ours, which is what lets
--- 'Shikigami.Trigger.Scheduler.shikigamiTimerFallback' route three kinds of
--- timer through the one loop the timer table can safely have.
---
--- __A superseded timer settles without effect, and that is by construction
--- rather than by a check alone.__ Its id belongs to a closed generation, and
--- 'signalAwakeable' on an already-resolved or abandoned awakeable returns
--- 'False' without changing the recorded value. The explicit staleness check is
--- the awakeable lookup: an awakeable whose owning workflow has moved on has
--- nothing to append to.
---
--- __A terminal journal refusal is not an error.__ Keiro's obligation 2 for a
--- custom wake source is to expect the append to be declined when the workflow
--- has already gone terminal; the right response is to settle the timer row and
--- deliver nothing, which is what returning 'Nothing' after the signal does.
-conversationIdleTimeoutFireAction ::
-  (Store :> es, IOE :> es) =>
-  TimerRow ->
-  Eff es (Maybe EventId)
-conversationIdleTimeoutFireAction TimerRow {payload = timerPayload} =
-  case parseConversationIdleTimeoutPayload timerPayload of
-    Nothing -> pure Nothing
-    Just aid -> do
-      _ <- signalAwakeable aid IdleTimedOut
-      lookupAwakeable (awakeableIdToUuid aid) >>= \case
-        Nothing -> pure Nothing
-        Just AwakeableRow {ownerWorkflowName, ownerWorkflowId, payload = storedPayload} -> do
-          now <- liftIO getCurrentTime
-          let eventPayload = fromMaybe (toJSON IdleTimedOut) storedPayload
-          Just
-            <$> appendJournalEntryReturningId
-              (WorkflowName ownerWorkflowName)
-              (WorkflowId ownerWorkflowId)
-              (StepRecorded (awakeableStepPrefix <> awakeableIdText aid) eventPayload now)
+-- A legacy payload without a generation is accepted only when its token still
+-- belongs to the live allocation. New payloads retain their original owner
+-- generation and never append an old wake to a successor journal.
+conversationIdleTimeoutFireAction :: (Store :> es, IOE :> es) => TimerRow -> Eff es (Maybe EventId)
+conversationIdleTimeoutFireAction row = case parseConversationIdleTimeoutPayload row.payload of
+  Nothing -> pure Nothing
+  Just timer -> do
+    owner <- lookupAwakeable (awakeableIdToUuid timer.awakeableId)
+    case owner of
+      Just awakeable | awakeable.ownerWorkflowName == unWorkflowName conversationWorkflowName -> do
+        let workflowId = WorkflowId awakeable.ownerWorkflowId
+        current <- currentGeneration conversationWorkflowName workflowId
+        index <- loadStepIndex conversationWorkflowName workflowId current
+        if maybe True (== current) timer.generation && timer.awakeableId `elem` pendingInputAids index
+          then do
+            _ <- signalConversationWake workflowId current timer.awakeableId IdleTimedOut
+            status <- lookupAwakeable (awakeableIdToUuid timer.awakeableId)
+            case status of
+              Just completed | completed.status == Awakeable.Completed -> pure (Just (deterministicJournalId conversationWorkflowName workflowId current (awakeableStepPrefix <> awakeableIdText timer.awakeableId)))
+              _ -> void (cancelTimer row.timerId) >> pure Nothing
+          else void (cancelTimer row.timerId) >> pure Nothing
+      _ -> void (cancelTimer row.timerId) >> pure Nothing
 
 resolveDeclStep :: ConversationEnv -> ConversationStart -> Eff (Workflow : AppEffects) AgentDecl
 resolveDeclStep env ConversationStart {agentName} =
@@ -744,14 +824,23 @@ processRotatingTurn ::
   Maybe ExecutionContext ->
   Eff (Workflow : AppEffects) (Either Text ConversationTurnResult)
 processRotatingTurn env recordedIdentity decl msg executionContext = do
+  durable <- patch (PatchId "shikigami-conversation-durable-execution-v1")
   enabled <- patch (PatchId "shikigami-conversation-execution-selection-v1")
-  admitted <- if enabled then admitConversationExecution env recordedIdentity decl msg executionContext else pure (Right env.behaviorEnv)
+  admitted <-
+    if durable && not (null decl.capabilityOverlays)
+      then pure (Left "capability overlay mismatch: conversations do not admit overlays")
+      else if enabled then admitConversationExecution env recordedIdentity decl msg executionContext durable else pure (Right (LegacyConversation env.behaviorEnv))
   case admitted of
     Left refusal -> pure (Left refusal)
     Right selected -> processSelectedTurn env selected recordedIdentity decl msg
 
-admitConversationExecution :: ConversationEnv -> ResolvedAgentIdentity -> AgentDecl -> AddressedMessage -> Maybe ExecutionContext -> Eff (Workflow : AppEffects) (Either Text BehaviorEnv)
-admitConversationExecution env recordedIdentity decl msg executionContext = do
+-- Process-local resources stay out of both selection journals and snapshots.
+data ConversationExecution
+  = LegacyConversation !BehaviorEnv
+  | DurableConversation !(Maybe ResolvedProfile) !Selection.ExecutionSelection
+
+admitConversationExecution :: ConversationEnv -> ResolvedAgentIdentity -> AgentDecl -> AddressedMessage -> Maybe ExecutionContext -> Bool -> Eff (Workflow : AppEffects) (Either Text ConversationExecution)
+admitConversationExecution env recordedIdentity decl msg executionContext durable = do
   profileResolution <- step (StepName "resolve-conversation-profile") $ liftIO case decl.sanctionedProfile of
     Nothing -> pure (Right Nothing)
     Just Agent.ProfileRequirement {profileId, version} -> fmap Just <$> env.resolveRunProfile (ProfileId profileId) (ProfileVersion <$> version)
@@ -773,7 +862,8 @@ admitConversationExecution env recordedIdentity decl msg executionContext = do
             _ -> Right Nothing
       case selected of
         Left refusal -> pure (Left (Text.pack (show refusal)))
-        Right Nothing -> pure (Right env.behaviorEnv)
+        Right Nothing -> pure (Right (LegacyConversation env.behaviorEnv))
+        Right (Just selection) | durable && null decl.delegates && isNothing decl.routing -> pure (Right (DurableConversation profile selection))
         Right (Just selection) -> do
           result <-
             liftIO
@@ -789,9 +879,9 @@ admitConversationExecution env recordedIdentity decl msg executionContext = do
                     }
                   selection
               )
-          pure (either (Left . Text.pack . show) Right result)
+          pure (either (Left . Text.pack . show) (Right . LegacyConversation) result)
 
-processSelectedTurn :: ConversationEnv -> BehaviorEnv -> ResolvedAgentIdentity -> AgentDecl -> AddressedMessage -> Eff (Workflow : AppEffects) (Either Text ConversationTurnResult)
+processSelectedTurn :: ConversationEnv -> ConversationExecution -> ResolvedAgentIdentity -> AgentDecl -> AddressedMessage -> Eff (Workflow : AppEffects) (Either Text ConversationTurnResult)
 processSelectedTurn env selectedBehavior recordedIdentity decl msg@AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId, content = msgContent} = do
   sid <- step (StepName "resolve-session") (liftIO (requireRight =<< resolveSession env recordedIdentity decl msgConversationId))
   userTurn <-
@@ -799,16 +889,14 @@ processSelectedTurn env selectedBehavior recordedIdentity decl msg@AddressedMess
       liftIO do
         turns <- loadTurns env sid
         recordTurnOnce env recordedIdentity sid ("danwa:user:" <> msgMessageId) Nothing "user" msgContent turns
-  outputE <-
-    step (StepName "run-behavior-v2") do
-      prior <- liftIO (loadTurns env sid)
-      liftIO
-        ( runBehaviorAttempt
-            (conversationRunTimeout env)
-            selectedBehavior
-            decl
-            (triggerOnly (behaviorPayload msg prior))
-        )
+  outputE <- case selectedBehavior of
+    DurableConversation profile selection -> case decl.behavior of
+      Agent.Skill {path} -> runConversationSkillStep env recordedIdentity decl msg sid userTurn profile selection path
+      _ -> pure (Left "durable conversation execution requires a Skill")
+    LegacyConversation active ->
+      step (StepName "run-behavior-v2") do
+        prior <- liftIO (loadTurns env sid)
+        liftIO (runBehaviorAttempt (conversationRunTimeout env) active decl (triggerOnly (behaviorPayload msg prior)))
   case outputE of
     Left err -> pure (Left err)
     Right output -> do
@@ -831,6 +919,79 @@ processSelectedTurn env selectedBehavior recordedIdentity decl msg@AddressedMess
                 replyMessageId
               }
       Right <$> step (StepName "turn-result") (pure result)
+
+runConversationSkillStep :: ConversationEnv -> ResolvedAgentIdentity -> AgentDecl -> AddressedMessage -> SessionId -> RecordedTurn -> Maybe ResolvedProfile -> Selection.ExecutionSelection -> Text -> Eff (Workflow : AppEffects) (Either Text Value)
+runConversationSkillStep env recordedIdentity decl msg sid userTurn profile selection path = do
+  (_, workflowId) <- currentWorkflow
+  let runtime = conversationExecutionRuntime env
+      describe = ExecutionTools.describeExecutionTools Log.silentLogger denyAllActionAuthorizer emptyCapabilityProviderRegistry (ExecutionTools.staticNativeTools env.behaviorEnv.tools)
+      assignment =
+        ExecutionStart.SkillAssignment
+          { runId = workflowId.unWorkflowId,
+            agent = AgentName decl.name,
+            identity = resolvedIdentity recordedIdentity,
+            sessionId = sid,
+            selection,
+            sanctionedProfile = profile,
+            capabilities = emptyResolvedCapabilitySet,
+            policy = Harness.defaultHarnessPolicy,
+            skillDir = SkillDir (Text.unpack path),
+            input = do
+              prior <- loadTurns env sid
+              pure do
+                history <- traverse historicalTurn (filter (\row -> row.turnIndex < userTurn.turnIndex) prior)
+                let payload = case behaviorPayload msg [] of
+                      Aeson.Object fields -> Aeson.Object (KeyMap.delete "turns" fields)
+                      value -> value
+                Right (ExecutionStart.SkillInput (triggerOnly payload) history)
+          }
+  admitted <- step (StepName "admit-conversation-skill") (liftIO (ExecutionStart.admitSkillExecution runtime describe assignment >>= executionResult))
+  case admitted of
+    Left err -> pure (Left err)
+    Right start -> do
+      accepted <- ExecutionDriver.requestExecution runtime start
+      liftIO (ExecutionStart.readExecutionResult runtime (resolvedIdentity recordedIdentity) accepted >>= executionResult)
+  where
+    executionResult :: Either Execution.ExecutionError a -> IO (Either Text a)
+    executionResult = \case
+      Left Execution.ExecutionStorageUnavailable -> throwIO (TransientBehaviorFailure "conversation execution storage unavailable")
+      Left Execution.ProjectionUnavailable -> throwIO (TransientBehaviorFailure "conversation execution projection unavailable")
+      Left Execution.ExecutionRevisionConflict -> throwIO (TransientBehaviorFailure "conversation execution admission changed concurrently")
+      Left err -> pure (Left (boundedBehaviorDetail (Text.pack (show err))))
+      Right value -> pure (Right value)
+
+-- These are initial conversation facts, not a reconstructed provider response
+-- from another assignment. Unknown roles cannot introduce a system instruction.
+historicalTurn :: TurnRow -> Either Execution.ExecutionError Execution.ReplayMessage
+historicalTurn row = case row.role of
+  "user" -> Right (Execution.UserTurn [Execution.TextBlock row.content] Nothing)
+  "assistant" -> Right (Execution.AssistantTurn (Execution.ReplayAssistant 1 [Execution.TextBlock row.content] Stop Nothing Nothing (Aeson.object []) Nothing))
+  _ -> Left Execution.UnsupportedReplay
+
+-- Supported conversation tools are exactly the existing base registry; this
+-- branch does not enable overlays, workspace mutations or another tool owner.
+conversationExecutionRuntime :: ConversationEnv -> Executor.ExecutionRuntime
+conversationExecutionRuntime env =
+  Executor.ExecutionRuntime
+    { appEnv = env.appEnv,
+      replayAuthority = Directory.identityLifecycleAdmission env.directory,
+      authorize = authority,
+      selectionRuntime = \snapshot ->
+        SelectionRuntime.SelectionRuntime
+          { catalog = env.decisions.catalog,
+            profile = snapshot.sanctionedProfile,
+            providers = env.decisions.providers,
+            baseEnv = env.behaviorEnv,
+            runId = runCorrelationId snapshot.runId,
+            authorize = authority snapshot,
+            transact = SelectionRuntime.selectionTransaction env.appEnv env.deliveryPool
+          },
+      withTools = ExecutionTools.withExecutionTools Log.silentLogger denyAllActionAuthorizer emptyCapabilityProviderRegistry (ExecutionTools.staticNativeTools env.behaviorEnv.tools),
+      timeoutSeconds = fromInteger (max 1 (min 3500 (floor env.runTimeout)))
+    }
+  where
+    authority :: Execution.ExecutionSnapshot -> IO (Either Text ())
+    authority snapshot = SelectionRuntime.currentExecutionAuthority (Directory.identityLifecycleAdmission env.directory snapshot.identity) snapshot.sanctionedProfile env.resolveRunProfile
 
 runConversationWorkflow ::
   ConversationEnv ->
@@ -873,7 +1034,10 @@ deliverConversationInputFromApp appEnv' msg@AddressedMessage {conversationId = m
     generation <- currentGeneration conversationWorkflowName wid
     stepIndex <- loadStepIndex conversationWorkflowName wid generation
     let aids = pendingInputAids stepIndex
-    signalFirst msg aids
+        current = Map.lookup "ingest-start" stepIndex >>= parseMaybe Aeson.parseJSON
+    if maybe False (\(start :: ConversationStart) -> start.initialMessage.messageId == msg.messageId) current
+      then pure False
+      else signalFirst wid generation msg aids
   pure case result of
     Right delivered -> delivered
     Left _ -> False
@@ -885,12 +1049,41 @@ pendingInputAids :: Map.Map Text Value -> [AwakeableId]
 pendingInputAids stepIndex =
   maybe [] pure (Map.lookup (awakeableAllocStepPrefix <> "next-message") stepIndex >>= parseMaybe Aeson.parseJSON)
 
-signalFirst :: (Store :> es, IOE :> es) => AddressedMessage -> [AwakeableId] -> Eff es Bool
-signalFirst msg = \case
+signalFirst :: (Store :> es, IOE :> es) => WorkflowId -> Int -> AddressedMessage -> [AwakeableId] -> Eff es Bool
+signalFirst workflowId generation msg = \case
   [] -> pure False
   aid : rest -> do
-    signalled <- signalAwakeable aid (NextMessage msg)
-    if signalled then pure True else signalFirst msg rest
+    signalled <- signalConversationWake workflowId generation aid (NextMessage msg)
+    if signalled then pure True else signalFirst workflowId generation msg rest
+
+-- Current-generation reads and asynchronous publication are separate actions.
+-- Carry the publishing generation into the atomic append instead of allowing a
+-- previously completed token to be repaired into the current generation.
+signalConversationWake :: (Store :> es, IOE :> es) => WorkflowId -> Int -> AwakeableId -> ConversationWake -> Eff es Bool
+signalConversationWake workflowId generation aid wake = do
+  row <- lookupAwakeable (awakeableIdToUuid aid)
+  case row of
+    Just previous | previous.ownerWorkflowName == unWorkflowName conversationWorkflowName && previous.ownerWorkflowId == unWorkflowId workflowId && previous.status /= Awakeable.Cancelled -> do
+      now <- liftIO getCurrentTime
+      let candidate = if previous.status == Awakeable.Completed then previous.payload else Just (Aeson.toJSON wake)
+      case candidate of
+        Nothing -> pure False
+        Just payload -> do
+          -- Repair only the generation that published this token. A stored
+          -- completion must never append an orphan wake to its successor.
+          append <- prepareJournalAppend conversationWorkflowName workflowId generation (StepRecorded (awakeableStepPrefix <> awakeableIdText aid) payload now)
+          (won, outcome) <- runTransaction do
+            won <- if previous.status == Awakeable.Pending then completeAwakeableTx (awakeableIdToUuid aid) payload now else pure False
+            if won || previous.status == Awakeable.Completed
+              then do
+                outcome <- append
+                case outcome of JournalAppendConflict {} -> Tx.condemn; _ -> pure ()
+                pure (won, Just outcome)
+              else pure (False, Nothing)
+          case outcome of
+            Just JournalAppendConflict {} -> liftIO (throwIO (WorkflowJournalAppendError "conversation input journal conflict"))
+            _ -> pure won
+    _ -> pure False
 
 -- | Read this message's turn result back out of the journal.
 --

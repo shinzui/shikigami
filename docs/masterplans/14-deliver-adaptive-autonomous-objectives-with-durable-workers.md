@@ -169,7 +169,11 @@ assignments. Recorded summaries now use ordinary accepted attempts with protecte
 outcome references; [ADR 0056](../adr/0056-context-summaries-are-accepted-accounted-model-operations.md)
 records that shared context contract. The agent-run leaf Skill patch is accepted: frozen assignment/menu admission
 and protected completed-result reads follow [ADR 0057](../adr/0057-skill-parents-admit-frozen-assignments-and-await-execution-children.md).
-Conversation adoption, configuration/ephemeral policy and remaining recovery
+Conversation adoption now shares that driver behind a separate real patch,
+retains the atomic reply owner, and distinguishes accepted ingress from completed
+replies. [ADR 0058](../adr/0058-conversation-acceptance-and-wakes-retain-their-generation.md)
+records generation-bound wakes and the explicit compactable request context.
+Configuration/ephemeral policy and remaining recovery
 qualification are not yet accepted, so EP-3 and its dependent-child start
 gates remain unchanged.
 

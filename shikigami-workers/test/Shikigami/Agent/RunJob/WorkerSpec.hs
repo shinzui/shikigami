@@ -108,6 +108,7 @@ tests databaseFixture =
           "shikigami.terminal_conversation_failure:"
           (conversationJobOutcome (Left (Conversation.ConversationTerminalFailure "failed")))
         assertDone "conversation completed" (conversationJobOutcome (Right ()))
+        assertDone "durable accepted conversation does not spend delivery retries while awaiting a reply" (conversationJobOutcome (Right Conversation.ConversationAccepted))
         assertRetryDefault
           "transient behavior exception"
           (transientBehaviorJobOutcome (TransientBehaviorFailure "retry"))
