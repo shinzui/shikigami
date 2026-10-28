@@ -430,6 +430,7 @@ computed label families; a duplicated line-number census quickly becomes stale.
 | `shikigami.agent-run` | [Agent run](../domain/shikigami-agent-run.keiro) | [AgentRun facts](../shikigami-core/src/Shikigami/AgentRun/Generated/WorkflowFacts.hs) | [Workflow.hs](../shikigami-core/src/Shikigami/Agent/Workflow.hs) |
 | `shikigami.danwa-conversation` | [Conversation](../domain/shikigami-conversation.keiro) | [DanwaConversation facts](../shikigami-core/src/Shikigami/DanwaConversation/Generated/WorkflowFacts.hs) | [Conversation.hs](../shikigami-core/src/Shikigami/Agent/Conversation.hs) |
 | `shikigami.approval` | [Approval](../domain/shikigami-approval.keiro) | [Approval facts](../shikigami-core/src/Shikigami/Approval/Generated/WorkflowFacts.hs) | [Approval/Workflow.hs](../shikigami-core/src/Shikigami/Agent/Approval/Workflow.hs) |
+| `shikigami.execution` | [Execution driver](../domain/shikigami-execution-driver.keiro) | [ExecutionDriver facts](../shikigami-core/src/Shikigami/ExecutionDriver/Generated/WorkflowFacts.hs) | [Execution/Driver.hs](../shikigami-core/src/Shikigami/Execution/Driver.hs) |
 
 The approval child journals `ingest-approval`, `notify`, and its `decision` wait.
 All agent runs use this child. Plan 65 removed the unused pre-release approval

@@ -1,9 +1,14 @@
 module Shikigami.ExecutionTranscriptSpec (tests) where
 
 import Baikai.Api (Api (OpenAIResponses))
+import Baikai.Content qualified as Content
+import Baikai.Context qualified as Context
 import Baikai.Message qualified as Message
 import Baikai.Options (emptyOptions)
+import Baikai.Provider.Registry qualified as Provider
+import Baikai.Response qualified as Response
 import Baikai.StopReason (StopReason (Stop, ToolUse))
+import Baikai.Stream (liftCompleteToStream)
 import Baikai.Tool qualified as BaikaiTool
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (concurrently)
@@ -20,6 +25,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
 import Data.UUID qualified as UUID
+import Data.Vector qualified as Vector
 import Effectful (Eff, liftIO)
 import Effectful.Dispatch.Static (unsafeEff_)
 import Hasql.Decoders qualified as D
@@ -44,13 +50,14 @@ import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunRouteKind (..))
-import Shikigami.Behavior.Run (newBehaviorEnv)
-import Shikigami.Behavior.StubProvider (stubModel)
+import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv)
+import Shikigami.Behavior.StubProvider (stubApiProvider, stubModel)
 import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Decision.ModelCatalog (modelCatalog)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Catalog qualified as ExecutionCatalog
+import Shikigami.Execution.Driver qualified as Driver
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy.Types
@@ -61,6 +68,8 @@ import Shikigami.Execution.SelectionRuntime (SelectionRuntime (..), selectionTra
 import Shikigami.Execution.Store qualified as Store
 import Shikigami.Execution.Timer (armObservation, observationFireAction)
 import Shikigami.Execution.Transcript
+import Shikigami.Execution.Transcript qualified as Replay
+import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as DriverGenerated
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude ((&), (.~))
@@ -77,7 +86,106 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "ExecutionTranscript"
-    [ testCase "assistant replay retains opaque thinking and exact cut-off tool arguments" do
+    [ testCase "driver generations repair lost queue delivery without another actual attempt" $
+        withConfiguredResourceFixture fixture id (Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot access -> do
+          (executor, calls, _) <- driverRuntime env False
+          withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
+          let workflow = executionWorkflowId snapshot.executionId
+              drive = run env (runWorkflow DriverGenerated.workflowName workflow (Driver.executionWorkflow executor (Just (Driver.ExecutionStart snapshot.executionId))))
+          drive >>= (@?= ContinuedAsNew)
+          second <- drive
+          Just (debugState, _, _) <- inspect env snapshot.executionId
+          assertBool (show (second, debugState)) (second == Suspended)
+          reference <- pendingReference env snapshot
+          run env (runTransaction (Tx.statement () (preparable "DELETE FROM pgmq.q_shikigami_run_jobs" E.noParams D.noResult)))
+          calls >>= (@?= [])
+          now <- getCurrentTime
+          Just timer <- run env (Timer.claimDueTimer (addUTCTime 120 now))
+          _ <- run env (observationFireAction timer)
+          drive >>= (@?= ContinuedAsNew)
+          drive >>= (@?= Suspended)
+          pendingReference env snapshot >>= (@?= reference)
+          attempts <- expectRight =<< run env (Store.inspectOperationAttempts reference.operationId)
+          length attempts @?= 1
+          queueCount env >>= (@?= 1)
+          Executor.executeAcceptedAttempt executor snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+          completed <- pumpDriver env executor snapshot 12
+          completed.phase @?= Succeeded
+          calls >>= (\values -> length values @?= 1)
+          -- A completed driver returns metadata without a live provider binding.
+          let unavailable = executor {Executor.replayAuthority = const (pure (Left "revoked")), Executor.authorize = const (pure (Left "retired"))}
+          run env (runWorkflow DriverGenerated.workflowName workflow (Driver.executionWorkflow unavailable Nothing)) >>= (@?= Completed completed)
+          (_, state) <- expectRight =<< run env (Store.loadExecution access)
+          state.cursor @?= 1,
+      testCase "automatic driver accepts each tool position and reconstructs exact bounded model history" $
+        withConfiguredResourceFixture fixture toolConfiguration (Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot access -> do
+          (executor, calls, toolCalls) <- driverRuntime env True
+          withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
+          result <- pumpDriver env executor snapshot 30
+          assertBool (show result) (result.phase == Succeeded)
+          toolCalls >>= (@?= 2)
+          observed <- calls
+          length observed @?= 2
+          let lastContext = last observed
+          length lastContext.messages @?= 4
+          case Vector.toList lastContext.messages of
+            [Message.UserMessage {}, Message.AssistantMessage assistant, Message.ToolResultMessage first, Message.ToolResultMessage second] -> do
+              assistant.stopReason @?= ToolUse
+              first.toolCallId @?= "first"
+              second.toolCallId @?= "second"
+            _ -> assertFailure "model context lost or reordered accepted tool observations"
+          (reconstructed, _, _) <- expectRight =<< run env (Store.loadModelReplayWindow access)
+          length reconstructed.messages @?= 5
+          Just (_, _, operations) <- inspect env snapshot.executionId
+          map (\operation -> operation.specification.kind) operations @?= [ModelTurn, ToolOperation, ToolOperation, ModelTurn]
+          root <- expectRight =<< run env (Roots.inspectRoot rootId)
+          Map.lookup R.ModelAttempts root.usage.settled @?= Just 2
+          Map.lookup R.ToolAttempts root.usage.settled @?= Just 2,
+      testCase "driver cancellation settles an undispatched reservation and never calls its provider" $
+        withConfiguredResourceFixture fixture id (Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot _ -> do
+          (executor, calls, _) <- driverRuntime env False
+          withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
+          let drive = run env (runWorkflow DriverGenerated.workflowName (executionWorkflowId snapshot.executionId) (Driver.executionWorkflow executor (Just (Driver.ExecutionStart snapshot.executionId))))
+          drive >>= (@?= ContinuedAsNew)
+          drive >>= (@?= Suspended)
+          root <- expectRight =<< run env (Roots.inspectRoot rootId)
+          run env (Roots.setRootControl rootId root.revision True Nothing) >>= (@?= Right ())
+          result <- pumpDriver env executor snapshot 12
+          result.phase @?= Replay.Cancelled
+          calls >>= (@?= [])
+          settled <- expectRight =<< run env (Roots.inspectRoot rootId)
+          settled.active @?= 0
+          Map.lookup R.ModelAttempts settled.usage.settled @?= Just 1,
+      testCase "driver parks one tool across approval restart and refuses revoked authority before submission" $
+        withConfiguredResourceFixture fixture (\snapshot -> toolConfiguration snapshot & #policy . #humanTools .~ ["observe"]) (Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot _ -> do
+          (executor, calls, toolCalls) <- driverRuntime env True
+          withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
+          permission <- reachPermission env executor snapshot 12
+          Just (parked, _, _) <- inspect env snapshot.executionId
+          parked.phase @?= Parked
+          parked.cursor @?= 1
+          parked.modelTurns @?= 1
+          tokenRef <- newIORef Nothing
+          let childEnv = Approval.ApprovalWorkflowEnv (Approval.ApprovalNotifier (\_ _ token _ -> writeIORef tokenRef (Just token)) (\_ _ _ _ -> pure (Right ())))
+              child = runChildWorkflow defaultWorkflowRunOptions Approval.approvalWorkflowName (approvalWorkflowId permission.reviewRequestId) (Approval.approvalWorkflow childEnv Nothing)
+          run env child >>= (@?= Suspended)
+          token <- readIORef tokenRef >>= maybe (assertFailure "missing approval token" >> fail "token") pure
+          resolveApproval env token (Approved (object [])) >>= (@?= True)
+          run env child >>= (@?= Completed (Approval.ApprovalResolved (Approved (object []))))
+          let revoked = executor {Executor.authorize = const (pure (Left "authority revoked while waiting"))}
+          result <- pumpDriver env revoked snapshot 12
+          result.phase @?= Replay.Failed
+          toolCalls >>= (@?= 0)
+          calls >>= (\values -> length values @?= 1)
+          Just (_, _, operations) <- inspect env snapshot.executionId
+          length operations @?= 2
+          case operations of
+            [_, operation] -> do
+              (operation.permission >>= (.resolution)) @?= Just PermissionApproved
+              attempts <- expectRight =<< run env (Store.inspectOperationAttempts operation.specification.operationId)
+              attempts @?= []
+            _ -> assertFailure "permission consumed another logical turn",
+      testCase "assistant replay retains opaque thinking and exact cut-off tool arguments" do
         let assistant =
               ReplayAssistant
                 1
@@ -553,6 +661,66 @@ tests fixture =
           run env (runTransaction (Tx.statement snapshot.executionId.value corruptPayload))
           run env (Store.loadExecution access) >>= (@?= Left CorruptReplay)
     ]
+
+-- Every invocation opens fresh app/store effects; only the provider counters
+-- survive in the fixture. Production restarts reconstruct from the same rows.
+driverRuntime :: AppEnv -> Bool -> IO (Executor.ExecutionRuntime, IO [Context.Context], IO Int)
+driverRuntime env toolResponse = do
+  observed <- newIORef []
+  toolCalls <- newIORef 0
+  base <- newBehaviorEnv
+  let complete model context options = do
+        ordinal <- atomicModifyIORef' observed (\values -> (values <> [context], length values))
+        response <- Provider.complete stubApiProvider model context options
+        pure (if toolResponse && ordinal == 0 then response & #message . #stopReason .~ ToolUse & #message . #content .~ Vector.fromList [Content.AssistantToolCall (Content.ToolCall "first" "observe" (object [])), Content.AssistantToolCall (Content.ToolCall "second" "observe" (object []))] else response)
+      provider = stubApiProvider {Provider.complete = complete, Provider.stream = liftCompleteToStream complete}
+      tool = mkDynTool "observe" "Observe fixture." (object []) \_ -> do
+        unsafeEff_ (modifyIORef' toolCalls (+ 1))
+        pure (Right (ToolOutput.textToolOutput "accepted observation"))
+  registry <- Provider.newProviderRegistryFrom [provider]
+  let selectedRuntime = SelectionRuntime (mustRight (modelCatalog [])) Nothing [provider] (base & #providerRegistry .~ Just registry) (runCorrelationId "driver") (pure (Right ())) (selectionTransaction env Nothing)
+      executor = Executor.ExecutionRuntime env (const (pure (Right ()))) (const (pure (Right ()))) (const selectedRuntime) (\_ _ _ use -> Right <$> use [Executor.BoundTool observationBinding tool]) 5
+  pure (executor, readIORef observed, readIORef toolCalls)
+
+reachPermission :: AppEnv -> Executor.ExecutionRuntime -> ExecutionSnapshot -> Int -> IO PermissionBinding
+reachPermission env executor snapshot remaining
+  | remaining <= 0 = assertFailure "driver did not reach its permission boundary" >> fail "permission"
+  | otherwise = do
+      result <- run env (runWorkflow DriverGenerated.workflowName (executionWorkflowId snapshot.executionId) (Driver.executionWorkflow executor (Just (Driver.ExecutionStart snapshot.executionId))))
+      case result of
+        ContinuedAsNew -> reachPermission env executor snapshot (remaining - 1)
+        Suspended -> do
+          Just (state, _, operations) <- inspect env snapshot.executionId
+          case [permission | operation <- operations, Just permission <- [operation.permission], state.activeOperation == Just operation.specification.operationId, state.phase == Parked] of
+            [permission] -> pure permission
+            _ -> do
+              reference <- pendingReference env snapshot
+              Executor.executeAcceptedAttempt executor snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+              reachPermission env executor snapshot (remaining - 1)
+        _ -> assertFailure (show result) >> fail "permission outcome"
+
+pendingReference :: AppEnv -> ExecutionSnapshot -> IO Attempt.JobReference
+pendingReference env snapshot = do
+  Just (state, _, _) <- inspect env snapshot.executionId
+  operation <- maybe (assertFailure "no active operation" >> fail "active") pure state.activeOperation
+  attempts <- expectRight =<< run env (Store.inspectOperationAttempts operation)
+  case filter (\attempt -> attempt.phase /= Attempt.AttemptAbandoned) attempts of
+    [attempt] -> pure (Attempt.JobReference 1 snapshot.executionId operation attempt.request.attemptId)
+    _ -> assertFailure "expected one prepared attempt" >> fail "attempt"
+
+pumpDriver :: AppEnv -> Executor.ExecutionRuntime -> ExecutionSnapshot -> Int -> IO Driver.ExecutionDriverResult
+pumpDriver env executor snapshot remaining
+  | remaining <= 0 = assertFailure "driver did not complete within its bounded fixture" >> fail "driver"
+  | otherwise = do
+      result <- run env (runWorkflow DriverGenerated.workflowName (executionWorkflowId snapshot.executionId) (Driver.executionWorkflow executor (Just (Driver.ExecutionStart snapshot.executionId))))
+      case result of
+        Completed value -> pure value
+        ContinuedAsNew -> pumpDriver env executor snapshot (remaining - 1)
+        Suspended -> do
+          reference <- pendingReference env snapshot
+          Executor.executeAcceptedAttempt executor snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+          pumpDriver env executor snapshot (remaining - 1)
+        _ -> assertFailure (show result) >> fail "unexpected driver outcome"
 
 nativeExecutorCase :: DatabaseFixture -> ToolInvoiceCost -> TestTree
 nativeExecutorCase fixture billing = testCase (show billing <> " preserves rich output and survives release failure") $

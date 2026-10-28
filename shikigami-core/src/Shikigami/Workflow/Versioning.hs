@@ -45,6 +45,7 @@ import Kioku.App (AppEnv (..))
 import Shikigami.AgentRun.Generated.WorkflowRuntime qualified as AgentRun
 import Shikigami.Approval.Generated.WorkflowRuntime qualified as Approval
 import Shikigami.DanwaConversation.Generated.WorkflowRuntime qualified as DanwaConversation
+import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as Execution
 
 -- | Every patch id this deployment has active, read from the checked
 -- specification rather than written here.
@@ -68,6 +69,7 @@ shikigamiActivePatches =
   AgentRun.declaredPatches
     <> Approval.declaredPatches
     <> DanwaConversation.declaredPatches
+    <> Execution.declaredPatches
 
 -- | The options every first run of a Shikigami workflow uses.
 shikigamiWorkflowRunOptions :: AppEnv -> WorkflowRunOptions

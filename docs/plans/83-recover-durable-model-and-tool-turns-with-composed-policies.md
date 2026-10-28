@@ -67,8 +67,11 @@ start, atomic outcome/cursor/accounting, pre-dispatch refusal with accounted ret
 retained late receipts, partial-billing reconciliation and protected current-wake
 publication. The real HTTP and native-tool executor paths consume those primitives.
 Observation deadlines use the existing timer dispatcher and an explicit generation.
-The automatic driver, its run/conversation patch branches, recorded summaries and
-agent/operator configuration are still outstanding. Milestones 2 and 3 remain open.
+The automatic driver is now a callable, registered workflow with bounded decision
+generations, accepted-reference queue repair, replay-window reconstruction and
+the existing bound Approval child. Its run/conversation patch branches, recorded
+summaries and agent/operator configuration are still outstanding. Milestones 2
+and 3 remain open.
 
 Implementation baseline: `a156a6f`. Plans 81 and 82 are Complete. ADR 0051/0052 define the accepted root/selection and partial-billing contracts.
 
@@ -145,6 +148,16 @@ UUIDv5 values instead of resource keys containing Keiro separators. These decisi
 and the remaining production-driver boundary are recorded in
 [ADR 0054](../adr/0054-execution-attempts-own-dispatch-fences-and-generation-wakes.md).
 
+2026-10-28: A new execution-driver family rotates after each bounded decision or
+observation. Lost queue delivery reuses the accepted actual attempt; no callback
+runs in its workflow lease. The latest accepted model-facing input bounds replay
+reconstruction while raw accepted payloads remain retained. Approval waits keep
+their child generation until resolution, and fresh authority still gates the
+subsequent submission. Identity-bound control writes can settle undispatched work
+or reconcile retained facts after revocation without exposing protected replay.
+[ADR 0055](../adr/0055-execution-drivers-rotate-around-accepted-work.md) records
+these constraints. Existing parent bodies have not yet adopted the driver.
+
 ## Outcomes & Retrospective
 
 
@@ -214,6 +227,16 @@ escalation. Runtime and operator output do not expose wake tokens or replay bodi
 These are executor primitives and explicit-route evidence. The production driver,
 parent workflow patches, output-summary integration, class-specific recovery wiring
 and configuration remain open; neither milestone 2 nor 3 is marked complete.
+
+The callable driver checkpoint passes all 34 focused `ExecutionTranscript`
+PostgreSQL cases. Four new driver cases qualify lost queue delivery/restart with
+one actual attempt, exact two-tool positional replay, cancellation without a
+provider call, and Approval child restart followed by fresh authority refusal
+before tool submission. The full gate against `12c4d06` passes, with one additive
+new-workflow finding and unchanged stored-data replay. Parent patches, summaries,
+configuration and class-specific recovery remain open; this checkpoint does not
+close milestone 3. The full build and complete suites pass: 490 core, 298
+PostgreSQL, 37 agent, 63 server and 98 worker cases.
 
 ## Context and Orientation
 

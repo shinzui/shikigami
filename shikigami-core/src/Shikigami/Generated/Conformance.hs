@@ -11,6 +11,7 @@ import Shikigami.RunEvidenceLookup.Generated.ReadModelHarness qualified as RunEv
 import Shikigami.AgentRun.Generated.WorkflowFacts qualified as AgentRun
 import Shikigami.Approval.Generated.WorkflowFacts qualified as Approval
 import Shikigami.DanwaConversation.Generated.WorkflowFacts qualified as DanwaConversation
+import Shikigami.ExecutionDriver.Generated.WorkflowFacts qualified as ExecutionDriver
 
 runServiceConformanceChecks :: IO [(String, Bool)]
 runServiceConformanceChecks =
@@ -26,3 +27,4 @@ serviceConformanceFacts =
     [("workflow/AgentRun/" <> fact, value) | (fact, value) <- AgentRun.workflowFactValues]
     <> [("workflow/Approval/" <> fact, value) | (fact, value) <- Approval.workflowFactValues]
     <> [("workflow/DanwaConversation/" <> fact, value) | (fact, value) <- DanwaConversation.workflowFactValues]
+    <> [("workflow/ExecutionDriver/" <> fact, value) | (fact, value) <- ExecutionDriver.workflowFactValues]

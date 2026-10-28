@@ -19,6 +19,10 @@ module Shikigami.Execution.Store
     inspectExecutionAttempt,
     publishExecutionWake,
     refreshExecutionWake,
+    refreshExecutionControlWake,
+    stopExecution,
+    inspectOperationAttempts,
+    loadModelReplayWindow,
     refuseUndispatchedExecutionAttempt,
     claimExecutionAttempt,
     startExecutionAttempt,
@@ -29,8 +33,10 @@ module Shikigami.Execution.Store
     markExpiredExecutionAttemptUncertain,
     recordLateExecutionReceipt,
     reconcileExecutionAttempt,
+    reconcileExecutionControlAttempt,
     parkOperationPermission,
     resolveOperationPermission,
+    resolveOperationControlPermission,
     recordOutcomeAndAdvance,
     recordOutcomeAndAdvanceWith,
     finishExecution,
@@ -41,6 +47,7 @@ where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
 import Control.Exception (Exception, fromException, throw)
+import Control.Monad (foldM)
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Functor.Contravariant ((>$<))
@@ -63,7 +70,7 @@ import Keiro.ReadModel (runQuery)
 import Keiro.Stream qualified as Stream
 import Keiro.Workflow (JournalAppendOutcome (..), WorkflowId (..), WorkflowJournalEvent (..), WorkflowName (..), awakeableStepPrefix, currentGeneration, prepareJournalAppend)
 import Keiro.Workflow.Awakeable (awakeableIdText, awakeableIdToUuid)
-import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), AwakeableStatus (..), completeAwakeableTx, lookupAwakeable, lookupAwakeableStatusTx)
+import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), AwakeableStatus (Completed), completeAwakeableTx, lookupAwakeable, lookupAwakeableStatusTx)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
@@ -74,7 +81,7 @@ import Shikigami.Decision.Contract (ModelDescriptor, versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Catalog (withLiveExecution)
 import Shikigami.Execution.Identity (AttemptId (..), ExecutionRootId, OperationId (..))
-import Shikigami.Execution.Policy (validateTerminalOutput, validateToolInvocation)
+import Shikigami.Execution.Policy (ContextView (..), ModelOperationInput (..), validateTerminalOutput, validateToolInvocation)
 import Shikigami.Execution.Policy.Types (HarnessPolicy (..), ToolInvoiceCost (..))
 import Shikigami.Execution.Resources (Admission (..))
 import Shikigami.Execution.Resources qualified as Resources
@@ -156,7 +163,7 @@ admitExecution snapshot
       Right ref -> do
         let execution = snapshot.executionId
             binding = ExecutionBinding snapshot.identity snapshot.selection.rootId snapshot.selection.assignmentId snapshot.selection.descriptor ref.digest (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy))
-            state = ExecutionState 1 execution 0 Active 0 NeedModel ref Nothing Nothing 0 0 Nothing
+            state = ExecutionState 1 execution 0 Active 0 NeedModel ref Nothing Nothing 0 0 Nothing Nothing
         result <- persist execution (Generated.AdmitExecution (Generated.AdmitExecutionData execution.value ref.digest)) do
           lockRoot binding.rootId
           validateAdmissionRoot binding.rootId
@@ -345,6 +352,15 @@ resolveOperationPermission access@(ReplayAccess execution _ _) expected operatio
           stored <- findOperation operationId
           pure (if (stored >>= (.permission) >>= (.resolution)) == Just resolution then Right AlreadyAccepted else Left OperationConflict)
 
+-- A child decision records facts after waiting without reusing an expired read
+-- permit. It grants neither replay reads nor a new effect authorization.
+resolveOperationControlPermission :: (ExecutionEffects es) => AgentIdentity -> ExecutionId -> Integer -> OperationId -> ReviewRequestId -> ApprovalDecision -> Eff es (Either ExecutionError Admission)
+resolveOperationControlPermission identity execution expected operation review decision = catchExecutionWith id do
+  (_, binding) <- readMetadata (getExecution execution)
+  unless (identity == binding.identity) (throwIO (ExecutionAbort ExecutionIdentityConflict))
+  now <- liftIO getCurrentTime
+  resolveOperationPermission (ReplayAccess execution identity (addUTCTime 60 now)) expected operation review decision
+
 validateOperationInput :: ReplayAccess -> ExecutionBinding -> ExecutionState -> ExecutionSnapshot -> OperationSpec -> Aeson.Value -> Transaction ()
 validateOperationInput access binding state snapshot specification input = case specification.kind of
   ToolOperation -> do
@@ -456,6 +472,88 @@ refreshExecutionWake access@(ReplayAccess execution _ _) expected wake = catchEx
       pure (case result of Right () -> Right Accepted; Left (CheckFailed err) -> Left err; Left EventRejected -> Left ExecutionRevisionConflict)
   where
     body = envelope "execution-wake" (toJSON wake)
+
+-- Updating a wake hint grants no replay read or dispatch authority. This
+-- restricted writer keeps accepted work observable after principal revocation.
+refreshExecutionControlWake :: (ExecutionEffects es) => AgentIdentity -> ExecutionId -> Integer -> Attempt.ExecutionWake -> Eff es (Either ExecutionError Admission)
+refreshExecutionControlWake identity execution expected wake = catchExecutionWith id do
+  (_, binding) <- readMetadata (getExecution execution)
+  unless (identity == binding.identity) (throwIO (ExecutionAbort ExecutionIdentityConflict))
+  now <- liftIO getCurrentTime
+  refreshExecutionWake (ReplayAccess execution identity (addUTCTime 60 now)) expected wake
+
+stopExecution :: (ExecutionEffects es) => AgentIdentity -> ExecutionId -> Integer -> Bool -> ExecutionError -> Eff es (Either ExecutionError Admission)
+stopExecution identity execution expected cancelled reason = catchExecutionWith id do
+  (stored, binding) <- readMetadata (getExecution execution)
+  unless (identity == binding.identity) (throwIO (ExecutionAbort ExecutionIdentityConflict))
+  if stored.phase `elem` [Failed, Cancelled] && stored.failure == Just reason
+    then pure (Right AlreadyAccepted)
+    else do
+      let command = if cancelled then Generated.CancelExecution (Generated.CancelExecutionData execution.value (fromInteger expected) (fromInteger (expected + 1))) else Generated.FailExecution (Generated.FailExecutionData execution.value (fromInteger expected) (fromInteger (expected + 1)))
+      result <- persist execution command do
+        lockRoot binding.rootId
+        (state, actualBinding) <- getExecution execution
+        unless (actualBinding.identity == identity) (abort ExecutionIdentityConflict)
+        checkRevision expected state
+        unless (state.phase `elem` [Active, Parked]) (abort UnresolvedOperation)
+        forM_ state.activeOperation \operationId -> do
+          (_, pending) <- Tx.statement (operationKey operationId) executionAttemptInventory
+          when pending (abort UnresolvedOperation)
+          operation <- Tx.statement (operationKey operationId) lockOperation >>= maybe (abort OperationMissing) pure
+          unless (isNothing operation.outcome && not operation.uncertain) (abort UnresolvedOperation)
+          denied <- writePayload execution (envelope "operation-outcome" (toJSON (OperationDenied "execution stopped before dispatch")))
+          Tx.statement (operationKey operationId, operation & #outcome .~ Just denied & #continuation .~ Just WorkFinished) updateOperation
+        when cancelled do
+          root <- maybe (abort OperationConflict) pure actualBinding.rootId
+          status <- Roots.inspectRootTx root >>= either (abort . ResourceAdmissionRefused . Text.pack . show) pure
+          unless status.cancelled (abort OperationConflict)
+        unless (Lazy.length (Aeson.encode reason) <= 1024) (abort UnsupportedReplay)
+        ref <- writePayload execution (envelope "execution-failure" (toJSON reason))
+        saveExecution (state & #revision .~ (expected + 1) & #phase .~ (if cancelled then Cancelled else Failed) & #next .~ WorkFinished & #result .~ Just ref & #failure .~ Just reason & #activeOperation .~ Nothing)
+      pure (case result of Right () -> Right Accepted; Left (CheckFailed err) -> Left err; Left EventRejected -> Left ExecutionRevisionConflict)
+
+inspectOperationAttempts :: (ExecutionReadEffects es) => OperationId -> Eff es (Either ExecutionError [Attempt.ExecutionAttempt])
+inspectOperationAttempts operation = protected (Tx.statement (operationKey operation) listOperationAttempts)
+
+-- Reconstruct from the last accepted model-facing checkpoint, then append its
+-- response and following tool observations. Earlier accepted payloads remain
+-- immutable and reachable through the previous model-input reference.
+loadModelReplayWindow :: (ExecutionReadEffects es) => ReplayAccess -> Eff es (Either ExecutionError (ReplayContext, Maybe PayloadRef, Maybe (Operation, ModelOperationInput, ReplayAssistant)))
+loadModelReplayWindow access@(ReplayAccess execution _ _) = protected do
+  (state, binding) <- getExecution execution
+  _ <- checkAccess access binding
+  snapshot <- readPayload @ExecutionSnapshot access binding "snapshot" state.snapshot
+  lastModel <- Tx.statement execution.value lastAcceptedModelOperation
+  (base, after, predecessor) <- case lastModel of
+    Nothing -> pure (snapshot.initialContext, -1, Nothing)
+    Just operation -> do
+      input <- readPayload @ModelOperationInput access binding "operation-input" operation.input
+      ref <- maybe (abort CorruptReplay) pure operation.outcome
+      outcome <- readPayload @OperationOutcome access binding "operation-outcome" ref
+      case outcome of
+        ModelReturned assistant _ -> pure (input.view.context & #messages %~ (<> [AssistantTurn assistant]), operation.position, Just operation.input)
+        _ -> abort CorruptReplay
+  tail <- Tx.statement (execution.value, fromInteger after) acceptedOperationsAfter
+  (context, summary, _) <- foldM (append binding snapshot.policy.contextBytes) (base, Nothing, []) tail
+  pure (context, predecessor, summary)
+  where
+    append binding byteLimit (context, summary, group) operation = case operation.specification.kind of
+      ModelSummary -> do
+        input <- readPayload @ModelOperationInput access binding "operation-input" operation.input
+        outcome <- maybe (abort CorruptReplay) (readPayload @OperationOutcome access binding "operation-outcome") operation.outcome
+        case outcome of ModelReturned assistant _ -> pure (context, Just (operation, input, assistant), group); _ -> abort CorruptReplay
+      ToolOperation -> do
+        input <- readPayload @ToolOperationInput access binding "operation-input" operation.input
+        outcome <- maybe (abort CorruptReplay) (readPayload @OperationOutcome access binding "operation-outcome") operation.outcome
+        message <- case outcome of
+          ToolReturned blocks failed -> pure (ToolTurn input.invocation.callId input.invocation.name blocks failed Nothing)
+          RichToolReturned result -> pure (ToolTurn input.invocation.callId input.invocation.name (observationBlocks result) result.failed Nothing)
+          OperationDenied reason -> pure (ToolTurn input.invocation.callId input.invocation.name [TextBlock reason] True Nothing)
+          _ -> abort UnresolvedOperation
+        let pending = group <> [message]
+        unless (Lazy.length (Aeson.encode pending) <= fromIntegral byteLimit) (abort (ExecutionPolicyRefused "required tool observations exceed the context ceiling"))
+        pure (context & #messages %~ (<> [message]), summary, pending)
+      _ -> pure (context, summary, group)
 
 -- Accepted state is a sufficient authority to publish its wake hint. This
 -- method never returns the opaque token or grants new reads/dispatch authority,
@@ -719,6 +817,15 @@ reconcileExecutionAttempt access@(ReplayAccess execution _ _) expected attemptId
         saveAttempt (current & #phase .~ Attempt.AttemptCommitted & #outcome .~ Just resultRef)
         saveExecution (state & #revision .~ (expected + 1) & #phase .~ Active & #activeOperation .~ Nothing & #cursor .~ (state.cursor + 1) & #next .~ receipt.next)
       pure (case result of Right () -> Right Accepted; Left (CheckFailed err) -> Left err; Left EventRejected -> Left ExecutionRevisionConflict)
+
+-- Applying a retained receipt records accepted facts and returns admission
+-- metadata only, including when its principal can no longer read replay bodies.
+reconcileExecutionControlAttempt :: (ExecutionEffects es) => AgentIdentity -> ExecutionId -> Integer -> AttemptId -> Eff es (Either ExecutionError Admission)
+reconcileExecutionControlAttempt identity execution expected attempt = catchExecutionWith id do
+  (_, binding) <- readMetadata (getExecution execution)
+  unless (identity == binding.identity) (throwIO (ExecutionAbort ExecutionIdentityConflict))
+  now <- liftIO getCurrentTime
+  reconcileExecutionAttempt (ReplayAccess execution identity now) expected attempt
 
 validateDispatchPermission :: UTCTime -> Operation -> ExecutionSnapshot -> Transaction ()
 validateDispatchPermission now operation snapshot = when (operation.specification.kind == ToolOperation) do
@@ -988,3 +1095,12 @@ toolSettlement :: Resources.AttemptRequest -> Resources.Settlement
 toolSettlement request
   | Map.member Resources.CostMicroUsd request.quantities = Resources.KnownUsage zeroModelBilling
   | otherwise = Resources.PartialUsage (Map.singleton Resources.Tokens 0) [Resources.CostMicroUsd] "tool invoice billing is unavailable"
+
+listOperationAttempts :: Statement Text [Attempt.ExecutionAttempt]
+listOperationAttempts = preparable "SELECT value FROM shikigami.execution_transcript_operations,LATERAL jsonb_each(dispatches) WHERE operation_id=$1 ORDER BY key LIMIT 1000" textParam (D.rowList jsonRow)
+
+lastAcceptedModelOperation :: Statement Text (Maybe Operation)
+lastAcceptedModelOperation = preparable "SELECT state FROM shikigami.execution_transcript_operations WHERE execution_id=$1 AND state#>>'{specification,kind}' IN ('ModelTurn','ModelRepair') AND state->'outcome' <> 'null'::jsonb ORDER BY position DESC LIMIT 1" textParam (D.rowMaybe jsonRow)
+
+acceptedOperationsAfter :: Statement (Text, Int64) [Operation]
+acceptedOperationsAfter = preparable "SELECT state FROM shikigami.execution_transcript_operations WHERE execution_id=$1 AND position>$2 AND state->'outcome' <> 'null'::jsonb ORDER BY position LIMIT 10000" (contrazip2 textParam (E.param (E.nonNullable E.int8))) (D.rowList jsonRow)

@@ -20,5 +20,11 @@ expectedServiceConformanceFacts =
     ("workflow/DanwaConversation/idField", "input"),
     ("workflow/DanwaConversation/idVia", "conversationWorkflowId"),
     ("workflow/DanwaConversation/name", "shikigami.danwa-conversation"),
-    ("workflow/DanwaConversation/patches", "[\"shikigami-conversation-execution-selection-v1\"]")
+    ("workflow/DanwaConversation/patches", "[\"shikigami-conversation-execution-selection-v1\"]"),
+    ("workflow/ExecutionDriver/awaits", "[\"observation\"]"),
+    ("workflow/ExecutionDriver/body", "[\"step:ingest-execution\",\"await:observation\",\"step:advance-execution\",\"step:resolve-tool-permission\",\"child:approval\",\"continueAsNew:ExecutionSeed\"]"),
+    ("workflow/ExecutionDriver/idField", "executionId"),
+    ("workflow/ExecutionDriver/idVia", "executionWorkflowId"),
+    ("workflow/ExecutionDriver/name", "shikigami.execution"),
+    ("workflow/ExecutionDriver/patches", "[]")
   ]

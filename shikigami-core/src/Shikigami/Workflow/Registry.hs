@@ -6,9 +6,12 @@ import Keiro.Workflow.Resume (WorkflowRegistry)
 import Kioku.App (AppEffects)
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Workflow qualified as Agent
+import Shikigami.Execution.Driver qualified as Execution
 
 -- | AgentRun's registry includes its durable Approval child. Conversation adds
--- the third family without erasing the resource-aware Kioku effect row.
+-- conversation and execution add their families on the same Kioku effect row.
 workflowRegistry :: Agent.AgentRunDeps -> Conversation.ConversationEnv -> WorkflowRegistry AppEffects
 workflowRegistry agents conversations =
-  Agent.agentRunRegistry agents `Map.union` Conversation.conversationRegistry conversations
+  Agent.agentRunRegistry agents
+    `Map.union` Conversation.conversationRegistry conversations
+    `Map.union` Execution.executionRegistry (Agent.executionRuntime agents)

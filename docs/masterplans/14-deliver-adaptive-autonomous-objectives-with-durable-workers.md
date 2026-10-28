@@ -130,7 +130,7 @@ Coordinate those prerequisite deliverables with their separate owning plans when
 ## Progress
 
 
-2026-10-27: Phase A is complete: EP-1 and EP-2 are Complete; EP-3 is In Progress and the remaining four children are Not Started. EP-2 passed the full build, 476 core, 260 PostgreSQL, 37 agent, 63 server and 98 worker cases, plus its final 10-case selection qualification, migration isolation and the additive workflow gate. EP-3 has accepted its protected transcript storage and atomic outcome boundary; composed policies, individually accepted tools, bound permissions and fenced executor primitives are implemented checkpoints. Policy configuration, recorded summaries and the automatic driver remain in progress. External plans 73–76 now have accepted implementation evidence in MasterPlan 13. IR-11 and IR-13 remain separately owned provider gates; fixture evidence cannot close them.
+2026-10-27: Phase A is complete: EP-1 and EP-2 are Complete; EP-3 is In Progress and the remaining four children are Not Started. EP-2 passed the full build, 476 core, 260 PostgreSQL, 37 agent, 63 server and 98 worker cases, plus its final 10-case selection qualification, migration isolation and the additive workflow gate. EP-3 has accepted its protected transcript storage and atomic outcome boundary; composed policies, individually accepted tools, bound permissions and fenced executor primitives are implemented checkpoints. The callable automatic driver is qualified independently; parent workflow adoption, policy configuration, recorded summaries and remaining recovery work are still in progress. External plans 73–76 now have accepted implementation evidence in MasterPlan 13. IR-11 and IR-13 remain separately owned provider gates; fixture evidence cannot close them.
 
 
 ## Surprises & Discoveries
@@ -162,9 +162,12 @@ identities. Attempt metadata uses a bounded column on the owned operation target
 queue delivery observes prepared references, and late receipts reconcile without
 redispatch or double accounting. Explicit tool invoice semantics prevent unknown
 cost from becoming zero. [ADR 0054](../adr/0054-execution-attempts-own-dispatch-fences-and-generation-wakes.md)
-records the cross-plan contract consumed by continuing assignments. The new worker
-route is available; the automatic driver and its parent workflow branches are not
-yet accepted, so EP-3 and its dependent-child start gates remain unchanged.
+records the cross-plan contract consumed by continuing assignments. The worker route and independently qualified callable driver are available.
+[ADR 0055](../adr/0055-execution-drivers-rotate-around-accepted-work.md) fixes the
+bounded-generation and accepted-reference repair contract for later continuing
+assignments. Parent workflow patches, summaries, configuration and remaining
+recovery qualification are not yet accepted, so EP-3 and its dependent-child start
+gates remain unchanged.
 
 ## Decision Log
 

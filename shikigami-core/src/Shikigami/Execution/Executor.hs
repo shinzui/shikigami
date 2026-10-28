@@ -104,6 +104,7 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
                       let oldClaim = Attempt.AttemptClaim reference (fromMaybe "" current.owner) current.generation
                       result <- runExecutionStore env (Store.markExecutionAttemptUncertain permit freshState.revision oldClaim)
                       case result of Right _ -> publish; Left err -> pure (Left err)
+                    Left ResourceAdmissionRefused {} -> owned (Store.refuseUndispatchedExecutionAttempt identity freshState.revision reference) >>= \case Right _ -> publish; Left err -> pure (Left err)
                     Left err -> pure (Left err)
                     Right (Attempt.ClaimGranted lease) -> runClaim permit snapshot lease
     (Left err, _) -> pure (Left err)
@@ -128,6 +129,8 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
           started <- owned (Store.startExecutionAttempt access state.revision lease)
           case started of
             Right AlreadyAccepted -> pure (Right ExecutorRetry)
+            Left ResourceAdmissionRefused {} -> owned (Store.abandonExecutionAttempt access state.revision reference) >>= \case Right _ -> publish; Left err -> pure (Left err)
+            Left ExecutionPolicyRefused {} -> owned (Store.abandonExecutionAttempt access state.revision reference) >>= \case Right _ -> publish; Left err -> pure (Left err)
             Left err -> pure (Left err)
             Right Accepted -> Exception.mask \restore -> do
               dispatched <- Exception.try @Exception.SomeException (restore (timeout (max 1 (min 3500 env.timeoutSeconds) * 1000000) (dispatch access snapshot lease)))

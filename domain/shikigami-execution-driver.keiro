@@ -1,0 +1,16 @@
+language keiro-dsl 6
+context shikigami
+layout collocated
+
+workflow ExecutionDriver
+  name "shikigami.execution"
+  in ExecutionStart { executionId:Id }
+  out ExecutionDriverResult
+  id from input.executionId via executionWorkflowId
+  body
+    step ingest-execution -> ExecutionStart
+    await observation -> ExecutionJobReference
+    step advance-execution -> ExecutionAction
+    step resolve-tool-permission -> ExecutionControlResult
+    child approval id input via approvalWorkflowId -> ApprovalWorkflowResult
+    continueAsNew ExecutionSeed

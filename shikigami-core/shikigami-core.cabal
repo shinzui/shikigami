@@ -92,6 +92,7 @@ library
     Shikigami.Execution.Admission
     Shikigami.Execution.Attempt
     Shikigami.Execution.Catalog
+    Shikigami.Execution.Driver
     Shikigami.Execution.Executor
     Shikigami.Execution.Identity
     Shikigami.Execution.Live
@@ -106,6 +107,8 @@ library
     Shikigami.Execution.Timer
     Shikigami.Execution.Tools
     Shikigami.Execution.Transcript
+    Shikigami.ExecutionDriver.Generated.WorkflowFacts
+    Shikigami.ExecutionDriver.Generated.WorkflowRuntime
     Shikigami.Flow
     Shikigami.Flow.Acknowledgement
     Shikigami.Flow.AtRiskCustomer
