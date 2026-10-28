@@ -134,7 +134,7 @@ sessionWorkflow runtime initial = do
               _ <- Store.setAssignmentStatus access state.revision state.epoch (OperationId ("unresolved:" <> message.assignmentId.value)) message.assignmentId AssignmentUnresolved >>= require
               continueAsNew (WorkerSessionSeed (Just accepted))
             Right () -> do
-              Delegated handle <- delegateAssignment state.owner instruction.selection runtime.agents runtime.directory admission.delegator admission.context (assignmentDelegationKey message.assignmentId) (agentNameText admission.worker) (Aeson.object ["instruction" Aeson..= instruction.text, "assignmentId" Aeson..= message.assignmentId, "objective" Aeson..= admission.objective, "retainedFindings" Aeson..= findings])
+              Delegated handle <- delegateAssignment state.owner instruction.selection runtime.agents runtime.directory admission.delegator admission.context (assignmentDelegationKey message.assignmentId) (agentNameText (fromMaybe admission.worker state.worker)) (Aeson.object ["instruction" Aeson..= instruction.text, "assignmentId" Aeson..= message.assignmentId, "objective" Aeson..= admission.objective, "retainedFindings" Aeson..= findings])
               finish accepted message access handle
   where
     waitAndRotate accepted awaitHint = do
@@ -179,6 +179,7 @@ selectAssignment runtime session = do
             Just assignment -> fmap RunAssignment <$> Store.readAssignment access assignment
           Parked -> pure (Right WaitForSession)
           Unresolved -> pure (Right WaitForSession)
+          Transferring -> pure (Right WaitForSession)
           Idle ->
             Store.nextAssignment access >>= \case
               Left err -> pure (Left err)

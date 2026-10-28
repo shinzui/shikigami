@@ -23,6 +23,9 @@ harnessAssertions =
   , ("golden round-trip: SessionResultRecorded", roundTrips sampleEventSessionResultRecorded)
   , ("golden round-trip: SessionBecameUnresolved", roundTrips sampleEventSessionBecameUnresolved)
   , ("golden round-trip: SessionAssignmentReconciled", roundTrips sampleEventSessionAssignmentReconciled)
+  , ("golden round-trip: SessionTransferRequested", roundTrips sampleEventSessionTransferRequested)
+  , ("golden round-trip: SessionTransferReconciled", roundTrips sampleEventSessionTransferReconciled)
+  , ("golden round-trip: SessionOwnerEstablished", roundTrips sampleEventSessionOwnerEstablished)
   , ("golden round-trip: WorkerSessionObserved", roundTrips sampleEventWorkerSessionObserved)
   , ("golden round-trip: SessionCheckpointPrepared", roundTrips sampleEventSessionCheckpointPrepared)
   , ("golden round-trip: SessionEventsConsumed", roundTrips sampleEventSessionEventsConsumed)
@@ -58,6 +61,15 @@ sampleEventSessionBecameUnresolved = SessionBecameUnresolved (SessionBecameUnres
 
 sampleEventSessionAssignmentReconciled :: WorkerSessionLifecycleEvent
 sampleEventSessionAssignmentReconciled = SessionAssignmentReconciled (SessionAssignmentReconciledData "sample-sessionId" 0 0)
+
+sampleEventSessionTransferRequested :: WorkerSessionLifecycleEvent
+sampleEventSessionTransferRequested = SessionTransferRequested (SessionTransferRequestedData "sample-sessionId" 0 0)
+
+sampleEventSessionTransferReconciled :: WorkerSessionLifecycleEvent
+sampleEventSessionTransferReconciled = SessionTransferReconciled (SessionTransferReconciledData "sample-sessionId" 0 0)
+
+sampleEventSessionOwnerEstablished :: WorkerSessionLifecycleEvent
+sampleEventSessionOwnerEstablished = SessionOwnerEstablished (SessionOwnerEstablishedData "sample-sessionId" 0 0)
 
 sampleEventWorkerSessionObserved :: WorkerSessionLifecycleEvent
 sampleEventWorkerSessionObserved = WorkerSessionObserved (WorkerSessionObservedData "sample-sessionId" 0 0)

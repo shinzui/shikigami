@@ -179,10 +179,12 @@ library
     Shikigami.Trigger.Stream
     Shikigami.WorkerSession.Catalog
     Shikigami.WorkerSession.Checkpoint
+    Shikigami.WorkerSession.Handoff
     Shikigami.WorkerSession.Identity
     Shikigami.WorkerSession.Integration
     Shikigami.WorkerSession.Live
     Shikigami.WorkerSession.Store
+    Shikigami.WorkerSession.Transfer
     Shikigami.WorkerSession.Types
     Shikigami.WorkerSession.Workflow
     Shikigami.Workflow.Registry
@@ -440,6 +442,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.RunEvidenceSpec
     Shikigami.SinkDeliverySpec
     Shikigami.SpikeWorkflowSpec
+    Shikigami.WorkerSessionHandoffSpec
     Shikigami.WorkerSessionSpec
     Shikigami.WorkerSessionStoreSpec
     Shikigami.WorkflowVersioningSpec

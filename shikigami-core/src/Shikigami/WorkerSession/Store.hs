@@ -26,6 +26,14 @@ module Shikigami.WorkerSession.Store
     readCheckpointIntent,
     acceptCheckpointWith,
     observeSession,
+    requestTransfer,
+    readTransferIntent,
+    readTransferOperation,
+    readTransferFence,
+    markTransferReconciling,
+    retainTransferFence,
+    establishOwner,
+    assignmentExecutions,
   )
 where
 
@@ -57,18 +65,20 @@ import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), AwakeableStatus (Comp
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
-import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
-import Shikigami.Agent.Principal (AgentIdentity)
+import Shikigami.Agent.Delegate.Context (DelegateCtx (..), assertMayDelegate, checkCycle, checkDepth)
+import Shikigami.Agent.Name (AgentName, agentNameText)
+import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId (..))
 import Shikigami.Execution.Resources (Admission (..))
 import Shikigami.Execution.Resources qualified as Resources
-import Shikigami.Execution.Transcript (PayloadRef (..))
+import Shikigami.Execution.Transcript (ExecutionId, PayloadRef (..))
 import Shikigami.Prelude
 import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.WorkerSession.Catalog (withLiveSession)
 import Shikigami.WorkerSession.Checkpoint
 import Shikigami.WorkerSession.Identity (assignmentChildWorkflowId, sessionWorkflowId, sessionWorkflowName)
+import Shikigami.WorkerSession.Transfer
 import Shikigami.WorkerSession.Types
 import Shikigami.WorkerSessionLifecycle.Generated.Domain qualified as Generated
 import Shikigami.WorkerSessionLifecycle.Generated.EventStream (workerSessionLifecycleCategory, workerSessionLifecycleEventStream)
@@ -132,7 +142,7 @@ openSession admission = guarded do
   let session = sessionIdFor admission
       root = fromMaybe (error "validated session root missing") admission.context.executionRootId
       binding = SessionBinding session (scopeDigestFor admission) admission.scope admission.objective admission.context.identity admission.identity root ref
-      initial = SessionState 1 session 0 Idle admission.identity 0 Nothing 0 0 0 Nothing Nothing
+      initial = SessionState 1 session 0 Idle admission.identity 0 Nothing 0 0 0 Nothing Nothing Nothing Nothing
       matching = \case
         Just (state, existing) | existing == binding -> Right (AlreadyAccepted, state)
         Just _ -> Left SessionBindingConflict
@@ -216,7 +226,7 @@ acceptMessage access expected epoch operation instruction = guarded do
     True
     (\session revision -> Generated.AcceptSessionMessage (Generated.AcceptSessionMessageData session revision (revision + 1)))
     \state _ admission -> do
-      unless (state.phase `elem` [Idle, Active, Parked, Unresolved]) (abort SessionClosed)
+      unless (state.phase `elem` [Idle, Active, Parked, Unresolved, Transferring]) (abort SessionClosed)
       when (state.nextSequence >= toInteger admission.maximumAssignments) (abort SessionLimitExceeded)
       queued <- Tx.statement state.sessionId.value countQueued
       when (queued >= fromIntegral admission.mailboxLimit) (abort SessionMailboxFull)
@@ -257,7 +267,7 @@ startAssignment access expected epoch operation assignment = guarded do
         let bounded = if Lazy.length (Aeson.encode (result :: AssignmentResult).output) <= 8192 then Just result.output else Nothing
         pure (RetainedFinding receipt bounded)
       context <- writePayload state.sessionId (body "assignment-context" findings)
-      let child = assignmentChildWorkflowId state.sessionId admission.worker assignment
+      let child = assignmentChildWorkflowId state.sessionId (fromMaybe admission.worker state.worker) assignment
           started = message & #phase .~ Running & #epoch .~ state.epoch & #childWorkflowId .~ Just child.unWorkflowId & #context .~ Just context
       saveMessage started
       appendEvent state (AssignmentStarted started)
@@ -342,7 +352,7 @@ recordResult access expected epoch operation result = guarded do
     False
     (\session revision -> Generated.RecordSessionResult (Generated.RecordSessionResultData session revision (revision + 1)))
     \state _ _ -> do
-      unless (state.phase == Active && state.activeAssignment == Just result.assignmentId) (abort AssignmentConflict)
+      unless (state.phase `elem` [Active, Transferring] && state.activeAssignment == Just result.assignmentId) (abort AssignmentConflict)
       message <- getAssignment state.sessionId result.assignmentId
       unless (message.phase == Running && message.epoch == epoch) (abort AssignmentConflict)
       existing <- Tx.statement (state.sessionId.value, result.assignmentId.value) selectResult
@@ -353,7 +363,7 @@ recordResult access expected epoch operation result = guarded do
       Tx.statement (state.sessionId.value, result.assignmentId.value, receipt) insertResult
       saveMessage (message & #phase .~ AssignmentFinished & #executionId .~ result.executionId)
       appendEvent state (ResultAvailable receipt)
-      pure (receipt, state & #phase .~ Idle & #activeAssignment .~ Nothing & #eventCursor .~ (state.eventCursor + 1))
+      pure (receipt, state & #phase .~ (if state.phase == Transferring then Transferring else Idle) & #activeAssignment .~ Nothing & #eventCursor .~ (state.eventCursor + 1))
   where
     encoded = body "assignment-result" result
 
@@ -462,6 +472,134 @@ observeSession access@(SessionAccess session _ _) expected epoch operation wake 
       ref <- writePayload session (body "session-wake" wake)
       let next = state & #wake .~ Just ref & #revision .~ (expected + 1)
       pure (next, next)
+
+requestTransfer :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> ObjectiveVersion -> WorkspaceRef -> AgentName -> AgentIdentity -> Eff es (Either SessionError (Admission, TransferIntent))
+requestTransfer access expected epoch operation version workspace target successor = guarded $
+  mutate
+    access
+    expected
+    epoch
+    operation
+    "transfer-request"
+    (toJSON (epoch, version, workspace, target, successor))
+    True
+    (\session revision -> Generated.RequestSessionTransfer (Generated.RequestSessionTransferData session revision (revision + 1)))
+    \state binding admission -> do
+      unless (isNothing state.checkpointIntent && maybe True ((== TransferEstablished) . (.stage)) state.handoff) (abort AssignmentConflict)
+      unless (version.active && version.owner == state.owner && version.ownerEpoch == epoch && version.rootId == binding.rootId && successor /= state.owner && successor /= binding.parentIdentity && all (>= 0) [version.revision, version.assignmentRevision, version.criteriaRevision] && all (\value -> not (Text.null value) && Text.length value <= 256) [workspace.provider, workspace.resource]) (abort SessionBindingConflict)
+      void (require (either (const (Left SessionOwnerRefused)) Right (identityText successor)))
+      require (either (const (Left SessionOwnerRefused)) Right (assertMayDelegate admission.delegator (agentNameText target)))
+      require (either (const (Left SessionOwnerRefused)) Right (checkCycle admission.context (agentNameText target)))
+      void (require (either (const (Left SessionOwnerRefused)) Right (checkDepth admission.context)))
+      let intent = TransferIntent 1 state.sessionId binding.objective binding.parentIdentity operation version state.owner successor target epoch (epoch + 1) binding.rootId workspace
+      ref <- writePayload state.sessionId (body "transfer-intent" intent)
+      appendEvent state (TransferStatusChanged operation TransferRequested)
+      pure (intent, state & #phase .~ Transferring & #handoff .~ Just (HandoffProgress operation ref TransferRequested Nothing Nothing) & #eventCursor .~ (state.eventCursor + 1))
+
+readTransferIntent :: (SessionReadEffects es) => SessionAccess -> Eff es (Either SessionError TransferIntent)
+readTransferIntent access@(SessionAccess session _ _) = protected do
+  (state, binding) <- getSession session
+  checkAccess access state binding
+  progress <- maybe (abort AssignmentMissing) pure state.handoff
+  readPayload session "transfer-intent" progress.intent
+
+readTransferOperation :: (SessionReadEffects es) => SessionAccess -> OperationId -> Eff es (Either SessionError TransferIntent)
+readTransferOperation access@(SessionAccess session _ _) operation = protected do
+  (state, binding) <- getSession session
+  checkAccess access state binding
+  stored <- Tx.statement (session.value, operationKey operation) selectCommand
+  case stored of
+    Just (_, value) -> case Aeson.fromJSON value of
+      Aeson.Success intent | intent.format == 1 && intent.sessionId == session && intent.operationId == operation -> pure intent
+      _ -> abort MessageConflict
+    Nothing -> abort AssignmentMissing
+
+readTransferFence :: (SessionReadEffects es) => SessionAccess -> Eff es (Either SessionError (Maybe FenceProof))
+readTransferFence access@(SessionAccess session _ _) = protected do
+  (state, binding) <- getSession session
+  checkAccess access state binding
+  progress <- maybe (abort AssignmentMissing) pure state.handoff
+  traverse (readPayload session "transfer-fence") progress.fence
+
+markTransferReconciling :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> OperationId -> Eff es (Either SessionError (Admission, HandoffProgress))
+markTransferReconciling access expected epoch operation transfer = guarded $
+  mutate
+    access
+    expected
+    epoch
+    operation
+    "transfer-reconciling"
+    (toJSON (epoch, transfer))
+    False
+    (\session revision -> Generated.ReconcileSessionTransfer (Generated.ReconcileSessionTransferData session revision (revision + 1)))
+    \state _ _ -> do
+      progress <- transferProgress state transfer
+      unless (progress.stage `elem` [TransferRequested, TransferReconciling, TransferUnresolved]) (abort AssignmentConflict)
+      let next = progress & #stage .~ TransferReconciling
+      appendEvent state (TransferStatusChanged transfer TransferReconciling)
+      pure (next, state & #handoff .~ Just next & #eventCursor .~ (state.eventCursor + 1))
+
+retainTransferFence :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> OperationId -> FenceOutcome -> Eff es (Either SessionError (Admission, HandoffProgress))
+retainTransferFence access expected epoch operation transfer outcome = guarded $
+  mutate
+    access
+    expected
+    epoch
+    operation
+    "transfer-fence"
+    (toJSON (epoch, transfer, outcome))
+    False
+    (\session revision -> Generated.ReconcileSessionTransfer (Generated.ReconcileSessionTransferData session revision (revision + 1)))
+    \state _ _ -> do
+      progress <- transferProgress state transfer
+      intent <- readPayload state.sessionId "transfer-intent" progress.intent
+      unless (progress.stage /= TransferEstablished) (abort AssignmentConflict)
+      next <- case outcome of
+        FencedAndSettled proof -> do
+          unless (matchesFence intent proof) (abort SessionBindingConflict)
+          ref <- writePayload state.sessionId (body "transfer-fence" proof)
+          pure (progress & #stage .~ TransferFenced & #fence .~ Just ref)
+        _ -> do
+          when (isJust progress.fence) (abort AssignmentConflict)
+          pure (progress & #stage .~ TransferUnresolved)
+      appendEvent state (TransferStatusChanged transfer next.stage)
+      pure (next, state & #handoff .~ Just next & #eventCursor .~ (state.eventCursor + 1))
+
+establishOwner :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> OperationId -> FenceProof -> OwnershipReceipt -> Eff es (Either SessionError (Admission, SessionState))
+establishOwner access expected epoch operation transfer proof receipt = guarded $
+  mutate
+    access
+    expected
+    epoch
+    operation
+    "transfer-establish"
+    (toJSON (epoch, transfer, proof, receipt))
+    False
+    (\session revision -> Generated.EstablishSessionOwner (Generated.EstablishSessionOwnerData session revision (revision + 1)))
+    \state binding _ -> do
+      progress <- transferProgress state transfer
+      intent <- readPayload state.sessionId "transfer-intent" progress.intent
+      unless (isNothing state.activeAssignment && isNothing state.checkpointIntent && progress.stage == TransferFenced && state.owner == intent.oldOwner && epoch == intent.oldEpoch && intent.newEpoch == epoch + 1 && binding.rootId == intent.rootId && matchesOwnership intent proof receipt) (abort AssignmentConflict)
+      storedProof <- maybe (abort AssignmentMissing) (readPayload state.sessionId "transfer-fence") progress.fence
+      unless (storedProof == proof) (abort SessionBindingConflict)
+      ref <- writePayload state.sessionId (body "transfer-checkpoint" receipt)
+      let established = progress & #stage .~ TransferEstablished & #checkpoint .~ Just ref
+          next = state & #phase .~ Idle & #owner .~ intent.newOwner & #worker .~ Just intent.newWorker & #epoch .~ intent.newEpoch & #handoff .~ Just established & #eventCursor .~ (state.eventCursor + 1) & #revision .~ (expected + 1)
+      appendEvent state (TransferStatusChanged transfer TransferEstablished)
+      pure (next, next)
+
+transferProgress :: SessionState -> OperationId -> Transaction HandoffProgress
+transferProgress state operation = do
+  progress <- maybe (abort AssignmentMissing) pure state.handoff
+  unless (state.phase == Transferring && progress.operationId == operation) (abort AssignmentConflict)
+  pure progress
+
+assignmentExecutions :: (SessionReadEffects es) => SessionAccess -> Eff es (Either SessionError [ExecutionId])
+assignmentExecutions access@(SessionAccess session _ _) = protected do
+  (state, binding) <- getSession session
+  checkAccess access state binding
+  messages <- Tx.statement session.value completedAssignments
+  pure (mapMaybe (.executionId) messages)
 
 validateWake :: (SessionReadEffects es) => WorkerSessionId -> SessionWake -> Eff es AwakeableRow
 validateWake session wake = do
@@ -628,6 +766,9 @@ selectMessage = preparable "SELECT state FROM shikigami.worker_session_messages 
 
 firstQueued :: Statement Text (Maybe MessageReceipt)
 firstQueued = preparable "SELECT state FROM shikigami.worker_session_messages WHERE session_id=$1 AND state->>'phase'='Queued' ORDER BY sequence LIMIT 1" textParam (D.rowMaybe jsonRow)
+
+completedAssignments :: Statement Text [MessageReceipt]
+completedAssignments = preparable "SELECT state FROM shikigami.worker_session_messages WHERE session_id=$1 AND state->>'phase'='AssignmentFinished' ORDER BY sequence LIMIT 1000" textParam (D.rowList jsonRow)
 
 countQueued :: Statement Text Int64
 countQueued = preparable "SELECT count(*) FROM shikigami.worker_session_messages WHERE session_id=$1 AND state->>'phase'='Queued'" textParam (D.singleRow (D.column (D.nonNullable D.int8)))

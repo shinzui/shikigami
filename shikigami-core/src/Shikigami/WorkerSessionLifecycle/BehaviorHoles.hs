@@ -29,6 +29,7 @@ historyFor source = case source of
   WorkerSessionLifecycleActive -> [admitted, eventFor "StartSessionAssignment" 0]
   WorkerSessionLifecycleParked -> [admitted, eventFor "StartSessionAssignment" 0, eventFor "ParkSessionAssignment" 1]
   WorkerSessionLifecycleUnresolved -> [admitted, eventFor "StartSessionAssignment" 0, eventFor "MarkSessionUnresolved" 1]
+  WorkerSessionLifecycleTransferring -> [admitted, eventFor "RequestSessionTransfer" 0]
   WorkerSessionLifecycleFailed -> [admitted, eventFor "FailWorkerSession" 0]
   WorkerSessionLifecycleCancelled -> [admitted, eventFor "CancelWorkerSession" 0]
 
@@ -42,6 +43,9 @@ commandFor name revision = case name of
   "RecordSessionResult" -> RecordSessionResult (RecordSessionResultData "fixture-session" revision (revision + 1))
   "MarkSessionUnresolved" -> MarkSessionUnresolved (MarkSessionUnresolvedData "fixture-session" revision (revision + 1))
   "ReconcileSessionAssignment" -> ReconcileSessionAssignment (ReconcileSessionAssignmentData "fixture-session" revision (revision + 1))
+  "RequestSessionTransfer" -> RequestSessionTransfer (RequestSessionTransferData "fixture-session" revision (revision + 1))
+  "ReconcileSessionTransfer" -> ReconcileSessionTransfer (ReconcileSessionTransferData "fixture-session" revision (revision + 1))
+  "EstablishSessionOwner" -> EstablishSessionOwner (EstablishSessionOwnerData "fixture-session" revision (revision + 1))
   "ObserveWorkerSession" -> ObserveWorkerSession (ObserveWorkerSessionData "fixture-session" revision (revision + 1))
   "PrepareSessionCheckpoint" -> PrepareSessionCheckpoint (PrepareSessionCheckpointData "fixture-session" revision (revision + 1))
   "ConsumeSessionEvents" -> ConsumeSessionEvents (ConsumeSessionEventsData "fixture-session" revision (revision + 1))
@@ -59,6 +63,9 @@ eventFor name revision = case name of
   "RecordSessionResult" -> SessionResultRecorded (SessionResultRecordedData "fixture-session" revision (revision + 1))
   "MarkSessionUnresolved" -> SessionBecameUnresolved (SessionBecameUnresolvedData "fixture-session" revision (revision + 1))
   "ReconcileSessionAssignment" -> SessionAssignmentReconciled (SessionAssignmentReconciledData "fixture-session" revision (revision + 1))
+  "RequestSessionTransfer" -> SessionTransferRequested (SessionTransferRequestedData "fixture-session" revision (revision + 1))
+  "ReconcileSessionTransfer" -> SessionTransferReconciled (SessionTransferReconciledData "fixture-session" revision (revision + 1))
+  "EstablishSessionOwner" -> SessionOwnerEstablished (SessionOwnerEstablishedData "fixture-session" revision (revision + 1))
   "ObserveWorkerSession" -> WorkerSessionObserved (WorkerSessionObservedData "fixture-session" revision (revision + 1))
   "PrepareSessionCheckpoint" -> SessionCheckpointPrepared (SessionCheckpointPreparedData "fixture-session" revision (revision + 1))
   "ConsumeSessionEvents" -> SessionEventsConsumed (SessionEventsConsumedData "fixture-session" revision (revision + 1))

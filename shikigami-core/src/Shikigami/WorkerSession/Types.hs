@@ -74,7 +74,7 @@ data SessionBinding = SessionBinding
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data SessionPhase = Idle | Active | Parked | Unresolved | Failed | Cancelled
+data SessionPhase = Idle | Active | Parked | Unresolved | Transferring | Failed | Cancelled
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -90,14 +90,16 @@ data SessionState = SessionState
     eventCursor :: !Integer,
     consumedCursor :: !Integer,
     checkpointIntent :: !(Maybe OperationId),
-    wake :: !(Maybe PayloadRef)
+    wake :: !(Maybe PayloadRef),
+    worker :: !(Maybe AgentName),
+    handoff :: !(Maybe HandoffProgress)
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON)
 
 instance FromJSON SessionState where
   parseJSON = Aeson.withObject "SessionState" \fields -> do
-    state <- SessionState <$> fields Aeson..: "format" <*> fields Aeson..: "sessionId" <*> fields Aeson..: "revision" <*> fields Aeson..: "phase" <*> fields Aeson..: "owner" <*> fields Aeson..: "epoch" <*> fields Aeson..: "activeAssignment" <*> fields Aeson..: "nextSequence" <*> fields Aeson..: "eventCursor" <*> fields Aeson..: "consumedCursor" <*> fields Aeson..:? "checkpointIntent" <*> fields Aeson..:? "wake"
+    state <- SessionState <$> fields Aeson..: "format" <*> fields Aeson..: "sessionId" <*> fields Aeson..: "revision" <*> fields Aeson..: "phase" <*> fields Aeson..: "owner" <*> fields Aeson..: "epoch" <*> fields Aeson..: "activeAssignment" <*> fields Aeson..: "nextSequence" <*> fields Aeson..: "eventCursor" <*> fields Aeson..: "consumedCursor" <*> fields Aeson..:? "checkpointIntent" <*> fields Aeson..:? "wake" <*> fields Aeson..:? "worker" <*> fields Aeson..:? "handoff"
     unless (state.format == 1 && all (>= 0) [state.revision, state.epoch, state.nextSequence, state.eventCursor, state.consumedCursor] && state.consumedCursor <= state.eventCursor && state.nextSequence <= 10000) (fail "unsupported worker session state")
     pure state
 
@@ -106,6 +108,20 @@ data SessionWake = SessionWake {token :: !AwakeableId, generation :: !Int}
   deriving anyclass (ToJSON, FromJSON)
 
 instance Show SessionWake where show _ = "SessionWake <protected>"
+
+data HandoffStage = TransferRequested | TransferReconciling | TransferUnresolved | TransferFenced | TransferEstablished
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+data HandoffProgress = HandoffProgress
+  { operationId :: !OperationId,
+    intent :: !PayloadRef,
+    stage :: !HandoffStage,
+    fence :: !(Maybe PayloadRef),
+    checkpoint :: !(Maybe PayloadRef)
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 data MessageKind = FollowUp | Interrupt !AssignmentId
   deriving stock (Eq, Show, Generic)
@@ -198,7 +214,7 @@ data ResultReceipt = ResultReceipt
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data SessionEvent = MessageAccepted !MessageReceipt | AssignmentStarted !MessageReceipt | ResultAvailable !ResultReceipt | AssignmentStatusChanged !AssignmentId !AssignmentPhase
+data SessionEvent = MessageAccepted !MessageReceipt | AssignmentStarted !MessageReceipt | ResultAvailable !ResultReceipt | AssignmentStatusChanged !AssignmentId !AssignmentPhase | TransferStatusChanged !OperationId !HandoffStage
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -240,6 +256,7 @@ assignmentIdFor session sequence operation = AssignmentId (UUID.toText (UUID.gen
 
 validateAdmission :: SessionAdmission -> Either SessionError ()
 validateAdmission admission = do
+  unless (admission.identity /= admission.context.identity) (Left SessionOwnerRefused)
   unless (admission.format == 1 && admission.maximumAssignments >= 1 && admission.maximumAssignments <= 1000 && admission.mailboxLimit >= 1 && admission.mailboxLimit <= 128) (Left (SessionInputRefused "invalid session bounds"))
   unless (all validKey [admission.scope.parent, admission.scope.workerKey, admission.objective.provider, admission.objective.key, agentNameText admission.worker, admission.delegator.name]) (Left (SessionInputRefused "invalid session scope or objective reference"))
   unless (isJust admission.context.executionRootId && isJust admission.context.sessionId) (Left (SessionInputRefused "continuing work requires an admitted root and parent memory session"))

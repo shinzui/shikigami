@@ -8,7 +8,7 @@ import GHC.Generics (Generic)
 import Keiki.Core (RegFile (..))
 import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)
 
-data WorkerSessionLifecycleVertex = WorkerSessionLifecycleMissing | WorkerSessionLifecycleIdle | WorkerSessionLifecycleActive | WorkerSessionLifecycleParked | WorkerSessionLifecycleUnresolved | WorkerSessionLifecycleFailed | WorkerSessionLifecycleCancelled
+data WorkerSessionLifecycleVertex = WorkerSessionLifecycleMissing | WorkerSessionLifecycleIdle | WorkerSessionLifecycleActive | WorkerSessionLifecycleParked | WorkerSessionLifecycleUnresolved | WorkerSessionLifecycleTransferring | WorkerSessionLifecycleFailed | WorkerSessionLifecycleCancelled
   deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
 
 data AdmitWorkerSessionData = AdmitWorkerSessionData
@@ -66,6 +66,27 @@ data ReconcileSessionAssignmentData = ReconcileSessionAssignmentData
   }
   deriving stock (Generic, Eq, Show)
 
+data RequestSessionTransferData = RequestSessionTransferData
+  { sessionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
+data ReconcileSessionTransferData = ReconcileSessionTransferData
+  { sessionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
+data EstablishSessionOwnerData = EstablishSessionOwnerData
+  { sessionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
 data ObserveWorkerSessionData = ObserveWorkerSessionData
   { sessionId :: !Text
   , expected :: !Int
@@ -109,6 +130,9 @@ data WorkerSessionLifecycleCommand = AdmitWorkerSession !AdmitWorkerSessionData
   | RecordSessionResult !RecordSessionResultData
   | MarkSessionUnresolved !MarkSessionUnresolvedData
   | ReconcileSessionAssignment !ReconcileSessionAssignmentData
+  | RequestSessionTransfer !RequestSessionTransferData
+  | ReconcileSessionTransfer !ReconcileSessionTransferData
+  | EstablishSessionOwner !EstablishSessionOwnerData
   | ObserveWorkerSession !ObserveWorkerSessionData
   | PrepareSessionCheckpoint !PrepareSessionCheckpointData
   | ConsumeSessionEvents !ConsumeSessionEventsData
@@ -171,6 +195,27 @@ data SessionAssignmentReconciledData = SessionAssignmentReconciledData
   }
   deriving stock (Generic, Eq, Show)
 
+data SessionTransferRequestedData = SessionTransferRequestedData
+  { sessionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
+data SessionTransferReconciledData = SessionTransferReconciledData
+  { sessionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
+data SessionOwnerEstablishedData = SessionOwnerEstablishedData
+  { sessionId :: !Text
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
 data WorkerSessionObservedData = WorkerSessionObservedData
   { sessionId :: !Text
   , expected :: !Int
@@ -214,6 +259,9 @@ data WorkerSessionLifecycleEvent = WorkerSessionAdmitted !WorkerSessionAdmittedD
   | SessionResultRecorded !SessionResultRecordedData
   | SessionBecameUnresolved !SessionBecameUnresolvedData
   | SessionAssignmentReconciled !SessionAssignmentReconciledData
+  | SessionTransferRequested !SessionTransferRequestedData
+  | SessionTransferReconciled !SessionTransferReconciledData
+  | SessionOwnerEstablished !SessionOwnerEstablishedData
   | WorkerSessionObserved !WorkerSessionObservedData
   | SessionCheckpointPrepared !SessionCheckpointPreparedData
   | SessionEventsConsumed !SessionEventsConsumedData

@@ -48,7 +48,7 @@ A coordinator can send a second assignment to the same worker, recover accepted 
 
 - [x] Milestone 1: Ordered mailbox, stable assignment identities, retained results/events and transactional cursors (2026-10-28).
 - [x] Milestone 2: Recoverable assignment workflow and checkpoint-intent integration against deterministic adapters (2026-10-28); real IR-13 integration remains a completion gate.
-- [ ] Milestone 3: Fenced and reconciled ownership transfer.
+- [x] Milestone 3: Durable fenced-transfer mechanics against deterministic owners (2026-10-28); real IR-11/IR-13 qualification remains a completion gate.
 - [ ] Milestone 4: Governed Flow/Skill/operator commands and runtime qualification.
 
 Implementation started after plan 83 completed at `a0d6f2a`. IR-11 and IR-13
@@ -118,6 +118,21 @@ workflow/integration cases), 37 agent, 64 server and 99 worker tests in
 expected: new observation/checkpoint self-edges change the generated fold
 fingerprint, automatically invalidating old snapshots; historical transitions
 and all behavior witnesses remain valid. The new workflow is additive.
+
+Milestone 3 acceptance is limited to consumer mechanics:
+[ADR 0063](../adr/0063-handoffs-establish-epochs-only-after-fences-and-versioned-owner-receipts.md)
+records the exact transfer/fence/ownership-receipt bindings and monotonic epoch.
+Six deterministic-owner cases exercise in-flight uncertainty, lost checkpoint
+acknowledgements, old/new write fencing, retained active-assignment results,
+missing execution evidence, proof substitution, root cancellation and absent
+providers. All suites pass with 504 core, 334 PostgreSQL, 37 agent, 64 server and
+99 worker cases (`/tmp/shikigami-mp14-transfer-all-tests.log`). The ordinary gate
+against `a24af4b` passes conformance and reports `breaking:false`
+(`/tmp/shikigami-mp14-transfer-gate.log`); its regenerated fold fingerprint
+invalidates snapshots after the additive transfer states/edges. No actual
+repository or task provider is implemented by these fixtures. Real process
+restart, late workspace writes and authoritative checkpoint integration remain
+required before this child can be Complete.
 
 
 ## Context and Orientation

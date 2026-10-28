@@ -19,7 +19,7 @@ import Keiro.Codec (Codec (..), EventType (..))
 
 
 workerSessionLifecycleEventTypes :: NonEmpty EventType
-workerSessionLifecycleEventTypes = EventType "WorkerSessionAdmitted" :| [EventType "SessionMessageAccepted", EventType "SessionAssignmentStarted", EventType "SessionAssignmentParked", EventType "SessionAssignmentResumed", EventType "SessionResultRecorded", EventType "SessionBecameUnresolved", EventType "SessionAssignmentReconciled", EventType "WorkerSessionObserved", EventType "SessionCheckpointPrepared", EventType "SessionEventsConsumed", EventType "WorkerSessionFailed", EventType "WorkerSessionCancelled"]
+workerSessionLifecycleEventTypes = EventType "WorkerSessionAdmitted" :| [EventType "SessionMessageAccepted", EventType "SessionAssignmentStarted", EventType "SessionAssignmentParked", EventType "SessionAssignmentResumed", EventType "SessionResultRecorded", EventType "SessionBecameUnresolved", EventType "SessionAssignmentReconciled", EventType "SessionTransferRequested", EventType "SessionTransferReconciled", EventType "SessionOwnerEstablished", EventType "WorkerSessionObserved", EventType "SessionCheckpointPrepared", EventType "SessionEventsConsumed", EventType "WorkerSessionFailed", EventType "WorkerSessionCancelled"]
 
 workerSessionLifecycleCodec :: Codec WorkerSessionLifecycleEvent
 workerSessionLifecycleCodec =
@@ -34,6 +34,9 @@ workerSessionLifecycleCodec =
         SessionResultRecorded{} -> EventType "SessionResultRecorded"
         SessionBecameUnresolved{} -> EventType "SessionBecameUnresolved"
         SessionAssignmentReconciled{} -> EventType "SessionAssignmentReconciled"
+        SessionTransferRequested{} -> EventType "SessionTransferRequested"
+        SessionTransferReconciled{} -> EventType "SessionTransferReconciled"
+        SessionOwnerEstablished{} -> EventType "SessionOwnerEstablished"
         WorkerSessionObserved{} -> EventType "WorkerSessionObserved"
         SessionCheckpointPrepared{} -> EventType "SessionCheckpointPrepared"
         SessionEventsConsumed{} -> EventType "SessionEventsConsumed"
@@ -98,6 +101,27 @@ encodeWorkerSessionLifecycleEvent = \case
   SessionAssignmentReconciled payload ->
     object
       [ "kind" .= ("SessionAssignmentReconciled" :: Text)
+      , "sessionId" .= payload.sessionId
+      , "expected" .= payload.expected
+      , "revision" .= payload.revision
+      ]
+  SessionTransferRequested payload ->
+    object
+      [ "kind" .= ("SessionTransferRequested" :: Text)
+      , "sessionId" .= payload.sessionId
+      , "expected" .= payload.expected
+      , "revision" .= payload.revision
+      ]
+  SessionTransferReconciled payload ->
+    object
+      [ "kind" .= ("SessionTransferReconciled" :: Text)
+      , "sessionId" .= payload.sessionId
+      , "expected" .= payload.expected
+      , "revision" .= payload.revision
+      ]
+  SessionOwnerEstablished payload ->
+    object
+      [ "kind" .= ("SessionOwnerEstablished" :: Text)
       , "sessionId" .= payload.sessionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
@@ -194,6 +218,27 @@ parseWorkerSessionLifecycleEvent (EventType tag) = mapLeftText . parseEither (wi
         "SessionAssignmentReconciled" ->
           SessionAssignmentReconciled
             <$> ( SessionAssignmentReconciledData
+                    <$> o .: "sessionId"
+                    <*> o .: "expected"
+                    <*> o .: "revision"
+                )
+        "SessionTransferRequested" ->
+          SessionTransferRequested
+            <$> ( SessionTransferRequestedData
+                    <$> o .: "sessionId"
+                    <*> o .: "expected"
+                    <*> o .: "revision"
+                )
+        "SessionTransferReconciled" ->
+          SessionTransferReconciled
+            <$> ( SessionTransferReconciledData
+                    <$> o .: "sessionId"
+                    <*> o .: "expected"
+                    <*> o .: "revision"
+                )
+        "SessionOwnerEstablished" ->
+          SessionOwnerEstablished
+            <$> ( SessionOwnerEstablishedData
                     <$> o .: "sessionId"
                     <*> o .: "expected"
                     <*> o .: "revision"

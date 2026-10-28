@@ -250,6 +250,18 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
+  , -- WorkerSessionLifecycleParked x EstablishSessionOwner: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-1f5eb9cf501f8b00"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleParked
+      , commandName = "EstablishSessionOwner"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
   , -- WorkerSessionLifecycleMissing x CancelWorkerSession: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-1f9736e3cf233687"
@@ -258,6 +270,18 @@ behaviorRequirements =
       , guardCoverage = GuardNotApplicable
       , source = WorkerSessionLifecycleMissing
       , commandName = "CancelWorkerSession"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- WorkerSessionLifecycleTransferring x ParkSessionAssignment: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-1fce68a0ddd1e9d9"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleTransferring
+      , commandName = "ParkSessionAssignment"
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
@@ -322,6 +346,18 @@ behaviorRequirements =
       , target = Just WorkerSessionLifecycleFailed
       , eventKinds = ["SessionEventsConsumed"]
       }
+  , -- WorkerSessionLifecycleTransferring x RequestSessionTransfer: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-29242ebee29dc3dc"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleTransferring
+      , commandName = "RequestSessionTransfer"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
   , -- WorkerSessionLifecycleActive x AdmitWorkerSession: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-29f5951dabb9a14c"
@@ -334,6 +370,18 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
+  , -- WorkerSessionLifecycleTransferring x PrepareSessionCheckpoint: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-2a1d45b9986cab9b"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = WorkerSessionLifecycleTransferring
+      , commandName = "PrepareSessionCheckpoint"
+      , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleTransferring 2))
+      , target = Just WorkerSessionLifecycleTransferring
+      , eventKinds = ["SessionCheckpointPrepared"]
+      }
   , -- WorkerSessionLifecycleIdle x StartSessionAssignment: live transition
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-2cd631e808e32748"
@@ -345,6 +393,30 @@ behaviorRequirements =
       , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleIdle 4))
       , target = Just WorkerSessionLifecycleActive
       , eventKinds = ["SessionAssignmentStarted"]
+      }
+  , -- WorkerSessionLifecycleCancelled x ReconcileSessionTransfer: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-2e329f0b2bc1fa2f"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleCancelled
+      , commandName = "ReconcileSessionTransfer"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- WorkerSessionLifecycleTransferring x ReconcileSessionTransfer: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-30433fde8f4feaf3"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = WorkerSessionLifecycleTransferring
+      , commandName = "ReconcileSessionTransfer"
+      , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleTransferring 5))
+      , target = Just WorkerSessionLifecycleTransferring
+      , eventKinds = ["SessionTransferReconciled"]
       }
   , -- WorkerSessionLifecycleUnresolved x MarkSessionUnresolved: required rejection
     BehaviorRequirement
@@ -454,6 +526,18 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
+  , -- WorkerSessionLifecycleUnresolved x ReconcileSessionTransfer: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-42275c270e009941"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleUnresolved
+      , commandName = "ReconcileSessionTransfer"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
   , -- WorkerSessionLifecycleParked x RecordSessionResult: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-43ddb0878e6ccb6e"
@@ -502,6 +586,18 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
+  , -- WorkerSessionLifecycleUnresolved x EstablishSessionOwner: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-465a0211949f4db6"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleUnresolved
+      , commandName = "EstablishSessionOwner"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
   , -- WorkerSessionLifecycleUnresolved x AdmitWorkerSession: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-4704e547b2fd4d93"
@@ -510,6 +606,18 @@ behaviorRequirements =
       , guardCoverage = GuardNotApplicable
       , source = WorkerSessionLifecycleUnresolved
       , commandName = "AdmitWorkerSession"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- WorkerSessionLifecycleTransferring x CancelWorkerSession: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-47be2e615619531c"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleTransferring
+      , commandName = "CancelWorkerSession"
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
@@ -598,6 +706,18 @@ behaviorRequirements =
       , target = Just WorkerSessionLifecycleUnresolved
       , eventKinds = ["SessionMessageAccepted"]
       }
+  , -- WorkerSessionLifecycleTransferring x RecordSessionResult: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-679b82ddd97d23df"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = WorkerSessionLifecycleTransferring
+      , commandName = "RecordSessionResult"
+      , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleTransferring 4))
+      , target = Just WorkerSessionLifecycleTransferring
+      , eventKinds = ["SessionResultRecorded"]
+      }
   , -- WorkerSessionLifecycleUnresolved x FailWorkerSession: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-6905df32be73c260"
@@ -606,6 +726,18 @@ behaviorRequirements =
       , guardCoverage = GuardNotApplicable
       , source = WorkerSessionLifecycleUnresolved
       , commandName = "FailWorkerSession"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- WorkerSessionLifecycleIdle x ReconcileSessionTransfer: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-6bfa8adb32232e02"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleIdle
+      , commandName = "ReconcileSessionTransfer"
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
@@ -621,6 +753,18 @@ behaviorRequirements =
       , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleCancelled 0))
       , target = Just WorkerSessionLifecycleCancelled
       , eventKinds = ["SessionEventsConsumed"]
+      }
+  , -- WorkerSessionLifecycleIdle x RequestSessionTransfer: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-6d2337a134eb73aa"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = WorkerSessionLifecycleIdle
+      , commandName = "RequestSessionTransfer"
+      , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleIdle 7))
+      , target = Just WorkerSessionLifecycleTransferring
+      , eventKinds = ["SessionTransferRequested"]
       }
   , -- WorkerSessionLifecycleFailed x FailWorkerSession: required rejection
     BehaviorRequirement
@@ -658,6 +802,18 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
+  , -- WorkerSessionLifecycleTransferring x ResumeSessionAssignment: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-79b035f0cc1577a4"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleTransferring
+      , commandName = "ResumeSessionAssignment"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
   , -- WorkerSessionLifecycleFailed x ParkSessionAssignment: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-7a1e6c4bb9597fb1"
@@ -681,6 +837,18 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
+      }
+  , -- WorkerSessionLifecycleTransferring x AcceptSessionMessage: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-7ba03c5ae545fa50"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = WorkerSessionLifecycleTransferring
+      , commandName = "AcceptSessionMessage"
+      , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleTransferring 0))
+      , target = Just WorkerSessionLifecycleTransferring
+      , eventKinds = ["SessionMessageAccepted"]
       }
   , -- WorkerSessionLifecycleUnresolved x CancelWorkerSession: required rejection
     BehaviorRequirement
@@ -714,6 +882,18 @@ behaviorRequirements =
       , guardCoverage = GuardNotApplicable
       , source = WorkerSessionLifecycleFailed
       , commandName = "ObserveWorkerSession"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- WorkerSessionLifecycleActive x EstablishSessionOwner: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-825dfb5b831da363"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleActive
+      , commandName = "EstablishSessionOwner"
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
@@ -790,6 +970,42 @@ behaviorRequirements =
       , target = Just WorkerSessionLifecycleUnresolved
       , eventKinds = ["SessionBecameUnresolved"]
       }
+  , -- WorkerSessionLifecycleTransferring x ReconcileSessionAssignment: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-88a4f70924aef2b5"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleTransferring
+      , commandName = "ReconcileSessionAssignment"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- WorkerSessionLifecycleActive x RequestSessionTransfer: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-8af57d13199fd67a"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = WorkerSessionLifecycleActive
+      , commandName = "RequestSessionTransfer"
+      , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleActive 7))
+      , target = Just WorkerSessionLifecycleTransferring
+      , eventKinds = ["SessionTransferRequested"]
+      }
+  , -- WorkerSessionLifecycleTransferring x StartSessionAssignment: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-8cd7aa4d3ff89135"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleTransferring
+      , commandName = "StartSessionAssignment"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
   , -- WorkerSessionLifecycleFailed x StartSessionAssignment: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-8db4f392e166798d"
@@ -813,6 +1029,18 @@ behaviorRequirements =
       , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleIdle 6))
       , target = Just WorkerSessionLifecycleCancelled
       , eventKinds = ["WorkerSessionCancelled"]
+      }
+  , -- WorkerSessionLifecycleTransferring x MarkSessionUnresolved: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-91aa9f772da2b410"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleTransferring
+      , commandName = "MarkSessionUnresolved"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
       }
   , -- WorkerSessionLifecycleParked x ObserveWorkerSession: live transition
     BehaviorRequirement
@@ -838,6 +1066,30 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
+  , -- WorkerSessionLifecycleMissing x EstablishSessionOwner: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-949d3e51c5962a9b"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleMissing
+      , commandName = "EstablishSessionOwner"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- WorkerSessionLifecycleMissing x ReconcileSessionTransfer: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-94f18f55eda18a66"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleMissing
+      , commandName = "ReconcileSessionTransfer"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
   , -- WorkerSessionLifecycleUnresolved x ObserveWorkerSession: live transition
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-977c37e18f28da5a"
@@ -850,6 +1102,18 @@ behaviorRequirements =
       , target = Just WorkerSessionLifecycleUnresolved
       , eventKinds = ["WorkerSessionObserved"]
       }
+  , -- WorkerSessionLifecycleCancelled x RequestSessionTransfer: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-981576fae378683c"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleCancelled
+      , commandName = "RequestSessionTransfer"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
   , -- WorkerSessionLifecycleActive x ConsumeSessionEvents: live transition
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-9ad1bcac784caab1"
@@ -861,6 +1125,18 @@ behaviorRequirements =
       , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleActive 1))
       , target = Just WorkerSessionLifecycleActive
       , eventKinds = ["SessionEventsConsumed"]
+      }
+  , -- WorkerSessionLifecycleActive x ReconcileSessionTransfer: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-9cef014bd5a81f7e"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleActive
+      , commandName = "ReconcileSessionTransfer"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
       }
   , -- WorkerSessionLifecycleFailed x PrepareSessionCheckpoint: live transition
     BehaviorRequirement
@@ -910,6 +1186,18 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
+  , -- WorkerSessionLifecycleTransferring x AdmitWorkerSession: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-b02ea848a26593e5"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleTransferring
+      , commandName = "AdmitWorkerSession"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
   , -- WorkerSessionLifecycleMissing x ConsumeSessionEvents: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-b12f99401a2e8962"
@@ -934,6 +1222,18 @@ behaviorRequirements =
       , target = Just WorkerSessionLifecycleUnresolved
       , eventKinds = ["SessionBecameUnresolved"]
       }
+  , -- WorkerSessionLifecycleMissing x RequestSessionTransfer: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-b15e52cd0ae575f9"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleMissing
+      , commandName = "RequestSessionTransfer"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
   , -- WorkerSessionLifecycleIdle x PrepareSessionCheckpoint: live transition
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-b5c0674dfd46242d"
@@ -945,6 +1245,18 @@ behaviorRequirements =
       , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleIdle 2))
       , target = Just WorkerSessionLifecycleIdle
       , eventKinds = ["SessionCheckpointPrepared"]
+      }
+  , -- WorkerSessionLifecycleTransferring x EstablishSessionOwner: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-b70e5fafe2a630aa"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = WorkerSessionLifecycleTransferring
+      , commandName = "EstablishSessionOwner"
+      , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleTransferring 6))
+      , target = Just WorkerSessionLifecycleIdle
+      , eventKinds = ["SessionOwnerEstablished"]
       }
   , -- WorkerSessionLifecycleUnresolved x ConsumeSessionEvents: live transition
     BehaviorRequirement
@@ -1042,6 +1354,18 @@ behaviorRequirements =
       , target = Just WorkerSessionLifecycleIdle
       , eventKinds = ["SessionMessageAccepted"]
       }
+  , -- WorkerSessionLifecycleTransferring x FailWorkerSession: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-cd043fe25bbd5272"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleTransferring
+      , commandName = "FailWorkerSession"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
   , -- WorkerSessionLifecycleParked x FailWorkerSession: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-cf822ea73aae218e"
@@ -1065,6 +1389,18 @@ behaviorRequirements =
       , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleCancelled 1))
       , target = Just WorkerSessionLifecycleCancelled
       , eventKinds = ["SessionCheckpointPrepared"]
+      }
+  , -- WorkerSessionLifecycleIdle x EstablishSessionOwner: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-cfa8f99adcc3f93f"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleIdle
+      , commandName = "EstablishSessionOwner"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
       }
   , -- WorkerSessionLifecycleMissing x RecordSessionResult: required rejection
     BehaviorRequirement
@@ -1126,6 +1462,18 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
+  , -- WorkerSessionLifecycleParked x ReconcileSessionTransfer: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-d6c03ccc3389aab3"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleParked
+      , commandName = "ReconcileSessionTransfer"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
   , -- WorkerSessionLifecycleParked x ParkSessionAssignment: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-d8b96de881b2842d"
@@ -1137,6 +1485,54 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
+      }
+  , -- WorkerSessionLifecycleFailed x RequestSessionTransfer: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-d9d299c8c21c7044"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleFailed
+      , commandName = "RequestSessionTransfer"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- WorkerSessionLifecycleParked x RequestSessionTransfer: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-dc6dadbda294757d"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = WorkerSessionLifecycleParked
+      , commandName = "RequestSessionTransfer"
+      , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleParked 6))
+      , target = Just WorkerSessionLifecycleTransferring
+      , eventKinds = ["SessionTransferRequested"]
+      }
+  , -- WorkerSessionLifecycleCancelled x EstablishSessionOwner: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-dcbe97331a8fdef4"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleCancelled
+      , commandName = "EstablishSessionOwner"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- WorkerSessionLifecycleTransferring x ObserveWorkerSession: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-e31a9be0e9c0a9e2"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = WorkerSessionLifecycleTransferring
+      , commandName = "ObserveWorkerSession"
+      , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleTransferring 3))
+      , target = Just WorkerSessionLifecycleTransferring
+      , eventKinds = ["WorkerSessionObserved"]
       }
   , -- WorkerSessionLifecycleUnresolved x StartSessionAssignment: required rejection
     BehaviorRequirement
@@ -1174,6 +1570,18 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
+  , -- WorkerSessionLifecycleUnresolved x RequestSessionTransfer: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-e85e0d3623301aab"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = WorkerSessionLifecycleUnresolved
+      , commandName = "RequestSessionTransfer"
+      , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleUnresolved 5))
+      , target = Just WorkerSessionLifecycleTransferring
+      , eventKinds = ["SessionTransferRequested"]
+      }
   , -- WorkerSessionLifecycleUnresolved x PrepareSessionCheckpoint: live transition
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-ee1bf0c711e6900f"
@@ -1210,6 +1618,18 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
+  , -- WorkerSessionLifecycleFailed x EstablishSessionOwner: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-f91ad7a46006f5ec"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleFailed
+      , commandName = "EstablishSessionOwner"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
   , -- WorkerSessionLifecycleMissing x ResumeSessionAssignment: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-f96105176fe9dabf"
@@ -1218,6 +1638,30 @@ behaviorRequirements =
       , guardCoverage = GuardNotApplicable
       , source = WorkerSessionLifecycleMissing
       , commandName = "ResumeSessionAssignment"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- WorkerSessionLifecycleTransferring x ConsumeSessionEvents: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-f98bc3a6f6cc2f3b"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = WorkerSessionLifecycleTransferring
+      , commandName = "ConsumeSessionEvents"
+      , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleTransferring 1))
+      , target = Just WorkerSessionLifecycleTransferring
+      , eventKinds = ["SessionEventsConsumed"]
+      }
+  , -- WorkerSessionLifecycleFailed x ReconcileSessionTransfer: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-fa33228feefd4677"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleFailed
+      , commandName = "ReconcileSessionTransfer"
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
@@ -1377,6 +1821,9 @@ commandKind command = case command of
   RecordSessionResult _ -> "RecordSessionResult"
   MarkSessionUnresolved _ -> "MarkSessionUnresolved"
   ReconcileSessionAssignment _ -> "ReconcileSessionAssignment"
+  RequestSessionTransfer _ -> "RequestSessionTransfer"
+  ReconcileSessionTransfer _ -> "ReconcileSessionTransfer"
+  EstablishSessionOwner _ -> "EstablishSessionOwner"
   ObserveWorkerSession _ -> "ObserveWorkerSession"
   PrepareSessionCheckpoint _ -> "PrepareSessionCheckpoint"
   ConsumeSessionEvents _ -> "ConsumeSessionEvents"

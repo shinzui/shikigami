@@ -69,7 +69,7 @@ aggregate WorkerSessionLifecycle
     sessionId Text = ""
     bindingDigest Text = ""
     revision Int = 0
-  states Missing Idle Active Parked Unresolved Failed Cancelled
+  states Missing Idle Active Parked Unresolved Transferring Failed Cancelled
 
   command AdmitWorkerSession { sessionId:Text bindingDigest:Text }
   command AcceptSessionMessage { sessionId:Text expected:Int revision:Int }
@@ -79,6 +79,9 @@ aggregate WorkerSessionLifecycle
   command RecordSessionResult { sessionId:Text expected:Int revision:Int }
   command MarkSessionUnresolved { sessionId:Text expected:Int revision:Int }
   command ReconcileSessionAssignment { sessionId:Text expected:Int revision:Int }
+  command RequestSessionTransfer { sessionId:Text expected:Int revision:Int }
+  command ReconcileSessionTransfer { sessionId:Text expected:Int revision:Int }
+  command EstablishSessionOwner { sessionId:Text expected:Int revision:Int }
   command ObserveWorkerSession { sessionId:Text expected:Int revision:Int }
   command PrepareSessionCheckpoint { sessionId:Text expected:Int revision:Int }
   command ConsumeSessionEvents { sessionId:Text expected:Int revision:Int }
@@ -92,6 +95,9 @@ aggregate WorkerSessionLifecycle
   event SessionResultRecorded = fields(RecordSessionResult)
   event SessionBecameUnresolved = fields(MarkSessionUnresolved)
   event SessionAssignmentReconciled = fields(ReconcileSessionAssignment)
+  event SessionTransferRequested = fields(RequestSessionTransfer)
+  event SessionTransferReconciled = fields(ReconcileSessionTransfer)
+  event SessionOwnerEstablished = fields(EstablishSessionOwner)
   event WorkerSessionObserved = fields(ObserveWorkerSession)
   event SessionCheckpointPrepared = fields(PrepareSessionCheckpoint)
   event SessionEventsConsumed = fields(ConsumeSessionEvents)
@@ -277,5 +283,71 @@ aggregate WorkerSessionLifecycle
     write revision := cmd.revision
     emit WorkerSessionCancelled
     goto Cancelled
+
+  Transferring -- AcceptSessionMessage -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionMessageAccepted
+    goto Transferring
+
+  Transferring -- ConsumeSessionEvents -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionEventsConsumed
+    goto Transferring
+
+  Transferring -- PrepareSessionCheckpoint -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionCheckpointPrepared
+    goto Transferring
+
+  Transferring -- ObserveWorkerSession -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit WorkerSessionObserved
+    goto Transferring
+
+  Transferring -- RecordSessionResult -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionResultRecorded
+    goto Transferring
+
+  Transferring -- ReconcileSessionTransfer -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionTransferReconciled
+    goto Transferring
+
+  Transferring -- EstablishSessionOwner -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionOwnerEstablished
+    goto Idle
+
+  Idle -- RequestSessionTransfer -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionTransferRequested
+    goto Transferring
+
+  Active -- RequestSessionTransfer -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionTransferRequested
+    goto Transferring
+
+  Parked -- RequestSessionTransfer -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionTransferRequested
+    goto Transferring
+
+  Unresolved -- RequestSessionTransfer -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionTransferRequested
+    goto Transferring
 
   wire kind=ctorName fields=camelCase schemaVersion=1

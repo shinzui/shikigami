@@ -1,4 +1,4 @@
-module Shikigami.WorkerSessionStoreSpec (tests, withFixture, checkpointVersion, fixtureCheckpoints) where
+module Shikigami.WorkerSessionStoreSpec (tests, withFixture, withConfiguredFixture, checkpointVersion, fixtureCheckpoints) where
 
 import Control.Concurrent.Async (concurrently)
 import Data.Aeson (object, (.=))
