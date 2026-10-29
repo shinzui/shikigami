@@ -52,8 +52,8 @@ reserveProcessTx binding proposed
                 _ -> pure (Left WorkspaceBindingConflict)
   where
     OperationId key = proposed.operationId
-    valid = proposed.bindingDigest == workspaceBindingDigest binding && digestText proposed.instructionDigest && digestText proposed.fingerprint && bounded key && bounded proposed.claimOwner && proposed.generation > 0 && validProcessCommand proposed.command && proposed.unit == processUnit proposed.operationId proposed.fingerprint && proposed.phase == ProcessReserved && isNothing proposed.bootId && isNothing proposed.invocationId && isNothing proposed.receipt
-    sameReservation actual candidate = actual.operationId == candidate.operationId && actual.bindingDigest == candidate.bindingDigest && actual.instructionDigest == candidate.instructionDigest && actual.fingerprint == candidate.fingerprint && actual.command == candidate.command && actual.unit == candidate.unit
+    valid = proposed.bindingDigest == workspaceBindingDigest binding && digestText proposed.instructionDigest && digestText proposed.fingerprint && bounded key && bounded proposed.claimOwner && proposed.generation > 0 && validProcessCommand proposed.command && maybe True validProcessRouting proposed.routing && proposed.unit == processUnit proposed.operationId proposed.fingerprint && proposed.phase == ProcessReserved && isNothing proposed.bootId && isNothing proposed.invocationId && isNothing proposed.receipt
+    sameReservation actual candidate = actual.operationId == candidate.operationId && actual.bindingDigest == candidate.bindingDigest && actual.instructionDigest == candidate.instructionDigest && actual.fingerprint == candidate.fingerprint && actual.command == candidate.command && actual.unit == candidate.unit && actual.routing == candidate.routing
 
 -- True is the single committed transition that may issue the launch request.
 -- Losing its acknowledgement intentionally does not permit a second launch.

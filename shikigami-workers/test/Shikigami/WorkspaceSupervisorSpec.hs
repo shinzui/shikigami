@@ -2,6 +2,7 @@
 -- These cases do not establish Linux service, restart or cgroup qualification.
 module Shikigami.WorkspaceSupervisorSpec (tests) where
 
+import Control.Concurrent (threadDelay)
 import Control.Exception (throwIO)
 import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as Bytes
@@ -10,22 +11,24 @@ import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
-import Data.Text.Encoding qualified as Encoding
 import Effectful (Eff)
 import Effectful.Dispatch.Static (unsafeEff_)
 import Hasql.Transaction (Transaction)
 import Kioku.App (AppEffects, runAppIO)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization
+import Shikigami.Agent.Principal (AgentIdentity (CompatibilityIdentity))
 import Shikigami.Capability.Provider (DurableAdapter (..), DurableToolContract (..))
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Policy.Types
+import Shikigami.Execution.Resources (Root (..))
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
+import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.Workspace.FileProvider (FileRuntime (..))
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Process
@@ -35,8 +38,7 @@ import Shikigami.Workspace.Supervisor
 import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Types
 import Shikigami.WorkspaceFileProviderSpec qualified as Fixture
-import Shikumi.Tool (ToolError (..), mkDynTool)
-import Shikumi.Tool.Output (textToolOutput)
+import Shikumi.Tool (mkDynTool)
 import System.Directory (removeFile)
 import System.FilePath ((</>))
 import Test.Tasty (TestTree, testGroup)
@@ -58,6 +60,7 @@ tests fixture =
         assertBool "only confirmed zero normal exit succeeds" (processSucceeded receipt)
         superviseProcess runtime request >>= (@?= Right retained)
         superviseProcess runtime (request & #generation .~ (request.generation + 1)) >>= (@?= Right retained)
+        publishProcessReceipt runtime reference.operationId >>= (@?= Right ProcessReceiptAcknowledged)
         readIORef calls >>= (@?= (1, 1)),
       testCase "lost launch acknowledgement reconciles facts after revocation without dispatching another command" $ withProcess fixture id False \file runtime observed calls snapshot reference -> do
         Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
@@ -70,10 +73,61 @@ tests fixture =
         recovered.attemptId @?= reference.attemptId
         superviseProcess runtime request >>= (@?= Right recovered)
         readIORef calls >>= (@?= (1, 1))
-        -- Workspace factual settlement alone cannot fabricate execution-accounting
-        -- acknowledgement; the independent late-receipt integration is separate.
+        -- Workspace facts and original-attempt accounting are separate owners.
         Just stillUnknown <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
-        stillUnknown.phase @?= Attempt.AttemptUncertain,
+        stillUnknown.phase @?= Attempt.AttemptUncertain
+        Just admission <- pure snapshot.workspace
+        root <- stored file (Roots.inspectRoot admission.rootId)
+        root.unknown @?= 2
+        stored file (Roots.setRootControl admission.rootId root.revision True Nothing)
+        Just (waiting, _, _) <- stored file (Execution.inspectExecution snapshot.executionId)
+        let claim = Attempt.AttemptClaim reference request.owner request.generation
+            invalid = Attempt.AttemptResult (OperationDenied "not a retained tool result") NeedModel Nothing
+        runAppIO file.appEnv (Execution.recordIndependentToolReceipt (CompatibilityIdentity "other-principal") waiting.revision claim invalid) >>= (\value -> right value >>= (@?= Left ExecutionIdentityConflict))
+        runAppIO file.appEnv (Execution.recordIndependentToolReceipt snapshot.identity waiting.revision (claim & #generation .~ (claim.generation + 1)) invalid) >>= (\value -> right value >>= (@?= Left AttemptConflict))
+        runAppIO file.appEnv (Execution.recordIndependentToolReceipt snapshot.identity waiting.revision claim invalid) >>= (\value -> right value >>= (@?= Left AttemptConflict))
+        publishProcessReceipt revoked reference.operationId >>= (@?= Right ProcessReceiptAcknowledged)
+        publishProcessReceipt revoked reference.operationId >>= (@?= Right ProcessReceiptAcknowledged)
+        Just acknowledged <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
+        acknowledged.phase @?= Attempt.AttemptCommitted
+        assertBool "original independent receipt retained" (maybe False (const True) acknowledged.lateReceipt)
+        settled <- stored file (Roots.inspectRoot admission.rootId)
+        -- The fixture model has separate unreported invoice billing. Factual
+        -- tool settlement must preserve that unrelated conservative hold.
+        settled.unknown @?= 1
+        settled.active @?= 0
+        settled.cancelled @?= True
+        readIORef calls >>= (@?= (1, 1)),
+      testCase "independent receipt recovery preserves the next accepted tool after replay authority is revoked" $ withProcessForTools 2 fixture id False \file runtime observed calls snapshot reference -> do
+        Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+        let revoked = runtime & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked")) & #authorizer .~ denyAllActionAuthorizer & #selectRule .~ (\_ _ _ -> pure (Left "revoked"))
+        publishProcessReceipt revoked reference.operationId >>= (@?= Right ProcessReceiptAcknowledged)
+        Just (state, _, _) <- stored file (Execution.inspectExecution snapshot.executionId)
+        state.cursor @?= 2
+        case state.next of
+          NeedTool _ position -> position @?= 1
+          _ -> assertFailure "accepted second tool routing was lost"
+        Just actual <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
+        actual.phase @?= Attempt.AttemptCommitted
+        readIORef calls >>= (@?= (1, 1)),
+      testCase "the independent owner waits for actual claim expiry before acknowledging its retained receipt" $ withProcess fixture id True \file runtime _ calls snapshot reference -> do
+        access <- stored file (Execution.authorizeReplay snapshot.executionId snapshot.identity (pure (Right ())))
+        Just (before, _, _) <- stored file (Execution.inspectExecution snapshot.executionId)
+        Attempt.ClaimGranted claim <- stored file (Execution.claimExecutionAttempt access before.revision reference "lost-worker" 3)
+        Just (claimed, _, _) <- stored file (Execution.inspectExecution snapshot.executionId)
+        _ <- stored file (Execution.startExecutionAttempt access claimed.revision claim)
+        let request = SupervisorRequest snapshot.executionId reference.operationId reference.attemptId claim.owner claim.generation
+        record <- right =<< superviseProcess runtime request
+        record.phase @?= ProcessSettled
+        publishProcessReceipt runtime reference.operationId >>= (@?= Right AwaitingExecutionExpiry)
+        Just pending <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
+        pending.phase @?= Attempt.DispatchStarted
+        threadDelay 3200000
+        let revoked = runtime & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked"))
+        publishProcessReceipt revoked reference.operationId >>= (@?= Right ProcessReceiptAcknowledged)
+        Just completed <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
+        completed.phase @?= Attempt.AttemptCommitted
+        readIORef calls >>= (@?= (1, 1)),
       testCase "denied exact authority proves pre-launch refusal and cannot be retried into a launch" $ withProcess fixture (\runtime -> runtime & #authorizer .~ denyAllActionAuthorizer) True \file runtime observed calls snapshot reference -> do
         Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         request <- readIORef observed >>= maybe (fail "missing actual request") pure
@@ -82,6 +136,7 @@ tests fixture =
         retained.receipt @?= Nothing
         readIORef calls >>= (@?= (0, 0))
         superviseProcess (runtime & #authorizer .~ allowAllActionAuthorizerForTests) request >>= (@?= Right retained)
+        publishProcessReceipt runtime reference.operationId >>= (@?= Right ProcessReceiptAcknowledged)
         readIORef calls >>= (@?= (0, 0)),
       testCase "a refusal after the committed launch transition remains uncertain rather than a known no-op" $ do
         checks <- newIORef (0 :: Int)
@@ -135,7 +190,10 @@ tests fixture =
     ]
 
 withProcess :: DatabaseFixture -> (SupervisorRuntime -> SupervisorRuntime) -> Bool -> (FileRuntime -> SupervisorRuntime -> IORef (Maybe SupervisorRequest) -> IORef (Int, Int) -> ExecutionSnapshot -> Attempt.JobReference -> IO a) -> IO a
-withProcess fixture configure acknowledge use = do
+withProcess = withProcessForTools 1
+
+withProcessForTools :: Int -> DatabaseFixture -> (SupervisorRuntime -> SupervisorRuntime) -> Bool -> (FileRuntime -> SupervisorRuntime -> IORef (Maybe SupervisorRequest) -> IORef (Int, Int) -> ExecutionSnapshot -> Attempt.JobReference -> IO a) -> IO a
+withProcessForTools toolCount fixture configure acknowledge use = do
   observed <- newIORef Nothing
   calls <- newIORef (0, 0)
   let backend =
@@ -172,7 +230,7 @@ withProcess fixture configure acknowledge use = do
       makeRuntime file = configure (SupervisorRuntime file.appEnv file.authorizer (const (pure (Right ()))) file.lifecycle select backend)
       install file = adapter (makeRuntime file) observed file
       qualify admission = admission & #filePolicy .~ Just supervisedFilePolicy
-  Fixture.withEffectAdapter qualify install workspaceExecBinding.name "validate" (Just (Aeson.object ["rule" Aeson..= ("validate" :: Text.Text)])) fixture \_ _ snapshot _ reference file _ ->
+  Fixture.withEffectAdapterForTools toolCount qualify install workspaceExecBinding.name "validate" (Just (Aeson.object ["rule" Aeson..= ("validate" :: Text.Text)])) fixture \_ _ snapshot _ reference file _ ->
     use file (makeRuntime file) observed calls snapshot reference
   where
     boot = "11111111-1111-4111-8111-111111111111"
@@ -193,11 +251,11 @@ adapterWithRequest alter runtime observed file = DurableAdapter workspaceExecDes
             writeIORef observed (Just request)
             result <- superviseProcess runtime (alter request)
             case result of
-              Right record | record.phase == ProcessSettled -> pure (Right (textToolOutput (Encoding.decodeUtf8 (Lazy.toStrict (Aeson.encode record.receipt)))))
+              Right record | Just output <- processToolResult record -> pure output
               Left SupervisorRefused -> do
                 retained <- transaction file (Processes.inspectProcessTx request.operationId)
                 case retained of
-                  Just record | record.phase == ProcessRefused -> pure (Left (ToolRunFailed name "workspace validation refused"))
+                  Just record | Just output <- processToolResult record -> pure output
                   _ -> throwIO (userError "workspace process refusal requires reconciliation")
               _ -> throwIO (userError "workspace process receipt requires reconciliation")
         )
@@ -206,7 +264,7 @@ adapterWithRequest alter runtime observed file = DurableAdapter workspaceExecDes
 transaction :: FileRuntime -> Transaction a -> IO a
 transaction file action = right =<< runAppIO file.appEnv (runTransaction action)
 
-stored :: FileRuntime -> Eff AppEffects (Either ExecutionError a) -> IO a
+stored :: (Show e) => FileRuntime -> Eff AppEffects (Either e a) -> IO a
 stored file action = right =<< (right =<< runAppIO file.appEnv action)
 
 right :: (Show e) => Either e a -> IO a

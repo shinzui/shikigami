@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-29
+* **Addition**: FRIC-19 records detour tooling friction with mori://shinzui/shikigami: Workflow scaffold gate includes handwritten core diffs
 * **Addition**: FRIC-18 records detour interface friction with mori://systemd/systemd: Systemd timeout evidence can omit numeric wait status
 * **Addition**: FRIC-17 records detour environment friction with mori://shinzui/shikigami: Full PostgreSQL suite exceeds shared fixture connection capacity
 * **Update**: FRIC-16 resolved: Align the implementation plan with the enforced package boundary.

@@ -12,6 +12,9 @@ module Shikigami.Workspace.Supervisor
     workspaceExecBinding,
     superviseProcess,
     reconcileProcess,
+    ProcessPublication (..),
+    publishProcessReceipt,
+    processToolResult,
   )
 where
 
@@ -19,8 +22,10 @@ import Control.Concurrent (threadDelay)
 import Control.Exception (Exception, IOException, catch, onException, throwIO)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
+import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Encoding
 import Data.Time (addUTCTime)
 import Effectful (Eff)
 import Hasql.Transaction (Transaction)
@@ -51,6 +56,8 @@ import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Store qualified as Workspaces
 import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Types
+import Shikumi.Tool (ToolError (ToolRunFailed), renderToolError)
+import Shikumi.Tool.Output (ToolOutput, textToolOutput)
 import System.Directory (createDirectory, doesPathExist)
 import System.FilePath ((</>))
 
@@ -105,7 +112,8 @@ data AcceptedProcess = AcceptedProcess
     admission :: !WorkspaceAdmission,
     dispatch :: !DispatchContext,
     command :: !ProcessCommand,
-    profile :: !Systemd.SystemdProfile
+    profile :: !Systemd.SystemdProfile,
+    routing :: !ProcessRouting
   }
 
 newtype SupervisorAbort = SupervisorAbort SupervisorError deriving stock (Show)
@@ -165,6 +173,12 @@ loadAccepted runtime request = do
   unless (admission.filePolicy == Just supervisedFilePolicy && workspaceExecDescriptor `elem` resolvedCapabilities snapshot.capabilities && operation.executionId == snapshot.executionId && operation.specification.kind == ToolOperation && operation.specification.name == workspaceExecBinding.name && operation.specification.recovery == UncertainEffect && operation.specification.scopeDigest == toolScopeDigest workspaceExecBinding && operation.specification.policyDigest == versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) (abort SupervisorRefused)
   tool <- execute runtime (Execution.readReplayPayload @ToolOperationInput access "operation-input" operation.input)
   unless (tool.binding == workspaceExecBinding && tool.binding `elem` snapshot.toolBindings && tool.invocation.name == workspaceExecBinding.name && operation.specification.responsePosition == Just tool.position) (abort SupervisorRefused)
+  response <- execute runtime (Execution.readReplayPayload @OperationOutcome access "operation-outcome" tool.response)
+  assistant <- case response of ModelReturned value _ -> pure value; _ -> abort SupervisorRefused
+  unless (tool.position >= 0 && take 1 (drop tool.position (toolInvocations assistant)) == [tool.invocation]) (abort SupervisorRefused)
+  let next = if tool.position + 1 < length (toolInvocations assistant) then NeedTool tool.response (tool.position + 1) else NeedModel
+      routing = ProcessRouting 1 snapshot.executionId snapshot.identity operation.input.digest next
+  unless (validProcessRouting routing) (abort SupervisorRefused)
   rule <- either (const (abort SupervisorRefused)) pure (parseEither (Aeson.withObject "validation rule" (\fields -> if length fields /= 1 then fail "invalid rule request" else fields Aeson..: "rule")) tool.invocation.arguments)
   unless (bounded rule) (abort SupervisorRefused)
   (binding, state) <- transact runtime (Workspaces.inspectWorkspaceTx admission.workspace) >>= maybe (abort SupervisorRefused) pure
@@ -175,20 +189,19 @@ loadAccepted runtime request = do
   let OperationId key = request.operationId
       context = OperationContext snapshot.executionId request.operationId key operation.fingerprint operation.specification.scopeDigest
       dispatch = DispatchContext context request.attemptId request.owner request.generation
-  pure (AcceptedProcess snapshot access binding admission dispatch command profile)
+  pure (AcceptedProcess snapshot access binding admission dispatch command profile routing)
 
 lockedProcess :: SupervisorRuntime -> AcceptedProcess -> IO ProcessRecord
 lockedProcess runtime accepted = do
   let binding = accepted.binding
       dispatch = accepted.dispatch
       command = accepted.command
-      metadata = workspaceMetadata binding.storageRoot binding
   -- An existing registration is observed without rechecking the former claim
   -- or reserving a new deadline. It can never produce another launch request.
   existing <- transact runtime (Processes.inspectProcessTx dispatch.operation.operationId)
   case existing of
     Just record -> do
-      unless (record.bindingDigest == workspaceBindingDigest binding && record.instructionDigest == bundleDigest accepted.admission.instructions && record.command == command && record.fingerprint == processFingerprint binding record.instructionDigest dispatch.operation command) (abort SupervisorRefused)
+      unless (record.bindingDigest == workspaceBindingDigest binding && record.instructionDigest == bundleDigest accepted.admission.instructions && record.command == command && record.routing == Just accepted.routing && record.fingerprint == processFingerprint binding record.instructionDigest dispatch.operation command) (abort SupervisorRefused)
       if record.phase == ProcessReserved
         then do
           transact runtime (Processes.refuseReservedProcessTx record) >>= either (const (abort SupervisorUnresolved)) pure
@@ -202,7 +215,7 @@ lockedProcess runtime accepted = do
       either (const (abort SupervisorRefused)) pure (Resources.checkRoot now root.revision root)
       let deadline = min root.envelope.cutoff (addUTCTime (fromIntegral command.timeoutSeconds) now)
           fingerprint = processFingerprint binding (bundleDigest accepted.admission.instructions) dispatch.operation command
-          proposed = ProcessRecord dispatch.operation.operationId dispatch.attemptId dispatch.owner dispatch.generation (workspaceBindingDigest binding) (bundleDigest accepted.admission.instructions) fingerprint command deadline (processUnit dispatch.operation.operationId fingerprint) Nothing Nothing ProcessReserved Nothing
+          proposed = ProcessRecord dispatch.operation.operationId dispatch.attemptId dispatch.owner dispatch.generation (workspaceBindingDigest binding) (bundleDigest accepted.admission.instructions) fingerprint command deadline (processUnit dispatch.operation.operationId fingerprint) Nothing Nothing ProcessReserved Nothing (Just accepted.routing)
       record <- transact runtime (Processes.reserveProcessTx binding proposed) >>= either (const (abort SupervisorRefused)) pure
       unless (record == proposed) (abort SupervisorUnresolved)
       let candidate = record & #bootId .~ Just boot & #phase .~ ProcessLaunchRequested
@@ -284,6 +297,66 @@ observe runtime binding record = do
             pure ()
         Right (Just _) -> pure ()
       transact runtime (Processes.inspectProcessTx record.operationId) >>= maybe (abort SupervisorUnavailable) pure
+
+-- One deterministic result encoding is shared by the live adapter and the
+-- factual late-receipt publisher. Command arguments and output bodies are absent.
+processToolResult :: ProcessRecord -> Maybe (Either ToolError ToolOutput)
+processToolResult record = case (record.phase, record.receipt) of
+  (ProcessSettled, Just receipt) | validProcessReceipt record receipt -> Just (Right (textToolOutput (Encoding.decodeUtf8 (Lazy.toStrict (Aeson.encode receipt)))))
+  (ProcessRefused, Nothing) -> Just (Left (ToolRunFailed "validate" "workspace validation refused"))
+  _ -> Nothing
+
+data ProcessPublication = AwaitingProcessReceipt | AwaitingExecutionExpiry | ProcessReceiptAcknowledged
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+-- This path consumes already accepted provider facts only. It creates no
+-- actual attempt, replay-read grant, command or authority to continue model IO.
+publishProcessReceipt :: SupervisorRuntime -> OperationId -> IO (Either SupervisorError ProcessPublication)
+publishProcessReceipt runtime operationId = protect do
+  (binding, initial) <- transact runtime (Processes.inspectRegisteredProcessTx operationId) >>= maybe (abort SupervisorRefused) pure
+  record <-
+    if initial.phase `elem` [ProcessSettled, ProcessRefused]
+      then pure initial
+      else reconcileProcess runtime operationId >>= either abort pure
+  case processToolResult record of
+    Nothing -> pure AwaitingProcessReceipt
+    Just result -> do
+      routing <- maybe (abort SupervisorUnresolved) pure record.routing
+      unless (validProcessRouting routing && record.bindingDigest == workspaceBindingDigest binding) (abort SupervisorUnresolved)
+      metadata <- execute runtime (Execution.inspectExecution routing.executionId) >>= maybe (abort SupervisorUnresolved) pure
+      let (state, retained, _) = metadata
+      operation <- execute runtime (Execution.inspectOperation operationId) >>= maybe (abort SupervisorUnresolved) pure
+      let OperationId key = operationId
+          context = OperationContext routing.executionId operationId key operation.fingerprint operation.specification.scopeDigest
+      unless (routing.identity == retained.identity && retained.rootId == Just binding.request.rootId && operation.executionId == routing.executionId && operation.specification.kind == ToolOperation && operation.specification.name == workspaceExecBinding.name && operation.specification.scopeDigest == toolScopeDigest workspaceExecBinding && operation.input.digest == routing.inputDigest && record.fingerprint == processFingerprint binding record.instructionDigest context record.command) (abort SupervisorUnresolved)
+      actual <- execute runtime (Execution.inspectExecutionAttempt record.attemptId) >>= maybe (abort SupervisorUnresolved) pure
+      unless (actual.executionId == routing.executionId && actual.operationId == operationId && actual.owner == Just record.claimOwner && actual.generation == record.generation && isNothing actual.call) (abort SupervisorUnresolved)
+      let reference = Attempt.JobReference 1 routing.executionId operationId record.attemptId
+          claim = Attempt.AttemptClaim reference record.claimOwner record.generation
+          outcome = either (\err -> ToolReturned [TextBlock (renderToolError err)] True) (RichToolReturned . captureToolOutput) result
+          receipt = Attempt.AttemptResult outcome routing.next Nothing
+          acknowledged = execute runtime (Execution.publishExecutionWake reference) >> pure ProcessReceiptAcknowledged
+      case actual.phase of
+        Attempt.DispatchStarted -> do
+          now <- getCurrentTime
+          if maybe False (now >=) actual.expiresAt
+            then do
+              _ <- execute runtime (Execution.markExpiredExecutionAttemptUncertain routing.identity state.revision reference)
+              publishProcessReceipt runtime operationId >>= either abort pure
+            else pure AwaitingExecutionExpiry
+        Attempt.AttemptUncertain -> do
+          _ <- execute runtime (Execution.recordIndependentToolReceipt routing.identity state.revision claim receipt)
+          (changed, _, _) <- execute runtime (Execution.inspectExecution routing.executionId) >>= maybe (abort SupervisorUnresolved) pure
+          _ <- execute runtime (Execution.reconcileExecutionControlAttempt routing.identity routing.executionId changed.revision record.attemptId)
+          acknowledged
+        Attempt.AttemptSuperseded -> do
+          _ <- execute runtime (Execution.recordIndependentToolReceipt routing.identity state.revision claim receipt)
+          acknowledged
+        Attempt.AttemptCommitted -> do
+          _ <- execute runtime (Execution.recordIndependentToolReceipt routing.identity state.revision claim receipt)
+          acknowledged
+        _ -> abort SupervisorUnresolved
 
 processDirectory :: WorkspaceBinding -> ProcessRecord -> FilePath
 processDirectory binding record = workspaceMetadata binding.storageRoot binding </> Text.unpack ("process-" <> Text.drop 7 (versionedDigest "shikigami.workspace-process-directory/1" (toJSON (record.operationId, record.fingerprint))))

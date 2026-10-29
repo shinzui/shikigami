@@ -235,7 +235,7 @@ remainingSeconds now record = do
   pure (fromInteger remaining)
 
 validLaunchRecord :: ProcessRecord -> Bool
-validLaunchRecord record = validProcessCommand record.command && digestText record.fingerprint && record.unit == processUnit record.operationId record.fingerprint && record.phase == ProcessLaunchRequested && maybe False hostIdentity record.bootId && isNothing record.invocationId && isNothing record.receipt
+validLaunchRecord record = validProcessCommand record.command && maybe False validProcessRouting record.routing && digestText record.fingerprint && record.unit == processUnit record.operationId record.fingerprint && record.phase == ProcessLaunchRequested && maybe False hostIdentity record.bootId && isNothing record.invocationId && isNothing record.receipt
 
 validProfile :: SystemdProfile -> Bool
 validProfile profile = all safeAbsolute [profile.rootDirectory, profile.collectorExecutable, Text.unpack profile.environmentExecutable] && digestText profile.rootIdentity && profile.userId > 0 && profile.groupId > 0

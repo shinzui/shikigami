@@ -3,13 +3,16 @@
 module Shikigami.Workspace.Process where
 
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy qualified as Bytes
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.UUID qualified as UUID
+import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (AttemptId, OperationId)
 import Shikigami.Execution.Runner (OperationContext)
+import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadRef (..))
 import Shikigami.Prelude
 import Shikigami.Workspace.Instructions (validWorkspacePath)
 import Shikigami.Workspace.Types
@@ -68,6 +71,28 @@ data ProcessReceipt = ProcessReceipt
 
 instance Show ProcessReceipt where show _ = "ProcessReceipt <protected>"
 
+-- Retain only accepted routing coordinates while replay access is live. A
+-- restarted factual owner must not reread model bodies after revocation merely
+-- to acknowledge the original attempt's independently retained receipt.
+data ProcessRouting = ProcessRouting
+  { format :: !Int,
+    executionId :: !ExecutionId,
+    identity :: !AgentIdentity,
+    inputDigest :: !Text,
+    next :: !NextWork
+  }
+  deriving stock (Eq, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+instance Show ProcessRouting where show _ = "ProcessRouting <protected>"
+
+validProcessRouting :: ProcessRouting -> Bool
+validProcessRouting routing = routing.format == 1 && bounded routing.executionId.value && either (const False) bounded (identityText routing.identity) && digestText routing.inputDigest && validNext routing.next && Bytes.length (Aeson.encode routing) <= 4096
+  where
+    validNext NeedModel = True
+    validNext (NeedTool response position) = position > 0 && position <= 10000 && digestText response.digest && bounded response.payloadId && response.bytes > 0
+    validNext _ = False
+
 data ProcessRecord = ProcessRecord
   { operationId :: !OperationId,
     attemptId :: !AttemptId,
@@ -82,10 +107,17 @@ data ProcessRecord = ProcessRecord
     bootId :: !(Maybe Text),
     invocationId :: !(Maybe Text),
     phase :: !ProcessPhase,
-    receipt :: !(Maybe ProcessReceipt)
+    receipt :: !(Maybe ProcessReceipt),
+    routing :: !(Maybe ProcessRouting)
   }
   deriving stock (Eq, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving anyclass (FromJSON)
+
+-- Preserve historical JSON, including its existing explicit null fields.
+instance ToJSON ProcessRecord where
+  toJSON record = case Aeson.genericToJSON Aeson.defaultOptions record of
+    Aeson.Object fields | isNothing record.routing -> Aeson.Object (KeyMap.delete "routing" fields)
+    value -> value
 
 instance Show ProcessRecord where show _ = "ProcessRecord <protected>"
 

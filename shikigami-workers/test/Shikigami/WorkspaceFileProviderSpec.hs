@@ -1,4 +1,4 @@
-module Shikigami.WorkspaceFileProviderSpec (tests, withEffectAdapter, executorForAdapter) where
+module Shikigami.WorkspaceFileProviderSpec (tests, withEffectAdapter, withEffectAdapterForTools, executorForAdapter) where
 
 import Baikai.Options (emptyOptions)
 import Baikai.StopReason (StopReason (ToolUse))
@@ -243,7 +243,10 @@ withEffectQualified qualify logical = withEffectAdapter qualify workspaceEditAda
 -- Shared accepted-executor fixture for native workspace adapters. This supplies
 -- real protected input and actual claims, never synthesized dispatch authority.
 withEffectAdapter :: (WorkspaceAdmission -> WorkspaceAdmission) -> (FileRuntime -> DurableAdapter) -> Text.Text -> Text.Text -> Maybe Aeson.Value -> DatabaseFixture -> (AppEnv -> WorkspaceBinding -> ExecutionSnapshot -> Execution.ReplayAccess -> Attempt.JobReference -> FileRuntime -> Aeson.Value -> IO a) -> IO a
-withEffectAdapter qualify install wire logical supplied fixture use = Fixture.withFixture fixture \env source root _ -> do
+withEffectAdapter = withEffectAdapterForTools 1
+
+withEffectAdapterForTools :: Int -> (WorkspaceAdmission -> WorkspaceAdmission) -> (FileRuntime -> DurableAdapter) -> Text.Text -> Text.Text -> Maybe Aeson.Value -> DatabaseFixture -> (AppEnv -> WorkspaceBinding -> ExecutionSnapshot -> Execution.ReplayAccess -> Attempt.JobReference -> FileRuntime -> Aeson.Value -> IO a) -> IO a
+withEffectAdapterForTools toolCount qualify install wire logical supplied fixture use = Fixture.withFixture fixture \env source root _ -> do
   createDirectory (source </> "src")
   renameFile (source </> "dependency.txt") (source </> "src/dependency.txt")
   writeFile (source </> "AGENTS.md") "PRIVATE_ROOT_POLICY: validate before commit"
@@ -282,7 +285,7 @@ withEffectAdapter qualify install wire logical supplied fixture use = Fixture.wi
       modelRequest = Resources.AttemptRequest (AttemptId ("model:" <> operationKey)) operation.specification.operationId (Map.fromList [(Resources.ActiveWork, 1), (Resources.ModelAttempts, 1), (Resources.Tokens, 10), (Resources.CostMicroUsd, 0)]) Resources.EnforcedCeiling
   reservation <- right =<< run env (Calls.reserveSelectionCall selection (Calls.CallLimits Nothing Nothing Nothing Nothing Nothing) modelRequest "fixture-model" now)
   call <- case reservation of Calls.NewCall value -> pure value; _ -> fail "new fixture call required"
-  let assistant = ReplayAssistant 1 [ToolBlock (ToolInvocation "replace-call" tool.name input)] ToolUse Nothing Nothing (Aeson.object []) Nothing
+  let assistant = ReplayAssistant 1 ([ToolBlock (ToolInvocation "replace-call" tool.name input)] <> [ToolBlock (ToolInvocation ("additional-call-" <> Text.pack (show index)) tool.name input) | index <- [1 .. toolCount - 1]]) ToolUse Nothing Nothing (Aeson.object []) Nothing
       outcome = ModelReturned assistant Nothing
   response <- right (Execution.outcomeReference outcome)
   run env (Execution.recordOutcomeAndAdvance access 1 operation.specification.operationId outcome (NeedTool response 0) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.singleton Resources.Tokens 1) [Resources.CostMicroUsd] Nothing Nothing Nothing))) >>= (@?= Right Resources.Accepted)

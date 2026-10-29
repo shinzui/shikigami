@@ -4,6 +4,7 @@ module Shikigami.WorkspaceProcessStoreSpec (tests) where
 
 import Control.Concurrent.Async (concurrently)
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (Pair)
 import Data.ByteString qualified as Bytes
 import Data.ByteString.Lazy qualified as Lazy
@@ -38,7 +39,15 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace process registrations"
-    [ testCase "racing reservations and lost launch acknowledgement converge without a second launch grant" $ withProcess fixture \env binding proposed -> do
+    [ testCase "historical registrations keep their JSON fields and omit absent receipt routing" $ withProcess fixture \_ _ proposed -> do
+        case Aeson.toJSON proposed of
+          Aeson.Object fields -> do
+            assertBool "new routing does not appear on old records" (not (KeyMap.member "routing" fields))
+            KeyMap.lookup "bootId" fields @?= Just Aeson.Null
+            KeyMap.lookup "receipt" fields @?= Just Aeson.Null
+          _ -> assertFailure "registration JSON must be an object"
+        Aeson.eitherDecode @ProcessRecord (Aeson.encode proposed) @?= Right proposed,
+      testCase "racing reservations and lost launch acknowledgement converge without a second launch grant" $ withProcess fixture \env binding proposed -> do
         (one, two) <- concurrently (run env (reserveProcessTx binding proposed)) (run env (reserveProcessTx binding proposed))
         one @?= Right proposed
         two @?= Right proposed
@@ -222,7 +231,7 @@ withProcess fixture use = Fixture.withFixture fixture \env _ root repository -> 
       operation = OperationId "process-operation"
       logical = OperationContext (ExecutionId "process-execution") operation "process-operation" "input-fingerprint" "scope"
       fingerprint = processFingerprint binding digest logical command
-      record = ProcessRecord operation (AttemptId "original-attempt") "original-claim" 1 (workspaceBindingDigest binding) digest fingerprint command (addUTCTime 30 now) (processUnit operation fingerprint) Nothing Nothing ProcessReserved Nothing
+      record = ProcessRecord operation (AttemptId "original-attempt") "original-claim" 1 (workspaceBindingDigest binding) digest fingerprint command (addUTCTime 30 now) (processUnit operation fingerprint) Nothing Nothing ProcessReserved Nothing Nothing
   use env binding record
 
 receiptFor :: ProcessRecord -> ProcessReceipt

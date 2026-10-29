@@ -94,6 +94,8 @@ workspaceProcessAction :: WorkspaceBinding -> WorkspaceAdmission -> DispatchCont
 workspaceProcessAction binding admission dispatch record boot target = do
   unless (admission.filePolicy == Just supervisedFilePolicy && admission.workspace == binding.workspace && admission.bindingDigest == workspaceBindingDigest binding && admission.runId == binding.request.runId && admission.rootId == binding.request.rootId && admission.owner == binding.request.owner && admission.epoch == binding.request.epoch && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base) (Left FileEffectRefused)
   unless (validProcessCommand record.command && record.phase `elem` [ProcessReserved, ProcessLaunchRequested] && record.operationId == dispatch.operation.operationId && record.attemptId == dispatch.attemptId && record.claimOwner == dispatch.owner && bounded dispatch.owner && record.generation == dispatch.generation && dispatch.generation > 0 && record.bindingDigest == workspaceBindingDigest binding && record.instructionDigest == bundleDigest admission.instructions && record.fingerprint == processFingerprint binding record.instructionDigest dispatch.operation record.command && record.unit == processUnit record.operationId record.fingerprint && hostIdentity boot && maybe True (== boot) record.bootId && isNothing record.invocationId && isNothing record.receipt && bounded target && Text.length target <= 128) (Left FileEffectRefused)
+  routing <- maybe (Left FileEffectRefused) Right record.routing
+  unless (validProcessRouting routing && routing.executionId == dispatch.operation.executionId && routing.identity == admission.owner) (Left FileEffectRefused)
   let coordinates =
         Aeson.object
           [ "binding" Aeson..= workspaceBindingDigest binding,
@@ -109,6 +111,7 @@ workspaceProcessAction binding admission dispatch record boot target = do
             "command" Aeson..= record.command,
             "fingerprint" Aeson..= record.fingerprint,
             "deadline" Aeson..= record.deadline,
+            "routing" Aeson..= routing,
             "unit" Aeson..= record.unit,
             "boot" Aeson..= boot,
             "cwdTarget" Aeson..= target

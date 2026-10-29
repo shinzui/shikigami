@@ -34,6 +34,7 @@ module Shikigami.Execution.Store
     markExecutionAttemptUncertain,
     markExpiredExecutionAttemptUncertain,
     recordLateExecutionReceipt,
+    recordIndependentToolReceipt,
     reconcileExecutionAttempt,
     reconcileExecutionControlAttempt,
     parkOperationPermission,
@@ -860,6 +861,35 @@ recordLateExecutionReceipt access@(ReplayAccess execution _ _) expected claim re
           pure (case result of Right () -> Right Accepted; Left (CheckFailed err) -> Left err; Left EventRejected -> Left ExecutionRevisionConflict)
   where
     body = envelope "late-attempt-receipt" (toJSON receipt)
+
+-- Trusted independent providers call this only after validating their retained
+-- factual receipt. Socket/model callers must never supply the result body.
+-- Like factual control reconciliation, this returns metadata and no replay
+-- permit. It confers neither fresh dispatch nor protected replay-read authority.
+recordIndependentToolReceipt :: (ExecutionEffects es) => AgentIdentity -> Integer -> Attempt.AttemptClaim -> Attempt.AttemptResult -> Eff es (Either ExecutionError Admission)
+recordIndependentToolReceipt identity expected claim receipt = catchExecutionWith id do
+  let execution = claim.reference.executionId
+  (_, binding) <- readMetadata (getExecution execution)
+  unless (identity == binding.identity) (throwIO (ExecutionAbort ExecutionIdentityConflict))
+  previous <- readMetadata (Tx.statement (attemptKey claim.reference.attemptId) selectExecutionAttempt) >>= maybe (throwIO (ExecutionAbort AttemptMissing)) pure
+  unless (claimMatches claim previous && isNothing previous.call && isNothing receipt.accounting) (throwIO (ExecutionAbort AttemptConflict))
+  operation <- readMetadata (Tx.statement (operationKey previous.operationId) selectOperation) >>= maybe (throwIO (ExecutionAbort OperationMissing)) pure
+  unless (operation.executionId == execution && operation.specification.kind == ToolOperation) (throwIO (ExecutionAbort AttemptConflict))
+  case receipt.outcome of
+    ToolReturned {} -> pure ()
+    RichToolReturned {} -> pure ()
+    _ -> throwIO (ExecutionAbort AttemptConflict)
+  case receipt.next of
+    NeedModel -> pure ()
+    NeedTool _ position | position > 0 -> pure ()
+    _ -> throwIO (ExecutionAbort AttemptConflict)
+  if previous.phase == Attempt.AttemptCommitted
+    then do
+      reference <- either (throwIO . ExecutionAbort) pure (payloadReference (envelope "attempt-result" (toJSON receipt)))
+      pure (if previous.outcome == Just reference then Right AlreadyAccepted else Left AttemptConflict)
+    else do
+      now <- liftIO getCurrentTime
+      recordLateExecutionReceipt (ReplayAccess execution identity now) expected claim receipt
 
 -- A superseded owner's receipt settles that actual attempt only. The logical
 -- operation, chosen result and cursor remain exactly as the replacement left

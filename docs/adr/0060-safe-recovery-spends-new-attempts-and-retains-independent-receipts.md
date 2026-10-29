@@ -104,6 +104,17 @@ hold; that owner must accept its actual late receipt. Independent recovery must
 retain the minimal accepted completion routing before launch so revocation does
 not require a new protected model-response read merely to record those facts.
 
+The process owner now retains versioned completion routing before launch and
+uses the execution owner's factual tool-receipt API, late reconciliation and
+existing wake publication. A live claim stays with its executor; an expired or
+already uncertain claim can settle from the original retained receipt without
+allocating another actual attempt. The publisher validates original actor,
+claim generation, accepted input and fingerprint, and grants no replay-read or
+fresh execution authority. Root cancellation does not erase facts or unrelated
+billing holds. Historical records without routing remain readable and gain no
+launch authority. The independent service and real Linux restart qualification
+remain explicit plan-96 enablement gates.
+
 ## Alternatives rejected
 
 Releasing the unknown attempt to make room for its replacement would invent

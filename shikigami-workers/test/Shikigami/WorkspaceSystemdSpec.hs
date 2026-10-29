@@ -4,7 +4,9 @@ import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.Time (UTCTime, addUTCTime)
+import Shikigami.Agent.Principal (AgentIdentity (CompatibilityIdentity))
 import Shikigami.Execution.Identity
+import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (NeedModel))
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.Workspace.Process
 import Shikigami.Workspace.Systemd
@@ -50,6 +52,7 @@ tests =
           [ProcessReserved, ProcessRunning, ProcessSettled, ProcessRefused, ProcessUnresolved]
         arguments now profile (record & #invocationId .~ Just "22222222222222222222222222222222") >>= (@?= Left SystemdRefused)
         arguments now profile (record & #bootId .~ Nothing) >>= (@?= Left SystemdRefused)
+        arguments now profile (record & #routing .~ Nothing) >>= (@?= Left SystemdRefused)
         arguments now profile (record & #unit .~ "arbitrary.service") >>= (@?= Left SystemdRefused)
         arguments now profile (record & #command . #directory .~ "../outside") >>= (@?= Left SystemdRefused),
       testCase "native unsupported hosts refuse without touching private paths or launching a service" $ withRecord \profile record -> do
@@ -70,7 +73,7 @@ withRecord use = do
   identity <- systemdProfileIdentity profile
   let command = ProcessCommand "validate" identity "/bin/validate" ["$HOME", "%n", "", "line\né"] "" (Map.singleton "HOME" "/scratch") 30 1024
       operation = OperationId "process-operation"
-      record = ProcessRecord operation (AttemptId "original-attempt") "claim" 1 digest digest digest command (addUTCTime 30 now) (processUnit operation digest) (Just "11111111-1111-4111-8111-111111111111") Nothing ProcessLaunchRequested Nothing
+      record = ProcessRecord operation (AttemptId "original-attempt") "claim" 1 digest digest digest command (addUTCTime 30 now) (processUnit operation digest) (Just "11111111-1111-4111-8111-111111111111") Nothing ProcessLaunchRequested Nothing (Just (ProcessRouting 1 (ExecutionId "transport-execution") (CompatibilityIdentity "worker") digest NeedModel))
   use profile record
 
 now :: UTCTime

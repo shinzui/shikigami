@@ -20,7 +20,7 @@ import Kikan.En.Client (newActionProofVerifier, verifyIssuedAction)
 import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Runner
-import Shikigami.Execution.Transcript (ExecutionId (..))
+import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadRef (..))
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Process
@@ -95,7 +95,7 @@ tests =
             boot = "11111111-1111-4111-8111-111111111111"
             recordFor b a d c =
               let fingerprint = processFingerprint b (bundleDigest a.instructions) d.operation c
-               in ProcessRecord d.operation.operationId d.attemptId d.owner d.generation (workspaceBindingDigest b) (bundleDigest a.instructions) fingerprint c expiry (processUnit d.operation.operationId fingerprint) Nothing Nothing ProcessReserved Nothing
+               in ProcessRecord d.operation.operationId d.attemptId d.owner d.generation (workspaceBindingDigest b) (bundleDigest a.instructions) fingerprint c expiry (processUnit d.operation.operationId fingerprint) Nothing Nothing ProcessReserved Nothing (Just (ProcessRouting 1 d.operation.executionId b.request.owner ("sha256:" <> Text.replicate 64 "a") NeedModel))
             record = recordFor binding processAdmission dispatch command
         workspaceProcessAction binding admission dispatch record boot "device:parent" @?= Left FileEffectRefused
         workspaceFileAction binding processAdmission dispatch "replace" "src/file" "device:parent" "input-hash" @?= Left FileEffectRefused
@@ -133,7 +133,9 @@ tests =
                 <> [ workspaceProcessAction binding processAdmission dispatch (record & #deadline .~ addUTCTime 1 expiry) boot "device:parent",
                      workspaceProcessAction binding processAdmission dispatch record "22222222-2222-4222-8222-222222222222" "device:parent",
                      workspaceProcessAction binding processAdmission dispatch record boot "device:other-parent",
-                     workspaceProcessAction binding (processAdmission & #assignmentId .~ "other-assignment") dispatch record boot "device:parent"
+                     workspaceProcessAction binding (processAdmission & #assignmentId .~ "other-assignment") dispatch record boot "device:parent",
+                     workspaceProcessAction binding processAdmission dispatch (record & #routing .~ Just (ProcessRouting 1 logical.executionId owner ("sha256:" <> Text.replicate 64 "b") NeedModel)) boot "device:parent",
+                     workspaceProcessAction binding processAdmission dispatch (record & #routing .~ Just (ProcessRouting 1 logical.executionId owner ("sha256:" <> Text.replicate 64 "a") (NeedTool (PayloadRef "response" ("sha256:" <> Text.replicate 64 "a") 1) 1))) boot "device:parent"
                    ]
             )
         processBindingActions <-
@@ -156,7 +158,8 @@ tests =
             record & #fingerprint .~ "mismatched",
             record & #phase .~ ProcessRunning,
             record & #bootId .~ Just "22222222-2222-4222-8222-222222222222",
-            record & #invocationId .~ Just boot
+            record & #invocationId .~ Just boot,
+            record & #routing .~ Nothing
           ]
     ]
 
