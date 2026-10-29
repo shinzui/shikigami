@@ -27,6 +27,11 @@ provenance:
       at: 2026-10-28T03:46:48Z
       mode: "implement"
       note: "Start EP-1; reconcile completed external decision prerequisites"
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-29T00:33:08Z
+      mode: "update"
+      note: "Record plan 96 as IR-11 owner and MasterPlan 17 (plan 99) as IR-13 provider owner in the registry note and Progress; gates remain open"
 ---
 
 # Deliver adaptive autonomous objectives with durable workers
@@ -77,7 +82,7 @@ Relevant local decisions consulted include [ADR 0007](../adr/0007-a-resolved-pro
 | EP-6 | Qualify integrated adaptive autonomous delivery | [docs/plans/86-qualify-integrated-adaptive-autonomous-delivery.md](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) | EP-5; IR-11 and IR-13 providers before milestones 2–3 | None | Not Started |
 | EP-7 | Supervise recurring objectives from current durable checkpoints | [docs/plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md](../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md) | EP-5; completion gate IR-13 provider | EP-6 fixture reuse | Not Started |
 
-EP numbers identify rows in this master plan; the linked ExecPlan file ids are 81–87. A child reference is a whole-child start gate: that child must be Complete before the dependent child begins. External plans 73 and 76 are start gates of the same kind, owned by [MasterPlan 13](13-compose-shikumi-decisions-in-durable-flows.md). IR-11 and IR-13 have no owning implementation plan; where a row names one as a completion gate, the child may build its mechanics against the fixture adapter its own plan defines, but it cannot be marked Complete until the real provider passes the acceptance cases named in the ownership matrix below. EP-6 is the exception: its milestones 2–3 exercise real workspaces and checkpoints, so both providers must exist before those milestones start. Initial status is Not Started, not a claim that every row is currently implementable.
+EP numbers identify rows in this master plan; the linked ExecPlan file ids are 81–87. A child reference is a whole-child start gate: that child must be Complete before the dependent child begins. External plans 73 and 76 are start gates of the same kind, owned by [MasterPlan 13](13-compose-shikumi-decisions-in-durable-flows.md). IR-11 is owned by [plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) and IR-13 by [MasterPlan 17](17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md), whose EP-2 (plan 99) delivers the provider that closes the IR-13 gate; where a row names one as a completion gate, the child may build its mechanics against the fixture adapter its own plan defines, but it cannot be marked Complete until the real provider passes the acceptance cases named in the ownership matrix below. EP-6 is the exception: its milestones 2–3 exercise real workspaces and checkpoints, so both providers must exist before those milestones start. Initial status is Not Started, not a claim that every row is currently implementable.
 
 
 ## Dependency Graph
@@ -144,11 +149,17 @@ limit in FRIC-13.
 
 EP-4 remains In Progress solely at its real-provider qualification boundary:
 IR-11 workspace/process fences and IR-13 authoritative objective/checkpoint
-ownership and retained coordination associations are unselected. A fresh check
-still finds both requests proposed with no complete providers. EP-5 requires
+ownership and retained coordination associations were unselected at that check,
+which found both requests proposed with no complete providers. EP-5 requires
 the whole EP-4 Complete; EP-6 and EP-7 depend on EP-5. No other child can start
 within this MasterPlan's declared order. External plans 73–76 have accepted
 evidence, but fixtures cannot close the remaining separately owned gates.
+
+2026-10-28 (later): IR-11 is in progress under plan 96 and IR-13 is accepted under
+MasterPlan 17, whose plan 99 supplies the objective checkpoint, ownership and
+coordination-scope providers that close EP-4's IR-13 gate. Both gates stay open
+until real provider evidence is recorded here and in plan 84; plan 96 has landed
+only repository catalog admission, and no MasterPlan 17 child has started.
 
 
 ## Surprises & Discoveries

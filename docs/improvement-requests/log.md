@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-28
+* **Update**: IR-13 moves from proposed to accepted: MasterPlan 17 owns the authoritative objective record through plans 98–102 (PostgreSQL store and conditional commands, trusted associations and the real providers that close plan 84's IR-13 gate, authenticated API and CLI, durable Skill/Flow/conversation capabilities, no-Rei qualification), with implementation not started. The single-plan draft, plan 97, is superseded.
 * **Progress**: IR-11 selects plan 96 for its complete durable workspace contract. Repository catalog admission is implemented; allocation, mutation, process recovery, worker composition and real fencing/integration acceptance remain outstanding.
 
 ## 2026-10-26

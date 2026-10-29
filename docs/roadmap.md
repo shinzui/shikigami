@@ -1,6 +1,6 @@
 # Shikigami roadmap
 
-Portfolio audit date: 2026-09-21; IR-12 and IR-13 added 2026-09-26; IR-12 completed 2026-10-25.
+Portfolio audit date: 2026-09-21; IR-12 and IR-13 added 2026-09-26; IR-12 completed 2026-10-25; IR-13 accepted 2026-10-28.
 
 Architecture and delivery decision view: [HTML roadmap](artifacts/roadmap.html).
 
@@ -137,7 +137,7 @@ or sequences them; do not let their size obscure the correctness and service-bou
 | IR-10 — Terminal run status over HTTP | Proposed | Depends on IR-8's run identity |
 | IR-11 — Governed mutable repository workspaces | Proposed | Sequence after IR-8/IR-10 and with plan 48 |
 | IR-12 — Shikumi decisions in durable Flows | Completed | [MasterPlan 13](masterplans/13-compose-shikumi-decisions-in-durable-flows.md), plans 73–76: typed two-model composition, retained replay, durable attempts and patch-safe evolution |
-| IR-13 — Optional major-task tracking without Rei | Proposed | Resolve task ownership, storage, and replay-safe mutation design before planning |
+| IR-13 — Optional major-task tracking without Rei | Accepted | [MasterPlan 17](masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md), plans 98–102: Shikigami-owned objective store, real checkpoint providers, API/CLI, durable capabilities; not started |
 
 ## Review disposition
 

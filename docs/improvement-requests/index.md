@@ -29,7 +29,7 @@ individual requests.
 | [IR-10](expose-agent-run-status-over-http.md) | Completed | [Plan 91](../plans/91-expose-agent-run-status-and-history-over-http.md), under [MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md) |
 | [IR-11](provide-governed-mutable-repository-workspaces.md) | In progress | [Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) |
 | [IR-12](compose-shikumi-decisions-in-durable-flows.md) | Completed | [MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md), plans 73–76 |
-| [IR-13](support-optional-major-task-tracking.md) | Proposed | None |
+| [IR-13](support-optional-major-task-tracking.md) | Accepted | [MasterPlan 17](../masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md), plans 98–102 |
 | [IR-14](record-durable-model-tool-turns-and-compose-harness-policies.md) | Accepted | [Plan 83](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md), under [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) |
 | [IR-15](support-continuing-worker-sessions.md) | Accepted | [Plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md), under [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) |
 | [IR-16](support-adaptive-durable-orchestration.md) | Accepted | [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md), plans 81, 85, and 86 |

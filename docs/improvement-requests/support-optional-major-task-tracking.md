@@ -2,12 +2,13 @@
 type: Improvement Request
 title: Support optional major-task tracking for Shikigami agents without Rei
 description: Give agents and users an explicit, durable view of progress on multi-step goals across runs without requiring a Rei intention, while preserving replay-safe updates and governed access.
-timestamp: "2026-09-26T22:03:32Z"
+timestamp: "2026-10-29T00:32:31Z"
 generated:
   by: process:codex
   at: "2026-10-11T03:04:54Z"
 requestId: IR-13
-status: proposed
+status: accepted
+targetPlan: docs/masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md
 origin: mori://shinzui/shikigami
 ---
 
@@ -15,21 +16,29 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Proposed for further design.** No task store, provider, API, or implementation plan is selected
-by this request. It records the user need and the current runtime constraints so a later design
-can start from evidence rather than rediscovering them.
+**Accepted; owned by [MasterPlan 17: Track durable objectives and authoritative assignment checkpoints without Rei](../masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md).**
+Shikigami owns the authoritative record, which the design names an objective (this request's
+"major task"). Five child plans deliver it: [plan 98](../plans/98-persist-authoritative-objectives-and-conditional-commands.md)
+persists objectives behind one conditional command executor; [plan 99](../plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md)
+adds trusted run/conversation associations and the real checkpoint, ownership and coordination-scope
+providers that close plan 84's IR-13 gate; [plan 100](../plans/100-expose-governed-objective-inspection-through-the-api-and-cli.md)
+exposes the authenticated `/objectives` API and operator CLI; [plan 101](../plans/101-make-objective-capabilities-durable-for-agents-and-conversations.md)
+makes the capability durable for Skills, Flows and conversations; and [plan 102](../plans/102-qualify-no-rei-objective-continuity-and-close-ir-13.md)
+qualifies no-Rei continuity and completes this request. Implementation has not started. The
+research baseline below is retained as the evidence the design started from.
 
 [UC-1: Adaptive autonomous delivery](../use-cases/adaptive-autonomous-delivery.md) is a
 concrete consumer: its coordinator must recover current owners, assignment dependencies,
-accepted artifacts, and next actions across worker turns and supervision cycles. No
-implementation plan currently supplies this task/checkpoint store.
+accepted artifacts, and next actions across worker turns and supervision cycles. MasterPlan 17
+supplies this task/checkpoint store.
 
 [MasterPlan 14: Deliver adaptive autonomous objectives with durable workers](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md)
 consumes this request as a separately owned prerequisite. [Plan 84: Coordinate continuing worker sessions and fenced handoffs](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md),
 [Plan 85: Adapt durable delivery through validated coordinator decisions](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md), and
 [Plan 87: Supervise recurring objectives from current durable checkpoints](../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md)
 require authoritative checkpoint integration, but leave the task/checkpoint store
-owned by this request. Their consumer contracts and fixture adapters do not fulfill it.
+owned by this request. Their consumer contracts and fixture adapters do not fulfill it;
+plan 99 under MasterPlan 17 delivers the real integration.
 
 ## Problem
 
@@ -100,6 +109,9 @@ task. That need should not require a Rei deployment or an intention ID.
    complete its parent objective.
 
 ## Questions before planning
+
+These questions are answered in the Decision Log of MasterPlan 17 and are retained here for
+the record.
 
 - Should the authoritative task record be Shikigami-owned, supplied by a separate task service,
   or selected from operator-configured providers? What is the smallest useful persistent model?
