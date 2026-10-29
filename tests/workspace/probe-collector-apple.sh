@@ -11,12 +11,13 @@ container run --rm --detach --name "$name" --cpus 2 --memory 2G --cap-add ALL "$
 created=true
 container exec "$name" mkdir -p /var/lib/shikigami-capture-probe
 container exec --interactive "$name" /bin/sh -c 'cat >/var/lib/shikigami-capture-probe/collector.c' <shikigami-workers/cbits/workspace-collector.c
+container exec --interactive "$name" /bin/sh -c 'cat >/var/lib/shikigami-capture-probe/workspace-systemd-profile.h' <shikigami-workers/cbits/workspace-systemd-profile.h
 container exec --interactive "$name" /bin/sh -c 'cat >/var/lib/shikigami-capture-probe/descendant.c' <tests/workspace/root-isolation-probe.c
 container exec --interactive "$name" /usr/bin/timeout 240 /bin/bash -s <<'GUEST'
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y --no-install-recommends dbus gcc libc6-dev libsystemd-dev pkg-config jq >/dev/null 2>&1
+apt-get install -y --no-install-recommends dbus gcc libc6-dev libsystemd-dev pkg-config jq busybox-static >/dev/null 2>&1
 systemctl daemon-reload
 systemctl start dbus
 prefix=/var/lib/shikigami-capture-probe
@@ -25,17 +26,24 @@ mkdir -p "$prefix/root"/{bin,etc,proc,dev,tmp,workspace,scratch} "$prefix/worksp
 groupadd --gid 62001 workspace-probe
 useradd --uid 62001 --gid 62001 --no-create-home --shell /usr/sbin/nologin workspace-probe
 chown 62001:62001 "$prefix/workspace" "$prefix/scratch"
+cp /usr/bin/busybox "$prefix/root/bin/env"
 cc -static -Wall -Wextra -Werror -o "$prefix/root/bin/descendant" "$prefix/descendant.c"
 cat >"$prefix/payload.c" <<'C'
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
 #include <signal.h>
+#include <stdlib.h>
+extern char **environ;
 int main(int argc, char **argv) {
   char bytes[8192]; memset(bytes, 'x', sizeof(bytes));
   int fd = open("/workspace/launch-count", O_WRONLY|O_CREAT|O_APPEND, 0600);
   if (fd < 0 || write(fd,"1",1)!=1) return 1;
   close(fd);
+  if (argc == 6 && !strcmp(argv[1],"argv")) {
+    return strcmp(argv[2],"$HOME") || strcmp(argv[3],"%n") || *argv[4] || strcmp(argv[5],"line\n\xc3\xa9") ||
+      !getenv("HOME") || strcmp(getenv("HOME"),"/scratch") || !environ[0] || environ[1] ? 4 : 0;
+  }
   if (argc == 2 && !strcmp(argv[1],"flood")) {
     for (int i=0;i<128;i++) if (write(1,bytes,sizeof(bytes))<0 || write(2,bytes,sizeof(bytes))<0) return 2;
     return 0;
@@ -47,22 +55,17 @@ int main(int argc, char **argv) {
 C
 cc -static -Wall -Wextra -Werror -o "$prefix/root/bin/payload" "$prefix/payload.c"
 props=(
-  -p Type=exec -p Restart=no -p RemainAfterExit=yes -p RuntimeMaxSec=15 -p TimeoutStopSec=1
-  -p KillMode=control-group -p SendSIGKILL=yes -p Slice=system.slice
+  -p RuntimeMaxSec=15
   -p "RootDirectory=$prefix/root" -p WorkingDirectory=/workspace
   -p "BindPaths=$prefix/workspace:/workspace $prefix/scratch:/scratch"
-  -p User=62001 -p Group=62001 -p ProtectSystem=strict -p 'ReadWritePaths=/workspace /scratch'
-  -p PrivateNetwork=yes -p PrivatePIDs=yes -p PrivateDevices=yes
-  -p NoNewPrivileges=yes -p CapabilityBoundingSet= -p ProtectControlGroups=yes
-  -p ProtectKernelTunables=yes -p ProtectKernelModules=yes -p RestrictNamespaces=yes
-  -p RestrictAddressFamilies=AF_UNIX
-  -p 'SystemCallFilter=~@mount @privileged @reboot @swap @module @raw-io @debug'
-  -p SystemCallErrorNumber=EPERM -p ProtectProc=invisible -p ProcSubset=pid
+  -p User=62001 -p Group=62001
 )
+while IFS= read -r property; do props+=(-p "$property"); done < <("$prefix/collector" --profile | jq -r '.[]')
 wait_file() {
   for _ in {1..200}; do [[ -f "$1" ]] && return 0; sleep 0.05; done
   [[ ! -f "$op/unresolved.json" ]] || cat "$op/unresolved.json"
   systemctl show "$capture" -p Result -p ExecMainStatus
+  systemctl show "$unit" -p Result -p ExecMainCode -p ExecMainStatus -p MainPID -p SubState -p ControlGroup -p ExecMainPID -p ExecMainStartTimestampMonotonic -p MemoryPeak
   return 1
 }
 prepare() {
@@ -76,7 +79,7 @@ prepare() {
   wait_file "$op/ready"
 }
 launch() {
-  systemd-run --quiet --unit="$unit" "${props[@]}" -p "Description=shikigami-workspace/1 $fingerprint" -p "StandardOutput=file:$op/stdout.pipe" -p "StandardError=file:$op/stderr.pipe" "$@"
+  systemd-run --quiet --no-ask-password --expand-environment=no --unit="$unit" "${props[@]}" -p "Description=shikigami-workspace/1 $fingerprint" -p "StandardOutput=file:$op/stdout.pipe" -p "StandardError=file:$op/stderr.pipe" "$@"
 }
 prepare 1
 launch /bin/payload flood
@@ -115,10 +118,16 @@ if "$prefix/collector" "$op" "$unit" "$fingerprint" 1024 30; then exit 1; fi
 [[ ! -f "$op/complete.json" ]]
 echo 'PASS collector loss is unresolved and cannot fabricate or recapture completion'
 prepare 4
-launch -p RuntimeMaxSec=1 /bin/payload slow
+before=$(wc -c <"$prefix/workspace/launch-count")
+if ! launch -p RuntimeMaxSec=3 /bin/payload slow; then
+  systemctl show "$unit" -p Result -p ExecMainCode -p ExecMainStatus -p MainPID -p SubState -p ControlGroup
+  exit 1
+fi
+sleep 0.2
+[[ $(wc -c <"$prefix/workspace/launch-count") -gt "$before" ]]
 wait_file "$op/complete.json"
-jq -e '.termination=="ProcessTimedOut" and .exitCode==137 and .descendantsEmpty and .outputComplete' "$op/complete.json" >/dev/null
-echo 'PASS runtime timeout records the forced exit after whole-group settlement'
+jq -e '.termination=="ProcessTimedOut" and (.exitCode==137 or .exitCode==null) and .descendantsEmpty and .outputComplete' "$op/complete.json" >/dev/null
+echo 'PASS runtime timeout settles the whole group without inventing an unavailable exit status'
 prepare 5
 accepted="$fingerprint"
 fingerprint="sha256:$(printf '%064x' 999)"
@@ -132,5 +141,10 @@ mkdir -m 755 "$prefix/not-private"
 if "$prefix/collector" "$prefix/not-private" "$unit" "$fingerprint" 1024 30; then exit 1; fi
 [[ ! -e "$prefix/not-private/unresolved.json" && ! -e "$prefix/not-private/ready" ]]
 echo 'PASS an unqualified metadata directory receives no collector writes'
-echo 'Collector probe passed (7 cases); supervisor RPC and PostgreSQL integration remain unqualified.'
+prepare 6
+launch /bin/env -i HOME=/scratch /bin/payload argv '$HOME' '%n' '' $'line\né'
+wait_file "$op/complete.json"
+jq -e '.exitCode==0 and .outputComplete and .descendantsEmpty' "$op/complete.json" >/dev/null
+echo 'PASS literal dollar, percent, empty and Unicode arguments survive a clean environment under the production profile'
+echo 'Collector probe passed (8 cases); supervisor RPC and PostgreSQL integration remain unqualified.'
 GUEST
