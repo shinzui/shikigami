@@ -12,8 +12,10 @@ module Shikigami.Workspace.ContainedFile
     readContainedFile,
     containedTargetIdentity,
     replaceContainedFile,
+    replaceContainedFileOwned,
     ensurePrivateDirectory,
     checkPrivateDirectory,
+    provisionContainedRoot,
   )
 where
 
@@ -47,9 +49,13 @@ foreign import ccall unsafe "shikigami_ws_identity" identifyTarget :: Ptr () -> 
 
 foreign import ccall safe "shikigami_ws_replace" replaceTarget :: Ptr () -> CString -> CString -> Ptr Word8 -> CInt -> Ptr Word8 -> CInt -> IO CInt
 
+foreign import ccall safe "shikigami_ws_replace_owned" replaceOwnedTarget :: Ptr () -> CString -> CString -> Ptr Word8 -> CInt -> Ptr Word8 -> CInt -> CInt -> IO CInt
+
 foreign import ccall safe "shikigami_ws_lock" lockWorkspace :: CString -> IO CInt
 
 foreign import ccall unsafe "shikigami_ws_unlock" unlockWorkspace :: CInt -> IO ()
+
+foreign import ccall safe "shikigami_ws_provision" provisionRoot :: Ptr () -> CInt -> CInt -> IO CInt
 
 withContainedFile :: FilePath -> Text -> (ContainedFile -> IO (Either FileError a)) -> IO (Either FileError a)
 withContainedFile root path use
@@ -80,13 +86,24 @@ containedTargetIdentity (ContainedFile pointer) = allocaBytes 128 \buffer -> do
   if size < 0 then pure (Left FileUnavailable) else Right . Encoding.decodeUtf8 <$> Bytes.packCStringLen (buffer, fromIntegral size)
 
 replaceContainedFile :: FilePath -> ContainedFile -> Maybe Bytes.ByteString -> Bytes.ByteString -> IO (Either FileError ())
-replaceContainedFile metadata (ContainedFile pointer) expected content
+replaceContainedFile = replaceWith replaceTarget
+
+-- Revision 2 publishes with the reserved workspace identity. Metadata remains
+-- provider-owned; unprivileged repository commands receive neither it nor its
+-- descriptors. The caller must retain the qualified profile and process fence.
+replaceContainedFileOwned :: Int -> FilePath -> ContainedFile -> Maybe Bytes.ByteString -> Bytes.ByteString -> IO (Either FileError ())
+replaceContainedFileOwned uid metadata target expected content
+  | uid < 1000 || uid > 2147483647 = pure (Left FilePathRefused)
+  | otherwise = replaceWith (\pointer directory nonce before expectedSize after size -> replaceOwnedTarget pointer directory nonce before expectedSize after size (fromIntegral uid)) metadata target expected content
+
+replaceWith :: (Ptr () -> CString -> CString -> Ptr Word8 -> CInt -> Ptr Word8 -> CInt -> IO CInt) -> FilePath -> ContainedFile -> Maybe Bytes.ByteString -> Bytes.ByteString -> IO (Either FileError ())
+replaceWith replace metadata (ContainedFile pointer) expected content
   | Bytes.length content > 262144 || maybe False ((> 262144) . Bytes.length) expected = pure (Left FileTooLarge)
   | otherwise = do
       nonce <- ("replace-" <>) . UUID.toString <$> UUID.nextRandom
       withCString metadata \directory -> withCString nonce \temporary ->
         Bytes.useAsCString (maybe Bytes.empty id expected) \before -> Bytes.useAsCStringLen content \(after, size) -> do
-          result <- replaceTarget pointer directory temporary (castPtr before) (maybe (-1) (fromIntegral . Bytes.length) expected) (castPtr after) (fromIntegral size)
+          result <- replace pointer directory temporary (castPtr before) (maybe (-1) (fromIntegral . Bytes.length) expected) (castPtr after) (fromIntegral size)
           pure case result of
             0 -> Right ()
             -3 -> Left FileContentConflict
@@ -101,3 +118,16 @@ checkPrivateDirectory :: FilePath -> IO (Either FileError ())
 checkPrivateDirectory path = withCString path \name -> do
   result <- isPrivateDirectory name
   pure (if result == 0 then Right () else Left FileUnavailable)
+
+-- The caller holds the workspace lock, checks no process/effect is pending and
+-- obtains fresh target-bound authority before apply=True. A check never writes.
+provisionContainedRoot :: Int -> Bool -> ContainedFile -> IO (Either FileError ())
+provisionContainedRoot uid apply (ContainedFile target)
+  | uid < 1000 || uid > 2147483647 = pure (Left FilePathRefused)
+  | otherwise = do
+      result <- provisionRoot target (fromIntegral uid) (if apply then 1 else 0)
+      pure case result of
+        0 -> Right ()
+        -3 -> Left FileContentConflict
+        -5 -> Left FileTooLarge
+        _ -> Left FileUnavailable

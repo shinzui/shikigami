@@ -158,6 +158,21 @@ helpers cannot reside on writable workspace/scratch mounts; host images and
 collectors cannot come from workspace storage. These metadata contracts do
 not establish native Unix provisioning, effective containment or fencing.
 
+Native provisioning has a separate fresh C13 target for the pre-model
+assignment, reserved Unix identity, retained policy, host boot and anchored
+workspace/scratch roots; it does not fabricate an execution attempt. Its
+directory primitive requires provider serialization and no active repository
+process, validates the entire tree before changing ownership, pins each inode
+without following symlinks, and refuses special files and hard links. The first
+process filesystem profile provisions at most 100,000 regular files/directories
+with nesting at most 128; unsupported trees refuse. Interrupted changes can
+recover only under the same reserved identity. Private metadata stays outside
+the provisioned tree. A separate owned-publication primitive creates/replaces
+files as that identity and preserves executable intent, so later isolated
+commands retain access. Existing file-only publication keeps its original
+behavior. These primitives and their Apple-container checks do not enable a
+process-backed file adapter or qualify account/admission recovery.
+
 ## Alternatives rejected
 
 Releasing the unknown attempt to make room for its replacement would invent

@@ -10,6 +10,7 @@ import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Prelude
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), bundleBase, bundleDigest, bundleRepository, nativeFilePolicy, supervisedFilePolicy, validWorkspacePath)
 import Shikigami.Workspace.Process
+import Shikigami.Workspace.ProcessPolicy
 import Shikigami.Workspace.Types
 
 -- Whole-file compare-and-replace, including creation in an existing directory.
@@ -56,6 +57,29 @@ workspaceAllocationAction binding assignment = do
   unless (not (Text.null assignment) && Text.length assignment <= 256) (Left FileEffectRefused)
   let digest = Text.replace ":" "-" (versionedDigest "shikigami.workspace-admission-action/1" (toJSON (workspaceBindingDigest binding, assignment)))
   either (const (Left FileEffectRefused)) (Right . InvokeCapabilityTool) (mkCapabilityToolTarget "shikigami.workspace" "1" ("admit-" <> digest))
+
+-- Native provisioning precedes the first model request, so it has assignment
+-- coordinates rather than a fabricated execution attempt. Bind the exact
+-- reserved Unix identity, frozen policy and anchored roots into fresh C13.
+workspaceProvisionAction :: WorkspaceBinding -> WorkspaceAdmission -> ProcessProfile -> Text -> Text -> Text -> Either FileEffectError AgentAction
+workspaceProvisionAction binding admission profile boot filesTarget scratchTarget = do
+  unless (admission.filePolicy == Just supervisedFilePolicy && admission.workspace == binding.workspace && admission.bindingDigest == workspaceBindingDigest binding && admission.runId == binding.request.runId && admission.rootId == binding.request.rootId && admission.owner == binding.request.owner && admission.epoch == binding.request.epoch && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base && bounded admission.assignmentId) (Left FileEffectRefused)
+  unless (validProcessProfile profile && profile.bindingDigest == workspaceBindingDigest binding && profile.instructionDigest == bundleDigest admission.instructions && processPolicyIdentity profile.policy == binding.policyRevision && hostIdentity boot && all (\target -> bounded target && Text.length target <= 128) [filesTarget, scratchTarget]) (Left FileEffectRefused)
+  let coordinates =
+        Aeson.object
+          [ "binding" Aeson..= workspaceBindingDigest binding,
+            "filePolicy" Aeson..= admission.filePolicy,
+            "assignment" Aeson..= admission.assignmentId,
+            "owner" Aeson..= admission.owner,
+            "epoch" Aeson..= admission.epoch,
+            "profile" Aeson..= profile,
+            "boot" Aeson..= boot,
+            "filesTarget" Aeson..= filesTarget,
+            "scratchTarget" Aeson..= scratchTarget
+          ]
+      digest = Text.replace ":" "-" (versionedDigest "shikigami.workspace-provision-action/1" coordinates)
+      revision = "2-" <> Text.replace ":" "-" (workspaceBindingDigest binding)
+  either (const (Left FileEffectRefused)) (Right . InvokeCapabilityTool) (mkCapabilityToolTarget "shikigami.workspace" revision ("provision-" <> digest))
 
 -- Digest every accepted coordinate into the closed C13 capability-tool target.
 -- The concrete provider obtains target from an anchored parent descriptor and

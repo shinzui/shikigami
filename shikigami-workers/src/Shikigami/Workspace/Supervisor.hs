@@ -47,7 +47,7 @@ import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude
 import Shikigami.Store.ExecutionResources qualified as Roots
-import Shikigami.Workspace.Allocation (workspaceFiles, workspaceMetadata)
+import Shikigami.Workspace.Allocation (workspaceFiles, workspaceMetadata, workspaceScratch)
 import Shikigami.Workspace.Collector
 import Shikigami.Workspace.ContainedFile
 import Shikigami.Workspace.Instructions
@@ -228,7 +228,7 @@ lockedProcess runtime accepted = do
       let candidate = record & #bootId .~ Just boot & #phase .~ ProcessLaunchRequested
           directory = processDirectory binding record
           files = workspaceFiles binding.storageRoot binding
-          scratch = binding.storageRoot </> Text.unpack binding.workspace.resource </> "scratch"
+          scratch = workspaceScratch binding.storageRoot binding
           path = (if Text.null command.directory then "" else command.directory <> "/") <> ".shikigami-process-target"
       -- Validate all serialization constraints before consuming the transition.
       _ <- Systemd.processArguments now accepted.profile files scratch directory candidate >>= either (abort . backendError) pure

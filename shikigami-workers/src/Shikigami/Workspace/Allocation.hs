@@ -1,6 +1,6 @@
 -- | Trusted allocation only. The private provider root must be operator-owned
 -- and inaccessible to workspace processes. No tool may select these paths.
-module Shikigami.Workspace.Allocation (allocateWorkspace, allocateWorkspaceWithCheckpoint, workspaceFiles, workspaceMetadata) where
+module Shikigami.Workspace.Allocation (allocateWorkspace, allocateWorkspaceWithCheckpoint, workspaceFiles, workspaceMetadata, workspaceScratch) where
 
 import Control.Exception (IOException, catch)
 import Data.Aeson qualified as Aeson
@@ -23,6 +23,9 @@ workspaceFiles root binding = root </> Text.unpack binding.workspace.resource </
 
 workspaceMetadata :: FilePath -> WorkspaceBinding -> FilePath
 workspaceMetadata root binding = root </> Text.unpack binding.workspace.resource </> "metadata"
+
+workspaceScratch :: FilePath -> WorkspaceBinding -> FilePath
+workspaceScratch root binding = root </> Text.unpack binding.workspace.resource </> "scratch"
 
 -- | Populate a fresh staging directory and atomically publish it. Interrupted
 -- staging directories are never exposed or reused. A duplicate publication
@@ -72,6 +75,7 @@ allocateWorkspaceWithCheckpoint checkpoint root binding state = catch work (\(_ 
           let staging = root </> ("staging-" <> Text.unpack nonce)
               metadata = staging </> "metadata"
               files = staging </> "files"
+              scratch = staging </> "scratch"
           createDirectory staging
           (cloned, _, _) <- git ["clone", "--bare", "--no-hardlinks", "--dissociate", "--", binding.source, metadata]
           privateMetadata <- if cloned == ExitSuccess then ensurePrivateDirectory metadata else pure (Left FileUnavailable)
@@ -79,8 +83,10 @@ allocateWorkspaceWithCheckpoint checkpoint root binding state = catch work (\(_ 
             then pure (Left WorkspaceAllocationRefused)
             else do
               createDirectory files
+              createDirectory scratch
+              scratchPrivate <- ensurePrivateDirectory scratch
               (checked, _, _) <- git ["--git-dir=" <> metadata, "--work-tree=" <> files, "checkout", "--force", "--detach", Text.unpack binding.base]
-              if checked /= ExitSuccess
+              if checked /= ExitSuccess || scratchPrivate /= Right ()
                 then pure (Left WorkspaceAllocationRefused)
                 else do
                   checkpoint

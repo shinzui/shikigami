@@ -24,6 +24,7 @@ import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadR
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Process
+import Shikigami.Workspace.ProcessPolicy
 import Shikigami.Workspace.Provider
 import Shikigami.Workspace.Reference
 import Shikigami.Workspace.Types
@@ -161,6 +162,36 @@ tests =
             record & #invocationId .~ Just boot,
             record & #routing .~ Nothing
           ]
+        let policy = ProcessPolicy 1 (ProcessImage "/qualified/root" command.profile "/bin/env" "/bin/deadline" "/qualified/collector") command.profile [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] ["src"]
+            provisionBinding = binding & #policyRevision .~ processPolicyIdentity policy
+        provisionAdmission <- (\a -> a & #filePolicy .~ Just supervisedFilePolicy) <$> admissionFor provisionBinding
+        let profileFor b a selected uid = ProcessProfile (workspaceBindingDigest b) (bundleDigest a.instructions) selected uid uid
+            profile = profileFor provisionBinding provisionAdmission policy 62001
+        provisionAction <- right (workspaceProvisionAction provisionBinding provisionAdmission profile boot "device:files" "device:scratch")
+        let provisionRequest = Kikan.AuthorizeActionRequest principal provisionAction requestId
+            provisionGrant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText principal))) (RelationName (Kikan.actionOperation provisionAction)) (ObjectRef (ObjectType (Kikan.actionObjectType provisionAction)) (Kikan.actionObjectId provisionAction)) (En.ConsistencyToken "snapshot-1") (En.SchemaHash "schema-workspace-fixture") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId "workspace-proof")) Nothing
+        provisionMinted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed provisionGrant
+        provisionProof <- right (Kikan.mkDecisionProof (decodeUtf8 provisionMinted.token))
+        let provisionIssued = Kikan.IssuedActionProof provisionProof provisionMinted.expiresAt [] checkedAt
+        _ <- right =<< verifyIssuedAction verifier now provisionRequest provisionIssued
+        changedProvision <-
+          mapM
+            right
+            [ workspaceProvisionAction provisionBinding provisionAdmission (profile & #userId .~ 62002 & #groupId .~ 62002) boot "device:files" "device:scratch",
+              workspaceProvisionAction provisionBinding (provisionAdmission & #assignmentId .~ "other-assignment") profile boot "device:files" "device:scratch",
+              workspaceProvisionAction provisionBinding provisionAdmission profile boot "device:other-files" "device:scratch",
+              workspaceProvisionAction provisionBinding provisionAdmission profile boot "device:files" "device:other-scratch",
+              workspaceProvisionAction provisionBinding provisionAdmission profile "22222222-2222-4222-8222-222222222222" "device:files" "device:scratch"
+            ]
+        let changedProcessPolicy = policy & #image . #rootIdentity .~ ("sha256:" <> Text.replicate 64 "b")
+            changedProvisionBinding = provisionBinding & #policyRevision .~ processPolicyIdentity changedProcessPolicy
+        changedProvisionAdmission <- (\a -> a & #filePolicy .~ Just supervisedFilePolicy) <$> admissionFor changedProvisionBinding
+        changedPolicyAction <- right (workspaceProvisionAction changedProvisionBinding changedProvisionAdmission (profileFor changedProvisionBinding changedProvisionAdmission changedProcessPolicy 62001) boot "device:files" "device:scratch")
+        mapM_
+          (\action -> verifyIssuedAction verifier now (provisionRequest & #action .~ action) provisionIssued >>= \answer -> assertBool "provisioning proof binds identity, policy, assignment, host and anchored roots" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False))
+          (changedPolicyAction : changedProvision)
+        workspaceProvisionAction provisionBinding (provisionAdmission & #filePolicy .~ Just nativeFilePolicy) profile boot "device:files" "device:scratch" @?= Left FileEffectRefused
+        workspaceProvisionAction provisionBinding provisionAdmission (profile & #instructionDigest .~ command.profile) boot "device:files" "device:scratch" @?= Left FileEffectRefused
     ]
 
 right :: (Show e) => Either e a -> IO a

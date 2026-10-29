@@ -48,6 +48,14 @@ flags, refusal of another endpoint, and retention of that listener across
 SIGKILL and service restart (4 checks). It is listener substrate evidence;
 accepted-attempt recovery still requires the full supervisor fixture.
 
+`bash tests/workspace/probe-provision-apple.sh` checks the native directory
+provisioning and owned-file publication primitives (11 cases). It refuses
+symlinks, hard links, FIFOs, root identities and substituted roots before
+ownership changes, recovers partial changes for the same reserved identity,
+and verifies service access to newly published files under the production
+containment properties. It does not qualify account creation, coupled durable
+admission or supervisor restart recovery.
+
 `bash tests/workspace/probe-collector-apple.sh` qualifies the independent bounded
 output collector and absolute deadline guard using the compiled production
 systemd properties (14 cases).
