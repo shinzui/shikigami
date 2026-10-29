@@ -10,6 +10,7 @@ import Shikigami.TelemetrySpec qualified as TelemetrySpec
 import Shikigami.TimerRecoverySpec qualified as TimerRecoverySpec
 import Shikigami.Workers.CommandSpec qualified as CommandSpec
 import Shikigami.Workers.SupervisionSpec qualified as SupervisionSpec
+import Shikigami.WorkspaceStoreSpec qualified as WorkspaceStoreSpec
 import System.Environment (lookupEnv)
 import Test.Tasty (defaultMain, testGroup)
 
@@ -22,7 +23,8 @@ main = do
       defaultMain
         ( testGroup
             "shikigami-workers"
-            [ CommandSpec.tests,
+            [ WorkspaceStoreSpec.tests databaseFixture,
+              CommandSpec.tests,
               HealthWorkerSpec.tests,
               RunJobWorkerSpec.tests databaseFixture,
               StatusSpec.tests databaseFixture,

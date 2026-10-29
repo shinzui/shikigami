@@ -77,6 +77,15 @@ before receiving the checkpoint acknowledgement would conceal a cross-owner
 conflict. Retrying a new transfer after an unknown receipt would duplicate an
 already accepted ownership change.
 
+Allocation reserves a stable workspace resource before filesystem IO and freezes its
+repository, base, policy, source and provider storage root together with the assignment
+coordinates. A retry cannot select another directory or reset accepted files. Private
+Git metadata remains outside the mutable files exposed to validation. The concrete Git
+allocator belongs in the workers package; core retains shared contracts and database
+transactions. An allocation marker proves only publication of a complete private copy.
+It grants no mutation authority and supplies no evidence that processes have settled or
+that an old owner has been fenced. See [plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md).
+
 ## Consequences
 
 An unresolved handoff may intentionally remain frozen until its real owners

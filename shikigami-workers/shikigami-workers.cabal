@@ -46,6 +46,7 @@ library
     Shikigami.Workers.Shutdown
     Shikigami.Workers.Subscription
     Shikigami.Workers.Supervision
+    Shikigami.Workspace.Allocation
 
   build-depends:
     aeson >=2.2,
@@ -77,6 +78,7 @@ library
     lens >=5.2,
     optparse-applicative >=0.19 && <0.20,
     pgmq-hasql,
+    process,
     servant >=0.20 && <0.21,
     servant-client >=0.20 && <0.21,
     servant-health >=0.1 && <0.2,
@@ -165,6 +167,7 @@ test-suite shikigami-workers-test
     Shikigami.TimerRecoverySpec
     Shikigami.Workers.CommandSpec
     Shikigami.Workers.SupervisionSpec
+    Shikigami.WorkspaceStoreSpec
 
   ghc-options:
     -threaded
@@ -173,13 +176,17 @@ test-suite shikigami-workers-test
 
   build-depends:
     aeson,
+    async,
     base,
     bytestring,
     containers,
+    directory,
     effectful,
+    filepath,
     generic-lens,
     hasql,
     hasql-pool,
+    hasql-transaction,
     hs-opentelemetry-exporter-in-memory,
     hs-opentelemetry-sdk,
     keiro,

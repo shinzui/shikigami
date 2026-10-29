@@ -21,6 +21,11 @@ provenance:
       at: 2026-10-29T13:12:10Z
       mode: "update"
       note: "Resolve review findings with exact durable workspace adapters and attempt context, a qualified Linux/systemd supervisor design, and frozen scoped repository instructions; align acceptance and ADRs."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-29T13:51:12Z
+      mode: "implement"
+      note: "Implement durable assignment reservations and private Git allocation with recovery fixtures"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -42,14 +47,16 @@ Implement [IR-11](../improvement-requests/provide-governed-mutable-repository-wo
 ## Progress
 
 
-- [ ] Milestone 1: Admit canonical repository identities and immutable bases; persist assignment-to-workspace bindings and prove isolation and recovery of allocation.
+- [x] Milestone 1: Admit canonical repository identities and immutable bases; persist assignment-to-workspace bindings and prove isolation and recovery of allocation.
 - [ ] Milestone 2: Enforce fresh exact authority and conditional ownership for contained reads and structured edits, with scoped repository instructions frozen into model context; refuse malicious paths without effects.
 - [ ] Milestone 3: Qualify Linux/systemd containment and independent process supervision, then execute bounded validation and local Git operations with retained receipts and restart reconciliation.
 - [ ] Milestone 4: Install declared mutation providers in durable workers and prove replay-safe end-to-end dependency upgrades.
 - [ ] Milestone 5: Fence real processes during handoff, integrate revision-pinned artifacts and safely clean terminal workspaces.
 - [ ] Milestone 6: Qualify all IR-11 acceptance cases, update operational documentation and consumer plan gates, and distill durable decisions.
 
-Milestone 1 is in progress: `Shikigami.Workspace.Catalog` now rejects duplicate/unknown identities, caller paths, mutable or unapproved revisions and malformed operator configuration. It preserves an opaque resolved source and exact base. Durable assignment bindings and real worktree allocation/isolation remain to implement. The initial missing Kikan-En packages were restored from upstream commit `16704290d527d413568bfa40c983f5c3604c35c8`; the baseline core build passes. FRIC-14 is resolved. Seven catalog tests and all 511 core tests pass (2026-10-28), including default parallelism after isolating authorization fixture provider keys (FRIC-15).
+Milestone 1 verified (2026-10-29): `Workspace.Types` and `Workspace.Store` retain immutable assignment/run/root/principal/owner/epoch/repository/base/policy/source/storage-root bindings in PostgreSQL. `shikigami-workers/src/Shikigami/Workspace/Allocation.hs` allocates private Git copies with separate provider-owned metadata and atomically publishes complete staging directories. Seven real PostgreSQL/Git fixtures pass, covering concurrent reservation/allocation, conflicting coordinates, independent files/indexes, asynchronous worker interruption before publication, lost acknowledgement, non-commit refusal, symlink substitution and missing-ready-directory refusal. The source fixture compares all regular file bytes, permissions and modification times including Git metadata. The workers focused command passes seven cases, the full workers suite passes 106 cases, the migration definition suite passes five cases, and the core suite passes all 511 cases. Allocation is a trusted internal primitive; no mutation tools or worker admission are installed yet.
+
+Next is Milestone 2's fresh authorization, contained structured edits, frozen scoped instructions and the early durable-adapter vertical slice. The Apple container environment probe described below passes, but the independent supervisor and full Linux qualification runner remain unimplemented.
 
 ## Surprises & Discoveries
 
@@ -57,6 +64,10 @@ Milestone 1 is in progress: `Shikigami.Workspace.Catalog` now rejects duplicate/
 The baseline build fails before solving dependencies because `kikan-en-contract` and `kikan-en-client` are absent from the checkout referenced by `cabal.project`. The registered producer checkout has only one worktree. A clean fast-forward to the verified upstream master commit `16704290d527d413568bfa40c983f5c3604c35c8` restored both packages and the baseline core build. FRIC-14 is resolved.
 
 2026-10-29 review: `Capability.Catalog.admitOperationClass` and `Execution.Tools.withBoundTools` independently reject durable mutation overlays. `withExecutionTools` passes accepted operation coordinates only to native factories; overlay acquisition receives run/principal/mode. `Execution.Start.admitSkillExecution` freezes Skill instructions without repository instructions. Installing providers alone cannot bridge these boundaries. The focused catalog command passed all seven tests during review; it supplies no process, fencing or durable mutation evidence.
+
+2026-10-29 implementation: the package architecture gate rejects `process` in core. Keep shared types and PostgreSQL transactions in core; place Git allocation and its PostgreSQL/Git fixture in workers. FRIC-16 records the documentation mismatch and its resolution. This changes placement, not mutation admission or acceptance.
+
+2026-10-29 environment: a disposable Apple container running the cached immutable kind node image has systemd 257 and writable cgroup v2. Installing D-Bus enables systemd-run; the effective PID/network/capability probe passes. This is environment evidence only, not supervisor/restart/RootDirectory qualification.
 
 ## Decision Log
 
@@ -71,10 +82,14 @@ The baseline build fails before solving dependencies because `kikan-en-contract`
 
 2026-10-29: Freeze repository `AGENTS.md` contents and directory scopes at assignment admission and include them in protected model context. Workspace edits cannot change an admitted assignment's governing instructions; a subsequent assignment explicitly admits the next instruction identity.
 
+2026-10-29: Preserve the enforced core/leaf dependency boundary: shared workspace types and transactions remain in core, while Git allocation and its database/Git fixtures live in workers. Allocation receipts establish publication only and confer neither mutation authority nor fencing proof.
+
+2026-10-29: Use Apple containers as the preferred local Linux qualification environment, per user direction. The configured remote builder is fallback only. The passing environment probe does not close the independent supervisor qualification gate.
+
 ## Outcomes & Retrospective
 
 
-The pure repository admission boundary is implemented; no full milestone has passed. FRIC-14 was resolved by restoring upstream dependency source and verifying the baseline core build. The provider, durable workspace binding, effect recovery and acceptance fixtures remain outstanding; IR-11 remains undelivered. FRIC-15 was resolved by giving the typed and dynamic authorization fixtures separate global provider keys; the parallel core suite passes all 511 tests. Existing authorization ADR constraints remain unchanged; no new durable architectural decision is claimed by this pure admission slice.
+Milestone 1 is implemented and verified; the five remaining milestones and full IR-11 acceptance are not delivered. FRIC-14 was resolved by restoring upstream dependency source and verifying the baseline core build. The governed mutation provider, effect recovery and complete acceptance fixtures remain outstanding; IR-11 remains undelivered. FRIC-15 was resolved by giving the typed and dynamic authorization fixtures separate global provider keys; the parallel core suite passes all 511 tests. Existing authorization ADR constraints remain unchanged. The existing ADR-0063 now also distinguishes allocation receipts from fencing proof. FRIC-16 is resolved by aligning this plan with the enforced core/leaf package boundary.
 
 ## Context and Orientation
 
@@ -85,7 +100,7 @@ A worktree is a separate set of mutable repository files and a separate Git inde
 
 `shikigami-workers/src/Shikigami/Workers/Config.hs` is the durable composition root. `shikigami-core/src/Shikigami/Execution/Executor.hs` owns actual attempts and exposes `ExecutionRuntime.withTools` with accepted operation context. `Shikigami.Execution.Store` and `Shikigami.Execution.Transcript` retain outcomes and protected payload references. New workspace IO must integrate there, preserving operation identity and receipts across a crash between effect completion and acknowledgement.
 
-`shikigami-core/src/Shikigami/Capability/Catalog.hs` owns the pure operation-class gate; `shikigami-core/src/Shikigami/Execution/Tools.hs` owns the second gate and live tool binding. `shikigami-core/src/Shikigami/Execution/Runner.hs` defines logical `OperationContext`, which does not identify an actual attempt. Keep that distinction when adding dispatch plumbing. `shikigami-core/src/Shikigami/Execution/Start.hs`, `shikigami-core/src/Shikigami/Execution/Transcript.hs` and `shikigami-core/src/Shikigami/Execution/Policy.hs` own frozen instruction input, its protected snapshot, and context selection. These are required integration surfaces, not optional provider internals.
+`shikigami-core/src/Shikigami/Capability/Catalog.hs` owns the pure operation-class gate; `shikigami-core/src/Shikigami/Execution/Tools.hs` owns the second gate and live tool binding. `shikigami-core/src/Shikigami/Execution/Runner.hs` defines logical `OperationContext`, which does not identify an actual attempt. Keep that distinction when adding dispatch plumbing. `shikigami-core/src/Shikigami/Execution/Start.hs`, `shikigami-core/src/Shikigami/Execution/Transcript.hs` and `shikigami-core/src/Shikigami/Execution/Policy.hs` own frozen instruction input, its protected snapshot, and context selection. These are required integration surfaces, not optional provider internals. Concrete Git/process IO belongs in workers because core is forbidden from linking process adapters; shared contracts and transactional stores remain in core.
 
 `shikigami-core/src/Shikigami/WorkerSession/Transfer.hs` defines `WorkspaceRef`, `TransferIntent`, `FenceProof` and `WorkspaceProvider`. Its `reconcile` must prove old-owner settlement; `admitWrite` must conditionally check the owner and epoch at the actual effect boundary. A separate IR-13 ownership provider supplies objective receipts. Do not fabricate those receipts here or mark plan 84 complete without them.
 
@@ -132,6 +147,14 @@ Milestone 6 adds `tests/workspace/` fixtures and operator documentation in `docs
 
 ## Concrete Steps
 
+
+The delivered allocation fixtures run in the workers suite because they exercise the concrete Git adapter. The core PostgreSQL workspace group remains to add for the next milestone. The environment-only Apple container probe is:
+
+```bash
+bash tests/workspace/probe-apple-container.sh
+```
+
+It creates a disposable image-pinned Linux container without host mounts, installs D-Bus, checks systemd/cgroup v2 and effective PID/network/capability isolation, prints two passing cases and stops/removes its own container. It does not replace `run-linux.sh --prototype` or `--qualify`. Apple containers are the user's preferred qualification environment; use the configured remote builder only if they cannot support the required fixture.
 
 Run from the repository root. The configured Kikan-En checkout was restored to upstream commit `16704290d527d413568bfa40c983f5c3604c35c8`, which compiles against this project's existing imports. Discover dependencies with Mori and verify released registry versions and upstream tags before changing any pins; this plan does not authorize guessing compatible versions.
 
@@ -206,3 +229,5 @@ The dependency owner is `mori://shinzui/kikan-en`, specifically its contract and
 The selected operating-system backend is `mori://systemd/systemd`, project-relative `man/systemd.exec.xml`, `man/systemd.service.xml` and `man/systemd.kill.xml`; artifact-level URIs are pending. Mori has no registered systemd source at this revision, so the planning lookup used the corresponding official upstream manuals. No package version or pin is selected here. Implementation must verify the installed backend and authoritative releases before adding bounds, and the fixture must test effective containment rather than assuming a setting is supported. The supervisor owns process settlement facts, while `Shikigami.Execution.Store` remains the sole owner of accepted attempts, resource accounting and terminal publication.
 
 Revision note (2026-10-29): Address the three review findings by defining exact durable-adapter admission and dispatch plumbing, selecting a Linux/systemd supervisor with a mandatory early recovery prototype, and freezing scoped repository instructions into protected model context. Add observable negative and restart cases, concrete suite/runner commands and matching ADR amendments. All six milestones and all nine IR-11 acceptance obligations remain open to implementation; this documentation update does not claim them passed.
+
+Implementation revision (2026-10-29): Complete the allocation milestone with durable immutable reservations and private Git copies, align concrete Git IO with the workers package boundary, and add the preferred Apple container environment probe. Preserve all remaining mutation, instruction, supervisor, integration and fencing gates as unfinished.

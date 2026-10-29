@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-10-29
+* **Update**: FRIC-16 resolved: Align the implementation plan with the enforced package boundary.
+* **Addition**: FRIC-16 records detour documentation friction with mori://shinzui/shikigami: Workspace allocation placement conflicts with core package boundary
+
 ## 2026-10-28
 * **Update**: FRIC-15 resolved: Isolate authorization fixture registry keys and verify the parallel core suite
 * **Addition**: FRIC-15 records detour tooling friction with mori://shinzui/shikigami: Authorization tests share a process-global model provider key
