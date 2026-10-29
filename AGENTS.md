@@ -32,3 +32,10 @@ workspace/scratch writes, effective PID/capability/syscall restrictions, and
 whole-cgroup settlement of a detached SIGTERM-ignoring writer (13 checks).
 This is substrate qualification; independent supervisor and receipt-recovery
 qualification still belongs to the plan implementing those services.
+
+`bash tests/workspace/probe-collector-apple.sh` qualifies the independent bounded
+output collector using the compiled production systemd properties (eight cases).
+It covers output draining, duplicate-unit refusal, cancellation, timeout,
+collector loss, mismatched evidence, metadata privacy and literal arguments in
+a cleared environment. Full supervisor RPC, accepted launch and restart
+qualification remain separate gates; this probe does not enable process tools.

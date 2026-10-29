@@ -54,7 +54,9 @@ data ProcessReceipt = ProcessReceipt
     unit :: !Text,
     bootId :: !Text,
     invocationId :: !Text,
-    exitCode :: !Int,
+    -- systemd can retain a timeout/cancellation outcome without a numeric wait
+    -- status. Preserve that absence; never manufacture a signal exit code.
+    exitCode :: !(Maybe Int),
     termination :: !ProcessTermination,
     stdout :: !CapturedOutput,
     stderr :: !CapturedOutput,
@@ -109,6 +111,10 @@ hostIdentity :: Text -> Bool
 hostIdentity value = maybe False (/= UUID.nil) (UUID.fromText value) || (Text.length value == 32 && Text.any (/= '0') value && Text.all (\c -> (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) value)
 
 validProcessReceipt :: ProcessRecord -> ProcessReceipt -> Bool
-validProcessReceipt record receipt = receipt.operationId == record.operationId && receipt.attemptId == record.attemptId && receipt.generation == record.generation && receipt.fingerprint == record.fingerprint && receipt.bindingDigest == record.bindingDigest && receipt.unit == record.unit && Just receipt.bootId == record.bootId && Just receipt.invocationId == record.invocationId && hostIdentity receipt.bootId && hostIdentity receipt.invocationId && receipt.descendantsEmpty && receipt.outputComplete && receipt.exitCode >= 0 && receipt.exitCode <= 255 && all validOutput [receipt.stdout, receipt.stderr] && receipt.stdout.bytes + receipt.stderr.bytes <= toInteger record.command.outputBytes
+validProcessReceipt record receipt = receipt.operationId == record.operationId && receipt.attemptId == record.attemptId && receipt.generation == record.generation && receipt.fingerprint == record.fingerprint && receipt.bindingDigest == record.bindingDigest && receipt.unit == record.unit && Just receipt.bootId == record.bootId && Just receipt.invocationId == record.invocationId && hostIdentity receipt.bootId && hostIdentity receipt.invocationId && receipt.descendantsEmpty && receipt.outputComplete && validExit && all validOutput [receipt.stdout, receipt.stderr] && receipt.stdout.bytes + receipt.stderr.bytes <= toInteger record.command.outputBytes
   where
+    validExit = maybe (receipt.termination /= ProcessExited) (\code -> code >= 0 && code <= 255) receipt.exitCode
     validOutput output = bounded output.artifact && output.artifact `notElem` [".", ".."] && Text.all (\c -> (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c `elem` ("._-" :: String)) output.artifact && digestText output.digest && output.bytes >= 0
+
+processSucceeded :: ProcessReceipt -> Bool
+processSucceeded receipt = receipt.termination == ProcessExited && receipt.exitCode == Just 0 && receipt.descendantsEmpty && receipt.outputComplete

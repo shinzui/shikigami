@@ -89,7 +89,14 @@ tests =
         takeMVar reached
         withWorkspaceLock metadata (assertFailure "concurrent owner entered" >> pure (Right ())) >>= (@?= Left FileBusy)
         cancel owner
-        withWorkspaceLock metadata (pure (Right ())) >>= (@?= Right ())
+        withWorkspaceLock metadata (pure (Right ())) >>= (@?= Right ()),
+      testCase "receipt privacy checks refuse exposed directories without repairing and trusting them" $ withFixture \_ metadata _ -> do
+        checkPrivateDirectory metadata >>= (@?= Right ())
+        callProcess "chmod" ["755", metadata]
+        checkPrivateDirectory metadata >>= (@?= Left FileUnavailable)
+        checkPrivateDirectory metadata >>= (@?= Left FileUnavailable)
+        ensurePrivateDirectory metadata >>= (@?= Right ())
+        checkPrivateDirectory metadata >>= (@?= Right ())
     ]
 
 withFixture :: (FilePath -> FilePath -> FilePath -> IO a) -> IO a

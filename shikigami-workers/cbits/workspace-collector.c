@@ -3,6 +3,15 @@
  * this collector as a separate system service before the validation service. */
 #ifdef __linux__
 #define _GNU_SOURCE
+#endif
+#include "workspace-systemd-profile.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+const char *shikigami_workspace_systemd_profile(void) {
+  return SHIKIGAMI_WORKSPACE_SYSTEMD_PROFILE;
+}
+#ifdef __linux__
 #include <systemd/sd-bus.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -110,7 +119,7 @@ static int empty_group(const char *unit, const struct observation *state) {
   FILE *file = fopen(path, "r");
   /* Kernel removal requires an empty cgroup. This inference is permitted only
    * for a retained, matching terminal unit in the same boot, never a lost unit. */
-  if (!file) return errno == ENOENT && !*state->group ? 1 : -1;
+  if (!file) return errno == ENOENT ? (!*state->group ? 1 : 0) : -1;
   char line[128]; int populated = -1;
   while (fgets(line, sizeof(line), file)) { int value; if (sscanf(line, "populated %d", &value) == 1) populated = value; }
   fclose(file); return populated == 0 ? 1 : populated == 1 ? 0 : -1;
@@ -203,17 +212,32 @@ int shikigami_workspace_collect(const char *directory, const char *unit,
           if (a < 0 || b < 0) goto done;
         } while (a || b);
         if (fsync(outputs[0]) || fsync(outputs[1])) goto done;
+        stage = 10;
         struct observation confirmed = {0};
-        if (get_observation(bus, object, &confirmed) || confirmed.pid || strcmp(pinned, confirmed.invocation) ||
-            strcmp(description, confirmed.description) || strcmp(observation.substate, confirmed.substate) ||
-            strcmp(observation.result, confirmed.result) || observation.code != confirmed.code || observation.status != confirmed.status ||
-            read_boot(current_boot) || strcmp(boot, current_boot) || empty_group(unit, &confirmed) != 1) goto done;
+        if (get_observation(bus, object, &confirmed) || strcmp(pinned, confirmed.invocation) ||
+            strcmp(description, confirmed.description) || read_boot(current_boot) || strcmp(boot, current_boot)) goto done;
+        stage = 11;
+        int confirmed_empty = empty_group(unit, &confirmed);
+        if (confirmed_empty < 0) goto done;
+        /* Properties are read separately over D-Bus. A shutdown transition can
+         * cross those reads; retain the identity and wait for a stable outcome. */
+        if (confirmed.pid || !confirmed_empty || strcmp(observation.substate, confirmed.substate) ||
+            strcmp(observation.result, confirmed.result) || observation.code != confirmed.code || observation.status != confirmed.status) {
+          usleep(50000); continue;
+        }
+        stage = 12;
         int status = observation.code == 1 ? observation.status : (observation.code == 2 || observation.code == 3) ? 128 + observation.status : -1;
-        if (status < 0 || status > 255) goto done;
         const char *termination = !strcmp(observation.result, "timeout") ? "ProcessTimedOut" : "ProcessExited";
         if (fstatat(dir, "cancel", &state, AT_SYMLINK_NOFOLLOW) == 0) termination = "ProcessCancelled";
+        /* Some settled timeout units retain no numeric main wait status. The
+         * explicit timeout/cancel outcome and empty group still prove fencing,
+         * but cannot prove validation success or an invented signal exit code. */
+        if ((status < 0 && (observation.code || !strcmp(termination, "ProcessExited"))) || status > 255) goto done;
+        char exit_code[16] = "null";
+        if (status >= 0) snprintf(exit_code, sizeof(exit_code), "%d", status);
         char receipt[2048];
-        snprintf(receipt, sizeof(receipt), "{\"version\":1,\"unit\":\"%s\",\"fingerprint\":\"%s\",\"bootId\":\"%s\",\"invocationId\":\"%s\",\"exitCode\":%d,\"termination\":\"%s\",\"stdoutBytes\":%d,\"stderrBytes\":%d,\"stdoutTruncated\":%s,\"stderrTruncated\":%s,\"descendantsEmpty\":true,\"outputComplete\":true}\n", unit, fingerprint, boot, pinned, status, termination, captured[0], captured[1], truncated[0] ? "true" : "false", truncated[1] ? "true" : "false");
+        snprintf(receipt, sizeof(receipt), "{\"version\":2,\"unit\":\"%s\",\"fingerprint\":\"%s\",\"bootId\":\"%s\",\"invocationId\":\"%s\",\"exitCode\":%s,\"termination\":\"%s\",\"stdoutBytes\":%d,\"stderrBytes\":%d,\"stdoutTruncated\":%s,\"stderrTruncated\":%s,\"descendantsEmpty\":true,\"outputComplete\":true}\n", unit, fingerprint, boot, pinned, exit_code, termination, captured[0], captured[1], truncated[0] ? "true" : "false", truncated[1] ? "true" : "false");
+        stage = 13;
         if (atomic_fact(dir, "complete.json", receipt)) goto done;
         result = 0; goto done;
       }
@@ -236,6 +260,9 @@ int shikigami_workspace_collect(const char *directory, const char *unit, const c
 #endif
 #ifdef SHIKIGAMI_COLLECTOR_STANDALONE
 int main(int argc, char **argv) {
+  if (argc == 2 && !strcmp(argv[1], "--profile")) {
+    puts(shikigami_workspace_systemd_profile()); return 0;
+  }
   if (argc != 6) return 64;
   char *end1, *end2; long limit = strtol(argv[4], &end1, 10), seconds = strtol(argv[5], &end2, 10);
   if (*end1 || *end2 || limit < 1 || limit > 1048576 || seconds < 1 || seconds > 3660) return 64;

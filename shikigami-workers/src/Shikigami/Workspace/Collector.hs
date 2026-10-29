@@ -38,7 +38,7 @@ data CollectorFact = CollectorFact
     fingerprint :: !Text,
     bootId :: !Text,
     invocationId :: !Text,
-    exitCode :: !Int,
+    exitCode :: !(Maybe Int),
     termination :: !ProcessTermination,
     stdoutBytes :: !Integer,
     stderrBytes :: !Integer,
@@ -83,7 +83,7 @@ readCollectorReceipt directory record = do
     Right (Just bytes) -> case Aeson.eitherDecodeStrict @CollectorFact bytes of
       Left _ -> pure (Left CollectorEvidenceConflict)
       Right fact
-        | fact.version /= 1 || fact.unit /= record.unit || fact.fingerprint /= record.fingerprint -> pure (Left CollectorEvidenceConflict)
+        | fact.version `notElem` [1, 2] || (fact.version == 1 && isNothing fact.exitCode) || fact.unit /= record.unit || fact.fingerprint /= record.fingerprint -> pure (Left CollectorEvidenceConflict)
         | otherwise -> do
             out <- readPrivate directory "stdout" record.command.outputBytes
             err <- readPrivate directory "stderr" record.command.outputBytes
@@ -129,7 +129,7 @@ readPrivate :: FilePath -> Text -> Int -> IO (Either CollectorError (Maybe Bytes
 readPrivate directory path limit = catch work (\(_ :: IOException) -> pure (Left CollectorUnavailable))
   where
     work = do
-      private <- ensurePrivateDirectory directory
+      private <- checkPrivateDirectory directory
       case private of
         Left _ -> pure (Left CollectorUnavailable)
         Right () -> either (const (Left CollectorUnavailable)) Right <$> withContainedFile directory path (readContainedFile limit)

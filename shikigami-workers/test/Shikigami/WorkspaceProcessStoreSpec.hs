@@ -95,11 +95,12 @@ tests fixture =
             receipt & #generation .~ 2,
             receipt & #descendantsEmpty .~ False,
             receipt & #outputComplete .~ False,
+            receipt & #exitCode .~ Nothing,
             receipt & #stdout . #bytes .~ 100000
           ]
         run env (recordProcessReceiptTx receipt) >>= (@?= Right ())
         run env (recordProcessReceiptTx receipt) >>= (@?= Right ())
-        run env (recordProcessReceiptTx (receipt & #exitCode .~ 1)) >>= (@?= Left WorkspaceBindingConflict)
+        run env (recordProcessReceiptTx (receipt & #exitCode .~ Just 1)) >>= (@?= Left WorkspaceBindingConflict)
         run env (Store.checkWorkspaceOwnerTx binding binding.request.owner 0) >>= (@?= Left WorkspaceBindingConflict)
         Just retained <- run env (inspectProcessTx proposed.operationId)
         retained.phase @?= ProcessSettled,
@@ -152,6 +153,21 @@ tests fixture =
         run env (markProcessUnresolvedTx record) >>= (@?= Right ())
         writeCollector directory record []
         Just _ <- right =<< reconcileCollector env directory record
+        run env (Store.checkWorkspaceOperationTx binding binding.request.owner 0 (OperationId "later")) >>= (@?= Right ()),
+      testCase "timeout settlement preserves unavailable status and cannot be interpreted as successful validation" $ withProcess fixture \env binding proposed -> do
+        record <- launchRecord env binding proposed
+        directory <- collectorDirectory binding
+        let unknownStatus = ["exitCode" Aeson..= Aeson.Null, "termination" Aeson..= ProcessTimedOut]
+        writeCollector directory record unknownStatus
+        readCollectorReceipt directory record >>= (@?= Left CollectorEvidenceConflict)
+        writeCollector directory record (["version" Aeson..= (2 :: Int), "termination" Aeson..= ProcessExited, "exitCode" Aeson..= Aeson.Null])
+        readCollectorReceipt directory record >>= (@?= Left CollectorEvidenceConflict)
+        writeCollector directory record (["version" Aeson..= (2 :: Int)] <> unknownStatus)
+        Just receipt <- right =<< reconcileCollector env directory record
+        receipt.exitCode @?= Nothing
+        receipt.termination @?= ProcessTimedOut
+        assertBool "missing status is never validation success" (not (processSucceeded receipt))
+        assertBool "timeout remains failure even with a zero exit status" (not (processSucceeded (receipt & #exitCode .~ Just 0)))
         run env (Store.checkWorkspaceOperationTx binding binding.request.owner 0 (OperationId "later")) >>= (@?= Right ())
     ]
 
@@ -210,7 +226,7 @@ withProcess fixture use = Fixture.withFixture fixture \env _ root repository -> 
   use env binding record
 
 receiptFor :: ProcessRecord -> ProcessReceipt
-receiptFor record = ProcessReceipt record.operationId record.attemptId record.generation record.fingerprint record.bindingDigest record.unit boot invocation 0 ProcessExited (CapturedOutput "stdout" digest 0 False) (CapturedOutput "stderr" digest 0 False) True True
+receiptFor record = ProcessReceipt record.operationId record.attemptId record.generation record.fingerprint record.bindingDigest record.unit boot invocation (Just 0) ProcessExited (CapturedOutput "stdout" digest 0 False) (CapturedOutput "stderr" digest 0 False) True True
 
 digest :: Text.Text
 digest = "sha256:" <> Text.replicate 64 "a"

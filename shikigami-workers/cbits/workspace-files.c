@@ -181,3 +181,13 @@ int shikigami_ws_private(const char *path) {
   int result = fstat(fd, &state) || state.st_uid != geteuid() || fchmod(fd, 0700);
   close(fd); return result ? -1 : 0;
 }
+
+/* Receipt readers must not repair permissions and then trust facts which may
+ * have been exposed for modification before that repair. */
+int shikigami_ws_is_private(const char *path) {
+  int fd = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+  if (fd < 0) return -1;
+  struct stat state;
+  int result = fstat(fd, &state) || state.st_uid != geteuid() || (state.st_mode & 077);
+  close(fd); return result ? -1 : 0;
+}

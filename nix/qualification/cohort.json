@@ -3887,6 +3887,7 @@
         "exe:shikigami-consume-stream",
         "exe:shikigami-scheduler",
         "exe:shikigami-worker",
+        "exe:shikigami-workspace-collector",
         "lib"
       ],
       "flags": {},

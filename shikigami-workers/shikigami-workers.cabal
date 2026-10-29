@@ -3,6 +3,7 @@ name: shikigami-workers
 version: 0.1.0.0
 synopsis: Shikigami supervised background loops
 build-type: Simple
+extra-source-files: cbits/workspace-systemd-profile.h
 
 common common
   default-language: GHC2024
@@ -60,6 +61,7 @@ library
     Shikigami.Workspace.Git
     Shikigami.Workspace.Host
     Shikigami.Workspace.InstructionLoader
+    Shikigami.Workspace.Systemd
 
   build-depends:
     aeson >=2.2,
@@ -109,6 +111,16 @@ library
     uuid,
     wai,
     warp,
+
+executable shikigami-workspace-collector
+  import: common
+  main-is: Main.hs
+  hs-source-dirs: app/workspace-collector
+  ghc-options: -threaded
+  build-depends:
+    base,
+    shikigami-workers,
+    text,
 
 executable shikigami-worker
   import: common
@@ -185,6 +197,7 @@ test-suite shikigami-workers-test
     Shikigami.WorkspaceFileProviderSpec
     Shikigami.WorkspaceProcessStoreSpec
     Shikigami.WorkspaceStoreSpec
+    Shikigami.WorkspaceSystemdSpec
     Shikigami.WorkspaceWorkflowSpec
 
   ghc-options:

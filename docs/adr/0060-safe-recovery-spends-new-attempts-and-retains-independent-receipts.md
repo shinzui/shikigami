@@ -85,6 +85,16 @@ receipt after revocation, without granting new execution or output-read access.
 The Apple-container collector probe qualifies this boundary; complete supervisor
 launch, restart and execution-accounting integration remain plan-96 gates.
 
+A settled timeout or cancellation can lack a numeric main wait status in the
+qualified backend. Retain that absence explicitly, rather than manufacturing a
+signal code. Exact invocation, complete bounded output and empty-cgroup evidence
+can establish process settlement in that case; successful validation requires
+an explicit normal completion and confirmed zero exit code. A normal completion
+with no numeric status remains unresolved. Version-2 collector facts express
+this distinction, while version-1 facts still require their numeric status.
+Receipt readers reject an exposed metadata directory without repairing its
+permissions and then trusting potentially modified evidence.
+
 ## Alternatives rejected
 
 Releasing the unknown attempt to make room for its replacement would invent

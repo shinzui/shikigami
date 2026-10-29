@@ -13,6 +13,7 @@ module Shikigami.Workspace.ContainedFile
     containedTargetIdentity,
     replaceContainedFile,
     ensurePrivateDirectory,
+    checkPrivateDirectory,
   )
 where
 
@@ -33,6 +34,8 @@ data FileError = FilePathRefused | FileContentConflict | FileTooLarge | FileUnav
   deriving stock (Eq, Show)
 
 foreign import ccall safe "shikigami_ws_private" privateDirectory :: CString -> IO CInt
+
+foreign import ccall safe "shikigami_ws_is_private" isPrivateDirectory :: CString -> IO CInt
 
 foreign import ccall safe "shikigami_ws_open" openTarget :: CString -> CString -> IO (Ptr ())
 
@@ -92,4 +95,9 @@ replaceContainedFile metadata (ContainedFile pointer) expected content
 ensurePrivateDirectory :: FilePath -> IO (Either FileError ())
 ensurePrivateDirectory path = withCString path \name -> do
   result <- privateDirectory name
+  pure (if result == 0 then Right () else Left FileUnavailable)
+
+checkPrivateDirectory :: FilePath -> IO (Either FileError ())
+checkPrivateDirectory path = withCString path \name -> do
+  result <- isPrivateDirectory name
   pure (if result == 0 then Right () else Left FileUnavailable)

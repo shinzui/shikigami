@@ -66,7 +66,7 @@ pkgs.stdenv.mkDerivation {
   dontUnpack = true;
   nativeBuildInputs = [ pkgs.haskell.compiler.ghc9124 pkgs.cabal-install pkgs.pkg-config pkgs.git pkgs.python3 ];
   buildInputs = [ pkgs.zlib pkgs.rdkafka pkgs.postgresql_18 pkgs.postgresql_18.dev pkgs.openssl.dev pkgs.curl.dev ]
-    ++ lib.optionals pkgs.stdenv.isLinux [ pkgs.systemd.dev ];
+    ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.systemd.dev ];
   configurePhase = ''
     runHook preConfigure
     export CABAL_DIR="$TMPDIR/cabal"
@@ -92,7 +92,8 @@ pkgs.stdenv.mkDerivation {
     mkdir -p "$out/bin" "$out/share/shikigami"
     for executable in shikigami shikigami-server shikigami-worker shikigami-migrate \
       shikigami-scheduler shikigami-consume-stream shikigami-consume-events \
-      shikigami-agent-run shikigami-run-behavior shikigami-agent-launch shikigami-openapi shikigami-client; do
+      shikigami-agent-run shikigami-run-behavior shikigami-agent-launch shikigami-openapi shikigami-client \
+      shikigami-workspace-collector; do
       cp "$(cabal list-bin --offline exe:$executable)" "$out/bin/$executable"
     done
     cp -R ${source}/schema "$out/share/shikigami/schema"
