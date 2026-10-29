@@ -53,6 +53,13 @@ Historical admissions omit the optional profile and acquire no native file
 authority; their original JSON encoding remains unchanged. File contents may be
 UTF-8, and supporting more path semantics requires a new qualified profile.
 
+Process-backed assignments must select another retained filesystem profile and
+an exact file-adapter revision that requires the process-registration barrier.
+Keep accepted file-only snapshots on their original profile and adapter. Older
+providers must refuse the new profile before IO, so enabling the process backend
+cannot expose its workspaces to a writer that predates process registration.
+The process adapter and this profile transition remain plan-96 enablement gates.
+
 The database-free command explicitly selects ephemeral recording. It uses the
 same pure context selection, summary preparation, tool admission and output
 validation policies. Each summary and repair consumes an ordinary model turn;
