@@ -95,11 +95,12 @@ checkWorkspaceOperationTx binding owner epoch (OperationId operation) = do
     Left err -> pure (Left err)
     Right () -> do
       pending <- Tx.statement (binding.workspace.resource, operation) pendingOtherEffect
-      pure (if pending then Left WorkspaceBindingConflict else Right ())
+      processes <- Tx.statement binding.workspace.resource pendingProcess
+      pure (if pending || processes then Left WorkspaceBindingConflict else Right ())
 
 reserveWorkspaceEffectTx :: WorkspaceBinding -> AgentIdentity -> Integer -> OperationId -> Text -> Transaction (Either WorkspaceError (Maybe FileReceipt))
 reserveWorkspaceEffectTx binding owner epoch (OperationId operation) fingerprint = do
-  checked <- checkWorkspaceOwnerTx binding owner epoch
+  checked <- checkWorkspaceOperationTx binding owner epoch (OperationId operation)
   case checked of
     Left err -> pure (Left err)
     Right () -> do
@@ -164,3 +165,6 @@ saveReceipt = preparable "UPDATE shikigami.workspace_effects SET receipt=$4,sett
 
 pendingOtherEffect :: Statement (Text, Text) Bool
 pendingOtherEffect = preparable "SELECT EXISTS(SELECT 1 FROM shikigami.workspace_effects WHERE resource=$1 AND operation_id<>$2 AND NOT settled)" (contrazip2 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.text))) (D.singleRow (D.column (D.nonNullable D.bool)))
+
+pendingProcess :: Statement Text Bool
+pendingProcess = preparable "SELECT EXISTS(SELECT 1 FROM shikigami.workspace_processes WHERE resource=$1 AND NOT settled)" (E.param (E.nonNullable E.text)) (D.singleRow (D.column (D.nonNullable D.bool)))

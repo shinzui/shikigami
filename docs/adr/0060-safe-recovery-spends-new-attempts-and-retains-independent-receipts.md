@@ -58,6 +58,22 @@ Receipt files carry hashes and coordinates; accepted content remains in protecte
 execution payloads. Production worker admission and supervised process effects
 remain separate plan gates.
 
+A prepared edit receipt is intent rather than proof of publication by its actual
+attempt. A replacement may reconcile the desired published content and settle
+that original attempt. If publication is unproven, it must not perform the edit
+and label the new work as the original attempt's completion. The current adapter
+leaves that case unresolved with its original reservation and pending receipt.
+The accepted-executor regression interrupts after prepared intent and proves no
+replacement file write or fabricated former-owner receipt.
+
+Process registration similarly retains the original attempt, deadline, unit and
+boot/invocation identities. Duplicate launch requests never receive a second
+launch transition. A pre-launch refusal is factual only while no transition
+committed; it carries no invented process receipt. Metadata settlement does not
+grant lifecycle or external action authority. The actual supervisor must supply
+real invocation, bounded complete output and descendant evidence before its
+receipt adapter can be enabled.
+
 ## Alternatives rejected
 
 Releasing the unknown attempt to make room for its replacement would invent

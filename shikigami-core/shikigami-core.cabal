@@ -196,6 +196,8 @@ library
     Shikigami.Workspace.Admission
     Shikigami.Workspace.Catalog
     Shikigami.Workspace.Instructions
+    Shikigami.Workspace.Process
+    Shikigami.Workspace.ProcessStore
     Shikigami.Workspace.Provider
     Shikigami.Workspace.Reference
     Shikigami.Workspace.Settings

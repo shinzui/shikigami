@@ -177,6 +177,7 @@ test-suite shikigami-workers-test
     Shikigami.Workers.SupervisionSpec
     Shikigami.WorkspaceContainedFileSpec
     Shikigami.WorkspaceFileProviderSpec
+    Shikigami.WorkspaceProcessStoreSpec
     Shikigami.WorkspaceStoreSpec
     Shikigami.WorkspaceWorkflowSpec
 

@@ -12,6 +12,7 @@ import Shikigami.Workers.CommandSpec qualified as CommandSpec
 import Shikigami.Workers.SupervisionSpec qualified as SupervisionSpec
 import Shikigami.WorkspaceContainedFileSpec qualified as WorkspaceContainedFileSpec
 import Shikigami.WorkspaceFileProviderSpec qualified as WorkspaceFileProviderSpec
+import Shikigami.WorkspaceProcessStoreSpec qualified as WorkspaceProcessStoreSpec
 import Shikigami.WorkspaceStoreSpec qualified as WorkspaceStoreSpec
 import Shikigami.WorkspaceWorkflowSpec qualified as WorkspaceWorkflowSpec
 import System.Environment (lookupEnv)
@@ -26,7 +27,8 @@ main = do
       defaultMain
         ( testGroup
             "shikigami-workers"
-            [ WorkspaceWorkflowSpec.tests databaseFixture,
+            [ WorkspaceProcessStoreSpec.tests databaseFixture,
+              WorkspaceWorkflowSpec.tests databaseFixture,
               WorkspaceFileProviderSpec.tests databaseFixture,
               WorkspaceContainedFileSpec.tests,
               WorkspaceStoreSpec.tests databaseFixture,

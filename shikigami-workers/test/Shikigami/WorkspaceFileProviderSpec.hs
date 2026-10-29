@@ -119,6 +119,31 @@ tests fixture =
         -- file attempt adds no remaining uncertainty or active reservation.
         root.unknown @?= 1
         root.active @?= 0,
+      testCase "a crash after prepared intent never attributes a replacement write to the old actual attempt" $ withEffect fixture \env binding snapshot access reference runtime _ -> do
+        calls <- newIORef (0 :: Int)
+        let interrupted =
+              (runtime.authorizer)
+                { Action.authorize = \principal action -> do
+                    ordinal <- atomicModifyIORef' calls (\n -> (n + 1, n))
+                    if ordinal == 1 then throwIO (userError "fixture interrupted before publication") else allowAllActionAuthorizerForTests.authorize principal action
+                }
+            executor = executorFor (runtime & #authorizer .~ interrupted) (pure ())
+        Executor.executeAcceptedAttempt executor snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+        (_, uncertain) <- right =<< run env (Execution.loadExecution access)
+        uncertain.phase @?= Unresolved
+        readFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") >>= (@?= "old dependency\n")
+        let next = reference & #attemptId .~ AttemptId "prepared-recovery"
+            tool = head snapshot.toolBindings
+            submission = Attempt.AttemptSubmission (Execution.toolAttemptRequest next.attemptId next.operationId tool) Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)
+        _ <- right =<< run env (Execution.recoverExecutionAttemptWith access uncertain.revision reference.attemptId submission (\_ -> pure ()))
+        Executor.executeAcceptedAttempt executor snapshot.identity next >>= (@?= Right Executor.ExecutorDone)
+        (_, retained) <- right =<< run env (Execution.loadExecution access)
+        retained.phase @?= Unresolved
+        retained.cursor @?= 1
+        retained.pendingReceipts @?= 1
+        readFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") >>= (@?= "old dependency\n")
+        Just original <- right =<< run env (Execution.inspectExecutionAttempt reference.attemptId)
+        original.lateReceipt @?= Nothing,
       testCase "freeze at the write boundary prevents publication and retains a settled refusal" $ withEffect fixture \env binding snapshot _ reference runtime _ -> do
         calls <- newIORef (0 :: Int)
         let revoke =

@@ -265,6 +265,10 @@ replaceWorkspaceFileWithCheckpoint checkpoint runtime snapshot dispatch input = 
           case actual of
             Left err -> pure (Left err)
             Right current | current == Just receipt.result && isJust previous -> settle complete binding metadata receiptName (fromMaybe receipt previous)
+            -- A prepared receipt proves intent, not publication by its original
+            -- actual attempt. A replacement may observe an applied effect, but
+            -- cannot execute it and attribute that new work to the old attempt.
+            Right _ | Just original <- previous, original.attemptId /= dispatch.attemptId || original.generation /= dispatch.generation -> pure (Left FileEffectUnresolved)
             Right current | current /= replacement.expected -> pure (Left FileEffectConflict)
             Right _ -> do
               reserved <- runTx runtime (Store.reserveWorkspaceEffectTx binding admission.owner admission.epoch dispatch.operation.operationId fingerprint)
