@@ -4,6 +4,8 @@ module Shikigami.Workspace.InstructionLoader (loadRepositoryInstructions, loadWo
 
 import Data.ByteString qualified as Bytes
 import Data.ByteString.Char8 qualified as Char8
+import Data.List (inits)
+import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
 import Shikigami.Workspace.Allocation (workspaceMetadata)
@@ -13,7 +15,10 @@ import Shikigami.Workspace.Types
 import Text.Read (readMaybe)
 
 loadRepositoryInstructions :: WorkspaceBinding -> Int -> IO (Either InstructionError InstructionBundle)
-loadRepositoryInstructions binding budget = do
+loadRepositoryInstructions = loadInstructions False
+
+loadInstructions :: Bool -> WorkspaceBinding -> Int -> IO (Either InstructionError InstructionBundle)
+loadInstructions qualifyFiles binding budget = do
   listing <- git 1048576 ["ls-tree", "-r", "-l", "-z", Text.unpack binding.base]
   case listing >>= parseListing of
     Left err -> pure (Left err)
@@ -33,7 +38,18 @@ loadRepositoryInstructions binding budget = do
           else do
             text <- either (const (Left InstructionSourceRefused)) Right (Encoding.decodeUtf8' bytes)
             pure (path, text)
-    parseListing bytes = fmap concat (traverse entry (filter (not . Bytes.null) (Bytes.split 0 bytes)))
+    parseListing bytes = do
+      let records = filter (not . Bytes.null) (Bytes.split 0 bytes)
+      paths <- traverse listingPath records
+      let prefixes = Set.fromList [Text.intercalate "/" prefix | path <- paths, prefix <- drop 1 (inits (Text.splitOn "/" path))]
+      -- A portable workspace cannot faithfully distinguish case-colliding Git
+      -- paths/scopes on macOS. Refuse the base rather than merge their policies.
+      if (qualifyFiles && not (all (\path -> validWorkspacePath path && Text.all (< '\DEL') path) paths)) || Set.size (Set.map Text.toCaseFold prefixes) /= Set.size prefixes
+        then Left InstructionSourceRefused
+        else fmap concat (traverse entry records)
+    listingPath raw = case Bytes.break (== 9) raw of
+      (_, suffix) | Bytes.null suffix -> Left InstructionSourceRefused
+      (_, suffix) -> either (const (Left InstructionSourceRefused)) Right (Encoding.decodeUtf8' (Bytes.drop 1 suffix))
     entry raw = do
       let (metadata, suffix) = Bytes.break (== 9) raw
       if Bytes.null suffix
@@ -55,5 +71,5 @@ loadWorkspaceAdmission :: WorkspaceBinding -> Text.Text -> Int -> IO (Either Ins
 loadWorkspaceAdmission binding assignmentId budget
   | Text.null assignmentId || Text.length assignmentId > 256 = pure (Left InstructionSourceRefused)
   | otherwise = do
-      loaded <- loadRepositoryInstructions binding budget
-      pure (WorkspaceAdmission binding.workspace (workspaceBindingDigest binding) binding.request.runId assignmentId binding.request.rootId binding.request.owner binding.request.epoch <$> loaded)
+      loaded <- loadInstructions True binding budget
+      pure ((\bundle -> WorkspaceAdmission binding.workspace (workspaceBindingDigest binding) binding.request.runId assignmentId binding.request.rootId binding.request.owner binding.request.epoch bundle (Just nativeFilePolicy)) <$> loaded)

@@ -1,4 +1,4 @@
-module Shikigami.WorkspaceStoreSpec (tests) where
+module Shikigami.WorkspaceStoreSpec (tests, withFixture, commitRepository) where
 
 import Control.Concurrent.Async (async, cancel, concurrently)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
@@ -94,6 +94,7 @@ tests fixture =
         admission.bindingDigest @?= workspaceBindingDigest binding
         admission.owner @?= binding.request.owner
         admission.instructions @?= bundle
+        admission.filePolicy @?= Just Instructions.nativeFilePolicy
         fmap (map (.text)) (instructionsForPath bundle "src/new.hs") @?= Right ["PRIVATE_ROOT: validate first\n", "PRIVATE_NESTED: use scoped checks\n"]
         writeFile (workspaceFiles root binding </> "AGENTS.md") "changed policy must not take effect"
         loadRepositoryInstructions binding 65536 >>= (@?= Right bundle)
@@ -108,12 +109,32 @@ tests fixture =
         assertBool "new assignment admits next instruction identity" (bundleDigest nextBundle /= bundleDigest bundle)
         fmap (map (.text)) (instructionsForPath nextBundle "test/new.hs") @?= Right ["PRIVATE_NEW_ROOT_POLICY"]
         loadRepositoryInstructions binding 65536 >>= (@?= Right bundle),
+      testCase "case-colliding base paths refuse instruction admission on every host" $ withFixture fixture \env source root repo -> do
+        blob <- Text.strip . Text.pack <$> git ["-C", source, "rev-parse", "HEAD:dependency.txt"]
+        tree <- Text.strip . Text.pack <$> gitInput ["-C", source, "mktree"] ("100644 blob " <> Text.unpack blob <> "\tSRC.txt\n100644 blob " <> Text.unpack blob <> "\tsrc.txt\n")
+        base <- Text.strip . Text.pack <$> git ["-C", source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit-tree", Text.unpack tree, "-m", "case-collision"]
+        _ <- git ["-C", source, "update-ref", "refs/heads/case-fixture", Text.unpack base]
+        selected <- resolved source base "policy-1"
+        (binding, _) <- right =<< run env (reserveWorkspaceTx root request selected)
+        createDirectoryIfMissing True (takeDirectoryOfFiles root binding)
+        _ <- git ["clone", "--bare", "--no-hardlinks", "--", source, workspaceMetadata root binding]
+        loadRepositoryInstructions binding 65536 >>= (@?= Left InstructionSourceRefused)
+        repositoryIdentity repo @?= "mori://fixture/repo",
       testCase "symlink instruction files fail admission without following their targets" $ withFixture fixture \env source root _ -> do
         createFileLink "dependency.txt" (source </> "AGENTS.md")
         repo <- commitRepository source
         (binding, _) <- right =<< run env (reserveWorkspaceTx root request repo)
         allocateWorkspace root binding Reserved >>= (@?= Right ())
         loadRepositoryInstructions binding 65536 >>= (@?= Left InstructionSourceRefused),
+      testCase "native file qualification refuses Unicode aliases while instruction snapshots stay readable" $ withFixture fixture \env source root _ -> do
+        writeFile (source </> "caf\233.txt") "ordinary UTF-8 content"
+        writeFile (source </> "AGENTS.md") "root policy"
+        repo <- commitRepository source
+        (binding, _) <- right =<< run env (reserveWorkspaceTx root request repo)
+        allocateWorkspace root binding Reserved >>= (@?= Right ())
+        bundle <- right =<< loadRepositoryInstructions binding 65536
+        map (.text) (bundleFiles bundle) @?= ["root policy"]
+        loadWorkspaceAdmission binding "native-files" 65536 >>= (@?= Left InstructionSourceRefused),
       testCase "borrowed source objects are copied into the private repository" $ withFixture fixture \env source root original -> do
         let borrowed = source <> "-borrowed"
         _ <- git ["clone", "--shared", "--", source, borrowed]
@@ -210,8 +231,11 @@ sourceSnapshot root = do
       (sort entries)
 
 git :: [String] -> IO String
-git args = do
-  (status, output, _) <- readCreateProcessWithExitCode ((proc "git" (["-c", "core.hooksPath=/dev/null"] <> args)) {env = Just [("PATH", "/usr/bin:/bin"), ("HOME", "/nonexistent"), ("GIT_CONFIG_NOSYSTEM", "1"), ("GIT_CONFIG_GLOBAL", "/dev/null")]}) ""
+git args = gitInput args ""
+
+gitInput :: [String] -> String -> IO String
+gitInput args input = do
+  (status, output, _) <- readCreateProcessWithExitCode ((proc "git" (["-c", "core.hooksPath=/dev/null"] <> args)) {env = Just [("PATH", "/usr/bin:/bin"), ("HOME", "/nonexistent"), ("GIT_CONFIG_NOSYSTEM", "1"), ("GIT_CONFIG_GLOBAL", "/dev/null")]}) input
   status @?= ExitSuccess
   pure output
 

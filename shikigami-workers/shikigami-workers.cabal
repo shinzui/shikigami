@@ -27,6 +27,7 @@ common common
 
 library
   import: common
+  c-sources: cbits/workspace-files.c
   hs-source-dirs: src
   exposed-modules:
     Shikigami.Agent.RunJob.Worker
@@ -47,6 +48,8 @@ library
     Shikigami.Workers.Subscription
     Shikigami.Workers.Supervision
     Shikigami.Workspace.Allocation
+    Shikigami.Workspace.ContainedFile
+    Shikigami.Workspace.FileProvider
     Shikigami.Workspace.Git
     Shikigami.Workspace.InstructionLoader
 
@@ -91,6 +94,7 @@ library
     shibuya-kafka-adapter,
     shikigami-core,
     shikigami-migrations,
+    shikumi-tools,
     text >=2.1,
     time >=1.12,
     unix,
@@ -169,6 +173,8 @@ test-suite shikigami-workers-test
     Shikigami.TimerRecoverySpec
     Shikigami.Workers.CommandSpec
     Shikigami.Workers.SupervisionSpec
+    Shikigami.WorkspaceContainedFileSpec
+    Shikigami.WorkspaceFileProviderSpec
     Shikigami.WorkspaceStoreSpec
 
   ghc-options:
@@ -179,6 +185,7 @@ test-suite shikigami-workers-test
   build-depends:
     aeson,
     async,
+    baikai,
     base,
     bytestring,
     containers,

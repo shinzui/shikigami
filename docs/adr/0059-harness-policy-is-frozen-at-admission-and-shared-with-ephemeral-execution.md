@@ -42,7 +42,13 @@ Its retained bundle comes from regular Git blobs in the immutable base, with at 
 Bundle decoding verifies content identities and directory scopes. Existing matching
 snapshots resume without reloading source instructions or current configuration.
 The original Skill admission API retains its historical behavior; production worker
-enablement and fresh exact read/edit authority remain separate gates in plan 96.
+enablement remains a separate gate in plan 96. The concrete file adapter requires an
+explicit retained `ascii-exact-v1` filesystem qualification: all base paths are
+ASCII and case-unambiguous, with exact directory-entry spelling at native IO.
+This prevents host case/Unicode normalization aliases from changing frozen scope.
+Historical admissions omit the optional profile and acquire no native file
+authority; their original JSON encoding remains unchanged. File contents may be
+UTF-8, and supporting more path semantics requires a new qualified profile.
 
 The database-free command explicitly selects ephemeral recording. It uses the
 same pure context selection, summary preparation, tool admission and output

@@ -86,6 +86,15 @@ transactions. An allocation marker proves only publication of a complete private
 It grants no mutation authority and supplies no evidence that processes have settled or
 that an old owner has been fenced. See [plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md).
 
+Native file effects serialize with a private per-workspace OS lock, alongside
+conditional owner/epoch and actual-attempt checks immediately before publication.
+The lock is held through durable receipt acknowledgement and is released by
+process death. Future freeze, transfer, Git and process launch owners must share
+this boundary and reconcile unsettled reservations. File operations require all
+supervised repository processes settled. Neither acquiring that file lock nor
+reading an allocation/applied-edit marker proves descendant settlement; full
+supervisor and transfer qualification remains pending in plan 96.
+
 ## Consequences
 
 An unresolved handoff may intentionally remain frozen until its real owners

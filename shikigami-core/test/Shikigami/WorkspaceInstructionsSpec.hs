@@ -6,9 +6,12 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Either (isLeft)
 import Data.Generics.Labels ()
 import Data.Text qualified as Text
+import Shikigami.Agent.Principal (AgentIdentity (..))
+import Shikigami.Execution.Identity (ExecutionRootId (..))
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Transcript
 import Shikigami.Workspace.Instructions
+import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -16,7 +19,14 @@ tests :: TestTree
 tests =
   testGroup
     "workspace instructions"
-    [ testCase "nested instructions apply to new descendants and never siblings" $ do
+    [ testCase "historical admissions preserve JSON and cannot acquire a native file profile" $ do
+        bundle <- right (mkInstructionBundle 65536 repository base [])
+        let admission = WorkspaceAdmission (WorkspaceRef "provider" "resource") "binding" "run" "assignment" (ExecutionRootId "root") (CompatibilityIdentity "worker") 0 bundle Nothing
+            historical = Aeson.object ["workspace" Aeson..= admission.workspace, "bindingDigest" Aeson..= admission.bindingDigest, "runId" Aeson..= admission.runId, "assignmentId" Aeson..= admission.assignmentId, "rootId" Aeson..= admission.rootId, "owner" Aeson..= admission.owner, "epoch" Aeson..= admission.epoch, "instructions" Aeson..= bundle]
+        Aeson.fromJSON historical @?= Aeson.Success admission
+        Aeson.toJSON admission @?= historical
+        Aeson.fromJSON (Aeson.toJSON (admission & #filePolicy .~ Just nativeFilePolicy)) @?= Aeson.Success (admission & #filePolicy .~ Just nativeFilePolicy),
+      testCase "nested instructions apply to new descendants and never siblings" $ do
         bundle <- right (mkInstructionBundle 65536 repository base [("AGENTS.md", "root"), ("src/AGENTS.md", "nested"), ("src/deep/AGENTS.md", "deep")])
         fmap (map (.text)) (instructionsForPath bundle "src/deep/new/file.hs") @?= Right ["root", "nested", "deep"]
         fmap (map (.text)) (instructionsForPath bundle "src-other/new.hs") @?= Right ["root"]

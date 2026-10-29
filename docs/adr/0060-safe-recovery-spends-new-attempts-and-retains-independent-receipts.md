@@ -45,6 +45,19 @@ unambiguously. Closing the last receipt reaches the original terminal state.
 The public execution phase stays terminal throughout. Partial billing can remain
 unknown in the resource owner even after transport completion is established.
 
+[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md)
+implements this contract for contained whole-file edits. A private prepared
+receipt is fsynced before atomic file publication; applied/refused receipts and
+conditional PostgreSQL reservations retain the same logical fingerprint. A
+replacement attempt reconciles an applied receipt without rewriting the file.
+The retained original actual attempt and claim generation supply its independent
+late receipt to the existing execution owner. This settles only original
+accounting; the replacement executor retains logical completion. A held OS lock
+or missing/conflicting evidence remains unresolved, never a successful no-op.
+Receipt files carry hashes and coordinates; accepted content remains in protected
+execution payloads. Production worker admission and supervised process effects
+remain separate plan gates.
+
 ## Alternatives rejected
 
 Releasing the unknown attempt to make room for its replacement would invent

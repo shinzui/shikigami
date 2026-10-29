@@ -11,6 +11,7 @@ import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUID
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
+import Shikigami.Workspace.ContainedFile (ensurePrivateDirectory)
 import Shikigami.Workspace.Git (runWorkspaceGit)
 import Shikigami.Workspace.Types
 import System.Directory
@@ -47,8 +48,12 @@ allocateWorkspaceWithCheckpoint checkpoint root binding state = catch work (\(_ 
             then pure (Left WorkspaceAllocationRefused)
             else do
               createDirectoryIfMissing True root
-              exists <- doesPathExist destination
-              if exists then verify else if state == Ready then pure (Left WorkspaceAllocationRefused) else populate
+              private <- ensurePrivateDirectory root
+              case private of
+                Left _ -> pure (Left WorkspaceAllocationRefused)
+                Right () -> do
+                  exists <- doesPathExist destination
+                  if exists then verify else if state == Ready then pure (Left WorkspaceAllocationRefused) else populate
     verify = do
       linked <- pathIsSymbolicLink destination
       markerLinked <- pathIsSymbolicLink (destination </> marker)

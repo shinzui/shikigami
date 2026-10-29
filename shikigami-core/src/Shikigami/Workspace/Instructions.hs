@@ -4,11 +4,14 @@ module Shikigami.Workspace.Instructions
   ( RepositoryInstruction (..),
     InstructionBundle,
     bundleDigest,
+    bundleRepository,
+    bundleBase,
     bundleFiles,
     mkInstructionBundle,
     instructionsForPath,
     instructionPrompt,
     validWorkspacePath,
+    nativeFilePolicy,
     WorkspaceAdmission (..),
     InstructionError (..),
   )
@@ -52,6 +55,12 @@ data InstructionError = InstructionPathRefused | InstructionBudgetExceeded | Ins
 
 bundleDigest :: InstructionBundle -> Text
 bundleDigest bundle = bundle.digest
+
+bundleRepository :: InstructionBundle -> Text
+bundleRepository bundle = bundle.repository
+
+bundleBase :: InstructionBundle -> Text
+bundleBase bundle = bundle.base
 
 bundleFiles :: InstructionBundle -> [RepositoryInstruction]
 bundleFiles bundle = bundle.files
@@ -100,9 +109,18 @@ data WorkspaceAdmission = WorkspaceAdmission
     rootId :: !ExecutionRootId,
     owner :: !AgentIdentity,
     epoch :: !Integer,
-    instructions :: !InstructionBundle
+    instructions :: !InstructionBundle,
+    filePolicy :: !(Maybe Text)
   }
   deriving stock (Eq, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving anyclass (FromJSON)
+
+-- Historical admissions carry no native filesystem qualification. Omission
+-- preserves their protected snapshot identity when decoded and re-encoded.
+instance ToJSON WorkspaceAdmission where
+  toJSON = Aeson.genericToJSON Aeson.defaultOptions {Aeson.omitNothingFields = True}
+
+nativeFilePolicy :: Text
+nativeFilePolicy = "ascii-exact-v1"
 
 instance Show WorkspaceAdmission where show _ = "WorkspaceAdmission <protected>"

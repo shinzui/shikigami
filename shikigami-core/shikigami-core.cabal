@@ -195,6 +195,7 @@ library
     Shikigami.Workflow.Versioning
     Shikigami.Workspace.Catalog
     Shikigami.Workspace.Instructions
+    Shikigami.Workspace.Provider
     Shikigami.Workspace.Reference
     Shikigami.Workspace.Store
     Shikigami.Workspace.Types
@@ -365,6 +366,7 @@ test-suite shikigami-core-test
     Shikigami.SinkHonestySpec
     Shikigami.SinkIntentSpec
     Shikigami.WireCompatSpec
+    Shikigami.WorkspaceActionProofSpec
     Shikigami.WorkspaceAdapterSpec
     Shikigami.WorkspaceCatalogSpec
     Shikigami.WorkspaceInstructionsSpec
@@ -381,12 +383,15 @@ test-suite shikigami-core-test
     baikai-claude,
     baikai-openai,
     base,
+    biscuit-haskell,
     bytestring,
     containers,
     danwa-api,
     danwa-client,
     directory,
     effectful,
+    en-biscuit,
+    en-core,
     filepath,
     generic-lens,
     handan-core,
@@ -401,6 +406,7 @@ test-suite shikigami-core-test
     http-types,
     keiki,
     keiro,
+    kikan-en-client,
     kikan-en-contract,
     kioku-api,
     kioku-core,
