@@ -27,7 +27,12 @@ common common
 
 library
   import: common
-  c-sources: cbits/workspace-files.c
+  c-sources:
+    cbits/workspace-collector.c
+    cbits/workspace-files.c
+
+  if os(linux)
+    pkgconfig-depends: libsystemd
   hs-source-dirs: src
   exposed-modules:
     Shikigami.Agent.RunJob.Worker
@@ -48,6 +53,7 @@ library
     Shikigami.Workers.Subscription
     Shikigami.Workers.Supervision
     Shikigami.Workspace.Allocation
+    Shikigami.Workspace.Collector
     Shikigami.Workspace.ConfiguredHost
     Shikigami.Workspace.ContainedFile
     Shikigami.Workspace.FileProvider

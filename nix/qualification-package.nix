@@ -65,7 +65,8 @@ pkgs.stdenv.mkDerivation {
   version = "0.1.0.0-${gitRev}";
   dontUnpack = true;
   nativeBuildInputs = [ pkgs.haskell.compiler.ghc9124 pkgs.cabal-install pkgs.pkg-config pkgs.git pkgs.python3 ];
-  buildInputs = [ pkgs.zlib pkgs.rdkafka pkgs.postgresql_18 pkgs.postgresql_18.dev pkgs.openssl.dev pkgs.curl.dev ];
+  buildInputs = [ pkgs.zlib pkgs.rdkafka pkgs.postgresql_18 pkgs.postgresql_18.dev pkgs.openssl.dev pkgs.curl.dev ]
+    ++ lib.optionals pkgs.stdenv.isLinux [ pkgs.systemd.dev ];
   configurePhase = ''
     runHook preConfigure
     export CABAL_DIR="$TMPDIR/cabal"

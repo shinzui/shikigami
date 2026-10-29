@@ -74,6 +74,17 @@ grant lifecycle or external action authority. The actual supervisor must supply
 real invocation, bounded complete output and descendant evidence before its
 receipt adapter can be enabled.
 
+The independent output collector drains excess bytes while retaining a bounded
+shared prefix in provider-private files. It holds a systemd unit reference on its
+own D-Bus connection through receipt publication, so cancellation cannot discard
+the invocation evidence before it is checked. A completion requires matching
+boot, invocation and fingerprint, fsynced output and an empty descendant cgroup.
+Collector loss leaves an unresolved registration; restarting capture cannot
+claim output completeness. Factual reconciliation can retain the original
+receipt after revocation, without granting new execution or output-read access.
+The Apple-container collector probe qualifies this boundary; complete supervisor
+launch, restart and execution-accounting integration remain plan-96 gates.
+
 ## Alternatives rejected
 
 Releasing the unknown attempt to make room for its replacement would invent

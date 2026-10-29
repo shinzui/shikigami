@@ -3,6 +3,10 @@
 module Shikigami.WorkspaceProcessStoreSpec (tests) where
 
 import Control.Concurrent.Async (concurrently)
+import Data.Aeson qualified as Aeson
+import Data.Aeson.Types (Pair)
+import Data.ByteString qualified as Bytes
+import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.List (sort)
 import Data.Map.Strict qualified as Map
@@ -18,11 +22,15 @@ import Shikigami.Execution.Transcript (ExecutionId (..))
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.Workspace.Allocation
+import Shikigami.Workspace.Collector
+import Shikigami.Workspace.ContainedFile (ensurePrivateDirectory)
 import Shikigami.Workspace.Process
 import Shikigami.Workspace.ProcessStore
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.Types
 import Shikigami.WorkspaceStoreSpec qualified as Fixture
+import System.Directory (createDirectory, removeFile)
+import System.FilePath ((</>))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -94,8 +102,97 @@ tests fixture =
         run env (recordProcessReceiptTx (receipt & #exitCode .~ 1)) >>= (@?= Left WorkspaceBindingConflict)
         run env (Store.checkWorkspaceOwnerTx binding binding.request.owner 0) >>= (@?= Left WorkspaceBindingConflict)
         Just retained <- run env (inspectProcessTx proposed.operationId)
-        retained.phase @?= ProcessSettled
+        retained.phase @?= ProcessSettled,
+      testCase "private collector completion reconciles the original attempt after freeze and acknowledgement loss" $ withProcess fixture \env binding proposed -> do
+        record <- launchRecord env binding proposed
+        directory <- collectorDirectory binding
+        writeCollector directory record []
+        run env (Store.freezeWorkspaceTx binding binding.request.owner 0) >>= (@?= Right ())
+        Just receipt <- right =<< reconcileCollector env directory record
+        receipt.attemptId @?= proposed.attemptId
+        receipt.generation @?= proposed.generation
+        receipt.stdout.bytes @?= 7
+        receipt.stdout.truncated @?= True
+        reconcileCollector env directory record >>= (@?= Right (Just receipt))
+        Just actual <- run env (inspectProcessTx proposed.operationId)
+        actual.phase @?= ProcessSettled
+        actual.receipt @?= Just receipt,
+      testCase "collector evidence rejects mismatched identities, incomplete settlement and inconsistent output" $ withProcess fixture \env binding proposed -> do
+        record <- launchRecord env binding proposed
+        directory <- collectorDirectory binding
+        mapM_
+          ( \changed -> do
+              writeCollector directory record changed
+              readCollectorReceipt directory record >>= (@?= Left CollectorEvidenceConflict)
+              Just actual <- run env (inspectProcessTx proposed.operationId)
+              actual.phase @?= ProcessLaunchRequested
+          )
+          [ ["bootId" Aeson..= otherBoot],
+            ["invocationId" Aeson..= ("invalid" :: Text.Text)],
+            ["unit" Aeson..= ("unrelated.service" :: Text.Text)],
+            ["fingerprint" Aeson..= ("sha256:" <> Text.replicate 64 "b")],
+            ["stdoutBytes" Aeson..= (6 :: Int)],
+            ["descendantsEmpty" Aeson..= False],
+            ["outputComplete" Aeson..= False]
+          ]
+        writeCollector directory record []
+        Bytes.writeFile (directory </> "stdout") (Bytes.replicate 1025 120)
+        readCollectorReceipt directory record >>= (@?= Left CollectorUnavailable)
+        writeCollector directory record []
+        removeFile (directory </> "stderr")
+        readCollectorReceipt directory record >>= (@?= Left CollectorUnavailable),
+      testCase "observed invocation alone cannot settle and conflicting collector facts keep the barrier closed" $ withProcess fixture \env binding proposed -> do
+        record <- launchRecord env binding proposed
+        directory <- collectorDirectory binding
+        Lazy.writeFile (directory </> "observed.json") (Aeson.encode (Aeson.object ["bootId" Aeson..= boot, "invocationId" Aeson..= invocation]))
+        reconcileCollector env directory record >>= (@?= Right Nothing)
+        run env (Store.checkWorkspaceOperationTx binding binding.request.owner 0 (OperationId "later")) >>= (@?= Left WorkspaceBindingConflict)
+        writeCollector directory record ["invocationId" Aeson..= otherBoot]
+        reconcileCollector env directory record >>= (@?= Left CollectorEvidenceConflict)
+        run env (markProcessUnresolvedTx record) >>= (@?= Right ())
+        writeCollector directory record []
+        Just _ <- right =<< reconcileCollector env directory record
+        run env (Store.checkWorkspaceOperationTx binding binding.request.owner 0 (OperationId "later")) >>= (@?= Right ())
     ]
+
+-- These JSON fixtures exercise receipt validation and database ownership; only
+-- probe-collector-apple.sh establishes facts from actual Linux services.
+launchRecord :: AppEnv -> WorkspaceBinding -> ProcessRecord -> IO ProcessRecord
+launchRecord env binding proposed = do
+  _ <- right =<< run env (reserveProcessTx binding proposed)
+  run env (requestProcessLaunchTx binding proposed boot) >>= (@?= Right True)
+  pure (proposed & #bootId .~ Just boot & #phase .~ ProcessLaunchRequested)
+
+collectorDirectory :: WorkspaceBinding -> IO FilePath
+collectorDirectory binding = do
+  let directory = workspaceMetadata binding.storageRoot binding </> "collector-test"
+  createDirectory directory
+  ensurePrivateDirectory directory >>= (@?= Right ())
+  pure directory
+
+writeCollector :: FilePath -> ProcessRecord -> [Pair] -> IO ()
+writeCollector directory record changed = do
+  Bytes.writeFile (directory </> "stdout") "bounded"
+  Bytes.writeFile (directory </> "stderr") ""
+  let base =
+        Aeson.object
+          [ "version" Aeson..= (1 :: Int),
+            "unit" Aeson..= record.unit,
+            "fingerprint" Aeson..= record.fingerprint,
+            "bootId" Aeson..= boot,
+            "invocationId" Aeson..= invocation,
+            "exitCode" Aeson..= (0 :: Int),
+            "termination" Aeson..= ProcessExited,
+            "stdoutBytes" Aeson..= (7 :: Int),
+            "stderrBytes" Aeson..= (0 :: Int),
+            "stdoutTruncated" Aeson..= True,
+            "stderrTruncated" Aeson..= False,
+            "descendantsEmpty" Aeson..= True,
+            "outputComplete" Aeson..= True
+          ]
+      overrides = Aeson.object changed
+      fact = case (overrides, base) of (Aeson.Object a, Aeson.Object b) -> Aeson.Object (a <> b); _ -> base
+  Lazy.writeFile (directory </> "complete.json") (Aeson.encode fact)
 
 withProcess :: DatabaseFixture -> (AppEnv -> WorkspaceBinding -> ProcessRecord -> IO a) -> IO a
 withProcess fixture use = Fixture.withFixture fixture \env _ root repository -> do
