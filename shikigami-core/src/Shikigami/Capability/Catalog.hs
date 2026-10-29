@@ -14,6 +14,7 @@ module Shikigami.Capability.Catalog
     ResolutionSubject (..),
     CapabilityResolutionError (..),
     resolveCapabilityOverlays,
+    resolveGovernedCapabilityOverlays,
   )
 where
 
@@ -154,14 +155,25 @@ resolveCapabilityOverlays ::
   ResolutionSubject ->
   [CapabilityId] ->
   Either CapabilityResolutionError ResolvedCapabilitySet
-resolveCapabilityOverlays catalog authorize subject@ResolutionSubject {principal, mode, behavior} requested
+resolveCapabilityOverlays = resolveGovernedCapabilityOverlays (const False)
+
+-- | Only an operator-installed exact adapter supplies the pure admission view.
+-- Generic callers retain the historical observation-only durable gate.
+resolveGovernedCapabilityOverlays ::
+  (CapabilityDescriptor -> Bool) ->
+  CapabilityCatalog ->
+  (ResolutionSubject -> CapabilityDescriptor -> Either CapabilityResolutionError ()) ->
+  ResolutionSubject ->
+  [CapabilityId] ->
+  Either CapabilityResolutionError ResolvedCapabilitySet
+resolveGovernedCapabilityOverlays installed catalog authorize subject@ResolutionSubject {principal, mode, behavior} requested
   | null requested = Right emptyResolvedCapabilitySet
   | Just duplicate <- firstDuplicate requested = Left DuplicateCapabilityRequest {capability = duplicate}
   | principal == Nothing = Left MissingCapabilityIdentity
   | behaviorKindText behavior /= "Skill" = Left CapabilityBehaviorUnsupported {behaviorKind = behaviorKindText behavior}
   | otherwise = do
       descriptors <- traverse resolveOne requested
-      traverse_ (admitOperationClass mode) descriptors
+      traverse_ (\descriptor -> if mode == Durable && installed descriptor then Right () else admitOperationClass mode descriptor) descriptors
       traverse_ (authorize subject) descriptors
       pure (mkResolvedCapabilitySet descriptors)
   where

@@ -47,6 +47,8 @@ library
     Shikigami.Workers.Subscription
     Shikigami.Workers.Supervision
     Shikigami.Workspace.Allocation
+    Shikigami.Workspace.Git
+    Shikigami.Workspace.InstructionLoader
 
   build-depends:
     aeson >=2.2,

@@ -1,6 +1,20 @@
 -- | Consumer contracts for authoritative workspace fencing and objective
 -- ownership. These adapters do not supply the separately owned real providers.
-module Shikigami.WorkerSession.Transfer where
+module Shikigami.WorkerSession.Transfer
+  ( WorkspaceRef (..),
+    TransferIntent (..),
+    FenceProof (..),
+    FenceOutcome (..),
+    OwnershipReceipt (..),
+    OwnershipOutcome (..),
+    WorkspaceProvider (..),
+    OwnershipProvider (..),
+    transferFingerprint,
+    ownershipFingerprint,
+    matchesFence,
+    matchesOwnership,
+  )
+where
 
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
@@ -9,10 +23,7 @@ import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Prelude
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
 import Shikigami.WorkerSession.Types (ObjectiveRef, WorkerSessionId)
-
-data WorkspaceRef = WorkspaceRef {provider :: !Text, resource :: !Text}
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+import Shikigami.Workspace.Reference (WorkspaceRef (..))
 
 data TransferIntent = TransferIntent
   { format :: !Int,

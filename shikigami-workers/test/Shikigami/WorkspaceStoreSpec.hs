@@ -19,6 +19,9 @@ import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshData
 import Shikigami.WorkerSession.Types (AssignmentId (..), WorkerSessionId (..))
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
+import Shikigami.Workspace.InstructionLoader
+import Shikigami.Workspace.Instructions (InstructionError (..), RepositoryInstruction (..), bundleDigest, bundleFiles, instructionsForPath)
+import Shikigami.Workspace.Instructions qualified as Instructions
 import Shikigami.Workspace.Store
 import Shikigami.Workspace.Types
 import System.Directory
@@ -77,6 +80,40 @@ tests fixture =
         assertBool "indexes differ after staging in one" (oneIndex /= twoIndex)
         doesPathExist (workspaceFiles root one </> ".git") >>= (@?= False)
         sourceSnapshot source >>= (@?= before),
+      testCase "instructions are loaded from the admitted tree after worktree policy edits" $ withFixture fixture \env source root _ -> do
+        writeFile (source </> "AGENTS.md") "PRIVATE_ROOT: validate first\n"
+        createDirectory (source </> "src")
+        writeFile (source </> "src" </> "AGENTS.md") "PRIVATE_NESTED: use scoped checks\n"
+        writeFile (source </> "README.md") "ordinary source is not an instruction"
+        repo <- commitRepository source
+        (binding, _) <- right =<< run env (reserveWorkspaceTx root request repo)
+        allocateWorkspace root binding Reserved >>= (@?= Right ())
+        bundle <- right =<< loadRepositoryInstructions binding 65536
+        map (.path) (bundleFiles bundle) @?= ["AGENTS.md", "src/AGENTS.md"]
+        admission <- right =<< loadWorkspaceAdmission binding "execution-assignment" 65536
+        admission.bindingDigest @?= workspaceBindingDigest binding
+        admission.owner @?= binding.request.owner
+        admission.instructions @?= bundle
+        fmap (map (.text)) (instructionsForPath bundle "src/new.hs") @?= Right ["PRIVATE_ROOT: validate first\n", "PRIVATE_NESTED: use scoped checks\n"]
+        writeFile (workspaceFiles root binding </> "AGENTS.md") "changed policy must not take effect"
+        loadRepositoryInstructions binding 65536 >>= (@?= Right bundle)
+        loadRepositoryInstructions binding 4 >>= (@?= Left InstructionBudgetExceeded)
+        -- Only an explicitly approved new base and a new assignment admit the
+        -- next policy identity. The old private repository retains its bundle.
+        writeFile (source </> "AGENTS.md") "PRIVATE_NEW_ROOT_POLICY"
+        nextRepository <- commitRepository source
+        (nextBinding, _) <- right =<< run env (reserveWorkspaceTx root (request {assignment = Just (WorkerSessionId "session", AssignmentId "next")}) nextRepository)
+        allocateWorkspace root nextBinding Reserved >>= (@?= Right ())
+        nextBundle <- right =<< loadRepositoryInstructions nextBinding 65536
+        assertBool "new assignment admits next instruction identity" (bundleDigest nextBundle /= bundleDigest bundle)
+        fmap (map (.text)) (instructionsForPath nextBundle "test/new.hs") @?= Right ["PRIVATE_NEW_ROOT_POLICY"]
+        loadRepositoryInstructions binding 65536 >>= (@?= Right bundle),
+      testCase "symlink instruction files fail admission without following their targets" $ withFixture fixture \env source root _ -> do
+        createFileLink "dependency.txt" (source </> "AGENTS.md")
+        repo <- commitRepository source
+        (binding, _) <- right =<< run env (reserveWorkspaceTx root request repo)
+        allocateWorkspace root binding Reserved >>= (@?= Right ())
+        loadRepositoryInstructions binding 65536 >>= (@?= Left InstructionSourceRefused),
       testCase "borrowed source objects are copied into the private repository" $ withFixture fixture \env source root original -> do
         let borrowed = source <> "-borrowed"
         _ <- git ["clone", "--shared", "--", source, borrowed]
@@ -177,3 +214,10 @@ git args = do
   (status, output, _) <- readCreateProcessWithExitCode ((proc "git" (["-c", "core.hooksPath=/dev/null"] <> args)) {env = Just [("PATH", "/usr/bin:/bin"), ("HOME", "/nonexistent"), ("GIT_CONFIG_NOSYSTEM", "1"), ("GIT_CONFIG_GLOBAL", "/dev/null")]}) ""
   status @?= ExitSuccess
   pure output
+
+commitRepository :: FilePath -> IO ResolvedRepository
+commitRepository source = do
+  _ <- git ["-C", source, "add", "."]
+  _ <- git ["-C", source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "instructions"]
+  base <- Text.strip . Text.pack <$> git ["-C", source, "rev-parse", "HEAD"]
+  resolved source base "policy-1"

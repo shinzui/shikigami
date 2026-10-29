@@ -69,10 +69,15 @@ authorization refusal, and non-`Skill` behavior are permanent typed refusals. Ge
 admits only observation tools. A one-off invocation may admit a mutation only when its explicit
 local policy authorizes it; the operation class remains visible rather than being weakened.
 
-[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) amendment (2026-10-29; implementation pending): a separate governed resolution path
+[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) amendment (2026-10-29; registry and dispatch plumbing implemented, concrete provider and workflow enablement pending): a separate governed resolution path
 may admit workspace mutation descriptors only through an operator-installed durable adapter
-keyed by exact capability, revision and descriptor digest. Both catalog admission and live
-execution enforce this registry. Description is effect-free; actual preparation receives the
+keyed by exact capability, revision and descriptor digest. `installDurableAdapters`
+validates immutable logical tool schemas and explicit recovery contracts independently
+of generic provider factories. `resolveGovernedCapabilityOverlays` consumes that exact
+registry's pure admission view; the generic resolver remains observation-only. Both catalog admission and live
+execution enforce this registry. Descriptions contain no executable preparation callbacks. Live schemas must match the
+installed contracts; historical snapshots without workspace admission refuse the exception.
+Actual preparation receives the
 executor's trusted logical operation and actual attempt/claim coordinates. Generic providers
 retain their existing scope and refusal behavior. Recovery classification comes from the
 adapter's tested receipt contract, never solely from a public operation-class label. Old

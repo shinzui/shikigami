@@ -20,14 +20,21 @@ module Shikigami.Capability.Provider
     emptyCapabilityProviderRegistry,
     resolveProvider,
     withCapabilityOverlays,
+    DurableToolContract (..),
+    DurableAdapter (..),
+    installDurableAdapters,
+    resolveDurableAdapter,
+    durableAdapterInstalled,
   )
 where
 
 import Control.Exception (SomeAsyncException, SomeException, displayException, fromException, mask, throwIO)
 import Control.Exception qualified as Exception
+import Control.Monad (foldM)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (Pair)
-import Data.List (sort)
+import Data.ByteString.Lazy qualified as Lazy
+import Data.List (nub, sort)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Set (Set)
@@ -50,18 +57,14 @@ import Shikigami.Capability.Catalog
     ExecutionMode,
     ResolutionSubject,
     emptyCapabilityCatalog,
+    mkCapabilityCatalog,
   )
-import Shikigami.Capability.Overlay
-  ( CapabilityDescriptor (..),
-    CapabilityId,
-    CapabilityRevision,
-    CapabilityToolDescriptor (..),
-    ResolvedCapabilitySet,
-    capabilityIdText,
-    capabilityRevisionText,
-    resolvedCapabilities,
-  )
+import Shikigami.Capability.Overlay (CapabilityDescriptor (..), CapabilityId, CapabilityOperationClass (..), CapabilityRevision, CapabilityToolDescriptor (..), ResolvedCapabilitySet, capabilityIdText, capabilityRevisionText, resolvedCapabilities)
 import Shikigami.Capability.Tools (CapabilityToolError, composeCapabilityToolsWithNames)
+import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Execution.Policy.Types (RecoveryClass (..), ToolInvoiceCost)
+import Shikigami.Execution.Runner (DispatchContext)
+import Shikigami.Execution.Transcript (ExecutionError, ExecutionSnapshot)
 import Shikigami.Log qualified as Log
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.Tool (SomeTool (..), Tool (..), ToolRegistry, someToolName)
@@ -124,15 +127,17 @@ data CapabilityProvider = CapabilityProvider
     acquire :: !(CapabilityScope -> IO (Either CapabilityAcquireError CapabilityLease))
   }
 
-newtype CapabilityProviderRegistry
+data CapabilityProviderRegistry
   = CapabilityProviderRegistry
       (Map (CapabilityId, CapabilityRevision) CapabilityProvider)
+      (Map (CapabilityId, CapabilityRevision, Text) DurableAdapter)
 
 data CapabilityProviderRegistryError
   = DuplicateCapabilityProvider
-  { capability :: !CapabilityId,
-    revision :: !CapabilityRevision
-  }
+      { capability :: !CapabilityId,
+        revision :: !CapabilityRevision
+      }
+  | InvalidDurableAdapter {capability :: !CapabilityId, revision :: !CapabilityRevision}
   deriving stock (Eq, Show, Generic)
 
 data CapabilityReleaseFailure = CapabilityReleaseFailure
@@ -182,7 +187,7 @@ mkCapabilityProviderRegistry ::
   [CapabilityProvider] ->
   Either CapabilityProviderRegistryError CapabilityProviderRegistry
 mkCapabilityProviderRegistry providers =
-  CapabilityProviderRegistry <$> foldl' addProvider (Right Map.empty) providers
+  (\registry -> CapabilityProviderRegistry registry Map.empty) <$> foldl' addProvider (Right Map.empty) providers
   where
     addProvider accumulated provider@CapabilityProvider {descriptor = CapabilityDescriptor {capability, revision}} = do
       registry <- accumulated
@@ -191,7 +196,7 @@ mkCapabilityProviderRegistry providers =
         Nothing -> Right (Map.insert (capability, revision) provider registry)
 
 emptyCapabilityProviderRegistry :: CapabilityProviderRegistry
-emptyCapabilityProviderRegistry = CapabilityProviderRegistry Map.empty
+emptyCapabilityProviderRegistry = CapabilityProviderRegistry Map.empty Map.empty
 
 -- | Find only the exact revision pinned in a resolved snapshot and verify the
 -- provider advertises the complete same descriptor. There is no current-version
@@ -200,7 +205,7 @@ resolveProvider ::
   CapabilityProviderRegistry ->
   CapabilityDescriptor ->
   Either CapabilityRuntimeError CapabilityProvider
-resolveProvider (CapabilityProviderRegistry registry) expected@CapabilityDescriptor {capability, revision} =
+resolveProvider (CapabilityProviderRegistry registry _) expected@CapabilityDescriptor {capability, revision} =
   case Map.lookup (capability, revision) registry of
     Nothing -> Left CapabilityProviderUnavailable {capability, revision}
     Just provider@CapabilityProvider {descriptor = actual}
@@ -445,3 +450,55 @@ lifecycleFields CapabilityScope {runId, principal, mode} CapabilityDescriptor {c
     "revision" Aeson..= capabilityRevisionText revision,
     "tool_names" Aeson..= sort names
   ]
+
+-- | Descriptions contain no executable callbacks. Menu inspection cannot
+-- prepare an attempt or launch a provider effect.
+data DurableToolContract = DurableToolContract
+  { name :: !Text,
+    description :: !Text,
+    schema :: !Aeson.Value,
+    recovery :: !RecoveryClass,
+    invoiceCost :: !ToolInvoiceCost
+  }
+
+data DurableAdapter = DurableAdapter
+  { descriptor :: !CapabilityDescriptor,
+    contracts :: ![DurableToolContract],
+    prepare :: !(ExecutionSnapshot -> DispatchContext -> Text -> IO (Either ExecutionError SomeTool))
+  }
+
+-- | Explicit operator installation, separate from generic overlay factories.
+-- The key includes the descriptor digest; duplicate immutable revisions refuse.
+installDurableAdapters :: [DurableAdapter] -> CapabilityProviderRegistry -> Either CapabilityProviderRegistryError CapabilityProviderRegistry
+installDurableAdapters adapters (CapabilityProviderRegistry generic existing) = CapabilityProviderRegistry generic <$> foldM add existing adapters
+  where
+    add registry adapter = do
+      let descriptor = adapter.descriptor
+          capability = descriptor.capability
+          revision = descriptor.revision
+          invalid = Left (InvalidDurableAdapter capability revision)
+      if any (\(id, rev, _) -> id == capability && rev == revision) (Map.keys registry)
+        then Left (DuplicateCapabilityProvider capability revision)
+        else case mkCapabilityCatalog [descriptor] of
+          Left _ -> invalid
+          Right _
+            | sort (map (\contract -> contract.name) adapter.contracts) /= sort (map (\tool -> tool.name) descriptor.tools) -> invalid
+            | length (nub (map (\contract -> contract.name) adapter.contracts)) /= length adapter.contracts -> invalid
+            | not (all (\contract -> Text.length contract.description <= 1024 && Lazy.length (Aeson.encode contract.schema) <= 65536 && objectSchema contract.schema && recoveryMatches descriptor contract) adapter.contracts) -> invalid
+            | otherwise -> Right (Map.insert (capability, revision, descriptorDigest descriptor) adapter registry)
+    objectSchema (Aeson.Object _) = True
+    objectSchema _ = False
+    recoveryMatches descriptor contract = case [tool.operationClass | tool <- descriptor.tools, tool.name == contract.name] of
+      [Observation] -> contract.recovery == RepeatableObservation
+      [IdempotentMutation] -> contract.recovery `elem` [IdempotentEffect, UncertainEffect]
+      [IrreversibleEmission] -> contract.recovery == UncertainEffect
+      _ -> False
+
+resolveDurableAdapter :: CapabilityProviderRegistry -> CapabilityDescriptor -> Maybe DurableAdapter
+resolveDurableAdapter (CapabilityProviderRegistry _ registry) descriptor = Map.lookup (descriptor.capability, descriptor.revision, descriptorDigest descriptor) registry
+
+durableAdapterInstalled :: CapabilityProviderRegistry -> CapabilityDescriptor -> Bool
+durableAdapterInstalled registry descriptor = maybe False (const True) (resolveDurableAdapter registry descriptor)
+
+descriptorDigest :: CapabilityDescriptor -> Text
+descriptorDigest = versionedDigest "shikigami.durable-adapter-descriptor/1" . Aeson.toJSON

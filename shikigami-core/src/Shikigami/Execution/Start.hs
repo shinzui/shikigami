@@ -5,6 +5,7 @@ module Shikigami.Execution.Start
   ( SkillAssignment (..),
     SkillInput (..),
     admitSkillExecution,
+    admitWorkspaceSkillExecution,
     readExecutionResult,
   )
 where
@@ -23,12 +24,14 @@ import Shikigami.Behavior.Skill (SkillDir, SkillManifest (..), loadSkillManifest
 import Shikigami.Capability.Overlay (ResolvedCapabilitySet)
 import Shikigami.Execution.Driver (ExecutionDriverResult (..), ExecutionStart (..))
 import Shikigami.Execution.Executor (ExecutionRuntime (..), runExecutionStore)
+import Shikigami.Execution.Policy (selectContextView)
 import Shikigami.Execution.Policy.Types (HarnessPolicy)
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Store qualified as Store
 import Shikigami.Execution.Tools (ExecutionToolMenu (..))
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude
+import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), instructionPrompt)
 import System.Timeout (timeout)
 
 data SkillAssignment = SkillAssignment
@@ -52,7 +55,15 @@ data SkillInput = SkillInput
   deriving stock (Generic)
 
 admitSkillExecution :: ExecutionRuntime -> (ExecutionSnapshot -> IO (Either ExecutionError ExecutionToolMenu)) -> SkillAssignment -> IO (Either ExecutionError ExecutionStart)
-admitSkillExecution runtime describe assignment = do
+admitSkillExecution = admitSkillExecutionWithWorkspace (pure (Right Nothing))
+
+-- | Only the new governed admission branch supplies this trusted loader. Resume
+-- reads the retained bundle and never calls the loader or mutable worktree.
+admitWorkspaceSkillExecution :: IO (Either ExecutionError WorkspaceAdmission) -> ExecutionRuntime -> (ExecutionSnapshot -> IO (Either ExecutionError ExecutionToolMenu)) -> SkillAssignment -> IO (Either ExecutionError ExecutionStart)
+admitWorkspaceSkillExecution load = admitSkillExecutionWithWorkspace (fmap Just <$> load)
+
+admitSkillExecutionWithWorkspace :: IO (Either ExecutionError (Maybe WorkspaceAdmission)) -> ExecutionRuntime -> (ExecutionSnapshot -> IO (Either ExecutionError ExecutionToolMenu)) -> SkillAssignment -> IO (Either ExecutionError ExecutionStart)
+admitSkillExecutionWithWorkspace loadWorkspace runtime describe assignment = do
   existing <- owned (Store.inspectExecution execution)
   case existing of
     Left err -> pure (Left err)
@@ -77,44 +88,49 @@ admitSkillExecution runtime describe assignment = do
             Right input -> case assignment.policy of
               Left reason -> pure (Left (ExecutionPolicyRefused reason))
               Right policy -> do
-                let initial =
-                      ExecutionSnapshot
-                        { format = 1,
-                          executionId = execution,
-                          runId = assignment.runId,
-                          agent = assignment.agent,
-                          identity = assignment.identity,
-                          sessionId = assignment.sessionId,
-                          selection = assignment.selection,
-                          sanctionedProfile = assignment.sanctionedProfile,
-                          instructions = SkillInstructions skill.name skill.description skill.body,
-                          initialContext = ReplayContext 2 (Just skill.description) (input.history <> [RequestTurn [TextBlock (skillRequestText skill input.request)] Nothing]),
-                          capabilities = assignment.capabilities,
-                          offeredTools = toJSON ([] :: [Aeson.Value]),
-                          policy,
-                          toolBindings = []
-                        }
-                case validateSnapshot initial >> void (Store.payloadReference (toJSON initial)) of
+                loadedWorkspace <- loadWorkspace
+                case loadedWorkspace of
                   Left err -> pure (Left err)
-                  Right () -> do
-                    authority <- runtime.authorize initial
-                    case authority of
-                      Left _ -> pure (Left (ExecutionPolicyRefused "fresh assignment authority refused"))
+                  Right workspace -> do
+                    let initial =
+                          ExecutionSnapshot
+                            { format = 1,
+                              executionId = execution,
+                              runId = assignment.runId,
+                              agent = assignment.agent,
+                              identity = assignment.identity,
+                              sessionId = assignment.sessionId,
+                              selection = assignment.selection,
+                              sanctionedProfile = assignment.sanctionedProfile,
+                              instructions = SkillInstructions skill.name skill.description skill.body,
+                              initialContext = ReplayContext 2 (Just (skill.description <> maybe "" (instructionPrompt . (.instructions)) workspace)) (input.history <> [RequestTurn [TextBlock (skillRequestText skill input.request)] Nothing]),
+                              capabilities = assignment.capabilities,
+                              offeredTools = toJSON ([] :: [Aeson.Value]),
+                              policy,
+                              toolBindings = [],
+                              workspace
+                            }
+                    case validateSnapshot initial >> when (isJust workspace) (void (selectContextView policy initial.initialContext)) >> void (Store.payloadReference (toJSON initial)) of
+                      Left err -> pure (Left err)
                       Right () -> do
-                        described <- timeout (max 1 (min 30 runtime.timeoutSeconds) * 1000000) (describe initial)
-                        let menu = fromMaybe (Left (ExecutionPolicyRefused "tool menu description exceeded its admission deadline")) described
-                        case menu of
-                          Left err -> pure (Left err)
-                          Right frozen -> do
-                            let snapshot = initial & #offeredTools .~ frozen.offeredTools & #toolBindings .~ frozen.toolBindings
-                            admitted <- owned (Store.admitExecution snapshot)
-                            case admitted of
-                              Right _ -> pure (Right (ExecutionStart execution))
-                              -- Another admission may have won after the initial
-                              -- read. Its frozen snapshot wins even if the file or
-                              -- process configuration changed between attempts.
-                              Left ExecutionIdentityConflict -> admitSkillExecution runtime describe assignment
+                        authority <- runtime.authorize initial
+                        case authority of
+                          Left _ -> pure (Left (ExecutionPolicyRefused "fresh assignment authority refused"))
+                          Right () -> do
+                            described <- timeout (max 1 (min 30 runtime.timeoutSeconds) * 1000000) (describe initial)
+                            let menu = fromMaybe (Left (ExecutionPolicyRefused "tool menu description exceeded its admission deadline")) described
+                            case menu of
                               Left err -> pure (Left err)
+                              Right frozen -> do
+                                let snapshot = initial & #offeredTools .~ frozen.offeredTools & #toolBindings .~ frozen.toolBindings
+                                admitted <- owned (Store.admitExecution snapshot)
+                                case admitted of
+                                  Right _ -> pure (Right (ExecutionStart execution))
+                                  -- Another admission may have won after the initial
+                                  -- read. Its frozen snapshot wins even if the file or
+                                  -- process configuration changed between attempts.
+                                  Left ExecutionIdentityConflict -> admitSkillExecutionWithWorkspace loadWorkspace runtime describe assignment
+                                  Left err -> pure (Left err)
   where
     execution = executionIdFor assignment.selection.assignmentId
     owned :: Eff AppEffects (Either ExecutionError a) -> IO (Either ExecutionError a)

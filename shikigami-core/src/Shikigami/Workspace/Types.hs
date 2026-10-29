@@ -3,6 +3,7 @@
 module Shikigami.Workspace.Types where
 
 import Shikigami.Agent.Principal (AgentIdentity)
+import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Prelude
 import Shikigami.WorkerSession.Transfer (WorkspaceRef)
@@ -42,3 +43,7 @@ data AllocationState = Reserved | Ready
 data WorkspaceError = InvalidWorkspaceRequest | WorkspaceBindingConflict | WorkspaceMissing | WorkspaceAllocationRefused
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
+
+-- | Protected snapshot correlation, distinct from an allocation completion marker.
+workspaceBindingDigest :: WorkspaceBinding -> Text
+workspaceBindingDigest = versionedDigest "shikigami.workspace-binding/1" . toJSON

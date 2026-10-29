@@ -194,6 +194,8 @@ library
     Shikigami.Workflow.Registry
     Shikigami.Workflow.Versioning
     Shikigami.Workspace.Catalog
+    Shikigami.Workspace.Instructions
+    Shikigami.Workspace.Reference
     Shikigami.Workspace.Store
     Shikigami.Workspace.Types
 
@@ -363,7 +365,9 @@ test-suite shikigami-core-test
     Shikigami.SinkHonestySpec
     Shikigami.SinkIntentSpec
     Shikigami.WireCompatSpec
+    Shikigami.WorkspaceAdapterSpec
     Shikigami.WorkspaceCatalogSpec
+    Shikigami.WorkspaceInstructionsSpec
 
   hs-source-dirs: test
   ghc-options:

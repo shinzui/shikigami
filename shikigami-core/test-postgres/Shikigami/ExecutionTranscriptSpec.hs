@@ -60,7 +60,10 @@ import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv)
 import Shikigami.Behavior.Skill (SkillDir (..))
 import Shikigami.Behavior.StubProvider (stubApiProvider, stubModel)
 import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
+import Shikigami.Capability.Overlay qualified as Overlay
 import Shikigami.Capability.Provider (emptyCapabilityProviderRegistry)
+import Shikigami.Capability.Provider qualified as Capability
+import Shikigami.Capability.Tools (overlayToolName)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Decision.ModelCatalog (modelCatalog)
 import Shikigami.Execution.Attempt qualified as Attempt
@@ -89,6 +92,8 @@ import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.Store.ExecutionSelection qualified as Calls
 import Shikigami.Trigger.Enqueue (addressedRunJob, enqueueRunJobTx, ensureRunQueue)
+import Shikigami.Workspace.Instructions
+import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikumi.Tool (mkDynTool)
 import Shikumi.Tool.Output qualified as ToolOutput
 import Test.Tasty (TestTree, testGroup)
@@ -128,6 +133,92 @@ tests fixture =
           Start.admitSkillExecution executor (\_ -> assertFailure "existing assignment reacquired its menu" >> pure (Left UnsupportedReplay)) retired >>= (@?= Right accepted)
           readIORef described >>= (@?= 1)
           Start.admitSkillExecution executor describe (retired & #runId .~ "different-run") >>= (@?= Left ExecutionIdentityConflict),
+      testCase "workspace admission freezes scoped policy across restart and the actual model request" $
+        withConfiguredResourceFixture fixture id (Map.insert R.Tokens R.ExplicitlyUnbounded) \env original _ -> do
+          (executor, observed, _) <- driverRuntime env False
+          bundle <- expectRight (mkInstructionBundle 65536 "mori://fixture/repo" (Text.replicate 40 "a") [("AGENTS.md", "PRIVATE_ROOT_POLICY"), ("src/AGENTS.md", "PRIVATE_NESTED_POLICY")])
+          let snapshot = anotherSnapshot original "workspace-instructions"
+              admission = WorkspaceAdmission (WorkspaceRef "shikigami.workspace/1" "fixture") ("sha256:" <> Text.replicate 64 "a") snapshot.runId snapshot.selection.assignmentId rootId snapshot.identity 0 bundle
+              assignment = Start.SkillAssignment snapshot.runId snapshot.agent snapshot.identity snapshot.sessionId snapshot.selection snapshot.sanctionedProfile snapshot.capabilities (Right snapshot.policy) (SkillDir "test/fixtures/durable-skill") (pure (Right (Start.SkillInput (triggerOnly (object [])) [])))
+              describe _ = pure (Right (Tools.ExecutionToolMenu (toJSON ([] :: [Value])) []))
+          accepted <- expectRight =<< Start.admitWorkspaceSkillExecution (pure (Right admission)) executor describe assignment
+          fresh <- expectRight =<< run env (Store.authorizeReplay snapshot.executionId snapshot.identity (pure (Right ())))
+          (frozen, _) <- expectRight =<< run env (Store.loadExecution fresh)
+          frozen.workspace @?= Just admission
+          let retired = assignment & #skillDir .~ SkillDir "/retired-skill" & #input .~ (assertFailure "resume reread input" >> pure (Left UnsupportedReplay))
+          Start.admitWorkspaceSkillExecution (assertFailure "resume rediscovered repository instructions" >> pure (Left UnsupportedReplay)) executor (\_ -> assertFailure "resume rebuilt tool menu" >> pure (Left UnsupportedReplay)) retired >>= (@?= Right accepted)
+          withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
+          completed <- pumpDriver env executor frozen 12
+          completed.phase @?= Succeeded
+          requests <- observed
+          assertBool "actual model request observed" (not (null requests))
+          mapM_ (\context -> context.systemPrompt @?= frozen.initialContext.systemPrompt) requests
+          assertBool "scope and exact bodies in actual request" (maybe False (\prompt -> all (`Text.isInfixOf` prompt) ["PRIVATE_ROOT_POLICY", "PRIVATE_NESTED_POLICY", "src/AGENTS.md", "Parent and operator restrictions remain authoritative"]) frozen.initialContext.systemPrompt)
+          metadata <- inspect env snapshot.executionId
+          assertBool "instruction bodies stay out of public metadata" (not ("PRIVATE_ROOT_POLICY" `Text.isInfixOf` Text.pack (show (Aeson.encode metadata))))
+          validateSnapshot (frozen & #initialContext . #systemPrompt .~ Just "lost policy") @?= Left UnsupportedReplay,
+      testCase "workspace fixed policy must fit before the model or menu is acquired" $
+        withConfiguredResourceFixture fixture id (Map.insert R.Tokens R.ExplicitlyUnbounded) \env original _ -> do
+          (executor, observed, _) <- driverRuntime env False
+          bundle <- expectRight (mkInstructionBundle 65536 "mori://fixture/repo" (Text.replicate 40 "a") [("AGENTS.md", Text.replicate 2000 "x")])
+          let snapshot = anotherSnapshot original "workspace-budget"
+              admission = WorkspaceAdmission (WorkspaceRef "shikigami.workspace/1" "fixture") ("sha256:" <> Text.replicate 64 "a") snapshot.runId snapshot.selection.assignmentId rootId snapshot.identity 0 bundle
+              assignment = Start.SkillAssignment snapshot.runId snapshot.agent snapshot.identity snapshot.sessionId snapshot.selection Nothing snapshot.capabilities (Right (snapshot.policy & #contextBytes .~ 1024)) (SkillDir "test/fixtures/durable-skill") (pure (Right (Start.SkillInput (triggerOnly (object [])) [])))
+          result <- Start.admitWorkspaceSkillExecution (pure (Right admission)) executor (\_ -> assertFailure "over-budget policy reached the menu" >> pure (Left UnsupportedReplay)) assignment
+          result @?= Left (ExecutionPolicyRefused "required context exceeds the configured byte ceiling")
+          observed >>= (@?= []),
+      testCase "workspace exact adapters describe without preparation and require trusted dispatch coordinates" $
+        withFixture fixture \env original _ -> do
+          prepared <- newIORef (0 :: Int)
+          bundle <- expectRight (mkInstructionBundle 65536 "mori://fixture/repo" (Text.replicate 40 "a") [])
+          capability <- expectRight (Overlay.mkCapabilityId "workspace.edit")
+          revision <- expectRight (Overlay.mkCapabilityRevision "1")
+          let admission = WorkspaceAdmission (WorkspaceRef "shikigami.workspace/1" "fixture") ("sha256:" <> Text.replicate 64 "a") original.runId original.selection.assignmentId rootId original.identity 0 bundle
+              snapshot = original & #workspace .~ Just admission & #initialContext . #systemPrompt .~ Just (instructionPrompt bundle) & #capabilities .~ Overlay.mkResolvedCapabilitySet [descriptor]
+              descriptor = Overlay.CapabilityDescriptor capability revision [Overlay.CapabilityToolDescriptor "edit" Overlay.IdempotentMutation]
+              contract = Capability.DurableToolContract "edit" "Edit fixture." (object []) IdempotentEffect NoInvoiceCost
+              adapter =
+                Capability.DurableAdapter
+                  descriptor
+                  [contract]
+                  ( \accepted dispatch name -> do
+                      accepted.executionId @?= snapshot.executionId
+                      dispatch.operation.executionId @?= snapshot.executionId
+                      dispatch.attemptId @?= AttemptId "fixture-attempt"
+                      name @?= "edit"
+                      modifyIORef' prepared (+ 1)
+                      pure (Right tool)
+                  )
+              tool = mkDynTool "edit" "Edit fixture." (object []) (\_ -> unsafeEff_ (assertFailure "description invoked a mutation") >> pure (Right (ToolOutput.textToolOutput "unused")))
+              native = Tools.NativeToolFactory (\_ -> pure (Right [])) (\_ _ _ -> pure (Right []))
+              logical = Runner.OperationContext snapshot.executionId (OperationId "fixture-operation") "fixture-operation" "fingerprint" "scope"
+              dispatch = Runner.DispatchContext logical (AttemptId "fixture-attempt") "owner" 1
+              describe registry accepted = Tools.describeExecutionTools Log.silentLogger denyAllActionAuthorizer registry native accepted
+              prepare registry context accepted = Tools.withExecutionTools Log.silentLogger denyAllActionAuthorizer registry native accepted context (Just (overlayToolName capability "edit")) (pure . map (.binding))
+          registry <- expectRight (Capability.installDurableAdapters [adapter] emptyCapabilityProviderRegistry)
+          menu <- expectRight =<< describe registry snapshot
+          readIORef prepared >>= (@?= 0)
+          undeclared <- expectRight =<< describe registry (snapshot & #capabilities .~ emptyResolvedCapabilitySet)
+          undeclared.toolBindings @?= []
+          map (.recovery) menu.toolBindings @?= [IdempotentEffect]
+          bindings <- expectRight =<< prepare registry dispatch snapshot
+          bindings @?= menu.toolBindings
+          readIORef prepared >>= (@?= 1)
+          _ <- prepare registry (dispatch & #generation .~ 0) snapshot >>= \case Left _ -> pure (); Right _ -> assertFailure "invalid generation reached callback"
+          _ <- prepare registry (dispatch & #operation . #executionId .~ ExecutionId "wrong") snapshot >>= \case Left _ -> pure (); Right _ -> assertFailure "wrong execution reached callback"
+          _ <- describe registry (snapshot & #workspace .~ Nothing) >>= \case Left _ -> pure (); Right _ -> assertFailure "historical snapshot gained mutation authority"
+          _ <- describe emptyCapabilityProviderRegistry snapshot >>= \case Left _ -> pure (); Right _ -> assertFailure "descriptor alone gained mutation authority"
+          readIORef prepared >>= (@?= 1)
+          let changedTool = mkDynTool "edit" "Edit fixture." (object ["changed" .= True]) (\_ -> pure (Right (ToolOutput.textToolOutput "unused")))
+              changedAdapter = Capability.DurableAdapter descriptor [contract] (\_ _ _ -> pure (Right changedTool))
+          changedRegistry <- expectRight (Capability.installDurableAdapters [changedAdapter] emptyCapabilityProviderRegistry)
+          _ <- prepare changedRegistry dispatch snapshot >>= \case Left _ -> pure (); Right _ -> assertFailure "changed invocation schema was admitted"
+          let collision = mkDynTool (overlayToolName capability "edit") "native collision" (object []) (\_ -> pure (Right (ToolOutput.textToolOutput "unused")))
+              collisionBinding = ToolBinding (overlayToolName capability "edit") "native/1" (versionedDigest "shikigami.tool-schema/1" (object [])) UncertainEffect NoInvoiceCost
+              collidingNative = Tools.NativeToolFactory (\_ -> pure (Right [Executor.BoundTool collisionBinding collision])) (\_ _ _ -> pure (Right []))
+          _ <- Tools.describeExecutionTools Log.silentLogger denyAllActionAuthorizer registry collidingNative snapshot >>= \case Left _ -> pure (); Right _ -> assertFailure "native tool replaced the overlay"
+          readIORef prepared >>= (@?= 1)
+          pure (),
       testCase "driver generations repair lost queue delivery without another actual attempt" $
         withConfiguredResourceFixture fixture id (Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot access -> do
           (executor, calls, _) <- driverRuntime env False
@@ -912,9 +1003,17 @@ nativeExecutorCase fixture billing = testCase (show billing <> " preserves rich 
             (const selectedRuntime)
             ( \_ context requested use -> do
                 requested @?= Just "observe"
-                context.operationId @?= specification.operationId
+                context.attemptId @?= reference.attemptId
+                current <- expectRight =<< run env (Store.inspectExecutionAttempt reference.attemptId)
+                case current of
+                  Just actual -> do
+                    actual.owner @?= Just context.owner
+                    actual.generation @?= context.generation
+                    actual.phase @?= Attempt.DispatchStarted
+                  Nothing -> assertFailure "dispatch had no retained attempt"
+                context.operation.operationId @?= specification.operationId
                 let OperationId key = specification.operationId
-                context.idempotencyKey @?= key
+                context.operation.idempotencyKey @?= key
                 _ <- use [Executor.BoundTool binding tool]
                 pure (Left (ExecutionPolicyRefused "fixture lease release failed"))
             )
@@ -1041,12 +1140,12 @@ toolRecoveryCase fixture recovery = testCase (show recovery <> " retains its log
             (const (pure (Right ())))
             (const selectedRuntime)
             ( \_ context _ use -> do
-                context.operationId @?= specification.operationId
+                context.operation.operationId @?= specification.operationId
                 let OperationId expectedKey = specification.operationId
-                context.idempotencyKey @?= expectedKey
+                context.operation.idempotencyKey @?= expectedKey
                 let tool = mkDynTool "observe" "Accepted native message." (object []) \_ -> unsafeEff_ do
-                      modifyIORef' keys (<> [context.idempotencyKey])
-                      existing <- atomicModifyIORef' acceptedMessages (\messages -> (Map.insert context.idempotencyKey "opaque-accepted-message" messages, Map.lookup context.idempotencyKey messages))
+                      modifyIORef' keys (<> [context.operation.idempotencyKey])
+                      existing <- atomicModifyIORef' acceptedMessages (\messages -> (Map.insert context.operation.idempotencyKey "opaque-accepted-message" messages, Map.lookup context.operation.idempotencyKey messages))
                       case existing of
                         Nothing -> Exception.throwIO (userError "accepted message response was lost")
                         Just reference -> pure (Right (ToolOutput.textToolOutput reference))
@@ -1180,7 +1279,7 @@ withConfiguredResourceFixture fixture configure editLimits use = withShikigamiFr
   let env = AppEnv (defaultConnectionSettings connection) tracer Nothing
       limits = editLimits (Map.insert R.Tokens (R.Limited 1000) (Map.fromList [(dimension, R.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]))
       selection = mustRight (resolveExecutionSelection "transcript-assignment" (mustRight (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just rootId) now)
-      snapshot = configure (ExecutionSnapshot 1 (executionIdFor selection.assignmentId) "transcript-run" (AgentName "worker") (compatibilityIdentity "worker") session selection Nothing (SkillInstructions "fixture" "system" "PRIVATE_REPLAY_MARKER") (ReplayContext 1 (Just "system") [UserTurn [TextBlock "PRIVATE_REPLAY_MARKER"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [])
+      snapshot = configure (ExecutionSnapshot 1 (executionIdFor selection.assignmentId) "transcript-run" (AgentName "worker") (compatibilityIdentity "worker") session selection Nothing (SkillInstructions "fixture" "system" "PRIVATE_REPLAY_MARKER") (ReplayContext 1 (Just "system") [UserTurn [TextBlock "PRIVATE_REPLAY_MARKER"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing)
   _ <- expectRight =<< run env Catalog.registerProjectionCatalog
   run env (Roots.enrollRoot rootId (R.Envelope limits (addUTCTime 3600 now))) >>= (@?= Right R.Accepted)
   run env (Store.admitExecution snapshot) >>= (@?= Right R.Accepted)

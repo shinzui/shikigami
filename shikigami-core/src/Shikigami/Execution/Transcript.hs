@@ -37,6 +37,8 @@ import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude hiding (Options)
+import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), instructionPrompt)
+import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikumi.Tool.Output qualified as Tool
 
 newtype ExecutionId = ExecutionId {value :: Text}
@@ -227,20 +229,22 @@ data ExecutionSnapshot = ExecutionSnapshot
     capabilities :: !ResolvedCapabilitySet,
     offeredTools :: !Aeson.Value,
     policy :: !HarnessPolicy,
-    toolBindings :: ![ToolBinding]
+    toolBindings :: ![ToolBinding],
+    workspace :: !(Maybe WorkspaceAdmission)
   }
   deriving stock (Eq, Generic)
 
 instance ToJSON ExecutionSnapshot where
   toJSON snapshot = case Aeson.genericToJSON Aeson.defaultOptions snapshot of
-    Aeson.Object fields | null snapshot.toolBindings -> Aeson.Object (KeyMap.delete "toolBindings" fields)
+    Aeson.Object fields -> Aeson.Object ((if isNothing snapshot.workspace then KeyMap.delete "workspace" else id) ((if null snapshot.toolBindings then KeyMap.delete "toolBindings" else id) fields))
     value -> value
 
 instance Show ExecutionSnapshot where show snapshot = "ExecutionSnapshot " <> show snapshot.executionId <> " <protected>"
 
 instance FromJSON ExecutionSnapshot where
   parseJSON = Aeson.withObject "ExecutionSnapshot" \fields -> do
-    snapshot <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (if KeyMap.member "toolBindings" fields then fields else KeyMap.insert "toolBindings" (toJSON ([] :: [ToolBinding])) fields))
+    let defaults = (if KeyMap.member "workspace" fields then id else KeyMap.insert "workspace" Aeson.Null) (if KeyMap.member "toolBindings" fields then fields else KeyMap.insert "toolBindings" (toJSON ([] :: [ToolBinding])) fields)
+    snapshot <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object defaults)
     unless (snapshot.format == 1 && snapshot.executionId == executionIdFor snapshot.selection.assignmentId && snapshot.selection.profile == ((.ref) <$> snapshot.sanctionedProfile)) (fail "unsupported execution snapshot version or identity")
     unless (maybe True (\resolved -> resolved.ref.profileId == resolved.profile.profileId && resolved.ref.version == resolved.profile.version && resolved.ref.digest == profileDigest resolved.profile) snapshot.sanctionedProfile) (fail "execution profile content differs from its immutable reference")
     case snapshot.selection.effectiveOptions of
@@ -250,6 +254,10 @@ instance FromJSON ExecutionSnapshot where
     unless (null snapshot.toolBindings) $ case Aeson.fromJSON snapshot.offeredTools of
       Aeson.Success tools -> unless (sort (map (\(tool :: BaikaiTool.Tool) -> tool.name) tools) == sort (map (\(binding :: ToolBinding) -> binding.name) snapshot.toolBindings) && all (\(tool :: BaikaiTool.Tool) -> any (\(binding :: ToolBinding) -> binding.name == tool.name && binding.schemaDigest == versionedDigest "shikigami.tool-schema/1" tool.parameters) snapshot.toolBindings) tools) (fail "execution tool bindings differ from the frozen menu")
       Aeson.Error _ -> fail "execution tool menu is unsupported"
+    forM_ snapshot.workspace \admission -> do
+      unless (admission.runId == snapshot.runId && admission.assignmentId == snapshot.selection.assignmentId && Just admission.rootId == snapshot.selection.rootId && admission.owner == snapshot.identity && admission.epoch >= 0) (fail "workspace differs from its accepted execution")
+      unless (admission.workspace.provider == "shikigami.workspace/1" && not (Text.null admission.workspace.resource) && Text.length admission.workspace.resource <= 128 && Text.length admission.bindingDigest == 71 && "sha256:" `Text.isPrefixOf` admission.bindingDigest) (fail "unsupported workspace binding")
+      unless (maybe False (instructionPrompt admission.instructions `Text.isSuffixOf`) snapshot.initialContext.systemPrompt) (fail "workspace instructions are absent from fixed context")
     pure snapshot
     where
       validBinding binding = all (\value -> not (Text.null value) && Text.length value <= 256) [binding.name, binding.revision, binding.schemaDigest]

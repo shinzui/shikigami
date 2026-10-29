@@ -3,6 +3,7 @@
 -- never authorizes external IO or claims that an uncertain effect is absent.
 module Shikigami.Execution.Runner
   ( OperationContext (..),
+    DispatchContext (..),
     PreparedTool (..),
     ToolPreparation (..),
     prepareAcceptedTool,
@@ -11,7 +12,7 @@ module Shikigami.Execution.Runner
 where
 
 import Effectful (Eff)
-import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Identity (AttemptId, OperationId (..))
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Store qualified as Store
 import Shikigami.Execution.Transcript
@@ -28,6 +29,17 @@ data OperationContext = OperationContext
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
+
+-- | Process-local evidence of the actual claimed dispatch. Menu construction
+-- has no such context. Providers still check these coordinates against retained
+-- state at their effect boundary; this value is not itself an authority grant.
+data DispatchContext = DispatchContext
+  { operation :: !OperationContext,
+    attemptId :: !AttemptId,
+    owner :: !Text,
+    generation :: !Integer
+  }
+  deriving stock (Eq, Show, Generic)
 
 data PreparedTool = PreparedTool
   { context :: !OperationContext,

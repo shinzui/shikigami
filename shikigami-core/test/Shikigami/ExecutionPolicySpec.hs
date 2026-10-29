@@ -11,6 +11,7 @@ import Data.Text qualified as Text
 import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Transcript
+import Shikigami.Workspace.Instructions (instructionPrompt, mkInstructionBundle)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -55,19 +56,22 @@ tests =
             source = ReplayContext 1 Nothing [UserTurn [TextBlock "request"] Nothing, UserTurn [TextBlock (Text.replicate 3000 "x")] Nothing, AssistantTurn (answer "latest")]
         prepareModelOperationInput policy ModelTurn source Nothing Nothing @?= Left (ExecutionPolicyRefused "summary source exceeds the context ceiling"),
       testCase "version-2 summary requests and accepted summaries retain the actual request" do
-        let policy = defaultHarnessPolicy & #contextBytes .~ 3000 & #keepRecentMessages .~ 1 & #summaryTokens .~ Just 64
+        bundle <- expectRight (mkInstructionBundle 65536 "mori://fixture/repo" (Text.replicate 40 "a") [("AGENTS.md", "frozen repository requirements")])
+        let policy = defaultHarnessPolicy & #contextBytes .~ 3600 & #keepRecentMessages .~ 1 & #summaryTokens .~ Just 64
             request = RequestTurn [TextBlock "current request"] Nothing
-            source = ReplayContext 2 Nothing [UserTurn [TextBlock (Text.replicate 1000 "x")] Nothing, AssistantTurn (answer (Text.replicate 1000 "y")), request, AssistantTurn (answer (Text.replicate 1000 "z"))]
+            source = ReplayContext 2 (Just (instructionPrompt bundle)) [UserTurn [TextBlock (Text.replicate 1000 "x")] Nothing, AssistantTurn (answer (Text.replicate 1000 "y")), request, AssistantTurn (answer (Text.replicate 1000 "z"))]
             execution = ExecutionId "summary-fixture"
             specification = OperationSpec (operationIdFor execution 0) ModelSummary RepeatableObservation "summary" "policy" "scope" Nothing
             ref = PayloadRef "payload" "digest" 1
             operation = Operation 1 execution 0 specification "fingerprint" ref (Just ref) (Just NeedModel) False Nothing
         (kind, input) <- expectRight (prepareModelOperationInput policy ModelTurn source Nothing Nothing)
         kind @?= ModelSummary
+        input.view.context.systemPrompt @?= source.systemPrompt
         input.view.context.format @?= 2
         contextRequest input.view.context.messages @?= Just request
         (next, accepted) <- expectRight (prepareModelOperationInput policy ModelTurn source Nothing (Just (operation, input, answer "retained facts")))
         next @?= ModelTurn
+        accepted.view.context.systemPrompt @?= source.systemPrompt
         accepted.view.context.format @?= 2
         contextRequest accepted.view.context.messages @?= Just request
         assertBool "accepted summary is referenced" (maybe False (maybe False (const True) . (.summary)) accepted.provenance),

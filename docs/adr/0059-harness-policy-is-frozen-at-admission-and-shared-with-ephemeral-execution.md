@@ -26,7 +26,7 @@ Overrides can add restrictions and lower ceilings, retain more recent context,
 and strengthen output requirements. They grant no model, tool or external action.
 The old coarse workflow branch retains its existing semantics and labels.
 
-[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) amendment (2026-10-29; implementation pending): repository instructions are also
+[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) amendment (2026-10-29; instruction admission implemented, worker enablement pending): repository instructions are also
 accepted assignment input. Freeze a bounded bundle of `AGENTS.md` text, path scopes and
 content identities from the admitted base in protected storage, and include its scope-labelled
 contents in fixed model context before the first request. Context compaction must preserve
@@ -35,6 +35,14 @@ repository files cannot grant capabilities. Instruction-file edits are proposed 
 not changes to the active assignment's policy. Resume uses the retained bundle, and only a
 new assignment admits a new instruction identity. Historical snapshots without the bundle
 retain their old encoding and behavior and gain no workspace mutation authority.
+
+`Execution.Start.admitWorkspaceSkillExecution` is the explicit trusted admission API.
+Its retained bundle comes from regular Git blobs in the immutable base, with at most
+64 files and 64 KiB of UTF-8 text, further constrained by the fixed-context budget.
+Bundle decoding verifies content identities and directory scopes. Existing matching
+snapshots resume without reloading source instructions or current configuration.
+The original Skill admission API retains its historical behavior; production worker
+enablement and fresh exact read/edit authority remain separate gates in plan 96.
 
 The database-free command explicitly selects ephemeral recording. It uses the
 same pure context selection, summary preparation, tool admission and output

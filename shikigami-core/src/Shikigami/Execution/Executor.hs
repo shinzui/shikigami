@@ -60,7 +60,7 @@ data ExecutionRuntime = ExecutionRuntime
     replayAuthority :: !(AgentIdentity -> IO (Either Text ())),
     authorize :: !(ExecutionSnapshot -> IO (Either Text ())),
     selectionRuntime :: !(ExecutionSnapshot -> SelectionRuntime),
-    withTools :: !(forall a. ExecutionSnapshot -> Runner.OperationContext -> Maybe Text -> ([BoundTool] -> IO a) -> IO (Either ExecutionError a)),
+    withTools :: !(forall a. ExecutionSnapshot -> Runner.DispatchContext -> Maybe Text -> ([BoundTool] -> IO a) -> IO (Either ExecutionError a)),
     timeoutSeconds :: !Int
   }
 
@@ -199,7 +199,8 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
         _ -> pure (Left AttemptMissing)
     dispatchTool access snapshot lease operation = do
       let context = Runner.OperationContext snapshot.executionId operation.specification.operationId (operationKey operation.specification.operationId) operation.fingerprint operation.specification.scopeDigest
-      handled <- withTools snapshot context (Just operation.specification.name) \tools -> do
+      let dispatchContext = Runner.DispatchContext context lease.reference.attemptId lease.owner lease.generation
+      handled <- withTools snapshot dispatchContext (Just operation.specification.name) \tools -> do
         now <- getCurrentTime
         prepared <- owned (Runner.prepareAcceptedTool now False Nothing access operation.specification.operationId (map (.binding) tools) (const (dispatchAuthority access snapshot lease)))
         case prepared of

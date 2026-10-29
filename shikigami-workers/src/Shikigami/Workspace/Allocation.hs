@@ -4,7 +4,6 @@ module Shikigami.Workspace.Allocation (allocateWorkspace, allocateWorkspaceWithC
 
 import Control.Exception (IOException, catch)
 import Data.Aeson qualified as Aeson
-import Data.ByteString qualified as Bytes
 import Data.ByteString.Char8 qualified as Char8
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Text qualified as Text
@@ -12,12 +11,11 @@ import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUID
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
+import Shikigami.Workspace.Git (runWorkspaceGit)
 import Shikigami.Workspace.Types
 import System.Directory
 import System.Exit (ExitCode (..))
 import System.FilePath (isAbsolute, (</>))
-import System.IO (IOMode (..), withFile)
-import System.Process (CreateProcess (..), StdStream (..), proc, terminateProcess, waitForProcess, withCreateProcess)
 
 workspaceFiles :: FilePath -> WorkspaceBinding -> FilePath
 workspaceFiles root binding = root </> Text.unpack binding.workspace.resource </> "files"
@@ -83,31 +81,4 @@ allocateWorkspaceWithCheckpoint checkpoint root binding state = catch work (\(_ 
                   Lazy.writeFile (staging </> marker) (Aeson.encode receipt)
                   catch (renameDirectory staging destination >> pure (Right ())) (\(_ :: IOException) -> verify)
     safeResource value = not (Text.null value) && Text.length value <= 128 && Text.all (\c -> (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) value
-    -- Ignore ambient config, credential helpers, hooks and environment overrides.
-    -- Output stays private even on errors; callers receive bounded error values.
-    git args = withFile "/dev/null" WriteMode \sink ->
-      withCreateProcess
-        ( (proc "git" (["-c", "core.hooksPath=/dev/null", "-c", "protocol.file.allow=always"] <> args))
-            { env = Just [("PATH", "/usr/bin:/bin"), ("HOME", root), ("GIT_CONFIG_NOSYSTEM", "1"), ("GIT_CONFIG_GLOBAL", "/dev/null"), ("GIT_TERMINAL_PROMPT", "0")],
-              std_in = NoStream,
-              std_out = CreatePipe,
-              std_err = UseHandle sink
-            }
-        )
-        \_ output _ process -> case output of
-          Nothing -> pure (ExitFailure 1, "", "")
-          Just handle -> do
-            let readBounded total chunks = do
-                  chunk <- Bytes.hGetSome handle 8192
-                  if Bytes.null chunk
-                    then pure (Just (Bytes.concat (reverse chunks)))
-                    else
-                      if total + Bytes.length chunk > 65536
-                        then pure Nothing
-                        else readBounded (total + Bytes.length chunk) (chunk : chunks)
-            bounded <- readBounded 0 []
-            case bounded of
-              Nothing -> terminateProcess process >> waitForProcess process >> pure (ExitFailure 1, "", "")
-              Just bytes -> do
-                status <- waitForProcess process
-                pure (status, Char8.unpack bytes, "")
+    git args = runWorkspaceGit root 65536 args >>= pure . either (const (ExitFailure 1, "", "")) (\bytes -> (ExitSuccess, Char8.unpack bytes, ""))
