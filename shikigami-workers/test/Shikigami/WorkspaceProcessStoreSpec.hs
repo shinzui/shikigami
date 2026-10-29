@@ -3,6 +3,7 @@
 module Shikigami.WorkspaceProcessStoreSpec (tests) where
 
 import Control.Concurrent.Async (concurrently)
+import Control.Monad (forM_)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (Pair)
@@ -39,7 +40,26 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace process registrations"
-    [ testCase "historical registrations keep their JSON fields and omit absent receipt routing" $ withProcess fixture \_ _ proposed -> do
+    [ testCase "bounded factual scans advance past unresolved registrations and include unacknowledged settled facts" $ withProcess fixture \env binding proposed -> do
+        let identifiers = [OperationId ("page-" <> Text.justifyRight 3 '0' (Text.pack (show index))) | index <- [1 .. 66 :: Int]]
+        forM_ identifiers \operation -> do
+          let candidate = proposed & #operationId .~ operation & #unit .~ processUnit operation proposed.fingerprint
+          retained <- right =<< run env (reserveProcessTx binding candidate)
+          run env (refuseReservedProcessTx retained) >>= (@?= Right ())
+        -- A stuck registration sorts first. Recovery must not repeatedly
+        -- select it instead of reaching the final two settled receipts.
+        let stuckId = OperationId "000-unresolved"
+            stuck = proposed & #operationId .~ stuckId & #unit .~ processUnit stuckId proposed.fingerprint
+        _ <- right =<< run env (reserveProcessTx binding stuck)
+        run env (requestProcessLaunchTx binding stuck boot) >>= (@?= Right True)
+        run env (markProcessUnresolvedTx stuck) >>= (@?= Right ())
+        first <- run env (inspectProcessPageTx Nothing)
+        first @?= stuckId : take 63 identifiers
+        second <- run env (inspectProcessPageTx (Just (last first)))
+        second @?= drop 63 identifiers
+        run env (inspectProcessPageTx (Just (last second))) >>= (@?= [])
+        run env (inspectProcessPageTx Nothing) >>= (@?= first),
+      testCase "historical registrations keep their JSON fields and omit absent receipt routing" $ withProcess fixture \_ _ proposed -> do
         case Aeson.toJSON proposed of
           Aeson.Object fields -> do
             assertBool "new routing does not appear on old records" (not (KeyMap.member "routing" fields))

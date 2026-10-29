@@ -9,6 +9,7 @@ module Shikigami.Workspace.ProcessStore
     markProcessUnresolvedTx,
     inspectProcessTx,
     inspectRegisteredProcessTx,
+    inspectProcessPageTx,
   )
 where
 
@@ -128,6 +129,13 @@ inspectProcessTx (OperationId key) = Tx.statement key selectProcess
 inspectRegisteredProcessTx :: OperationId -> Transaction (Maybe (WorkspaceBinding, ProcessRecord))
 inspectRegisteredProcessTx (OperationId key) = Tx.statement key selectRegisteredProcess
 
+-- Bounded keyset scan for the independent factual owner. Advancing past an
+-- unresolved registration prevents it from starving later receipts. Include
+-- settled rows: a crash can separate receipt persistence from acknowledgement.
+-- A complete sweep is safe to repeat; publication is independently idempotent.
+inspectProcessPageTx :: Maybe OperationId -> Transaction [OperationId]
+inspectProcessPageTx cursor = Tx.statement (maybe "" (\(OperationId key) -> key) cursor) selectProcessPage
+
 save :: ProcessRecord -> ProcessRecord -> Transaction (Either WorkspaceError ())
 save expected changed = do
   let OperationId key = expected.operationId
@@ -145,6 +153,9 @@ selectProcess = preparable "SELECT record FROM shikigami.workspace_processes WHE
 
 selectRegisteredProcess :: Statement Text (Maybe (WorkspaceBinding, ProcessRecord))
 selectRegisteredProcess = preparable "SELECT b.binding,p.record FROM shikigami.workspace_processes p JOIN shikigami.workspace_bindings b ON b.resource=p.resource WHERE p.operation_id=$1 AND b.state='ready'" textParam (D.rowMaybe ((,) <$> jsonColumn <*> jsonColumn))
+
+selectProcessPage :: Statement Text [OperationId]
+selectProcessPage = preparable "SELECT operation_id FROM shikigami.workspace_processes WHERE operation_id>$1 ORDER BY operation_id LIMIT 64" textParam (D.rowList (OperationId <$> D.column (D.nonNullable D.text)))
 
 jsonColumn :: (FromJSON a) => D.Row a
 jsonColumn = D.column (D.nonNullable (D.refine decode D.jsonb))

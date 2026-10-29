@@ -36,6 +36,7 @@ import Shikigami.Workspace.Process
 import Shikigami.Workspace.ProcessProvider
 import Shikigami.Workspace.ProcessStore qualified as Processes
 import Shikigami.Workspace.Rpc
+import Shikigami.Workspace.Service
 import Shikigami.Workspace.Store qualified as Workspaces
 import Shikigami.Workspace.Supervisor
 import Shikigami.Workspace.Systemd qualified as Systemd
@@ -45,6 +46,7 @@ import Shikigami.WorkspaceRpcSpec (withListener)
 import Shikumi.Tool (mkDynTool)
 import System.Directory (removeFile)
 import System.FilePath ((</>))
+import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -52,7 +54,35 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace accepted process supervisor"
-    [ testCase "accepted executor uses the peer-checked client and server with one original launch and identical receipt acknowledgement" $ withProcess fixture id True \file runtime _ calls snapshot reference ->
+    [ testCase "independent service recovers facts in the background with no connected worker" $ withProcess fixture id False \file runtime observed calls snapshot reference -> do
+        Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+        let revoked = runtime & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked")) & #authorizer .~ denyAllActionAuthorizer & #selectRule .~ (\_ _ _ -> pure (Left "revoked"))
+            waitCommitted = do
+              actual <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
+              case actual of
+                Just record | record.phase == Attempt.AttemptCommitted -> pure ()
+                _ -> threadDelay 20000 >> waitCommitted
+        withListener \_ listener uid ->
+          withAsync (serveSupervisor (RpcPolicy [uid] 2 3) listener revoked) \_ ->
+            timeout 5000000 waitCommitted >>= (@?= Just ())
+        readIORef calls >>= (@?= (1, 1)),
+      testCase "independent paged scan acknowledges original facts without a worker request or live read authority" $ withProcess fixture id False \file runtime observed calls snapshot reference -> do
+        Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+        let revoked = runtime & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked")) & #authorizer .~ denyAllActionAuthorizer & #selectRule .~ (\_ _ _ -> pure (Left "revoked"))
+        page <- right =<< scanProcessReceipts revoked Nothing
+        page.inspected @?= 1
+        page.acknowledged @?= 1
+        page.pending @?= 0
+        page.cursor @?= Just reference.operationId
+        next <- right =<< scanProcessReceipts revoked page.cursor
+        next.inspected @?= 0
+        next.cursor @?= Nothing
+        repeated <- right =<< scanProcessReceipts revoked Nothing
+        repeated.acknowledged @?= 1
+        Just completed <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
+        completed.phase @?= Attempt.AttemptCommitted
+        readIORef calls >>= (@?= (1, 1)),
+      testCase "accepted executor uses the peer-checked client and server with one original launch and identical receipt acknowledgement" $ withProcess fixture id True \file runtime _ calls snapshot reference ->
         withListener \path listener uid -> do
           let client = ProcessClient path uid 3 5
           withAsync (serveRpc (RpcPolicy [uid] 2 3) listener (dispatchSupervisorRpc runtime)) \_ -> do
