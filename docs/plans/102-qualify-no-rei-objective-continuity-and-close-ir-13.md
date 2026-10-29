@@ -11,6 +11,18 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-10-29T00:19:50Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-29T12:59:01Z
+      verdict: "comments"
+      note: "Qualification is well scoped; add first-objective creation by an unassociated authorized agent and instruction-only stale-checkpoint regression coverage."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-29T13:05:53Z
+      mode: "update"
+      note: "Qualify autonomous first-objective recovery and instruction-only checkpoint invalidation alongside API continuity."
 ---
 
 # Qualify no-Rei objective continuity and close IR-13
@@ -28,7 +40,7 @@ After this plan, a fresh reader can reproduce the IR-13 outcome with no Rei endp
 
 ## Progress
 
-- [ ] Milestone 1: the fixture under `fixtures/qualification/objectives/` and the isolated runner `tests/objective-tracking/run.sh` reproduce continuity with no Rei endpoint, including the lost-acknowledgement and stale-conflict scenarios with the accepted result preserved across an assignment ownership transfer.
+- [ ] Milestone 1: the fixture under `fixtures/qualification/objectives/` and the isolated runner `tests/objective-tracking/run.sh` reproduce continuity with no Rei endpoint, including first-objective agent creation, the lost-acknowledgement and instruction-only stale-conflict scenarios with the accepted result preserved across an assignment ownership transfer.
 - [ ] Milestone 2: integrated completion is proven: all-green workers with one failing criterion leave the objective open; a passing verifier result for the exact combined artifact plus explicit acceptance produce one `Completed` transition; stale, unknown-operation and repeated acceptance behave as specified; cancellation preserves late facts.
 - [ ] Milestone 3: documentation, OKF bundle updates, consumer-plan wording, ADR distillation, friction triage and the compatibility gates establish the delivered IR-13 boundary, and IR-13 is `completed`.
 
@@ -58,12 +70,14 @@ Planning baseline `3900c0e634d9b559e92a6989bb10f9943e0beab1`, inspected 2026-10-
 
 ## Context and Orientation
 
-An objective is a goal spanning executions; an assignment is a versioned piece of it with a designated owner; a checkpoint is the authoritative current view; a receipt is the committed result of one keyed command. By the time this plan starts, plan 98 supplies the store and command owner under `shikigami-core/src/Shikigami/Objective/`, plan 99 the trusted associations and the providers `Objective/Checkpoint.hs`, `Objective/Ownership.hs` and `Objective/Coordination.hs` wired into `shikigami-workers/src/Shikigami/Workers/Config.hs` and `shikigami-server/src/Shikigami/Server/Command/Workers.hs` behind the operator enablement setting in `shikigami-core/src/Shikigami/App/Config.hs`, plan 100 the `/objectives` vertical and `shikigami objectives` CLI, and plan 101 the native `objectives` tool and `Shikigami.Flow.Objectives`. Read each plan's Interfaces and Dependencies before writing the fixture.
+An objective is a goal spanning executions; an assignment is a versioned piece of it with a designated owner; a checkpoint is the authoritative current view; a receipt is the committed result of one keyed command. By the time this plan starts, plan 98 supplies the store and command owner under `shikigami-core/src/Shikigami/Objective/`, plan 99 the trusted associations and the providers `Objective/Checkpoint.hs`, `Objective/Ownership.hs` and `Objective/Coordination.hs` wired into `shikigami-workers/src/Shikigami/Workers/Config.hs` and `shikigami-server/src/Shikigami/Server/Command/Workers.hs` behind plan 98’s operator enablement setting in `shikigami-core/src/Shikigami/App/Config.hs`, plan 100 the `/objectives` vertical and `shikigami objectives` CLI, and plan 101 the native `objectives` tool and `Shikigami.Flow.Objectives`. Read each plan's Interfaces and Dependencies before writing the fixture.
 
 Rei is optional: the existing `ReiAction` sink described in `docs/user/sinks.md` records against a known Rei intention when an endpoint is configured; objectives persist only an optional typed external link, and a Rei failure never changes objective state. `tests/hurl/run.sh` is the existing isolated HTTP runner and the model for the new runner: it provisions disposable resources, honors `SHIKIGAMI_CABAL_PROJECT` and cleans up what it created. `docs/user/README.md` indexes user documentation, `docs/operations/operator-cli.md` documents operator commands, `docs/architecture/shikigami-domain-inventory.md` lists domains, `docs/use-cases/adaptive-autonomous-delivery.md` is UC-1 and `docs/roadmap.md` the portfolio view. `docs/improvement-requests/` is a profile-governed OKF bundle validated by `just improvement-requests-validate`, with `index.md` and `log.md` maintained by hand as in the 2026-10-28 IR-11 update; `docs/use-cases/` and `docs/user/` are validated by `just use-cases-validate` and `just user-docs-validate`. The ADR bundle in `docs/adr/` is Markdown, not profile-governed.
 
 Consumer plans: [plan 84](84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) had its IR-13 gate closed by plan 99 and keeps its IR-11 gate; [plan 96](96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) owns real fencing; [plans 85](85-adapt-durable-delivery-through-validated-coordinator-decisions.md) and [87](87-supervise-recurring-objectives-from-current-durable-checkpoints.md) consume the provider and `Shikigami.Objective.Acceptance`; [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) records the prerequisite. Relevant decisions: [ADR 0013](../adr/0013-flow-bodies-reach-the-world-only-through-capabilities.md), [ADR 0047](../adr/0047-public-api-authentication-is-a-verifier-at-the-vertical-mount.md), [ADR 0061](../adr/0061-continuing-sessions-own-ordered-assignments-and-retained-receipts.md), [ADR 0062](../adr/0062-session-generations-await-governed-children-and-retain-checkpoint-intents.md), [ADR 0063](../adr/0063-handoffs-establish-epochs-only-after-fences-and-versioned-owner-receipts.md) and [ADR 0066](../adr/0066-worker-commands-require-retained-scopes-and-fresh-exact-authority.md); this plan adds the ADRs that MasterPlan 17 identifies as cross-plan decisions.
 
+
+The reviewed contracts are recorded in [ADR 0067](../adr/0067-objective-checkpoints-use-assignment-scoped-preconditions.md) (checkpoint preconditions and instruction invalidation) and [ADR 0068](../adr/0068-objective-creation-has-authority-before-association.md) (creation authority before association). These are accepted design decisions; implementation and acceptance evidence remain outstanding.
 
 ## Plan of Work
 
@@ -71,9 +85,11 @@ Consumer plans: [plan 84](84-coordinate-continuing-worker-sessions-and-fenced-ha
 
 Add a reproducible fixture under `fixtures/qualification/objectives/` (at least `create.json`, command and evidence JSON matching plan 100's public schema, scripted model responses and authenticated caller configuration) and an isolated runner `tests/objective-tracking/run.sh`. The runner provisions only disposable resources, selects scripted model responses and authenticated objective callers, honors `SHIKIGAMI_CABAL_PROJECT`, and uses the serving API and workers with the real objective and session stores. It creates a two-assignment finite objective, runs authorized progress, restarts the service, continues from a second run and a conversation, and prints the objective ID, final revision, original and replayed receipt IDs and final status without protected payloads. It replays plan 99's lost-acknowledgement and stale-conflict scenario and preserves the accepted result across an assignment ownership transfer; the fence fixture remains explicitly labeled, and no real repository writes are required. Its real API path also exercises the CLI's shared command owner. Milestone 1 is accepted when the runner exits zero and reports the unauthorized cases refused, the stale cases conflicted and the continued objective at its expected revision.
 
+Milestone 1 also starts with no objectives and drives an unassociated declared Skill granted creation by operator policy. Through the actual native tool, create an objective, crash after commit before tool-result recording, recover the same objective/receipt/origin link and record progress without replacing the accepted tool binding. Continue it through a newly associated run and an explicitly bound conversation turn with memory recall disabled. Refuse a denied creator and a forged unrelated objective selector. Retain the API-created two-assignment scenario as separate surface coverage. Prepare a worker checkpoint, revise only objective instructions, and prove the old intent conflicts without evidence or cursor changes; reverting instructions does not revive it. Sibling-only progress must still permit both commits. Print these outcomes in the runner transcript so IR-13 closure cannot omit autonomous creation or instruction invalidation.
+
 ### Milestone 2 — Integrated completion
 
-Extend the runner: report both workers successful while one integrated criterion fails, and verify the objective remains open. Record a passing verifier result for the exact combined artifact and current criteria, submit explicit authorized acceptance and observe exactly one `Completed` transition. Submit an older completion command and verify it cannot close an objective whose criteria changed. Leave an unknown child or tool operation unresolved and verify acceptance is blocked. Repeat the acceptance and verify it returns its original receipt. Cancel a separate objective and verify new work stops while late facts and unresolved operations are preserved without any claim that external effects stopped. Milestone 2 is accepted when the runner prints the failed integrated acceptance still open and the final explicit acceptance completed.
+Extend the runner: report both workers successful while one integrated criterion fails, and verify the objective remains open. Record a passing verifier result for the exact combined artifact and current criteria, submit explicit authorized acceptance and observe exactly one `Completed` transition. Submit an older completion command and verify it cannot close an objective whose criteria changed. Leave an unknown child or tool operation unresolved and verify acceptance is blocked. Repeat the acceptance and verify it returns its original receipt. Cancel a separate objective and verify new work stops while late facts and unresolved operations are preserved without any claim that external effects stopped. Milestone 2 is accepted when the runner prints the failed integrated acceptance still open and the final explicit acceptance completed, plus first-objective creation/replay identity and instruction-only invalidation results.
 
 ### Milestone 3 — Documentation, bundles, ADRs and gates
 
@@ -92,7 +108,7 @@ just hurl
 bash tests/objective-tracking/run.sh
 ```
 
-The objective runner must exit zero and print the objective ID, final revision, original and replayed receipt IDs and final status, the refused unauthorized cases, the conflicted stale cases, the failed integrated acceptance still open and the final explicit acceptance completed. Its smoke invocation uses the CLI, keeping the same create key across retries so creation returns the same objective:
+The objective runner must exit zero and print the objective ID, final revision, original and replayed receipt IDs and final status, the refused unauthorized cases, the conflicted stale cases, the failed integrated acceptance still open and the final explicit acceptance completed, plus first-objective creation/replay identity and instruction-only invalidation results. Its smoke invocation uses the CLI, keeping the same create key across retries so creation returns the same objective:
 
 ```bash
 cabal run shikigami -- objectives create --operation-key ir13-demo-create --file fixtures/qualification/objectives/create.json --json
@@ -132,3 +148,8 @@ The runner owns and cleans up only resources it created and can be rerun from sc
 ## Interfaces and Dependencies
 
 Hard prerequisites: plans 99, 100 and 101 Complete. Soft: plan 96's `WorkspaceProvider` for a real fence, which this plan does not require. This plan adds no new domain modules; it owns the fixture, the runner, the documentation pages, the IR-13 lifecycle transition to `completed` and the ADR distillation for MasterPlan 17. Consumers: MasterPlan 14's EP-6 may reuse the fixture; plan 84 keeps its own joint late-writer test. Dependencies and cohort are unchanged.
+
+
+## Revision Notes
+
+2026-10-29: Added real agent-created objective recovery and instruction-only conflict cases to qualification.

@@ -11,6 +11,18 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-10-29T00:19:50Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-29T12:59:01Z
+      verdict: "changes-requested"
+      note: "API/CLI require EP-2-owned enablement and operator identity before their declared milestone gates; align dependency ownership."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-29T13:05:53Z
+      mode: "update"
+      note: "Resolve configuration prerequisite ownership and stage conversation binding behind EP-2 milestone 1."
 ---
 
 # Expose governed objective inspection through the API and CLI
@@ -65,7 +77,11 @@ An objective is a goal spanning executions, with a revision, instruction and cri
 Relevant decisions: [ADR 0047](../adr/0047-public-api-authentication-is-a-verifier-at-the-vertical-mount.md) places authentication at the vertical mount and leaves resource authorization to the handler; [ADR 0033](../adr/0033-recorded-agent-principals-key-durable-state.md) keys authority by recorded principal; [ADR 0025](../adr/0025-capability-overlays-are-requests-for-additive-model-tools.md) and [ADR 0066](../adr/0066-worker-commands-require-retained-scopes-and-fresh-exact-authority.md) establish that a name or supplied identity confers no authority. No ADR governs public resource paths; MasterPlan 17 reserves `/objectives` here and the A2A base path elsewhere.
 
 
+The reviewed contracts are recorded in [ADR 0067](../adr/0067-objective-checkpoints-use-assignment-scoped-preconditions.md) (checkpoint preconditions and instruction invalidation) and [ADR 0068](../adr/0068-objective-creation-has-authority-before-association.md) (creation authority before association). These are accepted design decisions; implementation and acceptance evidence remain outstanding.
+
 ## Plan of Work
+
+Plan 98 owns and delivers shared enablement, local operator identity and creation policy before this plan starts. Milestones 1–2 use that configuration and the objective store directly; they do not require plan 99’s worker providers. `BindConversation` is declared in the public schema in milestone 1 but remains explicitly unavailable until plan 99 milestone 1 supplies its validator; milestone 3 must test that real behavior as well as run associations.
 
 ### Milestone 1 — The authenticated objective vertical
 
@@ -126,3 +142,8 @@ A retried `POST /objectives` or command with the same operation key and bytes re
 ## Interfaces and Dependencies
 
 Hard prerequisite: plan 98 Complete; milestone 3 additionally requires plan 99 milestone 1 (the optional objective reference on run requests and `BindConversation`). `Shikigami.Objective.Api` owns the HTTP contract and envelope; `Shikigami.Objective.Handler` and `Shikigami.Server.Command.Objectives` are adapters over `Shikigami.Objective.Capability`; neither adds a second executor or authorization order. Plan 102 drives these endpoints and commands from its fixture. Dependencies and cohort are unchanged; the API uses the existing Servant and OpenAPI stack already in `shikigami-api`. Locate any further dependency API through Mori and read its source before use.
+
+
+## Revision Notes
+
+2026-10-29: Clarified that plan 98 supplies shared configuration; retained plan 99 milestone 1 only for association behavior and its acceptance.

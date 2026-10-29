@@ -10,6 +10,18 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-10-29T00:19:50Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-29T12:59:01Z
+      verdict: "changes-requested"
+      note: "Vision-aligned decomposition; resolve checkpoint version/precondition contract, agent creation bootstrap, and EP-3 configuration prerequisites."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-29T13:05:53Z
+      mode: "update"
+      note: "Apply review findings: distinct checkpoint preconditions, instruction invalidation, early shared configuration and autonomous objective creation; add ADRs 0067-0068."
 ---
 
 # Track durable objectives and authoritative assignment checkpoints without Rei
@@ -32,6 +44,8 @@ This MasterPlan is an independently owned prerequisite of [MasterPlan 14](14-del
 Excluded: adaptive orchestration, recurrence, offline replication, automatic Rei mirroring, an A2A wire mapping, a project-management product, real repository write fencing (plan 96) and any change to dependency bounds or pins. An optional typed Rei intention link is the whole Rei integration in this initiative; a Rei failure must never change objective state. [Plan 97](../plans/97-track-durable-tasks-and-authoritative-assignment-checkpoints-without-rei.md) was the single-plan draft of this work and is superseded by this MasterPlan and its children.
 
 
+The vision in [README](../../README.md) and [UC-1](../use-cases/adaptive-autonomous-delivery.md) includes agents initiating useful work under declared authority. Accordingly, an authorized agent can establish its first objective without manual API setup. Ordinary finite objectives need no worker hierarchy; coordination, budgets, memory and recurring supervision retain their existing owners.
+
 ## Decomposition Strategy
 
 Five children in three phases. Phase A is the provider slice: EP-1 persists authoritative objectives behind one conditional command executor, and EP-2 adds trusted run/conversation associations, the real `CheckpointProvider`, `OwnershipProvider` and `CoordinationAuthority` implementations, explicit conflict reconciliation and production wiring. Phase A alone closes plan 84's IR-13 completion gate, which is the critical path for MasterPlan 14: plans 85–87 cannot start until plan 84 is Complete, and plan 84 needs only the provider. Phase B adds the user-facing surfaces in parallel: EP-3 the authenticated HTTP vertical and CLI, EP-4 the durable native tool, Flow effect and conversation admission. Phase C is EP-5: the no-Rei continuity fixture, integrated-completion checks, documentation, IR-13 closure and ADR distillation.
@@ -44,6 +58,8 @@ Research against `3900c0e634d9b559e92a6989bb10f9943e0beab1` verified every modul
 
 Relevant local decisions, discovered by scanning `docs/adr/` filenames and headings (the bundle is not profile-governed): [ADR 0011](../adr/0011-defaulted-agent-fields-preserve-journal-codec-compatibility.md) for additive defaulted fields; [ADR 0012](../adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md) and [workflow versioning](../workflow-versioning.md) for real patch branches; [ADR 0013](../adr/0013-flow-bodies-reach-the-world-only-through-capabilities.md) for replay-safe effects with stable write identities; [ADR 0025](../adr/0025-capability-overlays-are-requests-for-additive-model-tools.md), under which a descriptor label is not deduplication; [ADR 0033](../adr/0033-recorded-agent-principals-key-durable-state.md) for principal-keyed authority; [ADR 0047](../adr/0047-public-api-authentication-is-a-verifier-at-the-vertical-mount.md) for authentication separate from resource authorization; [ADR 0051](../adr/0051-resource-roots-own-conservative-reservations-and-actual-attempts.md), under which budgets stay with the resource owner; [ADR 0057](../adr/0057-skill-parents-admit-frozen-assignments-and-await-execution-children.md) for frozen tool bindings and accepted operation context; [ADR 0058](../adr/0058-conversation-acceptance-and-wakes-retain-their-generation.md) for conversation turns owning their admission; [ADR 0061](../adr/0061-continuing-sessions-own-ordered-assignments-and-retained-receipts.md), [ADR 0062](../adr/0062-session-generations-await-governed-children-and-retain-checkpoint-intents.md), [ADR 0063](../adr/0063-handoffs-establish-epochs-only-after-fences-and-versioned-owner-receipts.md) and [ADR 0066](../adr/0066-worker-commands-require-retained-scopes-and-fresh-exact-authority.md) for mailbox ownership, retained intents, fenced transfer and fresh exact authorization. Each child repeats the subset it depends on. Cross-plan decisions that deserve ADRs during implementation: objective ownership inside Shikigami, receipt-before-revision ordering under authentication, the mapping from objective assignment to session assignment, assignment-scoped conflict with explicit reconciliation, and integrated completion as the only terminal path.
 
+
+The reviewed contracts are recorded in [ADR 0067](../adr/0067-objective-checkpoints-use-assignment-scoped-preconditions.md) (checkpoint preconditions and instruction invalidation) and [ADR 0068](../adr/0068-objective-creation-has-authority-before-association.md) (creation authority before association). These are accepted design decisions; implementation and acceptance evidence remain outstanding.
 
 ## Exec-Plan Registry
 
@@ -81,13 +97,17 @@ EP-3 and EP-4 proceed in parallel once EP-2 is Complete; EP-3 milestones 1–2 c
 
 **Objective types, closed command sum and command owner — EP-1 owns; EP-2, EP-3 and EP-4 adapt.** `shikigami-core/src/Shikigami/Objective/Types.hs` defines `ObjectiveId`, `ObjectiveAssignmentId`, the access-principal sum, versioned snapshots, receipts and evidence references. `Objective/Command.hs` defines the closed public sum (`ReviseInstructions`, `ReviseCriteria`, `SetAssignments`, `RecordProgress`, `RecordEvidence`, `SetNextAction`, `SetBlocked`, `ProposeCompletion`, `AcceptCompletion`, `CancelObjective`, `GrantMember`, `RevokeMember`, `BindConversation`, `LinkExternal`) plus the internal provider-only commands for checkpoint ingestion and ownership transfer. `Objective/Capability.hs` is the single authenticated command admission owner, `Objective/Store.hs` the conditional persistence and `Objective/Acceptance.hs` the completion contract. EP-2's providers call the internal commands and `BindConversation`; EP-3 wraps the public sum in the `format: 1` envelope with `operationKey`, `expectedRevision` and `command` (discriminant `tag`); EP-4's tool and Flow effect inject operation key and trusted actor and never accept them from model JSON. No adapter adds a second executor or a second authorization order.
 
-**Assignment identity and the worker consumer records — EP-1 owns the fields; EP-2 owns the provider.** An `ObjectiveAssignmentId` is distinct from a continuing session's per-message `AssignmentId` and stores its own assignment revision, which is the `assignmentRevision` that `ObjectiveVersion` reports. Provider id `shikigami-objective-v1` encodes the objective id and assignment id together in the opaque `ObjectiveRef` key; existing `ObjectiveRef` codecs stay intact. Conflict is defined per addressed assignment: a commit validates the assignment revision, criteria revision, owner and epoch, root, active flag and the objective's instructions revision, and treats the objective-wide revision as an ordering base that the receipt must still exceed. The early producer/consumer check, owned by EP-2 milestone 2, is that two sibling assignment checkpoints prepared from the same expected objective revision both commit without reconciliation, and that a lost acknowledgement followed by a retry returns the original receipt through `shikigami-core/src/Shikigami/WorkerSession/Integration.hs`.
+**Assignment identity and the worker consumer records — EP-1 owns the fields; EP-2 owns the provider.** An `ObjectiveAssignmentId` is distinct from a continuing session's per-message `AssignmentId` and stores its own assignment revision, which is the `assignmentRevision` that `ObjectiveVersion` reports. Provider id `shikigami-objective-v1` encodes the objective id and assignment id together in the opaque `ObjectiveRef` key; existing `ObjectiveRef` codecs stay intact. Conflict is defined per addressed assignment: a commit validates the assignment revision, criteria revision, owner and epoch, root and active flag, with instruction and status changes invalidating all assignment revisions, and treats the objective-wide revision as an ordering base that the receipt must still exceed. The early producer/consumer check, owned by EP-2 milestone 2, is that two sibling assignment checkpoints prepared from the same expected objective revision both commit without reconciliation, and that a lost acknowledgement followed by a retry returns the original receipt through `shikigami-core/src/Shikigami/WorkerSession/Integration.hs`.
+
+**Command preconditions — EP-1 owns; EP-2 consumes.** Public commands and ownership transfer use exact expected objective revision equality. Internal checkpoint ingestion uses assignment-scoped equality and an objective revision ordering base, all checked by the same executor under the objective lock; the next revision is allocated from current state. EP-1 increments every assignment revision atomically on objective instruction or status changes, even if later reverted, preserving the existing checkpoint codec. EP-1 proves these rules at the store boundary; EP-2 proves them through the real session consumer.
+
+**Creation before association — EP-1 owns persistence; EP-2 owns origin validation; EP-4 owns admission.** EP-1 defines creator-scoped authorization and atomic objective, creator-membership, origin-link and receipt persistence. EP-2 milestone 1 validates and resolves creation origins against accepted execution/turn/operation records. EP-4 admits a frozen creation scope without requiring an existing objective and permits subsequent commands only on receipt-backed created objectives within that scope, with fresh membership and exact authorization. It never rewrites run acceptance or widens a frozen tool menu. Future run associations and explicit conversation binding retain their existing admission rules. EP-5 qualifies first-objective creation and recovery through the real tool, in addition to API creation.
 
 **Run request envelope and acceptance ledger — EP-2 owns; EP-3 and EP-4 consume.** The optional typed objective/assignment reference on fresh public run requests (`shikigami-api/src/Shikigami/AgentRun/Api.hs`), the application-owned envelope (`shikigami-core/src/Shikigami/Agent/RunJob.hs`) and `shikigami-core/src/Shikigami/AgentRun/Ledger.hs` commit permitted association, run acceptance and queue send together; the association joins the request fingerprint. EP-3 exercises it over HTTP in its server contract; EP-4 reads the accepted association when admitting tools. Old decoders, absent-objective behavior and old trigger JSON are preserved and never reinterpreted as trusted objective metadata.
 
 **Retained coordination scope — EP-2 owns; EP-4 consumes.** `shikigami-core/src/Shikigami/Objective/Coordination.hs` implements `CoordinationAuthority{admit,reacquire}` from `shikigami-core/src/Shikigami/WorkerSession/Capability.hs`, persisting each admitted scope by fingerprint. EP-4's coordinator-run tool derives objective authority from that scope, which the existing `shikigami-worker-coordination-v1` branch already journals, so coordinator runs need no new journaled step.
 
-**Operator enablement and production wiring — EP-2 owns; EP-3 and EP-4 consume.** The explicit objective-tracking setting in `shikigami-core/src/Shikigami/App/Config.hs` and its loader, the provider wiring in `shikigami-workers/src/Shikigami/Workers/Config.hs` and `shikigami-server/src/Shikigami/Server/Command/Workers.hs`, and the recorded local operator identity. A missing provider or authority refuses objective work; ordinary unassociated runs still work; disabling the feature never selects an older unsafe path.
+**Operator configuration — EP-1 owns; EP-2, EP-3 and EP-4 consume.** EP-1 milestone 1 delivers the explicit objective-tracking setting in `shikigami-core/src/Shikigami/App/Config.hs` and its loader, the recorded local operator identity and administration policy, and default-deny agent creation policy. EP-3 milestones 1–2 therefore need no late EP-2 configuration. **Provider wiring — EP-2 owns.** EP-2 milestone 3 installs the providers in `shikigami-workers/src/Shikigami/Workers/Config.hs` and `shikigami-server/src/Shikigami/Server/Command/Workers.hs` using EP-1’s settings. A missing provider or authority refuses objective work; ordinary unassociated runs still work; disabling the feature never selects an older unsafe path.
 
 **Workflow patch ids — EP-4 owns.** `shikigami-objective-tracking-v1` for agent runs and `shikigami-conversation-objective-tracking-v1` for conversations are reserved names, declared only where a new journaled step is unavoidable, in the owning `domain/` member, following [workflow versioning](../workflow-versioning.md) and ADR 0012. No other child declares a patch.
 
@@ -100,7 +120,7 @@ EP-3 and EP-4 proceed in parallel once EP-2 is Complete; EP-3 milestones 1–2 c
 
 ## Progress
 
-2026-10-28: Planning only; no child has started. The single-plan draft, plan 97, is superseded. Cross-plan gates:
+2026-10-29: Review findings applied to all five children; planning only, no child has started. Acceptance now includes autonomous first-objective creation and instruction-only checkpoint invalidation. The single-plan draft, plan 97, is superseded. Cross-plan gates:
 
 - [ ] Plan 84's IR-13 completion gate: closed when EP-2 is Complete and plan 84's Progress and the MasterPlan 14 registry carry the real provider evidence.
 - [ ] IR-13 lifecycle: `accepted` with this MasterPlan as `targetPlan` now, `in-progress` at the first implementation commit, `completed` only with EP-5 evidence.
@@ -112,6 +132,10 @@ EP-3 and EP-4 proceed in parallel once EP-2 is Complete; EP-3 milestones 1–2 c
 
 
 ## Decision Log
+
+- Decision: Use constructor-selected preconditions in one executor, invalidate assignment revisions on instruction/status changes, and admit objective creation through a separate frozen creator scope. Move shared operator configuration to EP-1 so EP-3 retains its declared start gate.
+  Rationale: Resolve the review without a new checkpoint codec, a second executor, manual first-objective setup or a hidden worker-provider dependency. ADRs 0067 and 0068 record the durable contracts.
+  Date: 2026-10-29
 
 - Decision: Keep authoritative objective state in Shikigami, using its checked domain-command and transactional projection pattern; memory stays supplementary context and Rei an optional external reference.
   Rationale: No registered project owns an agent-objective record (Rei is intention-bound, Keiei owns organization strategy, Kotei is CI/CD, Keiro supplies aggregates and process managers without a domain). A separate service would add a deployment and a distributed commit boundary without satisfying any requirement the existing store cannot. Keiro's process manager was rejected for checkpoint integration because ADR 0062 already fixes an in-process intent/receipt exchange on one database.
@@ -146,7 +170,7 @@ EP-3 and EP-4 proceed in parallel once EP-2 is Complete; EP-3 milestones 1–2 c
   Date: 2026-10-28
 
 - Decision: Declare a workflow patch only where a new journaled step or a straddling shape change is unavoidable; `shikigami-objective-tracking-v1` and `shikigami-conversation-objective-tracking-v1` are reserved names, not commitments to declare both.
-  Rationale: A coordinator run derives objective authority from the retained coordination scope that the existing `shikigami-worker-coordination-v1` branch already journals, so only worker-child and conversation admission can need a new step.
+  Rationale: A coordinator run derives objective authority from the retained coordination scope that the existing `shikigami-worker-coordination-v1` branch already journals, so unassociated creation, worker-child and conversation admission can need a new step.
   Date: 2026-10-28
 
 - Decision: Scope includes HTTP/CLI access, later-run and conversation continuity, explicit completion and the real IR-13 side of worker integration; it excludes adaptive orchestration, recurrence, offline replication, automatic Rei mirroring, an A2A mapping and real workspace fencing, and fails closed for workspace transfers until plan 96's provider exists.
@@ -161,3 +185,8 @@ EP-3 and EP-4 proceed in parallel once EP-2 is Complete; EP-3 milestones 1–2 c
 ## Outcomes & Retrospective
 
 (To be filled during and after implementation.)
+
+
+## Revision Notes
+
+2026-10-29: Resolved the review by separating public and checkpoint preconditions, invalidating assignment revisions on instruction/status changes, moving shared configuration into EP-1, and specifying autonomous creation before association. Ownership and acceptance cascaded to all children; no implementation is claimed.
