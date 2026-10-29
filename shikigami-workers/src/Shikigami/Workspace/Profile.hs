@@ -1,6 +1,6 @@
 -- | Resolve only the rules retained before assignment admission. Current
 -- operator defaults cannot reinterpret an accepted rule after restart.
-module Shikigami.Workspace.Profile (retainedProcessRule, retainedSystemdProfile) where
+module Shikigami.Workspace.Profile (retainedProcessRule, retainedSystemdProfile, profileStorageSafe) where
 
 import Data.Text qualified as Text
 import Kioku.App (AppEnv, runAppIO)
@@ -26,7 +26,7 @@ retainedProcessRule appEnv binding admission rule = do
   retained <- runAppIO appEnv (runTransaction (inspectProcessProfileTx binding.workspace))
   case retained of
     Right (Just (profile, ProfileReady))
-      | profile.bindingDigest == workspaceBindingDigest binding && admission.bindingDigest == profile.bindingDigest && profile.instructionDigest == bundleDigest admission.instructions && binding.policyRevision == processPolicyIdentity profile.policy && admission.filePolicy == Just supervisedFilePolicy && all (outsideStorage binding.storageRoot) [profile.policy.image.rootDirectory, profile.policy.image.collectorExecutable] -> do
+      | profile.bindingDigest == workspaceBindingDigest binding && admission.bindingDigest == profile.bindingDigest && profile.instructionDigest == bundleDigest admission.instructions && binding.policyRevision == processPolicyIdentity profile.policy && admission.filePolicy == Just supervisedFilePolicy && profileStorageSafe binding profile -> do
           systemd <- retainedSystemdProfile profile
           case systemd of
             Left err -> pure (Left err)
@@ -40,3 +40,6 @@ outsideStorage root path = value /= parent && not ((parent <> "/") `Text.isPrefi
   where
     parent = Text.dropWhileEnd (== '/') (Text.pack root)
     value = Text.pack path
+
+profileStorageSafe :: WorkspaceBinding -> ProcessProfile -> Bool
+profileStorageSafe binding profile = all (outsideStorage binding.storageRoot) [profile.policy.image.rootDirectory, profile.policy.image.collectorExecutable]

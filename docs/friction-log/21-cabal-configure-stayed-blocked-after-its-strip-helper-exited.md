@@ -13,11 +13,14 @@ origin: "mori://shinzui/shikigami"
 affects: "mori://haskell/cabal"
 affectedVersion: "3.16.1.0"
 plan: "docs/plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md"
-workaround: "The complete frozen Linux runtime build passed with two build cores and full logs after cancelling only the task-owned stalled attempt. The blocked configure was not reproduced in that retry; its cause remains unestablished."
+workaround: "One complete two-core Apple build succeeded, but a later two-core build repeated the configure stall with an unreaped strip helper for more than ten minutes. Cancel only the task-owned stalled attempt and use the configured remote builder for the larger Haskell build; retain Apple containers for native qualification. The cause is unestablished."
 amended:
   - by: "codex-cli/gpt-6.1-sol"
     at: "2026-10-29T23:02:12Z"
     change: "Record the successful two-core Apple build without claiming a cause or a general fix."
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-10-29T23:46:10Z"
+    change: "Two-core retry is not a reliable workaround; the same configure/defunct-helper symptom recurred during the profile/primitives build."
 ---
 # Cabal configure stayed blocked after its strip helper exited
 

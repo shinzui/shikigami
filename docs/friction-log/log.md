@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-29
+* **Update**: FRIC-21 logged: Two-core retry is not a reliable workaround; the same configure/defunct-helper symptom recurred during the profile/primitives build.
 * **Update**: FRIC-21 logged: Record the successful two-core Apple build without claiming a cause or a general fix.
 * **Update**: FRIC-20 resolved: Verified the corrected locale through the complete Linux runtime build.
 * **Addition**: FRIC-21 records detour tooling friction with https://github.com/haskell/cabal: Cabal configure stayed blocked after its strip helper exited

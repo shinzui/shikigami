@@ -24,8 +24,10 @@ when Apple containers cannot meet the task's requirements.
 Apple container and copies its outputs back through Nix. An optional argument
 selects another `packages.aarch64-linux.<package>` attribute. It generates a
 temporary SSH key, verifies the guest's host key, publishes SSH only on loopback,
-uses two build cores (FRIC-21), and removes its container and generated credentials
-on exit. It uses no host mounts or existing SSH credentials. Compilation alone
+uses two build cores, and removes its container and generated credentials
+on exit. Cabal configuration has also stalled at two cores (FRIC-21); use the
+configured remote builder for a stalled build and retain Apple containers for
+runtime qualification. It uses no host mounts or existing SSH credentials. Compilation alone
 does not qualify runtime containment, restart recovery or workspace fencing.
 
 `bash tests/workspace/probe-apple-container.sh` demonstrates systemd, writable

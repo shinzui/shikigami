@@ -1,6 +1,6 @@
 -- Database/policy evidence only; marking the fixture profile ready below is a
 -- trusted test interpreter and does not qualify native identity provisioning.
-module Shikigami.WorkspaceProcessProfileSpec (tests) where
+module Shikigami.WorkspaceProcessProfileSpec (tests, withProfiles) where
 
 import Control.Concurrent.Async (concurrently)
 import Data.Generics.Labels ()

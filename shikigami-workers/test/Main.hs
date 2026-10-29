@@ -14,6 +14,7 @@ import Shikigami.WorkspaceContainedFileSpec qualified as WorkspaceContainedFileS
 import Shikigami.WorkspaceFileProviderSpec qualified as WorkspaceFileProviderSpec
 import Shikigami.WorkspaceProcessProfileSpec qualified as WorkspaceProcessProfileSpec
 import Shikigami.WorkspaceProcessStoreSpec qualified as WorkspaceProcessStoreSpec
+import Shikigami.WorkspaceProvisionSpec qualified as WorkspaceProvisionSpec
 import Shikigami.WorkspaceRpcSpec qualified as WorkspaceRpcSpec
 import Shikigami.WorkspaceStoreSpec qualified as WorkspaceStoreSpec
 import Shikigami.WorkspaceSupervisorSpec qualified as WorkspaceSupervisorSpec
@@ -36,6 +37,7 @@ main = do
               WorkspaceSystemdSpec.tests,
               WorkspaceProcessStoreSpec.tests databaseFixture,
               WorkspaceProcessProfileSpec.tests databaseFixture,
+              WorkspaceProvisionSpec.tests databaseFixture,
               WorkspaceWorkflowSpec.tests databaseFixture,
               WorkspaceFileProviderSpec.tests databaseFixture,
               WorkspaceContainedFileSpec.tests,

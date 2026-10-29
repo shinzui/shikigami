@@ -66,6 +66,7 @@ library
     Shikigami.Workspace.InstructionLoader
     Shikigami.Workspace.ProcessProvider
     Shikigami.Workspace.Profile
+    Shikigami.Workspace.Provision
     Shikigami.Workspace.Rpc
     Shikigami.Workspace.Service
     Shikigami.Workspace.Supervisor
@@ -206,6 +207,7 @@ test-suite shikigami-workers-test
     Shikigami.WorkspaceFileProviderSpec
     Shikigami.WorkspaceProcessProfileSpec
     Shikigami.WorkspaceProcessStoreSpec
+    Shikigami.WorkspaceProvisionSpec
     Shikigami.WorkspaceRpcSpec
     Shikigami.WorkspaceStoreSpec
     Shikigami.WorkspaceSupervisorSpec

@@ -64,8 +64,8 @@ printf '[127.0.0.1]:%s %s\n' "$port" "$hostkey" > "$taskdir/known_hosts"
 export NIX_SSHOPTS="-F /dev/null -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$taskdir/known_hosts"
 target="ssh-ng://root@127.0.0.1:$port?ssh-key=$taskdir/key"
 nix store info --store "$target"
-# Two cores avoid repeating the observed eight-job configure stall (FRIC-21).
-# The cause is unknown; this is a bounded build recipe, not a package patch.
+# Limit build load; FRIC-21 also recurred at two cores. A stalled build can use
+# the configured remote builder while runtime qualification stays in Apple containers.
 nix build --cores 2 --option timeout 3600 --option max-silent-time 600 --print-build-logs \
   --store "$target" ".#$attribute" --no-link --no-write-lock-file --json > "$taskdir/result.json"
 runtime=$(python3 - "$taskdir/result.json" <<'PY'
