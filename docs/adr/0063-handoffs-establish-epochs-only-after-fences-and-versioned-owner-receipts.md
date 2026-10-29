@@ -56,6 +56,18 @@ tests are deliberately separate from that production acceptance. Missing
 providers refuse new handoff admission; they never default to a successful
 fence or fabricate a receipt.
 
+[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) amendment (2026-10-29; implementation pending): the first real process owner uses
+Linux systemd system services with cgroup v2, an independently supervised workspace service,
+and an immutable filesystem root exposing only the admitted workspace and scratch writes.
+Unsupported hosts refuse process admission. The supervisor retains operation/attempt,
+workspace epoch, unit, invocation and boot identities, independently of queue-worker lifetime.
+Transfer freeze and launch registration share a conditional per-workspace boundary. A fence
+requires the entire descendant cgroup to be empty and a durable settlement receipt; main
+process exit, a PID lookup or a missing unit is insufficient. Missing evidence after supervisor
+or host failure remains unresolved. The selected backend must pass plan 96's real containment,
+worker/supervisor restart and late-descendant tests before being enabled; this decision does
+not assert that the provider has been implemented.
+
 ## Alternatives rejected
 
 Transferring on lease expiry would permit simultaneous writers. Cancelling a

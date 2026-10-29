@@ -65,9 +65,19 @@ provider/tool infrastructure failures retain their retry classification. Every m
 the environment's trace sink.
 
 Resolution is pure and fail-closed. Duplicate or unknown requests, missing identity,
-authorization refusal, and non-`Skill` behavior are permanent typed refusals. Durable runs
-admit only observation tools. A one-off invocation may admit a mutation only when its explicit
+authorization refusal, and non-`Skill` behavior are permanent typed refusals. Generic durable resolution
+admits only observation tools. A one-off invocation may admit a mutation only when its explicit
 local policy authorizes it; the operation class remains visible rather than being weakened.
+
+[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) amendment (2026-10-29; implementation pending): a separate governed resolution path
+may admit workspace mutation descriptors only through an operator-installed durable adapter
+keyed by exact capability, revision and descriptor digest. Both catalog admission and live
+execution enforce this registry. Description is effect-free; actual preparation receives the
+executor's trusted logical operation and actual attempt/claim coordinates. Generic providers
+retain their existing scope and refusal behavior. Recovery classification comes from the
+adapter's tested receipt contract, never solely from a public operation-class label. Old
+workflow branches and snapshots gain no new authority. This exception requires plan 96's
+negative, replay and process-recovery tests before production enablement.
 
 The first concrete one-off provider is the immutable `workspace.read` revision `1` descriptor
 in `shikigami-agent`. It contains exactly the logical `read`, `grep`, and `glob` observations.

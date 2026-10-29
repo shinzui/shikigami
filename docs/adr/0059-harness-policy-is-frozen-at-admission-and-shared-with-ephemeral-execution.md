@@ -26,6 +26,16 @@ Overrides can add restrictions and lower ceilings, retain more recent context,
 and strengthen output requirements. They grant no model, tool or external action.
 The old coarse workflow branch retains its existing semantics and labels.
 
+[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) amendment (2026-10-29; implementation pending): repository instructions are also
+accepted assignment input. Freeze a bounded bundle of `AGENTS.md` text, path scopes and
+content identities from the admitted base in protected storage, and include its scope-labelled
+contents in fixed model context before the first request. Context compaction must preserve
+it or refuse when the budget cannot fit it. Parent/operator restrictions remain authoritative;
+repository files cannot grant capabilities. Instruction-file edits are proposed source changes,
+not changes to the active assignment's policy. Resume uses the retained bundle, and only a
+new assignment admits a new instruction identity. Historical snapshots without the bundle
+retain their old encoding and behavior and gain no workspace mutation authority.
+
 The database-free command explicitly selects ephemeral recording. It uses the
 same pure context selection, summary preparation, tool admission and output
 validation policies. Each summary and repair consumes an ordinary model turn;
