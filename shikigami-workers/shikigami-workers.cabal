@@ -31,6 +31,7 @@ library
   c-sources:
     cbits/workspace-collector.c
     cbits/workspace-files.c
+    cbits/workspace-socket.c
 
   if os(linux)
     pkgconfig-depends: libsystemd
@@ -61,6 +62,8 @@ library
     Shikigami.Workspace.Git
     Shikigami.Workspace.Host
     Shikigami.Workspace.InstructionLoader
+    Shikigami.Workspace.ProcessProvider
+    Shikigami.Workspace.Rpc
     Shikigami.Workspace.Supervisor
     Shikigami.Workspace.Systemd
 
@@ -92,6 +95,7 @@ library
     kioku-core,
     kiroku-store,
     lens >=5.2,
+    network,
     optparse-applicative >=0.19 && <0.20,
     pgmq-hasql,
     process,
@@ -197,6 +201,7 @@ test-suite shikigami-workers-test
     Shikigami.WorkspaceContainedFileSpec
     Shikigami.WorkspaceFileProviderSpec
     Shikigami.WorkspaceProcessStoreSpec
+    Shikigami.WorkspaceRpcSpec
     Shikigami.WorkspaceStoreSpec
     Shikigami.WorkspaceSupervisorSpec
     Shikigami.WorkspaceSystemdSpec
@@ -229,6 +234,7 @@ test-suite shikigami-workers-test
     kioku-core,
     kiroku-store,
     lens,
+    network,
     optparse-applicative,
     pgmq-hasql,
     process,

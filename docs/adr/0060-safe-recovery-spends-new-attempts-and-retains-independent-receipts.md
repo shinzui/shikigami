@@ -115,6 +115,20 @@ billing holds. Historical records without routing remain readable and gain no
 launch authority. The independent service and real Linux restart qualification
 remain explicit plan-96 enablement gates.
 
+Supervisor intake uses a private filesystem Unix socket retained by systemd
+socket activation. The service adopts only the configured listening stream
+descriptor, authenticates kernel peer credentials before parsing a request,
+and accepts retained execution/operation/actual-claim coordinates rather than
+commands or host paths. The client verifies the server's Unix identity before
+disclosing those coordinates. Fixed worker counts, message limits and request
+deadlines bound intake. Restart closes only the service's descriptor copy;
+it must not shut down or unlink the manager's listener. A transport error or
+caller timeout keeps the original effect uncertain. Observation can recover
+retained facts, but never issues a second launch. The live client and factual
+publisher share deterministic result rendering. The native listener substrate
+and accepted-executor Unix fixtures are qualified separately; neither replaces
+the complete Linux supervisor restart gate.
+
 ## Alternatives rejected
 
 Releasing the unknown attempt to make room for its replacement would invent

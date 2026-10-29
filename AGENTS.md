@@ -33,6 +33,12 @@ whole-cgroup settlement of a detached SIGTERM-ignoring writer (13 checks).
 This is substrate qualification; independent supervisor and receipt-recovery
 qualification still belongs to the plan implementing those services.
 
+`bash tests/workspace/probe-socket-apple.sh` qualifies adoption of the exact
+private Unix listener supplied by systemd, kernel peer credentials, descriptor
+flags, refusal of another endpoint, and retention of that listener across
+SIGKILL and service restart (4 checks). It is listener substrate evidence;
+accepted-attempt recovery still requires the full supervisor fixture.
+
 `bash tests/workspace/probe-collector-apple.sh` qualifies the independent bounded
 output collector using the compiled production systemd properties (eight cases).
 It covers output draining, duplicate-unit refusal, cancellation, timeout,

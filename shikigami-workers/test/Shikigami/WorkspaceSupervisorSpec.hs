@@ -3,6 +3,7 @@
 module Shikigami.WorkspaceSupervisorSpec (tests) where
 
 import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async (withAsync)
 import Control.Exception (throwIO)
 import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as Bytes
@@ -32,12 +33,15 @@ import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.Workspace.FileProvider (FileRuntime (..))
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Process
+import Shikigami.Workspace.ProcessProvider
 import Shikigami.Workspace.ProcessStore qualified as Processes
+import Shikigami.Workspace.Rpc
 import Shikigami.Workspace.Store qualified as Workspaces
 import Shikigami.Workspace.Supervisor
 import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Types
 import Shikigami.WorkspaceFileProviderSpec qualified as Fixture
+import Shikigami.WorkspaceRpcSpec (withListener)
 import Shikumi.Tool (mkDynTool)
 import System.Directory (removeFile)
 import System.FilePath ((</>))
@@ -48,7 +52,42 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace accepted process supervisor"
-    [ testCase "actual executor dispatch registers and settles one original launch despite duplicate observation" $ withProcess fixture id True \file runtime observed calls snapshot reference -> do
+    [ testCase "accepted executor uses the peer-checked client and server with one original launch and identical receipt acknowledgement" $ withProcess fixture id True \file runtime _ calls snapshot reference ->
+        withListener \path listener uid -> do
+          let client = ProcessClient path uid 3 5
+          withAsync (serveRpc (RpcPolicy [uid] 2 3) listener (dispatchSupervisorRpc runtime)) \_ -> do
+            Executor.executeAcceptedAttempt (Fixture.executorForAdapter (const (workspaceExecAdapter client)) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+            Just actual <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
+            actual.phase @?= Attempt.AttemptCommitted
+            publishProcessReceipt runtime reference.operationId >>= (@?= Right ProcessReceiptAcknowledged)
+            readIORef calls >>= (@?= (1, 1)),
+      testCase "a failed peer check retains an uncertain accepted attempt without any supervisor launch" $ withProcess fixture id True \file runtime _ calls snapshot reference ->
+        withListener \path listener uid -> do
+          let client = ProcessClient path ((uid + 1) `mod` 4294967296) 3 5
+          withAsync (serveRpc (RpcPolicy [uid] 2 3) listener (dispatchSupervisorRpc runtime)) \_ -> do
+            Executor.executeAcceptedAttempt (Fixture.executorForAdapter (const (workspaceExecAdapter client)) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+            Just actual <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
+            actual.phase @?= Attempt.AttemptUncertain
+            transaction file (Processes.inspectProcessTx reference.operationId) >>= (@?= Nothing)
+            readIORef calls >>= (@?= (0, 0)),
+      testCase "restarted Unix service observes original facts and acknowledges after authority revocation" $ withProcess fixture id False \file runtime _ calls snapshot reference ->
+        withListener \path listener uid -> do
+          let client = ProcessClient path uid 3 5
+          withAsync (serveRpc (RpcPolicy [uid] 2 3) listener (dispatchSupervisorRpc runtime)) \_ ->
+            Executor.executeAcceptedAttempt (Fixture.executorForAdapter (const (workspaceExecAdapter client)) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+          Just actual <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
+          actual.phase @?= Attempt.AttemptUncertain
+          let revoked = runtime & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked")) & #authorizer .~ denyAllActionAuthorizer & #selectRule .~ (\_ _ _ -> pure (Left "revoked"))
+          withAsync (serveRpc (RpcPolicy [uid] 2 3) listener (dispatchSupervisorRpc revoked)) \_ -> do
+            result <- right =<< callRpc path uid 3 (RpcObserve reference.operationId)
+            case result of
+              RpcView value -> do
+                value.phase @?= ProcessSettled
+                value.attemptId @?= reference.attemptId
+              _ -> assertFailure "original facts unavailable after restart"
+            publishProcessReceipt revoked reference.operationId >>= (@?= Right ProcessReceiptAcknowledged)
+            readIORef calls >>= (@?= (1, 1)),
+      testCase "actual executor dispatch registers and settles one original launch despite duplicate observation" $ withProcess fixture id True \file runtime observed calls snapshot reference -> do
         readIORef calls >>= (@?= (0, 0))
         Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         request <- readIORef observed >>= maybe (fail "missing actual request") pure

@@ -15,12 +15,14 @@ module Shikigami.Workspace.Supervisor
     ProcessPublication (..),
     publishProcessReceipt,
     processToolResult,
+    renderProcessResult,
   )
 where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (Exception, IOException, catch, onException, throwIO)
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (parseEither)
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
@@ -76,7 +78,12 @@ data SupervisorRequest = SupervisorRequest
     generation :: !Integer
   }
   deriving stock (Eq, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving anyclass (ToJSON)
+
+instance FromJSON SupervisorRequest where
+  parseJSON = Aeson.withObject "supervisor request" \fields -> do
+    unless (length fields == 5 && all (`KeyMap.member` fields) ["executionId", "operationId", "attemptId", "owner", "generation"]) (fail "unsupported supervisor request")
+    Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object fields)
 
 instance Show SupervisorRequest where show _ = "SupervisorRequest <protected>"
 
@@ -302,9 +309,15 @@ observe runtime binding record = do
 -- factual late-receipt publisher. Command arguments and output bodies are absent.
 processToolResult :: ProcessRecord -> Maybe (Either ToolError ToolOutput)
 processToolResult record = case (record.phase, record.receipt) of
-  (ProcessSettled, Just receipt) | validProcessReceipt record receipt -> Just (Right (textToolOutput (Encoding.decodeUtf8 (Lazy.toStrict (Aeson.encode receipt)))))
-  (ProcessRefused, Nothing) -> Just (Left (ToolRunFailed "validate" "workspace validation refused"))
+  (ProcessSettled, Just receipt) | validProcessReceipt record receipt -> Just (renderProcessResult (Just receipt))
+  (ProcessRefused, Nothing) -> Just (renderProcessResult Nothing)
   _ -> Nothing
+
+-- Rendering only: callers must first validate the retained completion or
+-- pre-launch refusal. Keep live and independent acknowledgement bytes equal.
+renderProcessResult :: Maybe ProcessReceipt -> Either ToolError ToolOutput
+renderProcessResult Nothing = Left (ToolRunFailed "validate" "workspace validation refused")
+renderProcessResult (Just receipt) = Right (textToolOutput (Encoding.decodeUtf8 (Lazy.toStrict (Aeson.encode receipt))))
 
 data ProcessPublication = AwaitingProcessReceipt | AwaitingExecutionExpiry | ProcessReceiptAcknowledged
   deriving stock (Eq, Show, Generic)
