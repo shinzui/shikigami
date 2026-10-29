@@ -10,3 +10,18 @@ journals outlive the code that wrote them. **Any change to a workflow body — u
 follow [docs/workflow-versioning.md](docs/workflow-versioning.md).** It states which
 step-shape changes are deploy-safe, when `patch` and `continueAsNew` are required, and
 how a patch id is declared in `domain/` and gated by `just keiro-gate`.
+
+## Linux Qualification on macOS
+
+Use Apple containers as the preferred Linux qualification environment on this
+Mac. The container service is installed and running. Do not ask the user whether
+a Linux environment is available for each new plan: inspect the existing setup
+and provision a disposable, task-specific container without host credentials or
+unnecessary host mounts. Use the configured Nix remote builder as the fallback
+when Apple containers cannot meet the task's requirements.
+
+`bash tests/workspace/probe-apple-container.sh` demonstrates systemd, writable
+cgroup v2, and effective PID, network, and capability isolation in an Apple
+container. It installs the image's missing D-Bus package and removes its own
+container on exit. Verify the capabilities each plan actually needs; this probe
+does not qualify a durable supervisor, restart recovery, or workspace fencing.
