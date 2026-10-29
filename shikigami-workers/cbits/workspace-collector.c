@@ -94,16 +94,20 @@ static int get_observation(sd_bus *bus, const char *path, struct observation *ou
   const void *id = NULL; size_t size = 0;
   int result = get_string(bus, path, UNIT, "LoadState", loaded, sizeof(loaded));
   if (result || strcmp(loaded, "loaded")) return -1;
+  if (get_string(bus, path, UNIT, "Description", out->description, sizeof(out->description))) return -1;
   if (sd_bus_get_property(bus, DEST, path, UNIT, "InvocationID", NULL, &message, "ay") < 0) return -1;
   result = sd_bus_message_read_array(message, 'y', &id, &size);
-  if (result > 0 && size == 16) {
+  if (result > 0 && size == 0) {
+    sd_bus_message_unref(message);
+    return 1; /* Loaded and queued, but not yet assigned an invocation. */
+  } else if (result > 0 && size == 16) {
     const unsigned char *bytes = id;
     for (int i = 0; i < 16; ++i) snprintf(out->invocation + i * 2, 3, "%02x", bytes[i]);
   } else result = -1;
   sd_bus_message_unref(message);
-  if (result < 0 || !hex_id(out->invocation, 32)) return -1;
-  return get_string(bus, path, UNIT, "Description", out->description, sizeof(out->description)) ||
-    get_string(bus, path, UNIT, "ActiveState", out->state, sizeof(out->state)) ||
+  if (result < 0) return -1;
+  if (!hex_id(out->invocation, 32)) return 1;
+  return get_string(bus, path, UNIT, "ActiveState", out->state, sizeof(out->state)) ||
     get_string(bus, path, UNIT, "SubState", out->substate, sizeof(out->substate)) ||
     get_string(bus, path, SERVICE, "Result", out->result, sizeof(out->result)) ||
     get_string(bus, path, SERVICE, "ControlGroup", out->group, sizeof(out->group)) ||
@@ -192,7 +196,15 @@ int shikigami_workspace_collect(const char *directory, const char *unit,
     }
     struct observation observation = {0};
     stage = 7;
-    if (get_observation(bus, object, &observation) || strcmp(description, observation.description)) goto done;
+    int observed = get_observation(bus, object, &observation);
+    if (observed < 0 || strcmp(description, observation.description)) goto done;
+    if (observed > 0) {
+      /* A dependency can leave a correctly described unit queued before its
+       * first invocation exists. Keep capture open for a bounded interval;
+       * losing an identity after pinning it is still evidence loss. */
+      if (*pinned || now.tv_sec - started.tv_sec > 10) goto done;
+      usleep(50000); continue;
+    }
     if (!*pinned) {
       strcpy(pinned, observation.invocation);
       char identity[256]; snprintf(identity, sizeof(identity), "{\"bootId\":\"%s\",\"invocationId\":\"%s\"}\n", boot, pinned);

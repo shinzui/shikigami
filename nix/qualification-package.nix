@@ -3,6 +3,7 @@
 { pkgs, lib, source, gitRev }:
 let
   lock = builtins.fromJSON (builtins.readFile ./qualification/cohort.json);
+  deadlineGuard = import ./workspace-deadline.nix { inherit pkgs; };
   repositories = lib.mapAttrs (_: pin: builtins.fetchTree pin) lock.repositories;
   packageNames = builtins.attrNames lock.packages;
   stagePackage = name:
@@ -64,6 +65,13 @@ pkgs.stdenv.mkDerivation {
   pname = "shikigami-runtime";
   version = "0.1.0.0-${gitRev}";
   dontUnpack = true;
+  # Match mori://NixOS/nixpkgs, path
+  # pkgs/development/haskell-modules/generic-builder.nix (artifact URI pending):
+  # compile-time text embedding also decodes through the locale.
+  env = { LANG = "en_US.UTF-8"; }
+    // lib.optionalAttrs (pkgs.stdenv.buildPlatform.libc == "glibc") {
+    LOCALE_ARCHIVE = "${pkgs.buildPackages.glibcLocales}/lib/locale/locale-archive";
+  };
   nativeBuildInputs = [ pkgs.haskell.compiler.ghc9124 pkgs.cabal-install pkgs.pkg-config pkgs.git pkgs.python3 ];
   buildInputs = [ pkgs.zlib pkgs.rdkafka pkgs.postgresql_18 pkgs.postgresql_18.dev pkgs.openssl.dev pkgs.curl.dev ]
     ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.systemd.dev ];
@@ -90,6 +98,7 @@ pkgs.stdenv.mkDerivation {
   installPhase = ''
     runHook preInstall
     mkdir -p "$out/bin" "$out/share/shikigami"
+    ln -s ${deadlineGuard}/bin/shikigami-workspace-deadline "$out/bin/shikigami-workspace-deadline"
     for executable in shikigami shikigami-server shikigami-worker shikigami-migrate \
       shikigami-scheduler shikigami-consume-stream shikigami-consume-events \
       shikigami-agent-run shikigami-run-behavior shikigami-agent-launch shikigami-openapi shikigami-client \

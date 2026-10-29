@@ -29,7 +29,8 @@ does not qualify a durable supervisor, restart recovery, or workspace fencing.
 `bash tests/workspace/probe-root-apple.sh` also verifies Nix and sudo availability,
 a copied Nix closure inside an immutable systemd `RootDirectory`, unprivileged
 workspace/scratch writes, effective PID/capability/syscall restrictions, and
-whole-cgroup settlement of a detached SIGTERM-ignoring writer (13 checks).
+whole-cgroup settlement of a detached SIGTERM-ignoring writer, and the production
+Nix deadline-guard closure under that immutable root (14 checks).
 This is substrate qualification; independent supervisor and receipt-recovery
 qualification still belongs to the plan implementing those services.
 
@@ -40,8 +41,11 @@ SIGKILL and service restart (4 checks). It is listener substrate evidence;
 accepted-attempt recovery still requires the full supervisor fixture.
 
 `bash tests/workspace/probe-collector-apple.sh` qualifies the independent bounded
-output collector using the compiled production systemd properties (eight cases).
+output collector and absolute deadline guard using the compiled production
+systemd properties (14 cases).
 It covers output draining, duplicate-unit refusal, cancellation, timeout,
 collector loss, mismatched evidence, metadata privacy and literal arguments in
-a cleared environment. Full supervisor RPC, accepted launch and restart
+a cleared environment. It also checks queued and expired starts, orphan
+descendants, retained exit status and protection of the trusted deadline parent.
+Full supervisor RPC, accepted launch and restart
 qualification remain separate gates; this probe does not enable process tools.

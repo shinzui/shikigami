@@ -11,16 +11,27 @@ container run --rm --detach --name "$name" --cpus 2 --memory 2G --cap-add ALL "$
 created=true
 container exec "$name" mkdir -p /var/lib/shikigami-capture-probe
 container exec --interactive "$name" /bin/sh -c 'cat >/var/lib/shikigami-capture-probe/collector.c' <shikigami-workers/cbits/workspace-collector.c
+container exec --interactive "$name" /bin/sh -c 'cat >/var/lib/shikigami-capture-probe/deadline.c' <shikigami-workers/cbits/workspace-deadline.c
 container exec --interactive "$name" /bin/sh -c 'cat >/var/lib/shikigami-capture-probe/workspace-systemd-profile.h' <shikigami-workers/cbits/workspace-systemd-profile.h
 container exec --interactive "$name" /bin/sh -c 'cat >/var/lib/shikigami-capture-probe/descendant.c' <tests/workspace/root-isolation-probe.c
 container exec --interactive "$name" /usr/bin/timeout 240 /bin/bash -s <<'GUEST'
-set -euo pipefail
+set -eEuo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y --no-install-recommends dbus gcc libc6-dev libsystemd-dev pkg-config jq busybox-static >/dev/null 2>&1
 systemctl daemon-reload
 systemctl start dbus
 prefix=/var/lib/shikigami-capture-probe
+diagnose() {
+  status=$?
+  echo "FAIL collector/deadline probe at line $1 (status $status)"
+  if [[ -n ${op:-} && -f "$op/complete.json" ]]; then cat "$op/complete.json"; fi
+  if [[ -n ${op:-} && -f "$op/unresolved.json" ]]; then cat "$op/unresolved.json"; fi
+  if [[ -n ${capture:-} ]]; then systemctl show "$capture" -p Result -p ExecMainStatus; fi
+  if [[ -n ${unit:-} ]]; then systemctl show "$unit" -p Result -p ExecMainCode -p ExecMainStatus -p MainPID -p SubState -p ControlGroup; fi
+  exit "$status"
+}
+trap 'diagnose "$LINENO"' ERR
 cc -Wall -Wextra -Werror -DSHIKIGAMI_COLLECTOR_STANDALONE -o "$prefix/collector" "$prefix/collector.c" $(pkg-config --cflags --libs libsystemd)
 mkdir -p "$prefix/root"/{bin,etc,proc,dev,tmp,workspace,scratch} "$prefix/workspace" "$prefix/scratch"
 groupadd --gid 62001 workspace-probe
@@ -28,12 +39,14 @@ useradd --uid 62001 --gid 62001 --no-create-home --shell /usr/sbin/nologin works
 chown 62001:62001 "$prefix/workspace" "$prefix/scratch"
 cp /usr/bin/busybox "$prefix/root/bin/env"
 cc -static -Wall -Wextra -Werror -o "$prefix/root/bin/descendant" "$prefix/descendant.c"
+cc -static -O2 -Wall -Wextra -Werror -o "$prefix/root/bin/deadline" "$prefix/deadline.c"
 cat >"$prefix/payload.c" <<'C'
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <sys/ptrace.h>
 extern char **environ;
 int main(int argc, char **argv) {
   char bytes[8192]; memset(bytes, 'x', sizeof(bytes));
@@ -47,6 +60,25 @@ int main(int argc, char **argv) {
   if (argc == 2 && !strcmp(argv[1],"flood")) {
     for (int i=0;i<128;i++) if (write(1,bytes,sizeof(bytes))<0 || write(2,bytes,sizeof(bytes))<0) return 2;
     return 0;
+  }
+  if (argc == 2 && !strcmp(argv[1],"status")) return 7;
+  if (argc == 2 && !strcmp(argv[1],"tamper")) {
+    int memory = open("/proc/1/mem", O_RDWR);
+    if (memory >= 0 || ptrace(PTRACE_ATTACH, 1, NULL, NULL) != -1) return 8;
+    (void)kill(1,SIGSTOP);
+    return 0;
+  }
+  if (argc == 2 && !strcmp(argv[1],"orphan")) {
+    pid_t child = fork();
+    if (child < 0) return 5;
+    if (child) return 0;
+    if (setsid() < 0) return 6;
+    signal(SIGTERM,SIG_IGN);
+    for (;;) {
+      int out = open("/workspace/orphan", O_WRONLY|O_CREAT|O_APPEND, 0600);
+      if (out < 0 || write(out,"1",1)!=1 || close(out)) return 7;
+      usleep(50000);
+    }
   }
   signal(SIGTERM,SIG_IGN);
   for (int i=0;i<100;i++) { if (write(1,bytes,16)<0) return 3; usleep(100000); }
@@ -74,12 +106,15 @@ prepare() {
   capture="shikigami-capture-$id.service"
   fingerprint="sha256:$id"
   op="$prefix/operation-$id"
+  deadline=$(($(date +%s%N) + 15000000000))
   mkdir -m 700 "$op"
   systemd-run --quiet --unit="$capture" -p Type=exec -p Restart=no -p RuntimeMaxSec=45 -p StandardOutput=null -p StandardError=null "$prefix/collector" "$op" "$unit" "$fingerprint" 1024 30
   wait_file "$op/ready"
 }
 launch() {
-  systemd-run --quiet --no-ask-password --expand-environment=no --unit="$unit" "${props[@]}" -p "Description=shikigami-workspace/1 $fingerprint" -p "StandardOutput=file:$op/stdout.pipe" -p "StandardError=file:$op/stderr.pipe" "$@"
+  local overrides=()
+  while [[ "$1" == -p ]]; do overrides+=("$1" "$2"); shift 2; done
+  timeout 12 systemd-run --quiet --no-ask-password --expand-environment=no --unit="$unit" "${props[@]}" "${overrides[@]}" -p "Description=shikigami-workspace/1 $fingerprint" -p "StandardOutput=file:$op/stdout.pipe" -p "StandardError=file:$op/stderr.pipe" -- /bin/deadline 1 "$deadline" -- "$@"
 }
 prepare 1
 launch /bin/payload flood
@@ -126,7 +161,7 @@ fi
 sleep 0.2
 [[ $(wc -c <"$prefix/workspace/launch-count") -gt "$before" ]]
 wait_file "$op/complete.json"
-jq -e '.termination=="ProcessTimedOut" and (.exitCode==137 or .exitCode==null) and .descendantsEmpty and .outputComplete' "$op/complete.json" >/dev/null
+jq -e '.termination=="ProcessTimedOut" and (.exitCode==137 or .exitCode==143 or .exitCode==null) and .descendantsEmpty and .outputComplete' "$op/complete.json" >/dev/null
 echo 'PASS runtime timeout settles the whole group without inventing an unavailable exit status'
 prepare 5
 accepted="$fingerprint"
@@ -146,5 +181,50 @@ launch /bin/env -i HOME=/scratch /bin/payload argv '$HOME' '%n' '' $'line\né'
 wait_file "$op/complete.json"
 jq -e '.exitCode==0 and .outputComplete and .descendantsEmpty' "$op/complete.json" >/dev/null
 echo 'PASS literal dollar, percent, empty and Unicode arguments survive a clean environment under the production profile'
-echo 'Collector probe passed (8 cases); supervisor RPC and PostgreSQL integration remain unqualified.'
+prepare 7
+deadline=$(($(date +%s%N) - 1000000000))
+before=$(wc -c <"$prefix/workspace/launch-count")
+launch /bin/payload flood
+wait_file "$op/complete.json"
+jq -e '.exitCode==125 and .descendantsEmpty and .outputComplete' "$op/complete.json" >/dev/null
+[[ $(wc -c <"$prefix/workspace/launch-count") == "$before" ]]
+echo 'PASS an expired absolute deadline never executes the accepted payload'
+prepare 8
+deadline=$(($(date +%s%N) + 1000000000))
+before=$(wc -c <"$prefix/workspace/launch-count")
+systemd-run --quiet --no-block --unit=shikigami-deadline-blocker -p Type=oneshot /bin/sleep 3
+echo 'Checking a start queued behind a three-second prerequisite'
+launch -p After=shikigami-deadline-blocker.service /bin/payload flood
+wait_file "$op/complete.json"
+jq -e '.exitCode==125 and .descendantsEmpty and .outputComplete' "$op/complete.json" >/dev/null
+[[ $(wc -c <"$prefix/workspace/launch-count") == "$before" ]]
+echo 'PASS a queued service cannot start the accepted payload after its absolute cutoff'
+prepare 9
+deadline=$(($(date +%s%N) + 2000000000))
+launch /bin/payload orphan
+wait_file "$prefix/workspace/orphan"
+before=$(wc -c <"$prefix/workspace/orphan")
+sleep 0.3
+[[ $(wc -c <"$prefix/workspace/orphan") -gt "$before" && ! -f "$op/complete.json" ]]
+wait_file "$op/complete.json"
+jq -e '.exitCode==124 and .descendantsEmpty and .outputComplete' "$op/complete.json" >/dev/null
+before=$(wc -c <"$prefix/workspace/orphan")
+sleep 0.3
+[[ $(wc -c <"$prefix/workspace/orphan") == "$before" ]]
+echo 'PASS the deadline guard retains and kills a detached writer after the original command exits zero'
+prepare 10
+launch /bin/payload status
+wait_file "$op/complete.json"
+jq -e '.exitCode==7 and .termination=="ProcessExited" and .descendantsEmpty and .outputComplete' "$op/complete.json" >/dev/null
+echo 'PASS ordinary completion preserves the confirmed command status'
+prepare 11
+deadline=$(($(date +%s%N) + 2000000000))
+launch /bin/payload tamper
+wait_file "$op/complete.json"
+jq -e '.exitCode==0 and .termination=="ProcessExited" and .descendantsEmpty and .outputComplete' "$op/complete.json" >/dev/null
+echo 'PASS same-UID repository code cannot write, trace or stop its trusted deadline parent'
+if "$prefix/root/bin/deadline" 1 "$(($(date +%s%N) + 1000000000))" -- /bin/true; then exit 1; else [[ $? == 78 ]]; fi
+if "$prefix/root/bin/deadline" 1 999999999999999999999 -- /bin/true; then exit 1; else [[ $? == 64 ]]; fi
+echo 'PASS unsupported execution context and malformed deadline refuse before running a command'
+echo 'Collector and deadline probe passed (14 cases); full supervisor RPC and PostgreSQL integration remain unqualified.'
 GUEST

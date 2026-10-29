@@ -9,7 +9,10 @@ cleanup() { if "$created"; then container stop --time 5 "$name" >/dev/null; fi; 
 trap cleanup EXIT
 container run --rm --detach --name "$name" --cpus 2 --memory 4G --cap-add ALL "$image" /sbin/init >/dev/null
 created=true
+container exec "$name" mkdir -p /var/lib/shikigami-root-probe/nix /var/lib/shikigami-root-probe/shikigami-workers/cbits
 container exec --interactive "$name" /bin/sh -c 'mkdir -p /var/lib/shikigami-root-probe && cat >/var/lib/shikigami-root-probe/probe.c' <tests/workspace/root-isolation-probe.c
+container exec --interactive "$name" /bin/sh -c 'cat >/var/lib/shikigami-root-probe/nix/workspace-deadline.nix' <nix/workspace-deadline.nix
+container exec --interactive "$name" /bin/sh -c 'cat >/var/lib/shikigami-root-probe/shikigami-workers/cbits/workspace-deadline.c' <shikigami-workers/cbits/workspace-deadline.c
 container exec --interactive "$name" /usr/bin/timeout 300 /bin/bash -s <<'GUEST'
 set -euo pipefail
 [[ $(ps -p 1 -o comm=) == systemd ]]
@@ -42,6 +45,10 @@ reference='github:NixOS/nixpkgs/d5dfd8e6716dde34398bc14bc87c10dece9c8c68#busybox
 nix --extra-experimental-features 'nix-command flakes' build --no-link --no-write-lock-file "$reference"
 tool_path=$(nix --extra-experimental-features 'nix-command flakes' path-info "$reference")
 nix --extra-experimental-features 'nix-command flakes' copy --to "local?root=$root" "$tool_path"
+guard_expression="let pkgs = import (builtins.getFlake \"github:NixOS/nixpkgs/d5dfd8e6716dde34398bc14bc87c10dece9c8c68\") {}; in import $prefix/nix/workspace-deadline.nix { inherit pkgs; }"
+nix --extra-experimental-features 'nix-command flakes' build --impure --no-link --expr "$guard_expression"
+guard_path=$(nix --extra-experimental-features 'nix-command flakes' path-info --impure --expr "$guard_expression")
+nix --extra-experimental-features 'nix-command flakes' copy --no-check-sigs --to "local?root=$root" "$guard_path"
 properties=(
   -p Type=exec -p Restart=no -p RuntimeMaxSec=20 -p TimeoutStopSec=1
   -p KillMode=control-group -p SendSIGKILL=yes
@@ -62,6 +69,10 @@ systemd-run --unit=shikigami-root-isolation --wait --pipe "${properties[@]}" /bi
 systemd-run --unit=shikigami-root-nix --wait --pipe "${properties[@]}" "$tool_path/bin/busybox" sh -c 'printf nix-closure >/workspace/nix-closure'
 [[ $(cat "$workspace/nix-closure") == nix-closure ]]
 echo 'PASS Nix closure executes in the immutable root'
+deadline=$(($(date +%s%N) + 10000000000))
+systemd-run --unit=shikigami-root-deadline --wait --pipe "${properties[@]}" "$guard_path/bin/shikigami-workspace-deadline" 1 "$deadline" -- "$tool_path/bin/busybox" sh -c 'printf guarded-nix-closure >/workspace/guarded-nix-closure'
+[[ $(cat "$workspace/guarded-nix-closure") == guarded-nix-closure ]]
+echo 'PASS the production Nix deadline guard executes its closure under the immutable root and unprivileged profile'
 systemd-run --unit=shikigami-root-descendant "${properties[@]}" -p RemainAfterExit=yes -p StandardOutput=null -p StandardError=null /bin/isolation-probe descendant
 for _ in {1..100}; do
   [[ -f "$workspace/command-exited" ]] && break
@@ -85,5 +96,5 @@ before=$(wc -c <"$workspace/descendant")
 sleep 0.3
 [[ $(wc -c <"$workspace/descendant") == "$before" ]]
 echo 'PASS whole-cgroup stop settles a SIGTERM-ignoring detached child'
-echo 'Root substrate probe passed (13 checks); independent supervisor and receipt recovery remain unqualified.'
+echo 'Root substrate probe passed (14 checks); independent supervisor and receipt recovery remain unqualified.'
 GUEST

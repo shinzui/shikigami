@@ -24,6 +24,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
 import Data.Time (diffUTCTime)
+import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import Foreign.C
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Prelude
@@ -46,6 +47,7 @@ data SystemdProfile = SystemdProfile
   { rootDirectory :: !FilePath,
     rootIdentity :: !Text,
     environmentExecutable :: !Text,
+    deadlineExecutable :: !Text,
     collectorExecutable :: !FilePath,
     userId :: !Int,
     groupId :: !Int
@@ -65,7 +67,7 @@ systemdProperties = do
 systemdProfileIdentity :: SystemdProfile -> IO Text
 systemdProfileIdentity profile = do
   properties <- systemdProperties
-  pure (versionedDigest "shikigami.workspace-systemd-profile/1" (toJSON (profile.rootDirectory, profile.rootIdentity, profile.environmentExecutable, profile.collectorExecutable, profile.userId, profile.groupId, properties)))
+  pure (versionedDigest "shikigami.workspace-systemd-profile/2" (toJSON (profile.rootDirectory, profile.rootIdentity, profile.environmentExecutable, profile.deadlineExecutable, profile.collectorExecutable, profile.userId, profile.groupId, properties)))
 
 -- Status is diagnostic liveness only, never proof that the command settled.
 -- Lost/failed capture retains uncertainty even if systemd stopped the command.
@@ -127,7 +129,7 @@ processArguments now profile files scratch metadata record = do
           Text.unpack
           ( ["--quiet", "--no-ask-password", "--expand-environment=no", "--unit=" <> record.unit]
               <> concatMap (\property -> ["--property", property]) (properties <> dynamic)
-              <> ["--", profile.environmentExecutable, "-i"]
+              <> ["--", profile.deadlineExecutable, "1", tshow (floor (utcTimeToPOSIXSeconds record.deadline * 1000000000) :: Integer), "--", profile.environmentExecutable, "-i"]
               <> environment
               <> [record.command.executable]
               <> record.command.arguments
@@ -238,7 +240,7 @@ validLaunchRecord :: ProcessRecord -> Bool
 validLaunchRecord record = validProcessCommand record.command && maybe False validProcessRouting record.routing && digestText record.fingerprint && record.unit == processUnit record.operationId record.fingerprint && record.phase == ProcessLaunchRequested && maybe False hostIdentity record.bootId && isNothing record.invocationId && isNothing record.receipt
 
 validProfile :: SystemdProfile -> Bool
-validProfile profile = all safeAbsolute [profile.rootDirectory, profile.collectorExecutable, Text.unpack profile.environmentExecutable] && digestText profile.rootIdentity && profile.userId > 0 && profile.groupId > 0
+validProfile profile = all safeAbsolute [profile.rootDirectory, profile.collectorExecutable, Text.unpack profile.environmentExecutable, Text.unpack profile.deadlineExecutable] && digestText profile.rootIdentity && profile.userId > 0 && profile.groupId > 0
 
 safeAbsolute :: FilePath -> Bool
 safeAbsolute path = case Text.stripPrefix "/" (Text.pack path) of

@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-10-29
+* **Addition**: FRIC-21 records detour tooling friction with https://github.com/haskell/cabal: Cabal configure stayed blocked after its strip helper exited
+* **Addition**: FRIC-20 records detour tooling friction with mori://shinzui/shikigami: Frozen Linux runtime omitted the UTF-8 build locale
 * **Addition**: FRIC-19 records detour tooling friction with mori://shinzui/shikigami: Workflow scaffold gate includes handwritten core diffs
 * **Addition**: FRIC-18 records detour interface friction with mori://systemd/systemd: Systemd timeout evidence can omit numeric wait status
 * **Addition**: FRIC-17 records detour environment friction with mori://shinzui/shikigami: Full PostgreSQL suite exceeds shared fixture connection capacity

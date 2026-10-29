@@ -4,6 +4,7 @@ import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.Time (UTCTime, addUTCTime)
+import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import Shikigami.Agent.Principal (AgentIdentity (CompatibilityIdentity))
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (NeedModel))
@@ -20,7 +21,7 @@ tests =
     "workspace systemd transport"
     [ testCase "argv preserves literal arguments and explicitly constructs the isolated environment" $ withRecord \profile record -> do
         argv <- right =<< arguments now profile record
-        dropWhile (/= "--") argv @?= ["--", "/bin/env", "-i", "HOME=/scratch", "/bin/validate", "$HOME", "%n", "", "line\né"]
+        dropWhile (/= "--") argv @?= ["--", "/bin/deadline", "1", show (floor (utcTimeToPOSIXSeconds record.deadline * 1000000000) :: Integer), "--", "/bin/env", "-i", "HOME=/scratch", "/bin/validate", "$HOME", "%n", "", "line\né"]
         assertBool "disable manager expansion" ("--expand-environment=no" `elem` argv)
         assertBool "bounded deadline" ("RuntimeMaxSec=30" `elem` argv)
         assertBool "never use command text as service diagnostics" (("Description=shikigami-workspace/1 " <> Text.unpack record.fingerprint) `elem` argv),
@@ -38,6 +39,7 @@ tests =
             profile & #userId .~ 62002,
             profile & #groupId .~ 62002,
             profile & #environmentExecutable .~ "/other/env",
+            profile & #deadlineExecutable .~ "/other/deadline",
             profile & #collectorExecutable .~ "/other/collector"
           ]
         mapM_
@@ -69,7 +71,7 @@ arguments time profile = processArguments time profile "/private/files" "/privat
 
 withRecord :: (SystemdProfile -> ProcessRecord -> IO a) -> IO a
 withRecord use = do
-  let profile = SystemdProfile "/private/root" digest "/bin/env" "/bin/shikigami-workspace-collector" 62001 62001
+  let profile = SystemdProfile "/private/root" digest "/bin/env" "/bin/deadline" "/bin/shikigami-workspace-collector" 62001 62001
   identity <- systemdProfileIdentity profile
   let command = ProcessCommand "validate" identity "/bin/validate" ["$HOME", "%n", "", "line\né"] "" (Map.singleton "HOME" "/scratch") 30 1024
       operation = OperationId "process-operation"

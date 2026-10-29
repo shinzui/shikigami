@@ -3,7 +3,9 @@ name: shikigami-workers
 version: 0.1.0.0
 synopsis: Shikigami supervised background loops
 build-type: Simple
-extra-source-files: cbits/workspace-systemd-profile.h
+extra-source-files:
+  cbits/workspace-deadline.c
+  cbits/workspace-systemd-profile.h
 
 common common
   default-language: GHC2024

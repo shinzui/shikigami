@@ -304,7 +304,7 @@ withProcessForTools toolCount fixture configure acknowledge use = do
   where
     boot = "11111111-1111-4111-8111-111111111111"
     select _ _ rule = do
-      let profile = Systemd.SystemdProfile "/qualified/root" ("sha256:" <> Text.replicate 64 "a") "/bin/env" "/qualified/collector" 62001 62001
+      let profile = Systemd.SystemdProfile "/qualified/root" ("sha256:" <> Text.replicate 64 "a") "/bin/env" "/bin/deadline" "/qualified/collector" 62001 62001
       identity <- Systemd.systemdProfileIdentity profile
       pure (if rule == "validate" then Right (ProcessCommand rule identity "/bin/validate" [] "" (Map.singleton "HOME" "/scratch") 30 1024, profile) else Left "unknown fixture rule")
 

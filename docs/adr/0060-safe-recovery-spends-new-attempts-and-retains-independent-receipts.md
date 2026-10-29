@@ -129,6 +129,22 @@ publisher share deterministic result rendering. The native listener substrate
 and accepted-executor Unix fixtures are qualified separately; neither replaces
 the complete Linux supervisor restart gate.
 
+Process profile revision 2 also binds an immutable deadline executable. It runs
+as the unprivileged init of the private PID namespace, refuses expired starts
+before executing repository code, retains orphan descendants and stops them at
+the accepted absolute cutoff. A suspend-aware nonsettable timer bounds duration;
+a discontinuous realtime change expires the guard. Repository code cannot trace
+or write its trusted parent's memory, and cannot stop namespace init. Normal
+success requires the command's confirmed zero and no remaining descendants.
+Guard cutoff/refusal returns a nonzero unit status; it does not invent a
+successful command result or claim a systemd timeout that was not observed.
+The collector still independently checks matching invocation, bounded complete
+output and an empty cgroup. Loaded units can wait in a queue before receiving
+their first invocation identity: capture remains open for a bounded interval,
+but an identity lost or changed after pinning remains evidence loss. Native
+deadline and Nix-root probes qualify this substrate; accepted root-control and
+full service restart integration remain plan-96 gates.
+
 ## Alternatives rejected
 
 Releasing the unknown attempt to make room for its replacement would invent
