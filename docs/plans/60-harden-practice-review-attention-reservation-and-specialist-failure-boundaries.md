@@ -5,6 +5,19 @@ title: "Harden practice-review attention reservation and specialist failure boun
 kind: exec-plan
 created_at: 2026-08-27T00:54:32Z
 intention: "intention_01m10bc7hae8trp0ev5mzpvt0d"
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-29T13:39:34Z
+      mode: "update"
+      note: "Refresh current source and suite paths; correct semantic ordering, exception handling, replay prerequisites, and acceptance coverage."
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-29T13:40:45Z
+      verdict: "approved"
+      note: "Validated refreshed plan against source, ADRs, dependency transaction semantics, suite declarations, local links, fences, and gate dry-run; implementation checks remain pending."
 ---
 
 # Harden practice-review attention reservation and specialist failure boundaries
@@ -50,7 +63,13 @@ association table gains the index the operator audit query needs.
 
 ## Surprises & Discoveries
 
-(None yet.)
+Refresh on 2026-10-29 against `dda505e`: all four defects and the missing index
+remain. The orchestration suite moved to `shikigami-core/test-postgres/`; the old
+focused command would miss it. `materialClaimProjection` also sorts by `claimId`,
+so deleting the JSON field alone does not make multi-claim keys label-independent.
+`runFlowBehavior` now handles `DecisionAbort` as well as approval failures; both
+must remain intact. Practice-review patch branches were removed in the pre-release
+baseline reset, so the current production interpreters are installed directly.
 
 
 ## Decision Log
@@ -68,8 +87,9 @@ association table gains the index the operator audit query needs.
   `schemaVersion` to 2, keeping the frozen namespace.
   Rationale: ADR 0035 says a projection change is a new version. The claim id is chosen by
   the model in its raw proposal and is not part of the dispute's substance; kind, normalized
-  statement, and cited evidence ids are. No production reservation rows exist (ADR 0027:
-  Shikigami is pre-release), so no migration of stored keys is needed.
+  statement, and cited evidence ids are. The original plan assumed no production reservation rows existed under ADR 0027.
+  Recheck that assumption immediately before implementation; the historical ADR
+  alone does not establish the current deployment state.
   Date: 2026-08-27.
 
 - Decision: Replace `show problem` with an explicit renderer, `renderEvidenceProblem`, and
@@ -92,7 +112,14 @@ association table gains the index the operator audit query needs.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The 2026-10-29 refresh validates the plan against source, dependency transaction
+semantics, ADRs, test-suite declarations, migration recipes, and workflow-versioning
+rules. No implementation milestone is complete. Implementation tests and the Keiro
+gate remain acceptance work; this documentation refresh does not claim they passed.
+Plan validation checked all local Markdown links and required sections, language-tagged
+fences, Cabal suite names, and `just --dry-run keiro-gate HEAD`; `git diff --check`
+passed. Original author/review provenance was absent, so historical authorship is
+unknown; this pass records its own revision and review without backfilling it.
 
 
 ## Context and Orientation
@@ -102,13 +129,21 @@ Shikigami runs each agent execution as a durable keiro workflow named `shikigami
 visible result is written to a journal in PostgreSQL under a step name, and when the
 process crashes and the run is resumed, each step returns its journaled value instead of
 re-running. A "patch" is keiro's guard that lets a body add steps without confusing runs
-that started before the steps existed; the two practice-review patches are declared in
-`domain/shikigami-agent-run.keiro` and must not change here.
+that started before the steps existed; the current baseline installs practice-review interpreters directly. Preserve the
+existing labels and result codecs declared in `domain/shikigami-agent-run.keiro`.
+Follow `docs/workflow-versioning.md` for every Agent or Flow body edit. This plan
+changes step internals and pure validation, without introducing steps or patch ids.
+Replay already-journaled evaluator, recall, verdict, and attention values unchanged;
+exercise resume with previously recorded values as well as fresh runs. Before changing
+the semantic key, record ADR 0027's current unused-state evidence (no resumable
+journals, queued/stored old payloads, external wire consumers, or release/deployment
+freezing the old shape). If that evidence does not hold, revise the rollout with an
+explicit versioned compatibility strategy before changing stored-key semantics.
 
 The specialist Flow is `shikigami-core/src/Shikigami/Flow/OpenTelemetryPracticeReview.hs`.
 It reaches the world only through narrow effects declared in
 `shikigami-core/src/Shikigami/PracticeReview/Capability.hs`; their production
-interpreters are installed in `runFlowBehavior` in `Shikigami/Agent/Workflow.hs`. The
+interpreters are installed in `runFlowBehavior` in `shikigami-core/src/Shikigami/Agent/Workflow.hs`. The
 attention effect's production interpreter is `runPracticeReviewAttentionAtomic` in
 `shikigami-core/src/Shikigami/PracticeReview/Attention.hs`. It derives an `AttentionKey`
 (a UUIDv5 over a canonical JSON projection of the verdict), prepares a Kizashi sink intent
@@ -119,17 +154,17 @@ its pending delivery receipt. The tables are `shikigami.practice_review_attentio
 `shikigami.practice_review_attention_reviews`, created by
 `shikigami-migrations/sql-migrations/2026-08-26-20-30-00-practice-review-attention.sql`.
 
-The defect in M1 is an ordering. `reserveAttention` (Attention.hs lines 226-298) calls
+The defect in M1 is an ordering. `reserveAttention` in `shikigami-core/src/Shikigami/PracticeReview/Attention.hs` calls
 `insertAttentionTx` and `linkAttentionReviewTx` before it runs the transaction returned by
-`prepareJournalAppend`. That keiro function (`keiro/src/Keiro/Workflow/Journal.hs`,
+`prepareJournalAppend`. That keiro function (`mori://shinzui/keiro`, project-relative `keiro/src/Keiro/Workflow/Journal.hs`; source-file artifact URI pending,
 `prepareJournalAppend`) checks whether the step is already journaled *inside* the returned
 transaction and reports `JournalAlreadyPresent stored`. The `JournalAlreadyPresent` branch
 in `reserveAttention` returns the stored value without `Tx.condemn`, so the inserts
 commit. When the stored value is `AttentionSkipped`, which the skip branch journals through
 keiro's `step` under the same `practice-review-attention` name, a resumed run whose grant
 was added in the meantime commits a reservation for an outbox message that was never
-written, and every later equivalent review coalesces onto it. kiroku's
-`Kiroku.Store.Transaction` documents (in the `runTransaction` haddock) that the body runs at
+written, and every later equivalent review coalesces onto it. `mori://shinzui/kiroku`, project-relative
+`kiroku-store/src/Kiroku/Store/Transaction.hs` (source-file artifact URI pending), documents (in the `runTransaction` haddock) that the body runs at
 read-committed isolation and that `Tx.condemn` marks the transaction for rollback while
 the call still returns the body's value.
 
@@ -141,8 +176,8 @@ defines the key, the atomic transaction, and the never-release rule; it is amend
 never point at a message that was not enqueued.
 [0013](../adr/0013-flow-bodies-reach-the-world-only-through-capabilities.md) is why the fix
 lives in the interpreter, not the Flow.
-[0027](../adr/0027-the-first-release-establishes-one-clean-durable-baseline.md) is why the
-key version can change without a data migration.
+[0027](../adr/0027-the-first-release-establishes-one-clean-durable-baseline.md) defines the unused-state prerequisites for changing the
+key version without a data migration; they must be rechecked.
 [0012](../adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md) is why no step
 name changes in this plan. No cross-repository ADR applies.
 
@@ -162,7 +197,7 @@ returned value is unchanged; only the writes are discarded. Add a comment above 
 stating that the inserts above are speculative until the append succeeds and that a
 journaled skip must not leave a row behind.
 
-In `shikigami-core/test/Shikigami/PracticeReviewOrchestrationSpec.hs`, add a test to the
+In `shikigami-core/test-postgres/Shikigami/PracticeReviewOrchestrationSpec.hs`, add a test to the
 `atomicAttentionTests` group named "a journaled skip followed by a granted resume reserves
 nothing". Build the attention environment exactly as `attentionEnv` does but with
 `grants = StaticGrants (Map.singleton reviewerAgent (Set.fromList [SKawaDigest]))`, so the
@@ -188,22 +223,30 @@ the `AttentionProjection` record, so the `schema_version` column records 2. Leav
 already says `v1` about the contract family, not the projection. Update the frozen vector
 test "frozen target-suspect vector is stable across whitespace normalization" with the new
 UUID, obtained by running the test once and copying the reported value into the assertion,
-and add an assertion that changing only the fixture claim's `claimId` yields the same key.
+and add an assertion that changing only the fixture claim's `claimId` yields the same key. Also replace the label-based `claimKey` ordering with an ordering by
+`(enumText kind, normalizeWords statement, sorted evidence-id texts)`; emit the
+same normalized values used by that ordering. Test at least two distinct material
+claims whose labels are swapped, renamed, and whose input order is reversed.
+All variants must produce the same key. A single-claim test cannot detect the
+remaining label-based ordering defect.
 Extend "recipient and material action changes produce distinct attention keys" with three
 more variations that must change the key: a different classification, a different claim
 statement, and a different cited content hash.
 
 In `shikigami-core/src/Shikigami/PracticeReview/Evidence.hs`, add and export
-`renderEvidenceProblem :: EvidenceProblem -> Text`. Write one sentence per constructor
-that names the repository, revision, path, and the failure in plain words; for example
+`renderEvidenceProblem :: EvidenceProblem -> Text`. Write explicit prose per constructor using its available fields (not every
+constructor has a repository, revision, or path); for example
 `ReadFailed repository revision path (ContentPlaneUnavailable detail) required` renders as
 "Reading <path> at <revision> in <repository> failed because the content plane was
-unavailable: <detail> (required)". Keep every field that distinguishes two problems in the
-rendering so that two different problems cannot render identically. In
-`Shikigami/Flow/OpenTelemetryPracticeReview.hs`, change `problemClaims` to use
+unavailable: <detail> (required)". Render every distinguishing field, including absent versus present optional values,
+required versus optional flags, and each nested `EvidenceReadError` constructor,
+without derived `Show`. Quote/escape dynamic text to avoid ambiguous delimiters.
+Preserve the existing 512-character bound in `problemClaims`; do not claim that
+truncated user-facing statements uniquely encode arbitrarily large problems. In
+`shikigami-core/src/Shikigami/Flow/OpenTelemetryPracticeReview.hs`, change `problemClaims` to use
 `renderEvidenceProblem` for `statement` and to sort by the rendered text rather than by
 `show`. Add a golden test to `shikigami-core/test/Shikigami/PracticeReviewEvidenceSpec.hs`
-that renders one value of every constructor and compares against a checked-in fixture
+that renders every constructor, nested read-error variant, and optional/required case and compares against a checked-in fixture
 `fixtures/practice-review/evidence-problems-rendered.json` (a JSON array of strings); the
 test fails when a rendering changes, which is the point.
 
@@ -222,44 +265,61 @@ attempt, a producer cannot retire a provisional review outside the trigger's rec
 and an oversized model reply is refused before it is journaled.
 
 Export `PracticeReviewFlowFailure (..)` from
-`Shikigami/Flow/OpenTelemetryPracticeReview.hs`. In `Shikigami/Agent/Workflow.hs`, in
-`runFlowBehavior`, extend the `case fromException err of` after `trySync` so that
-`Just (PracticeReviewFlowFailure detail)` also yields `pure (Left detail)`; keep the
-existing `ApprovalAcknowledgementFailed` case and the rethrow for everything else. Because
+`shikigami-core/src/Shikigami/Flow/OpenTelemetryPracticeReview.hs`. In `shikigami-core/src/Shikigami/Agent/Workflow.hs`, in
+`runFlowBehavior`, add a separate typed pattern guard on `Left err`:
+`Just (PracticeReviewFlowFailure detail) <- fromException err`, returning
+`pure (Left detail)`. Preserve the existing `DecisionAbort` guard, the separate
+`ApprovalAcknowledgementFailed` downcast, and the rethrow for everything else.
+Do not place constructors from different exception types in one `Maybe` case. Because
 `runSessionedAgent` wraps a Flow's `Left` as `PermanentAgentRunFailure`, and
-`Shikigami/Workers/Agent/RunJob/Worker.hs` maps that to `deadOutcome
+`shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs` maps that to `deadOutcome
 "permanent_workflow_failure"`, no worker change is needed. Add a test to the
 `agentRunSpecialistTests` group: submit a `RunJob` whose `triggerPayload` is a bare
 `PracticeReviewResolution` (reuse the resolution built in `replayTests`) and assert
 `runAgentRunWorkflow` returns `Right (Completed (Left (PermanentAgentRunFailure detail)))`
 with "authorized resolution" in `detail`, and that `loadStepIndex` for that workflow shows
-no `practice-review-evidence` step.
+no `practice-review-evidence` step. Add the same assertions for a trigger with
+an unknown field. Keep a transient evaluator failure test proving it remains
+retryable rather than becoming a permanent input error. Existing worker mapping
+coverage in `shikigami-workers/test/Shikigami/Agent/RunJob/WorkerSpec.hs` proves
+`PermanentAgentRunFailure` becomes the permanent dead outcome.
 
-In `Shikigami/Flow/OpenTelemetryPracticeReview.hs`, replace `priorActiveMemoryId` with a
-check that uses its `RecalledPracticeReviews` argument: when the trigger carries
+In `shikigami-core/src/Shikigami/Flow/OpenTelemetryPracticeReview.hs`, change `priorActiveMemoryId` to return `Either Text (Maybe MemoryId)` and
+bind it with `either failFlow pure` immediately after `recallPracticeReviews`,
+before evidence acquisition or evaluation. Pass its successful result to
+`rememberProvisional`. Implement a check that uses its `RecalledPracticeReviews` argument: when the trigger carries
 `priorReviewId`, require that some verdict in `pending` has that `reviewId`; if none does,
 fail the Flow with "practice-review trigger names a prior review outside its recall
-scope". `pending` holds the provisional verdicts that `recallPracticeReviews` returned for
-the same project, path, dependencies, and practice, so a prior review of another target
-cannot match. Add a test to `replayTests`: run the reference-change trigger from
+scope". `pending` holds the provisional verdicts that `recallPracticeReviews` returned through `verdictMatchesContext`/`appliesTo` for the practice and applicability
+scope. This is applicability matching, not exact equality of every scope field. Add a test to `replayTests`: run the reference-change trigger from
 `completeOpenTelemetryReferenceChangeTrigger` with a `priorReviewId` that was never
 reviewed and assert the run is refused before `rememberProvisional` (no
-`practice-review-remember-provisional` step in the index). The existing reference
+`practice-review-remember-provisional` step in the index). Also seed a real provisional review outside the new trigger's applicability
+scope, then verify refusal leaves that memory active and creates no new provisional
+memory, history, or attention. The existing reference
 re-review test in `completeClassificationTests` already covers the accepted path.
 
-In `Shikigami/PracticeReview/Capability.hs`, in `modelPracticeReviewEvaluator`, measure
-the UTF-8 length of `responseText` and return `Left` with a bounded detail when it exceeds
-`maximumProposalBytes = 262144`; add the constant with a comment that the raw proposal is
-journaled verbatim. A unit test in `PracticeReviewOrchestrationSpec.hs` can exercise this
-by calling `modelPracticeReviewEvaluator` with a `BehaviorEnv` whose model is the stub
-provider used in `AgentWorkflowSpec.hs` (`newBehaviorEnv` plus the `stub-v1` model), or,
-if that stub cannot return a chosen body, by factoring the size check into an exported
-pure function `boundProposalText :: Text -> Either Text Text` and testing that directly.
+In `shikigami-core/src/Shikigami/PracticeReview/Capability.hs`, export
+`boundProposalText :: Text -> Either Text Text` and `maximumProposalBytes :: Int`
+with value 262144. Check `ByteString.length (TextEncoding.encodeUtf8 responseText)`
+before JSON decoding in `modelPracticeReviewEvaluator`, returning a fixed bounded
+error on overflow without including the response. The journal stores decoded JSON,
+not verbatim response text; this cap bounds model input to that stored value.
+Add pure tests in `shikigami-core/test/Shikigami/PracticeReviewEvidenceSpec.hs` for
+empty text, exactly 262144 UTF-8 bytes, 262145 bytes, and multibyte text whose
+character count fits but byte count exceeds the limit. Add an evaluator integration
+test in the orchestration suite with a dedicated provider modeled on
+`shikigami-core/src/Shikigami/Behavior/StubProvider.hs`. Give it a unique Custom
+API key and a response containing oversized valid JSON; the stock `stub-v1`
+provider returns fixed prose and cannot supply this fixture. Preserve the stub's
+thinking/evidence handling so provider validation reaches the size check; assert refusal and no `practice-review-evaluate` journal entry.
+Retain the current retry policy for evaluator failures; changing it is outside this
+plan's deterministic Flow-input failure classification.
 
 
 ### Milestone 4: Index migration and verification
 
-At the end of this milestone the audit query from review id to reservation uses an index,
+At the end of this milestone the audit query from review id to reservation has an eligible index,
 and every repository gate passes.
 
 Run `just new-migration practice-review-attention-review-index` from the repository root.
@@ -271,7 +331,10 @@ shikigami.practice_review_attention_reviews (review_id);` and delete the templat
 `shikigami-migrations/sql-migrations/manifest`. Add a case to
 `shikigami-migrations/test/Main.hs` beside "the practice-review attention migration is
 appended without delivery state" asserting the new file is embedded and contains the index
-name. Then run the full verification in Concrete Steps and record the transcript in
+name. Extend `shikigami-migrations/test/Migrate.hs` to query `pg_indexes` after
+fresh and repeated application and assert the index belongs to the association
+table with `review_id` as its leading column. Do not require a planner index scan
+on tiny fixture tables. Then run the full verification in Concrete Steps and record concise results in
 Outcomes.
 
 
@@ -279,15 +342,20 @@ Outcomes.
 
 All commands run from `/Users/shinzui/Keikaku/bokuno/shikigami`. Builds and tests must run
 inside the Nix development shell because `librdkafka` is only on the linker path there;
-the local PostgreSQL cluster must be running (`nix develop -c pg_ctl -D db/db status`
-reports "server is running").
+the PostgreSQL tests use `withShikigamiMigratedSuite` and isolated database
+fixtures backed by Keiro's ephemeral PostgreSQL owner. They do not require a
+manually started `db/db` cluster. Local `just migrate` targets the development
+PG environment and is separate from the fixture-based acceptance checks.
+Before implementation, save `git rev-parse HEAD` as the gate base and use that
+same revision throughout, including when committing directly on the current branch.
 
 Focused suites while working:
 
 ```bash
-nix develop -c cabal test shikigami-core-test -j1 --test-options='-p "practice review"' --test-show-details=direct
+nix develop -c cabal test shikigami-core-test -j1 --test-options='--num-threads=1 -p "practice review"' --test-show-details=direct
+nix develop -c cabal test shikigami-core-postgres-test -j1 --test-options='--num-threads=1 -p "practice review"' --test-show-details=direct
 nix develop -c cabal test shikigami-migrations-test -j1 --test-show-details=direct
-nix develop -c cabal test shikigami-migrations-smoke -j1 --test-show-details=direct
+nix develop -c cabal test shikigami-migrations-smoke -j1 --test-options=--num-threads=1 --test-show-details=direct
 ```
 
 Expected after M1, before any other change, for the new case:
@@ -302,15 +370,15 @@ Full verification at the end:
 
 ```bash
 nix develop -c cabal build all
-nix develop -c cabal test all -j1 --test-show-details=direct
+nix develop -c cabal test all -j1 --test-options=--num-threads=1 --test-show-details=direct
 nix develop -c just keiro-gate <merge-base>
 git diff --check
 ```
 
 `just keiro-gate` must report no `BREAKING` finding; this plan adds no step and no patch,
 so the expected `keiro-diff` output contains no practice-review lines at all. Replace
-`<merge-base>` with the commit this work branches from (`git merge-base master HEAD`, or
-the last commit before the plan's first commit when working on `master`).
+`<merge-base>` with the saved pre-implementation revision. Do not recompute it from
+`master` after committing the work on `master`.
 
 Every commit carries the trailers:
 
@@ -329,20 +397,20 @@ proving the winner path still commits its row, outbox message, and receipt toget
 For M2, `deriveAttentionKey` on two validated verdicts that differ only in `claimId`
 returns the same key, and on verdicts differing in classification, a claim statement, a
 cited content hash, a recipient mapping, or the recommended action returns different keys.
+The multi-claim rename/permutation cases also preserve the key.
 The golden rendering fixture exists and the rendering test passes; changing any word in
 `renderEvidenceProblem` makes it fail.
 
-For M3, submitting a bare resolution as an AgentRun completes with
-`PermanentAgentRunFailure` on the first attempt; the worker log line for such a job reads
-`worker.job.dead_lettered` with `reason = permanent_workflow_failure`, which can be observed
-by running the worker against the local cluster with `nix develop -c cabal run
-shikigami-worker` and enqueuing a bare resolution through `cabal run shikigami --
-enqueue-run` if a manual check is wanted. A reference-change trigger naming an unknown
-prior review is refused without writing memory.
+For M3, both a bare resolution and an unknown trigger field complete as
+`PermanentAgentRunFailure` on the first attempt without acquiring evidence; existing
+worker tests verify the `permanent_workflow_failure` dead outcome. Unknown and
+out-of-scope prior ids are refused before writes and do not retire existing memory;
+the valid reference-change case still succeeds. Proposal bounds pass at the exact
+UTF-8 byte limit and reject above it, including multibyte inputs, and the evaluator
+integration case leaves no oversized journal entry.
 
-For M4, `just migrate` on the local cluster applies the new file once, and running it
-again reports nothing to apply; the migration smoke suite proves fresh and repeated
-application.
+For M4, migration contract and smoke suites pass, including fresh/repeated
+application and the catalog assertion for the index.
 
 The whole plan is accepted when `cabal test all -j1` passes with the new cases included
 and `just keiro-gate` passes.
@@ -367,13 +435,17 @@ version-2 projection and `reserveAttention` gains the condemn branch.
 `Shikigami.PracticeReview.Evidence` exports `renderEvidenceProblem :: EvidenceProblem ->
 Text`. `Shikigami.Flow.OpenTelemetryPracticeReview` exports
 `PracticeReviewFlowFailure (..)`. `Shikigami.PracticeReview.Capability` exports
-`boundProposalText :: Text -> Either Text Text` and `maximumProposalBytes :: Int` if the
-pure factoring in M3 is used. `Shikigami.Agent.Workflow.runFlowBehavior` recognises the
-Flow failure exception. Dependencies are unchanged: keiro (`Keiro.Workflow`,
-`Keiro.Workflow.Journal` semantics), kiroku (`Kiroku.Store.Transaction.runTransaction`,
+`boundProposalText :: Text -> Either Text Text` and `maximumProposalBytes :: Int` for the pure bounds tests in M3. `Shikigami.Agent.Workflow.runFlowBehavior` recognises the
+Flow failure exception. Dependencies are unchanged: `mori://shinzui/keiro` (`Keiro.Workflow`,
+`Keiro.Workflow.Journal` semantics), `mori://shinzui/kiroku` (`Kiroku.Store.Transaction.runTransaction`,
 `Hasql.Transaction.condemn`), and pg-migrate through the existing migration manifest. The
 review records this plan answers are
 [REV-2](../reviews/practice-review-attention-reservation.md),
 [REV-3](../reviews/practice-review-attention-migration.md),
 [REV-5](../reviews/opentelemetry-practice-review-flow.md), and
 [REV-6](../reviews/practice-review-capability-ports.md).
+
+
+Revision note (2026-10-29): refreshed paths, suite commands, current Flow exception
+handling and baseline context; closed label-sort, bounds, prior-scope and migration
+acceptance gaps; made pre-release assumptions conditional on current evidence.
