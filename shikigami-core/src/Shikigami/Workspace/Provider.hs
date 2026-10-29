@@ -6,9 +6,10 @@ import Data.Text qualified as Text
 import Kikan.En.Action (AgentAction (InvokeCapabilityTool), mkCapabilityToolTarget)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (AttemptId, OperationId)
-import Shikigami.Execution.Runner (DispatchContext (..))
+import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Prelude
-import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), bundleBase, bundleDigest, bundleRepository, nativeFilePolicy, validWorkspacePath)
+import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), bundleBase, bundleDigest, bundleRepository, nativeFilePolicy, supervisedFilePolicy, validWorkspacePath)
+import Shikigami.Workspace.Process
 import Shikigami.Workspace.Types
 
 -- Whole-file compare-and-replace, including creation in an existing directory.
@@ -83,3 +84,35 @@ workspaceFileAction binding admission dispatch kind path target inputDigest = do
       digest = Text.replace ":" "-" (versionedDigest "shikigami.workspace-file-action/1" coordinates)
       revision = "1-" <> Text.replace ":" "-" (workspaceBindingDigest binding)
   either (const (Left FileEffectRefused)) (Right . InvokeCapabilityTool) (mkCapabilityToolTarget "shikigami.workspace" revision (kind <> "-" <> digest))
+
+-- A process launch grant binds the complete retained rule, immutable root
+-- profile, original actual attempt and absolute deadline. The resolved cwd
+-- identity and host boot are trusted supervisor observations, never model input.
+-- Phase is deliberately excluded from the hash so fresh authorization may be
+-- checked before and after committing the single launch transition.
+workspaceProcessAction :: WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> ProcessRecord -> Text -> Text -> Either FileEffectError AgentAction
+workspaceProcessAction binding admission dispatch record boot target = do
+  unless (admission.filePolicy == Just supervisedFilePolicy && admission.workspace == binding.workspace && admission.bindingDigest == workspaceBindingDigest binding && admission.runId == binding.request.runId && admission.rootId == binding.request.rootId && admission.owner == binding.request.owner && admission.epoch == binding.request.epoch && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base) (Left FileEffectRefused)
+  unless (validProcessCommand record.command && record.phase `elem` [ProcessReserved, ProcessLaunchRequested] && record.operationId == dispatch.operation.operationId && record.attemptId == dispatch.attemptId && record.claimOwner == dispatch.owner && bounded dispatch.owner && record.generation == dispatch.generation && dispatch.generation > 0 && record.bindingDigest == workspaceBindingDigest binding && record.instructionDigest == bundleDigest admission.instructions && record.fingerprint == processFingerprint binding record.instructionDigest dispatch.operation record.command && record.unit == processUnit record.operationId record.fingerprint && hostIdentity boot && maybe True (== boot) record.bootId && isNothing record.invocationId && isNothing record.receipt && bounded target && Text.length target <= 128) (Left FileEffectRefused)
+  let coordinates =
+        Aeson.object
+          [ "binding" Aeson..= workspaceBindingDigest binding,
+            "instructions" Aeson..= record.instructionDigest,
+            "filePolicy" Aeson..= admission.filePolicy,
+            "assignment" Aeson..= admission.assignmentId,
+            "owner" Aeson..= admission.owner,
+            "epoch" Aeson..= admission.epoch,
+            "operation" Aeson..= dispatch.operation,
+            "attempt" Aeson..= dispatch.attemptId,
+            "claimOwner" Aeson..= dispatch.owner,
+            "generation" Aeson..= dispatch.generation,
+            "command" Aeson..= record.command,
+            "fingerprint" Aeson..= record.fingerprint,
+            "deadline" Aeson..= record.deadline,
+            "unit" Aeson..= record.unit,
+            "boot" Aeson..= boot,
+            "cwdTarget" Aeson..= target
+          ]
+      digest = Text.replace ":" "-" (versionedDigest "shikigami.workspace-process-action/1" coordinates)
+      revision = "1-" <> Text.replace ":" "-" (workspaceBindingDigest binding)
+  either (const (Left FileEffectRefused)) (Right . InvokeCapabilityTool) (mkCapabilityToolTarget "shikigami.workspace" revision ("exec-" <> digest))

@@ -3,6 +3,7 @@ module Shikigami.WorkspaceActionProofSpec (tests) where
 import Auth.Biscuit (toPublic)
 import Data.Aeson (toJSON)
 import Data.Generics.Labels ()
+import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Encoding (decodeUtf8)
@@ -22,6 +23,7 @@ import Shikigami.Execution.Runner
 import Shikigami.Execution.Transcript (ExecutionId (..))
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.Workspace.Instructions
+import Shikigami.Workspace.Process
 import Shikigami.Workspace.Provider
 import Shikigami.Workspace.Reference
 import Shikigami.Workspace.Types
@@ -88,6 +90,74 @@ tests =
         result <- verifyIssuedAction verifier expiry actionRequest issued
         assertBool "expiry enforced" (case result of Left Kikan.ProofExpired -> True; _ -> False)
         assertBool "proof bytes excluded from public contracts" (not (Kikan.decisionProofText proof `Text.isInfixOf` Text.pack (show (toJSON (binding, admission)))))
+        let processAdmission = admission & #filePolicy .~ Just supervisedFilePolicy
+            command = ProcessCommand "validate" ("sha256:" <> Text.replicate 64 "a") "/bin/validate" [] "src" (Map.singleton "HOME" "/scratch") 30 1024
+            boot = "11111111-1111-4111-8111-111111111111"
+            recordFor b a d c =
+              let fingerprint = processFingerprint b (bundleDigest a.instructions) d.operation c
+               in ProcessRecord d.operation.operationId d.attemptId d.owner d.generation (workspaceBindingDigest b) (bundleDigest a.instructions) fingerprint c expiry (processUnit d.operation.operationId fingerprint) Nothing Nothing ProcessReserved Nothing
+            record = recordFor binding processAdmission dispatch command
+        workspaceProcessAction binding admission dispatch record boot "device:parent" @?= Left FileEffectRefused
+        workspaceFileAction binding processAdmission dispatch "replace" "src/file" "device:parent" "input-hash" @?= Left FileEffectRefused
+        processAction <- right (workspaceProcessAction binding processAdmission dispatch record boot "device:parent")
+        let processRequest = Kikan.AuthorizeActionRequest principal processAction requestId
+            processGrant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText principal))) (RelationName (Kikan.actionOperation processAction)) (ObjectRef (ObjectType (Kikan.actionObjectType processAction)) (Kikan.actionObjectId processAction)) (En.ConsistencyToken "snapshot-1") (En.SchemaHash "schema-workspace-fixture") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId "workspace-proof")) Nothing
+        processMinted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed processGrant
+        processProof <- right (Kikan.mkDecisionProof (decodeUtf8 processMinted.token))
+        let processIssued = Kikan.IssuedActionProof processProof processMinted.expiresAt [] checkedAt
+        _ <- right =<< verifyIssuedAction verifier now processRequest processIssued
+        workspaceProcessAction binding processAdmission dispatch (record & #phase .~ ProcessLaunchRequested & #bootId .~ Just boot) boot "device:parent" @?= Right processAction
+        let alteredCommands =
+              [ command & #rule .~ "other-rule",
+                command & #profile .~ ("sha256:" <> Text.replicate 64 "b"),
+                command & #executable .~ "/bin/other",
+                command & #arguments .~ ["different"],
+                command & #directory .~ "other",
+                command & #environment .~ Map.singleton "HOME" "/workspace",
+                command & #timeoutSeconds .~ 29,
+                command & #outputBytes .~ 512
+              ]
+            alteredDispatches =
+              [ dispatch & #attemptId .~ AttemptId "other-attempt",
+                dispatch & #owner .~ "other-claim",
+                dispatch & #generation .~ 2,
+                dispatch & #operation . #operationId .~ OperationId "other-operation",
+                dispatch & #operation . #fingerprint .~ "other-fingerprint",
+                dispatch & #operation . #scopeDigest .~ "other-scope"
+              ]
+        processActions <-
+          mapM
+            right
+            ( [workspaceProcessAction binding processAdmission dispatch (recordFor binding processAdmission dispatch changed) boot "device:parent" | changed <- alteredCommands]
+                <> [workspaceProcessAction binding processAdmission changed (recordFor binding processAdmission changed command) boot "device:parent" | changed <- alteredDispatches]
+                <> [ workspaceProcessAction binding processAdmission dispatch (record & #deadline .~ addUTCTime 1 expiry) boot "device:parent",
+                     workspaceProcessAction binding processAdmission dispatch record "22222222-2222-4222-8222-222222222222" "device:parent",
+                     workspaceProcessAction binding processAdmission dispatch record boot "device:other-parent",
+                     workspaceProcessAction binding (processAdmission & #assignmentId .~ "other-assignment") dispatch record boot "device:parent"
+                   ]
+            )
+        processBindingActions <-
+          mapM
+            ( \changed -> do
+                changedAdmission <- (\a -> a & #filePolicy .~ Just supervisedFilePolicy) <$> admissionFor changed
+                right (workspaceProcessAction changed changedAdmission dispatch (recordFor changed changedAdmission dispatch command) boot "device:parent")
+            )
+            changedBindings
+        mapM_
+          ( \action -> do
+              rejected <- verifyIssuedAction verifier now (processRequest & #action .~ action) processIssued
+              assertBool "process proof binds command, profile, original attempt, boot, cwd and deadline" (case rejected of Left Kikan.ProofWrongResource -> True; _ -> False)
+          )
+          (processBindingActions <> processActions)
+        mapM_
+          (\invalid -> workspaceProcessAction binding processAdmission dispatch invalid boot "device:parent" @?= Left FileEffectRefused)
+          [ record & #attemptId .~ AttemptId "unmatched-attempt",
+            record & #generation .~ 2,
+            record & #fingerprint .~ "mismatched",
+            record & #phase .~ ProcessRunning,
+            record & #bootId .~ Just "22222222-2222-4222-8222-222222222222",
+            record & #invocationId .~ Just boot
+          ]
     ]
 
 right :: (Show e) => Either e a -> IO a

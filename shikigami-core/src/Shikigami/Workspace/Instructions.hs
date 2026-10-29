@@ -12,6 +12,7 @@ module Shikigami.Workspace.Instructions
     instructionPrompt,
     validWorkspacePath,
     nativeFilePolicy,
+    supervisedFilePolicy,
     WorkspaceAdmission (..),
     InstructionError (..),
   )
@@ -122,5 +123,10 @@ instance ToJSON WorkspaceAdmission where
 
 nativeFilePolicy :: Text
 nativeFilePolicy = "ascii-exact-v1"
+
+-- Process-backed admissions require a different exact file adapter revision.
+-- Historical file-only writers must reject this profile before any file IO.
+supervisedFilePolicy :: Text
+supervisedFilePolicy = "ascii-exact-process-v1"
 
 instance Show WorkspaceAdmission where show _ = "WorkspaceAdmission <protected>"
