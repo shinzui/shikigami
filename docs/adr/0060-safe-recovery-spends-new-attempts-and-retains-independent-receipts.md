@@ -145,6 +145,19 @@ but an identity lost or changed after pinning remains evidence loss. Native
 deadline and Nix-root probes qualify this substrate; accepted root-control and
 full service restart integration remain plan-96 gates.
 
+Supervised workspace policies retain the complete reviewed rule set, immutable
+image/helper coordinates, compiled containment-property identity and file
+restrictions. Their content identity supplies the immutable workspace policy
+revision. A separate durable profile reserves a unique unprivileged Unix id
+from the operator's bounded pool, binds the workspace and instruction digests,
+and records readiness only after trusted provisioning. Lost acknowledgement
+returns the same identity and policy; expiry or freeze cannot recycle it.
+The supervisor resolves ready retained rules, rather than current defaults,
+and refuses incompatible compiled containment properties. Trusted launch
+helpers cannot reside on writable workspace/scratch mounts; host images and
+collectors cannot come from workspace storage. These metadata contracts do
+not establish native Unix provisioning, effective containment or fencing.
+
 ## Alternatives rejected
 
 Releasing the unknown attempt to make room for its replacement would invent

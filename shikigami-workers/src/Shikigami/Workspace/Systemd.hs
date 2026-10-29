@@ -7,6 +7,7 @@ module Shikigami.Workspace.Systemd
   ( SystemdError (..),
     SystemdProfile (..),
     systemdProperties,
+    systemdPropertiesIdentity,
     systemdProfileIdentity,
     processArguments,
     collectorArguments,
@@ -30,6 +31,7 @@ import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Prelude
 import Shikigami.Workspace.ContainedFile
 import Shikigami.Workspace.Process
+import Shikigami.Workspace.ProcessPolicy (immutableHelper)
 import System.Directory (doesFileExist)
 import System.Exit (ExitCode (..))
 import System.IO (IOMode (..), withBinaryFile, withFile)
@@ -68,6 +70,9 @@ systemdProfileIdentity :: SystemdProfile -> IO Text
 systemdProfileIdentity profile = do
   properties <- systemdProperties
   pure (versionedDigest "shikigami.workspace-systemd-profile/2" (toJSON (profile.rootDirectory, profile.rootIdentity, profile.environmentExecutable, profile.deadlineExecutable, profile.collectorExecutable, profile.userId, profile.groupId, properties)))
+
+systemdPropertiesIdentity :: IO Text
+systemdPropertiesIdentity = versionedDigest "shikigami.workspace-systemd-properties/2" . toJSON <$> systemdProperties
 
 -- Status is diagnostic liveness only, never proof that the command settled.
 -- Lost/failed capture retains uncertainty even if systemd stopped the command.
@@ -240,7 +245,7 @@ validLaunchRecord :: ProcessRecord -> Bool
 validLaunchRecord record = validProcessCommand record.command && maybe False validProcessRouting record.routing && digestText record.fingerprint && record.unit == processUnit record.operationId record.fingerprint && record.phase == ProcessLaunchRequested && maybe False hostIdentity record.bootId && isNothing record.invocationId && isNothing record.receipt
 
 validProfile :: SystemdProfile -> Bool
-validProfile profile = all safeAbsolute [profile.rootDirectory, profile.collectorExecutable, Text.unpack profile.environmentExecutable, Text.unpack profile.deadlineExecutable] && digestText profile.rootIdentity && profile.userId > 0 && profile.groupId > 0
+validProfile profile = all safeAbsolute [profile.rootDirectory, profile.collectorExecutable, Text.unpack profile.environmentExecutable, Text.unpack profile.deadlineExecutable] && all immutableHelper [profile.environmentExecutable, profile.deadlineExecutable] && digestText profile.rootIdentity && profile.userId > 0 && profile.groupId > 0
 
 safeAbsolute :: FilePath -> Bool
 safeAbsolute path = case Text.stripPrefix "/" (Text.pack path) of

@@ -76,6 +76,7 @@ import Shikigami.WorkspaceActionProofSpec qualified as WorkspaceActionProofSpec
 import Shikigami.WorkspaceAdapterSpec qualified as WorkspaceAdapterSpec
 import Shikigami.WorkspaceCatalogSpec qualified as WorkspaceCatalogSpec
 import Shikigami.WorkspaceInstructionsSpec qualified as WorkspaceInstructionsSpec
+import Shikigami.WorkspaceProcessPolicySpec qualified as WorkspaceProcessPolicySpec
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase, (@?=))
 
@@ -88,6 +89,7 @@ main =
           testGroup "Trigger" [scheduleTests, streamTests, danwaIntegrationTests],
           WorkspaceCatalogSpec.tests,
           WorkspaceInstructionsSpec.tests,
+          WorkspaceProcessPolicySpec.tests,
           WorkspaceAdapterSpec.tests,
           WorkspaceActionProofSpec.tests,
           AgentLoaderSpec.tests,

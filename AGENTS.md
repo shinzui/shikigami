@@ -20,6 +20,14 @@ and provision a disposable, task-specific container without host credentials or
 unnecessary host mounts. Use the configured Nix remote builder as the fallback
 when Apple containers cannot meet the task's requirements.
 
+`bash tests/workspace/build-apple.sh` builds the Linux runtime in a disposable
+Apple container and copies its outputs back through Nix. An optional argument
+selects another `packages.aarch64-linux.<package>` attribute. It generates a
+temporary SSH key, verifies the guest's host key, publishes SSH only on loopback,
+uses two build cores (FRIC-21), and removes its container and generated credentials
+on exit. It uses no host mounts or existing SSH credentials. Compilation alone
+does not qualify runtime containment, restart recovery or workspace fencing.
+
 `bash tests/workspace/probe-apple-container.sh` demonstrates systemd, writable
 cgroup v2, and effective PID, network, and capability isolation in an Apple
 container. It installs the image's missing D-Bus package and removes its own

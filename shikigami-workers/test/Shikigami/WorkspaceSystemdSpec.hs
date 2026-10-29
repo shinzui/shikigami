@@ -47,7 +47,7 @@ tests =
               identity <- systemdProfileIdentity unsafe
               arguments now unsafe (record & #command . #profile .~ identity) >>= (@?= Left SystemdRefused)
           )
-          [profile & #userId .~ 0, profile & #groupId .~ 0, profile & #rootDirectory .~ "/unsafe/../root", profile & #rootDirectory .~ "/unsafe/%n", profile & #rootIdentity .~ "invalid"],
+          [profile & #userId .~ 0, profile & #groupId .~ 0, profile & #rootDirectory .~ "/unsafe/../root", profile & #rootDirectory .~ "/unsafe/%n", profile & #rootIdentity .~ "invalid", profile & #deadlineExecutable .~ "/workspace/deadline", profile & #environmentExecutable .~ "/scratch/env"],
       testCase "only the committed pre-launch shape can be serialized for a new start" $ withRecord \profile record -> do
         mapM_
           (\phase -> arguments now profile (record & #phase .~ phase) >>= (@?= Left SystemdRefused))

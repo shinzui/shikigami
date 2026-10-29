@@ -6,14 +6,18 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-10-29T22:49:23Z"
 frictionId: FRIC-21
-status: logged
+status: "logged"
 impact: detour
 kind: tooling
 origin: "mori://shinzui/shikigami"
 affects: "mori://haskell/cabal"
 affectedVersion: "3.16.1.0"
 plan: "docs/plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md"
-workaround: "Cancel only the task-owned failed build and retry with two build cores and complete logs. This is an experimental retry, not an established fix or proof of a cause."
+workaround: "The complete frozen Linux runtime build passed with two build cores and full logs after cancelling only the task-owned stalled attempt. The blocked configure was not reproduced in that retry; its cause remains unestablished."
+amended:
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-10-29T23:02:12Z"
+    change: "Record the successful two-core Apple build without claiming a cause or a general fix."
 ---
 # Cabal configure stayed blocked after its strip helper exited
 

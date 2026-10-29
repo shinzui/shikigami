@@ -6,7 +6,7 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-10-29T22:43:29Z"
 frictionId: FRIC-20
-status: logged
+status: "resolved"
 impact: detour
 kind: tooling
 origin: "mori://shinzui/shikigami"
@@ -14,6 +14,11 @@ affects: "mori://shinzui/shikigami"
 affectedVersion: "unreleased"
 plan: "docs/plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md"
 workaround: "Set LANG=en_US.UTF-8 and provide the glibc locale archive on glibc build platforms, following the existing pinned nixpkgs Haskell builder; retain the dependency graph unchanged and rerun the Linux build."
+resolution: "The frozen Nix runtime now declares the UTF-8 locale and glibc archive used by the pinned Haskell builder; its complete aarch64-linux build passes in a disposable Apple container without changing dependency pins."
+amended:
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-10-29T23:02:05Z"
+    change: "Verified the corrected locale through the complete Linux runtime build."
 ---
 # Frozen Linux runtime omitted the UTF-8 build locale
 

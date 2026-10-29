@@ -197,6 +197,8 @@ library
     Shikigami.Workspace.Catalog
     Shikigami.Workspace.Instructions
     Shikigami.Workspace.Process
+    Shikigami.Workspace.ProcessPolicy
+    Shikigami.Workspace.ProcessProfileStore
     Shikigami.Workspace.ProcessStore
     Shikigami.Workspace.Provider
     Shikigami.Workspace.Reference
@@ -374,6 +376,7 @@ test-suite shikigami-core-test
     Shikigami.WorkspaceAdapterSpec
     Shikigami.WorkspaceCatalogSpec
     Shikigami.WorkspaceInstructionsSpec
+    Shikigami.WorkspaceProcessPolicySpec
 
   hs-source-dirs: test
   ghc-options:

@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-10-29
+* **Update**: FRIC-21 logged: Record the successful two-core Apple build without claiming a cause or a general fix.
+* **Update**: FRIC-20 resolved: Verified the corrected locale through the complete Linux runtime build.
 * **Addition**: FRIC-21 records detour tooling friction with https://github.com/haskell/cabal: Cabal configure stayed blocked after its strip helper exited
 * **Addition**: FRIC-20 records detour tooling friction with mori://shinzui/shikigami: Frozen Linux runtime omitted the UTF-8 build locale
 * **Addition**: FRIC-19 records detour tooling friction with mori://shinzui/shikigami: Workflow scaffold gate includes handwritten core diffs
