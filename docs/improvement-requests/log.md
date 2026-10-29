@@ -1,5 +1,22 @@
 # Bundle Update Log
 
+## 2026-10-29
+* **Audit**: Reconcile all 18 request lifecycles and their selected delivery plans
+  against current child Progress/Outcomes and parent acceptance matrices. Six requests
+  remain completed (IR-1/3/8/9/10/12); seven are in progress (IR-4/7/11/14/15/16/17);
+  two remain accepted and unstarted (IR-13/18); three remain proposed without selected
+  full-contract plans (IR-2/5/6).
+* **Correction**: Move IR-14 through IR-17 from accepted to in-progress. Plans 81–83
+  are complete and plan 84 is partial, but remaining real-provider, Flow-regression,
+  coordinator and integrated acceptance gates prevent request completion. Replace stale
+  current-coverage claims while preserving the requested contracts and acceptance cases.
+* **Links**: Add direct links to IR-12's completed child plans, identify IR-13's
+  superseded plan 97 and link IR-18's real provider/coordinator prerequisites. Verify all
+  15 targetPlan values exist and have matching request-body links. Regenerate the
+  catalog and its metadata-derived lifecycle/plan table.
+* **Scope**: Preserve historical review/completion records. Runtime acceptance evidence
+  was inspected, not rerun; no independent design review is asserted.
+
 ## 2026-10-28
 * **Update**: IR-13 moves from proposed to accepted: MasterPlan 17 owns the authoritative objective record through plans 98–102 (PostgreSQL store and conditional commands, trusted associations and the real providers that close plan 84's IR-13 gate, authenticated API and CLI, durable Skill/Flow/conversation capabilities, no-Rei qualification), with implementation not started. The single-plan draft, plan 97, is superseded.
 * **Progress**: IR-11 selects plan 96 for its complete durable workspace contract. Repository catalog admission is implemented; allocation, mutation, process recovery, worker composition and real fencing/integration acceptance remain outstanding.

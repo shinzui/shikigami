@@ -2,12 +2,12 @@
 type: Improvement Request
 title: Support adaptive durable orchestration with shared resource limits
 description: Let a coordinator revise work decomposition, assignments, hierarchy, and concurrency through validated durable decisions while preserving ownership, authority, and shared execution budgets.
-timestamp: "2026-10-10T23:44:58Z"
+timestamp: "2026-10-29T13:33:46Z"
 generated:
   by: process:codex
-  at: "2026-10-11T03:04:54Z"
+  at: "2026-10-29T13:33:46Z"
 requestId: IR-16
-status: accepted
+status: in-progress
 targetPlan: docs/masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md
 origin: mori://shinzui/shikigami
 ---
@@ -16,35 +16,39 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Accepted; implementation planned but not started.** [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) decomposes
-this request into shared resource accounting in [plan 81](../plans/81-enforce-root-resource-reservations-across-durable-work.md), adaptive
-coordination and execution capacity in [plan 85](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md), and integrated delivery
-qualification in [plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md). All are not started. This request owns the
-adaptive coordinator and end-to-end qualification for
-[UC-1](../use-cases/adaptive-autonomous-delivery.md); continuing sessions, repository
-execution, model selection and recurring mandates retain their separate owners.
-Existing typed-decision plans and IR-11/IR-13 remain explicit prerequisites.
+**In progress.** [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) coordinates this request. [plan 81](../plans/81-enforce-root-resource-reservations-across-durable-work.md) is complete and supplies
+root-owned reservations, shared accounting, cutoff admission and conservative uncertain
+usage. [plan 82](../plans/82-pin-governed-execution-settings-for-agent-assignments.md) selection and [plan 83](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) recovery are complete supporting foundations;
+[plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) continuing sessions remain in progress.
+
+[plan 85](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) adaptive proposals, validation and execution-capacity policy, and [plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md)
+combined-artifact/live delivery qualification are not started. The root accounting
+slice satisfies the foundation of acceptance 4, which plan 85 must recheck; it does not
+satisfy the remaining adaptive/integrated acceptance cases. The dependency and acceptance
+matrix in MasterPlan 14 remains authoritative. Real workspace fences from [plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md)
+and objective/checkpoint providers from [MasterPlan 17](../masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md) / [plan 99](../plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md) remain gates.
+Typed decisions in [MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md) / plans 73–76 are complete prerequisites, not blockers
+for lack of implementation. This request owns adaptive coordination and integrated
+[UC-1](../use-cases/adaptive-autonomous-delivery.md) delivery, while recurring mandates
+remain separately owned by [IR-18](support-recurring-objective-supervision.md).
 
 ## Problem and current coverage
 
-Shikigami has governed routing and durable child runs. Its current
-[non-Flow supervisor](../../shikigami-core/src/Shikigami/Agent/Workflow.hs) runs every
-declared delegate and collects results. For a non-Flow declaration with `delegates`, this
-path replaces ordinary Skill execution; installing an adaptive coordinator Skill does
-not make the model control delegation. A delegating Skill also cannot request overlays.
+The fixed non-Flow supervisor still runs its declared delegate list; an ordinary
+Skill with delegates does not become an adaptive coordinator. Admitted `CoordinatingSkill`
+and Flow worker capabilities now share a governed session command owner from [plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md).
+Their authority comes from a retained trusted scope and fresh exact authorization, not
+Skill instructions. Real provider qualification remains open.
 
-The compiled router makes one validated selection from a specialist catalog. It does
-not maintain a revisable organization, react to worker progress, or compare quality and
-useful throughput. Existing descendant-count and depth bounds do not reserve concurrency,
-token/cost usage, wall time, or command capacity across a hierarchy. The resume runtime
-currently sets `maxConcurrentAdvances = 1` in
-[Workflow.Versioning](../../shikigami-core/src/Shikigami/Workflow/Versioning.hs); spawning
-several children alone does not prove simultaneous useful execution.
+Root concurrency/attempt/token/cost/time policies now have the accounting foundation
+from [plan 81](../plans/81-enforce-root-resource-reservations-across-durable-work.md). This does not prove adaptive fairness, useful overlap or combined-result
+quality. [plan 85](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) and [plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) still own those accepted delivery gates.
 
-[Plans 73–76](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md) are unimplemented
-and cover typed, governed Flow decisions with model selection. Reuse that work instead
-of inventing another ungoverned model-call path. Those plans' finite two-decision example
-does not implement an adaptive continuing coordinator.
+[MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md) / plans 73–76 now deliver typed governed decisions and mixed-model replay.
+Their finite example is a reusable decision primitive, not an implemented adaptive
+continuing coordinator. The proposed coordinator must consume the real workspace and
+objective/checkpoint providers rather than treating deterministic adapters as production
+acceptance.
 
 ## Requested change
 

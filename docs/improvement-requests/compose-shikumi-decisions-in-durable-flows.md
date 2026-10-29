@@ -2,10 +2,10 @@
 type: Improvement Request
 title: Compose Shikumi decisions in durable Flows with per-step model selection
 description: Let compiled Flows invoke registered typed Shikumi programs at named, replay-safe decision steps and select an authorized model for each invocation.
-timestamp: "2026-10-25T21:39:50Z"
+timestamp: "2026-10-29T13:33:46Z"
 generated:
   by: process:codex
-  at: "2026-10-25T21:39:50Z"
+  at: "2026-10-29T13:33:46Z"
 requestId: IR-12
 status: completed
 targetPlan: docs/masterplans/13-compose-shikumi-decisions-in-durable-flows.md
@@ -19,7 +19,7 @@ origin: mori://shinzui/shikigami
 ## Status
 
 **Completed.** [MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md)
-and plans 73–76 deliver typed static decision slots, authorized per-invocation model
+and [plan 73](../plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md), [plan 74](../plans/74-run-shikumi-decisions-through-governed-provider-calls.md), [plan 75](../plans/75-persist-decision-call-evidence-across-retries-and-restarts.md) and [plan 76](../plans/76-compose-and-verify-typed-shikumi-decisions-in-durable-flows.md) deliver typed static decision slots, authorized per-invocation model
 selection, whole-Flow policy pinning, governed actual-attempt dispatch, restartable
 call evidence and retained rich-result replay. The compiled two-model example and
 [authoring guide](../shikumi-flow-decisions.md) are available.

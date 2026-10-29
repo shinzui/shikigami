@@ -2,12 +2,12 @@
 type: Improvement Request
 title: Select governed models and reasoning settings for agent runs
 description: Resolve and pin operator-approved provider, model, and reasoning choices per agent or delegated assignment so coordinators and workers can use different execution settings within shared authority.
-timestamp: "2026-10-10T23:44:58Z"
+timestamp: "2026-10-29T13:33:46Z"
 generated:
   by: process:codex
-  at: "2026-10-22T01:23:55Z"
+  at: "2026-10-29T13:33:46Z"
 requestId: IR-17
-status: accepted
+status: in-progress
 targetPlan: docs/plans/82-pin-governed-execution-settings-for-agent-assignments.md
 origin: mori://shinzui/shikigami
 ---
@@ -16,35 +16,37 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Accepted; implementation planned but not started.** [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) assigns
-whole-assignment execution selection to [plan 82](../plans/82-pin-governed-execution-settings-for-agent-assignments.md), with durable-turn and
-continuing-session integration in [plan 83](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) and [plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md).
-[plan 85](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) owns the real typed-Flow decision-permission regression, and
-[plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) qualifies distinct permitted settings in integrated delivery.
-The catalog in [plan 73](../plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md)
-remains an unimplemented prerequisite. This supplies role-appropriate
-execution for [UC-1](../use-cases/adaptive-autonomous-delivery.md), without prescribing
-particular models or a permanent coordinator/worker pairing.
+**In progress.** [plan 82](../plans/82-pin-governed-execution-settings-for-agent-assignments.md) is complete under [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md): declarations and assignments
+select admitted aliases from the completed [plan 73](../plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md) catalog, intersect user/parent/profile
+restrictions, retain immutable bindings and correlate actual provider attempts.
+[plan 83](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) additionally supplies completed individual-turn recovery. The plan records
+three-alias HTTP fixture and replay/refusal evidence; it does not claim a live vendor trial.
+
+The request remains open under MasterPlan 14's acceptance matrix. Continued-assignment
+cases still consume [plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) (in progress, real providers missing); [plan 85](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) owns the
+coordinator-proposed escalation and real IR-12 Flow permission regression; [plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md)
+owns integrated distinct-model delivery. Plans 85 and 86 are not started. These are
+remaining acceptance gates, rather than missing whole-assignment selection primitives.
+The declaration fields and operator model catalog are documented in
+[Writing agents](../user/writing-agents.md).
 
 ## Problem and existing plan coverage
 
-The current [BehaviorEnv](../../shikigami-core/src/Shikigami/Behavior/Run.hs) has one
-process-selected model and options. A sanctioned profile constrains that tuple but does
-not select a different model for each declared agent or delegated assignment. The
-[agent schema](../../schema/Agent.dhall) has no such execution selection.
+The original gap was process-wide model configuration with no per-assignment
+selection. [plan 82](../plans/82-pin-governed-execution-settings-for-agent-assignments.md) now provides `execution.defaultAlias` and `permittedAliases`,
+retained effective descriptors, separate live binding lookup and per-attempt accounting.
+The default remains available for historical declarations; it cannot override a pinned
+assignment or widen its authority.
 
-[IR-12](compose-shikumi-decisions-in-durable-flows.md) and its unimplemented
-[plans 73–76](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md) select models
-for typed Flow decision invocations. They explicitly stop at that boundary; an entire
-Skill worker loop and its delegated run are not decision invocations. Reuse their model
-catalog and governed dispatch contracts where suitable, rather than broadening those
-plans silently or duplicating provider configuration.
+[IR-12](compose-shikumi-decisions-in-durable-flows.md) is complete through [MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md)
+and plans 73–76. Its per-slot Flow permissions remain distinct from whole-assignment
+permissions, although both reuse the operator model catalog. The actual cross-feature
+Flow regression and coordinator escalation remain in plans 85/86.
 
-[Plan 80](../plans/80-configure-model-providers-and-agent-launches-through-baikai.md)
-delivered HTTP options and foreground launch configuration. Background CLI response
-adapters remain blocked on released cancellation-safe lifecycle support. Foreground
-named jobs may have different settings, but their process results are not durable agent
-runs. This request can start with HTTP providers; CLI transport is optional.
+[plan 80](../plans/80-configure-model-providers-and-agent-launches-through-baikai.md) delivers HTTP providers and foreground launch configuration; background CLI
+responses retain the released cancellation-support gate. Foreground process settings
+are not durable assignment selection, and this request does not depend on enabling that
+optional transport.
 
 ## Requested change
 

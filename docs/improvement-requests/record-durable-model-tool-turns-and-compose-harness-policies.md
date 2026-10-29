@@ -2,12 +2,12 @@
 type: Improvement Request
 title: Record durable model and tool turns and compose harness policies
 description: Resume Skill execution from recorded model and tool outcomes and compose context, permission, budget, and termination policies over durable execution state.
-timestamp: "2026-10-10T23:44:58Z"
+timestamp: "2026-10-29T13:33:46Z"
 generated:
   by: process:codex
-  at: "2026-10-11T03:04:54Z"
+  at: "2026-10-29T13:33:46Z"
 requestId: IR-14
-status: accepted
+status: in-progress
 targetPlan: docs/plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md
 origin: mori://shinzui/shikigami
 ---
@@ -16,20 +16,22 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Accepted; implementation planned but not started.** [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) coordinates this
-request with IR-15 through IR-18 for
-[UC-1: Adaptive autonomous delivery](../use-cases/adaptive-autonomous-delivery.md).
-[plan 83](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) owns durable model/tool turns and composed policies;
-[plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) closes the continuing-message recovery integration, and
-[plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) qualifies the integrated delivery scenario. Shared resource
-accounting and pinned settings come from [plan 81](../plans/81-enforce-root-resource-reservations-across-durable-work.md) and [plan 82](../plans/82-pin-governed-execution-settings-for-agent-assignments.md).
-All these plans are not started. The evidence persistence planned in
-[plan 75](../plans/75-persist-decision-call-evidence-across-retries-and-restarts.md)
-records typed decision-call evidence; it does not recover a Skill's model/tool transcript.
+**In progress.** [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) owns the full acceptance matrix. [plan 83](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) is complete:
+protected model/tool transcripts, accepted operations, composed policies, safe recovery,
+conversation integration and bounded inspection are implemented and qualified. Its
+recorded completion evidence is dated 2026-10-28; this audit does not rerun those tests.
+[plan 81](../plans/81-enforce-root-resource-reservations-across-durable-work.md) root accounting, [plan 82](../plans/82-pin-governed-execution-settings-for-agent-assignments.md) assignment selection and [plan 75](../plans/75-persist-decision-call-evidence-across-retries-and-restarts.md) typed-decision
+attempt evidence are also complete; decision evidence remains distinct from Skill replay.
 
-## Problem
+The request stays open for acceptance 8: continuing-assignment recovery in [plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md)
+and integrated [UC-1](../use-cases/adaptive-autonomous-delivery.md) qualification in
+[plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md). Plan 84 has implemented mechanics against deterministic adapters but remains
+in progress at the real workspace/checkpoint provider boundary. Plan 86 is not started.
+Completion of plan 83 alone does not close this request.
 
-An ordinary Skill executes its model and tool loop inside one journaled `run-behavior-v2`
+## Original problem
+
+Before plan 83, an ordinary Skill executed its model and tool loop inside one journaled `run-behavior-v2`
 step. Intermediate model responses, tool requests, and tool observations are held in the
 behavior's in-memory context. If the worker crashes before the behavior result commits,
 the next attempt can repeat already completed model calls and tool work. This increases
@@ -44,21 +46,18 @@ changing an offered tool list must not bypass authorization or restore an exhaus
 
 ## Current boundaries
 
-- [Agent workflow execution](../../shikigami-core/src/Shikigami/Agent/Workflow.hs) journals
-  an ordinary synchronous behavior as one step; explicit Flow capabilities have their own
-  replay-safe boundaries.
-- [Skill execution](../../shikigami-core/src/Shikigami/Behavior/Skill.hs) appends tool
-  observations to an in-memory context and applies a model-turn ceiling. The
-  [conversation workflow](../../shikigami-core/src/Shikigami/Agent/Conversation.hs) also
-  journals behavior as one step within each conversation turn. Rotating after that turn
-  does not checkpoint the model and tool exchanges inside it.
-- [Capability overlays](../adr/0025-capability-overlays-are-requests-for-additive-model-tools.md)
-  pin approved descriptors and bracket provider leases. Durable overlays currently admit
-  observations only; recording turns must not implicitly enable mutations or conversation
-  overlays.
-- [Action authorization](../operations/action-authorization.md) requires a fresh exact
-  decision before protected external IO. Recorded harness permission is not a reusable
-  authorization proof.
+New leaf Skill runs and conversation turns use the protected execution child delivered
+by [plan 83](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md). Instructions, input, model binding, tool menu and narrowed policy are frozen
+before execution; individual accepted model/tool operations and actual attempts are retained.
+Historical journals keep their coarse behavior branch. The no-database one-off command uses
+an ephemeral recording, while the durable command locally drives its accepted execution child.
+See [execution recovery](../operations/durable-execution.md).
+
+Durable overlay admission still permits observations only; this request does not install
+mutable workspace providers or conversation overlays. Human harness permission is followed
+by fresh exact-action authorization before protected dispatch. Unknown unsafe effects remain
+unresolved until reconciliation, with their resource reservations held. Continued-assignment
+and integrated qualification remains assigned to plans 84/86 as stated above.
 
 ## Requested change
 

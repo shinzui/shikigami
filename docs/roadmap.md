@@ -115,9 +115,9 @@ surfaces, not prerequisites for every autonomous workload.
 
 ## Improvement-request lifecycle and implementation coverage
 
-Lifecycle below mirrors existing request metadata, which is not rewritten in this
-pass. An accepted request may already have completed implementation slices; its
-lifecycle does not replace plan-level progress.
+Lifecycle below mirrors the request metadata reconciled on 2026-10-29.
+Completed implementation slices do not close requests with remaining acceptance
+gates; the owning plans and parent completion matrix define those gates.
 
 | Request | Recorded lifecycle | Current coverage |
 | --- | --- | --- |
@@ -134,10 +134,10 @@ lifecycle does not replace plan-level progress.
 | [IR-11](improvement-requests/provide-governed-mutable-repository-workspaces.md) | in-progress | Plan 96 in progress: pure catalog admission only |
 | [IR-12](improvement-requests/compose-shikumi-decisions-in-durable-flows.md) | completed | MasterPlan 13 complete |
 | [IR-13](improvement-requests/support-optional-major-task-tracking.md) | accepted | MasterPlan 17 accepted: plans 98–102 not started; plan 97 superseded |
-| [IR-14](improvement-requests/record-durable-model-tool-turns-and-compose-harness-policies.md) | accepted | Plan 83 complete; follow-up/integrated acceptance remains in 84/86 |
-| [IR-15](improvement-requests/support-continuing-worker-sessions.md) | accepted | Plan 84 partial; real providers gate completion |
-| [IR-16](improvement-requests/support-adaptive-durable-orchestration.md) | accepted | Plan 81 complete; adaptive/integrated plans 85/86 remain |
-| [IR-17](improvement-requests/select-governed-models-for-agent-runs.md) | accepted | Plan 82 complete; later adaptation/integration remains |
+| [IR-14](improvement-requests/record-durable-model-tool-turns-and-compose-harness-policies.md) | in-progress | Plan 83 complete; follow-up/integrated acceptance remains in 84/86 |
+| [IR-15](improvement-requests/support-continuing-worker-sessions.md) | in-progress | Plan 84 partial; real providers gate completion |
+| [IR-16](improvement-requests/support-adaptive-durable-orchestration.md) | in-progress | Plan 81 complete; adaptive/integrated plans 85/86 remain |
+| [IR-17](improvement-requests/select-governed-models-for-agent-runs.md) | in-progress | Plan 82 complete; later adaptation/integration remains |
 | [IR-18](improvement-requests/support-recurring-objective-supervision.md) | accepted | Plan 87 not started |
 
 ## Review disposition

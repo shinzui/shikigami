@@ -2,10 +2,10 @@
 type: Improvement Request
 title: Support recurring objective supervision with durable checkpoints
 description: Resume an explicitly authorized ongoing objective from authoritative checkpoints and events, coalesce overlapping wakeups, and enforce cadence, shared limits, expiry, and stop conditions.
-timestamp: "2026-10-10T23:44:58Z"
+timestamp: "2026-10-29T13:33:46Z"
 generated:
   by: process:codex
-  at: "2026-10-11T03:04:54Z"
+  at: "2026-10-29T13:33:46Z"
 requestId: IR-18
 status: accepted
 targetPlan: docs/plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md
@@ -21,7 +21,9 @@ explicit recurring mandates, checkpoint wakeups, coalescing and stop semantics t
 [plan 87](../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md). This is a separate optional phase of
 [UC-1](../use-cases/adaptive-autonomous-delivery.md), following the finite coordinator
 foundations and the IR-13 checkpoint prerequisite. Finite delivery qualification does
-not require recurring automation to be enabled. The plan is not started.
+not require recurring automation to be enabled. The plan is not started. Its real checkpoint prerequisite is owned by
+[MasterPlan 17](../masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md) / [plan 99](../plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md), while [plan 85](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) supplies the finite coordinator.
+Completed resource and recovery foundations in plans 81–83 do not start this recurring phase.
 
 ## Problem and current coverage
 
