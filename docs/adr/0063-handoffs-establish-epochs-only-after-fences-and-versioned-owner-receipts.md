@@ -68,6 +68,16 @@ or host failure remains unresolved. The selected backend must pass plan 96's rea
 worker/supervisor restart and late-descendant tests before being enabled; this decision does
 not assert that the provider has been implemented.
 
+The Apple-container substrate probe now exercises a Nix closure in the immutable
+root, effective unprivileged/PID/capability/syscall restrictions, and a detached
+SIGTERM-ignoring writer that outlives an intermediate command parent. It proves
+whole-cgroup stop and no later file writes. `PrivatePIDs` makes the service
+process the namespace's PID 1, so a fixture that exits PID 1 cannot demonstrate
+an independently surviving descendant. Preserve that profile and observe the
+whole cgroup. These checks do not qualify an independent supervisor, output
+collector, restart reconciliation or handoff receipt. See
+[the root probe](../../tests/workspace/probe-root-apple.sh).
+
 ## Alternatives rejected
 
 Transferring on lease expiry would permit simultaneous writers. Cancelling a

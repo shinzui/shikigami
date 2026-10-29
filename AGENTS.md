@@ -25,3 +25,10 @@ cgroup v2, and effective PID, network, and capability isolation in an Apple
 container. It installs the image's missing D-Bus package and removes its own
 container on exit. Verify the capabilities each plan actually needs; this probe
 does not qualify a durable supervisor, restart recovery, or workspace fencing.
+
+`bash tests/workspace/probe-root-apple.sh` also verifies Nix and sudo availability,
+a copied Nix closure inside an immutable systemd `RootDirectory`, unprivileged
+workspace/scratch writes, effective PID/capability/syscall restrictions, and
+whole-cgroup settlement of a detached SIGTERM-ignoring writer (13 checks).
+This is substrate qualification; independent supervisor and receipt-recovery
+qualification still belongs to the plan implementing those services.
