@@ -85,11 +85,22 @@ workspaceProvisionAction binding admission profile boot filesTarget scratchTarge
 -- The concrete provider obtains target from an anchored parent descriptor and
 -- obtains binding/admission/dispatch from retained state, never model arguments.
 workspaceFileAction :: WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> Text -> Text -> Text -> Text -> Either FileEffectError AgentAction
-workspaceFileAction binding admission dispatch kind path target inputDigest = do
-  unless (admission.filePolicy == Just nativeFilePolicy && Text.all (< '\DEL') path) (Left FileEffectRefused)
+workspaceFileAction = workspaceFileActionFor Nothing
+
+-- The complete retained profile, including its reserved Unix identity, belongs
+-- to the revision-2 authority target. Revision 1 keeps its original encoding.
+workspaceSupervisedFileAction :: ProcessProfile -> WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> Text -> Text -> Text -> Text -> Either FileEffectError AgentAction
+workspaceSupervisedFileAction profile = workspaceFileActionFor (Just profile)
+
+workspaceFileActionFor :: Maybe ProcessProfile -> WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> Text -> Text -> Text -> Text -> Either FileEffectError AgentAction
+workspaceFileActionFor profile binding admission dispatch kind path target inputDigest = do
+  unless (Text.all (< '\DEL') path) (Left FileEffectRefused)
+  case profile of
+    Nothing -> unless (admission.filePolicy == Just nativeFilePolicy) (Left FileEffectRefused)
+    Just retained -> unless (admission.filePolicy == Just supervisedFilePolicy && validProcessProfile retained && retained.bindingDigest == workspaceBindingDigest binding && retained.instructionDigest == bundleDigest admission.instructions && processPolicyIdentity retained.policy == binding.policyRevision && processFileAllowed retained.policy kind path) (Left FileEffectRefused)
   unless (kind `elem` ["read", "replace"] && validWorkspacePath path && not (Text.null target) && Text.length target <= 128 && not (Text.null inputDigest) && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base && admission.workspace == binding.workspace && admission.bindingDigest == workspaceBindingDigest binding && admission.runId == binding.request.runId && admission.rootId == binding.request.rootId && admission.owner == binding.request.owner && admission.epoch == binding.request.epoch && dispatch.generation > 0 && not (Text.null dispatch.owner)) (Left FileEffectRefused)
   let coordinates =
-        Aeson.object
+        Aeson.object $
           [ "binding" Aeson..= workspaceBindingDigest binding,
             "instructions" Aeson..= bundleDigest admission.instructions,
             "filePolicy" Aeson..= admission.filePolicy,
@@ -105,8 +116,9 @@ workspaceFileAction binding admission dispatch kind path target inputDigest = do
             "target" Aeson..= target,
             "input" Aeson..= inputDigest
           ]
-      digest = Text.replace ":" "-" (versionedDigest "shikigami.workspace-file-action/1" coordinates)
-      revision = "1-" <> Text.replace ":" "-" (workspaceBindingDigest binding)
+            <> maybe [] (\retained -> ["profile" Aeson..= retained]) profile
+      digest = Text.replace ":" "-" (versionedDigest (if isJust profile then "shikigami.workspace-file-action/2" else "shikigami.workspace-file-action/1") coordinates)
+      revision = (if isJust profile then "2-" else "1-") <> Text.replace ":" "-" (workspaceBindingDigest binding)
   either (const (Left FileEffectRefused)) (Right . InvokeCapabilityTool) (mkCapabilityToolTarget "shikigami.workspace" revision (kind <> "-" <> digest))
 
 -- A process launch grant binds the complete retained rule, immutable root

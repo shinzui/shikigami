@@ -48,12 +48,18 @@ import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.Store.ExecutionSelection qualified as Calls
 import Shikigami.Workspace.Allocation
+import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.ContainedFile (withWorkspaceLock)
 import Shikigami.Workspace.FileProvider
 import Shikigami.Workspace.InstructionLoader
 import Shikigami.Workspace.Instructions
+import Shikigami.Workspace.Process
+import Shikigami.Workspace.ProcessPolicy
+import Shikigami.Workspace.ProcessProfileStore
+import Shikigami.Workspace.ProcessStore qualified as Processes
 import Shikigami.Workspace.Provider
 import Shikigami.Workspace.Store qualified as Store
+import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Types
 import Shikigami.WorkspaceStoreSpec qualified as Fixture
 import System.Directory
@@ -65,7 +71,42 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace real file provider"
-    [ testCase "accepted durable edit uses both gates and duplicate delivery preserves one result" $ withEffect fixture \env binding snapshot access reference runtime input -> do
+    [ testCase "revision 2 reads only with a ready retained profile and exact authority" $ withSupervisedEffect fixture id "read" \env binding snapshot reference runtime profile -> do
+        run env (runTransaction (readyProcessProfileTx binding profile)) >>= (@?= Right ())
+        calls <- newIORef (0 :: Int)
+        let checking = runtime & #authorizer .~ (runtime.authorizer) {Action.authorize = \principal action -> modifyIORef' calls (+ 1) >> allowAllActionAuthorizerForTests.authorize principal action}
+        Executor.executeAcceptedAttempt (executorForAdapter supervisedWorkspaceEditAdapter checking) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+        readIORef calls >>= (@?= 1)
+        Just operation <- right =<< run env (Execution.inspectOperation reference.operationId)
+        output <- retainedOutput env snapshot operation
+        assertBool "retained read contains protected contents" ("old dependency" `Text.isInfixOf` Text.pack (show (Aeson.encode output))),
+      testCase "revision 2 refuses reserved profiles before authority or file effects" $ withSupervisedEffect fixture id "read" \env _ snapshot reference runtime _ -> do
+        calls <- newIORef (0 :: Int)
+        let checking = runtime & #authorizer .~ (runtime.authorizer) {Action.authorize = \principal action -> modifyIORef' calls (+ 1) >> allowAllActionAuthorizerForTests.authorize principal action}
+        Executor.executeAcceptedAttempt (executorForAdapter supervisedWorkspaceEditAdapter checking) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+        readIORef calls >>= (@?= 0)
+        Just operation <- right =<< run env (Execution.inspectOperation reference.operationId)
+        output <- retainedOutput env snapshot operation
+        assertBool "refusal excludes protected contents" (case output of ToolReturned _ True -> True; _ -> False),
+      testCase "revision 2 enforces retained path restrictions before requesting authority" $ withSupervisedEffect fixture (\policy -> policy & #readPaths .~ ["lib"]) "read" \env binding snapshot reference runtime profile -> do
+        run env (runTransaction (readyProcessProfileTx binding profile)) >>= (@?= Right ())
+        calls <- newIORef (0 :: Int)
+        let checking = runtime & #authorizer .~ (runtime.authorizer) {Action.authorize = \principal action -> modifyIORef' calls (+ 1) >> allowAllActionAuthorizerForTests.authorize principal action}
+        Executor.executeAcceptedAttempt (executorForAdapter supervisedWorkspaceEditAdapter checking) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+        readIORef calls >>= (@?= 0),
+      testCase "revision 2 refuses reads while a retained process is unresolved" $ withSupervisedEffect fixture id "read" \env binding snapshot reference runtime profile -> do
+        run env (runTransaction (readyProcessProfileTx binding profile)) >>= (@?= Right ())
+        now <- getCurrentTime
+        let operation = OperationId "pending-validation"
+            digest = profile.instructionDigest
+            command = commandFor digest (head profile.policy.rules)
+            record = ProcessRecord operation (AttemptId "pending-attempt") "pending-owner" 1 (workspaceBindingDigest binding) digest digest command (addUTCTime 30 now) (processUnit operation digest) Nothing Nothing ProcessReserved Nothing Nothing
+        _ <- right =<< run env (runTransaction (Processes.reserveProcessTx binding record))
+        Executor.executeAcceptedAttempt (executorForAdapter supervisedWorkspaceEditAdapter runtime) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+        Just observed <- right =<< run env (Execution.inspectOperation reference.operationId)
+        output <- retainedOutput env snapshot observed
+        assertBool "pending process blocks protected reads" (case output of ToolReturned _ True -> True; _ -> False),
+      testCase "accepted durable edit uses both gates and duplicate delivery preserves one result" $ withEffect fixture \env binding snapshot access reference runtime input -> do
         authorizations <- newIORef (0 :: Int)
         let checking = (runtime.authorizer) {Action.authorize = \principal action -> modifyIORef' authorizations (+ 1) >> allowAllActionAuthorizerForTests.authorize principal action}
             executor = executorFor (runtime & #authorizer .~ checking) (pure ())
@@ -246,12 +287,21 @@ withEffectAdapter :: (WorkspaceAdmission -> WorkspaceAdmission) -> (FileRuntime 
 withEffectAdapter = withEffectAdapterForTools 1
 
 withEffectAdapterForTools :: Int -> (WorkspaceAdmission -> WorkspaceAdmission) -> (FileRuntime -> DurableAdapter) -> Text.Text -> Text.Text -> Maybe Aeson.Value -> DatabaseFixture -> (AppEnv -> WorkspaceBinding -> ExecutionSnapshot -> Execution.ReplayAccess -> Attempt.JobReference -> FileRuntime -> Aeson.Value -> IO a) -> IO a
-withEffectAdapterForTools toolCount qualify install wire logical supplied fixture use = Fixture.withFixture fixture \env source root _ -> do
+withEffectAdapterForTools = withEffectAdapterPolicy Nothing
+
+withEffectAdapterPolicy :: Maybe ProcessPolicy -> Int -> (WorkspaceAdmission -> WorkspaceAdmission) -> (FileRuntime -> DurableAdapter) -> Text.Text -> Text.Text -> Maybe Aeson.Value -> DatabaseFixture -> (AppEnv -> WorkspaceBinding -> ExecutionSnapshot -> Execution.ReplayAccess -> Attempt.JobReference -> FileRuntime -> Aeson.Value -> IO a) -> IO a
+withEffectAdapterPolicy processPolicy toolCount qualify install wire logical supplied fixture use = Fixture.withFixture fixture \env source root _ -> do
   createDirectory (source </> "src")
   renameFile (source </> "dependency.txt") (source </> "src/dependency.txt")
   writeFile (source </> "AGENTS.md") "PRIVATE_ROOT_POLICY: validate before commit"
   writeFile (source </> "src/AGENTS.md") "PRIVATE_NESTED_POLICY: scope source changes"
-  repository <- Fixture.commitRepository source
+  originalRepository <- Fixture.commitRepository source
+  repository <- case processPolicy of
+    Nothing -> pure originalRepository
+    Just policy -> do
+      let base = repositoryBase originalRepository
+      catalog <- right (mkWorkspaceCatalog [RepositoryPolicy (repositoryIdentity originalRepository) source [base] base (processPolicyIdentity policy)])
+      right (resolveRepository catalog (repositoryIdentity originalRepository) Nothing)
   let identity = CompatibilityIdentity "worker"
       rootId = ExecutionRootId "file-root"
       request = WorkspaceRequest "file-run" Nothing rootId identity identity 0
@@ -319,3 +369,21 @@ right = either (\err -> assertFailure (show err) >> fail "unreachable") pure
 
 must :: (Show e) => Either e a -> a
 must = either (error . show) id
+
+-- Supplies database readiness only. Native account/ownership qualification is
+-- separate; these tests use the actual accepted file adapter and claim stores.
+withSupervisedEffect :: DatabaseFixture -> (ProcessPolicy -> ProcessPolicy) -> Text.Text -> (AppEnv -> WorkspaceBinding -> ExecutionSnapshot -> Attempt.JobReference -> FileRuntime -> ProcessProfile -> IO a) -> IO a
+withSupervisedEffect fixture change logical use = do
+  properties <- Systemd.systemdPropertiesIdentity
+  let digest = "sha256:" <> Text.replicate 64 "a"
+      policy = change (ProcessPolicy 1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") properties [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] ["src"])
+  withEffectAdapterPolicy (Just policy) 1 (\admission -> admission & #filePolicy .~ Just supervisedFilePolicy) supervisedWorkspaceEditAdapter ("overlay__workspace-edit__" <> logical) logical Nothing fixture \env binding snapshot _ reference runtime _ -> do
+    admission <- maybe (fail "workspace admission missing") pure snapshot.workspace
+    (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest admission.instructions) policy (IdentityRange 62000 62001)))
+    use env binding snapshot reference runtime profile
+
+retainedOutput :: AppEnv -> ExecutionSnapshot -> Operation -> IO OperationOutcome
+retainedOutput env snapshot operation = do
+  access <- right =<< run env (Execution.authorizeReplay snapshot.executionId snapshot.identity (pure (Right ())))
+  result <- maybe (fail "missing file outcome") pure operation.outcome
+  right =<< run env (Execution.readReplayPayload @OperationOutcome access "operation-outcome" result)

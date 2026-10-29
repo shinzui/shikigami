@@ -3,6 +3,9 @@
 module Shikigami.Workspace.FileProvider
   ( FileRuntime (..),
     workspaceEditDescriptor,
+    supervisedWorkspaceEditDescriptor,
+    supervisedWorkspaceEditAdapter,
+    supervisedWorkspaceEditAdapterWithCheckpoint,
     workspaceEditAdapter,
     workspaceEditAdapterWithCheckpoint,
     readWorkspaceFile,
@@ -41,6 +44,8 @@ import Shikigami.Prelude
 import Shikigami.Workspace.Allocation (workspaceFiles, workspaceMetadata)
 import Shikigami.Workspace.ContainedFile
 import Shikigami.Workspace.Instructions
+import Shikigami.Workspace.ProcessPolicy
+import Shikigami.Workspace.Profile (retainedFileProfile)
 import Shikigami.Workspace.Provider
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.Types
@@ -61,7 +66,15 @@ data FileRuntime = FileRuntime
   deriving stock (Generic)
 
 workspaceEditDescriptor :: CapabilityDescriptor
-workspaceEditDescriptor = CapabilityDescriptor (must (mkCapabilityId "workspace.edit")) (must (mkCapabilityRevision "1")) [CapabilityToolDescriptor "read" Observation, CapabilityToolDescriptor "replace" IdempotentMutation]
+workspaceEditDescriptor = fileDescriptor FileOnly
+
+supervisedWorkspaceEditDescriptor :: CapabilityDescriptor
+supervisedWorkspaceEditDescriptor = fileDescriptor Supervised
+
+data FileMode = FileOnly | Supervised deriving stock (Eq)
+
+fileDescriptor :: FileMode -> CapabilityDescriptor
+fileDescriptor mode = CapabilityDescriptor (must (mkCapabilityId "workspace.edit")) (must (mkCapabilityRevision (fileRevision mode))) [CapabilityToolDescriptor "read" Observation, CapabilityToolDescriptor "replace" IdempotentMutation]
   where
     must :: (Show e) => Either e a -> a
     must = either (error . show) id
@@ -70,9 +83,26 @@ workspaceEditAdapter :: FileRuntime -> DurableAdapter
 workspaceEditAdapter = workspaceEditAdapterWithCheckpoint (pure ())
 
 workspaceEditAdapterWithCheckpoint :: IO () -> FileRuntime -> DurableAdapter
-workspaceEditAdapterWithCheckpoint checkpoint runtime =
+workspaceEditAdapterWithCheckpoint = fileAdapter FileOnly
+
+supervisedWorkspaceEditAdapter :: FileRuntime -> DurableAdapter
+supervisedWorkspaceEditAdapter = supervisedWorkspaceEditAdapterWithCheckpoint (pure ())
+
+supervisedWorkspaceEditAdapterWithCheckpoint :: IO () -> FileRuntime -> DurableAdapter
+supervisedWorkspaceEditAdapterWithCheckpoint = fileAdapter Supervised
+
+fileRevision :: FileMode -> Text
+fileRevision FileOnly = "1"
+fileRevision Supervised = "2"
+
+filePolicyFor :: FileMode -> Text
+filePolicyFor FileOnly = nativeFilePolicy
+filePolicyFor Supervised = supervisedFilePolicy
+
+fileAdapter :: FileMode -> IO () -> FileRuntime -> DurableAdapter
+fileAdapter mode checkpoint runtime =
   DurableAdapter
-    workspaceEditDescriptor
+    (fileDescriptor mode)
     [ DurableToolContract "read" readDescription readSchema RepeatableObservation NoInvoiceCost,
       DurableToolContract "replace" replaceDescription replaceSchema IdempotentEffect NoInvoiceCost
     ]
@@ -84,7 +114,7 @@ workspaceEditAdapterWithCheckpoint checkpoint runtime =
                   (description name)
                   (if name == "read" then readSchema else replaceSchema)
                   ( \input -> unsafeEff_ do
-                      result <- if name == "read" then readWorkspaceFile runtime snapshot dispatch input else replaceWorkspaceFileWithCheckpoint checkpoint runtime snapshot dispatch input
+                      result <- if name == "read" then readFileFor mode runtime snapshot dispatch input else replaceFileFor mode checkpoint runtime snapshot dispatch input
                       case result of
                         Left FileEffectUnresolved -> throwIO (userError "workspace effect requires reconciliation")
                         Left FileEffectUnavailable -> throwIO (userError "workspace effect evidence is unavailable")
@@ -113,8 +143,8 @@ stringSchema = Aeson.object ["type" Aeson..= ("string" :: Text)]
 
 -- Load the authoritative snapshot, accepted arguments and actual attempt. A
 -- prepared tool closure is not permission to substitute caller coordinates.
-withAccess :: FileRuntime -> ExecutionSnapshot -> DispatchContext -> Text -> Aeson.Value -> (WorkspaceBinding -> WorkspaceAdmission -> IO (Either FileEffectError ()) -> (FileReceipt -> IO (Either FileEffectError ())) -> IO (Either FileEffectError Aeson.Value)) -> IO (Either FileEffectError Aeson.Value)
-withAccess runtime snapshot dispatch logical input perform = catch work (\(_ :: IOException) -> pure (Left FileEffectUnavailable))
+withAccess :: FileMode -> FileRuntime -> ExecutionSnapshot -> DispatchContext -> Text -> Aeson.Value -> (WorkspaceBinding -> WorkspaceAdmission -> Maybe ProcessProfile -> IO (Either FileEffectError ()) -> (FileReceipt -> IO (Either FileEffectError ())) -> IO (Either FileEffectError Aeson.Value)) -> IO (Either FileEffectError Aeson.Value)
+withAccess mode runtime snapshot dispatch logical input perform = catch work (\(_ :: IOException) -> pure (Left FileEffectUnavailable))
   where
     owned :: Eff AppEffects (Either ExecutionError a) -> IO (Either FileEffectError a)
     owned action = runAppIO runtime.appEnv action <&> either (const (Left FileEffectUnavailable)) (either (const (Left FileEffectRefused)) Right)
@@ -128,12 +158,12 @@ withAccess runtime snapshot dispatch logical input perform = catch work (\(_ :: 
           accepted <- owned (Execution.inspectOperation dispatch.operation.operationId)
           case (loaded, accepted, snapshot.workspace) of
             (Right (retained, _), Right (Just operation), Just admission)
-              | admission.filePolicy == Just nativeFilePolicy && retained == snapshot && workspaceEditDescriptor `elem` resolvedCapabilities snapshot.capabilities && dispatch.operation.executionId == snapshot.executionId && dispatch.operation.fingerprint == operation.fingerprint && dispatch.operation.scopeDigest == operation.specification.scopeDigest && operation.specification.name == wireName logical && operation.specification.kind == ToolOperation && dispatch.operation.idempotencyKey == operationKey dispatch.operation.operationId -> do
+              | admission.filePolicy == Just (filePolicyFor mode) && retained == snapshot && fileDescriptor mode `elem` resolvedCapabilities snapshot.capabilities && dispatch.operation.executionId == snapshot.executionId && dispatch.operation.fingerprint == operation.fingerprint && dispatch.operation.scopeDigest == operation.specification.scopeDigest && operation.specification.name == wireName logical && operation.specification.kind == ToolOperation && dispatch.operation.idempotencyKey == operationKey dispatch.operation.operationId -> do
                   arguments <- owned (Execution.readReplayPayload @ToolOperationInput permit "operation-input" operation.input)
                   binding <- runTx runtime (Store.inspectWorkspaceTx admission.workspace)
                   case (arguments, binding) of
                     (Right tool, Right (Just (bound, Ready)))
-                      | tool.invocation.arguments == input && tool.invocation.name == wireName logical && tool.binding `elem` snapshot.toolBindings && tool.binding.name == wireName logical && tool.binding.revision == "workspace.edit:1" && tool.binding.schemaDigest == versionedDigest "shikigami.tool-schema/1" (if logical == "read" then readSchema else replaceSchema) && tool.binding.recovery == (if logical == "read" then RepeatableObservation else IdempotentEffect) && tool.binding.invoiceCost == NoInvoiceCost && admission.bindingDigest == workspaceBindingDigest bound && admission.runId == bound.request.runId && admission.owner == snapshot.identity && Just admission.rootId == snapshot.selection.rootId -> do
+                      | tool.invocation.arguments == input && tool.invocation.name == wireName logical && tool.binding `elem` snapshot.toolBindings && tool.binding.name == wireName logical && tool.binding.revision == "workspace.edit:" <> fileRevision mode && tool.binding.schemaDigest == versionedDigest "shikigami.tool-schema/1" (if logical == "read" then readSchema else replaceSchema) && tool.binding.recovery == (if logical == "read" then RepeatableObservation else IdempotentEffect) && tool.binding.invoiceCost == NoInvoiceCost && admission.bindingDigest == workspaceBindingDigest bound && admission.runId == bound.request.runId && admission.owner == snapshot.identity && Just admission.rootId == snapshot.selection.rootId -> do
                           let check = do
                                 lifecycle <- runtime.lifecycle snapshot
                                 if isLeft lifecycle
@@ -146,10 +176,30 @@ withAccess runtime snapshot dispatch logical input perform = catch work (\(_ :: 
                           case ready of
                             Left err -> pure (Left err)
                             Right () -> do
-                              private <- ensurePrivateDirectory bound.storageRoot
+                              private <- case mode of
+                                FileOnly -> ensurePrivateDirectory bound.storageRoot
+                                Supervised -> do
+                                  root <- checkPrivateDirectory bound.storageRoot
+                                  metadata <- checkPrivateDirectory (workspaceMetadata bound.storageRoot bound)
+                                  pure (root >> metadata)
                               case private of
                                 Left _ -> pure (Left FileEffectUnavailable)
-                                Right () -> flattenFile <$> withWorkspaceLock (workspaceMetadata bound.storageRoot bound) (Right <$> perform bound admission check (completeReceipt permit tool))
+                                Right () ->
+                                  flattenFile
+                                    <$> withWorkspaceLock
+                                      (workspaceMetadata bound.storageRoot bound)
+                                      ( Right <$> do
+                                          current <- check
+                                          case current of
+                                            Left err -> pure (Left err)
+                                            Right () -> do
+                                              profile <- case mode of
+                                                FileOnly -> pure (Right Nothing)
+                                                Supervised -> fmap (either (const (Left FileEffectRefused)) (Right . Just)) (retainedFileProfile runtime.appEnv bound admission)
+                                              case profile of
+                                                Left err -> pure (Left err)
+                                                Right selected -> perform bound admission selected check (completeReceipt permit tool)
+                                      )
                     _ -> pure (Left FileEffectRefused)
             _ -> pure (Left FileEffectRefused)
     -- A recovered private receipt settles only its original actual attempt.
@@ -179,9 +229,12 @@ withAccess runtime snapshot dispatch logical input perform = catch work (\(_ :: 
     isLeft _ = False
 
 readWorkspaceFile :: FileRuntime -> ExecutionSnapshot -> DispatchContext -> Aeson.Value -> IO (Either FileEffectError Aeson.Value)
-readWorkspaceFile runtime snapshot dispatch input = case parseEither (Aeson.withObject "read" (\fields -> if length fields /= 1 then fail "unsupported read" else fields Aeson..: "path")) input of
+readWorkspaceFile = readFileFor FileOnly
+
+readFileFor :: FileMode -> FileRuntime -> ExecutionSnapshot -> DispatchContext -> Aeson.Value -> IO (Either FileEffectError Aeson.Value)
+readFileFor mode runtime snapshot dispatch input = case parseEither (Aeson.withObject "read" (\fields -> if length fields /= 1 then fail "unsupported read" else fields Aeson..: "path")) input of
   Left _ -> pure (Left FileEffectRefused)
-  Right path -> withAccess runtime snapshot dispatch "read" input \binding admission check _complete ->
+  Right path -> withAccess mode runtime snapshot dispatch "read" input \binding admission profile check _complete ->
     flattenFile
       <$> withContainedFile
         (workspaceFiles binding.storageRoot binding)
@@ -192,7 +245,7 @@ readWorkspaceFile runtime snapshot dispatch input = case parseEither (Aeson.with
               case target of
                 Left _ -> pure (Left FileEffectRefused)
                 Right identity -> do
-                  granted <- authorize runtime binding admission dispatch "read" path identity input check
+                  granted <- authorize runtime profile binding admission dispatch "read" path identity input check
                   case granted of
                     Left err -> pure (Left err)
                     Right () -> do
@@ -209,7 +262,10 @@ replaceWorkspaceFile = replaceWorkspaceFileWithCheckpoint (pure ())
 -- The fixture interrupts after durable file publication, before final receipt
 -- acknowledgement. The prepared private receipt must already be on disk.
 replaceWorkspaceFileWithCheckpoint :: IO () -> FileRuntime -> ExecutionSnapshot -> DispatchContext -> Aeson.Value -> IO (Either FileEffectError Aeson.Value)
-replaceWorkspaceFileWithCheckpoint checkpoint runtime snapshot dispatch input = case parseEither
+replaceWorkspaceFileWithCheckpoint = replaceFileFor FileOnly
+
+replaceFileFor :: FileMode -> IO () -> FileRuntime -> ExecutionSnapshot -> DispatchContext -> Aeson.Value -> IO (Either FileEffectError Aeson.Value)
+replaceFileFor mode checkpoint runtime snapshot dispatch input = case parseEither
   ( Aeson.withObject
       "Replacement"
       ( \fields -> do
@@ -222,7 +278,7 @@ replaceWorkspaceFileWithCheckpoint checkpoint runtime snapshot dispatch input = 
   Right (replacement :: Replacement)
     | not (validWorkspacePath replacement.path) -> pure (Left FileEffectRefused)
     | Bytes.length (Encoding.encodeUtf8 replacement.content) > 262144 -> pure (Left FileEffectTooLarge)
-    | otherwise -> withAccess runtime snapshot dispatch "replace" input \binding admission check complete ->
+    | otherwise -> withAccess mode runtime snapshot dispatch "replace" input \binding admission profile check complete ->
         flattenFile
           <$> withContainedFile
             (workspaceFiles binding.storageRoot binding)
@@ -233,14 +289,16 @@ replaceWorkspaceFileWithCheckpoint checkpoint runtime snapshot dispatch input = 
                   case target of
                     Left _ -> pure (Left FileEffectRefused)
                     Right identity -> do
-                      granted <- authorize runtime binding admission dispatch "replace" replacement.path identity input check
+                      granted <- authorize runtime profile binding admission dispatch "replace" replacement.path identity input check
                       case granted of
                         Left err -> pure (Left err)
-                        Right () -> replace binding admission check complete file identity replacement
+                        Right () -> replace profile binding admission check complete file identity replacement
             )
   where
-    replace binding admission check complete file identity replacement = do
-      let fingerprint = versionedDigest "shikigami.workspace-replacement/1" (toJSON (workspaceBindingDigest binding, dispatch.operation, input, identity))
+    replace profile binding admission check complete file identity replacement = do
+      let fingerprint = case profile of
+            Nothing -> versionedDigest "shikigami.workspace-replacement/1" (toJSON (workspaceBindingDigest binding, dispatch.operation, input, identity))
+            Just retained -> versionedDigest "shikigami.workspace-replacement/2" (toJSON (workspaceBindingDigest binding, dispatch.operation, input, identity, retained))
           receipt = FileReceipt dispatch.operation.operationId dispatch.attemptId dispatch.generation fingerprint (workspaceBindingDigest binding) (bundleDigest admission.instructions) replacement.path identity replacement.expected (contentDigest replacement.content) EditPrepared
           metadata = workspaceMetadata binding.storageRoot binding
           receiptName = "receipt-" <> Text.drop 7 (versionedDigest "shikigami.workspace-receipt/1" (toJSON dispatch.operation.operationId)) <> ".json"
@@ -280,10 +338,12 @@ replaceWorkspaceFileWithCheckpoint checkpoint runtime snapshot dispatch input = 
                     Left err -> pure (Left err)
                     Right () -> do
                       saved <- runTx runtime (Store.recordWorkspaceReceiptTx binding prepared)
-                      gate <- authorize runtime binding admission dispatch "replace" replacement.path identity input check
+                      gate <- authorize runtime profile binding admission dispatch "replace" replacement.path identity input check
                       case (saved, gate, mapFile observed) of
                         (Right (Right ()), Right (), Right old) -> do
-                          applied <- replaceContainedFile metadata file old (Encoding.encodeUtf8 replacement.content)
+                          applied <- case profile of
+                            Nothing -> replaceContainedFile metadata file old (Encoding.encodeUtf8 replacement.content)
+                            Just retained -> replaceContainedFileOwned retained.userId metadata file old (Encoding.encodeUtf8 replacement.content)
                           case applied of
                             Left FileContentConflict -> refusePrepared binding metadata receiptName prepared
                             Left _ -> pure (Left FileEffectUnresolved)
@@ -310,8 +370,8 @@ replaceWorkspaceFileWithCheckpoint checkpoint runtime snapshot dispatch input = 
             Right (Right ()) -> complete completed <&> fmap (const (toJSON completed))
             _ -> pure (Left FileEffectUnresolved)
 
-authorize :: FileRuntime -> WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> Text -> Text -> Text -> Aeson.Value -> IO (Either FileEffectError ()) -> IO (Either FileEffectError ())
-authorize runtime binding admission dispatch kind path target input check = case (identityText admission.owner, workspaceFileAction binding admission dispatch kind path target (versionedDigest "shikigami.workspace-file-input/1" input), instructionsForPath admission.instructions path) of
+authorize :: FileRuntime -> Maybe ProcessProfile -> WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> Text -> Text -> Text -> Aeson.Value -> IO (Either FileEffectError ()) -> IO (Either FileEffectError ())
+authorize runtime profile binding admission dispatch kind path target input check = case (identityText admission.owner, maybe workspaceFileAction workspaceSupervisedFileAction profile binding admission dispatch kind path target (versionedDigest "shikigami.workspace-file-input/1" input), instructionsForPath admission.instructions path) of
   (Right principal, Right action, Right instructions) -> do
     policy <- runtime.admitTarget binding admission instructions kind path
     case policy of

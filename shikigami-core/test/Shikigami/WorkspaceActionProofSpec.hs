@@ -167,6 +167,24 @@ tests =
         provisionAdmission <- (\a -> a & #filePolicy .~ Just supervisedFilePolicy) <$> admissionFor provisionBinding
         let profileFor b a selected uid = ProcessProfile (workspaceBindingDigest b) (bundleDigest a.instructions) selected uid uid
             profile = profileFor provisionBinding provisionAdmission policy 62001
+        fileAction <- right (workspaceSupervisedFileAction profile provisionBinding provisionAdmission dispatch "replace" "src/file" "device:parent" "input-hash")
+        let fileRequest = Kikan.AuthorizeActionRequest principal fileAction requestId
+            fileGrant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText principal))) (RelationName (Kikan.actionOperation fileAction)) (ObjectRef (ObjectType (Kikan.actionObjectType fileAction)) (Kikan.actionObjectId fileAction)) (En.ConsistencyToken "snapshot-1") (En.SchemaHash "schema-workspace-fixture") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId "workspace-proof")) Nothing
+        fileMinted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed fileGrant
+        fileProof <- right (Kikan.mkDecisionProof (decodeUtf8 fileMinted.token))
+        let fileIssued = Kikan.IssuedActionProof fileProof fileMinted.expiresAt [] checkedAt
+        _ <- right =<< verifyIssuedAction verifier now fileRequest fileIssued
+        changedFileActions <-
+          mapM
+            right
+            [ workspaceSupervisedFileAction (profile & #userId .~ 62002 & #groupId .~ 62002) provisionBinding provisionAdmission dispatch "replace" "src/file" "device:parent" "input-hash",
+              workspaceSupervisedFileAction profile provisionBinding provisionAdmission (dispatch & #attemptId .~ AttemptId "other-attempt") "replace" "src/file" "device:parent" "input-hash",
+              workspaceSupervisedFileAction profile provisionBinding provisionAdmission dispatch "replace" "src/file" "device:other-parent" "input-hash"
+            ]
+        mapM_ (\action -> verifyIssuedAction verifier now (fileRequest & #action .~ action) fileIssued >>= \answer -> assertBool "supervised file authority binds reserved identity and actual effect" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) changedFileActions
+        workspaceSupervisedFileAction profile provisionBinding provisionAdmission dispatch "replace" "src-other/file" "device:parent" "input-hash" @?= Left FileEffectRefused
+        workspaceSupervisedFileAction profile provisionBinding (provisionAdmission & #filePolicy .~ Just nativeFilePolicy) dispatch "replace" "src/file" "device:parent" "input-hash" @?= Left FileEffectRefused
+        workspaceSupervisedFileAction (profile & #instructionDigest .~ command.profile) provisionBinding provisionAdmission dispatch "replace" "src/file" "device:parent" "input-hash" @?= Left FileEffectRefused
         provisionAction <- right (workspaceProvisionAction provisionBinding provisionAdmission profile boot "device:files" "device:scratch")
         let provisionRequest = Kikan.AuthorizeActionRequest principal provisionAction requestId
             provisionGrant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText principal))) (RelationName (Kikan.actionOperation provisionAction)) (ObjectRef (ObjectType (Kikan.actionObjectType provisionAction)) (Kikan.actionObjectId provisionAction)) (En.ConsistencyToken "snapshot-1") (En.SchemaHash "schema-workspace-fixture") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId "workspace-proof")) Nothing

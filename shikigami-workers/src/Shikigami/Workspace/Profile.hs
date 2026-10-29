@@ -1,6 +1,6 @@
 -- | Resolve only the rules retained before assignment admission. Current
 -- operator defaults cannot reinterpret an accepted rule after restart.
-module Shikigami.Workspace.Profile (retainedProcessRule, retainedSystemdProfile, profileStorageSafe) where
+module Shikigami.Workspace.Profile (retainedProcessRule, retainedFileProfile, retainedSystemdProfile, profileStorageSafe) where
 
 import Data.Text qualified as Text
 import Kioku.App (AppEnv, runAppIO)
@@ -23,6 +23,19 @@ retainedSystemdProfile profile = do
 
 retainedProcessRule :: AppEnv -> WorkspaceBinding -> WorkspaceAdmission -> Text -> IO (Either Text (ProcessCommand, Systemd.SystemdProfile))
 retainedProcessRule appEnv binding admission rule = do
+  retained <- retainedFileProfile appEnv binding admission
+  case retained of
+    Left err -> pure (Left err)
+    Right profile -> do
+      systemd <- retainedSystemdProfile profile
+      case systemd of
+        Left err -> pure (Left err)
+        Right selected -> do
+          identity <- Systemd.systemdProfileIdentity selected
+          pure $ maybe (Left "workspace process rule is unavailable") (\command -> Right (command, selected)) (processPolicyCommand profile.policy identity rule)
+
+retainedFileProfile :: AppEnv -> WorkspaceBinding -> WorkspaceAdmission -> IO (Either Text ProcessProfile)
+retainedFileProfile appEnv binding admission = do
   retained <- runAppIO appEnv (runTransaction (inspectProcessProfileTx binding.workspace))
   case retained of
     Right (Just (profile, ProfileReady))
@@ -30,9 +43,7 @@ retainedProcessRule appEnv binding admission rule = do
           systemd <- retainedSystemdProfile profile
           case systemd of
             Left err -> pure (Left err)
-            Right selected -> do
-              identity <- Systemd.systemdProfileIdentity selected
-              pure $ maybe (Left "workspace process rule is unavailable") (\command -> Right (command, selected)) (processPolicyCommand profile.policy identity rule)
+            Right _ -> pure (Right profile)
     _ -> pure (Left "workspace process rule is unavailable")
 
 outsideStorage :: FilePath -> FilePath -> Bool

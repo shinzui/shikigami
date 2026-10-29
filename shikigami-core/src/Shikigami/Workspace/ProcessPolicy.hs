@@ -112,3 +112,9 @@ processPolicyCommand policy profile selected
       [rule] -> Just (commandFor profile rule)
       _ -> Nothing
   | otherwise = Nothing
+
+processFileAllowed :: ProcessPolicy -> Text -> Text -> Bool
+processFileAllowed policy kind path = validProcessPolicy policy && validWorkspacePath path && any includesPath prefixes
+  where
+    prefixes = case kind of "read" -> policy.readPaths; "replace" -> policy.writePaths; _ -> []
+    includesPath prefix = Text.null prefix || path == prefix || (prefix <> "/") `Text.isPrefixOf` path

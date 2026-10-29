@@ -40,7 +40,12 @@ tests =
           Aeson.Object fields -> case Aeson.fromJSON @ProcessPolicy (Aeson.Object (KeyMap.insert "hostPath" (Aeson.String "/host") fields)) of
             Aeson.Error _ -> pure ()
             _ -> assertFailure "unknown policy fields accepted"
-          _ -> assertFailure "policy must be an object"
+          _ -> assertFailure "policy must be an object",
+      testCase "file restrictions use exact path segments and independent read and write scopes" $ do
+        mapM_ (\path -> assertBool "approved write scope" (processFileAllowed policy "replace" path)) ["src", "src/file", "src/nested/file"]
+        mapM_ (\path -> assertBool "outside write scope" (not (processFileAllowed policy "replace" path))) ["src-other/file", "lib/file", "../src/file", "src/../lib"]
+        assertBool "read policy independent" (processFileAllowed policy "read" "lib/file")
+        assertBool "unknown operation refuses" (not (processFileAllowed policy "chmod" "src/file"))
     ]
 
 policy :: ProcessPolicy
