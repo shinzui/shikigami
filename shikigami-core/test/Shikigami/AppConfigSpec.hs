@@ -61,6 +61,7 @@ import Shikigami.PracticeReview.Capability (renderAttentionRecipientMap)
 import Shikigami.Sink.Auth (TokenSource (..), credentialToken, matchesBearerHeader, staticTokenSource)
 import Shikigami.Sink.Permission (SinkKind (..))
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
+import Shikigami.Workspace.Settings (WorkspaceSettings (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -156,7 +157,8 @@ surfaceTests =
                 "sinks.kizashi.base_url",
                 "sinks.kizashi.default_recipient",
                 "sinks.rei.base_url",
-                "worker.run_timeout_seconds"
+                "worker.run_timeout_seconds",
+                "workspaces"
               ],
       -- Forcing the validated binding list here is the point: an invalid edit
       -- becomes a test failure instead of a failure in every deployed process.
@@ -197,6 +199,7 @@ surfaceTests =
               ("SHIKIGAMI_APPROVAL_REQUIRE", "approval.require"),
               ("SHIKIGAMI_BEHAVIOR_DECISION_MODELS", "behavior.decisionModels"),
               ("SHIKIGAMI_BEHAVIOR_HARNESS", "behavior.harness"),
+              ("SHIKIGAMI_WORKSPACES", "workspaces"),
               ("SHIKIGAMI_BEHAVIOR_MODEL", "behavior.model"),
               ("SHIKIGAMI_BEHAVIOR_PROVIDER", "behavior.provider"),
               ("SHIKIGAMI_CONVERSATION_IDLE_TIMEOUT_SECONDS", "conversation.idle_timeout_seconds"),
@@ -274,6 +277,7 @@ surfaceTests =
         (.danwaBaseUrl) defaultAppConfig @?= "http://localhost:8080"
         (.danwaAgentParticipant) defaultAppConfig @?= "part_shikigami"
         assertBool "danwa has no default credential" (isNothing ((.danwaToken) defaultAppConfig))
+        assertBool "workspace authority is opt-in" (isNothing defaultAppConfig.workspaceSettings)
         case (.actionAuthorization) defaultAppConfig of
           ActionAuthorizationDisabled -> pure ()
           KikanActionAuthorization {} -> assertFailure "action authorization must default to fail-closed disabled mode"
@@ -296,7 +300,17 @@ precedenceTests :: TestTree
 precedenceTests =
   testGroup
     "precedence"
-    [ testCase "harness options resolve through file environment and CLI with bounded validation" do
+    [ testCase "reviewed workspace configuration resolves from the environment and hides local paths" do
+        let supplied = "{\"storageRoot\":\"/private/workspaces\",\"repositories\":[{\"identity\":\"mori://fixture/repo\",\"source\":\"/private/approved-source\",\"revisions\":[{\"base\":\"" <> Text.replicate 40 "a" <> "\",\"instructionDigest\":\"sha256:" <> Text.replicate 64 "b" <> "\"}],\"defaultRevision\":\"" <> Text.replicate 40 "a" <> "\",\"policyRevision\":\"reviewed-1\",\"readPaths\":[\"\"],\"writePaths\":[\"src\"]}],\"grants\":[{\"agent\":\"worker\",\"principal\":\"agent_fixture\",\"repository\":\"mori://fixture/repo\"}]}"
+        config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_WORKSPACES", supplied)]
+        case config.workspaceSettings of
+          Just settings -> settings.storageRoot @?= "/private/workspaces"
+          Nothing -> assertFailure "workspace settings did not resolve"
+        let report = runWith (diagnosticOptions ExplainJson) [] [("SHIKIGAMI_WORKSPACES", supplied)]
+        report.exitCode @?= 0
+        assertBool "source paths are operator-private diagnostics" (not ("approved-source" `Text.isInfixOf` (report.standardOutput <> report.standardError)))
+        (runWith (diagnosticOptions CheckConfig) [] [("SHIKIGAMI_WORKSPACES", "{\"storageRoot\":\"/private/approved-source\",\"repositories\":[],\"grants\":[],\"unexpected\":true}")]).exitCode @?= 4,
+      testCase "harness options resolve through file environment and CLI with bounded validation" do
         config <-
           resolveOrFail
             (optionsWith [] [cliOverride behaviorHarnessKey "{\"maxModelTurns\":3,\"outputRepairs\":1,\"output\":{\"tag\":\"NonemptyReply\"}}"])

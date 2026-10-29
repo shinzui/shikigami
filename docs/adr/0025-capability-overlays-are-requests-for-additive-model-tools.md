@@ -69,7 +69,7 @@ authorization refusal, and non-`Skill` behavior are permanent typed refusals. Ge
 admits only observation tools. A one-off invocation may admit a mutation only when its explicit
 local policy authorizes it; the operation class remains visible rather than being weakened.
 
-[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) amendment (2026-10-29; registry and dispatch plumbing implemented, concrete provider and workflow enablement pending): a separate governed resolution path
+[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) amendment (2026-10-29; file adapter and patched worker admission implemented; process and handoff gates pending): a separate governed resolution path
 may admit workspace mutation descriptors only through an operator-installed durable adapter
 keyed by exact capability, revision and descriptor digest. `installDurableAdapters`
 validates immutable logical tool schemas and explicit recovery contracts independently
@@ -81,8 +81,15 @@ Actual preparation receives the
 executor's trusted logical operation and actual attempt/claim coordinates. Generic providers
 retain their existing scope and refusal behavior. Recovery classification comes from the
 adapter's tested receipt contract, never solely from a public operation-class label. Old
-workflow branches and snapshots gain no new authority. This exception requires plan 96's
-negative, replay and process-recovery tests before production enablement.
+workflow branches and snapshots gain no new authority. The
+`shikigami-governed-workspaces-v1` guard selects separate governed resolution
+and workspace Skill admission labels for the new capability family. Explicit
+worker `workspaces` configuration installs only `workspace.edit:1`, with reviewed
+immutable instruction digests, exact agent/principal grants and content-bound
+read/write restrictions. Actual file effects and lost-acknowledgement recovery
+are exercised through the real parent, child and executor. No process or Git
+adapter is installed until its independent qualification passes. Generic
+observation providers, including `workspace.read`, retain their semantics.
 
 The first concrete one-off provider is the immutable `workspace.read` revision `1` descriptor
 in `shikigami-agent`. It contains exactly the logical `read`, `grep`, and `glob` observations.

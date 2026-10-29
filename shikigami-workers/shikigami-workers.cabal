@@ -48,9 +48,11 @@ library
     Shikigami.Workers.Subscription
     Shikigami.Workers.Supervision
     Shikigami.Workspace.Allocation
+    Shikigami.Workspace.ConfiguredHost
     Shikigami.Workspace.ContainedFile
     Shikigami.Workspace.FileProvider
     Shikigami.Workspace.Git
+    Shikigami.Workspace.Host
     Shikigami.Workspace.InstructionLoader
 
   build-depends:
@@ -176,6 +178,7 @@ test-suite shikigami-workers-test
     Shikigami.WorkspaceContainedFileSpec
     Shikigami.WorkspaceFileProviderSpec
     Shikigami.WorkspaceStoreSpec
+    Shikigami.WorkspaceWorkflowSpec
 
   ghc-options:
     -threaded

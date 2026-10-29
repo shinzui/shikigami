@@ -58,7 +58,7 @@ tests databaseFixture =
       testCase "failed workflows resurrect through the public owner" (failedWorkflowResurrects databaseFixture),
       testCase "approval review identity has a frozen public vector" approvalReviewIdentityIsStable,
       testCase "the current baseline activates the declared decision and resource patches" do
-        assertEqual "active application patches" (Set.fromList [PatchId "shikigami-durable-execution-v1", PatchId "shikigami-flow-decisions-v1", PatchId "shikigami-execution-resources-v1", PatchId "shikigami-execution-selection-v1", PatchId "shikigami-conversation-execution-selection-v1", PatchId "shikigami-conversation-durable-execution-v1", PatchId "shikigami-worker-coordination-v1"]) shikigamiActivePatches
+        assertEqual "active application patches" (Set.fromList [PatchId "shikigami-durable-execution-v1", PatchId "shikigami-flow-decisions-v1", PatchId "shikigami-execution-resources-v1", PatchId "shikigami-execution-selection-v1", PatchId "shikigami-conversation-execution-selection-v1", PatchId "shikigami-conversation-durable-execution-v1", PatchId "shikigami-worker-coordination-v1", PatchId "shikigami-governed-workspaces-v1"]) shikigamiActivePatches
     ]
 
 -- ── Test A: the patch primitive, end to end ─────────────────────────────────

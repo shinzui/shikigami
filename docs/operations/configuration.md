@@ -530,6 +530,73 @@ These are distinct from per-slot Flow `decisionModels` permissions.
 
 Root resource envelopes and continuing-worker scopes are supplied by trusted
 admission APIs, rather than arbitrary process settings. The default operator host
-has no real objective/checkpoint or workspace fencing provider. No configuration
-flag alone enables those providers. See [worker operations](operator-cli.md) and
+has no real objective/checkpoint, process-supervisor or workspace fencing provider.
+The file-only workspace host below does not supply those providers. See [worker operations](operator-cli.md) and
 [the roadmap](../roadmap.md) for the owning delivery gates.
+
+
+## Governed repository files
+
+The worker's optional `workspaces` setting (`SHIKIGAMI_WORKSPACES`, JSON) installs
+`workspace.edit` revision `1` for leaf Skills that explicitly request it through
+`capabilityOverlays`. No workspace tools are installed by default. Existing
+`workspace.read` observation semantics remain unchanged. The file host requires
+an admitted execution resource root, a matching agent/principal grant and fresh
+Kikan action authorization. The portable one-off command and conversations do
+not acquire this durable file host.
+
+This example is schematic: replace the commit and reviewed bundle digest with
+identities for your approved source. `base` in a grant may pin an approved commit;
+when omitted, the repository's immutable `defaultRevision` is used.
+
+```json
+{
+  "storageRoot": "/private/agent-workspaces",
+  "repositories": [{
+    "identity": "mori://example/project",
+    "source": "/operator/approved-project",
+    "revisions": [{
+      "base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "instructionDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }],
+    "defaultRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "policyRevision": "reviewed-1",
+    "readPaths": [""],
+    "writePaths": ["src", "project.cabal"]
+  }],
+  "grants": [{
+    "agent": "upgrade-worker",
+    "principal": "agent_01h000000000000000triage",
+    "repository": "mori://example/project"
+  }]
+}
+```
+
+Each path prefix admits itself and descendants; an empty prefix admits the
+complete tree, while an empty list admits no path. Before listing a bundle
+digest, review every regular `AGENTS.md` blob and its directory scope at the
+approved commit, resolving explicit conflicts with governing restrictions.
+`Workspace.Instructions.mkInstructionBundle` accepts the repository identity,
+full commit, and complete `(relative path, exact UTF-8 text)` list; `bundleDigest`
+returns the versioned identity used here. The trusted loader independently
+checks the complete immutable tree at admission, so omitted or changed
+instructions refuse before model dispatch. It limits instruction discovery to
+64 files and 64 KiB and preserves the accepted bundle on resume.
+
+Native file admission also requires ASCII tree paths with unambiguous case
+spellings. File contents may be UTF-8. Reads and whole-file compare-and-replace
+are bounded to 256 KiB; a missing expected hash means create only if absent,
+and creation requires an existing directory. Git metadata, symlinks, hardlinks,
+FIFOs, traversal and path substitution refuse. Repository path restrictions
+are part of the retained policy identity: reusing a human revision label cannot
+silently change pending work's policy. Retain the exact restriction set and
+reviewed base while its pending operations still need it.
+
+The entire setting is redacted from configuration diagnostics, including invalid
+raw candidates. Local source paths are not model input. A private copy keeps
+provider Git metadata outside the mutable files. Edit publication uses an OS
+lock and independent receipts; uncertain effects require reconciliation and
+never justify another writer. This host offers no validation process, local
+commit, transfer fence or cleanup operation. Those remain Plan 96 gates. On
+macOS, use Apple containers first for Linux qualification, as recorded in
+[AGENTS.md](../../AGENTS.md).

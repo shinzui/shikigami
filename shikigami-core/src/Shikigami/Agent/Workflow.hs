@@ -114,11 +114,12 @@ import Shikigami.Behavior.Provider (ProfileViolation, constrainBehaviorEnv, rend
 import Shikigami.Behavior.Run (BehaviorEnv (..), BehaviorInput (..), behaviorModelId, runBehavior, runBehaviorAttemptWith, withCapabilityTools)
 import Shikigami.Behavior.Skill (SkillDir (..))
 import Shikigami.Capability.Catalog qualified as Capability
-import Shikigami.Capability.Overlay (ResolvedCapabilitySet)
+import Shikigami.Capability.Overlay (CapabilityDescriptor, ResolvedCapabilitySet, capabilityIdText)
 import Shikigami.Capability.Provider
   ( CapabilityRuntime (..),
     CapabilityRuntimeError,
     CapabilityScope (..),
+    durableAdapterInstalled,
     withCapabilityOverlays,
   )
 import Shikigami.Decision.Contract (renderDecisionFailure)
@@ -181,6 +182,7 @@ import Shikigami.WorkerSession.Handoff qualified as WorkerHandoff
 import Shikigami.WorkerSession.Tools qualified as WorkerTools
 import Shikigami.WorkerSession.Workflow qualified as WorkerSession
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
+import Shikigami.Workspace.Admission (WorkspaceHost (..))
 
 data AgentRunDeps = AgentRunDeps
   { appEnv :: !AppEnv,
@@ -192,6 +194,7 @@ data AgentRunDeps = AgentRunDeps
     -- | Operator-owned overlay catalog, policy, and exact-revision provider
     -- factories. Only its pure resolution result crosses the journal boundary.
     capabilities :: !CapabilityRuntime,
+    workspace :: !(Maybe WorkspaceHost),
     -- | No production scope/provider is selected until IR-11/IR-13 deliver it.
     coordination :: !(Maybe WorkerCapability.CoordinationHost),
     agents :: ![AgentDecl],
@@ -353,6 +356,7 @@ runResolvedAgent ::
   AgentDecl ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 runResolvedAgent deps job decl = do
+  workspaceEnabled <- Workflow.patch (PatchId "shikigami-governed-workspaces-v1")
   profileResolution <- runStep deps (StepName "resolve-profile") (liftIO (resolveRequiredProfile deps decl))
   case profileResolution of
     Left refusal -> pure (Left (PermanentAgentRunFailure (renderProfileResolutionError refusal)))
@@ -360,8 +364,8 @@ runResolvedAgent deps job decl = do
       capabilityResolution <-
         runStep
           deps
-          (StepName "resolve-capability-overlays")
-          (pure (resolveCapabilitiesForRun ((.capabilities) deps) decl resolvedProfile))
+          (StepName (if workspaceEnabled && requestsWorkspace decl then "resolve-governed-capability-overlays" else "resolve-capability-overlays"))
+          (pure (if workspaceEnabled && requestsWorkspace decl then resolveGovernedCapabilitiesForRun deps.capabilities decl resolvedProfile else resolveCapabilitiesForRun deps.capabilities decl resolvedProfile))
       case capabilityResolution of
         Left refusal ->
           pure
@@ -381,11 +385,21 @@ resolveCapabilitiesForRun ::
   AgentDecl ->
   Maybe ResolvedProfile ->
   Either Capability.CapabilityResolutionError ResolvedCapabilitySet
-resolveCapabilitiesForRun CapabilityRuntime {catalog, authorize} AgentDecl {behavior, capabilityOverlays, delegates, identity} resolvedProfile
+resolveCapabilitiesForRun = resolveRunCapabilities (const False)
+
+resolveGovernedCapabilitiesForRun :: CapabilityRuntime -> AgentDecl -> Maybe ResolvedProfile -> Either Capability.CapabilityResolutionError ResolvedCapabilitySet
+resolveGovernedCapabilitiesForRun runtime = resolveRunCapabilities (durableAdapterInstalled runtime.providers) runtime
+
+requestsWorkspace :: AgentDecl -> Bool
+requestsWorkspace decl = any ((`elem` ["workspace.edit", "workspace.exec", "workspace.git"]) . capabilityIdText) decl.capabilityOverlays
+
+resolveRunCapabilities :: (CapabilityDescriptor -> Bool) -> CapabilityRuntime -> AgentDecl -> Maybe ResolvedProfile -> Either Capability.CapabilityResolutionError ResolvedCapabilitySet
+resolveRunCapabilities installed CapabilityRuntime {catalog, authorize} AgentDecl {behavior, capabilityOverlays, delegates, identity} resolvedProfile
   | not (null capabilityOverlays) && not (null delegates) =
       Left Capability.CapabilityBehaviorUnsupported {Capability.behaviorKind = "DelegatingSkill"}
   | otherwise =
-      Capability.resolveCapabilityOverlays
+      Capability.resolveGovernedCapabilityOverlays
+        installed
         catalog
         authorize
         Capability.ResolutionSubject
@@ -640,6 +654,7 @@ runSessionedAgent deps activeBehaviorEnv durableSelection resolvedProfile resolv
 -- owners and step labels below.
 runDurableSkillStep :: AgentRunDeps -> Maybe ResolvedProfile -> ResolvedCapabilitySet -> RunJob -> AgentDecl -> SessionId -> [MemoryRecord] -> Selection.ExecutionSelection -> Text -> Eff (Workflow : AppEffects) (Either Text Value)
 runDurableSkillStep deps profile overlays job decl sid prior selection path = do
+  workspaceEnabled <- Workflow.patch (PatchId "shikigami-governed-workspaces-v1")
   coordinationEnabled <- Workflow.patch (PatchId "shikigami-worker-coordination-v1")
   let runtime = executionRuntime deps
       coordinating = case decl.behavior of CoordinatingSkill {} -> True; _ -> False
@@ -665,7 +680,20 @@ runDurableSkillStep deps profile overlays job decl sid prior selection path = do
             skillDir = SkillDir (Text.unpack path),
             input = pure (Right (ExecutionStart.SkillInput (BehaviorInput job.triggerPayload prior) []))
           }
-  admitted <- runStep deps (StepName "admit-skill-execution") (liftIO (ExecutionStart.admitSkillExecution runtime describe assignment >>= executionResult))
+  admitted <-
+    if workspaceEnabled && requestsWorkspace decl
+      then
+        runStep
+          deps
+          (StepName "admit-workspace-skill-execution")
+          ( liftIO
+              ( case deps.workspace of
+                  Nothing -> pure (Left (Execution.ExecutionPolicyRefused "workspace host is unavailable"))
+                  Just host -> ExecutionStart.admitWorkspaceSkillExecution (host.load assignment) runtime describe assignment
+              )
+              >>= liftIO . executionResult
+          )
+      else runStep deps (StepName "admit-skill-execution") (liftIO (ExecutionStart.admitSkillExecution runtime describe assignment >>= executionResult))
   case admitted of
     Left err -> pure (Left err)
     Right start -> do

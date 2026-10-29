@@ -48,6 +48,14 @@ instance Show FileReceipt where show _ = "FileReceipt <protected>"
 contentDigest :: Text -> Text
 contentDigest = versionedDigest "shikigami.workspace-content/1" . toJSON
 
+-- Allocation is protected IO too. This action binds the reserved immutable
+-- resource and execution assignment before reading the operator's source.
+workspaceAllocationAction :: WorkspaceBinding -> Text -> Either FileEffectError AgentAction
+workspaceAllocationAction binding assignment = do
+  unless (not (Text.null assignment) && Text.length assignment <= 256) (Left FileEffectRefused)
+  let digest = Text.replace ":" "-" (versionedDigest "shikigami.workspace-admission-action/1" (toJSON (workspaceBindingDigest binding, assignment)))
+  either (const (Left FileEffectRefused)) (Right . InvokeCapabilityTool) (mkCapabilityToolTarget "shikigami.workspace" "1" ("admit-" <> digest))
+
 -- Digest every accepted coordinate into the closed C13 capability-tool target.
 -- The concrete provider obtains target from an anchored parent descriptor and
 -- obtains binding/admission/dispatch from retained state, never model arguments.

@@ -26,7 +26,7 @@ Overrides can add restrictions and lower ceilings, retain more recent context,
 and strengthen output requirements. They grant no model, tool or external action.
 The old coarse workflow branch retains its existing semantics and labels.
 
-[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) amendment (2026-10-29; instruction admission implemented, worker enablement pending): repository instructions are also
+[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) amendment (2026-10-29; file admission and worker enablement implemented; process gates pending): repository instructions are also
 accepted assignment input. Freeze a bounded bundle of `AGENTS.md` text, path scopes and
 content identities from the admitted base in protected storage, and include its scope-labelled
 contents in fixed model context before the first request. Context compaction must preserve
@@ -41,8 +41,11 @@ Its retained bundle comes from regular Git blobs in the immutable base, with at 
 64 files and 64 KiB of UTF-8 text, further constrained by the fixed-context budget.
 Bundle decoding verifies content identities and directory scopes. Existing matching
 snapshots resume without reloading source instructions or current configuration.
-The original Skill admission API retains its historical behavior; production worker
-enablement remains a separate gate in plan 96. The concrete file adapter requires an
+The original Skill admission API retains its historical behavior; the new governed
+workflow patch and optional worker configuration select workspace admission.
+The operator reviews a complete instruction digest before model dispatch;
+read/write prefixes and their human revision label also form a retained content
+identity. Reusing the label cannot reinterpret accepted restrictions. The concrete file adapter requires an
 explicit retained `ascii-exact-v1` filesystem qualification: all base paths are
 ASCII and case-unambiguous, with exact directory-entry spelling at native IO.
 This prevents host case/Unicode normalization aliases from changing frozen scope.

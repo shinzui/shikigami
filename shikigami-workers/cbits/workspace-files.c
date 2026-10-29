@@ -170,7 +170,9 @@ int shikigami_ws_lock(const char *metadata) {
       flock(fd, LOCK_EX | LOCK_NB)) { close(fd); return -1; }
   return fd;
 }
-void shikigami_ws_unlock(int fd) { close(fd); }
+/* Release the open-file-description lock explicitly: another provider thread
+ * may briefly fork a CLOEXEC descriptor before that unrelated child execs. */
+void shikigami_ws_unlock(int fd) { flock(fd, LOCK_UN); close(fd); }
 
 int shikigami_ws_private(const char *path) {
   int fd = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);

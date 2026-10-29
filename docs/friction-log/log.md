@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-29
+* **Addition**: FRIC-17 records detour environment friction with mori://shinzui/shikigami: Full PostgreSQL suite exceeds shared fixture connection capacity
 * **Update**: FRIC-16 resolved: Align the implementation plan with the enforced package boundary.
 * **Addition**: FRIC-16 records detour documentation friction with mori://shinzui/shikigami: Workspace allocation placement conflicts with core package boundary
 

@@ -67,6 +67,7 @@ import Shikigami.Sink.Http (SinkHttp)
 import Shikigami.Telemetry.Metrics (ShikigamiMetrics)
 import Shikigami.Trigger.Schedule (CatchUpPolicy, CronSchedule, parseCron)
 import Shikigami.Trigger.Scheduler qualified as Scheduler
+import Shikigami.Workspace.Admission (WorkspaceHost (..))
 import System.Exit (exitFailure)
 
 -- | Persist the one completed loader report before strict mode may refuse boot.
@@ -98,6 +99,7 @@ data WorkerEnv = WorkerEnv
     behaviorEnv :: !BehaviorEnv,
     decisions :: !FlowDecision.DecisionServices,
     actionAuthorizer :: !ActionAuthorizer,
+    workspace :: !(Maybe WorkspaceHost),
     runTimeout :: !NominalDiffTime,
     harness :: !HarnessPolicy,
     delegationBudget :: !DelegationBudget,
@@ -205,7 +207,8 @@ agentRunDeps env =
       AgentWorkflow.behaviorEnv = (.behaviorEnv) env,
       AgentWorkflow.decisions = (.decisions) env,
       AgentWorkflow.actionAuthorizer = (.actionAuthorizer) env,
-      AgentWorkflow.capabilities = emptyCapabilityRuntime,
+      AgentWorkflow.capabilities = maybe emptyCapabilityRuntime (.capabilities) env.workspace,
+      AgentWorkflow.workspace = env.workspace,
       AgentWorkflow.coordination = Nothing,
       AgentWorkflow.agents = (.agents) env,
       AgentWorkflow.kizashi = (.kizashi) env,

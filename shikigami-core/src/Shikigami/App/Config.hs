@@ -114,6 +114,7 @@ module Shikigami.App.Config
     behaviorModelKey,
     behaviorDecisionModelsKey,
     behaviorHarnessKey,
+    workspacesKey,
     anthropicApiKeyKey,
     openaiApiKeyKey,
     actionAuthorizationModeKey,
@@ -198,6 +199,7 @@ import Shikigami.PracticeReview.Capability
   )
 import Shikigami.Sink.Permission (SinkKind)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
+import Shikigami.Workspace.Settings (WorkspaceSettings)
 
 -- ── Value types ─────────────────────────────────────────────────────────────
 
@@ -485,7 +487,8 @@ data AppConfig = AppConfig
     behaviorProvider :: !ProviderSelection,
     decisionModelCatalog :: !(Either DecisionFailure Decision.ModelCatalog),
     harness :: !Harness.HarnessPolicy,
-    actionAuthorization :: !ActionAuthorizationConfig
+    actionAuthorization :: !ActionAuthorizationConfig,
+    workspaceSettings :: !(Maybe WorkspaceSettings)
   }
   deriving stock (Generic, Eq)
 
@@ -542,6 +545,7 @@ appConfig =
     <*> decisionModelsConfig
     <*> withDefault harnessSetting (constant "default-harness" "Bound Skill execution policy" Harness.defaultHarnessPolicy)
     <*> actionAuthorizationConfig
+    <*> optional (secretSetting workspacesKey "Approved workspace repositories, reviewed instruction digests, path restrictions and exact agent/principal grants" jsonDecoder)
 
 -- | Which provider runs a Skill behavior, and what the real branch needs.
 --
@@ -1386,6 +1390,9 @@ behaviorProviderKey = stableKey "behavior.provider"
 behaviorHarnessKey :: Key
 behaviorHarnessKey = stableKey "behavior.harness"
 
+workspacesKey :: Key
+workspacesKey = stableKey "workspaces"
+
 behaviorDecisionModelsKey :: Key
 behaviorDecisionModelsKey = stableKey "behavior.decisionModels"
 
@@ -1505,6 +1512,7 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_BEHAVIOR_PROVIDER") behaviorProviderKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_DECISION_MODELS") behaviorDecisionModelsKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_HARNESS") behaviorHarnessKey,
+          binding (EnvName "SHIKIGAMI_WORKSPACES") workspacesKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_MODEL") behaviorModelKey,
           binding (EnvName "ANTHROPIC_API_KEY") anthropicApiKeyKey,
           binding (EnvName "OPENAI_API_KEY") openaiApiKeyKey,

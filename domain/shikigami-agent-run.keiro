@@ -15,6 +15,10 @@ workflow AgentRun
     step lookup-agent -> AgentDecl
     step resolve-profile -> ProfileResolution
     step resolve-capability-overlays -> CapabilityOverlayResolution
+    patch shikigami-governed-workspaces-v1 {
+      step resolve-governed-capability-overlays -> CapabilityOverlayResolution
+      step admit-workspace-skill-execution -> ExecutionAdmissionResult
+    }
     patch shikigami-execution-selection-v1 {
       step resolve-execution-selection -> ExecutionSelectionResolution
     }

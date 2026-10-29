@@ -546,6 +546,7 @@ withFixtureUsingTracer databaseFixture tracer label sinks kizashi danwa use =
                 AgentWorkflow.actionAuthorizer = allowAllActionAuthorizerForTests,
                 AgentWorkflow.capabilities = emptyCapabilityRuntime,
                 AgentWorkflow.coordination = Nothing,
+                AgentWorkflow.workspace = Nothing,
                 AgentWorkflow.agents = [declaration],
                 AgentWorkflow.kizashi = kizashi,
                 AgentWorkflow.kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},

@@ -193,10 +193,12 @@ library
     Shikigami.WorkerSession.Workflow
     Shikigami.Workflow.Registry
     Shikigami.Workflow.Versioning
+    Shikigami.Workspace.Admission
     Shikigami.Workspace.Catalog
     Shikigami.Workspace.Instructions
     Shikigami.Workspace.Provider
     Shikigami.Workspace.Reference
+    Shikigami.Workspace.Settings
     Shikigami.Workspace.Store
     Shikigami.Workspace.Types
 

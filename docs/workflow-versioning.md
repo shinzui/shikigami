@@ -535,6 +535,18 @@ repairs missing child input and acknowledges an already retained result under
 the existing labels and codecs. These repairs add no parent journal step.
 See [ADR 0066](adr/0066-worker-commands-require-retained-scopes-and-fresh-exact-authority.md).
 
+Agent runs also declare `shikigami-governed-workspaces-v1`. Only journaled
+requests for the separate `workspace.edit`, `workspace.exec` or `workspace.git`
+capabilities select `resolve-governed-capability-overlays` and
+`admit-workspace-skill-execution`. The exact operator-installed adapter registry
+must admit their descriptor; currently only the file adapter is implemented.
+The trusted workspace host freezes reviewed repository instructions before the
+first model request. Old patch snapshots retain the original resolution and
+Skill admission labels and cannot gain mutation authority. Existing observation
+requests retain their original path. Roll forward across this patch; process
+and handoff qualification remain separate gates in
+[Plan 96](plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md).
+
 ## Undeclarable label families
 
 Conversations also declare `shikigami-conversation-durable-execution-v1`.

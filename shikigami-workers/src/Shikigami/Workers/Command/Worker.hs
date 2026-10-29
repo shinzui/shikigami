@@ -38,6 +38,7 @@ import Shikigami.Sink.Permission (sinkKindText)
 import Shikigami.Telemetry (withRunTelemetry)
 import Shikigami.Workers.Config (WorkerEnv (..), directoryLoopRegistration, persistAgentLoadReport, schedulerSchedules, startProcessDirectory)
 import Shikigami.Workers.Registry (runWorkers)
+import Shikigami.Workspace.ConfiguredHost (configuredWorkspaceHost)
 import System.Exit qualified as Exit
 
 -- | Boot the supervised worker that drains @shikigami_run_jobs@, runs each agent
@@ -156,7 +157,12 @@ runWorkerCmdWith resumeBudget config = do
       DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
         startProcessDirectory logger registry ((.directorySettings) config)
       let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics}
-          env =
+      workspace <- case traverse (configuredWorkspaceHost appEnv storePool directory actionAuthorizer) config.workspaceSettings of
+        Left _ -> do
+          Log.logError logger "worker.workspace.invalid" []
+          Exit.exitFailure
+        Right host -> pure host
+      let env =
             WorkerEnv
               { pool = storePool,
                 appEnv,
@@ -165,6 +171,7 @@ runWorkerCmdWith resumeBudget config = do
                 behaviorEnv = behEnv,
                 decisions = FlowDecision.defaultDecisionServices (either (error . show) id config.decisionModelCatalog),
                 actionAuthorizer,
+                workspace,
                 runTimeout = (.runTimeout) config,
                 harness = (.harness) config,
                 delegationBudget = (.delegationBudget) config,
