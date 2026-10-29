@@ -13,6 +13,7 @@ module Shikigami.Workspace.Systemd
     startProcess,
     startCollector,
     systemdBootIdentity,
+    collectorActive,
   )
 where
 
@@ -66,6 +67,38 @@ systemdProfileIdentity profile = do
   properties <- systemdProperties
   pure (versionedDigest "shikigami.workspace-systemd-profile/1" (toJSON (profile.rootDirectory, profile.rootIdentity, profile.environmentExecutable, profile.collectorExecutable, profile.userId, profile.groupId, properties)))
 
+-- Status is diagnostic liveness only, never proof that the command settled.
+-- Lost/failed capture retains uncertainty even if systemd stopped the command.
+collectorActive :: ProcessRecord -> IO (Either SystemdError Bool)
+collectorActive record = guarded record do
+  if record.unit /= processUnit record.operationId record.fingerprint
+    then pure (Left SystemdRefused)
+    else do
+      result <- timeout 3000000 $ withFile "/dev/null" WriteMode \sink ->
+        withCreateProcess
+          ( (proc "/usr/bin/systemctl" ["show", "--value", "--property=ActiveState", "--", Text.unpack (captureUnit record)])
+              { env = Just [("PATH", "/usr/bin:/bin"), ("LANG", "C")],
+                close_fds = True,
+                std_in = NoStream,
+                std_out = CreatePipe,
+                std_err = UseHandle sink
+              }
+          )
+          ( \_ output _ process -> case output of
+              Nothing -> pure Nothing
+              Just handle -> do
+                body <- Bytes.hGet handle 65
+                if Bytes.length body > 64
+                  then pure Nothing
+                  else do
+                    status <- waitForProcess process
+                    pure (if status == ExitSuccess then Just body else Nothing)
+          )
+      pure case result of
+        Just (Just body) | body `elem` ["active\n", "activating\n"] -> Right True
+        Just (Just body) | body `elem` ["inactive\n", "deactivating\n", "failed\n"] -> Right False
+        _ -> Left SystemdUncertain
+
 -- Return argv without invoking a shell or interpolating command text. A clean
 -- environment is constructed inside the immutable root, rather than relying on
 -- the service manager's operator-configured DefaultEnvironment.
@@ -106,9 +139,10 @@ collectorArguments now profile metadata record = do
   _ <- remainingSeconds now record
   unless (validProfile profile && safeAbsolute metadata && validLaunchRecord record) (Left SystemdRefused)
   let watchdog = record.command.timeoutSeconds + 30
-      name = "shikigami-capture-" <> Text.drop (Text.length ("shikigami-workspace-" :: Text)) record.unit
+      name = captureUnit record
       properties =
         [ "Type=exec",
+          "TimeoutStartSec=5",
           "Restart=no",
           "RuntimeMaxSec=" <> tshow (watchdog + 10),
           "StandardOutput=null",
@@ -216,3 +250,6 @@ safeDirectory path = Text.null path || (all (\part -> not (Text.null part) && pa
 
 tshow :: (Show a) => a -> Text
 tshow = Text.pack . show
+
+captureUnit :: ProcessRecord -> Text
+captureUnit record = "shikigami-capture-" <> Text.drop (Text.length ("shikigami-workspace-" :: Text)) record.unit

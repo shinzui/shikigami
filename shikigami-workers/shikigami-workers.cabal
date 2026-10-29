@@ -61,6 +61,7 @@ library
     Shikigami.Workspace.Git
     Shikigami.Workspace.Host
     Shikigami.Workspace.InstructionLoader
+    Shikigami.Workspace.Supervisor
     Shikigami.Workspace.Systemd
 
   build-depends:
@@ -197,6 +198,7 @@ test-suite shikigami-workers-test
     Shikigami.WorkspaceFileProviderSpec
     Shikigami.WorkspaceProcessStoreSpec
     Shikigami.WorkspaceStoreSpec
+    Shikigami.WorkspaceSupervisorSpec
     Shikigami.WorkspaceSystemdSpec
     Shikigami.WorkspaceWorkflowSpec
 
@@ -237,6 +239,7 @@ test-suite shikigami-workers-test
     shikigami-core,
     shikigami-migrations:test-support,
     shikigami-workers,
+    shikumi-tools,
     tasty,
     tasty-hunit,
     text,

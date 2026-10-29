@@ -1,4 +1,4 @@
-module Shikigami.WorkspaceFileProviderSpec (tests) where
+module Shikigami.WorkspaceFileProviderSpec (tests, withEffectAdapter, executorForAdapter) where
 
 import Baikai.Options (emptyOptions)
 import Baikai.StopReason (StopReason (ToolUse))
@@ -238,7 +238,12 @@ withEffectFor :: Text.Text -> Maybe Aeson.Value -> DatabaseFixture -> (AppEnv ->
 withEffectFor = withEffectQualified id
 
 withEffectQualified :: (WorkspaceAdmission -> WorkspaceAdmission) -> Text.Text -> Maybe Aeson.Value -> DatabaseFixture -> (AppEnv -> WorkspaceBinding -> ExecutionSnapshot -> Execution.ReplayAccess -> Attempt.JobReference -> FileRuntime -> Aeson.Value -> IO a) -> IO a
-withEffectQualified qualify logical supplied fixture use = Fixture.withFixture fixture \env source root _ -> do
+withEffectQualified qualify logical = withEffectAdapter qualify workspaceEditAdapter ("overlay__workspace-edit__" <> logical) logical
+
+-- Shared accepted-executor fixture for native workspace adapters. This supplies
+-- real protected input and actual claims, never synthesized dispatch authority.
+withEffectAdapter :: (WorkspaceAdmission -> WorkspaceAdmission) -> (FileRuntime -> DurableAdapter) -> Text.Text -> Text.Text -> Maybe Aeson.Value -> DatabaseFixture -> (AppEnv -> WorkspaceBinding -> ExecutionSnapshot -> Execution.ReplayAccess -> Attempt.JobReference -> FileRuntime -> Aeson.Value -> IO a) -> IO a
+withEffectAdapter qualify install wire logical supplied fixture use = Fixture.withFixture fixture \env source root _ -> do
   createDirectory (source </> "src")
   renameFile (source </> "dependency.txt") (source </> "src/dependency.txt")
   writeFile (source </> "AGENTS.md") "PRIVATE_ROOT_POLICY: validate before commit"
@@ -257,13 +262,14 @@ withEffectQualified qualify logical supplied fixture use = Fixture.withFixture f
   now <- getCurrentTime
   session <- genSessionId
   selection <- right (resolveExecutionSelection assignment (must (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just rootId) now)
-  registry <- right (installDurableAdapters [workspaceEditAdapter runtime] emptyCapabilityProviderRegistry)
-  catalog <- right (mkCapabilityCatalog [workspaceEditDescriptor])
-  capabilities <- right (resolveGovernedCapabilityOverlays (durableAdapterInstalled registry) catalog (\_ _ -> Right ()) (ResolutionSubject (Just "worker") Durable (Skill "fixture") Nothing) [workspaceEditDescriptor.capability])
+  let adapter = install runtime
+  registry <- right (installDurableAdapters [adapter] emptyCapabilityProviderRegistry)
+  catalog <- right (mkCapabilityCatalog [adapter.descriptor])
+  capabilities <- right (resolveGovernedCapabilityOverlays (durableAdapterInstalled registry) catalog (\_ _ -> Right ()) (ResolutionSubject (Just "worker") Durable (Skill "fixture") Nothing) [adapter.descriptor.capability])
   let initial = ExecutionSnapshot 1 (executionIdFor assignment) "file-run" (AgentName "worker") identity session selection Nothing (SkillInstructions "fixture" "system" "body") (ReplayContext 2 (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "edit fixture"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
       native = Tools.NativeToolFactory (\_ -> pure (Right [])) (\_ _ _ -> pure (Right []))
   menu <- right =<< Tools.describeExecutionTools Log.silentLogger allowAllActionAuthorizerForTests registry native initial
-  let chosen = filter (\tool -> tool.name == "overlay__workspace-edit__" <> logical) menu.toolBindings
+  let chosen = filter (\tool -> tool.name == wire) menu.toolBindings
       tool = case chosen of [value] -> value; _ -> error "missing fixture file binding"
       snapshot = initial & #offeredTools .~ Aeson.toJSON (filterTools menu.offeredTools) & #toolBindings .~ [tool]
       model = OperationSpec (operationIdFor snapshot.executionId 0) ModelTurn RepeatableObservation "model" (versionedDigest "shikigami.harness-policy/1" (Aeson.toJSON snapshot.policy)) "scope" Nothing
@@ -291,12 +297,15 @@ withEffectQualified qualify logical supplied fixture use = Fixture.withFixture f
   where
     filterTools (Aeson.Array values) = Aeson.Array (filterVector values)
     filterTools value = value
-    filterVector = DataVector.filter (\value -> case value of Aeson.Object fields -> AesonKeyMap.lookup "name" fields == Just (Aeson.String ("overlay__workspace-edit__" <> logical)); _ -> False)
+    filterVector = DataVector.filter (\value -> case value of Aeson.Object fields -> AesonKeyMap.lookup "name" fields == Just (Aeson.String wire); _ -> False)
 
 executorFor :: FileRuntime -> IO () -> Executor.ExecutionRuntime
-executorFor runtime checkpoint = Executor.ExecutionRuntime runtime.appEnv (const (pure (Right ()))) runtime.lifecycle (\_ -> error "fixture never dispatches a model") (Tools.withExecutionTools Log.silentLogger runtime.authorizer registry native) 5
+executorFor runtime checkpoint = executorForAdapter (workspaceEditAdapterWithCheckpoint checkpoint) runtime
+
+executorForAdapter :: (FileRuntime -> DurableAdapter) -> FileRuntime -> Executor.ExecutionRuntime
+executorForAdapter install runtime = Executor.ExecutionRuntime runtime.appEnv (const (pure (Right ()))) runtime.lifecycle (\_ -> error "fixture never dispatches a model") (Tools.withExecutionTools Log.silentLogger runtime.authorizer registry native) 5
   where
-    registry = must (installDurableAdapters [workspaceEditAdapterWithCheckpoint checkpoint runtime] emptyCapabilityProviderRegistry)
+    registry = must (installDurableAdapters [install runtime] emptyCapabilityProviderRegistry)
     native = Tools.NativeToolFactory (\_ -> pure (Right [])) (\_ _ _ -> pure (Right []))
 
 run :: AppEnv -> Eff AppEffects a -> IO a

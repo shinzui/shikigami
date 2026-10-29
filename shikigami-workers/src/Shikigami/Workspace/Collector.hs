@@ -8,6 +8,7 @@ module Shikigami.Workspace.Collector
     readCollectorReceipt,
     readCollectorIdentity,
     reconcileCollector,
+    collectorFailed,
   )
 where
 
@@ -31,6 +32,22 @@ data CollectorError = CollectorUnsupported | CollectorUnavailable | CollectorEvi
 data CollectorIdentity = CollectorIdentity {bootId :: !Text, invocationId :: !Text}
   deriving stock (Generic)
   deriving anyclass (FromJSON)
+
+newtype CollectorFailure = CollectorFailure {stage :: Int}
+  deriving stock (Generic)
+  deriving anyclass (FromJSON)
+
+collectorFailed :: FilePath -> IO (Either CollectorError Bool)
+collectorFailed directory = do
+  loaded <- readPrivate directory "unresolved.json" 4096
+  pure do
+    bytes <- loaded
+    case bytes of
+      Nothing -> Right False
+      Just body -> do
+        fact <- either (const (Left CollectorEvidenceConflict)) Right (Aeson.eitherDecodeStrict @CollectorFailure body)
+        unless (fact.stage >= 1 && fact.stage <= 13) (Left CollectorEvidenceConflict)
+        Right True
 
 data CollectorFact = CollectorFact
   { version :: !Int,

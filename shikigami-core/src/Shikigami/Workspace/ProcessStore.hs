@@ -8,6 +8,7 @@ module Shikigami.Workspace.ProcessStore
     refuseReservedProcessTx,
     markProcessUnresolvedTx,
     inspectProcessTx,
+    inspectRegisteredProcessTx,
   )
 where
 
@@ -122,6 +123,11 @@ refuseReservedProcessTx expected = do
 inspectProcessTx :: OperationId -> Transaction (Maybe ProcessRecord)
 inspectProcessTx (OperationId key) = Tx.statement key selectProcess
 
+-- Factual recovery derives the provider directory from the immutable database
+-- association, never a path supplied by a worker or socket request.
+inspectRegisteredProcessTx :: OperationId -> Transaction (Maybe (WorkspaceBinding, ProcessRecord))
+inspectRegisteredProcessTx (OperationId key) = Tx.statement key selectRegisteredProcess
+
 save :: ProcessRecord -> ProcessRecord -> Transaction (Either WorkspaceError ())
 save expected changed = do
   let OperationId key = expected.operationId
@@ -135,7 +141,13 @@ jsonParam :: (ToJSON a) => E.Params a
 jsonParam = toJSON >$< E.param (E.nonNullable E.jsonb)
 
 selectProcess :: Statement Text (Maybe ProcessRecord)
-selectProcess = preparable "SELECT record FROM shikigami.workspace_processes WHERE operation_id=$1 FOR UPDATE" textParam (D.rowMaybe (D.column (D.nonNullable (D.refine decode D.jsonb))))
+selectProcess = preparable "SELECT record FROM shikigami.workspace_processes WHERE operation_id=$1 FOR UPDATE" textParam (D.rowMaybe jsonColumn)
+
+selectRegisteredProcess :: Statement Text (Maybe (WorkspaceBinding, ProcessRecord))
+selectRegisteredProcess = preparable "SELECT b.binding,p.record FROM shikigami.workspace_processes p JOIN shikigami.workspace_bindings b ON b.resource=p.resource WHERE p.operation_id=$1 AND b.state='ready'" textParam (D.rowMaybe ((,) <$> jsonColumn <*> jsonColumn))
+
+jsonColumn :: (FromJSON a) => D.Row a
+jsonColumn = D.column (D.nonNullable (D.refine decode D.jsonb))
   where
     decode value = case Aeson.fromJSON value of Aeson.Success record -> Right record; Aeson.Error err -> Left (Text.pack err)
 

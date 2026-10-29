@@ -3,7 +3,7 @@
  * paths, identity and deadline are supplied only by the trusted supervisor. */
 #define SHIKIGAMI_WORKSPACE_SYSTEMD_PROFILE \
   "[\"Type=exec\",\"Restart=no\",\"RemainAfterExit=yes\"," \
-  "\"TimeoutStopSec=1\",\"KillMode=control-group\",\"SendSIGKILL=yes\",\"Slice=system.slice\"," \
+  "\"TimeoutStartSec=5\",\"TimeoutStopSec=1\",\"KillMode=control-group\",\"SendSIGKILL=yes\",\"Slice=system.slice\"," \
   "\"ProtectSystem=strict\",\"ReadWritePaths=/workspace /scratch\"," \
   "\"PrivateNetwork=yes\",\"PrivatePIDs=yes\",\"PrivateDevices=yes\"," \
   "\"NoNewPrivileges=yes\",\"CapabilityBoundingSet=\",\"ProtectControlGroups=yes\"," \

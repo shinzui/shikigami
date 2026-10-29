@@ -95,6 +95,15 @@ this distinction, while version-1 facts still require their numeric status.
 Receipt readers reject an exposed metadata directory without repairing its
 permissions and then trusting potentially modified evidence.
 
+A process-supervisor transport/admission error carries no no-launch proof.
+Only the retained pre-launch refusal, which competes with the single launch
+transition, establishes that fact. A failure after the transition remains
+uncertain even if a later guard refuses. Workspace receipt settlement alone
+does not acknowledge the original execution attempt or release its accounting
+hold; that owner must accept its actual late receipt. Independent recovery must
+retain the minimal accepted completion routing before launch so revocation does
+not require a new protected model-response read merely to record those facts.
+
 ## Alternatives rejected
 
 Releasing the unknown attempt to make room for its replacement would invent

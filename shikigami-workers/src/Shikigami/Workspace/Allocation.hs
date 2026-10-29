@@ -11,7 +11,7 @@ import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUID
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
-import Shikigami.Workspace.ContainedFile (ensurePrivateDirectory)
+import Shikigami.Workspace.ContainedFile (FileError (FileUnavailable), ensurePrivateDirectory)
 import Shikigami.Workspace.Git (runWorkspaceGit)
 import Shikigami.Workspace.Types
 import System.Directory
@@ -74,7 +74,8 @@ allocateWorkspaceWithCheckpoint checkpoint root binding state = catch work (\(_ 
               files = staging </> "files"
           createDirectory staging
           (cloned, _, _) <- git ["clone", "--bare", "--no-hardlinks", "--dissociate", "--", binding.source, metadata]
-          if cloned /= ExitSuccess
+          privateMetadata <- if cloned == ExitSuccess then ensurePrivateDirectory metadata else pure (Left FileUnavailable)
+          if cloned /= ExitSuccess || privateMetadata /= Right ()
             then pure (Left WorkspaceAllocationRefused)
             else do
               createDirectory files
