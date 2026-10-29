@@ -124,7 +124,9 @@ process fencing or authoritative task updates. See ADRs 0061–0063 and
 
 `shikigami-core/src/Shikigami/Agent/RunJob.hs` owns the complete journal input.
 `domain/shikigami-run-jobs.keiro` owns the twelve-field generated `RunJobMessage`
-envelope and queue policy. `Shikigami.RunJobs` adapts the nominal domain value to
+envelope and queue policy. The application input stored inside it now writes
+version 4, retaining historical v1/v2/v3 readers for resource enrollment,
+execution selection and accepted-operation references. `Shikigami.RunJobs` adapts the nominal domain value to
 that envelope and validates identity and route on decoding. `Trigger/Enqueue.hs`
 uses it for direct and transactional producers; the worker uses the same generated
 codec, queue provisioning and retry policy. CLI, schedule, Kafka inbox, delegation

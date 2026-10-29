@@ -1,9 +1,9 @@
 # Capability coverage census
 
-This census was checked on 2026-10-25 against the Cabal manifests, public module
+This census was checked on 2026-10-29 against the Cabal manifests, public module
 exports, executable entry points, administrative parser, implementation, tests,
-and current user/operations documentation. It maps **seven packages, 183 exposed
-modules, twelve executables, and eleven repository-owned administrative command
+and current user/operations documentation. It maps **seven packages, 226 exposed
+modules, twelve executables, and fourteen repository-owned administrative command
 families** to the capability catalog or an explicit supporting-surface exclusion.
 
 This is a coverage audit of the current consumer surface, not a declaration that
@@ -19,9 +19,9 @@ mapped provisions and are not independently importable consumer interfaces.
 | [shikigami-agent](../shikigami-agent/shikigami-agent.cabal) | 6 | 3 |
 | [shikigami-api](../shikigami-api/shikigami-api.cabal) | 7 | 1 |
 | [shikigami-client](../shikigami-client/shikigami-client.cabal) | 2 | 1 |
-| [shikigami-core](../shikigami-core/shikigami-core.cabal) | 122 | 0 |
+| [shikigami-core](../shikigami-core/shikigami-core.cabal) | 162 | 0 |
 | [shikigami-migrations](../shikigami-migrations/shikigami-migrations.cabal) | 2 | 1 |
-| [shikigami-server](../shikigami-server/shikigami-server.cabal) | 27 | 2 |
+| [shikigami-server](../shikigami-server/shikigami-server.cabal) | 30 | 2 |
 | [shikigami-workers](../shikigami-workers/shikigami-workers.cabal) | 17 | 4 |
 
 The migration count includes its public `test-support` sublibrary. Counts come
@@ -47,7 +47,7 @@ mechanism remain grouped under that provision.
 | shikigami-api | `Caller.Api` | 1 | [CAP-23](capabilities/http-caller-authentication.md) |
 | shikigami-api | `Health` | 1 | [CAP-16](capabilities/http-health-contract.md) |
 | shikigami-client | `Client` | 2 | [CAP-16](capabilities/http-health-contract.md), [CAP-22](capabilities/declared-agent-http-catalog.md), [CAP-23](capabilities/http-caller-authentication.md), [CAP-24](capabilities/idempotent-http-agent-runs.md), [CAP-25](capabilities/http-agent-run-lifecycle.md) |
-| shikigami-core | `Action` | 1 | [CAP-7](capabilities/exact-action-authorization.md) |
+| shikigami-core | `Action` | 2 | [CAP-7](capabilities/exact-action-authorization.md) |
 | shikigami-core | `Activity` | 1 | [CAP-2](capabilities/durable-trigger-intake.md) |
 | shikigami-core | `Agent.Approval` | 3 | [CAP-10](capabilities/durable-human-approval.md) |
 | shikigami-core | `Agent.Conversation` | 2 | [CAP-11](capabilities/addressed-conversations.md) |
@@ -133,6 +133,17 @@ mechanism remain grouped under that provision.
 | shikigami-workers | `Telemetry` | 2 | [CAP-17](capabilities/worker-operations-and-telemetry.md) |
 | shikigami-workers | `Trigger` | 3 | [CAP-2](capabilities/durable-trigger-intake.md) |
 | shikigami-workers | `Workers` | 8 | [CAP-17](capabilities/worker-operations-and-telemetry.md) |
+| shikigami-core | `Store.ExecutionResources` | 1 | [CAP-26](capabilities/root-resource-accounting.md) |
+| shikigami-core | `Store.ExecutionSelection` | 1 | [CAP-27](capabilities/assignment-execution-selection.md) |
+| shikigami-core | `Execution` | 21 | [CAP-26](capabilities/root-resource-accounting.md), [CAP-27](capabilities/assignment-execution-selection.md), [CAP-28](capabilities/recoverable-skill-execution.md) |
+| shikigami-core | `ExecutionDriver` | 2 | [CAP-28](capabilities/recoverable-skill-execution.md) |
+| shikigami-core | `WorkerSession` | 12 | [CAP-29](capabilities/continuing-worker-primitives.md) |
+| shikigami-core | `Workspace` | 1 | [CAP-30](capabilities/repository-catalog-admission.md) |
+| shikigami-core | `Flow.Workers` | 1 | [CAP-29](capabilities/continuing-worker-primitives.md) |
+| shikigami-server | `Server.Command.Resources` | 1 | [CAP-26](capabilities/root-resource-accounting.md) |
+| shikigami-server | `Server.Command.Executions` | 1 | [CAP-28](capabilities/recoverable-skill-execution.md) |
+| shikigami-server | `Server.Command.Workers` | 1 | [CAP-29](capabilities/continuing-worker-primitives.md) |
+
 
 ## Executable entry points
 
@@ -173,6 +184,10 @@ its commands belong to
 | `agents` | [CAP-6](capabilities/principal-lifecycle-and-continuity.md) |
 | `runs` | [CAP-17](capabilities/worker-operations-and-telemetry.md), [CAP-25](capabilities/http-agent-run-lifecycle.md) |
 
+| `resources` | [CAP-26](capabilities/root-resource-accounting.md) |
+| `executions` | [CAP-28](capabilities/recoverable-skill-execution.md) |
+| `workers` | [CAP-29](capabilities/continuing-worker-primitives.md) |
+
 ## Exclusions and bounds
 
 - `Shikigami.Core` is a version placeholder; `Prelude` and `Id.Name` are supporting utilities. They are exported, but do not warrant independent provision records.
@@ -205,3 +220,11 @@ authentication, atomic acceptance, and derived run lifecycle. The twelve binarie
 and eleven administrative command families are unchanged; the typed client now
 also exposes `agents list/show` and `runs request/show/list/wait`. HTTP discovery and
 run routes are implemented and no longer appear in the unavailable-surface list.
+
+## October 29 additions
+
+CAP-26 through CAP-30 cover accounting, assignment selection, recoverable Skill
+execution, continuing-worker primitives and pure repository admission. Counts
+above now reflect all current Cabal public modules and fourteen command families.
+Plan 84 remains partial; the repository catalog does not deliver mutable workspaces.
+Objective persistence/API/CLI and full adaptive/recurring coordination remain planned.

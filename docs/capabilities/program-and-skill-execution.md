@@ -52,8 +52,9 @@ Builds on [CAP-1: Typed agent declarations](typed-agent-declarations.md).
 
 Durable typed decision programs use the separate
 [Flow Decision capability](typed-flow-decisions.md). They do not add entries to
-the synchronous behavior task registry. Intermediate Skill model/tool turns
-still require the planned durable execution harness.
+the synchronous behavior task registry. Intermediate Skill model/tool turns now use the separate
+[recoverable execution capability](recoverable-skill-execution.md) in durable runs;
+the synchronous command uses an ephemeral recording.
 
 The built-in researcher programs return fixed proof findings; they do not perform live research. Skill `allowed-tools` is not enforced and Skill scripts are not executed. Tools require an installed registry and authorization. Flow and durable supervisor behavior require the workflow path. Background Claude/Codex CLI responses are currently refused because the released adapters fail the cancellation contract.
 

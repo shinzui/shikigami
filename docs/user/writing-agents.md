@@ -90,6 +90,8 @@ let Agent =
 | `delegationBudget` | `Optional Natural` | Optional root-run-wide child budget | platform default |
 | `sanctionedProfile` | `Optional ProfileRequirement` | Execution profile the run must resolve and satisfy | `None` |
 | `capabilityOverlays` | `List Text` | Additive model-tool capabilities requested by this agent | `[]` |
+| `execution` | `Optional Execution` | Default and permitted immutable whole-assignment model aliases | `None` |
+| `harness` | `Optional Harness.Type` | Narrow operator Skill policy ceilings and restrictions | `None` |
 | `decisionModels` | `List Text` | Operator model aliases this agent permits typed Flow decisions to use | `[]` |
 | `identity` | `Optional Identity` | Stable meibo principal whose authority the agent will use | `None` |
 | `memory` | `MemoryPolicy` | Recall scope, recall bound, and automatic recording policy | agent scope, 10 results, record on success |
@@ -299,3 +301,20 @@ $ cabal run shikigami -- validate agents/triage-note.dhall
 A typed Dhall error points at the exact field that doesn't conform — the schema is your
 spec. To see what a behavior actually produces without a database, use `run-behavior` (see
 **[Getting Started](./getting-started.md)**).
+
+## Assignment execution and harness policy
+
+`execution = Some { defaultAlias = "worker", permittedAliases = [ "worker" ] }`
+selects aliases from the operator's `behavior.decisionModels` catalog for a whole
+assignment. Admission intersects declaration permissions, delegation restrictions,
+operator entries and any sanctioned profile. The accepted binding retains exact
+provider/model/options and catalog revision; changing defaults does not retarget
+pending work. A missing retained binding refuses rather than falling back.
+`decisionModels` remains the separate allow-list for typed Flow decision slots.
+
+The optional `harness` record narrows model turns, output repair, safe recovery,
+context, permission lifetime and summary ceilings, and adds denied/human tools.
+See [execution policies](../operations/durable-execution.md) for a complete Dhall
+example, ranges and output requirements. Neither field grants tools or external
+authority. [CoordinatingSkill](behaviors.md#coordinatingskill--admitted-worker-control)
+additionally requires a trusted admitted coordination scope.

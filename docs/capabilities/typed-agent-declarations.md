@@ -46,3 +46,12 @@ Start with [Writing Agents](../user/writing-agents.md), then run `shikigami vali
 Parsing does not establish executability or authorization. `Deterministic` is accepted by the schema but its runner returns `UnsupportedBehavior`. `ShikumiProgram` enrichment, grounding, and `enabledBy` fields are metadata unless the selected program implements them.
 
 The available implementation is unreleased. No Shikigami release tags or published releases were present when this catalog was authored; the Cabal package version alone does not establish a released compatibility promise.
+
+## Assignment policy additions
+
+The canonical declaration also exposes `execution` and `harness`, documented in
+[Writing agents](../user/writing-agents.md). They support
+[assignment selection](assignment-execution-selection.md) and
+[recoverable Skill execution](recoverable-skill-execution.md). `CoordinatingSkill`
+requires an admitted scope for [worker control](continuing-worker-primitives.md);
+its declaration alone creates no authority.

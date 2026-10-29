@@ -371,15 +371,16 @@ not claim a verb-specific outcome; nothing at that layer can observe one.
 ## What is mounted but has no target here
 
 `outbox dead-letters list` requires `--dispatcher NAME`, naming a process-manager
-or router dispatcher. Shikigami has neither — it has no aggregate, read model,
-projection, router, or process manager of its own — so there is no dispatcher to
-name and nothing for this verb to report. It is present because the Keiro tree
+or router dispatcher. Shikigami has no process-manager or router dispatcher registered, so there
+is no dispatcher to name. Its RunEvidence, execution and worker-session aggregates
+and query models do not create such a dispatcher. It is present because the Keiro tree
 mounts whole, not because it answers a question here.
 
-The same caution applies generally to `projection`, `shard`, `snapshot`,
-`stream`, `inbox`, and `rebuild`: they operate Keiro machinery, and where this
-service does not use that machinery, they will have nothing to say. That is not a
-malfunction.
+The mounted `projection`, `shard`, `snapshot`, `stream`, `inbox` and `rebuild`
+commands operate Keiro machinery. Shikigami registers application projection
+catalogs; use their owning APIs and preserve-only operations. Rich execution,
+worker-session and evidence payloads cannot be reconstructed from compact lifecycle
+events. See [the domain inventory](../architecture/shikigami-domain-inventory.md).
 
 
 ## Related documents

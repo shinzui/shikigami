@@ -190,7 +190,7 @@ and worker implementations could not honestly satisfy the dependency graph, whic
 `shikigami-agent` is not a counterexample and not a utility package. The objection to
 `shikigami-cli` was that it depended on `shikigami-api`, `shikigami-core`,
 `shikigami-server`, **and** `shikigami-workers` at once, so it sat above every other package
-and its one binary linked all of them. `shikigami-agent` depends only on `shikigami-core`: it
+and its one binary linked all of them. `shikigami-agent` depends on `shikigami-core` and the migration startup library: it
 is a lighter leaf under the domain, not a lid over the graph. The distinguishing rule is
 enforced — `Shikigami.PackageArchitectureSpec` fails if any executable in any package depends
 on a sibling library other than its own package's.
@@ -226,8 +226,8 @@ it, because the coupling was inside a package rather than between two.
 - Operation ids are stable and deterministic. `ToSchema` / `ToParamSchema` instances are
   wire-accurate, including explicit `additionalProperties` for opaque `Value` and
   `oneOf` for hand-written tagged unions.
-- Relay keyset pagination is required for any public list endpoint. This plan introduces
-  none.
+- Relay keyset pagination is required for public list endpoints. The agent catalog
+  and HTTP run acceptance history implement it; see [the HTTP guide](../user/http-api.md).
 
 Regenerate and verify with:
 
@@ -245,7 +245,8 @@ handshake runs before telemetry, pools, catalog registration and listeners. Core
 no production sibling dependency. The migration executable remains independently
 configured and never imports the application roles.
 
-Core owns the complete three-family workflow registry and retention policy. Workers
+Core owns the complete workflow registry and retention policy, including agent runs,
+approvals, conversations, execution drivers and continuing worker sessions. Workers
 own the continuous runners, bounded resume command, shared timer dispatcher and hourly
 terminal GC. The server mounts lifecycle replay audit and preserve-only catalog
 operations; its embedded resume hook remains absent because its effects do not match
@@ -254,3 +255,15 @@ Kioku's resource-aware workflows.
 ## Foreground Baikai launch boundary (plan 80)
 
 `shikigami-agent` also owns `shikigami-agent-launch`, its interactive resolver and the mounted public Baikai unattended command tree. Direct vendor/agent dependencies remain at that composition leaf. The shared HTTP response builder and pure request compatibility check live in `shikigami-core`; workers and server reuse them. Foreground process results do not replace durable behavior Responses. [ADR 0040](../adr/0040-response-options-and-foreground-launches-have-separate-authority.md) records this boundary.
+
+## Execution and continuing-work ownership
+
+Core owns root accounting, immutable execution selection, protected transcripts,
+accepted operations, continuing-session state, coordination commands and repository
+catalog validation. Workers compose submit/observe executors, workflow runners,
+durable event waits and timer recovery. Server owns bounded metadata inspection
+through `resources`, `executions` and `workers`; API/client packages retain the
+implemented agent/run HTTP contract. Objective API/CLI routes remain planned in
+MasterPlan 17. The pure repository catalog does not allocate worktrees or install
+mutation providers. See [the current domain inventory](shikigami-domain-inventory.md)
+and [capability census](../capabilities-coverage.md).

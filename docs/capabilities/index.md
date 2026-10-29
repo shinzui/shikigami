@@ -11,7 +11,9 @@ okf_version: "0.2"
 - [Addressed durable conversations](addressed-conversations.md) - Consume addressed messages, preserve conversation turns, and rotate a durable workflow generation after every reply.
 - [Advisory practice-review orchestration](advisory-practice-review.md) - Run a registered advisory review flow with pinned evidence contracts, validated verdicts, review memory, and deduplicated attention.
 - [Agent memory and sessions](agent-memory-and-sessions.md) - Recall prior agent learnings and record session outcomes with configurable automatic memory policy.
+- [Governed assignment execution selection](assignment-execution-selection.md) - Admit and retain exact provider, model and option bindings for whole assignments.
 - [Authorized sink delivery and outbox](authorized-sink-outbox.md) - Dispatch declared external outputs with permission checks, durable intents, retry classification, and delivery receipts.
+- [Continuing worker session primitives](continuing-worker-primitives.md) - Retain ordered assignments, results and event cursors and admit scoped worker control with conditional ownership.
 - [Database migrations and bootstrap](database-migrations-and-bootstrap.md) - Apply a dependency-ordered database plan, reconcile memory read models, and refuse incompatible migration history at runtime startup.
 - [Declared-agent HTTP catalog](declared-agent-http-catalog.md) - Discover boot-loaded declarations and current lifecycle admission through authenticated HTTP, Relay pages, and a typed client.
 - [Durable agent runs and Flows](durable-agent-flows.md) - Resume agent lifecycles and compiled Haskell Flows from journaled steps after suspension or restart.
@@ -27,7 +29,10 @@ okf_version: "0.2"
 - [Local integration fixtures](local-integration-fixtures.md) - Exercise activity intake and sink HTTP contracts with fixture publication, authenticated local stubs, and an outbound conversation probe.
 - [Principal lifecycle and continuity](principal-lifecycle-and-continuity.md) - Gate runs on a validated directory snapshot and preserve principal-based memory and grants across presentation renames.
 - [Program and Skill execution](program-and-skill-execution.md) - Execute registered programs or instruction-directory Skills and return JSON, with a bounded tool loop for Skills.
+- [Recoverable Skill execution](recoverable-skill-execution.md) - Retain protected model and tool operations, compose bounded harness policies and recover accepted durable work.
+- [Repository catalog admission](repository-catalog-admission.md) - Resolve only operator-approved canonical repository identities and immutable base revisions.
 - [Revision-pinned tool overlays](revision-pinned-tool-overlays.md) - Resolve additive Skill tools against an operator catalog, acquire exact-revision leases, and release them on every exit.
+- [Root resource accounting](root-resource-accounting.md) - Reserve root-wide time, capacity, token and cost allowances across descendants and retain uncertain usage.
 - [Run evidence and compliance records](run-evidence-and-compliance.md) - Collect correlated call evidence, evaluate execution compliance, and persist a checked lifecycle with guarded queries.
 - [Sanctioned execution profile pinning](sanctioned-execution-profiles.md) - Resolve an immutable execution policy before a run and retain its exact provider, model, and option constraints on replay.
 - [Typed agent declarations](typed-agent-declarations.md) - Load typed Dhall manifests with identity, behavior, triggers, sinks, memory, delegation, and overlay policy.

@@ -1,5 +1,15 @@
 # Bundle Update Log
 
+## 2026-10-29
+
+* **Addition**: CAP-26 through CAP-30 document root accounting, immutable assignment
+  selection, protected recoverable Skill execution, continuing-session primitives
+  and pure repository admission. Plan 84 and real-provider limits remain explicit.
+* **Correction**: Recount all 226 public modules, twelve executables and fourteen
+  administrative families. Remove the obsolete planned-harness claim in CAP-3.
+* **Evidence**: Inspect implementation, public declarations and focused test sources.
+  Runtime tests were not rerun and independent review is not claimed.
+
 ## 2026-10-25
 
 * **Addition**: CAP-21 documents governed typed Flow decisions, immutable model

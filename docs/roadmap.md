@@ -1,143 +1,144 @@
 # Shikigami roadmap
 
-Portfolio audit date: 2026-09-21; IR-12 and IR-13 added 2026-09-26; IR-12 completed 2026-10-25; IR-13 accepted 2026-10-28.
+Refreshed 2026-10-29 against the working tree (audit started at `ac971c3`), Cabal
+manifests, domain declarations and plan Progress/Outcomes. Existing uncommitted
+plan refinements are included as design context; they do not imply implementation.
+See the [HTML roadmap](artifacts/roadmap.html),
+[engineer onboarding map](artifacts/shikigami-engineer-onboarding.html) and
+[adaptive delivery guide](artifacts/adaptive-autonomous-objectives.html).
 
-Architecture and delivery decision view: [HTML roadmap](artifacts/roadmap.html).
+## Current delivery boundary
 
-The 2026-09-21 portfolio audit reconciled `docs/reviews`, `docs/improvement-requests`,
-`docs/masterplans`, and `docs/plans` against their progress records, Git history, and the
-repository tree. The request table records IR-12 completion on 2026-10-25; portfolio counts remain the historical audit snapshot. A plan
-is complete only when its own outcomes and evidence support completion. A review outcome remains
-historical evidence about its `reviewedSha`; the disposition below says whether later work has
-answered it.
+Implemented: typed Flow decisions and actual-attempt evidence (plans 73–76),
+authenticated HTTP agent discovery and idempotent run acceptance/status/history
+(plans 88–91), root resource accounting (81), immutable assignment model selection
+(82) and protected durable Skill operation/transcript recovery (83). Continuing
+workers retain ordered assignments, results, events and governed command mechanics
+under plan 84, which remains in progress. Pure repository catalog admission is
+implemented under plan 96; it does not allocate worktrees or permit mutation.
+
+Full autonomous coding delivery remains gated on real workspace fences (96),
+objective/checkpoint providers (MasterPlan 17), validated adaptive coordination
+(85), integrated qualification (86), and optional recurring supervision (87).
+The default operator host refuses commands requiring those missing providers.
+Fixtures prove consumer mechanics, not full production delivery.
+
+The configured cohort is Keiro 0.18 at the October 6 snapshot. MasterPlan 16's
+0.22 upgrade is planned, with no completed implementation milestone. See
+[dependency cohort](dependency-cohort.md) and the
+[domain inventory](architecture/shikigami-domain-inventory.md).
 
 ## Portfolio snapshot
 
-| Corpus | Complete or resolved | In progress or open | Not started or proposed |
-| --- | ---: | ---: | ---: |
-| MasterPlans | 8 | 4 | 0 |
-| ExecPlans | 60 | 3 | 8 |
-| Improvement requests | 3 | 2 | 8 |
-| Change-requesting reviews | 1 resolved | 4 open | — |
-
-The completed MasterPlans are 1 through 5, 8, 11, and 12. The active coordination documents are:
+This audit covers the 17 coordinated MasterPlans (1–17) and 102 ExecPlan files. Ten MasterPlans are complete:
+1–5, 8, 11–13 and 15. The seven remaining coordination documents are below.
+Plan 97 is a superseded design, replaced by MasterPlan 17 and plans 98–102;
+it is not a second objective implementation lane. Counts describe artifacts,
+not feature readiness or effort percentages.
 
 | MasterPlan | Current state | Remaining work |
 | --- | --- | --- |
-| [6 — Operations and observability](masterplans/6-operations-and-observability-run-shikigami-as-a-real-service.md) | 3 of 4 children complete | Plan 31: deployable service stack |
-| [7 — Platform feature completion](masterplans/7-platform-feature-completion-egress-schema-memory-lifecycle-delegation.md) | 3 of 5 children complete | Plan 34: memory lifecycle; plan 12: MCP declarations/runtime |
-| [9 — Architecture-practice review flow](masterplans/9-architecture-practice-review-flow.md) | Core implementation landed; closeout is not trustworthy yet | Plans 60 through 63, then close plan 46 |
-| [10 — Sanctioned execution attestation](masterplans/10-sanctioned-execution-attestation-for-agent-runs.md) | 3 of 4 children complete | Plan 52: signing, read API, verifier, UC-8 proof |
+| [6](masterplans/6-operations-and-observability-run-shikigami-as-a-real-service.md) | 3 of 4 children complete; plan 31 in progress | Full service stack and drain proof |
+| [7](masterplans/7-platform-feature-completion-egress-schema-memory-lifecycle-delegation.md) | 3 of 5 complete | Plan 34 memory lifecycle and plan 12 MCP-specific integration |
+| [9](masterplans/9-architecture-practice-review-flow.md) | 3 of 4 complete; plan 46 partial | Safety and closeout plans 60–63, then plan 46 acceptance |
+| [10](masterplans/10-sanctioned-execution-attestation-for-agent-runs.md) | 3 of 4 complete | Plan 52 shared signed envelope, read API/verifier and live proof |
+| [14](masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) | 3 of 7 complete; plan 84 in progress | Real providers, adaptive coordination, integrated proof and optional recurrence |
+| [16](masterplans/16-upgrade-shikigami-to-keiro-0-22-and-retire-superseded-runtime-workarounds.md) | 0 of 4 complete | Plans 92–95: released solve, migration, guarded commands, patterns and replay rollout |
+| [17](masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md) | 0 of 5 complete | Plans 98–102: authoritative objectives, trusted providers, API/CLI, durable capabilities and no-Rei qualification |
 
-## Priority order
+## Delivery order and gates
 
-### Local qualification workload — 2026-10-06
+Practice-review safety remains first: plans 60/61 fix attention reservation and
+resolver entitlement; plans 62/63 make closeout and conformance truthful before
+plan 46 closes. Production evidence acquisition still depends on
+`mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5`.
 
-[Plan 79](plans/79-qualify-local-agent-execution-and-prioritize-production-readiness.md)
-has fresh successful Cabal build, regression, migration and workflow checks; four
-immutable roles and installed reporter assets pass at `685a410`, and the live workload
-is blocked. Use the corrected at-risk fixture revision for host deployment. The operator
-confirmed that the required integration services are not running. Start PostgreSQL 18,
-Shomei and Kikan-En first, then a test Kawa destination with a real response provider,
-then test Danwa and Kizashi for durable human waits. [Plan 80](plans/80-configure-model-providers-and-agent-launches-through-baikai.md)
-extends the existing Baikai builder to selectable HTTP/CLI transports and foreground
-launches. HTTP and foreground launch integration are implemented; Codex/Claude batch login
-for the reporter awaits an upstream released descendant-cancellation fix;
-Anthropic API credentials are needed only when choosing Anthropic HTTP. Configure real trust and grants
-before protected delivery. Kafka and Kubernetes are not prerequisites for this workload.
+For adaptive delivery, continue the real-provider contracts alongside plan 84:
+plan 96 owns actual repository process fencing; MasterPlan 17 owns authoritative
+objective/assignment state, trusted associations and checkpoint/ownership/scope
+providers. Plan 99 consumes the real fence for positive handoff qualification.
+Do not close plan 84 or IR-15 from deterministic adapter evidence. Plans 85/86
+consume these contracts; plan 87 adds explicitly admitted recurring mandates.
+No objective CLI or HTTP endpoint is shipped yet.
 
-The [readiness report](evidence/local-qualification/readiness.md) records observed
-failures, successful retries, remaining scenario gates and separate production gates.
-This workload order does not enable practice review: plans 60/61 remain prerequisites
-for that feature. IR-14 is next only when crash evidence or the selected workload
-requires individual model/tool-turn recovery.
+MasterPlan 16 independently owns the Keiro 0.22 upgrade. Retain the current
+cohort, late-write rollback protections, queue upcasters and protected live-only
+payloads until its replacement contracts and old/new replay proof pass.
 
-### P0 — Correctness and authorization defects
+Plan 31 has delivered immutable role builds and installed assets, but its full
+process-compose/NixOS/graceful-drain scope remains open. Plan 79's installed
+reporter qualification is partial; the last recorded live workload is blocked
+on integration services. Plan 80 delivers HTTP providers and foreground launches;
+background CLI response promotion remains gated on released cancellation support.
+These historical live-service observations have not been re-probed by this audit.
 
-Implement [plan 60](plans/60-harden-practice-review-attention-reservation-and-specialist-failure-boundaries.md)
-and [plan 61](plans/61-enforce-practice-review-resolver-entitlement-and-harden-the-authorization-envelope.md)
-first. REV-2 identifies a replay path that can permanently reserve attention without an outbox
-message. REV-4 identifies a resolution boundary that authenticates a subject without proving that
-subject is entitled to resolve the review, and the credential wrapper still derives `Show`.
-Both findings still exist in the current source.
+Plan 52 still depends on the shared envelope contract at
+`mori://shinzui/kikan/okf/improvement-requests/concepts/IR-6` and live-provider proof.
+Memory plan 34 and MCP plan 12 now define staged contract/fixture gates; follow
+their current plans rather than the older recommendation to decompose them again.
+Read-only Kubernetes observation (77) and external jobs (78) are separate planned
+surfaces, not prerequisites for every autonomous workload.
 
-### P1 — Make the practice-review feature's claims true
+## Open implementation and qualification work
 
-Implement [plan 62](plans/62-make-the-practice-review-closeout-and-operator-documentation-true.md)
-and [plan 63](plans/63-extend-practice-review-conformance-to-the-claimed-end-to-end-matrix.md),
-then revise and close [plan 46](plans/46-orchestrate-review-delivery-and-end-to-end-conformance.md).
-This closes REV-1 and REV-7, adds the missing profile provisioning/operator path, and makes the
-claimed conformance matrix observable. IR-4 remains `in-progress` until this wave is complete.
-The production evidence reader still depends on
-`mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5`, which remains proposed; keep the
-fail-closed unresolved behavior until that contract ships.
+| Plan | Current state and remaining gate |
+| --- | --- |
+| [8](plans/8-conversational-agent-loop-bound-to-danwa.md) | Implementation landed; legacy live Danwa validation remains |
+| [12](plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md) | Not started; staged MCP provider/catalog and external contract gates |
+| [31](plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md) | In progress; packaging slice landed, full stack and drain proof remain |
+| [34](plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md) | Not started; staged memory contracts/fixtures and bounded recall/retention gates |
+| [46](plans/46-orchestrate-review-delivery-and-end-to-end-conformance.md) | In progress; plans 60–63 gate truthful closeout |
+| [48](plans/48-add-a-portable-one-off-repository-agent-harness.md) | Partial portable harness; mutable/command slices remain; separate from durable plan 96 |
+| [52](plans/52-signed-attestation-read-api-and-uc-8-conformance.md) | Not started; shared signed envelope and live-provider proof |
+| [60](plans/60-harden-practice-review-attention-reservation-and-specialist-failure-boundaries.md) | Not started; atomic attention/outbox and specialist failure boundaries |
+| [61](plans/61-enforce-practice-review-resolver-entitlement-and-harden-the-authorization-envelope.md) | Not started; resolver entitlement and credential handling |
+| [62](plans/62-make-the-practice-review-closeout-and-operator-documentation-true.md) | Not started; provisioning/operator path and closeout |
+| [63](plans/63-extend-practice-review-conformance-to-the-claimed-end-to-end-matrix.md) | Not started; complete claimed conformance matrix |
+| [77](plans/77-add-a-read-only-k8s-observe-capability-provider-for-durable-agents.md) | Not started; bounded read-only Kubernetes provider |
+| [78](plans/78-run-external-operations-from-durable-flows-through-idempotent-shiki-jobs.md) | Not started; external executor, authorization and crash contracts |
+| [79](plans/79-qualify-local-agent-execution-and-prioritize-production-readiness.md) | Partial packaging qualification; live workload/fault/human-wait gates remain |
+| [80](plans/80-configure-model-providers-and-agent-launches-through-baikai.md) | HTTP/foreground delivered; background CLI response qualification remains |
+| [84](plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) | In progress; real checkpoint/workspace providers and runtime qualification remain |
+| [85](plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) | Not started; validated adaptive coordination |
+| [86](plans/86-qualify-integrated-adaptive-autonomous-delivery.md) | Not started; combined artifacts, actual checks and live finite coding proof |
+| [87](plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md) | Not started; recurring mandate admission and current-checkpoint supervision |
+| [92](plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md) | Not started; 0.22 solve and composed migration |
+| [93](plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md) | Not started; guarded commands and DSL consumer contracts |
+| [94](plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md) | Not started; runtime lifecycle and bounded operator integration |
+| [95](plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md) | Not started; old/new replay, artifacts and rollout closure |
+| [96](plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) | In progress; pure admission landed, durable workspaces/mutation/fencing remain |
+| [98](plans/98-persist-authoritative-objectives-and-conditional-commands.md) | Not started; authoritative objective persistence and conditional commands |
+| [99](plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md) | Not started; trusted associations and actual checkpoint/ownership/scope providers |
+| [100](plans/100-expose-governed-objective-inspection-through-the-api-and-cli.md) | Not started; governed objective API/CLI inspection |
+| [101](plans/101-make-objective-capabilities-durable-for-agents-and-conversations.md) | Not started; durable objective capabilities for agents/conversations |
+| [102](plans/102-qualify-no-rei-objective-continuity-and-close-ir-13.md) | Not started; integrated no-Rei continuity and request closeout |
 
-### P2 — Make the runtime deployable and externally consumable
+## Improvement-request lifecycle and implementation coverage
 
-Implement [plan 31](plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md).
-Its prerequisites are now complete, and it is the only unfinished child of MasterPlan 6. It also
-unblocks the remaining portable-harness work in
-[plan 48](plans/48-add-a-portable-one-off-repository-agent-harness.md).
+Lifecycle below mirrors existing request metadata, which is not rewritten in this
+pass. An accepted request may already have completed implementation slices; its
+lifecycle does not replace plan-level progress.
 
-In the same planning horizon, create a coordinated plan for IR-8 and IR-10: the public addressed-run
-command and terminal run-status query must share one stable run identifier and lifecycle contract.
-Do this before IR-11, because governed mutable workspaces need a supported way for Mori to start a
-durable run and observe its terminal result.
-
-### P3 — Finish sanctioned execution attestation
-
-[Plan 52](plans/52-signed-attestation-read-api-and-uc-8-conformance.md) is the last child of
-MasterPlan 10 and completes IR-7. Its local prerequisites are complete, but the shared envelope
-contract at `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-6` remains proposed and the
-positive live-provider proof needs credentials. Prioritize cross-repository contract ratification;
-do not freeze another local wire format while that shared decision is open.
-
-### P4 — Feature breadth after the service boundary is stable
-
-Resume [plan 34](plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md) and
-[plan 12](plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md) selectively. Plan 34 can
-start its distillation and shared-scope slices, but its bounded recall and retention work still
-depends on `mori://shinzui/kioku/okf/improvement-requests/concepts/IR-2`. Plan 12 can deliver its
-schema and registry seam, but live MCP work remains blocked on the proposed Baikai, Shikumi, and
-Kikan-En requests named in the plan.
-
-IR-2 (cross-cluster diagnostics), IR-5 (governed evolution), and IR-6 (A2A interoperability) have
-no accepted Shikigami delivery plan. Keep them proposed until a product decision accepts, rejects,
-or sequences them; do not let their size obscure the correctness and service-boundary work above.
-
-## Open ExecPlans
-
-| Plan | Status | Recommendation |
+| Request | Recorded lifecycle | Current coverage |
 | --- | --- | --- |
-| [8 — Danwa conversation loop](plans/8-conversational-agent-loop-bound-to-danwa.md) | In progress; implementation landed, two legacy validation items remain | Re-verify against the current Danwa event path or explicitly supersede the old manual proof |
-| [12 — Per-agent MCP servers](plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md) | Not started; partly locally startable, live path externally blocked | Split local schema/seam work from blocked runtime work before implementation |
-| [31 — Deployable service stack](plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md) | Not started; prerequisites complete | Start after P0/P1, before plan 48 |
-| [34 — Memory lifecycle](plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md) | Not started; mixed local and external scope | Split or stage around the Kioku IR-2 dependency |
-| [46 — Review orchestration](plans/46-orchestrate-review-delivery-and-end-to-end-conformance.md) | In progress; core landed, reviewed closeout has gaps | Close only after plans 60–63 |
-| [48 — Portable repository-agent harness](plans/48-add-a-portable-one-off-repository-agent-harness.md) | In progress; 3 of 10 progress items complete | Resume after plan 31; align with IR-11 rather than inventing a second workspace contract |
-| [52 — Signed attestation and UC-8](plans/52-signed-attestation-read-api-and-uc-8-conformance.md) | Not started; local prerequisites complete, shared contract open | Coordinate Kikan IR-6, then implement |
-| [60 — Attention and specialist boundaries](plans/60-harden-practice-review-attention-reservation-and-specialist-failure-boundaries.md) | Not started | P0 |
-| [61 — Resolver entitlement](plans/61-enforce-practice-review-resolver-entitlement-and-harden-the-authorization-envelope.md) | Not started | P0 |
-| [62 — Truthful closeout and operator docs](plans/62-make-the-practice-review-closeout-and-operator-documentation-true.md) | Not started | P1 |
-| [63 — Claimed conformance matrix](plans/63-extend-practice-review-conformance-to-the-claimed-end-to-end-matrix.md) | Not started | P1 |
-
-## Improvement-request status
-
-| Request | Status | Evidence or next decision |
-| --- | --- | --- |
-| IR-1 — Meibo lifecycle and fleet identity | Completed | Plan 23 |
-| IR-2 — Cross-cluster diagnostics | Proposed | No accepted Shikigami plan |
-| IR-3 — Declarative router agents | Completed | MasterPlan 8, plans 40–42 |
-| IR-4 — Architecture-practice review flow | In progress | Plans 43–46 landed in part; plans 60–63 remain |
-| IR-5 — Governed agent evolution | Proposed | No accepted Shikigami plan |
-| IR-6 — A2A interoperability | Proposed | No accepted Shikigami plan |
-| IR-7 — Sanctioned execution attestation | In progress | Plans 49–51 complete; plan 52 remains |
-| IR-8 — Addressed runs over HTTP | Proposed | Needs coordinated plan with IR-10 |
-| IR-9 — Principal-keyed continuity and attribution | Completed | Plan 54 |
-| IR-10 — Terminal run status over HTTP | Proposed | Depends on IR-8's run identity |
-| IR-11 — Governed mutable repository workspaces | Proposed | Sequence after IR-8/IR-10 and with plan 48 |
-| IR-12 — Shikumi decisions in durable Flows | Completed | [MasterPlan 13](masterplans/13-compose-shikumi-decisions-in-durable-flows.md), plans 73–76: typed two-model composition, retained replay, durable attempts and patch-safe evolution |
-| IR-13 — Optional major-task tracking without Rei | Accepted | [MasterPlan 17](masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md), plans 98–102: Shikigami-owned objective store, real checkpoint providers, API/CLI, durable capabilities; not started |
+| [IR-1](improvement-requests/consult-meibo-agent-lifecycle.md) | completed | Plan 23 |
+| [IR-2](improvement-requests/authorized-cross-cluster-diagnostic-tools.md) | proposed | Cross-cluster scope remains proposed; plan 77 is narrower |
+| [IR-3](improvement-requests/add-declarative-router-agents.md) | completed | MasterPlan 8 |
+| [IR-4](improvement-requests/add-architecture-practice-review-flow.md) | in-progress | Plans 43–45 complete; plan 46 and plans 60–63 remain |
+| [IR-5](improvement-requests/governed-agent-evolution.md) | proposed | No accepted implementation lane |
+| [IR-6](improvement-requests/support-a2a-cross-runtime-agent-interoperability.md) | proposed | No accepted implementation lane |
+| [IR-7](improvement-requests/attest-sanctioned-agent-execution.md) | in-progress | Plans 49–51 complete; plan 52 remains |
+| [IR-8](improvement-requests/expose-addressed-agent-runs-over-http.md) | completed | MasterPlan 15 complete |
+| [IR-9](improvement-requests/key-agent-continuity-by-meibo-principal.md) | completed | Plan 54 |
+| [IR-10](improvement-requests/expose-agent-run-status-over-http.md) | completed | MasterPlan 15 complete |
+| [IR-11](improvement-requests/provide-governed-mutable-repository-workspaces.md) | in-progress | Plan 96 in progress: pure catalog admission only |
+| [IR-12](improvement-requests/compose-shikumi-decisions-in-durable-flows.md) | completed | MasterPlan 13 complete |
+| [IR-13](improvement-requests/support-optional-major-task-tracking.md) | accepted | MasterPlan 17 accepted: plans 98–102 not started; plan 97 superseded |
+| [IR-14](improvement-requests/record-durable-model-tool-turns-and-compose-harness-policies.md) | accepted | Plan 83 complete; follow-up/integrated acceptance remains in 84/86 |
+| [IR-15](improvement-requests/support-continuing-worker-sessions.md) | accepted | Plan 84 partial; real providers gate completion |
+| [IR-16](improvement-requests/support-adaptive-durable-orchestration.md) | accepted | Plan 81 complete; adaptive/integrated plans 85/86 remain |
+| [IR-17](improvement-requests/select-governed-models-for-agent-runs.md) | accepted | Plan 82 complete; later adaptation/integration remains |
+| [IR-18](improvement-requests/support-recurring-objective-supervision.md) | accepted | Plan 87 not started |
 
 ## Review disposition
 
@@ -152,9 +153,11 @@ or sequences them; do not let their size obscure the correctness and service-bou
 | REV-7 — User guide | Changes requested | Open; plans 61 and 62 not started |
 | REV-8 — Improvement-request corpus | Changes requested | Resolved locally by plan 64 on 2026-09-21; Mori still lacks conventional plan-artifact URI coverage |
 
-## Status maintenance rule
+## Status maintenance
 
-When an ExecPlan completes, update its parent MasterPlan registry and aggregate Progress in the
-same change. When an improvement request changes lifecycle, update its frontmatter, Status prose,
-bundle log, and review provenance together. Never rewrite a historical review outcome to describe
-later work; add a new review or update this disposition ledger instead.
+Keep child Progress/Outcomes, parent registry and summary documents consistent.
+Mark completion only when acceptance evidence supports it. Historical reviews
+remain evidence about their reviewed revision; later fixes change disposition,
+not the original review outcome. Maintain generated OKF indexes through the
+bundle recipes. Runtime tests were inspected as documentation evidence and were
+not rerun by this documentation pass.

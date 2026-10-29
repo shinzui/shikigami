@@ -7,6 +7,20 @@
 > for current behavior, package boundaries, and migration qualification.
 
 
+## Current reading order — 2026-10-29
+
+Use [the roadmap](../roadmap.md) for current cross-plan status. MasterPlans 13 and
+15 are complete; MasterPlan 14 has completed plans 81–83 and an in-progress plan
+84. Plans 85–87 remain unimplemented. MasterPlan 16 (Keiro 0.22) and MasterPlan 17
+(objectives/checkpoints) are planned; plan 96 has only repository catalog admission.
+The configured runtime remains Keiro 0.18. This supersedes historical counts,
+registry-precedence advice and compatibility assumptions below. Workflow changes
+follow [workflow versioning](../workflow-versioning.md), regardless of whether the
+August assessment assumed there were no live users. Preserve dated analysis as
+historical context; it is not authorization to remove replay safety.
+
+## Historical August assessment
+
 Reviewed **2026-08-26** after plans 41, 42, 32, 14, and 45 landed, superseding the post-delivery
 2026-08-23 review. Goal of this revision: recognize the declarative-router initiative and the
 production-completion lane as complete; move MasterPlan 9 to the front of the remaining service
@@ -59,7 +73,7 @@ obsoleted by a released `keiro-ops`, and plan 20 found three more decayed premis
 implementation than its own pre-implementation refresh had caught. The instruction stands and is
 widened in [Citation rot](#citation-rot-re-measured).
 
-`docs/architecture/implementation-order.html` renders the 2026-08-05 state and is **stale**.
+The current visual decision view is [the roadmap artifact](../artifacts/roadmap.html).
 
 
 ## The open set

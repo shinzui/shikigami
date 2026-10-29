@@ -1,5 +1,12 @@
 # Bundle Update Log
 
+## 2026-10-29
+
+* **Correction**: Reconcile UC-1 with completed plans 73–76 and 81–83, partial plan 84,
+  pure plan-96 admission and MasterPlan 17's planned objective/checkpoint providers.
+  Update feature states and ownership while retaining draft end-to-end status.
+  Request metadata is unchanged; acceptance claims still require integrated proof.
+
 ## 2026-10-10
 * **Adoption**: Adopt the `jtbd-use-cases` profile (`coordination.useCases`) from https://raw.githubusercontent.com/shinzui/okf-profiles/v0.20.0/package.dhall.
 * **Addition**: UC-1 describes adaptive autonomous delivery with jobs, feature states,

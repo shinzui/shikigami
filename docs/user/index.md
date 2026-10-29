@@ -25,7 +25,7 @@ okf_version: "0.2"
 
 # Reference
 
-- [Behaviors — what an agent does](behaviors.md) - Compare deterministic, ShikumiProgram, Skill, and Flow behavior declarations.
+- [Behaviors — what an agent does](behaviors.md) - Compare deterministic, ShikumiProgram, Skill, CoordinatingSkill, and Flow behavior declarations.
 - [CLI Reference](cli.md) - Look up Shikigami commands, options, and database recipes.
 - [Sinks — what an agent produces](sinks.md) - Look up sink declarations, delivery behavior, and permission requirements.
 - [Triggers — when an agent fires](triggers.md) - Look up schedule, stream, and addressed-event triggers and their feedback guards.

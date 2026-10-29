@@ -15,8 +15,8 @@ $ shikigami-worker --describe-config
 
 If this document and that output ever disagree, the output is right.
 
-`shikigami-openapi` has no configuration parser. `shikigami-client` accepts only
-its own `health [--server URL]` command and does not consume `AppConfig`. The migration executable
+`shikigami-openapi` has no configuration parser. `shikigami-client` has its own health, agent-catalog and run command parser,
+including `--server`, `--token` and `SHIKIGAMI_API_TOKEN`; it does not consume `AppConfig`. The migration executable
 `shikigami-migrate` reads `DATABASE_URL` itself. See
 [The two exceptions](#the-two-exceptions) below.
 
@@ -517,3 +517,19 @@ probes remain public. The typed client accepts a global `--token TOKEN`, with
 `SHIKIGAMI_API_TOKEN` as its runtime fallback; help never includes that value.
 Authentication identifies a caller; this setting does not define per-agent
 permissions. Credential rotation requires a server restart.
+
+## Durable execution and coordination settings
+
+`behavior.harness` (`SHIKIGAMI_BEHAVIOR_HARNESS`) is a checked JSON policy; agent
+`harness` declarations may narrow it. See [durable execution](durable-execution.md)
+for defaults, ranges, recovery and human permission semantics. The shared
+`behavior.decisionModels` catalog also supplies immutable whole-assignment model
+bindings selected by a declaration's `execution.defaultAlias` and
+`execution.permittedAliases`; see [agent declarations](../user/writing-agents.md).
+These are distinct from per-slot Flow `decisionModels` permissions.
+
+Root resource envelopes and continuing-worker scopes are supplied by trusted
+admission APIs, rather than arbitrary process settings. The default operator host
+has no real objective/checkpoint or workspace fencing provider. No configuration
+flag alone enables those providers. See [worker operations](operator-cli.md) and
+[the roadmap](../roadmap.md) for the owning delivery gates.

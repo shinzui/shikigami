@@ -32,8 +32,9 @@ expiry never releases uncertain effects. Do not delete resource rows because a
 workflow is terminal or its journal has passed the workflow retention window.
 
 For rollout, apply the additive migration with the dedicated migration role.
-Upgrade workers before producers: the new application queue codec writes
-version 2 and accepts retained version 1 messages through an upcaster. Version
+Upgrade workers before producers: the resource rollout introduced application input
+version 2. The current codec writes version 4 and retains v1/v2/v3 readers; later
+versions add execution selection and accepted-operation references. Version
 1 inputs remain unchanged and unenrolled. Stop all old workflow writers before
 enrolling resource roots. Resume using the shared workflow options containing
 `shikigami-execution-resources-v1`; historical journals retain their old branch.

@@ -1,5 +1,12 @@
 # Bundle Update Log
 
+## 2026-10-29
+
+* **Correction**: Document `execution` and `harness` manifest fields, resource/execution/
+  worker command families, retained assignment model bindings and remaining real-provider
+  gates. Link current operation guides; preserve the separate client parser and authority
+  requirements. This is documentation validation, not live runtime qualification.
+
 ## 2026-10-25
 
 * **Addition**: DOC-14 explains authenticated HTTP discovery, atomic idempotent run

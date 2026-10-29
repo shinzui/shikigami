@@ -53,3 +53,11 @@ Builds on [CAP-1: Typed agent declarations](typed-agent-declarations.md).
 Dhall selects compiled flows; it cannot load arbitrary Haskell at runtime. The lifecycle diagram is descriptive and does not own execution state. A journal records completed steps; it does not make external HTTP exactly-once or independently checkpoint every turn inside a synchronous Skill tool loop.
 
 The available implementation is unreleased. No Shikigami release tags or published releases were present when this catalog was authored; the Cabal package version alone does not establish a released compatibility promise.
+
+## Recoverable execution and continuing sessions
+
+Leaf Skill runs now await a separate [durable execution child](recoverable-skill-execution.md)
+that retains model/tool operations. [Continuing worker primitives](continuing-worker-primitives.md)
+retain assignments and results across generations. Their real checkpoint/workspace
+providers remain incomplete. Existing journal populations retain their declared
+patch branches; see [workflow versioning](../workflow-versioning.md).

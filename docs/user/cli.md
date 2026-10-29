@@ -39,6 +39,10 @@ shikigami stub-kanmon --port <PORT> [--allow-conversation <KEY>]
 shikigami agents list [--json]
 shikigami agents sync [--json] [--alias <LEGACY_NAME=agent_...>]
 shikigami runs show <WORKFLOW-NAME> <WORKFLOW-ID> [--json]
+shikigami resources inspect <ROOT> [--json]
+shikigami executions inspect <EXECUTION> [--json] [--after <POSITION>] [--limit <N>]
+shikigami workers inspect <SESSION> [--json] [--after <POSITION>] [--limit <N>]
+shikigami workers send|interrupt|cancel|transfer|reconcile|integrate ...
 ```
 
 The administrative binary also mounts Keiro's `wf`, `timer`, `outbox`, `inbox`,
@@ -366,3 +370,18 @@ against a running Danwa, not part of the runtime path.
 | `just new-migration <slug>` | scaffold a new timestamped migration file |
 
 → See [Getting Started](./getting-started.md).
+
+## Durable execution and continuing workers
+
+`resources inspect` reports root limits, held reservations, actual usage and unknown
+attempts. `executions inspect` pages accepted operation metadata (1–20 per page)
+without revealing transcript bodies. `workers inspect` pages assignments/results,
+owner epochs and pending checkpoints/handoffs. These reads require the database.
+See [resource accounting](../operations/execution-resources.md),
+[execution recovery](../operations/durable-execution.md) and the
+[operator command forms](../operations/operator-cli.md).
+
+Worker mutations require stable operation keys, fresh parent authority and the
+relevant revision/epoch. The default CLI lacks the real objective/checkpoint and
+workspace ownership providers needed for new follow-ups, integration and transfer.
+Its fixtures prove consumer mechanics; they do not enable production mutation.

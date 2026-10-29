@@ -28,6 +28,11 @@ provenance:
       at: 2026-10-28T16:49:51Z
       mode: "implement"
       note: "Start ordered continuing-session mechanics after EP-3; real IR-11 and IR-13 providers remain completion gates"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-29T13:10:20Z
+      mode: "update"
+      note: "Refresh real-provider prerequisite ownership without changing acceptance gates"
 ---
 
 # Coordinate continuing worker sessions and fenced handoffs
@@ -51,8 +56,9 @@ A coordinator can send a second assignment to the same worker, recover accepted 
 - [x] Milestone 3: Durable fenced-transfer mechanics against deterministic owners (2026-10-28); real IR-11/IR-13 qualification remains a completion gate.
 - [ ] Milestone 4: Governed Flow/Skill/operator command mechanics qualified against deterministic adapters (2026-10-28); real-provider runtime qualification remains open.
 
-Implementation started after plan 83 completed at `a0d6f2a`. IR-11 and IR-13
-remain proposed with no selected complete providers as of 2026-10-28. Build
+Implementation started after plan 83 completed at `a0d6f2a`. As of 2026-10-29, IR-11 is in progress under plan 96 (pure catalog admission
+only), and IR-13 is accepted under MasterPlan 17 / plans 98–102. Neither
+supplies a complete real provider yet. Build
 mechanics against explicit deterministic adapters; preserve both real-provider
 acceptance gates and do not claim full IR-15 delivery from those fixtures.
 

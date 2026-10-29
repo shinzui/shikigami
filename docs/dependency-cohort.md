@@ -1,4 +1,4 @@
-# Dependency cohort — September 2026
+# Dependency cohort — configured baseline and upgrade targets
 
 Shikigami builds against **one** coherent set of co-developed releases. This
 document is the contract: it names each explicitly managed cohort selection,
@@ -10,7 +10,22 @@ the cohort moves. Before plan 80, the only exact constraint was `keiro-dsl`, whi
 and so no bound ties to the runtime's Keiro release. A drift between a matrix
 row and the solver's plan is a bug in one of them.
 
-## Current Keiro 0.18 target
+## Configured baseline — checked 2026-10-29
+
+`cabal.project` still pins Keiro/DSL 0.18.0.0 at the October 6 index snapshot.
+[MasterPlan 16](masterplans/16-upgrade-shikigami-to-keiro-0-22-and-retire-superseded-runtime-workarounds.md)
+and plans 92–95 define the 0.22 upgrade and its migration/replay gates; their
+implementation milestones remain unchecked. The
+[0.22 pattern audit](architecture/keiro-0.22-pattern-audit.md) describes a target,
+not an installed cohort. This documentation pass changes no dependency selection
+and makes no new latest-release claim.
+
+The two Kikan-En packages are co-developed sibling sources in `cabal.project`;
+a full build requires that checkout until they are replaced by a verified published
+commit. The Hackage table below covers the configured released families, while
+source-only dependencies retain their exact project pins.
+
+## Keiro 0.18 configured cohort
 
 Plan 80 advances the index to `2026-10-06T14:00:00Z` for the released Baikai
 HTTP/foreground integration. Explicit constraints retain every previously frozen

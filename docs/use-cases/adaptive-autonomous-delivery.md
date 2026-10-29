@@ -46,56 +46,56 @@ features:
     jobs: [deliver-verified-outcome, recover-continuing-work]
   - name: recoverable-model-tool-harness
     description: Record accepted model and tool operations and reconstruct context, pending work, and policy state after restart.
-    status: discovered
+    status: delivered
     owners: [mori://shinzui/shikigami]
     acceptance: Restart within a multi-turn worker loop reuses committed outcomes and reconciles uncertain effects without resetting usage.
     jobs: [deliver-verified-outcome, recover-continuing-work]
     improvementRequests: [mori://shinzui/shikigami/okf/improvement-requests/concepts/IR-14]
   - name: continuing-worker-sessions
     description: Address workers across assignments, deliver follow-ups, consume progress events, and transfer ownership safely.
-    status: discovered
+    status: in-progress
     owners: [mori://shinzui/shikigami]
     acceptance: A worker handles a follow-up under the same session identity and an ownership transfer fences the previous writer after restart.
     jobs: [improve-work-organization, recover-continuing-work]
     improvementRequests: [mori://shinzui/shikigami/okf/improvement-requests/concepts/IR-15]
   - name: adaptive-coordination-and-shared-limits
     description: Validate and execute organizational changes while reserving concurrency and resource allowances across descendants.
-    status: discovered
+    status: in-progress
     owners: [mori://shinzui/shikigami]
     acceptance: New evidence changes a fixture's assignments; root reservation races admit only bounded work and the combined outcome passes acceptance.
     jobs: [deliver-verified-outcome, improve-work-organization, recover-continuing-work]
     improvementRequests: [mori://shinzui/shikigami/okf/improvement-requests/concepts/IR-16]
   - name: role-appropriate-run-models
     description: Resolve and pin permitted provider, model, and reasoning settings for coordinator and worker runs or later assignments.
-    status: discovered
+    status: delivered
     owners: [mori://shinzui/shikigami]
     acceptance: One deployment dispatches distinct permitted coordinator/worker tuples, preserves them on resume, and refuses forbidden choices before dispatch.
     jobs: [deliver-verified-outcome, improve-work-organization]
     improvementRequests: [mori://shinzui/shikigami/okf/improvement-requests/concepts/IR-17]
   - name: typed-coordinator-decisions
     description: Invoke typed Shikumi decisions at governed replay-safe Flow slots with per-decision model selection.
-    status: planned
+    status: delivered
     owners: [mori://shinzui/shikigami]
     acceptance: Plans 73–76 demonstrate typed mixed-model decisions whose committed branches replay without new calls or duplicate children.
     jobs: [deliver-verified-outcome, improve-work-organization]
     improvementRequests: [mori://shinzui/shikigami/okf/improvement-requests/concepts/IR-12]
   - name: isolated-repository-work-and-integration
     description: Give coding assignments isolated recoverable workspaces, authorized edits/tests/Git, and integration evidence for exact artifacts.
-    status: discovered
+    status: in-progress
     owners: [mori://shinzui/shikigami]
     acceptance: Two worker artifacts are integrated in a separate workspace and validated together, with safe handoff and uncertain-operation recovery.
     jobs: [deliver-verified-outcome, recover-continuing-work]
     improvementRequests: [mori://shinzui/shikigami/okf/improvement-requests/concepts/IR-11]
   - name: authoritative-objective-checkpoints
     description: Track acceptance, current assignments and owners, dependencies, evidence, and next actions across runs without requiring Rei.
-    status: discovered
+    status: planned
     owners: [mori://shinzui/shikigami]
     acceptance: A resumed coordinator reads current ownership and accepted artifact identities without relying on semantic memory recall.
     jobs: [deliver-verified-outcome, recover-continuing-work, supervise-recurring-objective]
     improvementRequests: [mori://shinzui/shikigami/okf/improvement-requests/concepts/IR-13]
   - name: recurring-objective-supervision
     description: Resume authorized ongoing work through events and scheduled backstops with coalescing, watermarks, expiry, and explicit stopping.
-    status: discovered
+    status: planned
     owners: [mori://shinzui/shikigami]
     acceptance: Duplicate wakeups do not duplicate work, a successful ongoing cycle continues, and expiry or cancellation prevents new admission.
     jobs: [supervise-recurring-objective, recover-continuing-work]
@@ -128,9 +128,9 @@ This use case belongs to the [autonomous-work theme](themes/autonomous-work.md).
 No skill is installed and no recurring automation is started by this documentation.
 
 **Draft; not executable end to end today.** Existing primitives are implemented, but the
-continuing harness and coding/coordination requirements below remain missing. The feature
-states describe coverage, not a fresh live qualification. The source baseline is Shikigami
-commit `51c7b1d`; this documentation change runs catalog checks, not runtime acceptance.
+recovery and model-selection foundations have landed while real checkpoint/workspace
+providers and integrated adaptive coordination remain incomplete. The feature
+states describe coverage, not a fresh live qualification. The source baseline is the 2026-10-29 working tree (audit started at `ac971c3`); this documentation change runs catalog checks, not runtime acceptance.
 
 ## User journey
 
@@ -160,14 +160,14 @@ commit `51c7b1d`; this documentation change runs catalog checks, not runtime acc
 
 | Feature | Owning request | Coverage remaining |
 | --- | --- | --- |
-| Recoverable model/tool harness | [IR-14](../improvement-requests/record-durable-model-tool-turns-and-compose-harness-policies.md) | Proposed; no execution-record/harness plan yet. Updated for follow-ups and shared accounting. |
-| Continuing workers | [IR-15](../improvement-requests/support-continuing-worker-sessions.md) | New request for durable messaging/events, retained context, and ownership transfer. |
-| Adaptive coordination and shared limits | [IR-16](../improvement-requests/support-adaptive-durable-orchestration.md) | New request for validated adaptations, root reservations, execution capacity, and integrated qualification. |
-| Run/assignment model choices | [IR-17](../improvement-requests/select-governed-models-for-agent-runs.md) | New request; process defaults and sanctioned profiles alone do not select different worker models. |
-| Typed Flow decisions | [IR-12](../improvement-requests/compose-shikumi-decisions-in-durable-flows.md) | Planned in unimplemented plans 73–76; scope remains per decision invocation. |
-| Repository work and integration | [IR-11](../improvement-requests/provide-governed-mutable-repository-workspaces.md) | Proposed durable mutation path; updated for assignment identity, handoff, instructions, and integrated artifacts. |
-| Goal and checkpoint continuity | [IR-13](../improvement-requests/support-optional-major-task-tracking.md) | Proposed; updated for versioned assignments, authoritative owner/evidence references, and integrated acceptance. |
-| Optional ongoing supervision | [IR-18](../improvement-requests/support-recurring-objective-supervision.md) | New request for admitted mandates, current-state reconciliation, overlap, watermark, expiry, and stop semantics. |
+| Recoverable model/tool harness | [IR-14](../improvement-requests/record-durable-model-tool-turns-and-compose-harness-policies.md) | Plan 83 complete: accepted operations, protected transcripts, composed policies and recovery. Continuing/integrated acceptance remains in plans 84/86. |
+| Continuing workers | [IR-15](../improvement-requests/support-continuing-worker-sessions.md) | Plan 84 in progress: ordered assignments, event waits and governed commands landed; real IR-11/13 providers gate completion. |
+| Adaptive coordination and shared limits | [IR-16](../improvement-requests/support-adaptive-durable-orchestration.md) | Plan 81 root accounting complete; adaptive decisions and integrated proof remain in plans 85/86. |
+| Run/assignment model choices | [IR-17](../improvement-requests/select-governed-models-for-agent-runs.md) | Plan 82 complete: admitted assignment bindings retain model/provider/options. Later adaptations remain in plans 85/86. |
+| Typed Flow decisions | [IR-12](../improvement-requests/compose-shikumi-decisions-in-durable-flows.md) | MasterPlan 13 and plans 73–76 complete; scope remains per decision invocation. |
+| Repository work and integration | [IR-11](../improvement-requests/provide-governed-mutable-repository-workspaces.md) | Plan 96 started with pure repository admission; durable allocation, mutations, recovery and fencing remain unimplemented. |
+| Goal and checkpoint continuity | [IR-13](../improvement-requests/support-optional-major-task-tracking.md) | MasterPlan 17, plans 98–102, accepted and not started. Plan 97 is superseded; real checkpoint providers remain a gate. |
+| Optional ongoing supervision | [IR-18](../improvement-requests/support-recurring-objective-supervision.md) | Plan 87 not started; consumes coordinator and real checkpoint providers. |
 
 Frontmatter request references mirror this table and the feature-level union. Body links
 provide navigation to owning requests; the current bundle graph connects the local use case
@@ -175,29 +175,28 @@ and theme, while cross-bundle request relationships use the canonical frontmatte
 The canonical use-case identity is
 `mori://shinzui/shikigami/okf/use-cases/concepts/UC-1`.
 
-## Existing implementation and unimplemented plan coverage
+## Implementation and remaining plan coverage
 
 | Implementation or plan | What can be reused | What it does not establish |
 | --- | --- | --- |
 | [Durable Flows](../capabilities/durable-agent-flows.md), [routing/delegation](../capabilities/governed-routing-and-delegation.md), completed plans [9](../plans/9-multi-agent-delegation-primitive.md) and [42](../plans/42-execute-replay-safe-typed-routing-and-delegation.md) | Compiled lifecycle, child identities, lineage, bounded fan-out, waits and cancellation. | Continuing mailboxes, adaptive organization, or simultaneous useful execution merely from child count. |
 | [Exact authorization](../capabilities/exact-action-authorization.md), [human approval](../capabilities/durable-human-approval.md), [principal continuity](../capabilities/principal-lifecycle-and-continuity.md) | Enforcing authority, lifecycle and parked human decisions. | Permission acquired solely from installing a skill or assigning a role. Live services remain deployment prerequisites. |
-| [MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md), plans [73](../plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md), [74](../plans/74-run-shikumi-decisions-through-governed-provider-calls.md), [75](../plans/75-persist-decision-call-evidence-across-retries-and-restarts.md), [76](../plans/76-compose-and-verify-typed-shikumi-decisions-in-durable-flows.md) | Planned typed program/model catalog, governed execution, evidence store, and Flow decision composition. | All four are not started. Their finite example does not deliver a continuing coordinator, worker model selection, or Skill transcript recovery. |
+| [MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md), plans [73](../plans/73-define-typed-decision-programs-and-authorized-model-catalogs.md), [74](../plans/74-run-shikumi-decisions-through-governed-provider-calls.md), [75](../plans/75-persist-decision-call-evidence-across-retries-and-restarts.md), [76](../plans/76-compose-and-verify-typed-shikumi-decisions-in-durable-flows.md) | Implemented typed program/model catalog, governed execution, evidence store, and Flow decision composition. | All four are complete with deterministic providers and real journals. Their finite example does not deliver a continuing coordinator, worker model selection, or Skill transcript recovery. |
 | [Plan 48](../plans/48-add-a-portable-one-off-repository-agent-harness.md) and completed read-only slice [59](../plans/59-adopt-capability-overlays-in-the-portable-one-off-repository-harness.md) | Workspace containment/provider seams and future one-off editing/command design. | Remaining writable/command/executable milestones are unchecked. The worker installs no provider; one-off commands deny acquisition. This is not durable IR-11 delivery. |
 | [Plan 78](../plans/78-run-external-operations-from-durable-flows-through-idempotent-shiki-jobs.md) | Optional generic quick submit/observe executor and durable child-job polling. | All implementation milestones are unchecked; it neither retains coding sessions nor integrates workspaces. Production authorization depends on `mori://shinzui/kikan-en/okf/improvement-requests/concepts/IR-4`; repeat-safe shiki submission needs `mori://shinzui/shiki/okf/improvement-requests/concepts/IR-1`. These are conditional on backend selection. |
 | [Plan 80](../plans/80-configure-model-providers-and-agent-launches-through-baikai.md) and [foreground launch capability](../capabilities/foreground-agent-launches.md) | Implemented HTTP transport/options and foreground vendor-agent launches with operator ceilings. | Background CLI response adapters remain blocked on released cancellation-safe lifecycle support. A foreground unattended process result is not a durable worker job. |
 | [Plan 12](../plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md) | Optional planned MCP tool transport. | Still unfinished; MCP configuration alone supplies neither coordination semantics nor mutation authority. It is not mandatory for a native capability first slice. |
 | [Plan 79](../plans/79-qualify-local-agent-execution-and-prioritize-production-readiness.md) | Packaging and bounded service-health qualification work. | Its supervised deployment and live/fault milestones remain unfinished; the tool-free reporter does not qualify autonomous coding. |
 
-Two current code boundaries matter. In
-[Agent.Workflow](../../shikigami-core/src/Shikigami/Agent/Workflow.hs), a non-Flow agent
-with declared delegates takes the fixed supervisor path instead of running its Skill;
-delegation plus overlays is refused. In
-[Behavior.Skill](../../shikigami-core/src/Shikigami/Behavior/Skill.hs), intermediate model/tool
-context is in memory inside one outer behavior step, with a default eight-turn ceiling
-from [Behavior.Run](../../shikigami-core/src/Shikigami/Behavior/Run.hs).
-[Workers.Config](../../shikigami-workers/src/Shikigami/Workers/Config.hs) installs
-`emptyCapabilityRuntime`, and [Capability.Catalog](../../shikigami-core/src/Shikigami/Capability/Catalog.hs)
-admits only observations for durable overlays. These prevent an installation-only solution.
+Current runtime boundaries remain material. Ordinary Skills with delegates take the
+fixed supervisor path; admitted `CoordinatingSkill` supplies a dedicated governed
+worker-control tool. Leaf Skills use the durable execution child, with accepted
+model/tool operations and a protected transcript; the no-database command uses an
+ephemeral recording. See [execution policies](../operations/durable-execution.md).
+The default worker still installs no mutable repository provider. The pure
+repository catalog admits exact identities and bases but performs no filesystem
+I/O. The real ownership fence and objective checkpoint providers remain separate
+completion gates. Library fixtures do not establish integrated coding delivery.
 
 ## Acceptance scenarios
 

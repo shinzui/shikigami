@@ -117,3 +117,13 @@ After editing pages, update `log.md`, regenerate the index with
 `just user-docs-index`, and run `just user-docs-validate`. The migration provenance
 records the format conversion; it does not claim independent verification of the
 existing runtime examples.
+
+## Recovery and continuing work
+
+New leaf Skills retain accepted model/tool work in a protected durable execution
+child. See [execution policy and recovery](../operations/durable-execution.md),
+[root accounting](../operations/execution-resources.md) and
+[worker inspection/control](../operations/operator-cli.md). Manifest `execution`
+selects an admitted whole-assignment model binding; `harness` narrows operator
+policy. Continuing-worker primitives do not yet supply real objective/checkpoint
+or mutable workspace providers. The [roadmap](../roadmap.md) tracks those gates.

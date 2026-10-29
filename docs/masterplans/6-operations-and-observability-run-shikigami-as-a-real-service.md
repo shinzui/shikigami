@@ -12,6 +12,11 @@ provenance:
       at: 2026-09-21T18:24:04Z
       mode: "update"
       note: "Reconciled status and progress during the 2026-09-21 portfolio audit"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-29T13:10:20Z
+      mode: "update"
+      note: "Reconcile partial plan 31 packaging delivery with registry and progress"
 ---
 
 # Operations and Observability: Run Shikigami as a Real Service
@@ -100,7 +105,7 @@ endpoint*: rejected because the substrate's metrics hooks are typed for the Open
 | EP-1 | Structured logging, metrics, and trace propagation | docs/plans/28-structured-logging-metrics-and-trace-propagation.md | cross-MP: plans 36, 37, and 47 | cross-MP: plan 22 (MasterPlan 4, required for M3) | Complete (2026-08-23) |
 | EP-2 | Health, liveness, and worker loop supervision | docs/plans/29-health-liveness-and-worker-loop-supervision.md | cross-MP: plans 36, 37, and 47; upstream Shibuya IR-1 for worker probe | EP-1 | Complete (2026-08-23) |
 | EP-3 | Operator CLI: inspect runs, agents, dead letters, and cancel | docs/plans/30-operator-cli-inspect-runs-agents-dead-letters-and-cancel.md | cross-MP: plans 20, 36, 37, and 47 | EP-1 | Complete (2026-08-20; automated behavioral fixture descoped) |
-| EP-4 | Deployable service stack: process-compose, packaging, and configuration | docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md | cross-MP: plans 36–38 and 47 | EP-1, EP-2; cross-MP: plans 13 (MasterPlan 2), 22 (MasterPlan 4), 32 (MasterPlan 7) | Not Started |
+| EP-4 | Deployable service stack: process-compose, packaging, and configuration | docs/plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md | cross-MP: plans 36–38 and 47 | EP-1, EP-2; cross-MP: plans 13 (MasterPlan 2), 22 (MasterPlan 4), 32 (MasterPlan 7) | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their EP-# prefix.
@@ -216,6 +221,10 @@ operational DLQ. Any operator-side schema change is delivered through plan 38.
 
 
 ## Progress
+
+2026-10-29 reconciliation: three children complete; plan 31 is In Progress.
+Its October 6 immutable role builds and installed assets are delivered; full
+process-compose, NixOS and graceful-drain acceptance remain open.
 
 Milestone-level checklist across all four child plans. Update as each milestone completes.
 

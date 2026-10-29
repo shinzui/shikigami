@@ -66,3 +66,13 @@ Resolve each role's configuration and use `--describe-config`, `--describe-confi
 Long-running roles require their configured database, broker, and service dependencies. Metrics and diagnostics do not replace durable run evidence. Runtime administration commands are mounted from [the upstream operations package](mori://shinzui/keiro/packages/keiro-ops); Shikigami supplies the composition and its fleet/run commands.
 
 The available implementation is unreleased. No Shikigami release tags or published releases were present when this catalog was authored; the Cabal package version alone does not establish a released compatibility promise.
+
+## Bounded execution and session inspection
+
+The administrative surface also includes `resources inspect`, `executions inspect`
+and `workers inspect`, plus governed worker control verbs. See
+[root accounting](root-resource-accounting.md),
+[execution recovery](recoverable-skill-execution.md),
+[continuing sessions](continuing-worker-primitives.md) and the
+[operator guide](../operations/operator-cli.md). Inspection excludes protected
+transcript/instruction bodies. Missing real providers refuse new dependent work.
