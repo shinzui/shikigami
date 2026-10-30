@@ -1,6 +1,6 @@
 -- | Reserve before filesystem effects. Matching duplicate requests converge;
 -- reservation metadata remains immutable after the workspace becomes ready.
-module Shikigami.Workspace.Store (reserveWorkspaceTx, inspectWorkspaceTx, markWorkspaceReadyTx, checkWorkspaceOwnerTx, checkWorkspaceOperationTx, reserveWorkspaceEffectTx, recordWorkspaceReceiptTx, freezeWorkspaceTx) where
+module Shikigami.Workspace.Store (reserveWorkspaceTx, inspectWorkspaceTx, markWorkspaceReadyTx, checkWorkspaceOwnerTx, checkWorkspaceOperationTx, reserveWorkspaceEffectTx, recordWorkspaceReceiptTx, freezeWorkspaceTx, registerFileTx, inspectRegisteredFileTx, inspectFilePageTx) where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4)
 import Data.Aeson qualified as Aeson
@@ -14,11 +14,13 @@ import Hasql.Transaction qualified as Tx
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
+import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Prelude
 import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
 import Shikigami.WorkerSession.Types (AssignmentId (..), WorkerSessionId (..))
 import Shikigami.Workspace.Catalog
-import Shikigami.Workspace.Provider (FileReceipt (..))
+import Shikigami.Workspace.Process (ProcessRouting (..), validProcessRouting)
+import Shikigami.Workspace.Provider (FileReceipt (..), FileRegistration (..), ReceiptState (..))
 import Shikigami.Workspace.Types
 import System.FilePath (isAbsolute, normalise, splitDirectories)
 
@@ -133,6 +135,26 @@ recordWorkspaceReceiptTx binding receipt
       changed <- Tx.statement (operation, binding.workspace.resource, receipt.fingerprint, receipt) saveReceipt
       pure (if changed then Right () else Left WorkspaceBindingConflict)
 
+-- Called in the reservation transaction before writing any private intent or
+-- repository bytes. A duplicate cannot replace the original actual routing.
+registerFileTx :: WorkspaceBinding -> FileRegistration -> Transaction (Either WorkspaceError ())
+registerFileTx binding registration = do
+  let receipt = registration.receipt
+      OperationId key = receipt.operationId
+  existing <- Tx.statement key selectEffect
+  if validProcessRouting registration.routing && registration.routing.identity == binding.request.owner && registration.routing.executionId == registration.operation.executionId && registration.operation.operationId == receipt.operationId && receipt.bindingDigest == workspaceBindingDigest binding && receipt.generation > 0 && receipt.state == EditPrepared && registration.claimOwner /= "" && maybe False (\(resource, fingerprint, _) -> resource == binding.workspace.resource && fingerprint == receipt.fingerprint) existing
+    then do
+      Tx.statement (key, registration) insertFileRegistration
+      retained <- inspectRegisteredFileTx receipt.operationId
+      pure (if maybe False (\(_, actual, _) -> actual == registration) retained then Right () else Left WorkspaceBindingConflict)
+    else pure (Left WorkspaceBindingConflict)
+
+inspectRegisteredFileTx :: OperationId -> Transaction (Maybe (WorkspaceBinding, FileRegistration, Maybe FileReceipt))
+inspectRegisteredFileTx (OperationId key) = Tx.statement key selectRegisteredFile
+
+inspectFilePageTx :: Maybe OperationId -> Transaction [OperationId]
+inspectFilePageTx cursor = Tx.statement (maybe "" (\(OperationId key) -> key) cursor) selectFilePage
+
 freezeWorkspaceTx :: WorkspaceBinding -> AgentIdentity -> Integer -> Transaction (Either WorkspaceError ())
 freezeWorkspaceTx binding owner epoch = do
   checked <- checkWorkspaceOwnerTx binding owner epoch
@@ -172,3 +194,14 @@ pendingOtherEffect = preparable "SELECT EXISTS(SELECT 1 FROM shikigami.workspace
 
 pendingProcess :: Statement Text Bool
 pendingProcess = preparable "SELECT EXISTS(SELECT 1 FROM shikigami.workspace_processes WHERE resource=$1 AND NOT settled)" (E.param (E.nonNullable E.text)) (D.singleRow (D.column (D.nonNullable D.bool)))
+
+insertFileRegistration :: Statement (Text, FileRegistration) ()
+insertFileRegistration = preparable "INSERT INTO shikigami.workspace_file_registrations(operation_id,registration) VALUES($1,$2) ON CONFLICT DO NOTHING" (contrazip2 (E.param (E.nonNullable E.text)) jsonParam) D.noResult
+
+selectRegisteredFile :: Statement Text (Maybe (WorkspaceBinding, FileRegistration, Maybe FileReceipt))
+selectRegisteredFile = preparable "SELECT b.binding,r.registration,e.receipt FROM shikigami.workspace_file_registrations r JOIN shikigami.workspace_effects e USING(operation_id) JOIN shikigami.workspace_bindings b ON b.resource=e.resource WHERE r.operation_id=$1 AND e.kind='file' AND b.state='ready' AND e.fingerprint=r.registration->'receipt'->>'fingerprint'" (E.param (E.nonNullable E.text)) (D.rowMaybe ((,,) <$> jsonRow <*> jsonRow <*> D.column (D.nullable (D.refine decode D.jsonb))))
+  where
+    decode value = case Aeson.fromJSON value of Aeson.Success result -> Right result; Aeson.Error err -> Left (Text.pack err)
+
+selectFilePage :: Statement Text [OperationId]
+selectFilePage = preparable "SELECT operation_id FROM shikigami.workspace_file_registrations WHERE operation_id>$1 ORDER BY operation_id LIMIT 20" (E.param (E.nonNullable E.text)) (D.rowList (OperationId <$> D.column (D.nonNullable D.text)))

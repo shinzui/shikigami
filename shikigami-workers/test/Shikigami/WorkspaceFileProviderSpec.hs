@@ -58,6 +58,7 @@ import Shikigami.Workspace.ProcessPolicy
 import Shikigami.Workspace.ProcessProfileStore
 import Shikigami.Workspace.ProcessStore qualified as Processes
 import Shikigami.Workspace.Provider
+import Shikigami.Workspace.Service (FileScan (..), scanFileReceipts)
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Types
@@ -71,7 +72,75 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace real file provider"
-    [ testCase "revision 2 reads only with a ready retained profile and exact authority" $ withSupervisedEffect fixture id "read" \env binding snapshot reference runtime profile -> do
+    [ testCase "independent file recovery settles the original edit after freeze and revoked replay authority" $ withEffect fixture \env binding snapshot access reference runtime _ -> do
+        let checkpoint = throwIO (userError "fixture interrupted after publication")
+        Executor.executeAcceptedAttempt (executorFor runtime checkpoint) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+        (_, uncertain) <- right =<< run env (Execution.loadExecution access)
+        uncertain.phase @?= Unresolved
+        run env (runTransaction (Store.freezeWorkspaceTx binding snapshot.identity 0)) >>= (@?= Right ())
+        let path = workspaceFiles binding.storageRoot binding </> "src/dependency.txt"
+        published <- getModificationTime path
+        -- The factual API accepts only an operation id, never current authority,
+        -- protected tool arguments or a proposed successor's claimed result.
+        publishFileReceipt env reference.operationId >>= (@?= Right FileReceiptAcknowledged)
+        publishFileReceipt env reference.operationId >>= (@?= Right FileReceiptAcknowledged)
+        getModificationTime path >>= (@?= published)
+        readFile path >>= (@?= "PRIVATE_REPLACEMENT\n")
+        Just original <- right =<< run env (Execution.inspectExecutionAttempt reference.attemptId)
+        original.phase @?= Attempt.AttemptCommitted
+        Just (state, _, _) <- right =<< run env (Execution.inspectExecution snapshot.executionId)
+        state.cursor @?= 2
+        state.pendingReceipts @?= 0
+        scan <- right =<< scanFileReceipts env Nothing
+        scan.inspected @?= 1
+        scan.acknowledged @?= 1
+        scan.pending @?= 0
+        empty <- right =<< scanFileReceipts env scan.cursor
+        empty.inspected @?= 0
+        empty.cursor @?= Nothing
+        root <- right =<< run env (Roots.inspectRoot binding.request.rootId)
+        root.unknown @?= 1
+        root.active @?= 0,
+      testCase "independent file recovery settles a superseded actual without replacement IO" $ withEffect fixture \env binding snapshot access reference runtime _ -> do
+        Executor.executeAcceptedAttempt (executorFor runtime (throwIO (userError "lost publication acknowledgement"))) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+        (_, uncertain) <- right =<< run env (Execution.loadExecution access)
+        let next = reference & #attemptId .~ AttemptId "independent-replacement"
+            tool = head snapshot.toolBindings
+            submission = Attempt.AttemptSubmission (Execution.toolAttemptRequest next.attemptId next.operationId tool) Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)
+        _ <- right =<< run env (Execution.recoverExecutionAttemptWith access uncertain.revision reference.attemptId submission (\_ -> pure ()))
+        run env (runTransaction (Store.freezeWorkspaceTx binding snapshot.identity 0)) >>= (@?= Right ())
+        publishFileReceipt env reference.operationId >>= (@?= Right FileReceiptAcknowledged)
+        Just original <- right =<< run env (Execution.inspectExecutionAttempt reference.attemptId)
+        original.phase @?= Attempt.AttemptSuperseded
+        assertBool "original late receipt retained" (maybe False (const True) original.lateReceipt)
+        Just (state, _, _) <- right =<< run env (Execution.inspectExecution snapshot.executionId)
+        state.pendingReceipts @?= 0
+        state.cursor @?= 1,
+      testCase "independent recovery preserves uncertainty when prepared bytes were never published" $ withEffect fixture \env binding snapshot _ reference runtime _ -> do
+        calls <- newIORef (0 :: Int)
+        let interrupted =
+              (runtime.authorizer)
+                { Action.authorize = \principal action -> do
+                    ordinal <- atomicModifyIORef' calls (\n -> (n + 1, n))
+                    if ordinal == 1 then throwIO (userError "interrupted before publication") else allowAllActionAuthorizerForTests.authorize principal action
+                }
+        Executor.executeAcceptedAttempt (executorFor (runtime & #authorizer .~ interrupted) (pure ())) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+        run env (runTransaction (Store.freezeWorkspaceTx binding snapshot.identity 0)) >>= (@?= Right ())
+        publishFileReceipt env reference.operationId >>= (@?= Right AwaitingFileReceipt)
+        readFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") >>= (@?= "old dependency\n")
+        Just original <- right =<< run env (Execution.inspectExecutionAttempt reference.attemptId)
+        original.lateReceipt @?= Nothing
+        Just (_, registration, _) <- run env (runTransaction (Store.inspectRegisteredFileTx reference.operationId))
+        run env (runTransaction (Store.registerFileTx binding (registration & #claimOwner .~ "forged"))) >>= (@?= Left WorkspaceBindingConflict),
+      testCase "independent recovery refuses a substituted target and never searches unregistered operations" $ withEffect fixture \env binding snapshot _ reference runtime _ -> do
+        Executor.executeAcceptedAttempt (executorFor runtime (throwIO (userError "lost publication acknowledgement"))) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+        let files = workspaceFiles binding.storageRoot binding
+        renameDirectory (files </> "src") (files </> "retained-src")
+        createDirectory (files </> "src")
+        writeFile (files </> "src/dependency.txt") "PRIVATE_REPLACEMENT\n"
+        publishFileReceipt env reference.operationId >>= (@?= Right AwaitingFileReceipt)
+        publishFileReceipt env (OperationId "unknown-operation") >>= (@?= Left FileEffectUnresolved),
+      testCase "revision 2 reads only with a ready retained profile and exact authority" $ withSupervisedEffect fixture id "read" \env binding snapshot reference runtime profile -> do
         run env (runTransaction (readyProcessProfileTx binding profile)) >>= (@?= Right ())
         calls <- newIORef (0 :: Int)
         let checking = runtime & #authorizer .~ (runtime.authorizer) {Action.authorize = \principal action -> modifyIORef' calls (+ 1) >> allowAllActionAuthorizerForTests.authorize principal action}

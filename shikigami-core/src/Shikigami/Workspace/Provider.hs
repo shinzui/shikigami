@@ -48,6 +48,20 @@ data FileReceipt = FileReceipt
 
 instance Show FileReceipt where show _ = "FileReceipt <protected>"
 
+-- Separate from the historical receipt encoding. Retain the original dispatch
+-- continuation before publication so an independent factual owner needs no
+-- current replay authority or replacement worker to acknowledge the effect.
+data FileRegistration = FileRegistration
+  { operation :: !OperationContext,
+    claimOwner :: !Text,
+    routing :: !ProcessRouting,
+    receipt :: !FileReceipt
+  }
+  deriving stock (Eq, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+instance Show FileRegistration where show _ = "FileRegistration <protected>"
+
 contentDigest :: Text -> Text
 contentDigest = versionedDigest "shikigami.workspace-content/1" . toJSON
 

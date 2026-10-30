@@ -109,6 +109,13 @@ The independent receipt owner can acknowledge the original actual attempt
 after execution authority is revoked or ownership freezes, without acquiring
 authority to read model payloads or launch new work.
 
+The independent supervisor also scans file registrations retained before edit
+publication. It can settle the original attempt after ownership freezes or
+replay authority is revoked. Prepared intent requires matching parent inode and
+resulting content; missing or conflicting evidence stays unresolved. Recovery
+does not write repository bytes. Historical file receipts without retained
+routing require their original authorized recovery path.
+
 Do not repair exposed receipt-directory permissions and then trust its contents.
 Do not remove pending workspace directories, replace receipt files, clear
 reservations or recycle reserved Unix identities to regain capacity. Explicit terminal cleanup retains provider metadata and receipts. The operator commands

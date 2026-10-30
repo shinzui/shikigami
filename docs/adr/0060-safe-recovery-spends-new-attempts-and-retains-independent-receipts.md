@@ -234,6 +234,17 @@ new authority denied, and denial after capture without HEAD publication. These
 checks preserve the ten earlier provisioning/process cases; they do not prove
 the normal configured parent/child workflow or handoff.
 
+File receipt recovery (2026-10-30) retains original dispatch routing separately
+from the historical file receipt encoding, in the reservation transaction before
+private intent or repository publication. The independent supervisor scans these
+registrations without current replay authority. Under the shared workspace lock
+it may recognize prepared intent as applied only when the retained parent inode,
+exact path and resulting content hash match. Missing intent, substituted targets
+and unpublished bytes remain unresolved; recovery never executes a replacement
+write. A final retained receipt settles only its original actual claim through
+the existing execution receipt/accounting owner, including after owner freeze or
+supersession. Historical receipts without routing gain no invented continuation.
+
 ## Alternatives rejected
 
 Releasing the unknown attempt to make room for its replacement would invent

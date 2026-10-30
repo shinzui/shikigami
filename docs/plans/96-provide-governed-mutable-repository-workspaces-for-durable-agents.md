@@ -41,6 +41,11 @@ provenance:
       at: 2026-10-30T13:02:18Z
       mode: "implement"
       note: "Install reviewed process-backed worker host and qualify durable upgrade integration"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-30T14:51:46Z
+      mode: "implement"
+      note: "Implement independent factual file receipt recovery before successor and handoff admission"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -141,9 +146,24 @@ A final compatibility regression verifies an already admitted file-only executio
 
 Milestone 4 verified (2026-10-30): the complete `tests/workspace/run-apple.sh --workflow` matrix passes all fourteen named cases (`/tmp/shikigami-96-workflow-apple-final.log`, private evidence `/tmp/shikigami-workspace-run.lFoJXl/evidence`). The normal agent parent and execution child use the production configured host, with only the model response deterministic. Worker restart after the accepted edit and duplicate parent delivery retain one terminal result and one local commit. The terminal evidence matches the published commit and changed paths, includes the original instruction digest and a retained normal validation exit with code zero, and leaves the source clean. All thirteen prior native provisioning/process/Git cases pass in that same run. The runtime is the committed `4941dab` host candidate; the later file-only compatibility fix is separately covered by the final 224-worker suite, and native cleanup additions by the nine-case shared-C probe. The focused `--workflow-only` mode also passes its three provisioning/workflow cases. Containers and task credentials were removed successfully.
 
-Next implement successor admission, independent factual file receipt recovery, real process fencing and revision-pinned integration for Milestone 5. File revision 1 remains file-only. A queue lease or unlocked file alone supplies no process fence, and changing only the workspace control row cannot establish successor write authority. Explicit terminal cleanup is implemented below; handoff and integration remain unavailable.
+Next implement successor admission, real process fencing and revision-pinned integration for Milestone 5. File revision 1 remains file-only. A queue lease or unlocked file alone supplies no process fence, and changing only the workspace control row cannot establish successor write authority. Explicit terminal cleanup and independent factual file receipt recovery are implemented below; handoff and integration remain unavailable.
 
 Terminal cleanup is implemented as a Milestone 5 sub-deliverable (2026-10-30). `Workspace.CleanupStore` conditions a retained cleanup plan and admission freeze on a known terminal execution, zero pending receipts, settled file/Git/process effects and absence of live continuing sessions sharing the root. `Workspace.Cleanup` obtains fresh exact maintenance authority under the shared OS lock and removes only the recorded files/scratch root inodes. Partial deletion and lost acknowledgement reuse the same plan; metadata, receipts, source and Unix reservations survive. `shikigami-worker --workspace-list` and `--workspace-cleanup` require an explicit active principal. Four focused PostgreSQL/workflow cases pass for interruption, duplicates, active/denied refusal, idle-session retention and unsettled effects. The shared-source Apple native file probe passes nine cases, including hostile-tree and substituted-root cleanup refusal. The full worker candidate passes 223 cases (including hostile-tree cleanup), all 533 core and five migration tests pass, the maintenance parser case passes, and all seven runtime-cohort tooling tests pass. The shared-source native cleanup probe is qualified; all worker executables build. The final cleanup workflow gate against `0c9c384` passes, as do the native-system Nix flake checks. FRIC-26 records the repeated monolithic runtime build delay, also observed in FRIC-23. This does not implement handoff or integration and does not close Milestone 5. FRIC-25 records and resolves guest package setup failures with a local-filesystem startup barrier.
+
+Independent file recovery is implemented as a Milestone 5 prerequisite (2026-10-30).
+The reservation transaction now retains original execution/actual claim and
+continuation metadata separately from historical receipt JSON. The supervisor
+scans those registrations and acknowledges applied/refused receipts through the
+existing execution owner without current replay or dispatch authority. Prepared
+intent is recognized only under the shared lock with matching parent inode,
+exact path and resulting content hash. Missing intent, substituted targets and
+unpublished bytes remain unresolved; recovery never writes repository bytes.
+All 129 focused workspace tests pass, including four new actual-executor cases
+for frozen-owner recovery, superseded actual settlement, missing publication,
+substituted targets and bounded scan traversal. The complete candidate passes
+533 core, 228 worker and five migration tests, migration schema isolation and
+`git diff --check`. Native Linux qualification and
+successor/handoff/integration remain outstanding.
 
 ## Surprises & Discoveries
 
