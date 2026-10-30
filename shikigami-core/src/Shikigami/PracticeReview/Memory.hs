@@ -8,7 +8,7 @@
 -- those four operations and no Kioku environment or IO capability.
 --
 -- The specialist Flow installs this interpreter with four static journal
--- labels declared in domain/shikigami-agent-run.keiro. Every durable call
+-- labels declared in domain/shikigami/agent-run.keiro. Every durable call
 -- journals its operation; the explicit unjournaled interpreter is test-only.
 module Shikigami.PracticeReview.Memory
   ( PracticeReviewMemory,

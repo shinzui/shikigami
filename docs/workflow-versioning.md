@@ -192,7 +192,7 @@ first. Every rule below then applies without exception.
 **1. Workflow names and workflow ids are permanent.** The name is the journal's
 stream name and the id is its key; changing either makes every existing instance
 invisible rather than migrated. Both names live in the checked specification —
-`domain/shikigami-agent-run.keiro` and `domain/shikigami-conversation.keiro` —
+`domain/shikigami/agent-run.keiro` and `domain/shikigami/conversation.keiro` —
 and `just keiro-diff` classifies a rename as `BREAKING` with the code
 `WorkflowStableNameChanged`. A wholesale redesign of a workflow gets a *new*
 name, and the old one keeps running until its instances drain.
@@ -214,7 +214,7 @@ adds failures.
 
 So adding a step to a declared workflow costs a patch id, and rule 4's mechanism
 applies even when rule 4's *reasoning* does not. Earlier patch-guarded additions to
-`domain/shikigami-agent-run.keiro` include: `resolve-profile` inside
+`domain/shikigami/agent-run.keiro` include: `resolve-profile` inside
 `shikigami-resolve-profile-v1`, `run-behavior-v2` inside
 `shikigami-behavior-retry-v1`, and the flow memory labels inside
 `shikigami-flow-memory-steps-v1`. Because ADR-0001 forbids declaring a guard the
@@ -310,8 +310,8 @@ A patch id is a **declared surface**, not just a Haskell literal. It is written
 in the checked specification, and the Haskell value is generated from it.
 
 1. Declare the patch inside the owning workflow's body in
-   `domain/shikigami-agent-run.keiro`, `domain/shikigami-conversation.keiro`,
-   or `domain/shikigami-approval.keiro`:
+   `domain/shikigami/agent-run.keiro`, `domain/shikigami/conversation.keiro`,
+   or `domain/shikigami/approval.keiro`:
 
    ```text
    patch shikigami-emit-signal-labels-v1 {
@@ -441,11 +441,11 @@ computed label families; a duplicated line-number census quickly becomes stale.
 
 | Workflow | Declaration | Generated facts | Runtime body |
 | --- | --- | --- | --- |
-| `shikigami.agent-run` | [Agent run](../domain/shikigami-agent-run.keiro) | [AgentRun facts](../shikigami-core/src/Shikigami/AgentRun/Generated/WorkflowFacts.hs) | [Workflow.hs](../shikigami-core/src/Shikigami/Agent/Workflow.hs) |
-| `shikigami.danwa-conversation` | [Conversation](../domain/shikigami-conversation.keiro) | [DanwaConversation facts](../shikigami-core/src/Shikigami/DanwaConversation/Generated/WorkflowFacts.hs) | [Conversation.hs](../shikigami-core/src/Shikigami/Agent/Conversation.hs) |
-| `shikigami.approval` | [Approval](../domain/shikigami-approval.keiro) | [Approval facts](../shikigami-core/src/Shikigami/Approval/Generated/WorkflowFacts.hs) | [Approval/Workflow.hs](../shikigami-core/src/Shikigami/Agent/Approval/Workflow.hs) |
-| `shikigami.execution` | [Execution driver](../domain/shikigami-execution-driver.keiro) | [ExecutionDriver facts](../shikigami-core/src/Shikigami/ExecutionDriver/Generated/WorkflowFacts.hs) | [Execution/Driver.hs](../shikigami-core/src/Shikigami/Execution/Driver.hs) |
-| `shikigami.worker-session` | [Continuing worker](../domain/shikigami-continuing-worker.keiro) | [ContinuingWorker facts](../shikigami-core/src/Shikigami/ContinuingWorker/Generated/WorkflowFacts.hs) | [WorkerSession/Workflow.hs](../shikigami-core/src/Shikigami/WorkerSession/Workflow.hs) |
+| `shikigami.agent-run` | [Agent run](../domain/shikigami/agent-run.keiro) | [AgentRun facts](../shikigami-core/src/Shikigami/AgentRun/Generated/WorkflowFacts.hs) | [Workflow.hs](../shikigami-core/src/Shikigami/Agent/Workflow.hs) |
+| `shikigami.danwa-conversation` | [Conversation](../domain/shikigami/conversation.keiro) | [DanwaConversation facts](../shikigami-core/src/Shikigami/DanwaConversation/Generated/WorkflowFacts.hs) | [Conversation.hs](../shikigami-core/src/Shikigami/Agent/Conversation.hs) |
+| `shikigami.approval` | [Approval](../domain/shikigami/approval.keiro) | [Approval facts](../shikigami-core/src/Shikigami/Approval/Generated/WorkflowFacts.hs) | [Approval/Workflow.hs](../shikigami-core/src/Shikigami/Agent/Approval/Workflow.hs) |
+| `shikigami.execution` | [Execution driver](../domain/shikigami/execution-driver.keiro) | [ExecutionDriver facts](../shikigami-core/src/Shikigami/ExecutionDriver/Generated/WorkflowFacts.hs) | [Execution/Driver.hs](../shikigami-core/src/Shikigami/Execution/Driver.hs) |
+| `shikigami.worker-session` | [Continuing worker](../domain/shikigami/continuing-worker.keiro) | [ContinuingWorker facts](../shikigami-core/src/Shikigami/ContinuingWorker/Generated/WorkflowFacts.hs) | [WorkerSession/Workflow.hs](../shikigami-core/src/Shikigami/WorkerSession/Workflow.hs) |
 
 The approval child journals `ingest-approval`, `notify`, and its `decision` wait.
 All agent runs use this child. Plan 65 removed the unused pre-release approval
@@ -469,7 +469,7 @@ The two memory families are marked `declared` because they are the first
 flow-side journal names this service can gate rather than merely keep stable by
 convention. `runMemory` journals a flow's `recall` and `remember` under the
 caller's label, and the labels every *registered* flow reaches are declared in
-`domain/shikigami-agent-run.keiro` — today `recall-risk-history`,
+`domain/shikigami/agent-run.keiro` — today `recall-risk-history`,
 `remember-acknowledged`, `remember-declined`, and `remember-escalated`. The first
 router similarly owns the static `route-catalog-architecture-practice` and
 `route-decision-architecture-practice` labels. Under ADR-0027 those two labels

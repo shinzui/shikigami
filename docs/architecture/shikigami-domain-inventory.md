@@ -15,12 +15,12 @@ Paths in this section are relative to `shikigami-core/src/`.
 
 | Surface | Declaration and execution owner | Observable proof |
 |---|---|---|
-| `shikigami.agent-run` | `domain/shikigami-agent-run.keiro`; `Shikigami/Agent/Workflow.hs`; generated AgentRun runtime | Job idempotency key identifies the run. WorkflowVersioningSpec, ApprovalWorkflowSpec, BehaviorRetrySpec and memory/router replay suites exercise it. Current leaf Skills await execution children directly; no obsolete patch branch remains. |
-| `shikigami.approval` | `domain/shikigami-approval.keiro`; `Shikigami/Agent/Approval/Workflow.hs`; generated Approval runtime | ApprovalWorkflowSpec covers a durable child with `ingest-approval`, `notify`, and `decision`. Publication and resolution use the allocated opaque AwakeableId, distinct from the review-request key. |
-| `shikigami.danwa-conversation` | `domain/shikigami-conversation.keiro`; `Shikigami/Agent/Conversation.hs`; generated DanwaConversation runtime | Conversation tests cover restoreSeed, one turn per continueAsNew generation, timeout and wake tokens. The baseline uses only the rotating workflow and static labels. |
+| `shikigami.agent-run` | `domain/shikigami/agent-run.keiro`; `Shikigami/Agent/Workflow.hs`; generated AgentRun runtime | Job idempotency key identifies the run. WorkflowVersioningSpec, ApprovalWorkflowSpec, BehaviorRetrySpec and memory/router replay suites exercise it. Current leaf Skills await execution children directly; no obsolete patch branch remains. |
+| `shikigami.approval` | `domain/shikigami/approval.keiro`; `Shikigami/Agent/Approval/Workflow.hs`; generated Approval runtime | ApprovalWorkflowSpec covers a durable child with `ingest-approval`, `notify`, and `decision`. Publication and resolution use the allocated opaque AwakeableId, distinct from the review-request key. |
+| `shikigami.danwa-conversation` | `domain/shikigami/conversation.keiro`; `Shikigami/Agent/Conversation.hs`; generated DanwaConversation runtime | Conversation tests cover restoreSeed, one turn per continueAsNew generation, timeout and wake tokens. The baseline uses only the rotating workflow and static labels. |
 | Delegated runs | `Shikigami/Agent/Delegate.hs` and `Shikigami/Agent/Delegate/Context.hs` | Deterministic UUIDv5 child identities and reservation ledger are technical deduplication identities. Preserve their derivation; do not relabel them TypeID-v7. |
-| `shikigami.execution` | `domain/shikigami-execution-driver.keiro`; `Shikigami/Execution/Driver.hs`; generated ExecutionDriver runtime | Transcript and selection workflow tests cover bounded generations, accepted-reference queue repair, protected replay, Approval, cancellation and parent completion after provider retirement. |
-| `shikigami.worker-session` | `domain/shikigami-continuing-worker.keiro`; `Shikigami/WorkerSession/Workflow.hs`; generated ContinuingWorker runtime | Session suites cover one assignment per generation, durable idle wakes, original governed child mappings, missing-input repair and retained result acknowledgement after handoff. |
+| `shikigami.execution` | `domain/shikigami/execution-driver.keiro`; `Shikigami/Execution/Driver.hs`; generated ExecutionDriver runtime | Transcript and selection workflow tests cover bounded generations, accepted-reference queue repair, protected replay, Approval, cancellation and parent completion after provider retirement. |
+| `shikigami.worker-session` | `domain/shikigami/continuing-worker.keiro`; `Shikigami/WorkerSession/Workflow.hs`; generated ContinuingWorker runtime | Session suites cover one assignment per generation, durable idle wakes, original governed child mappings, missing-input repair and retained result acknowledgement after handoff. |
 | Workflow options | `Shikigami/Workflow/Versioning.hs` | One options constructor derives active patches from generated declarations. Preserve it even with an empty patch set; retain synthetic old/new workflow tests. |
 | Flow capabilities | `Shikigami/Flow/Capability.hs`, `Shikigami/Flow/Routing.hs`, `Shikigami/Flow/AtRiskCustomer.hs` | Journaled memory, routing decisions, approvals and sink labels execute within agent-run. The model-driven router is a Flow capability, not a Keiro process/router node. |
 
@@ -79,7 +79,7 @@ It does not become an aggregate merely because RunEvidence is now an aggregate.
 
 ## Evidence lifecycle and queries
 
-`domain/shikigami-run-evidence.keiro` owns the RunEvidence aggregate, generated
+`domain/shikigami/run-evidence.keiro` owns the RunEvidence aggregate, generated
 RunEvidenceId, commands, events, transducer, codecs and behavior obligations.
 `Shikigami.RunEvidence.BehaviorHoles` supplies executable state/command witnesses.
 `shikigami-core/src/Shikigami/Attestation/EvidenceStore.hs` executes
@@ -105,7 +105,7 @@ not redeclare that upstream aggregate or those targets as its own.
 
 ## Objective ownership
 
-`domain/shikigami-objective.keiro` owns ObjectiveLifecycle and its current catalog.
+`domain/shikigami/objective.keiro` owns ObjectiveLifecycle and its current catalog.
 `Objective/Store.hs` commits lifecycle append and protected objective state,
 assignment, payload, receipt, origin, association, scope and cursor targets together.
 The preserve/live-only boundary does not reconstruct private evidence from events.
@@ -114,7 +114,7 @@ tracker/product integrations remain with their owning MasterPlans 17 and 18.
 
 ## Continuing session ownership
 
-`domain/shikigami-worker-session.keiro` owns WorkerSessionLifecycle. The live
+`domain/shikigami/worker-session.keiro` owns WorkerSessionLifecycle. The live
 catalog writer commits lifecycle events, protected payload references, ordered
 messages, results, event cursors and immutable command receipts together across
 six application targets. Its preserve-and-reconcile policy cannot reconstruct
@@ -141,7 +141,7 @@ process fencing or authoritative task updates. See ADRs 0061–0063 and
 ## Run-job queue
 
 `shikigami-core/src/Shikigami/Agent/RunJob.hs` owns the complete journal input.
-`domain/shikigami-run-jobs.keiro` owns the twelve-field generated `RunJobMessage`
+`domain/shikigami/run-jobs.keiro` owns the twelve-field generated `RunJobMessage`
 envelope and queue policy. One complete version-1 application codec carries
 current resource enrollment, selection, permissions and accepted-operation routes.
 Historical upcasters and journal omission defaults are removed under ADR-27.

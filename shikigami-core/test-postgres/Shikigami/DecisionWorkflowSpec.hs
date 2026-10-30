@@ -288,8 +288,8 @@ tests fixture =
           children <- runAppIO app (lookupChildrenOfParent (runJobWorkflowId request).unWorkflowId "shikigami.agent-run")
           fmap length children @?= Right 0,
       testCase "every compiled slot maps to its exact declared prepare and result labels" do
-        atRoot <- doesFileExist "domain/shikigami-agent-run.keiro"
-        declared <- TextIO.readFile (if atRoot then "domain/shikigami-agent-run.keiro" else "../domain/shikigami-agent-run.keiro")
+        atRoot <- doesFileExist "domain/shikigami/agent-run.keiro"
+        declared <- TextIO.readFile (if atRoot then "domain/shikigami/agent-run.keiro" else "../domain/shikigami/agent-run.keiro")
         let compiled = [slot.label | flow <- Flow.flowRegistry, slot <- flow.decisionSlots]
         compiled @?= ["triage", "investigate"]
         mapM_

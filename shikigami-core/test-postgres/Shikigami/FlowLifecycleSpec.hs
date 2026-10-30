@@ -286,7 +286,7 @@ tests databaseFixture =
       -- What a flow can say about its own memories now that the metadata is not
       -- hardcoded. This flow runs under WorkflowName "shikigami.flow.spike",
       -- which no specification member declares, so its labels need no
-      -- declaration in domain/shikigami-agent-run.keiro.
+      -- declaration in domain/shikigami/agent-run.keiro.
       testCase "rememberWith records chosen metadata while remember keeps the old defaults" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do

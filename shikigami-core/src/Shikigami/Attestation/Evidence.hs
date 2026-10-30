@@ -1,7 +1,7 @@
 -- | Durable run-evidence lifecycle and the immutable facts bound to it.
 --
 -- The lifecycle is executed by the checked Keiro aggregate generated from
--- @domain/shikigami-run-evidence.keiro@. This module is the hand-owned facade:
+-- @domain/shikigami/run-evidence.keiro@. This module is the hand-owned facade:
 -- it speaks in attestation and correlation types and exposes a typed rejection
 -- instead of generated vertices and commands.
 module Shikigami.Attestation.Evidence
