@@ -53,6 +53,15 @@ edit, and verifies one terminal result with exact commit and validation evidence
 It passes fourteen named cases. The focused `--workflow-only` mode runs three
 cases (native provisioning plus the normal workflow) for iteration; retain the
 combined `--workflow` gate for complete process/Git/workflow qualification.
+The expanded candidate is selected with `--workspace-gates`: it adds exact
+artifact integration, conflicts and a combined-only validation failure, native
+same-owner follow-up writes and cleanup, transfer freeze/restart/settlement,
+late old-owner edit refusal, and journal/log privacy checks. Native results are
+still pending for this candidate. `--qualify` runs the same checks and then
+refuses full qualification while the real objective ownership provider is
+unavailable. It never substitutes an objective ownership receipt. Neither mode
+enables the transfer-aware adapters in production.
+
 The runner builds its controller through the configured Nix builder, copies its closure
 through Nix, creates a task-specific container and temporary SSH credentials,
 and removes its container and credentials on exit. It prints the private

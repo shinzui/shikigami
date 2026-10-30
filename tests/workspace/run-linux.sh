@@ -401,6 +401,33 @@ if [[ "$mode" == --workspace-gates || "$mode" == --qualify ]]; then
   systemctl kill --kill-whom=main --signal=STOP "$capture"
   "$prototype" continuing "$config" "$prefix" freeze >"$prefix/continuing-freeze.log" 2>&1
   cat "$prefix/continuing-freeze.log"
+  # A busy shared lock is also unresolved. Require the retained freeze before
+  # revoking authority, retrying the same production RPC and immutable intent.
+  python3 - "$prefix" "$connection" <<'FROZEN'
+import json,re,socket,struct,subprocess,sys,time
+from pathlib import Path
+root=Path(sys.argv[1]); intent=json.loads((root/'continuing-intent.json').read_text())
+resource=intent['workspace']['resource']; assert re.fullmatch('[a-f0-9]{64}',resource)
+query="SELECT EXISTS(SELECT 1 FROM shikigami.workspace_controls WHERE resource='"+resource+"' AND frozen)"
+def exact(peer,size):
+    value=b''
+    while len(value)<size:
+        chunk=peer.recv(size-len(value)); assert chunk; value+=chunk
+    return value
+for attempt in range(30):
+    frozen=subprocess.check_output(['/usr/bin/psql',sys.argv[2],'-Atc',query]).strip()
+    if frozen==b't': break
+    with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as peer:
+        peer.settimeout(5); peer.connect(str(root/'rpc/supervisor.sock'))
+        _,uid,_=struct.unpack('3i',peer.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12)); assert uid==0
+        body=json.dumps({'format':2,'action':'fence','intent':intent},separators=(',',':')).encode(); assert 0<len(body)<=4096
+        peer.sendall(struct.pack('!I',len(body))+body)
+        size=struct.unpack('!I',exact(peer,4))[0]; assert 0<size<=8192
+        reply=json.loads(exact(peer,size)); assert reply.get('format')==2 and 'fence' in reply
+        assert 'FencedAndSettled' not in json.dumps(reply)
+    time.sleep(.1)
+else: raise RuntimeError('workspace admission freeze was not retained')
+FROZEN
   listener=$(stat -c '%d:%i' "$prefix/rpc/supervisor.sock")
   systemctl kill --kill-whom=main --signal=KILL "$task-continuing.service" || true
   systemctl kill --kill-whom=main --signal=KILL "$service"
