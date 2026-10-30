@@ -69,8 +69,8 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
-import Keiro.Command (CommandError (CommandRejected, RetryExhausted, StoreFailed), defaultRunCommandOptions)
-import Keiro.Projection (ProjectionCommandOutcome (..), runCommandWithCatalogProjections)
+import Keiro.Command (CommandError (CommandRejected, RetryExhausted, StoreFailed), DomainCommandHandler (..), DomainCommandOutcome (..), DomainDecision (..), SilentDomainDecision (SilentRejected), defaultRunCommandOptions)
+import Keiro.Projection (DomainProjectionCommandOutcome (..), GuardedCatalogOutcome (..), ProjectionCommandOutcome (..), runCommandWithCatalogProjections, runDomainCommandWithCatalogProjectionsGuarded)
 import Keiro.ReadModel (runQuery)
 import Keiro.Stream qualified as Stream
 import Keiro.Workflow (JournalAppendOutcome (..), WorkflowId (..), WorkflowJournalEvent (..), WorkflowName (..), awakeableStepPrefix, currentGeneration, prepareJournalAppend)
@@ -1028,27 +1028,13 @@ recordOutcomeAndAdvanceWith access@(ReplayAccess execution _ _) expected operati
             Just (_, binding) -> do
               let unresolved = case outcome of OperationUnresolved {} -> True; _ -> False
                   command = if unresolved then Generated.MarkExecutionUnresolved (Generated.MarkExecutionUnresolvedData execution.value (fromInteger expected) (fromInteger (expected + 1))) else advance execution expected
-              result <- persist execution command do
-                lockRoot binding.rootId
-                (state, actualBinding) <- getExecution execution
-                checkOutcomeIdentity access actualBinding
-                checkRevision expected state
-                unless (state.activeOperation == Just operationId && state.phase == Active) (abort OperationConflict)
-                actualOperation <- Tx.statement (operationKey operationId) lockOperation >>= maybe (abort OperationMissing) pure
-                unless (actualOperation == operation) (abort OperationConflict)
-                forM_ accounting \(receipt, terminal) -> do
-                  unless (receipt.request.operationId == operationId && receipt.rootId == actualBinding.rootId && receipt.assignmentId == actualBinding.assignmentId) (abort OperationConflict)
+              let precondition = outcomePrecondition access expected operation outcome accounting binding
+              result <- persistGuarded execution command precondition do
+                -- The precondition retains root/execution/operation row locks.
+                -- Reread transaction-local state rather than retaining callback cells.
+                (state, _) <- getExecution execution
+                forM_ accounting \(receipt, terminal) ->
                   Calls.finishSelectionCallTx receipt terminal >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
-                case outcome of
-                  ModelReturned {} -> unless (actualOperation.specification.kind `elem` [ModelTurn, ModelRepair, ModelSummary]) (abort OperationConflict)
-                  RichToolReturned {} -> do
-                    unless (actualOperation.specification.kind == ToolOperation && isNothing accounting) (abort OperationConflict)
-                    forM_ actualOperation.permission \permission -> unless (permission.resolution == Just PermissionApproved) (abort (ExecutionPolicyRefused "tool permission was not approved"))
-                  ToolReturned {} -> do
-                    unless (actualOperation.specification.kind == ToolOperation && isNothing accounting) (abort OperationConflict)
-                    forM_ actualOperation.permission \permission -> unless (permission.resolution == Just PermissionApproved) (abort (ExecutionPolicyRefused "tool permission was not approved"))
-                  TerminalResult {} -> abort OperationConflict
-                  _ -> pure ()
                 actual <- writePayload execution body
                 unless (actual == ref) (abort CorruptReplay)
                 Tx.statement (operationKey operationId, operation & #outcome .~ Just ref & #continuation .~ Just next & #uncertain .~ unresolved) updateOperation
@@ -1062,6 +1048,38 @@ recordOutcomeAndAdvanceWith access@(ReplayAccess execution _ _) expected operati
                 Left (CheckFailed err) -> pure (Left err)
   where
     body = envelope "operation-outcome" outcome
+
+-- Bounded command authority under the same root -> execution -> operation lock
+-- order as the inline writer. Accounting settlement and final hooks stay late:
+-- their failures must escape the transaction through ExecutionAbort.
+outcomePrecondition :: ReplayAccess -> Integer -> Operation -> OperationOutcome -> Maybe (Calls.CallReceipt, Calls.CallOutcome) -> ExecutionBinding -> Transaction (Either ExecutionError ())
+outcomePrecondition (ReplayAccess execution identity _) expected operation outcome accounting binding = do
+  root <- traverse Roots.inspectRootTx binding.rootId
+  case sequence root of
+    Left err -> pure (Left (ResourceAdmissionRefused (Text.pack (show err))))
+    Right _ -> do
+      stored <- Tx.statement execution.value lockExecution
+      actual <- Tx.statement (operationKey operation.specification.operationId) lockOperation
+      pure do
+        (state, actualBinding) <- maybe (Left ExecutionMissing) Right stored
+        unless (identity == actualBinding.identity) (Left ReplayReadRefused)
+        unless (expected >= 0 && expected < toInteger (maxBound :: Int) && state.revision == expected) (Left ExecutionRevisionConflict)
+        unless (state.activeOperation == Just operation.specification.operationId && state.phase == Active) (Left OperationConflict)
+        actualOperation <- maybe (Left OperationMissing) Right actual
+        unless (actualOperation == operation) (Left OperationConflict)
+        forM_ accounting \(receipt, _) ->
+          unless (receipt.request.operationId == operation.specification.operationId && receipt.rootId == actualBinding.rootId && receipt.assignmentId == actualBinding.assignmentId) (Left OperationConflict)
+        case outcome of
+          ModelReturned {} -> unless (actualOperation.specification.kind `elem` [ModelTurn, ModelRepair, ModelSummary]) (Left OperationConflict)
+          RichToolReturned {} -> toolOutcome actualOperation
+          ToolReturned {} -> toolOutcome actualOperation
+          TerminalResult {} -> Left OperationConflict
+          _ -> Right ()
+  where
+    toolOutcome actualOperation = do
+      unless (actualOperation.specification.kind == ToolOperation && isNothing accounting) (Left OperationConflict)
+      forM_ actualOperation.permission \permission ->
+        unless (permission.resolution == Just PermissionApproved) (Left (ExecutionPolicyRefused "tool permission was not approved"))
 
 finishExecution :: (ExecutionEffects es) => ReplayAccess -> Integer -> Aeson.Value -> Eff es (Either ExecutionError Admission)
 finishExecution access@(ReplayAccess execution _ _) expected result = catchExecutionWith id $ case payloadReference body of
@@ -1140,6 +1158,23 @@ persist execution command action = catchExecutionWith CheckFailed run
         Left (StoreFailed _) -> Left (CheckFailed ExecutionStorageUnavailable)
         Left (RetryExhausted _ _) -> Left (CheckFailed ExecutionStorageUnavailable)
         Left _ -> Left (CheckFailed ExecutionCommandRefused)
+
+-- Every current lifecycle live edge emits an event. An unexpected future silent
+-- edge refuses explicitly; it cannot fabricate an accepted persistence receipt.
+persistGuarded :: (ExecutionEffects es) => ExecutionId -> Generated.ExecutionLifecycleCommand -> Transaction (Either ExecutionError ()) -> Transaction () -> Eff es (Either PersistenceFailure ())
+persistGuarded execution command precondition action = catchExecutionWith CheckFailed do
+  let (catalog, projections) = withLiveExecution (\_ _ -> action)
+      handler = DomainCommandHandler {eventStream = executionLifecycleEventStream, classifySilent = \_ -> SilentRejected ExecutionCommandRefused}
+  result <- runDomainCommandWithCatalogProjectionsGuarded defaultRunCommandOptions handler (Stream.entityStream executionLifecycleCategory execution.value) command catalog projections (const precondition)
+  pure case result of
+    Right (PreconditionRefused refusal) -> Left (CheckFailed refusal)
+    Right (CatalogCommandOutcome (DomainProjectionCommandApplied DomainCommandOutcome {decision = DomainAccepted _})) -> Right ()
+    Right (CatalogCommandOutcome (DomainProjectionCommandApplied DomainCommandOutcome {decision = DomainRejected refusal})) -> Left (CheckFailed refusal)
+    Right _ -> Left (CheckFailed ProjectionUnavailable)
+    Left CommandRejected -> Left EventRejected
+    Left (StoreFailed _) -> Left (CheckFailed ExecutionStorageUnavailable)
+    Left (RetryExhausted _ _) -> Left (CheckFailed ExecutionStorageUnavailable)
+    Left _ -> Left (CheckFailed ExecutionCommandRefused)
 
 protected :: (ExecutionReadEffects es, ToJSON a, FromJSON a) => Transaction a -> Eff es (Either ExecutionError a)
 protected action = catchExecutionWith id do

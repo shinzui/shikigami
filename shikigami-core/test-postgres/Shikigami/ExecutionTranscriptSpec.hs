@@ -36,7 +36,12 @@ import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Tx
+import Keiki.Core qualified as K
+import Keiro.Command (DomainCommandHandler (..), SilentDomainDecision (SilentRejected), defaultRunCommandOptions)
+import Keiro.EventStream (EventStream (..))
+import Keiro.Projection (DomainProjectionCommandOutcome (DomainProjectionCommandFenced), GuardedCatalogOutcome (..), runDomainCommandWithCatalogProjectionsGuarded)
 import Keiro.ReadModel.Rebuild qualified as Rebuild
+import Keiro.Stream qualified as Stream
 import Keiro.Timer qualified as Timer
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), continueAsNew, currentRunGeneration, defaultWorkflowRunOptions, loadStepIndex, runWorkflow)
 import Keiro.Workflow.Awakeable (AwakeableId (..), awakeableIdText, awakeableNamed)
@@ -84,6 +89,8 @@ import Shikigami.Execution.Tools qualified as Tools
 import Shikigami.Execution.Transcript
 import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as DriverGenerated
+import Shikigami.ExecutionLifecycle.Generated.Domain qualified as Lifecycle
+import Shikigami.ExecutionLifecycle.Generated.EventStream (executionLifecycleCategory, executionLifecycleEventStream, executionLifecycleEventStreamDef)
 import Shikigami.Log qualified as Log
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
@@ -779,13 +786,61 @@ tests fixture =
           state.revision @?= 1
           state.cursor @?= 0
           length operations @?= 1,
+      testCase "every lifecycle live edge emits events and has no silent acceptance" do
+        let graph = executionLifecycleEventStreamDef.transducer
+            states = [minBound .. maxBound] :: [Lifecycle.ExecutionLifecycleVertex]
+            edges = concatMap graph.edgesOut states
+            emits K.Edge {K.output = outputs, K.mode = mode} = mode /= K.Live || not (null outputs)
+        assertBool "the finite lifecycle graph must have live edges" (not (null edges))
+        assertBool "silent lifecycle edge would need an explicit domain policy" (all emits edges),
+      testCase "typed precondition and rebuild refusals roll back tentative lifecycle append" $
+        withFixture fixture \env snapshot access -> do
+          (_, operation) <- expectRight =<< run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput)
+          before <- lifecycleCount env snapshot.executionId
+          payloads <- payloadCount env snapshot.executionId
+          let (catalog, projections) = ExecutionCatalog.withLiveExecution (\_ _ -> error "refused command reached inline writes")
+              handler = DomainCommandHandler {eventStream = executionLifecycleEventStream, classifySilent = \_ -> SilentRejected ExecutionCommandRefused}
+              command = Lifecycle.AdvanceExecution (Lifecycle.AdvanceExecutionData snapshot.executionId.value 1 2)
+              target = Stream.entityStream executionLifecycleCategory snapshot.executionId.value
+          typed <- run env (runDomainCommandWithCatalogProjectionsGuarded defaultRunCommandOptions handler target command catalog projections (const (pure (Left OperationConflict))))
+          case typed of
+            Right (PreconditionRefused OperationConflict) -> pure ()
+            _ -> assertFailure "expected typed precondition refusal without committed metadata"
+          lifecycleCount env snapshot.executionId >>= (@?= before)
+          payloadCount env snapshot.executionId >>= (@?= payloads)
+          -- Exercise the production relational precondition: a model operation
+          -- cannot accept a tool outcome, and the late hook must not run.
+          run env (Store.recordOutcomeAndAdvanceWith access 1 operation.specification.operationId (ToolReturned [] False) NeedModel Nothing (error "typed refusal reached late hook")) >>= (@?= Left OperationConflict)
+          lifecycleCount env snapshot.executionId >>= (@?= before)
+          let request =
+                Rebuild.RebuildRequest
+                  { rebuildRunId = mustRight (Rebuild.mkRebuildRunId "guarded-outcome-fence"),
+                    requestedBy = "execution-fixture",
+                    requestReason = "prove native guarded rollback",
+                    replayFrom = GlobalPosition 0
+                  }
+          _ <- expectRight =<< run env (Rebuild.beginGroupRebuild Catalog.validatedProjectionCatalog ExecutionCatalog.executionStoreRebuildGroupId request)
+          fenced <- run env (runDomainCommandWithCatalogProjectionsGuarded defaultRunCommandOptions handler target command catalog projections (const (error "fenced command reached precondition")))
+          case fenced of
+            Right (CatalogCommandOutcome (DomainProjectionCommandFenced _ _)) -> pure ()
+            _ -> assertFailure "expected native catalog fence"
+          lifecycleCount env snapshot.executionId >>= (@?= before)
+          payloadCount env snapshot.executionId >>= (@?= payloads),
       testCase "fault after outcome writes rolls back payload cursor call facts and root settlement" $
         withFixture fixture \env snapshot access -> do
           (_, operation) <- expectRight =<< run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput)
           receipt <- reserveCall env snapshot operation
           before <- payloadCount env snapshot.executionId
-          run env (Store.recordOutcomeAndAdvanceWith access 1 operation.specification.operationId modelOutcome NeedModel (Just (receipt, terminal)) (pure (Left ExecutionCommandRefused))) >>= (@?= Left ExecutionCommandRefused)
+          eventsBefore <- lifecycleCount env snapshot.executionId
+          let finalCheck = do
+                tentative <- Tx.statement snapshot.executionId.value outcomeWritesVisible
+                root <- Roots.inspectRootTx rootId
+                pure case root of
+                  Right value | tentative && value.active == 0 && Map.lookup R.Tokens value.known == Just 3 -> Left ExecutionCommandRefused
+                  _ -> Left CorruptReplay
+          run env (Store.recordOutcomeAndAdvanceWith access 1 operation.specification.operationId modelOutcome NeedModel (Just (receipt, terminal)) finalCheck) >>= (@?= Left ExecutionCommandRefused)
           payloadCount env snapshot.executionId >>= (@?= before)
+          lifecycleCount env snapshot.executionId >>= (@?= eventsBefore)
           Just pending <- inspectOperation env operation.specification.operationId
           pending.outcome @?= Nothing
           Just (state, _, _) <- inspect env snapshot.executionId
@@ -1310,3 +1365,15 @@ inspect env execution = run env (Store.inspectExecution execution) >>= expectRig
 
 inspectOperation :: AppEnv -> OperationId -> IO (Maybe Operation)
 inspectOperation env operation = run env (Store.inspectOperation operation) >>= expectRight
+
+lifecycleCount :: AppEnv -> ExecutionId -> IO Int64
+lifecycleCount env execution = run env (runTransaction (Tx.statement ("executionLifecycle-" <> execution.value) statement))
+  where
+    statement = preparable "SELECT count(*) FROM kiroku.stream_events e JOIN kiroku.streams s USING (stream_id) WHERE s.stream_name=$1" (E.param (E.nonNullable E.text)) (D.singleRow (D.column (D.nonNullable D.int8)))
+
+outcomeWritesVisible :: Statement Text Bool
+outcomeWritesVisible =
+  preparable
+    "SELECT (state->>'revision')::bigint=2 AND (state->>'cursor')::bigint=1 AND state->>'activeOperation' IS NULL FROM shikigami.executions WHERE execution_id=$1"
+    (E.param (E.nonNullable E.text))
+    (D.singleRow (D.column (D.nonNullable D.bool)))

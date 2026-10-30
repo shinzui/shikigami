@@ -27,6 +27,11 @@ provenance:
       at: 2026-10-30T19:46:17Z
       mode: "update"
       note: "Expand unused-service adoption to six children, current domain census, HTTP/live inspection, Haskell corpus and first-release qualification."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-30T20:38:29Z
+      mode: "implement"
+      note: "Begin native guarded outcome transaction adoption after accepted plan 92"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -52,12 +57,26 @@ Make execution admission checks that can run before inline writes return typed r
 ## Progress
 
 
-- [ ] M1: An accepted outcome, typed precondition refusal, retained late-write refusal and active rebuild fence prove atomicity with real PostgreSQL transactions.
+- [x] M1 (2026-10-30): All 50 ExecutionTranscript PostgreSQL cases pass, including typed refusal, tentative-append rebuild rollback, accepted convergence and late refusal after observed cursor/accounting writes. `docs/evidence/keiro-0.22/guarded-outcome-m1.txt` records the native results.
 - [ ] M2: All applicable execution persistence paths use the accepted protocol, preserving concurrent retry, accounting, permission and claim behavior.
 - [ ] M3: Every 0.21/0.22 DSL capability and existing consumer adapter has an evidence-backed disposition, generated conformance passes, and the single first-release contract passes same-build replay qualification.
 
 
 ## Surprises & Discoveries
+
+The native proof uses the actual generated ExecutionLifecycle domain/validated
+stream through the released guarded runner. These two modules are now explicit
+core exports for typed command integration; all remaining generated modules stay
+in the ordinary generated build inventory. A finite graph assertion proves every
+current live edge emits events. The fallback classifier rejects an unexpected
+future silent edge instead of declaring it an accepted no-op.
+
+Outcome preconditions lock root, execution and operation rows in that order and
+return ordinary identity/revision/kind/permission refusals before inline writes.
+The inline writer rereads transaction-local state under retained locks. It still
+settles accounting and invokes the final hook after protected writes; native
+fault injection observes those tentative facts before returning its original
+refusal and proves complete rollback.
 
 
 The released guarded runner calls its precondition after tentative append and catalog admission but before inline delivery. It has no post-inline typed-refusal callback. The existing `recordOutcomeAndAdvanceWith` hook runs after payload/cursor writes and accounting, so its rollback path is not superseded by this API.

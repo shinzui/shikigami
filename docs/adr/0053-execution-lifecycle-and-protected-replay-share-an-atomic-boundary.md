@@ -107,3 +107,26 @@ not establish production model/tool recovery by itself. The resource owner's
 - [ADR 0052](0052-assignments-pin-whole-run-selection-and-account-every-provider-attempt.md)
 - `mori://shinzui/keiro/packages/keiro` — selected 0.18.0.0 public command, catalog and query boundaries.
 - `mori://shinzui/baikai` — supported content/continuation constructors and encode-only provider envelopes; artifact-level source URIs are pending.
+
+
+## Guarded outcome admission — 2026-10-30
+
+Outcome admission now uses the released typed catalog precondition after tentative
+append and catalog fencing, before inline delivery. Expected root/identity,
+revision, operation-kind and permission refusals return through
+`PreconditionRefused`; they carry no committed receipt. Root, execution and
+operation row locks retain that order until the command transaction settles.
+The writer rereads transaction-local values under those locks and retains no
+mutable cross-callback state.
+
+Accounting owner writes and the post-write final hook remain inside the same
+inline transaction. Their refusal must still throw through the transaction
+boundary before mapping to `CheckFailed`. The guarded API has no post-inline
+typed-refusal callback. Removing those exception paths would lose atomicity.
+The fifty-case native outcome proof observes tentative cursor and accounting
+writes before injecting a late refusal, then checks rollback of every participant.
+
+ExecutionLifecycle's domain and validated stream are explicit core exports for
+typed command integration. A finite-graph assertion proves every current live
+edge emits events. An unexpected silent edge is classified as a bounded refusal;
+no successful no-op or accepted receipt is fabricated.

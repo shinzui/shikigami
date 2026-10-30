@@ -113,6 +113,8 @@ library
     Shikigami.Execution.Transcript
     Shikigami.ExecutionDriver.Generated.WorkflowFacts
     Shikigami.ExecutionDriver.Generated.WorkflowRuntime
+    Shikigami.ExecutionLifecycle.Generated.Domain
+    Shikigami.ExecutionLifecycle.Generated.EventStream
     Shikigami.Flow
     Shikigami.Flow.Acknowledgement
     Shikigami.Flow.AtRiskCustomer
@@ -233,6 +235,8 @@ library
   -- src/keiro-dsl-cabal-fragment.workspace.shikigami.txt, which is the
   -- authoritative build inventory for the generated layer. Never edit a
   -- generated module; change domain/*.keiro and scaffold again.
+  -- ExecutionLifecycle Domain/EventStream are exposed above for typed command
+  -- integration; the union of both module lists matches the generated inventory.
   other-modules:
     Paths_shikigami_core
     Shikigami.AgentRun.Generated.WorkflowFacts
@@ -246,8 +250,6 @@ library
     Shikigami.ExecutionLifecycle.BehaviorHoles
     Shikigami.ExecutionLifecycle.Generated.BehaviorContract
     Shikigami.ExecutionLifecycle.Generated.Codec
-    Shikigami.ExecutionLifecycle.Generated.Domain
-    Shikigami.ExecutionLifecycle.Generated.EventStream
     Shikigami.ExecutionLifecycle.Generated.Harness
     Shikigami.ExecutionLifecycle.Generated.Projection
     Shikigami.ExecutionLifecycle.Generated.Transducer
