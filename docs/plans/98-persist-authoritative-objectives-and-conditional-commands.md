@@ -47,11 +47,11 @@ After this plan, Shikigami's own PostgreSQL store holds authoritative objectives
 
 - [x] Milestone 1 (2026-10-30): objective domain, generated catalog/read model, additive migration `0031-objective-checkpoints.sql`, closed command types and default-deny shared configuration compile. `cabal build all`, 542 unit tests (including loader cases), migration application in the PostgreSQL harness and `just migration-schema-isolation` pass.
 - [x] Milestone 2 (2026-10-30): one authenticated conditional executor atomically writes state, lifecycle, protected payload and receipt. The 377-case PostgreSQL suite passes, including 19 objective cases for public conflicts, retained negative outcomes, source-authentic sibling checkpoints, revocation, atomic creation/origins and rollback.
-- [ ] Milestone 3: graph/acceptance validation, real worker result projection, terminal reconciliation and separate-process receipt recovery pass in the same 19 objective PostgreSQL cases. The final committed-candidate Keiro gate remains pending.
+- [x] Milestone 3 (2026-10-30): bounded graph and explicit integrated acceptance reject stale or incomplete work; real session results project with assignment revisions, and terminal reconciliation/process-exit recovery pass. The final committed-source gate against `86954e1` passes with 122 conformance checks, no breaking findings, unchanged regeneration and replay-neutral impact.
 
 Planning baseline `3900c0e634d9b559e92a6989bb10f9943e0beab1`, inspected 2026-10-28. Implementation baseline: `86954e17d57099a7c48499402946bb4558752afa` (2026-10-30).
 
-Implementation is present. The checked-in Cabal project resolves without the optional local project. The full suites have passed 542 unit cases and 377 PostgreSQL cases (19 new objective cases), including real worker result/checkpoint ingestion and separate-process acknowledgement loss. The final root-optional interface and package-formatting reconciliation are validated; only the committed-candidate Keiro gate remains.
+Implementation is present. The checked-in Cabal project resolves without the optional local project. The full suites have passed 542 unit cases and 377 PostgreSQL cases (19 new objective cases), including real worker result/checkpoint ingestion and separate-process acknowledgement loss. The final root-optional interface, package-formatting reconciliation and committed-candidate Keiro gate are validated. Source candidate `c074feb` is qualified against baseline `86954e1`; [qualification facts](../evidence/plan-98/qualification.json) and the adjacent gate reports retain the evidence.
 
 
 ## Surprises & Discoveries
@@ -86,7 +86,13 @@ Worker success and verifier success need separate retained dispositions. The exi
 
 ## Outcomes & Retrospective
 
-Implementation and runtime qualification are complete pending the final committed-candidate gate. No worker-provider, public API/CLI or model/Flow surface is enabled by this plan. FRIC-32 is resolved by formatter ownership exclusions. FRIC-33 is accepted: strict request-bundle validation still reports the same eight missing recommended metadata fields as the implementation baseline; its output compares byte-for-byte equal, and no historical review entries were invented.
+Completed 2026-10-30. Shikigami now owns authoritative objective snapshots, bounded assignment graphs, source-authenticated progress, retained evidence, explicit acceptance and immutable command outcomes. Creation/origin links and positive transitions commit atomically with the checked lifecycle; membership checks precede receipt recovery, and definitive conflicts cannot later become accepted. Finite assignments need no execution root; worker projection requires an admitted binding. Accepted source effects can reconcile after cancellation while fresh public progress remains denied.
+
+Validation: 542 unit tests and 377 PostgreSQL tests pass, including 19 objective cases; `cabal build all`, schema isolation and the committed-candidate Keiro gate pass. The gate records 122 conformance checks, no breaking findings, unchanged regeneration and replay-neutral impact. See [qualification facts](../evidence/plan-98/qualification.json), [compatibility report](../evidence/plan-98/keiro-diff.json) and [replay report](../evidence/plan-98/keiro-replay-impact.json). The PostgreSQL suite's evidence was preserved while a Cabal internal-module declaration layout assertion was fixed and the unit suite/build rerun.
+
+[ADR 0070](../adr/0070-objective-receipts-and-integrated-acceptance-share-one-command-owner.md) distills the command/receipt and integrated-acceptance boundaries; ADRs 0067–0068 now distinguish qualified persistence from the remaining runtime adapters. No worker-provider, public API/CLI or model/Flow surface is enabled by this plan. Plans 99–102 and plan 84's real-provider gate remain open; IR-13 is in-progress.
+
+FRIC-32 is resolved by formatter ownership exclusions, verified by pre-commit formatting and deterministic regeneration. FRIC-33 is accepted: strict request-bundle validation reports eight inherited missing recommended metadata fields. The [diagnostics](../evidence/plan-98/inherited-request-diagnostics.txt) compare byte-for-byte equal with an isolated copy of the implementation-baseline bundle; no historical review entries were invented. No friction recorded under this plan remains untriaged.
 
 
 ## Context and Orientation

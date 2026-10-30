@@ -1,0 +1,46 @@
+{
+  "implementationBaseline": "86954e17d57099a7c48499402946bb4558752afa",
+  "qualifiedSourceCommit": "c074feb3a5dcb620ed0dc3a8b1a0f738385f784e",
+  "date": "2026-10-30",
+  "project": "cabal.project",
+  "buildAll": "passed",
+  "unitTests": {
+    "suite": "shikigami-core-test",
+    "passed": 542,
+    "result": "passed"
+  },
+  "postgresTests": {
+    "suite": "shikigami-core-postgres-test",
+    "passed": 377,
+    "newObjectiveCases": 19,
+    "result": "passed"
+  },
+  "suiteEvidence": "The final PostgreSQL suite passed after root-optional/source-binding changes. A Cabal field-layout assertion in the parallel unit suite was repaired by consolidating internal module declarations, then all 542 unit tests and cabal build all passed. PostgreSQL evidence remains applicable: its source and runtime dependencies did not change during that metadata-only consolidation.",
+  "migrationSchemaIsolation": "passed",
+  "migration": "0031-objective-checkpoints.sql",
+  "keiroGate": {
+    "baseline": "86954e17d57099a7c48499402946bb4558752afa",
+    "result": "passed",
+    "conformanceChecks": 122,
+    "breaking": false,
+    "replayImpact": "replay-neutral",
+    "regeneration": "unchanged"
+  },
+  "formatting": "pre-commit treefmt and commit-message checks passed; machine-owned Keiro output is excluded from formatting and checked by deterministic regeneration",
+  "friction": {
+    "FRIC-32": "resolved",
+    "FRIC-33": "accepted"
+  },
+  "knownLimit": {
+    "check": "strict improvement-request bundle validation",
+    "result": "inherited failure",
+    "diagnostics": 8,
+    "baselineComparison": "byte-for-byte identical to the implementation baseline",
+    "evidence": "inherited-request-diagnostics.txt"
+  },
+  "scopeLimits": [
+    "Trusted callback fixtures stand in for production origin, verifier and fence adapters.",
+    "No production worker provider, HTTP/CLI objective surface, model tool or Flow effect is enabled here.",
+    "IR-13 remains in-progress; plan 84 real-provider gate remains open."
+  ]
+}

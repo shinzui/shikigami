@@ -1,0 +1,8 @@
+profile: compose-shikumi-decisions-in-durable-flows: missing profile-recommended field: reviews (Chronological human or model review provenance for this document revision.)
+profile: expose-addressed-agent-runs-over-http: missing profile-recommended field: resolution (when status is one of [completed, rejected, withdrawn, superseded]) (Evidence or rationale recorded when a request reaches a terminal state.)
+profile: record-durable-model-tool-turns-and-compose-harness-policies: missing profile-recommended field: reviews (Chronological human or model review provenance for this document revision.)
+profile: select-governed-models-for-agent-runs: missing profile-recommended field: reviews (Chronological human or model review provenance for this document revision.)
+profile: support-adaptive-durable-orchestration: missing profile-recommended field: reviews (Chronological human or model review provenance for this document revision.)
+profile: support-continuing-worker-sessions: missing profile-recommended field: reviews (Chronological human or model review provenance for this document revision.)
+profile: support-optional-major-task-tracking: missing profile-recommended field: reviews (Chronological human or model review provenance for this document revision.)
+profile: support-recurring-objective-supervision: missing profile-recommended field: reviews (Chronological human or model review provenance for this document revision.)
