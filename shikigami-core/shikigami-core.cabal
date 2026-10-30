@@ -195,6 +195,8 @@ library
     Shikigami.Workflow.Versioning
     Shikigami.Workspace.Admission
     Shikigami.Workspace.Catalog
+    Shikigami.Workspace.GitStore
+    Shikigami.Workspace.GitTypes
     Shikigami.Workspace.Instructions
     Shikigami.Workspace.Process
     Shikigami.Workspace.ProcessPolicy

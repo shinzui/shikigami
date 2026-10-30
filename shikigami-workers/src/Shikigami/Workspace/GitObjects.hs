@@ -6,6 +6,7 @@ module Shikigami.Workspace.GitObjects
     GitAuthor (..),
     storeBlob,
     storeTree,
+    storeFlatTree,
     storeCommit,
     readHead,
     publishCommit,
@@ -16,14 +17,17 @@ where
 
 import Control.Monad (unless)
 import Data.ByteString qualified as Bytes
-import Data.List (nub)
+import Data.Generics.Labels ()
+import Data.List (inits, nub)
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
 import Data.Time (UTCTime)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId)
-import Shikigami.Prelude (FromJSON, Generic, ToJSON, toJSON)
+import Shikigami.Prelude (FromJSON, Generic, ToJSON, toJSON, (&), (.~))
 import Shikigami.Workspace.ContainedFile (checkPrivateDirectory)
 import Shikigami.Workspace.Git (runWorkspaceGitInput)
 import Shikigami.Workspace.Instructions (validWorkspacePath)
@@ -52,6 +56,27 @@ storeTree metadata entries
   where
     valid entry = component entry.name && entry.mode `elem` ["100644", "100755", "040000"] && validObject entry.objectId
     line entry = entry.mode <> (if entry.mode == "040000" then " tree " else " blob ") <> entry.objectId <> "\t" <> entry.name <> "\0"
+
+-- Compose a complete, bounded flat manifest without a Git index or worktree
+-- traversal. A file/directory collision and case aliases at any depth refuse.
+storeFlatTree :: FilePath -> [GitEntry] -> IO (Either WorkspaceError Text.Text)
+storeFlatTree metadata entries
+  | length entries > 100000 || length entries /= Set.size (Set.fromList paths) || Set.size prefixes /= Set.size (Set.map Text.toCaseFold prefixes) || not (all valid entries) = pure refused
+  | otherwise = build entries
+  where
+    paths = map (.name) entries
+    prefixes = Set.fromList [Text.intercalate "/" prefix | path <- paths, prefix <- drop 1 (inits (Text.splitOn "/" path))]
+    valid entry = validWorkspacePath entry.name && Text.all (< '\DEL') entry.name && length (Text.splitOn "/" entry.name) <= 128 && entry.mode `elem` ["100644", "100755"] && validObject entry.objectId
+    build current = do
+      let groups = Map.fromListWith (<>) [(Text.takeWhile (/= '/') entry.name, [entry]) | entry <- current]
+      children <- traverse child (Map.toAscList groups)
+      case sequence children of Left err -> pure (Left err); Right nodes -> storeTree metadata nodes
+    child (name, [entry]) | entry.name == name = pure (Right entry)
+    child (name, group)
+      | any ((== name) . (.name)) group = pure refused
+      | otherwise = do
+          nested <- build [entry & #name .~ Text.drop (Text.length name + 1) entry.name | entry <- group]
+          pure (GitEntry name "040000" <$> nested)
 
 -- The caller retains this exact object, parent, tree and timestamp before
 -- publishing HEAD. Rebuilding an object never invokes user commit hooks.

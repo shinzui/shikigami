@@ -8,6 +8,7 @@ import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (AttemptId, OperationId)
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Prelude
+import Shikigami.Workspace.GitTypes qualified as Git
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), bundleBase, bundleDigest, bundleRepository, nativeFilePolicy, supervisedFilePolicy, validWorkspacePath)
 import Shikigami.Workspace.Process
 import Shikigami.Workspace.ProcessPolicy
@@ -155,3 +156,17 @@ workspaceProcessAction binding admission dispatch record boot target = do
       digest = Text.replace ":" "-" (versionedDigest "shikigami.workspace-process-action/1" coordinates)
       revision = "1-" <> Text.replace ":" "-" (workspaceBindingDigest binding)
   either (const (Left FileEffectRefused)) (Right . InvokeCapabilityTool) (mkCapabilityToolTarget "shikigami.workspace" revision ("exec-" <> digest))
+
+-- Prepare can capture admitted bytes and create immutable objects; publish
+-- additionally binds the exact parent/tree/commit and every changed path.
+-- Neither proof can be reused by another actual claim or Unix profile.
+workspaceGitAction :: WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> ProcessProfile -> Git.GitRecord -> Either FileEffectError AgentAction
+workspaceGitAction binding admission dispatch profile record = do
+  unless (admission.filePolicy == Just supervisedFilePolicy && admission.workspace == binding.workspace && admission.bindingDigest == workspaceBindingDigest binding && admission.runId == binding.request.runId && admission.rootId == binding.request.rootId && admission.owner == binding.request.owner && admission.epoch == binding.request.epoch && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base) (Left FileEffectRefused)
+  unless (validProcessProfile profile && profile.bindingDigest == workspaceBindingDigest binding && profile.instructionDigest == bundleDigest admission.instructions && processPolicyIdentity profile.policy == binding.policyRevision && "" `elem` profile.policy.readPaths) (Left FileEffectRefused)
+  unless (Git.validGitRecord record && record.phase `elem` [Git.GitReserved, Git.GitPrepared, Git.GitPublishRequested] && record.bindingDigest == workspaceBindingDigest binding && record.instructionDigest == bundleDigest admission.instructions && record.profileDigest == Git.gitProfileDigest profile && record.fingerprint == Git.gitFingerprint binding record && record.operation == dispatch.operation && record.attemptId == dispatch.attemptId && record.claimOwner == dispatch.owner && record.generation == dispatch.generation && record.routing.identity == admission.owner) (Left FileEffectRefused)
+  forM_ record.candidate \candidate -> unless (all (processFileAllowed profile.policy "replace") candidate.paths) (Left FileEffectRefused)
+  let coordinates = Aeson.object ["binding" Aeson..= workspaceBindingDigest binding, "instructions" Aeson..= bundleDigest admission.instructions, "filePolicy" Aeson..= admission.filePolicy, "assignment" Aeson..= admission.assignmentId, "owner" Aeson..= admission.owner, "epoch" Aeson..= admission.epoch, "profile" Aeson..= profile, "record" Aeson..= Git.gitActionIdentity record]
+      digest = Text.replace ":" "-" (versionedDigest "shikigami.workspace-git-action/1" coordinates)
+      revision = "git1-" <> Text.replace ":" "-" (workspaceBindingDigest binding)
+  either (const (Left FileEffectRefused)) (Right . InvokeCapabilityTool) (mkCapabilityToolTarget "shikigami.workspace" revision ("commit-" <> digest))

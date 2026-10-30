@@ -150,7 +150,7 @@ freezeControl :: Statement Text ()
 freezeControl = preparable "UPDATE shikigami.workspace_controls SET frozen=true WHERE resource=$1" (E.param (E.nonNullable E.text)) D.noResult
 
 selectEffect :: Statement Text (Maybe (Text, Text, Maybe FileReceipt))
-selectEffect = preparable "SELECT resource,fingerprint,receipt FROM shikigami.workspace_effects WHERE operation_id=$1" (E.param (E.nonNullable E.text)) (D.rowMaybe ((,,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> D.column (D.nullable (D.refine decode D.jsonb))))
+selectEffect = preparable "SELECT resource,fingerprint,receipt FROM shikigami.workspace_effects WHERE operation_id=$1 AND kind='file'" (E.param (E.nonNullable E.text)) (D.rowMaybe ((,,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> D.column (D.nullable (D.refine decode D.jsonb))))
   where
     decode value = case Aeson.fromJSON value of Aeson.Success result -> Right result; Aeson.Error err -> Left (Text.pack err)
 
@@ -161,7 +161,7 @@ insertEffect :: Statement (Text, Text, Text) ()
 insertEffect = preparable "INSERT INTO shikigami.workspace_effects(operation_id,resource,fingerprint) VALUES($1,$2,$3) ON CONFLICT DO NOTHING" (contrazip3 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.text))) D.noResult
 
 saveReceipt :: Statement (Text, Text, Text, FileReceipt) Bool
-saveReceipt = preparable "UPDATE shikigami.workspace_effects SET receipt=$4,settled=($4->>'state' IN ('EditApplied','EditRefused')) WHERE operation_id=$1 AND resource=$2 AND fingerprint=$3 AND (receipt IS NULL OR receipt=$4 OR (NOT settled AND receipt->>'state'='EditPrepared' AND $4->>'state' IN ('EditApplied','EditRefused') AND receipt-'state'=$4-'state')) RETURNING true" (contrazip4 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.text)) jsonParam) (maybe False id <$> D.rowMaybe (D.column (D.nonNullable D.bool)))
+saveReceipt = preparable "UPDATE shikigami.workspace_effects SET receipt=$4,settled=($4->>'state' IN ('EditApplied','EditRefused')) WHERE operation_id=$1 AND kind='file' AND resource=$2 AND fingerprint=$3 AND (receipt IS NULL OR receipt=$4 OR (NOT settled AND receipt->>'state'='EditPrepared' AND $4->>'state' IN ('EditApplied','EditRefused') AND receipt-'state'=$4-'state')) RETURNING true" (contrazip4 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.text)) jsonParam) (maybe False id <$> D.rowMaybe (D.column (D.nonNullable D.bool)))
 
 pendingOtherEffect :: Statement (Text, Text) Bool
 pendingOtherEffect = preparable "SELECT EXISTS(SELECT 1 FROM shikigami.workspace_effects WHERE resource=$1 AND operation_id<>$2 AND NOT settled)" (contrazip2 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.text))) (D.singleRow (D.column (D.nonNullable D.bool)))

@@ -36,6 +36,15 @@ tests =
         assertBool "bounded object diff" ("new dependency" `Bytes.isInfixOf` patch)
         doesFileExist marker >>= (@?= False)
         readHead metadata >>= (@?= Right parent),
+      testCase "flat capture composes nested trees and refuses ambiguous prefixes" $ fixture \root metadata parent -> do
+        original <- right =<< storeBlob metadata "old dependency\n"
+        script <- right =<< storeBlob metadata "#!/bin/sh\ntrue\n"
+        tree <- right =<< storeFlatTree metadata [GitEntry "dependency.txt" "100644" original, GitEntry "src/tools/probe" "100755" script]
+        git root ["--git-dir=" <> metadata, "show", Text.unpack tree <> ":src/tools/probe"] >>= (@?= "#!/bin/sh\ntrue\n")
+        changedPaths metadata parent tree >>= (@?= Right ["src/tools/probe"])
+        storeFlatTree metadata [GitEntry "A/one" "100644" script, GitEntry "a/two" "100644" script] >>= assertLeft
+        storeFlatTree metadata [GitEntry "file" "100644" script, GitEntry "file/child" "100644" script] >>= assertLeft
+        storeFlatTree metadata [GitEntry "src/same" "100644" script, GitEntry "src/same" "100644" script] >>= assertLeft,
       testCase "retained commit publishes once and recovers acknowledgement loss" $ fixture \root metadata parent -> do
         marker <- armHelpers root metadata
         blob <- right =<< storeBlob metadata "upgrade\n"

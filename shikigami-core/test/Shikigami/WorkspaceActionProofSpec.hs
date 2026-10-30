@@ -22,6 +22,7 @@ import Shikigami.Execution.Identity
 import Shikigami.Execution.Runner
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadRef (..))
 import Shikigami.Prelude ((&), (.~))
+import Shikigami.Workspace.GitTypes qualified as Git
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Process
 import Shikigami.Workspace.ProcessPolicy
@@ -210,6 +211,44 @@ tests =
           (changedPolicyAction : changedProvision)
         workspaceProvisionAction provisionBinding (provisionAdmission & #filePolicy .~ Just nativeFilePolicy) profile boot "device:files" "device:scratch" @?= Left FileEffectRefused
         workspaceProvisionAction provisionBinding provisionAdmission (profile & #instructionDigest .~ command.profile) boot "device:files" "device:scratch" @?= Left FileEffectRefused
+        let gitLogical = logical & #fingerprint .~ command.profile & #scopeDigest .~ command.profile
+            gitDispatch = dispatch & #operation .~ gitLogical
+            candidate = Git.GitCandidate provisionBinding.base (Text.replicate 40 "b") (Text.replicate 40 "c") ["src/file"]
+            rawGit = Git.GitRecord 1 gitLogical gitDispatch.attemptId gitDispatch.owner gitDispatch.generation (workspaceBindingDigest provisionBinding) (bundleDigest provisionAdmission.instructions) (Git.gitProfileDigest profile) "device:files" provisionBinding.base command.profile now (Git.GitRouting gitLogical.executionId owner command.profile NeedModel) Git.GitPrepared (Just candidate)
+            seal value = value & #fingerprint .~ Git.gitFingerprint provisionBinding value
+            gitRecord = seal rawGit
+            gitAction a d p value = workspaceGitAction provisionBinding a d p (seal value)
+        commitAction <- right (gitAction provisionAdmission gitDispatch profile gitRecord)
+        workspaceGitAction provisionBinding provisionAdmission gitDispatch profile (gitRecord & #phase .~ Git.GitPublishRequested) @?= Right commitAction
+        let commitRequest = Kikan.AuthorizeActionRequest principal commitAction requestId
+            commitGrant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText principal))) (RelationName (Kikan.actionOperation commitAction)) (ObjectRef (ObjectType (Kikan.actionObjectType commitAction)) (Kikan.actionObjectId commitAction)) (En.ConsistencyToken "snapshot-1") (En.SchemaHash "schema-workspace-fixture") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId "workspace-proof")) Nothing
+        commitMinted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed commitGrant
+        commitProof <- right (Kikan.mkDecisionProof (decodeUtf8 commitMinted.token))
+        let commitIssued = Kikan.IssuedActionProof commitProof commitMinted.expiresAt [] checkedAt
+            changedProfile = profile & #userId .~ 62002 & #groupId .~ 62002
+        _ <- right =<< verifyIssuedAction verifier now commitRequest commitIssued
+        changedGitActions <-
+          mapM
+            right
+            [ gitAction provisionAdmission gitDispatch profile (gitRecord & #target .~ "device:other-files"),
+              gitAction provisionAdmission gitDispatch profile (gitRecord & #createdAt .~ addUTCTime 1 now),
+              gitAction provisionAdmission gitDispatch profile (gitRecord & #candidate .~ Just (candidate & #tree .~ Text.replicate 40 "d")),
+              gitAction provisionAdmission gitDispatch profile (gitRecord & #candidate .~ Just (candidate & #result .~ Text.replicate 40 "d")),
+              gitAction provisionAdmission gitDispatch profile (gitRecord & #candidate .~ Just (candidate & #paths .~ ["src/other"])),
+              gitAction provisionAdmission gitDispatch profile (gitRecord & #expectedParent .~ Text.replicate 40 "d" & #candidate .~ Just (candidate & #parent .~ Text.replicate 40 "d")),
+              gitAction provisionAdmission gitDispatch profile (gitRecord & #routing . #inputDigest .~ ("sha256:" <> Text.replicate 64 "b")),
+              gitAction (provisionAdmission & #assignmentId .~ "other-assignment") gitDispatch profile gitRecord,
+              gitAction provisionAdmission (gitDispatch & #attemptId .~ AttemptId "other-attempt") profile (gitRecord & #attemptId .~ AttemptId "other-attempt"),
+              gitAction provisionAdmission (gitDispatch & #owner .~ "other-claim") profile (gitRecord & #claimOwner .~ "other-claim"),
+              gitAction provisionAdmission (gitDispatch & #generation .~ 2) profile (gitRecord & #generation .~ 2),
+              gitAction provisionAdmission gitDispatch changedProfile (gitRecord & #profileDigest .~ Git.gitProfileDigest changedProfile),
+              gitAction provisionAdmission gitDispatch profile (gitRecord & #phase .~ Git.GitReserved & #candidate .~ Nothing)
+            ]
+        mapM_ (\action -> verifyIssuedAction verifier now (commitRequest & #action .~ action) commitIssued >>= \answer -> assertBool "Git proof binds exact plan, profile, input, anchor and actual claim" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) changedGitActions
+        workspaceGitAction provisionBinding (provisionAdmission & #filePolicy .~ Just nativeFilePolicy) gitDispatch profile gitRecord @?= Left FileEffectRefused
+        workspaceGitAction provisionBinding provisionAdmission gitDispatch profile (gitRecord & #phase .~ Git.GitUnresolved) @?= Left FileEffectRefused
+        workspaceGitAction provisionBinding provisionAdmission gitDispatch profile (gitRecord & #attemptId .~ AttemptId "unmatched") @?= Left FileEffectRefused
+        gitAction provisionAdmission gitDispatch profile (gitRecord & #candidate .~ Just (candidate & #paths .~ ["outside-policy"])) @?= Left FileEffectRefused
     ]
 
 right :: (Show e) => Either e a -> IO a

@@ -200,6 +200,20 @@ owned edits, duplicate requests, worker/supervisor restart, cancellation, offlin
 receipt recovery, isolation, missing-evidence retention and fresh denial. Local
 Git receipt qualification and production composition remain plan-96 gates.
 
+Local Git commit intent retains the original actual claim and an exact
+parent/tree/result/changed-path plan before publishing HEAD. Immutable blob/tree
+construction reads admitted bytes without invoking worktree filters or helpers;
+commit construction disables hooks and signing, and publication checks the
+expected parent. A single retained publication transition cannot be reissued
+after acknowledgement loss. A prepared candidate establishes intent, while
+only verified publication can establish completion. File and Git operations
+share the same unsettled-effect barrier, with typed receipt kinds preserving
+historical file encodings. Factual Git settlement after an owner freeze retains
+the original claim; only the existing execution owner may acknowledge its actual
+attempt and release accounting. These registration/object primitives remain
+uninstalled until the accepted Git adapter, independent publisher and coupled
+recovery fixture qualify that boundary.
+
 ## Alternatives rejected
 
 Releasing the unknown attempt to make room for its replacement would invent
