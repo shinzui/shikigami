@@ -25,7 +25,10 @@ extra-packages: keiro-dsl
 -- keiro-shikigami-conformance` never has to change. The package, its .cabal,
 -- and its Main.hs are generated; only KeiroConformance.Expectations inside it
 -- is hand-owned.
-optional-packages: shikigami-core/src/keiro-dsl-conformance.workspace.*/*.cabal
+optional-packages:
+  shikigami-core/src/keiro-dsl-conformance.workspace.*/*.cabal
+  tests/workspace/prototype/*.cabal
+
 with-compiler: ghc-9.12.4
 -- The co-developed cohort is selected by the components' own build-depends
 -- bounds, resolved against this fixed Hackage snapshot. Advance it to move the

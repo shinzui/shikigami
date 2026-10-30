@@ -1,0 +1,58 @@
+cabal-version: 3.0
+name: workspace-linux-fixture
+version: 0.1.0.0
+build-type: Simple
+synopsis: Disposable governed workspace Linux qualification
+
+executable shikigami-workspace-prototype
+  other-modules: Accepted
+  main-is: Main.hs
+  hs-source-dirs: .
+  default-language: GHC2024
+  default-extensions:
+    BlockArguments
+    DeriveAnyClass
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedLabels
+    OverloadedRecordDot
+    OverloadedStrings
+
+  ghc-options:
+    -Wall
+    -threaded
+    -rtsopts
+
+  build-depends:
+    aeson,
+    async,
+    baikai,
+    base,
+    biscuit-haskell,
+    bytestring,
+    containers,
+    directory,
+    effectful,
+    en-biscuit,
+    en-core,
+    filepath,
+    generic-lens,
+    hasql-transaction,
+    http-types,
+    keiro,
+    kikan-en-client,
+    kikan-en-contract,
+    kioku-api,
+    kioku-core,
+    kiroku-store,
+    process,
+    shikigami-core,
+    shikigami-workers,
+    shikumi-tools,
+    text,
+    time,
+    unix,
+    uuid,
+    vector,
+    wai,
+    warp,

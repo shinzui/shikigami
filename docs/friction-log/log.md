@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-10-30
+* **Addition**: FRIC-23 records slowdown tooling friction with mori://shinzui/shikigami: Frozen runtime rebuilds the full dependency graph for each fixture edit
+* **Addition**: FRIC-22 records detour environment friction with mori://apple/container: Translated amd64 commands fail inside the qualified private workspace profile
+
 ## 2026-10-29
 * **Update**: FRIC-21 logged: Two-core retry is not a reliable workaround; the same configure/defunct-helper symptom recurred during the profile/primitives build.
 * **Update**: FRIC-21 logged: Record the successful two-core Apple build without claiming a cause or a general fix.

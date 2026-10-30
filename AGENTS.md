@@ -1,6 +1,6 @@
 ## Haskell Record Fields
 
-Follow `/Users/shinzui/Keikaku/bokuno/haskell-jitsurei/core/record-patterns.md` for Haskell records. In particular, do not prefix record fields with the type, constructor, or module name; rely on `DuplicateRecordFields` and use direct field names such as `status`, `runId`, or `baseUrl`.
+Follow [the record patterns guide](mori://shinzui/haskell-jitsurei/docs/core-record-patterns) for Haskell records. In particular, do not prefix record fields with the type, constructor, or module name; rely on `DuplicateRecordFields` and use direct field names such as `status`, `runId`, or `baseUrl`.
 
 ## Durable Workflow Changes
 
@@ -60,10 +60,14 @@ admission or supervisor restart recovery.
 
 `bash tests/workspace/probe-collector-apple.sh` qualifies the independent bounded
 output collector and absolute deadline guard using the compiled production
-systemd properties (14 cases).
+systemd properties (17 cases).
 It covers output draining, duplicate-unit refusal, cancellation, timeout,
 collector loss, mismatched evidence, metadata privacy and literal arguments in
 a cleared environment. It also checks queued and expired starts, orphan
 descendants, retained exit status and protection of the trusted deadline parent.
+Cancellation checks also reject another boot, invocation or fingerprint. The
+default arm64 probe passes; the optional `amd64` probe currently fails its first
+isolated payload under translation (FRIC-22). Qualify the architecture and
+containment profile actually used by a plan.
 Full supervisor RPC, accepted launch and restart
 qualification remain separate gates; this probe does not enable process tools.

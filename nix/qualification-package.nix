@@ -1,6 +1,6 @@
 # Build one frozen Cabal graph, including all seven application packages. The
 # source lock is generated from the qualified solve, not an independent Nix solve.
-{ pkgs, lib, source, gitRev }:
+{ pkgs, lib, source, gitRev, workspaceFixture ? null }:
 let
   lock = builtins.fromJSON (builtins.readFile ./qualification/cohort.json);
   deadlineGuard = import ./workspace-deadline.nix { inherit pkgs; };
@@ -62,7 +62,7 @@ in
 assert lock.compiler == "ghc-9.12.4";
 assert builtins.length applicationPackages == 7;
 pkgs.stdenv.mkDerivation {
-  pname = "shikigami-runtime";
+  pname = if workspaceFixture == null then "shikigami-runtime" else "shikigami-workspace-prototype";
   version = "0.1.0.0-${gitRev}";
   dontUnpack = true;
   # Match mori://NixOS/nixpkgs, path
@@ -84,6 +84,9 @@ pkgs.stdenv.mkDerivation {
     tar -xzf ${./qualification/metadata.tar.gz} -C metadata
     touch "$CABAL_DIR/config"
     ${lib.concatMapStrings stagePackage packageNames}
+    ${lib.optionalString (workspaceFixture != null) ''
+      cp -R ${workspaceFixture} packages/workspace-linux-fixture
+    ''}
     chmod -R u+w packages
     cp ${project} cabal.project
     cp ${./qualification/cohort.json} cohort.json
@@ -92,7 +95,7 @@ pkgs.stdenv.mkDerivation {
   '';
   buildPhase = ''
     runHook preBuild
-    cabal build --offline -j"$NIX_BUILD_CORES" ${lib.concatStringsSep " " applicationPackages}
+    cabal build --offline -j"$NIX_BUILD_CORES" ${lib.concatStringsSep " " applicationPackages} ${lib.optionalString (workspaceFixture != null) "workspace-linux-fixture"}
     runHook postBuild
   '';
   installPhase = ''
@@ -105,6 +108,9 @@ pkgs.stdenv.mkDerivation {
       shikigami-workspace-collector shikigami-workspace-supervisor; do
       cp "$(cabal list-bin --offline exe:$executable)" "$out/bin/$executable"
     done
+    ${lib.optionalString (workspaceFixture != null) ''
+      cp "$(cabal list-bin --offline exe:shikigami-workspace-prototype)" "$out/bin/shikigami-workspace-prototype"
+    ''}
     cp -R ${source}/schema "$out/share/shikigami/schema"
     mkdir -p "$out/share/shikigami/fixtures"
     cp -R ${source}/fixtures/qualification "$out/share/shikigami/fixtures/qualification"
