@@ -63,6 +63,7 @@ library
     Shikigami.Workspace.Daemon
     Shikigami.Workspace.FileProvider
     Shikigami.Workspace.Git
+    Shikigami.Workspace.GitObjects
     Shikigami.Workspace.Host
     Shikigami.Workspace.InstructionLoader
     Shikigami.Workspace.ProcessProvider
@@ -215,6 +216,7 @@ test-suite shikigami-workers-test
     Shikigami.Workers.SupervisionSpec
     Shikigami.WorkspaceContainedFileSpec
     Shikigami.WorkspaceFileProviderSpec
+    Shikigami.WorkspaceGitObjectsSpec
     Shikigami.WorkspaceProcessProfileSpec
     Shikigami.WorkspaceProcessStoreSpec
     Shikigami.WorkspaceProvisionSpec

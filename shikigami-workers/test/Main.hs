@@ -12,6 +12,7 @@ import Shikigami.Workers.CommandSpec qualified as CommandSpec
 import Shikigami.Workers.SupervisionSpec qualified as SupervisionSpec
 import Shikigami.WorkspaceContainedFileSpec qualified as WorkspaceContainedFileSpec
 import Shikigami.WorkspaceFileProviderSpec qualified as WorkspaceFileProviderSpec
+import Shikigami.WorkspaceGitObjectsSpec qualified as WorkspaceGitObjectsSpec
 import Shikigami.WorkspaceProcessProfileSpec qualified as WorkspaceProcessProfileSpec
 import Shikigami.WorkspaceProcessStoreSpec qualified as WorkspaceProcessStoreSpec
 import Shikigami.WorkspaceProvisionSpec qualified as WorkspaceProvisionSpec
@@ -32,7 +33,8 @@ main = do
       defaultMain
         ( testGroup
             "shikigami-workers"
-            [ WorkspaceSupervisorSpec.tests databaseFixture,
+            [ WorkspaceGitObjectsSpec.tests,
+              WorkspaceSupervisorSpec.tests databaseFixture,
               WorkspaceRpcSpec.tests,
               WorkspaceSystemdSpec.tests,
               WorkspaceProcessStoreSpec.tests databaseFixture,
