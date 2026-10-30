@@ -200,6 +200,18 @@ core, 358 PostgreSQL, 238 worker and five migration tests pass. New cleanup
 intents bind the retained ownership request; historical encodings omit that
 optional field and preserve their identity.
 
+
+Same-owner continuing follow-up reuse is implemented (2026-10-30). The host
+finds the session's exact original allocation and retains a distinct fresh
+admission under the shared lock. Reuse requires the earlier assignments and
+real executions to be terminal with no outstanding receipts; an unsettled
+candidate refuses rather than allocating another copy. The accepted file-3
+read observes retained prior changes, repeats converge, and cleanup follows
+the latest admitted run. The current same-owner path covers the original
+session epoch; successor follow-ups still use the established-transfer path.
+All 533 core, 358 PostgreSQL, 239 worker and five migration tests pass. Native
+owned writes, process fencing and integrated artifacts remain open.
+
 ## Surprises & Discoveries
 
 2026-10-30 successor design: retain the original allocation and process profile

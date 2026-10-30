@@ -128,6 +128,9 @@ composition selects file revision 3, process revision 2 and Git revision 2 under
 ready Unix identity, and requires a separate retained successor admission.
 Production selection remains on the previously qualified revisions until real
 successor-write and Linux handoff qualification pass.
+Same-owner follow-ups at the original epoch reuse that allocation only after
+the preceding assignments and executions are terminal and all receipts settle.
+An unsettled allocation refuses reuse; it does not create a replacement copy.
 
 Do not repair exposed receipt-directory permissions and then trust its contents.
 Do not remove pending workspace directories, replace receipt files, clear

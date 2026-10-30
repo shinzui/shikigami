@@ -338,6 +338,11 @@ tests =
         workspaceGitAction transferBinding successorAdmission gitDispatch retainedProfile proposedGit @?= Left FileEffectRefused
         workspaceGitObservationAction transferBinding successorAdmission gitDispatch retainedProfile "status" command.profile "device:files" @?= Left FileEffectRefused
         workspaceProvisionAction transferBinding successorAdmission retainedProfile boot "device:files" "device:scratch" @?= Left FileEffectRefused
+        let followup = successorAdmission & #owner .~ transferBinding.request.owner & #epoch .~ transferBinding.request.epoch
+        followupAction <- right (workspaceFollowupAdmissionAction transferBinding followup retainedProfile)
+        nextFollowupAction <- right (workspaceFollowupAdmissionAction transferBinding (followup & #runId .~ "next-followup" & #assignmentId .~ "next-assignment") retainedProfile)
+        verifyTargets followupAction [successorAction, nextFollowupAction]
+        workspaceSuccessorAdmissionAction transferBinding followup retainedProfile @?= Left FileEffectRefused
     ]
 
 right :: (Show e) => Either e a -> IO a

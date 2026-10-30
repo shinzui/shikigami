@@ -14,10 +14,12 @@ module Shikigami.Workspace.TransferStore
     checkSessionWriteTx,
     currentWorkspaceRequestTx,
     successorWorkspaceTx,
+    findFollowupWorkspaceTx,
+    admitFollowupTx,
   )
 where
 
-import Contravariant.Extras (contrazip2, contrazip3, contrazip6)
+import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip6)
 import Data.Aeson qualified as Aeson
 import Data.Functor.Contravariant ((>$<))
 import Data.Text qualified as Text
@@ -30,9 +32,11 @@ import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId (..))
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
+import Shikigami.Execution.Transcript (ExecutionId (..), executionIdFor)
 import Shikigami.Prelude
 import Shikigami.WorkerSession.Transfer
 import Shikigami.WorkerSession.Types hiding (assignmentIdFor)
+import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.Types
@@ -149,6 +153,34 @@ admitSuccessorTx binding admission = do
       _ -> pure (Left WorkspaceBindingConflict)
     _ -> pure (Left WorkspaceBindingConflict)
 
+-- Same-owner follow-ups reuse accepted files only after earlier assignments and
+-- their execution receipts are terminal. No ownership receipt or epoch change
+-- is invented for a subsequent assignment belonging to the same owner.
+admitFollowupTx :: WorkspaceBinding -> WorkspaceAdmission -> Transaction (Either WorkspaceError ())
+admitFollowupTx binding admission = do
+  control <- Store.inspectWorkspaceControlTx binding
+  child <- lookupSessionChildTx admission.runId
+  case (child, binding.request.assignment) of
+    (Right (Just current), Just (session, originalAssignment))
+      | current.session == session && isNothing current.handoff && current.sequence > 0 && current.owner == binding.request.owner && current.epoch == binding.request.epoch && admission.owner == current.owner && admission.epoch == current.epoch && admission.runId /= binding.request.runId && admission.assignmentId == assignmentIdFor admission.runId && admission.filePolicy == Just transferableFilePolicy && matchesAdmission binding admission -> do
+          let ExecutionId execution = executionIdFor (assignmentIdFor binding.request.runId)
+              scope = Aeson.object ["executionId" Aeson..= execution, "assignmentId" Aeson..= assignmentIdFor binding.request.runId, "owner" Aeson..= current.owner, "rootId" Aeson..= current.rootId, "sequence" Aeson..= current.sequence]
+          prior <- Tx.statement (binding.workspace.resource, session.value, originalAssignment.value, scope) priorAssignmentsSettled
+          settled <- Tx.statement binding.workspace.resource settledWorkspace
+          if prior && settled && control == Just (Store.WorkspaceControl current.owner current.epoch False)
+            then do
+              Tx.statement (admission.runId, binding.workspace.resource, session.value, current.assignment.value, current.sequence, admission) insertAdmission
+              actual <- Tx.statement admission.runId selectAdmission
+              pure (if actual == Just admission then Right () else Left WorkspaceBindingConflict)
+            else pure (Left WorkspaceBindingConflict)
+    _ -> pure (Left WorkspaceBindingConflict)
+
+findFollowupWorkspaceTx :: Text -> SessionChild -> FilePath -> ResolvedRepository -> Transaction (Either WorkspaceError (Maybe WorkspaceBinding))
+findFollowupWorkspaceTx run child storage repository = do
+  let scope = Aeson.object ["runId" Aeson..= run, "repository" Aeson..= repositoryIdentity repository, "base" Aeson..= repositoryBase repository, "policyRevision" Aeson..= repositoryPolicyRevision repository, "source" Aeson..= repositorySource repository, "storageRoot" Aeson..= storage, "rootId" Aeson..= child.rootId, "owner" Aeson..= child.owner, "epoch" Aeson..= child.epoch]
+  matches <- Tx.statement (child.session.value, scope) selectFollowupWorkspace
+  pure case matches of [] -> Right Nothing; [binding] -> Right (Just binding); _ -> Left WorkspaceBindingConflict
+
 matchesAdmission :: WorkspaceBinding -> WorkspaceAdmission -> Bool
 matchesAdmission binding admission = admission.workspace == binding.workspace && admission.bindingDigest == workspaceBindingDigest binding && admission.rootId == binding.request.rootId && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base
 
@@ -187,10 +219,12 @@ currentWorkspaceRequestTx :: WorkspaceBinding -> Transaction (Maybe WorkspaceReq
 currentWorkspaceRequestTx binding = do
   control <- Store.inspectWorkspaceControlTx binding
   case control of
-    Just current | current.owner == binding.request.owner && current.epoch == binding.request.epoch -> pure (Just binding.request)
     Just current -> do
       admission <- Tx.statement (binding.workspace.resource, toJSON current.owner, current.epoch) selectCurrentAdmission
-      pure (fmap (\(run, session, assignment) -> WorkspaceRequest run (Just (WorkerSessionId session, AssignmentId assignment)) binding.request.rootId current.owner current.owner current.epoch) admission)
+      pure case admission of
+        Just (run, session, assignment) -> Just (WorkspaceRequest run (Just (WorkerSessionId session, AssignmentId assignment)) binding.request.rootId current.owner current.owner current.epoch)
+        Nothing | current.owner == binding.request.owner && current.epoch == binding.request.epoch -> Just binding.request
+        _ -> Nothing
     Nothing -> pure Nothing
 
 successorWorkspaceTx :: SessionChild -> Transaction (Either WorkspaceError WorkspaceBinding)
@@ -255,3 +289,9 @@ selectCurrentAdmission = preparable "SELECT run_id,session_id,assignment_id FROM
 
 selectSuccessorWorkspace :: Statement (Text, Integer, Text) [(WorkspaceBinding, TransferIntent, FenceProof)]
 selectSuccessorWorkspace = preparable "SELECT b.binding,t.intent,t.proof FROM shikigami.workspace_transfers t JOIN shikigami.workspace_bindings b USING(resource) WHERE t.intent->>'sessionId'=$1 AND (t.intent->>'newEpoch')::bigint=$2 AND t.intent->>'operationId'=$3 AND t.proof IS NOT NULL AND b.state='ready' LIMIT 2" (contrazip3 textParam integerParam textParam) (D.rowList ((,,) <$> jsonRow <*> jsonRow <*> jsonRow))
+
+selectFollowupWorkspace :: Statement (Text, Aeson.Value) [WorkspaceBinding]
+selectFollowupWorkspace = preparable "SELECT binding FROM shikigami.workspace_bindings WHERE binding->'request'->'assignment'->>0=$1 AND binding->'request'->>'runId'<>$2->>'runId' AND binding->>'repository'=$2->>'repository' AND binding->>'base'=$2->>'base' AND binding->>'policyRevision'=$2->>'policyRevision' AND binding->>'source'=$2->>'source' AND binding->>'storageRoot'=$2->>'storageRoot' AND binding->'request'->'rootId'=$2->'rootId' AND binding->'request'->'owner'=$2->'owner' AND binding->'request'->'epoch'=$2->'epoch' LIMIT 2" (contrazip2 textParam (E.param (E.nonNullable E.jsonb))) (D.rowList jsonRow)
+
+priorAssignmentsSettled :: Statement (Text, Text, Text, Aeson.Value) Bool
+priorAssignmentsSettled = preparable "SELECT EXISTS(SELECT 1 FROM shikigami.worker_session_messages m JOIN shikigami.worker_session_results r USING(assignment_id) JOIN shikigami.executions e ON e.execution_id=$4->>'executionId' WHERE m.session_id=$2 AND m.assignment_id=$3 AND m.state->>'phase'='AssignmentFinished' AND e.binding->>'assignmentId'=$4->>'assignmentId' AND e.binding->'identity'=$4->'owner' AND e.binding->'rootId'=$4->'rootId' AND e.state->>'phase' IN ('Succeeded','Failed','Cancelled') AND COALESCE((e.state->>'pendingReceipts')::bigint,0)=0 AND COALESCE(e.state->'activeOperation','null'::jsonb)='null'::jsonb AND (COALESCE(m.state->'executionId','null'::jsonb)='null'::jsonb OR m.state->>'executionId'=e.execution_id)) AND NOT EXISTS(SELECT 1 FROM shikigami.workspace_successor_admissions a JOIN shikigami.worker_session_messages m ON m.assignment_id=a.assignment_id LEFT JOIN shikigami.executions e ON e.binding->>'assignmentId'=a.admission->>'assignmentId' WHERE a.resource=$1 AND a.sequence<($4->>'sequence')::bigint AND (m.state->>'phase'<>'AssignmentFinished' OR e.execution_id IS NULL OR e.binding->'identity'<>$4->'owner' OR e.binding->'rootId'<>$4->'rootId' OR e.state->>'phase' NOT IN ('Succeeded','Failed','Cancelled') OR COALESCE((e.state->>'pendingReceipts')::bigint,0)<>0 OR COALESCE(e.state->'activeOperation','null'::jsonb)<>'null'::jsonb OR (COALESCE(m.state->'executionId','null'::jsonb)<>'null'::jsonb AND m.state->>'executionId'<>e.execution_id)))" (contrazip4 textParam textParam textParam (E.param (E.nonNullable E.jsonb))) (D.singleRow (D.column (D.nonNullable D.bool)))

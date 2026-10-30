@@ -46,7 +46,7 @@ import Shikigami.WorkerSession.Types hiding (assignmentIdFor)
 import Shikigami.Workspace.Admission (WorkspaceHost (..))
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
-import Shikigami.Workspace.CleanupStore (cleanupEligibleTx)
+import Shikigami.Workspace.CleanupStore (cleanupEligibleTx, listWorkspacesTx)
 import Shikigami.Workspace.ContainedFile (ensurePrivateDirectory, withWorkspaceLock)
 import Shikigami.Workspace.FileProvider
 import Shikigami.Workspace.Host
@@ -57,12 +57,14 @@ import Shikigami.Workspace.ProcessPolicy
 import Shikigami.Workspace.ProcessProfileStore
 import Shikigami.Workspace.ProcessProvider (ProcessClient (..))
 import Shikigami.Workspace.ProcessStore qualified as Processes
+import Shikigami.Workspace.Provider (FileReceipt (..), ReceiptState (..))
 import Shikigami.Workspace.Rpc
 import Shikigami.Workspace.Store qualified as Workspaces
 import Shikigami.Workspace.Supervisor
 import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Transfer
 import Shikigami.Workspace.TransferClient
+import Shikigami.Workspace.TransferStore qualified as Transfers
 import Shikigami.Workspace.Types
 import Shikigami.WorkspaceFileProviderSpec qualified as FileFixture
 import Shikigami.WorkspaceRpcSpec (withListener)
@@ -76,7 +78,77 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace concrete transfer owner"
-    [ testCase "successor host admits the real retained child and exact read adapter without reallocating or provisioning" $ do
+    [ testCase "same-owner follow-up reuses retained bytes and unknown effects prevent a fresh-copy fallback" $ do
+        properties <- Systemd.systemdPropertiesIdentity
+        let digest = "sha256:" <> Text.replicate 64 "a"
+            policy = ProcessPolicy 1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") properties [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] [""]
+        withWorkspacePolicy False (Just policy) fixture \env binding context _ _ -> do
+          original <- (\admission -> admission & #filePolicy .~ Just transferableFilePolicy) <$> (right =<< loadWorkspaceAdmission binding (Selection.assignmentIdFor binding.request.runId) 65536)
+          (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest original.instructions) policy (IdentityRange 62000 62001)))
+          run env (runTransaction (readyProcessProfileTx binding profile)) >>= (@?= Right ())
+          let runtime = FileRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ _ _ -> pure (Right ()))
+              input = Aeson.object ["path" Aeson..= ("dependency.txt" :: Text)]
+          token <- UUID4.nextRandom
+          execution <- FileFixture.withAcceptedWorkspaceTool 1 transferredWorkspaceEditAdapter (AgentName "worker") "overlay__workspace-edit__read" token env original runtime input \snapshot access reference -> do
+            Executor.executeAcceptedAttempt (FileFixture.executorForAdapter transferredWorkspaceEditAdapter runtime) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+            (_, state) <- right =<< run env (Execution.loadExecution access)
+            _ <- right =<< run env (Execution.stopExecution snapshot.identity snapshot.executionId state.revision False (ExecutionPolicyRefused "fixture terminal"))
+            pure snapshot.executionId
+          parent <- right =<< run env (Sessions.authorizeSession context.sessionId context.actor (pure (Right ())))
+          Just (_, first) <- pure binding.request.assignment
+          Just (active, _) <- right =<< run env (Sessions.inspectSession context.sessionId)
+          _ <- right =<< run env (Sessions.recordResult parent active.revision 0 (OperationId "finish-first") (AssignmentResult 1 first AssignmentFailed (Just execution) Aeson.Null []))
+          Just (idle, _) <- right =<< run env (Sessions.inspectSession context.sessionId)
+          (_, message) <- right =<< run env (Sessions.acceptMessage parent idle.revision 0 (OperationId "follow-up") (Instruction 1 FollowUp "continue accepted work" 1 1 1 Nothing))
+          (_, started) <- right =<< run env (Sessions.startAssignment parent (idle.revision + 1) 0 (OperationId "start-follow-up") message.assignmentId)
+          child <- maybe (fail "missing follow-up child") pure started.childWorkflowId
+          now <- getCurrentTime
+          memory <- genSessionId
+          selection <- right (resolveExecutionSelection (Selection.assignmentIdFor child) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just context.rootId) now)
+          let assignment = SkillAssignment child (AgentName "worker") binding.request.owner memory selection Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host cannot dispatch models")
+          catalog <- right (mkWorkspaceCatalog [RepositoryPolicy binding.repository binding.source [binding.base] binding.base binding.policyRevision])
+          repository <- right (resolveRepository catalog binding.repository Nothing)
+          host <- right (governedWorkspaceHostWithTransfers runtime [transferredWorkspaceEditAdapter runtime] [] (\_ _ admission -> pure (Right admission)) binding.storageRoot (const (pure (Right repository))) (const (pure (Right ()))))
+          -- This fixture datum stands for retained accepted work; native owned
+          -- writes remain qualified separately by the Linux handoff fixture.
+          writeFile (workspaceFiles binding.storageRoot binding </> "dependency.txt") "ACCEPTED_PRIOR_CHANGE\n"
+          let operation = OperationId "uncertain-prior-effect"
+              prepared = FileReceipt operation (AttemptId "prior-actual") 1 digest (workspaceBindingDigest binding) (bundleDigest original.instructions) "dependency.txt" "1:2" Nothing digest EditPrepared
+          _ <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceEffectTx binding binding.request.owner 0 operation digest))
+          run env (runTransaction (Workspaces.recordWorkspaceReceiptTx binding prepared)) >>= (@?= Right ())
+          host.load assignment >>= \case Left _ -> pure (); Right _ -> assertFailure "unknown effect was bypassed"
+          length <$> run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing)) >>= (@?= 1)
+          run env (runTransaction (Workspaces.recordWorkspaceReceiptTx binding (prepared & #state .~ EditRefused))) >>= (@?= Right ())
+          admission <- right =<< host.load assignment
+          admission.workspace @?= binding.workspace
+          admission.owner @?= binding.request.owner
+          admission.epoch @?= 0
+          host.load assignment >>= (@?= Right admission)
+          nextToken <- UUID4.nextRandom
+          latest <- FileFixture.withAcceptedWorkspaceTool 1 transferredWorkspaceEditAdapter (AgentName "worker") "overlay__workspace-edit__read" nextToken env admission runtime input \snapshot access reference -> do
+            Executor.executeAcceptedAttempt (FileFixture.executorForAdapter transferredWorkspaceEditAdapter runtime) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+            Just operation <- right =<< run env (Execution.inspectOperation reference.operationId)
+            result <- maybe (fail "missing follow-up result") pure operation.outcome
+            output <- right =<< run env (Execution.readReplayPayload @OperationOutcome access "operation-outcome" result)
+            assertBool "follow-up sees accepted work" ("ACCEPTED_PRIOR_CHANGE" `Text.isInfixOf` Text.pack (show (Aeson.encode output)))
+            Just (active, _) <- right =<< run env (Sessions.inspectSession context.sessionId)
+            _ <- right =<< run env (Sessions.recordResult parent active.revision 0 (OperationId "premature-second-result") (AssignmentResult 1 message.assignmentId AssignmentFailed (Just snapshot.executionId) Aeson.Null []))
+            Just (idle, _) <- right =<< run env (Sessions.inspectSession context.sessionId)
+            (_, third) <- right =<< run env (Sessions.acceptMessage parent idle.revision 0 (OperationId "third-message") (Instruction 1 FollowUp "continue again" 1 1 1 Nothing))
+            (_, started) <- right =<< run env (Sessions.startAssignment parent (idle.revision + 1) 0 (OperationId "third-start") third.assignmentId)
+            thirdRun <- maybe (fail "missing third child") pure started.childWorkflowId
+            selection <- right (resolveExecutionSelection (Selection.assignmentIdFor thirdRun) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just context.rootId) now)
+            let next = assignment & #runId .~ thirdRun & #selection .~ selection
+            host.load next >>= \case Left _ -> pure (); Right _ -> assertFailure "a session result hid an active prior execution"
+            (_, state) <- right =<< run env (Execution.loadExecution access)
+            _ <- right =<< run env (Execution.stopExecution snapshot.identity snapshot.executionId state.revision False (ExecutionPolicyRefused "fixture terminal"))
+            resumed <- right =<< host.load next
+            resumed.workspace @?= binding.workspace
+            pure thirdRun
+          effective <- run env (runTransaction (Transfers.currentWorkspaceRequestTx binding))
+          fmap (.runId) effective @?= Just latest
+          run env (runTransaction (inspectProcessProfileTx binding.workspace)) >>= (@?= Just (profile, ProfileReady)),
+      testCase "successor host admits the real retained child and exact read adapter without reallocating or provisioning" $ do
         properties <- Systemd.systemdPropertiesIdentity
         let digest = "sha256:" <> Text.replicate 64 "a"
             policy = ProcessPolicy 1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") properties [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] [""]
@@ -186,7 +258,10 @@ withTransfer :: DatabaseFixture -> (AppEnv -> WorkspaceBinding -> TransferIntent
 withTransfer = withTransferPolicy Nothing
 
 withTransferPolicy :: Maybe ProcessPolicy -> DatabaseFixture -> (AppEnv -> WorkspaceBinding -> TransferIntent -> SupervisorRuntime -> IORef Int -> IO a) -> IO a
-withTransferPolicy policy fixture callback = Fixture.withFixture fixture \env source storage originalRepository -> do
+withTransferPolicy = withWorkspacePolicy True
+
+withWorkspacePolicy :: Bool -> Maybe ProcessPolicy -> DatabaseFixture -> (AppEnv -> WorkspaceBinding -> TransferIntent -> SupervisorRuntime -> IORef Int -> IO a) -> IO a
+withWorkspacePolicy transferring policy fixture callback = Fixture.withFixture fixture \env source storage originalRepository -> do
   repository <- case policy of
     Nothing -> pure originalRepository
     Just selected -> do
@@ -214,7 +289,10 @@ withTransferPolicy policy fixture callback = Fixture.withFixture fixture \env so
   allocateWorkspace storage binding Reserved >>= (@?= Right ())
   run env (runTransaction (Workspaces.markWorkspaceReadyTx binding)) >>= (@?= Right ())
   let version = ObjectiveVersion 1 1 1 0 old True root (addUTCTime 3600 now)
-  (_, intent) <- right =<< run env (Sessions.requestTransfer access 2 0 (OperationId "transfer") version binding.workspace (AgentName "successor") successor)
+  intent <-
+    if transferring
+      then snd <$> (right =<< run env (Sessions.requestTransfer access 2 0 (OperationId "transfer") version binding.workspace (AgentName "successor") successor))
+      else pure (TransferIntent 1 (sessionIdFor session) session.objective actor (OperationId "not-requested") version old successor (AgentName "successor") 0 1 root binding.workspace)
   stopped <- newIORef 0
   let backend = SupervisorBackend (pure (Right boot)) (\_ _ _ -> fail "transfer cannot capture") (\_ _ _ _ _ -> fail "transfer cannot launch") (const (pure (Right True))) (\_ -> modifyIORef' stopped (+ 1) >> pure (Right ()))
       runtime = SupervisorRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ -> fail "transfer cannot select new commands") backend

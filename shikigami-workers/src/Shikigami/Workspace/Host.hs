@@ -65,64 +65,72 @@ workspaceHostFor transferable runtime selected historical prepare storageRoot se
           (Right repository, Right (Just child), Right ()) | child.epoch > 0 -> do
             retained <- runAppIO runtime.appEnv (runTransaction (Transfers.successorWorkspaceTx child))
             case retained of
-              Right (Right binding) | binding.repository == repositoryIdentity repository && binding.base == repositoryBase repository && binding.policyRevision == repositoryPolicyRevision repository && binding.source == repositorySource repository && binding.storageRoot == storageRoot -> do
-                -- Only immutable admitted Git instructions are read before the
-                -- conditional successor admission; the worktree stays frozen.
-                authority <- case workspaceAllocationAction binding assignment.selection.assignmentId of
-                  Left _ -> pure (Left "workspace admission refused")
-                  Right action -> runtime.authorizer.authorize principal action <&> either (const (Left "workspace admission refused")) (const (Right ()))
-                fresh <- gate assignment root
-                case (authority, fresh) of
-                  (Right (), Right ()) -> do
-                    loaded <- loadWorkspaceAdmission binding assignment.selection.assignmentId (min 65536 policy.contextBytes)
-                    case loaded of
-                      Left _ -> pure refused
-                      Right original -> do
-                        let admission = original & #runId .~ assignment.runId & #owner .~ child.owner & #epoch .~ child.epoch & #filePolicy .~ Just transferableFilePolicy
-                        reviewed <- runtime.admitTarget binding admission (bundleFiles admission.instructions) "admit" ""
-                        case reviewed of
-                          Left _ -> pure refused
-                          Right () -> do
-                            prepared <- prepare assignment binding admission
-                            case prepared of
-                              Left _ -> pure refused
-                              Right accepted -> admitSuccessor assignment binding accepted
-                  _ -> pure refused
+              Right (Right binding) -> reuse False assignment root policy principal repository child binding
               _ -> pure refused
-          (Right repository, Right mappedChild, Right ()) -> do
-            let request = WorkspaceRequest assignment.runId (fmap (\child -> (child.session, child.assignment)) mappedChild) root assignment.identity assignment.identity (maybe 0 (.epoch) mappedChild)
-            reserved <- runAppIO runtime.appEnv (runTransaction (Store.reserveWorkspaceTx storageRoot request repository))
-            case reserved of
-              Right (Right (binding, state)) -> case workspaceAllocationAction binding assignment.selection.assignmentId of
-                Left _ -> pure refused
-                Right action -> do
-                  authority <- runtime.authorizer.authorize principal action
-                  fresh <- gate assignment root
-                  case (authority, fresh) of
-                    (Right _, Right ()) -> do
-                      allocated <- allocateWorkspace storageRoot binding state
-                      case allocated of
-                        Left _ -> pure refused
-                        Right () -> do
-                          ready <- runAppIO runtime.appEnv (runTransaction (Store.markWorkspaceReadyTx binding))
-                          case ready of
-                            Right (Right ()) -> do
-                              loaded <- loadWorkspaceAdmission binding assignment.selection.assignmentId (min 65536 policy.contextBytes)
-                              case loaded of
-                                Left _ -> pure refused
-                                Right original -> do
-                                  let admission = if transferable then original & #filePolicy .~ Just transferableFilePolicy else original
-                                  reviewed <- runtime.admitTarget binding admission (bundleFiles admission.instructions) "admit" ""
-                                  case reviewed of
-                                    Left _ -> pure refused
-                                    Right () -> either (const refused) Right <$> prepare assignment binding admission
-                            Left _ -> pure (Left ExecutionStorageUnavailable)
-                            _ -> pure refused
-                    _ -> pure refused
-              Left _ -> pure (Left ExecutionStorageUnavailable)
+          (Right repository, Right (Just child), Right ()) | child.sequence > 0 -> do
+            retained <- runAppIO runtime.appEnv (runTransaction (Transfers.findFollowupWorkspaceTx assignment.runId child storageRoot repository))
+            case retained of
+              Right (Right (Just binding)) -> reuse True assignment root policy principal repository child binding
+              Right (Right Nothing) -> allocate assignment root policy principal repository (Just child)
               _ -> pure refused
+          (Right repository, Right mappedChild, Right ()) -> allocate assignment root policy principal repository mappedChild
           _ -> pure refused
       _ -> pure refused
+    reuse followup assignment root policy principal repository child binding
+      | binding.repository /= repositoryIdentity repository || binding.base /= repositoryBase repository || binding.policyRevision /= repositoryPolicyRevision repository || binding.source /= repositorySource repository || binding.storageRoot /= storageRoot = pure refused
+      | otherwise = do
+          authority <- case workspaceAllocationAction binding assignment.selection.assignmentId of
+            Left _ -> pure (Left "workspace admission refused")
+            Right action -> runtime.authorizer.authorize principal action <&> either (const (Left "workspace admission refused")) (const (Right ()))
+          fresh <- gate assignment root
+          case (authority, fresh) of
+            (Right (), Right ()) -> do
+              loaded <- loadWorkspaceAdmission binding assignment.selection.assignmentId (min 65536 policy.contextBytes)
+              case loaded of
+                Left _ -> pure refused
+                Right original -> do
+                  let admission = original & #runId .~ assignment.runId & #owner .~ child.owner & #epoch .~ child.epoch & #filePolicy .~ Just transferableFilePolicy
+                  reviewed <- runtime.admitTarget binding admission (bundleFiles admission.instructions) "admit" ""
+                  case reviewed of
+                    Left _ -> pure refused
+                    Right () -> do
+                      prepared <- prepare assignment binding admission
+                      case prepared of
+                        Left _ -> pure refused
+                        Right accepted -> admitExisting followup assignment binding accepted
+            _ -> pure refused
+    allocate assignment root policy principal repository mappedChild = do
+      let request = WorkspaceRequest assignment.runId (fmap (\child -> (child.session, child.assignment)) mappedChild) root assignment.identity assignment.identity (maybe 0 (.epoch) mappedChild)
+      reserved <- runAppIO runtime.appEnv (runTransaction (Store.reserveWorkspaceTx storageRoot request repository))
+      case reserved of
+        Right (Right (binding, state)) -> case workspaceAllocationAction binding assignment.selection.assignmentId of
+          Left _ -> pure refused
+          Right action -> do
+            authority <- runtime.authorizer.authorize principal action
+            fresh <- gate assignment root
+            case (authority, fresh) of
+              (Right _, Right ()) -> do
+                allocated <- allocateWorkspace storageRoot binding state
+                case allocated of
+                  Left _ -> pure refused
+                  Right () -> do
+                    ready <- runAppIO runtime.appEnv (runTransaction (Store.markWorkspaceReadyTx binding))
+                    case ready of
+                      Right (Right ()) -> do
+                        loaded <- loadWorkspaceAdmission binding assignment.selection.assignmentId (min 65536 policy.contextBytes)
+                        case loaded of
+                          Left _ -> pure refused
+                          Right original -> do
+                            let admission = if transferable then original & #filePolicy .~ Just transferableFilePolicy else original
+                            reviewed <- runtime.admitTarget binding admission (bundleFiles admission.instructions) "admit" ""
+                            case reviewed of
+                              Left _ -> pure refused
+                              Right () -> either (const refused) Right <$> prepare assignment binding admission
+                      Left _ -> pure (Left ExecutionStorageUnavailable)
+                      _ -> pure refused
+              _ -> pure refused
+        Left _ -> pure (Left ExecutionStorageUnavailable)
+        _ -> pure refused
     gate assignment root = do
       authority <- currentAuthority assignment
       mapped <- mapping assignment
@@ -140,7 +148,7 @@ workspaceHostFor transferable runtime selected historical prepare storageRoot se
           pure case retained of
             Right (Right child) | maybe True (\value -> value.owner == assignment.identity && Just value.rootId == assignment.selection.rootId) child -> Right child
             _ -> Left "workspace session admission refused"
-    admitSuccessor assignment binding admission = do
+    admitExisting followup assignment binding admission = do
       let metadata = workspaceMetadata binding.storageRoot binding
       rootPrivate <- checkPrivateDirectory binding.storageRoot
       metadataPrivate <- checkPrivateDirectory metadata
@@ -151,14 +159,14 @@ workspaceHostFor transferable runtime selected historical prepare storageRoot se
             current <- gate assignment admission.rootId
             profile <- retainedFileProfile runtime.appEnv binding admission
             case (current, profile, identityText admission.owner) of
-              (Right (), Right retained, Right principal) -> case workspaceSuccessorAdmissionAction binding admission retained of
+              (Right (), Right retained, Right principal) -> case (if followup then workspaceFollowupAdmissionAction else workspaceSuccessorAdmissionAction) binding admission retained of
                 Left _ -> pure (Right refused)
                 Right action -> do
                   authority <- runtime.authorizer.authorize principal action
                   fresh <- gate assignment admission.rootId
                   case (authority, fresh) of
                     (Right _, Right ()) -> do
-                      saved <- runAppIO runtime.appEnv (runTransaction (Transfers.admitSuccessorTx binding admission))
+                      saved <- runAppIO runtime.appEnv (runTransaction ((if followup then Transfers.admitFollowupTx else Transfers.admitSuccessorTx) binding admission))
                       pure (Right (case saved of Right (Right ()) -> Right admission; _ -> refused))
                     _ -> pure (Right refused)
               _ -> pure (Right refused)

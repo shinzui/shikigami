@@ -83,6 +83,11 @@ workspaceSuccessorAdmissionAction binding admission profile = do
   unless (matchesWorkspaceAdmission binding admission && admission.filePolicy == Just transferableFilePolicy && admission.epoch > binding.request.epoch && validProcessProfile profile && profile.bindingDigest == workspaceBindingDigest binding && profile.instructionDigest == bundleDigest admission.instructions && processPolicyIdentity profile.policy == binding.policyRevision) (Left FileEffectRefused)
   workspaceControlAction binding "successor" (toJSON (versionedDigest "shikigami.workspace-successor-admission/1" (toJSON admission), profile))
 
+workspaceFollowupAdmissionAction :: WorkspaceBinding -> WorkspaceAdmission -> ProcessProfile -> Either FileEffectError AgentAction
+workspaceFollowupAdmissionAction binding admission profile = do
+  unless (matchesWorkspaceAdmission binding admission && admission.filePolicy == Just transferableFilePolicy && admission.runId /= binding.request.runId && admission.owner == binding.request.owner && admission.epoch == binding.request.epoch && validProcessProfile profile && profile.bindingDigest == workspaceBindingDigest binding && profile.instructionDigest == bundleDigest admission.instructions && processPolicyIdentity profile.policy == binding.policyRevision) (Left FileEffectRefused)
+  workspaceControlAction binding "followup" (toJSON (versionedDigest "shikigami.workspace-followup-admission/1" (toJSON admission), profile))
+
 workspaceControlAction :: WorkspaceBinding -> Text -> Aeson.Value -> Either FileEffectError AgentAction
 workspaceControlAction binding kind value = do
   let digest = Text.replace ":" "-" (versionedDigest "shikigami.workspace-control-action/1" (toJSON (workspaceBindingDigest binding, kind, value)))

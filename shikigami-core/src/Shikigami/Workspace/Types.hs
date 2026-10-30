@@ -59,5 +59,5 @@ matchesWorkspaceAdmission binding admission =
     && bundleRepository admission.instructions == binding.repository
     && bundleBase admission.instructions == binding.base
     && ( (admission.runId == binding.request.runId && admission.owner == binding.request.owner && admission.epoch == binding.request.epoch)
-           || (admission.filePolicy == Just transferableFilePolicy && admission.epoch > binding.request.epoch && admission.epoch < 9223372036854775808 && admission.runId /= binding.request.runId && admission.runId /= "" && admission.assignmentId /= "")
+           || (admission.filePolicy == Just transferableFilePolicy && admission.epoch >= binding.request.epoch && (admission.epoch /= binding.request.epoch || admission.owner == binding.request.owner) && admission.epoch < 9223372036854775808 && admission.runId /= binding.request.runId && admission.runId /= "" && admission.assignmentId /= "")
        )

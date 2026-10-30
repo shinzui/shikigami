@@ -167,3 +167,9 @@ Real restart/late-write repository tests remain a plan-84 completion gate.
 - [ADR 0062](0062-session-generations-await-governed-children-and-retain-checkpoint-intents.md)
 - [IR-11](../improvement-requests/provide-governed-mutable-repository-workspaces.md)
 - [IR-13](../improvement-requests/support-optional-major-task-tracking.md)
+
+Same-owner follow-ups at the original session epoch retain separate admissions
+without manufacturing an ownership receipt or incrementing the epoch. They
+require the prior assignment results and actual executions to be terminal and
+all receipts settled. The original allocation, Unix profile and instruction
+bundle remain pinned; cleanup follows the latest retained admission.
