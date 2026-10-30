@@ -57,6 +57,7 @@ library
     Shikigami.Workers.Subscription
     Shikigami.Workers.Supervision
     Shikigami.Workspace.Allocation
+    Shikigami.Workspace.Cleanup
     Shikigami.Workspace.Collector
     Shikigami.Workspace.ConfiguredHost
     Shikigami.Workspace.ContainedFile
@@ -68,6 +69,7 @@ library
     Shikigami.Workspace.GitProvider
     Shikigami.Workspace.Host
     Shikigami.Workspace.InstructionLoader
+    Shikigami.Workspace.Maintenance
     Shikigami.Workspace.ProcessProvider
     Shikigami.Workspace.Profile
     Shikigami.Workspace.Provision

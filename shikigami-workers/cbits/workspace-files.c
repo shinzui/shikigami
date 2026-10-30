@@ -366,3 +366,78 @@ int shikigami_ws_manifest(struct ws_target *target, int uid, char *out, int capa
   (void)target; (void)uid; (void)out; (void)capacity; return -78;
 }
 #endif
+/* Terminal cleanup removes only a retained files/scratch root. The provider
+ * holds the metadata lock, has frozen admission and has durable settlement for
+ * every repository process. Validate the entire bounded tree before deleting
+ * anything; recovery validates whatever remains against the original inode. */
+static int cleanup_node(int fd, dev_t device, uid_t uid, int depth,
+                        int *remaining, int apply) {
+  struct stat root;
+  if (depth > 128 || --*remaining < 0 || fstat(fd, &root) ||
+      !S_ISDIR(root.st_mode) || root.st_dev != device || root.st_uid != uid)
+    return -1;
+  int copy = dup(fd);
+  if (copy < 0) return -1;
+  DIR *entries = fdopendir(copy);
+  if (!entries) { close(copy); return -1; }
+  rewinddir(entries);
+  int result = 0;
+  struct dirent *entry;
+  while ((entry = readdir(entries))) {
+    if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) continue;
+    struct stat before, after;
+    if (fstatat(fd, entry->d_name, &before, AT_SYMLINK_NOFOLLOW) ||
+        before.st_dev != device || before.st_uid != uid) { result = -1; break; }
+    if (S_ISDIR(before.st_mode)) {
+      int child = openat(fd, entry->d_name,
+                         O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+      if (child < 0) { result = -1; break; }
+      if (fstat(child, &after) || before.st_dev != after.st_dev ||
+          before.st_ino != after.st_ino) result = -3;
+      else result = cleanup_node(child, device, uid, depth + 1, remaining, apply);
+      close(child);
+      if (!result && apply && unlinkat(fd, entry->d_name, AT_REMOVEDIR)) result = -1;
+    } else if (S_ISREG(before.st_mode) && before.st_nlink == 1) {
+      if (--*remaining < 0) result = -5;
+      else if (apply && unlinkat(fd, entry->d_name, 0)) result = -1;
+    } else result = -1;
+    if (result) break;
+  }
+  closedir(entries);
+  if (!result && apply && fsync(fd)) result = -1;
+  return result;
+}
+int shikigami_ws_cleanup(const char *parent, const char *name,
+                         const char *identity, int uid) {
+  if (!parent || !name || !identity || uid < 0 ||
+      (strcmp(name, "files") && strcmp(name, "scratch"))) return -1;
+  int directory = open(parent, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+  if (directory < 0) return -1;
+  struct stat state;
+  if (fstatat(directory, name, &state, AT_SYMLINK_NOFOLLOW)) {
+    int result = errno == ENOENT ? 0 : -1;
+    close(directory); return result;
+  }
+  int root = openat(directory, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+  if (root < 0) { close(directory); return -1; }
+  struct stat opened;
+  char actual[128];
+  int result = -3;
+  if (fstat(root, &opened) || !S_ISDIR(state.st_mode) ||
+      state.st_dev != opened.st_dev || state.st_ino != opened.st_ino) goto done;
+  int count = snprintf(actual, sizeof(actual), "%llu:%llu",
+                       (unsigned long long)opened.st_dev,
+                       (unsigned long long)opened.st_ino);
+  if (count < 0 || count >= (int)sizeof(actual) || strcmp(actual, identity)) goto done;
+  int remaining = 100000;
+  result = cleanup_node(root, opened.st_dev, (uid_t)uid, 0, &remaining, 0);
+  if (result) goto done;
+  remaining = 100000;
+  result = cleanup_node(root, opened.st_dev, (uid_t)uid, 0, &remaining, 1);
+  if (result) goto done;
+  if (fstatat(directory, name, &state, AT_SYMLINK_NOFOLLOW) ||
+      state.st_dev != opened.st_dev || state.st_ino != opened.st_ino) { result = -3; goto done; }
+  if (unlinkat(directory, name, AT_REMOVEDIR) || fsync(directory)) result = -1;
+done:
+  close(root); close(directory); return result;
+}

@@ -28,8 +28,9 @@ reserveWorkspaceTx storageRoot request repository
   | otherwise = do
       Tx.statement (key, resource, binding) insertBinding
       existing <- inspectWorkspaceTx binding.workspace
+      retired <- Tx.statement resource hasCleanup
       case existing of
-        Just pair@(stored, _) | stored == binding -> do
+        Just pair@(stored, _) | stored == binding && not retired -> do
           Tx.statement (resource, request.owner, request.epoch) insertControl
           pure (Right pair)
         _ -> pure (Left WorkspaceBindingConflict)
@@ -59,6 +60,9 @@ textParam = E.text
 
 insertBinding :: Statement (Text, Text, WorkspaceBinding) ()
 insertBinding = preparable "INSERT INTO shikigami.workspace_bindings(assignment_key,resource,binding,state) VALUES($1,$2,$3,'reserved') ON CONFLICT DO NOTHING" (contrazip3 (E.param (E.nonNullable textParam)) (E.param (E.nonNullable textParam)) jsonParam) D.noResult
+
+hasCleanup :: Statement Text Bool
+hasCleanup = preparable "SELECT EXISTS(SELECT 1 FROM shikigami.workspace_cleanup WHERE resource=$1)" (E.param (E.nonNullable E.text)) (D.singleRow (D.column (D.nonNullable D.bool)))
 
 selectBinding :: Statement Text (Maybe (WorkspaceBinding, AllocationState))
 selectBinding = preparable "SELECT binding,state='ready' FROM shikigami.workspace_bindings WHERE resource=$1" (E.param (E.nonNullable E.text)) (D.rowMaybe ((,) <$> jsonRow <*> ((\ready -> if ready then Ready else Reserved) <$> D.column (D.nonNullable D.bool))))

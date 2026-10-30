@@ -102,5 +102,40 @@ authority to read model payloads or launch new work.
 
 Do not repair exposed receipt-directory permissions and then trust its contents.
 Do not remove pending workspace directories, replace receipt files, clear
-reservations or recycle reserved Unix identities to regain capacity. Automated
-terminal cleanup awaits the ownership and fencing implementation in plan 96.
+reservations or recycle reserved Unix identities to regain capacity. Explicit terminal cleanup retains provider metadata and receipts. The operator commands
+below are implemented; handoff and integrated-revision qualification remain open.
+
+## Terminal cleanup
+
+Use an active operator principal with fresh exact maintenance authority:
+
+```bash
+shikigami-worker --workspace-actor agent_01h000000000000000triage --workspace-list
+shikigami-worker --workspace-actor agent_01h000000000000000triage --workspace-list --workspace-after RESOURCE
+shikigami-worker --workspace-actor agent_01h000000000000000triage --workspace-cleanup RESOURCE
+```
+
+Supply the usual configuration containing `workspaces.storageRoot`, database
+and action-authorizer settings. A list page has at most twenty public resource,
+repository and base identities with cleanup status and terminal eligibility.
+It omits local paths and instruction bodies. Its `next` cursor pages the
+retained catalog. Cleanup takes exactly one retained resource identifier;
+it does not accept a path or scan for directories to remove.
+
+Cleanup requires a known terminal durable execution, no pending transport
+receipts, every workspace effect/process settled and no live continuing session
+sharing the resource root. Active, parked, unresolved and idle continuing
+sessions retain their workspaces. Missing execution evidence refuses cleanup
+of an unknown orphan. A terminal workspace whose worker has exited remains
+eligible through its retained execution identity.
+
+Before deleting files, the provider retains both root inode identities and the
+expected Unix owner and permanently freezes admission under the shared lock.
+Native deletion validates a complete bounded ordinary-file/directory tree,
+refusing symlinks, hardlinks, special files, foreign ownership, filesystem
+changes and substituted roots. The limit is 100,000 entries and depth 128 per
+root. Interrupted deletion resumes only that exact plan; duplicate cleanup
+observes its original completion. Files and scratch are removed, while Git
+metadata, allocation markers, receipts, database rows and Unix identities
+remain available for audit/recovery. This does not grant capacity by discarding
+uncertain effects or provide general deletion of arbitrary host directories.

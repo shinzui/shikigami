@@ -75,6 +75,28 @@ int main(void) {
   int lock=shikigami_ws_lock(metadata); require(lock>=0, "lock recovered after owner death");
   shikigami_ws_unlock(lock);
   puts("PASS process death releases the independent file lock");
-  puts("Native file boundary passed (6 cases); supervisor qualification remains incomplete.");
+  struct stat state;
+  char identity[128];
+  require(!stat(root,&state), "cleanup root identity");
+  snprintf(identity,sizeof(identity),"%llu:%llu",(unsigned long long)state.st_dev,(unsigned long long)state.st_ino);
+  require(shikigami_ws_cleanup(temporary,"files",identity,getuid())!=0 &&
+          !access(child(retained,"file"),F_OK) && !access(secret,F_OK), "hostile cleanup refuses before deletion");
+  puts("PASS terminal cleanup refuses hostile trees before deleting ordinary files");
+
+  char *scratch=child(temporary,"scratch"), *oldScratch=child(temporary,"scratch-retained");
+  require(!mkdir(scratch,0700), "cleanup scratch root");
+  put(child(scratch,"file"),"retained");
+  require(!stat(scratch,&state), "scratch identity");
+  snprintf(identity,sizeof(identity),"%llu:%llu",(unsigned long long)state.st_dev,(unsigned long long)state.st_ino);
+  require(!rename(scratch,oldScratch) && !mkdir(scratch,0700), "substitute cleanup root");
+  require(shikigami_ws_cleanup(temporary,"scratch",identity,getuid())!=0 &&
+          !access(child(oldScratch,"file"),F_OK), "substituted cleanup root refuses");
+  puts("PASS terminal cleanup pins the original root inode");
+  require(!rmdir(scratch) && !rename(oldScratch,scratch), "restore cleanup root");
+  require(!shikigami_ws_cleanup(temporary,"scratch",identity,getuid()) &&
+          access(scratch,F_OK)!=0 && !shikigami_ws_cleanup(temporary,"scratch",identity,getuid()) &&
+          !access(secret,F_OK) && !access(metadata,F_OK), "exact cleanup and duplicate recovery");
+  puts("PASS terminal cleanup removes only its exact owned root and recovers acknowledgement loss");
+  puts("Native file boundary passed (9 cases); supervisor qualification remains separate.");
   return 0;
 }

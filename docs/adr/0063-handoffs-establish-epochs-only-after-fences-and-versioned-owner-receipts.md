@@ -105,6 +105,16 @@ supervised repository processes settled. Neither acquiring that file lock nor
 reading an allocation/applied-edit marker proves descendant settlement; full
 supervisor and transfer qualification remains pending in plan 96.
 
+Terminal retirement (2026-10-30) uses a separate retained cleanup intent. Only
+known terminal execution metadata, zero pending receipts, settled provider
+effects/processes and absence of any live continuing session sharing the root
+permit permanent admission freeze. Session idleness supplies no cleanup proof.
+Fresh exact operator authority and the shared workspace lock guard deletion of
+only the two recorded files/scratch root inodes. Recovery keeps that plan and
+preserves provider metadata, receipts, source and Unix reservations. A missing
+execution is not evidence that an orphan is safe to adopt. Retirement provides
+no ownership-transfer proof; the real handoff/integration gates remain open.
+
 ## Consequences
 
 An unresolved handoff may intentionally remain frozen until its real owners

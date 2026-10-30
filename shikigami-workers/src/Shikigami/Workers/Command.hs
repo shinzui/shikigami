@@ -74,6 +74,7 @@ import Shikigami.Workers.Command.Scheduler (runSchedulerCmd)
 import Shikigami.Workers.Command.Worker (runResumeCmd, runWorkerCmd)
 import Shikigami.Workers.Subscription (runConsumeEvents, runConsumeStream)
 import Shikigami.Workspace.Daemon (runWorkspaceSupervisor)
+import Shikigami.Workspace.Maintenance (WorkspaceMaintenance (..), runWorkspaceMaintenance)
 
 -- | Every worker executable, in the order they are documented.
 --
@@ -270,7 +271,18 @@ danwaAgentOption =
 -- Bounded maintenance stays in the resource-owning worker binary; the embedded
 -- server hook cannot interpret the application's Kioku effect row.
 workerAction :: Parser (AppConfig -> IO ())
-workerAction =
+workerAction = workspaceMaintenanceAction <|> resumeAction
+
+workspaceMaintenanceAction :: Parser (AppConfig -> IO ())
+workspaceMaintenanceAction =
+  runWorkspaceMaintenance
+    <$> strOption (long "workspace-actor" <> metavar "PRINCIPAL" <> help "Active principal requiring fresh exact maintenance authority")
+    <*> ( (ListWorkspaces <$> (flag' () (long "workspace-list" <> help "List at most 20 retained workspaces") *> optional (strOption (long "workspace-after" <> metavar "RESOURCE"))))
+            <|> (CleanupWorkspace <$> strOption (long "workspace-cleanup" <> metavar "RESOURCE" <> help "Remove the exact terminal workspace files and scratch; retain receipts"))
+        )
+
+resumeAction :: Parser (AppConfig -> IO ())
+resumeAction =
   choose
     <$> optional (option positiveInt (long "resume-passes" <> metavar "N" <> help "Preview bounded workflow resume; use --force to advance"))
     <*> option positiveInt (long "resume-limit" <> value 100 <> metavar "N" <> help "Maximum candidates per bounded resume pass")

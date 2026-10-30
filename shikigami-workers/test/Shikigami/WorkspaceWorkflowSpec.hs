@@ -5,6 +5,7 @@ import Baikai.Context qualified as Context
 import Baikai.Provider.Registry qualified as Provider
 import Baikai.StopReason (StopReason (ToolUse))
 import Baikai.Stream (liftCompleteToStream)
+import Control.Exception (throwIO)
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Data.IORef
@@ -22,6 +23,8 @@ import Shikigami.Action.Authorization
 import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as Approval
 import Shikigami.Agent.Decl
+import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
+import Shikigami.Agent.Delegate.Depth (DelegationDepth (..))
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (AgentIdentity (..), identityText)
@@ -36,7 +39,7 @@ import Shikigami.Capability.Overlay (CapabilityDescriptor (..))
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Driver (ExecutionStart (..))
 import Shikigami.Execution.Foreground (driveExecutionForeground)
-import Shikigami.Execution.Identity (ExecutionRootId (..))
+import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
 import Shikigami.Execution.Policy.Types (defaultHarnessPolicy)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
@@ -54,21 +57,27 @@ import Shikigami.Sink.Config
 import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
 import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
+import Shikigami.WorkerSession.Store qualified as Sessions
+import Shikigami.WorkerSession.Types qualified as Sessions
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Shikigami.Workspace.Admission (WorkspaceHost (..))
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog (repositoryBase)
+import Shikigami.Workspace.Catalog qualified as WorkspaceCatalog
+import Shikigami.Workspace.Cleanup
+import Shikigami.Workspace.CleanupStore
 import Shikigami.Workspace.ConfiguredHost
 import Shikigami.Workspace.FileProvider
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), bundleDigest, mkInstructionBundle)
 import Shikigami.Workspace.ProcessPolicy
 import Shikigami.Workspace.Provider
+import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Settings
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Types
 import Shikigami.WorkspaceStoreSpec qualified as Fixture
-import System.Directory (doesPathExist, makeAbsolute)
+import System.Directory (createFileLink, doesPathExist, makeAbsolute)
 import System.FilePath ((</>))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
@@ -77,7 +86,70 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace governed parent and child"
-    [ testCase "real parent admission freezes instructions and child edits once across restart" $
+    [ testCase "terminal cleanup recovers interruption without removing source, metadata or a sibling" $
+        withWorkflow fixture \env root job _ deps _ -> do
+          binding <- finishWorkspace env job deps
+          writeFile (root </> "retained-sibling") "sibling"
+          let runtime = maintenance env root
+              interrupted = runtime {afterFiles = throwIO (userError "fixture lost cleanup acknowledgement")}
+          cleanupWorkspace interrupted job.identity binding.workspace >>= (@?= Left CleanupUnresolved)
+          doesPathExist (workspaceFiles root binding) >>= (@?= False)
+          doesPathExist (workspaceScratch root binding) >>= (@?= True)
+          Just (_, False) <- run env (runTransaction (inspectCleanupTx binding))
+          cleanupWorkspace runtime job.identity binding.workspace >>= (@?= Right ())
+          cleanupWorkspace runtime job.identity binding.workspace >>= (@?= Right ())
+          doesPathExist (workspaceScratch root binding) >>= (@?= False)
+          doesPathExist (workspaceMetadata root binding) >>= (@?= True)
+          readFile (binding.source </> "dependency.txt") >>= (@?= "old dependency\n")
+          readFile (root </> "retained-sibling") >>= (@?= "sibling")
+          Just (_, True) <- run env (runTransaction (inspectCleanupTx binding))
+          catalog <- right (WorkspaceCatalog.mkWorkspaceCatalog [WorkspaceCatalog.RepositoryPolicy binding.repository binding.source [binding.base] binding.base binding.policyRevision])
+          repository <- right (WorkspaceCatalog.resolveRepository catalog binding.repository Nothing)
+          run env (runTransaction (Store.reserveWorkspaceTx root binding.request repository)) >>= (@?= Left WorkspaceBindingConflict)
+          (foreignBinding, _) <- right =<< run env (runTransaction (Store.reserveWorkspaceTx (root <> "-other") (binding.request & #runId .~ "foreign-workspace") repository))
+          listing <- right =<< listWorkspaces runtime job.identity Nothing
+          assertBool "operator listing omits other storage roots, local paths and private instructions" (all (\secret -> not (secret `Text.isInfixOf` Text.pack (show (Aeson.encode listing)))) [Text.pack root, Text.pack binding.source, "PRIVATE_WORKFLOW_POLICY", foreignBinding.workspace.resource])
+          Agent.runAgentRunWorkflow deps job >>= assertCompleted,
+      testCase "active execution and denied cleanup leave the worktree untouched" $
+        withWorkflow fixture \env root job _ deps _ -> do
+          Agent.runAgentRunWorkflow deps job >>= assertSuspended
+          binding <- admittedBinding env job
+          cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
+          run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Nothing)
+          _ <- finishWorkspace env job deps
+          let denied = (maintenance env root) & #authorizer .~ denyAllActionAuthorizer
+          cleanupWorkspace denied job.identity binding.workspace >>= (@?= Left CleanupRefused)
+          readFile (workspaceFiles root binding </> "dependency.txt") >>= (@?= "workflow replacement\n"),
+      testCase "terminal cleanup refuses unsettled effects and a live idle session" $
+        withWorkflow fixture \env root job _ deps _ -> do
+          binding <- finishWorkspace env job deps
+          parentSession <- pure binding.request.runId
+          parent <- right =<< loadAgent "../agents/heartbeat.dhall"
+          access <- right =<< run env (Execution.authorizeReplay (executionIdFor (assignmentIdFor (runJobWorkflowId job).unWorkflowId)) job.identity (pure (Right ())))
+          (snapshot, _) <- right =<< run env (Execution.loadExecution access)
+          let coordinator = CompatibilityIdentity "cleanup-coordinator"
+              admission = Sessions.SessionAdmission 1 (Sessions.SessionScope parentSession "worker") (Sessions.ObjectiveRef "fixture" "objective") (parent & #name .~ "cleanup-coordinator" & #delegates .~ ["workspace-worker"]) (DelegateCtx (DelegationDepth 0) coordinator (Just snapshot.sessionId) Nothing (Just (WorkflowId "cleanup-parent")) [AgentName "cleanup-coordinator"] Nothing (Just binding.request.rootId) Nothing defaultDelegationBudget) (AgentName "workspace-worker") job.identity 10 4
+          _ <- right =<< run env (Sessions.openSession admission)
+          cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
+          run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Nothing)
+          readFile (workspaceFiles root binding </> "dependency.txt") >>= (@?= "workflow replacement\n"),
+      testCase "terminal cleanup refuses a prepared mutation without inferring settlement from a free lock" $
+        withWorkflow fixture \env root job _ deps _ -> do
+          binding <- finishWorkspace env job deps
+          run env (runTransaction (Store.reserveWorkspaceEffectTx binding job.identity 0 (OperationId "pending-cleanup-effect") "pending")) >>= (@?= Right Nothing)
+          cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
+          run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Nothing)
+          doesPathExist (workspaceFiles root binding) >>= (@?= True),
+      testCase "hostile terminal tree is never followed or partly deleted" $
+        withWorkflow fixture \env root job _ deps _ -> do
+          binding <- finishWorkspace env job deps
+          let marker = root </> "outside-marker"
+          writeFile marker "outside"
+          createFileLink marker (workspaceFiles root binding </> "escape")
+          cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupUnresolved)
+          readFile marker >>= (@?= "outside")
+          readFile (workspaceFiles root binding </> "dependency.txt") >>= (@?= "workflow replacement\n"),
+      testCase "real parent admission freezes instructions and child edits once across restart" $
         withWorkflow fixture \env root job host deps observed -> do
           Agent.runAgentRunWorkflow deps job >>= assertSuspended
           let execution = executionIdFor (assignmentIdFor (runJobWorkflowId job).unWorkflowId)
@@ -242,3 +314,23 @@ run env action = runAppIO env action >>= right
 
 right :: (Show e) => Either e a -> IO a
 right = either (\err -> assertFailure (show err) >> fail "unreachable") pure
+
+maintenance :: AppEnv -> FilePath -> MaintenanceRuntime
+maintenance env root = MaintenanceRuntime env root allowAllActionAuthorizerForTests (\_ -> pure (Right ())) (pure ())
+
+admittedBinding :: AppEnv -> RunJob -> IO WorkspaceBinding
+admittedBinding env job = do
+  let execution = executionIdFor (assignmentIdFor (runJobWorkflowId job).unWorkflowId)
+  access <- right =<< run env (Execution.authorizeReplay execution job.identity (pure (Right ())))
+  (snapshot, _) <- right =<< run env (Execution.loadExecution access)
+  admission <- maybe (fail "workspace admission missing") pure snapshot.workspace
+  Just (binding, _) <- run env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
+  pure binding
+
+finishWorkspace :: AppEnv -> RunJob -> Agent.AgentRunDeps -> IO WorkspaceBinding
+finishWorkspace env job deps = do
+  Agent.runAgentRunWorkflow deps job >>= assertSuspended
+  let execution = executionIdFor (assignmentIdFor (runJobWorkflowId job).unWorkflowId)
+  _ <- right =<< driveExecutionForeground (Agent.executionRuntime deps) (ExecutionStart execution) 30
+  Agent.runAgentRunWorkflow deps job >>= assertCompleted
+  admittedBinding env job

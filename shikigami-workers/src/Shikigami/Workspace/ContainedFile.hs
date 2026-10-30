@@ -18,6 +18,7 @@ module Shikigami.Workspace.ContainedFile
     checkPrivateDirectory,
     provisionContainedRoot,
     listContainedFiles,
+    cleanupContainedRoot,
   )
 where
 
@@ -62,6 +63,17 @@ foreign import ccall unsafe "shikigami_ws_unlock" unlockWorkspace :: CInt -> IO 
 foreign import ccall safe "shikigami_ws_provision" provisionRoot :: Ptr () -> CInt -> CInt -> IO CInt
 
 foreign import ccall safe "shikigami_ws_manifest" manifestRoot :: Ptr () -> CInt -> CString -> CInt -> IO CInt
+
+foreign import ccall safe "shikigami_ws_cleanup" cleanupRoot :: CString -> CString -> CString -> CInt -> IO CInt
+
+-- Caller-derived parent and fixed child names only; the retained inode identity
+-- is required even after an interrupted partial deletion. Metadata survives.
+cleanupContainedRoot :: FilePath -> Text -> Text -> Int -> IO (Either FileError ())
+cleanupContainedRoot parent name identity uid
+  | name `notElem` ["files", "scratch"] || uid < 0 || Text.null identity || Text.length identity > 128 = pure (Left FilePathRefused)
+  | otherwise = withCString parent \directory -> withCString (Text.unpack name) \child -> withCString (Text.unpack identity) \target -> do
+      result <- cleanupRoot directory child target (fromIntegral uid)
+      pure (if result == 0 then Right () else Left FilePathRefused)
 
 withContainedFile :: FilePath -> Text -> (ContainedFile -> IO (Either FileError a)) -> IO (Either FileError a)
 withContainedFile root path use

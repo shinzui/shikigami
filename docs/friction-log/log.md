@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-10-30
+* **Addition**: FRIC-26 records slowdown tooling friction with mori://shinzui/shikigami: Normal workflow qualification waits for a complete runtime rebuild
+* **Update**: FRIC-25 resolved: Add a guest local-filesystem startup barrier before package setup; retain signature verification.
+* **Addition**: FRIC-25 records slowdown environment friction with mori://shinzui/shikigami: Fresh Apple guests lose the package signature temporary file
 * **Addition**: FRIC-24 records detour environment friction with mori://apple/container: Apple guest clock synchronization cancels absolute deadline guards
 * **Addition**: FRIC-23 records slowdown tooling friction with mori://shinzui/shikigami: Frozen runtime rebuilds the full dependency graph for each fixture edit
 * **Addition**: FRIC-22 records detour environment friction with mori://apple/container: Translated amd64 commands fail inside the qualified private workspace profile

@@ -89,6 +89,9 @@ tests =
         assertHasAll
           workerRoleInfo
           ["--agents", "--kawa-url", "--kizashi-url", "--kanmon-url", "--danwa-url", "--danwa-agent"],
+      testCase "workspace maintenance requires an explicit actor and exclusive action" $ do
+        mapM_ (\args -> case execParserPure defaultPrefs workerRoleInfo.parserInfo args of Success _ -> pure (); _ -> assertFailure "maintenance command refused") [["--workspace-actor", "agent_01h000000000000000triage", "--workspace-list"], ["--workspace-actor", "agent_01h000000000000000triage", "--workspace-cleanup", replicate 64 'a']]
+        mapM_ (\args -> case execParserPure defaultPrefs workerRoleInfo.parserInfo args of Success _ -> assertFailure "incomplete maintenance command admitted"; _ -> pure ()) [["--workspace-list"], ["--workspace-actor", "agent_01h000000000000000triage"], ["--workspace-actor", "agent_01h000000000000000triage", "--workspace-list", "--workspace-cleanup", replicate 64 'a']],
       testCase "the scheduler keeps its agents directory option" $
         assertHasAll schedulerRoleInfo ["--agents"],
       testCase "the stream consumer keeps its topic and feedback-guard options" $

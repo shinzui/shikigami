@@ -9,7 +9,7 @@ cleanup() { if "$created"; then container stop --time 5 "$name" >/dev/null; fi; 
 trap cleanup EXIT
 container run --rm --detach --name "$name" --cpus 2 --memory 2G --cap-add ALL "$image" /sbin/init >/dev/null
 created=true
-container exec "$name" /bin/sh -c 'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y --no-install-recommends gcc libc6-dev >/dev/null 2>&1'
+container exec "$name" /bin/sh -c 'systemctl start local-fs.target && export DEBIAN_FRONTEND=noninteractive && apt-get update -qq && apt-get install -y --no-install-recommends gcc libc6-dev >/dev/null 2>&1'
 container exec --interactive "$name" /bin/sh -c 'cat >/tmp/workspace-files.c' <shikigami-workers/cbits/workspace-files.c
 container exec --interactive "$name" /bin/sh -c 'cat >/tmp/contained-file-probe.c' <tests/workspace/contained-file-probe.c
 container exec "$name" /bin/sh -c 'cc -Wall -Wextra -Werror -o /tmp/contained-file-probe /tmp/contained-file-probe.c && /tmp/contained-file-probe'
