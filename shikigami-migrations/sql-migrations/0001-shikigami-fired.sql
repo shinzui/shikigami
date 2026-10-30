@@ -3,9 +3,10 @@
 -- bespoke agent_runs table. The only shikigami-owned table is the detector
 -- suppression table below, keyed (detector, subject, window) so a still-true
 -- condition does not re-raise a signal on every evaluation tick.
-SET search_path TO kiroku, pg_catalog;
 
-CREATE TABLE IF NOT EXISTS shikigami_fired (
+CREATE SCHEMA IF NOT EXISTS shikigami;
+
+CREATE TABLE IF NOT EXISTS shikigami.fired (
   detector     TEXT        NOT NULL,
   subject_type TEXT        NOT NULL,
   subject_id   TEXT        NOT NULL,

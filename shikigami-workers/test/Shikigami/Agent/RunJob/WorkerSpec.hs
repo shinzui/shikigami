@@ -203,7 +203,7 @@ tests databaseFixture =
                   Left err -> liftIO (assertFailure ("runJobWorkers failed: " <> show err))
                   Right app -> do
                     completed <- liftIO (waitUntil (readIORef handlerDone))
-                    _ <- stopAppGracefully ShutdownConfig {drainTimeout = 1} app
+                    _ <- stopAppGracefully ShutdownConfig {drainTimeout = 1, totalShutdownTimeout = 2} app
                     pure completed
           assertBool "slow handler completed" processed
           assertEqual "delivery entered the handler once" 1 =<< readIORef callCount
@@ -235,7 +235,7 @@ tests databaseFixture =
                     reached <- liftIO $ waitUntil do
                       metrics <- runDb connStr \probeRuntime -> runJobEff probeRuntime (jobDlqMetrics runJob)
                       pure (queueLength metrics == 1)
-                    _ <- stopAppGracefully ShutdownConfig {drainTimeout = 1} app
+                    _ <- stopAppGracefully ShutdownConfig {drainTimeout = 1, totalShutdownTimeout = 2} app
                     pure reached
           assertBool "permanent message reached the DLQ" reachedDlq
           mainMetrics <- runDb connStr \runtime -> runJobEff runtime (jobQueueMetrics runJob)
@@ -287,7 +287,7 @@ tests databaseFixture =
                     reached <- liftIO $ waitUntil do
                       metrics <- runDb connStr \probeRuntime -> runJobEff probeRuntime (jobDlqMetrics runJob)
                       pure (queueLength metrics == 1)
-                    _ <- stopAppGracefully ShutdownConfig {drainTimeout = 1} app
+                    _ <- stopAppGracefully ShutdownConfig {drainTimeout = 1, totalShutdownTimeout = 2} app
                     pure reached
           assertBool "the mis-declared job reached the DLQ" reachedDlq
           mainMetrics <- runDb connStr \runtime -> runJobEff runtime (jobQueueMetrics runJob)

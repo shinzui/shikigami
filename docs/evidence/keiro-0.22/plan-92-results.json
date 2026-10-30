@@ -1,0 +1,17 @@
+{
+  "build": {
+    "command": "nix develop --no-write-lock-file -c cabal build all --enable-tests -j2",
+    "exit_code": 0
+  },
+  "tests": {
+    "migration_source": 9,
+    "migration_postgres": 11,
+    "generated_conformance": 122,
+    "core_postgres": 377,
+    "workers": 248
+  },
+  "generation_idempotent": true,
+  "semantic_diff": "replay-neutral",
+  "profile": "aarch64-darwin; ephemeral PostgreSQL 18",
+  "deployment_closure_refreshed": false
+}

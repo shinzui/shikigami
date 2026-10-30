@@ -1,8 +1,4 @@
 packages:
-  -- The two ../kikan-project paths are the co-developed public action boundary
-  -- from mori://shinzui/kikan-en. Replace them with the exact upstream commit
-  -- once the M2-M4 commits are published; the packages themselves remain the
-  -- only Kikan dependency.
   shikigami-agent
   shikigami-api
   shikigami-core
@@ -10,8 +6,6 @@ packages:
   shikigami-migrations
   shikigami-server
   shikigami-workers
-  ../kikan-project/kikan-en/kikan-en-contract
-  ../kikan-project/kikan-en/kikan-en-client
 
 -- keiro-dsl is the build-time specification toolchain, not a library this
 -- service links against. Listing it here makes `cabal run keiro-dsl -- ...`
@@ -33,12 +27,12 @@ with-compiler: ghc-9.12.4
 -- The co-developed cohort is selected by the components' own build-depends
 -- bounds, resolved against this fixed Hackage snapshot. Advance it to move the
 -- cohort; docs/dependency-cohort.md records the release matrix and evidence.
-index-state: 2026-10-06T14:00:00Z
+index-state: 2026-10-30T19:00:00Z
 -- Nothing links keiro-dsl, so no bound ties it to the runtime's Keiro release;
 -- the toolchain and the runtime move in lockstep.
 -- Preserve the qualified runtime closure while adding released Baikai surfaces.
 constraints:
-  keiro-dsl ==0.18.0.0,
+  keiro-dsl ==0.22.0.0,
   baikai ==0.7.2.0,
   baikai-claude ==0.7.1.0,
   baikai-openai ==0.7.1.0,
@@ -198,17 +192,17 @@ constraints:
   kan-extensions ==5.2.8,
   keiki ==0.9.1.0,
   keiki-codec-json ==0.9.1.0,
-  keiro ==0.18.0.0,
-  keiro-core ==0.18.0.0,
-  keiro-migrations ==0.18.0.0,
-  keiro-ops ==0.18.0.0,
-  keiro-pgmq ==0.18.0.0,
-  keiro-test-support ==0.18.0.0,
-  kioku-api ==0.7.0.0,
-  kioku-core ==0.7.0.0,
-  kioku-migrations ==0.7.0.0,
-  kiroku-store ==0.8.0.1,
-  kiroku-store-migrations ==0.4.0.0,
+  keiro ==0.22.0.0,
+  keiro-core ==0.22.0.0,
+  keiro-migrations ==0.22.0.0,
+  keiro-ops ==0.22.0.0,
+  keiro-pgmq ==0.22.0.0,
+  keiro-test-support ==0.22.0.0,
+  kioku-api ==0.12.0.0,
+  kioku-core ==0.12.0.0,
+  kioku-migrations ==0.12.0.0,
+  kiroku-store ==0.12.0.0,
+  kiroku-store-migrations ==0.7.2.0,
   language-c ==0.10.2,
   lens ==5.3.6,
   lens-family ==2.1.3,
@@ -243,14 +237,14 @@ constraints:
   parallel ==3.3.0.0,
   parser-combinators ==1.3.1,
   parsers ==0.12.12,
-  pg-migrate ==1.1.0.0,
-  pg-migrate-cli ==1.1.0.0,
-  pg-migrate-embed ==1.1.0.0,
-  pg-migrate-import-codd ==1.1.0.0,
-  pgmq-config ==0.6.1.0,
-  pgmq-core ==0.6.1.0,
-  pgmq-effectful ==0.6.1.0,
-  pgmq-hasql ==0.6.1.0,
+  pg-migrate ==1.2.0.0,
+  pg-migrate-cli ==1.2.0.0,
+  pg-migrate-embed ==1.2.0.0,
+  pg-migrate-import-codd ==1.2.0.0,
+  pgmq-config ==0.7.0.0,
+  pgmq-core ==0.7.0.0,
+  pgmq-effectful ==0.7.0.0,
+  pgmq-hasql ==0.7.0.0,
   postgresql-binary ==0.15.0.1,
   postgresql-connection-string ==0.1.0.6,
   postgresql-libpq ==0.11.0.0,
@@ -271,7 +265,7 @@ constraints:
   reflection ==2.1.9,
   regex-base ==0.94.0.3,
   regex-tdfa ==1.3.2.6,
-  relay-pagination ==0.1.1.0,
+  relay-pagination ==0.1.1.2,
   repline ==0.4.3.0,
   resourcet ==1.3.0,
   safe ==0.3.21,
@@ -295,10 +289,10 @@ constraints:
   settei-env ==0.2.0.0,
   settei-optparse-applicative ==0.2.0.0,
   settei-yaml ==0.2.0.0,
-  shibuya-core ==0.9.0.3,
-  shibuya-kafka-adapter ==0.9.0.1,
-  shibuya-kiroku-adapter ==0.5.1.2,
-  shibuya-pgmq-adapter ==0.16.0.0,
+  shibuya-core ==0.12.0.0,
+  shibuya-kafka-adapter ==0.12.0.0,
+  shibuya-kiroku-adapter ==0.7.0.0,
+  shibuya-pgmq-adapter ==0.18.0.0,
   shikumi ==0.4.0.0,
   shikumi-cache ==0.2.0.0,
   shikumi-eval ==0.3.0.0,
@@ -427,8 +421,13 @@ package postgresql-libpq
 -- The third-party claude package still caps http-client-tls below 0.4, which
 -- the selected Crypton 1.1 / TLS 2.x cohort requires; its used API is
 -- compatible. Remove after a Hackage revision or release widens the bound.
--- pg-migrate-test-support 1.1.0.0 still caps ephemeral-pg below 0.3, while
--- keiro-test-support 0.18 requires the compatible ephemeral-pg 0.3 API.
 allow-newer:
-  claude:http-client-tls,
-  pg-migrate-test-support:ephemeral-pg
+  claude:http-client-tls
+
+-- Unpublished public action boundary, pinned to verified upstream HEAD.
+-- mori://shinzui/kikan-en/repos/kikan-en
+source-repository-package
+  type: git
+  location: https://github.com/shinzui/kikan-en.git
+  tag: 16704290d527d413568bfa40c983f5c3604c35c8
+  subdir: kikan-en-contract kikan-en-client

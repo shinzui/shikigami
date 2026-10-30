@@ -1,5 +1,4 @@
 0001-shikigami-fired.sql
-0002-pgmq-schema.sql
 0003-sink-grants.sql
 0004-sanctioned-execution-profiles.sql
 0005-run-evidence-and-call-records.sql

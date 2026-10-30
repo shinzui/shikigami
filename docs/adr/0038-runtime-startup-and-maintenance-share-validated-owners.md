@@ -95,3 +95,19 @@ Application migrations are schema-qualified and checked by
 `tools/check-migration-schema-isolation.sh`. The checker reports the one exact
 checksum-immutable historical `SET search_path` file and separately scans the
 vendored PGMQ snapshot; new migration scaffolds never emit session path mutation.
+
+## First-release schema ownership — 2026-10-30
+
+MasterPlan 16 replaces Shikigami's vendored PGMQ baseline with the released
+`pgmq-migration` component from `mori://shinzui/pgmq-hs/packages/pgmq-migration`.
+The application component depends on both Kioku and PGMQ. Production composition
+and the shared database fixture use these same five component owners; framework
+SQL remains in its producing package. The unused detector suppression table moves to the application-owned
+`shikigami.fired` relation; no runtime consumer references the old name. Every
+application object is explicitly qualified without changing the session search path.
+
+This is an unused-service first-release ledger reset under ADR-27, not an upgrade
+recipe for a populated old ledger. The superseded vendored SQL and historical
+0.15 upgrade fixture are retired. Startup still verifies read-only and refuses
+pending, drifted, unknown or missing history. Plan 92 records native acceptance: ten PostgreSQL smoke tests and five
+composition tests pass, including the required upstream migration identities.

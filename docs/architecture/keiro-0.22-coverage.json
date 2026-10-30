@@ -878,9 +878,31 @@
       "sourcePath": "runtime-patterns/migrations/authoring.md",
       "sourceSha256": "23aab5aa42e6cb59fc4be00dac765220027d774b450d389f3e89f5cac75baeec",
       "owner": "docs/plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "immutable-baseline",
+          "disposition": "implemented",
+          "rationale": "First-release SQL identities and checksum lock are frozen under ADR-27; later changes append entries."
+        },
+        {
+          "id": "qualified-bodies",
+          "disposition": "implemented",
+          "rationale": "Default tests and the standalone gate reject unqualified object targets and search_path; no application exception remains."
+        },
+        {
+          "id": "exact-manifest",
+          "disposition": "implemented",
+          "rationale": "Runtime membership and lock checks reject tampering and unlisted siblings. All current application SQL is transactional; no nontransactional directive consumer exists."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/cohort-and-schema.md",
+        "docs/evidence/keiro-0.22/migrations-composition.txt",
+        "docs/evidence/keiro-0.22/migrations-smoke.txt",
+        "shikigami-migrations/src/Shikigami/Migrations.hs",
+        "shikigami-migrations/app/Main.hs"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/migrations-codd-transition",
@@ -888,9 +910,21 @@
       "sourcePath": "runtime-patterns/migrations/codd-transition.md",
       "sourceSha256": "d4d15966fd5d852b757d990d5cc9fd1faa8742236f3a7c6fb17497357c184770",
       "owner": "docs/plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "not-applicable",
+      "clauses": [
+        {
+          "id": "absent-legacy-consumer",
+          "disposition": "not-applicable",
+          "rationale": "No service Codd ledger, import deployment or legacy reader exists. No import facade or historical checksum equivalence is invented; only fresh provisioning is qualified."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/cohort-and-schema.md",
+        "docs/evidence/keiro-0.22/migrations-composition.txt",
+        "docs/evidence/keiro-0.22/migrations-smoke.txt",
+        "shikigami-migrations/src/Shikigami/Migrations.hs",
+        "shikigami-migrations/app/Main.hs"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/migrations-operations",
@@ -898,9 +932,36 @@
       "sourcePath": "runtime-patterns/migrations/operations.md",
       "sourceSha256": "aa357c8224c1c7a48e8d63188bd0a7245cd650b2a4702005c454599be1ff9792",
       "owner": "docs/plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "offline-and-database-commands",
+          "disposition": "implemented",
+          "rationale": "The service migration executable owns the complete plan. Plan/list/check/new require no database credentials; status/verify/up/repair retain the released pg-migrate dispatcher."
+        },
+        {
+          "id": "ledger-and-live-schema",
+          "disposition": "implemented",
+          "rationale": "Read-only startup verification refuses pending/missing/unknown/drifted history. The independent verify-schema command compares framework and application objects and refuses deliberate live drift."
+        },
+        {
+          "id": "first-release-operation",
+          "disposition": "implemented",
+          "rationale": "Fresh provisioning applies Kiroku 0012-0016 and PGMQ 0007 before runtime intake. No populated old ledger, withdrawn-checksum repair, active legacy writer or Codd import exists under the confirmed ADR-27 baseline. Final artifact/deployment procedure belongs to plan 95."
+        },
+        {
+          "id": "schema-profile",
+          "disposition": "implemented",
+          "rationale": "The released framework schema checker is PostgreSQL-18-only; the first-release evidence uses PostgreSQL 18 and does not claim PostgreSQL 17 snapshot qualification."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/cohort-and-schema.md",
+        "docs/evidence/keiro-0.22/migrations-composition.txt",
+        "docs/evidence/keiro-0.22/migrations-smoke.txt",
+        "shikigami-migrations/src/Shikigami/Migrations.hs",
+        "shikigami-migrations/app/Main.hs"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/migrations-overview",
@@ -908,9 +969,21 @@
       "sourcePath": "runtime-patterns/migrations/overview.md",
       "sourceSha256": "569aeada1e912b3b4dde913c0774c7ac6d5bec06acbe543c7ee74c634336a314",
       "owner": "docs/plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "one-owner-and-layered-gates",
+          "disposition": "implemented",
+          "rationale": "One service executable composes upstream components, exact-byte compile embedding, runtime source checks, startup verification and independent live-object comparison."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/cohort-and-schema.md",
+        "docs/evidence/keiro-0.22/migrations-composition.txt",
+        "docs/evidence/keiro-0.22/migrations-smoke.txt",
+        "shikigami-migrations/src/Shikigami/Migrations.hs",
+        "shikigami-migrations/app/Main.hs"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/migrations-pg-migrate-model",
@@ -918,9 +991,31 @@
       "sourcePath": "runtime-patterns/migrations/pg-migrate-model.md",
       "sourceSha256": "87f990d92e4d35f7e55dc9c76ab9788ddf7de3bd2c22f9dd112f1980402c81f0",
       "owner": "docs/plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "explicit-ordered-plan",
+          "disposition": "implemented",
+          "rationale": "migrationPlan validates the authoritative five-component order and declared dependencies; no competing framework SQL owner remains."
+        },
+        {
+          "id": "embedding-and-runtime-integrity",
+          "disposition": "implemented",
+          "rationale": "RecompilePlugin and strict manifest embedding remain; runtime source/lock/membership tests independently detect stale-build inputs."
+        },
+        {
+          "id": "ledger-atomicity",
+          "disposition": "implemented",
+          "rationale": "The native suite proves fresh apply, strict verification and AlreadyApplied/no-write repetition through the released advisory-lock runner. No custom migration interpreter or nontransactional application action exists."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/cohort-and-schema.md",
+        "docs/evidence/keiro-0.22/migrations-composition.txt",
+        "docs/evidence/keiro-0.22/migrations-smoke.txt",
+        "shikigami-migrations/src/Shikigami/Migrations.hs",
+        "shikigami-migrations/app/Main.hs"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/migrations-service-package",
@@ -928,9 +1023,26 @@
       "sourcePath": "runtime-patterns/migrations/service-package.md",
       "sourceSha256": "caacf90153f887cb9c5f29328c8fd54ce4fcc0531c0a177f52d65ecfa53f81db",
       "owner": "docs/plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "package-and-schema-boundaries",
+          "disposition": "implemented",
+          "rationale": "The migration library stays independent of core, exports one application component and composes Kiroku, Keiro, Kioku and PGMQ once. Application objects use the shikigami schema."
+        },
+        {
+          "id": "service-cli-and-startup",
+          "disposition": "implemented",
+          "rationale": "The migration executable owns DATABASE_URL, output and exit status. Runtime startup uses the identical complete plan read-only and never applies pending work."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/cohort-and-schema.md",
+        "docs/evidence/keiro-0.22/migrations-composition.txt",
+        "docs/evidence/keiro-0.22/migrations-smoke.txt",
+        "shikigami-migrations/src/Shikigami/Migrations.hs",
+        "shikigami-migrations/app/Main.hs"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/migrations-testing",
@@ -938,9 +1050,31 @@
       "sourcePath": "runtime-patterns/migrations/testing.md",
       "sourceSha256": "db807caba392bb7f681b801ad78b0986c0a90c8538f11d3b3928b80544ab7eed",
       "owner": "docs/plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "default-source-gates",
+          "disposition": "implemented",
+          "rationale": "Nine normal tests include body lint, exact source/embedded agreement and a source checksum lock. Negative fixtures reject changed payloads, unlisted SQL, path mutation and unqualified DDL."
+        },
+        {
+          "id": "fresh-schema-and-negative-drift",
+          "disposition": "implemented",
+          "rationale": "Eleven native tests exercise all five components, strict startup refusals, no-op repetition, fixture isolation and an explicitly generated application schema snapshot. A disposable added column makes independent live verification fail."
+        },
+        {
+          "id": "released-fixture-boundary",
+          "disposition": "implemented",
+          "rationale": "Keiro 0.22/pg-migrate 1.2 own stable ephemeral roots and cleanup. Production does not import test-support. No nested session Left is accepted. Populated old-plan and withdrawn-checksum exercises have no first-release consumer; PostgreSQL 17 is not claimed by this evidence."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/cohort-and-schema.md",
+        "docs/evidence/keiro-0.22/migrations-composition.txt",
+        "docs/evidence/keiro-0.22/migrations-smoke.txt",
+        "shikigami-migrations/src/Shikigami/Migrations.hs",
+        "shikigami-migrations/app/Main.hs"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/api-health-endpoints",

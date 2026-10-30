@@ -1,0 +1,751 @@
+{
+  "command": "plan",
+  "data": {
+    "components": [
+      {
+        "dependencies": [],
+        "migrations": [
+          {
+            "checksum": "af7c777f8702d9b5bce6b3ea16540ab7542bc78725cb45e945c6d5b6025a4d66",
+            "id": "kiroku/0001-kiroku-bootstrap",
+            "kind": "sql",
+            "position": 1,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "2771cdd2605a8808ea469c0bcba175c8ba4c5d2465f43eb05c56edb188fa8141",
+            "id": "kiroku/0002-add-subscription-dead-letters",
+            "kind": "sql",
+            "position": 2,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "432796c59389d45478ba773b62e9f38d0a562807061eb49280d295ec83248351",
+            "id": "kiroku/0003-notify-trigger-append-guard",
+            "kind": "sql",
+            "position": 3,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "f698db092ebf34beeddecc949bbd506afc0b9c63d3e9983ad5d14f203f2ee1cd",
+            "id": "kiroku/0004-dead-letters-event-id-index",
+            "kind": "sql",
+            "position": 4,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "80c28c7743f1d9967eadf921c0509fc8477db16500466bf7a49c5f59aadb0fa2",
+            "id": "kiroku/0005-index-hygiene-and-streams-fillfactor",
+            "kind": "sql",
+            "position": 5,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "a0e4338a2feadf8f01499a3809d3de78966966689b095ea46195c4d07743e4aa",
+            "id": "kiroku/0006-stream-name-length-check",
+            "kind": "sql",
+            "position": 6,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "a4fe42ad8702b43c3d6f72edf263d6b301e783493d49f40a35dd14d2a7928fa7",
+            "id": "kiroku/0007-stream-truncate-before",
+            "kind": "sql",
+            "position": 7,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "3fb3dd5a7172da3cd14edecb0877cc9963fc9a6dceaff9ed41705a2365070f70",
+            "id": "kiroku/0008-schema-management-comment",
+            "kind": "sql",
+            "position": 8,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "62c80d627dc8f17393d26ff7dbc00cabde11ed38ee7bf3cb1ae42ea89f484c74",
+            "id": "kiroku/0009",
+            "kind": "sql",
+            "position": 9,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "debc19187d79cd263be66c6c85cd789c1176e508d562a27390095aaa70f650c4",
+            "id": "kiroku/0010",
+            "kind": "sql",
+            "position": 10,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "bf8b76a712a31cb602aee793a11691283ccd1eafdc16224e45e14484512b5af7",
+            "id": "kiroku/0011",
+            "kind": "sql",
+            "position": 11,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "32a0a0c877ff1aa6c1f74de8db62c74884e96a9c7500b2b65725b9e654101a7a",
+            "id": "kiroku/0012",
+            "kind": "sql",
+            "position": 12,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "49e519280a578e5b0f02603173b492075b072d0ae52d0e5848fea8ae1d6f7d53",
+            "id": "kiroku/0013",
+            "kind": "sql",
+            "position": 13,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "b93580ef072e85a6a598724fa8746aaa079346d7dd4a9c859412cc07113ff4d1",
+            "id": "kiroku/0014",
+            "kind": "sql",
+            "position": 14,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "821b12e410c1cece52aee018f1916a8cb01b2e900784817ba9b33d37b78d3be5",
+            "id": "kiroku/0015",
+            "kind": "sql",
+            "position": 15,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "53b22f14e20af7af0f444877544217a2433939be6a9a245295485e2f87228ee4",
+            "id": "kiroku/0016",
+            "kind": "sql",
+            "position": 16,
+            "transactionMode": "transactional"
+          }
+        ],
+        "name": "kiroku",
+        "position": 1
+      },
+      {
+        "dependencies": [
+          "kiroku"
+        ],
+        "migrations": [
+          {
+            "checksum": "1d15faa7cfb474455c3a1193b454ce493d49589b0f9f62b0b8beff65a00f6403",
+            "id": "keiro/0001-keiro-bootstrap",
+            "kind": "sql",
+            "position": 1,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "4c9c645e7ac9ebc9228638a89580613bd0058444e20047486d4bd7696b9ddb0a",
+            "id": "keiro/0002-keiro-outbox",
+            "kind": "sql",
+            "position": 2,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "71aabbfd93e66b324691ca856ca73245d62d84d984ca162e1388726127daa5e5",
+            "id": "keiro/0003-keiro-inbox",
+            "kind": "sql",
+            "position": 3,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "42f1bbd4fb23b27b2be434f25b559b2e17870f1d8c6efbcf2ae6a702c6136f98",
+            "id": "keiro/0004-keiro-timer-recovery",
+            "kind": "sql",
+            "position": 4,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "e967d41342cddc8cfe8381e5f562603dbc9a10e61232458e24c5cb291cfe9047",
+            "id": "keiro/0005-keiro-workflow-steps",
+            "kind": "sql",
+            "position": 5,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "3b20ba3981ae718cfbb9ed68318131a50ca5ad715b459868b79ac1f4c138fc5c",
+            "id": "keiro/0006-keiro-awakeables",
+            "kind": "sql",
+            "position": 6,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "975c0e6480fa01f2af1e2c45a4396e2588af4560c9803b55e8b574ea2e69b5b2",
+            "id": "keiro/0007-keiro-workflow-children",
+            "kind": "sql",
+            "position": 7,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "f05e8254de4c328f9319db4db8b9a78d6fba552c245acf0e24c6c450d8d71559",
+            "id": "keiro/0008-keiro-workflow-generation",
+            "kind": "sql",
+            "position": 8,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "1a93b4fdad24624b168a0aeeb12c659c59764660cc11fa564e77aa4b32a54fca",
+            "id": "keiro/0009-keiro-subscription-shards",
+            "kind": "sql",
+            "position": 9,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "49a963745a637c8e0248b5b958a719ccc772dbd02ca77cf706fee5de8d8d1a85",
+            "id": "keiro/0010-keiro-messaging-crash-recovery",
+            "kind": "sql",
+            "position": 10,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "7c329c9f439d2bab927debf5dc8b96acb438b4e240ef16292723398ddf005fea",
+            "id": "keiro/0011-keiro-workflows-instances",
+            "kind": "sql",
+            "position": 11,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "77c394334c64ff0631eb1c831f60629123ae255f1be7fb1716748b6ff9d0b701",
+            "id": "keiro/0012-keiro-workflow-gc-index",
+            "kind": "sql",
+            "position": 12,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "a2ea08ce3debec078e89490403241d9fd4e5d4ff3ea64b2c01ab236fb2dda313",
+            "id": "keiro/0013-keiro-workflows-wake-after",
+            "kind": "sql",
+            "position": 13,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "ed5bef75d195df0335b86d36256fd4f1dab30cb1eab4e05f0a321bf8d989503a",
+            "id": "keiro/0014-keiro-projection-dedup",
+            "kind": "sql",
+            "position": 14,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "fd65320576b06e8d30a8308ac790be463c09906e74d81a6fd535e7745ef943c5",
+            "id": "keiro/0015-keiro-outbox-claim-order-index",
+            "kind": "sql",
+            "position": 15,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "50b169c9bc98e7ab6845c74b105d13990af3cdb2e587445fd869e942c28df81d",
+            "id": "keiro/0016-keiro-inbox-drop-received-idx",
+            "kind": "sql",
+            "position": 16,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "e2690e1e2517d28e596330d3bdfcc07f6a8d7e1b6e87b94f726630d221663900",
+            "id": "keiro/0017-schema-management-comment",
+            "kind": "sql",
+            "position": 17,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "be7e510421f983ac2e446ae655d000b810b19cf2667f328dd7caf41a2101d0b6",
+            "id": "keiro/0018",
+            "kind": "sql",
+            "position": 18,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "7a0d0280d8d54f811c33b4bec525d78fe8f172de92b62e4745dcdd217c656209",
+            "id": "keiro/0019-keiro-snapshots-state-shape-hash",
+            "kind": "sql",
+            "position": 19,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "c125e8c32a0848854d94bce1245f349cf7f479326a1bf540e9dba9e222b75a4f",
+            "id": "keiro/0020-keiro-workflow-children-failure-reason",
+            "kind": "sql",
+            "position": 20,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "fa59bb3930e541b55b92f22b4662b800f560a48c65af9edbb43089b33ba43cb2",
+            "id": "keiro/0021-keiro-workflows-exact-discovery",
+            "kind": "sql",
+            "position": 21,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "f06ed6b5a3de431f3f9de55f7776eb86549432317bc728ef848fd246db67c0ce",
+            "id": "keiro/0022",
+            "kind": "sql",
+            "position": 22,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "04cbd376eb9509cb202ec0caa43e6646957d10c241511829b225d072cfd92641",
+            "id": "keiro/0023",
+            "kind": "sql",
+            "position": 23,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "faad6bd740cda45378645be1d3fe0b1754c4f1e9ac6a02e9e935bb5f6e304f95",
+            "id": "keiro/0024",
+            "kind": "sql",
+            "position": 24,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "343f0852de6cddf85ab7a69bbba7d07396427877a78b0f7f97f9835d86c4deaf",
+            "id": "keiro/0025",
+            "kind": "sql",
+            "position": 25,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "cc167230c3765bd2de986cc1dc0db447d4f186a3e6b2dbbdac7ea2cabe6cb2b3",
+            "id": "keiro/0026",
+            "kind": "sql",
+            "position": 26,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "bb725945d567c9446e67db65535daf2017dd1b6facb3277c2b85e7429b4e95f7",
+            "id": "keiro/0027",
+            "kind": "sql",
+            "position": 27,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "524e90271704112722bbfe0fc54f1c8dcc06b1f9e2ce1821e54dc232d434104f",
+            "id": "keiro/0028",
+            "kind": "sql",
+            "position": 28,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "40f62a18adf0457fc6d35e880eca8be1922f22a2fd8c893c13d59537fe941719",
+            "id": "keiro/0029",
+            "kind": "sql",
+            "position": 29,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "0e0b847088d178290e77913224df82435b86c00062feb47c79351ed014a605a1",
+            "id": "keiro/0030",
+            "kind": "sql",
+            "position": 30,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "d78b8400638b3a9005f4e964f2cb10d3863d60d1038735ed6fa09507a912a26e",
+            "id": "keiro/0031",
+            "kind": "sql",
+            "position": 31,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "b0fd734dde0a23d13f844a5e137fe92859f726ded171e14ca531c3e10f3dcf47",
+            "id": "keiro/0032",
+            "kind": "sql",
+            "position": 32,
+            "transactionMode": "transactional"
+          }
+        ],
+        "name": "keiro",
+        "position": 2
+      },
+      {
+        "dependencies": [
+          "keiro"
+        ],
+        "migrations": [
+          {
+            "checksum": "bfc4fc77978588405f0f697a4831ca12a4972ab8f0e5fe320561a7e34122fb94",
+            "id": "kioku/0001-kioku-base",
+            "kind": "sql",
+            "position": 1,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "11b42d976d146b61023e102b8633fce0df445ebe2ef4f2b9fedd51e8ad93e349",
+            "id": "kioku/0002-kioku-memory-embeddings",
+            "kind": "sql",
+            "position": 2,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "a4dcaf496976a1d206c8c5c903f3e18a768eca62bc32c09a01822e32d5aeebae",
+            "id": "kioku/0003-kioku-distillation",
+            "kind": "sql",
+            "position": 3,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "70ca30dc4737ef5048a9b241ad87ed0d71f0f0c32527f442e9a0ffbf2047f7ba",
+            "id": "kioku/0004-kioku-session-delegation-lineage",
+            "kind": "sql",
+            "position": 4,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "d849d7d8a2581ce25475542828462534d56454ab620522251adec5bc95ab1792",
+            "id": "kioku/0005-kioku-awaiting-session-state",
+            "kind": "sql",
+            "position": 5,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "76c3e43144ee7d158a73088fe38edee771994a38d796cc7dadf6ebd83b122542",
+            "id": "kioku/0006-kioku-session-readmodel-registry-bump",
+            "kind": "sql",
+            "position": 6,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "2f5bce34b92de0e306dbba7dc978ebb531e5f7f09edb18a0fcc758daa2319a45",
+            "id": "kioku/0007-kioku-l1-watermarks",
+            "kind": "sql",
+            "position": 7,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "c6b734e2ba1aacf4736a6714ef218ed26c89cbfb7ce02552af46d220a0be42ae",
+            "id": "kioku/0008-kioku-schema-hardening",
+            "kind": "sql",
+            "position": 8,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "26b42f4fc265fb214ff3ab6b312be893eb447223322ac4bdb09d4ee1a649ece8",
+            "id": "kioku/0009-kioku-embedding-schema-heal",
+            "kind": "sql",
+            "position": 9,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "c88ad236c4d6ad54e8ad6c4b51821f72772d58ff2d028d60d9e4d32a5c3cb125",
+            "id": "kioku/0010-kioku-scope-identity-recompute",
+            "kind": "sql",
+            "position": 10,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "6c83d3f01f784d0d9395953d5bb1763b8eea6cd9439073df42f79775a85197a9",
+            "id": "kioku/0011-kioku-memory-space-partition",
+            "kind": "sql",
+            "position": 11,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "5ad602b1379694d30241e09ad77d78858cbf8f8094d2e7bdb0fe7ba12dda88e6",
+            "id": "kioku/0012-relocate-projections-to-kioku-schema",
+            "kind": "sql",
+            "position": 12,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "b73a9fef16c523ef50d4c9cb0cb550abe276c974b2937b798e8d2ea7497ffd4a",
+            "id": "kioku/0013-partition-aware-fts-index",
+            "kind": "sql",
+            "position": 13,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "4e5864ff18e6fd9c3182fedea72cd22270c5f6a8cdd48a45225e723629ab6a03",
+            "id": "kioku/0014-bounded-session-memory-pages",
+            "kind": "sql",
+            "position": 14,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "4baa5e1ee9a9f6dee25b900d6c3f14d06de0fac1b8bf5f7b043adb42cace896c",
+            "id": "kioku/0015-active-memory-recency",
+            "kind": "sql",
+            "position": 15,
+            "transactionMode": "transactional"
+          }
+        ],
+        "name": "kioku",
+        "position": 3
+      },
+      {
+        "dependencies": [],
+        "migrations": [
+          {
+            "checksum": "89f9d8a3adc43434afcf814c4afc3ef8957a20418eb120801922435238714e7a",
+            "id": "pgmq/0001-install-v1.11.0",
+            "kind": "sql",
+            "position": 1,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "61d996ab813573c5b4e25633ddc628d1245c6e2751227639a03238eb87d19f75",
+            "id": "pgmq/0002-schema-management-comment",
+            "kind": "sql",
+            "position": 2,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "89774ae839eed692d11b0e5fe3e4ed7c15e9fc6dde5a23a1dcfe7a0a127c1431",
+            "id": "pgmq/0003-notify-crash-safety-and-locking",
+            "kind": "sql",
+            "position": 3,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "adbd78cfa6f6d093417627ce4ab608a5930d43caf4b7b16d9773a23ff9e3effd",
+            "id": "pgmq/0004-upgrade-v1.12.0",
+            "kind": "sql",
+            "position": 4,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "e494ff99e02ff6f4e886ee257421145cb510ad4f950835480896437a7fab41d2",
+            "id": "pgmq/0005-upgrade-v1.13.0",
+            "kind": "sql",
+            "position": 5,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "63f34f86679639dd422346767c48e1965e48055869b56c4dc5cbb56744009033",
+            "id": "pgmq/0006-preserve-partitioned-reentry-v1.13.0",
+            "kind": "sql",
+            "position": 6,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "21a61e11153a9620ee4e60c2d217b4e4699580d4970eb0afdcf991ff965ee557",
+            "id": "pgmq/0007-notify-only-registered-queues",
+            "kind": "sql",
+            "position": 7,
+            "transactionMode": "transactional"
+          }
+        ],
+        "name": "pgmq",
+        "position": 4
+      },
+      {
+        "dependencies": [
+          "kioku",
+          "pgmq"
+        ],
+        "migrations": [
+          {
+            "checksum": "c4154ad439974cb88270a72801a78c1b273b9ac29de0e639de13e04dd0f0c9f8",
+            "id": "shikigami/0001-shikigami-fired",
+            "kind": "sql",
+            "position": 1,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "23f27de3cfa98dee03715628773583540d18b3f941525806c37c5242a853aeaf",
+            "id": "shikigami/0003-sink-grants",
+            "kind": "sql",
+            "position": 2,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "6a2d0c31425a4d333a121ffdd8eac66b3c50c60aae754afaf93f39b1e2af8097",
+            "id": "shikigami/0004-sanctioned-execution-profiles",
+            "kind": "sql",
+            "position": 3,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "ac60653ba47ac524c6f7cb5d5bc2c535ec83b5af8595db05623776285243fbc0",
+            "id": "shikigami/0005-run-evidence-and-call-records",
+            "kind": "sql",
+            "position": 4,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "bed49ab021d4580f5e47fc32d68da430c784fc9387dedfcc1a52913d01796549",
+            "id": "shikigami/0006-conversation-session-index",
+            "kind": "sql",
+            "position": 5,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "244ba66cef05df0e5199b15da72b71902df41ad6e07406eb94182630d42c7860",
+            "id": "shikigami/0007-conversation-session-epoch",
+            "kind": "sql",
+            "position": 6,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "e14dd0cf6d893ef2ae0db13c36d3aae595b62d3d6c7201309ae1da0bd6af7381",
+            "id": "shikigami/0008-sink-deliveries",
+            "kind": "sql",
+            "position": 7,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "6d4abbc219754cab7e6e642e7fdb26e383cdfcd15367c355ec6ec06ef1bf01bd",
+            "id": "shikigami/0009-delegation-budgets",
+            "kind": "sql",
+            "position": 8,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "eb69ca790bf6d2132ae80ba6f7856831c1a4769842222cee1f47a2601a94fccc",
+            "id": "shikigami/0010-agent-load-state-and-run-skips",
+            "kind": "sql",
+            "position": 9,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "c39f3d0a92f6475506fc3085b54b7f780c3082627d349b44160dcbb40ee6851e",
+            "id": "shikigami/0011-agent-principal-state",
+            "kind": "sql",
+            "position": 10,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "60dedf3f3fc0204cdf6917e5c50d159d718fd9565d50378a109ffd983ca65e0f",
+            "id": "shikigami/0012-practice-review-attention",
+            "kind": "sql",
+            "position": 11,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "e0952427098f685ae542235a2ff96b544d3f53d5ee2ca34fd8ac7d35ebd5fe17",
+            "id": "shikigami/0013-decision-attempt-ledger",
+            "kind": "sql",
+            "position": 12,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "a1aca5b9a93b8617a2d78162fea19d5573da749a6c425bf8110eff0910985162",
+            "id": "shikigami/0014-agent-run-requests",
+            "kind": "sql",
+            "position": 13,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "80eb2d2e344f1293133f5f9fd06f78231eb4cf083dc7da3aebdca6032e3797db",
+            "id": "shikigami/0015-agent-run-request-dispositions",
+            "kind": "sql",
+            "position": 14,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "54769415ff34c374435d84e47f392a0b52d600c4c6551fc117f2f86be8e1851b",
+            "id": "shikigami/0016-execution-resources",
+            "kind": "sql",
+            "position": 15,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "23c6bfb9b9302c7a9e8cb2542757fc516b3f63c056d27eac298e48da3ecfc27d",
+            "id": "shikigami/0017-execution-selection-call-facts",
+            "kind": "sql",
+            "position": 16,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "2dda6ad44c6902371c62f278780491c7e31fcb3d1eb3b9c15d156627188b4e86",
+            "id": "shikigami/0018-execution-transcripts-and-accepted-operations",
+            "kind": "sql",
+            "position": 17,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "8f064713c670c2fc367fcdd17a0b995657f4a7a84033bb3120c395b4fbccc892",
+            "id": "shikigami/0019-execution-attempt-claims",
+            "kind": "sql",
+            "position": 18,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "4f135e4193efdf7d4cc05795f84ad78ef9d47cbc53cc9c905534c90c54eedbc8",
+            "id": "shikigami/0020-worker-sessions",
+            "kind": "sql",
+            "position": 19,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "47918692eaa76b50584f44a3d2bb4a752c51584c2e4cb9c943ce2d5ea159af0b",
+            "id": "shikigami/0021-worker-session-scope-index",
+            "kind": "sql",
+            "position": 20,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "e2344a5e32775699836c982f9ccc62eb9ec8b33f5ccd411b5f60c2322e6489a4",
+            "id": "shikigami/0022-workspace-bindings",
+            "kind": "sql",
+            "position": 21,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "fb02812fcfd1a245b389b2815a9c38b37411778e0758c70508467ec24b1ed824",
+            "id": "shikigami/0023-workspace-effect-reservations",
+            "kind": "sql",
+            "position": 22,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "0f74cf0564466317ecf18757770e85106729f6ae61632eb6dedc6fb932039b67",
+            "id": "shikigami/0024-workspace-process-registrations",
+            "kind": "sql",
+            "position": 23,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "bd159ee8882d4c9fd4b4b1d5f489e06ae8ab562edeaa02fd0f57f083524e82bd",
+            "id": "shikigami/0025-workspace-process-profiles",
+            "kind": "sql",
+            "position": 24,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "bafd64173d2e1385c1d110cc7b3401936bde77c7208323b1dbd5e6885eb97aef",
+            "id": "shikigami/0026-workspace-git-effect-records",
+            "kind": "sql",
+            "position": 25,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "f379075096a7d139f9fe8995cee040a80d4e8dde0d3e61df5f091e49573e38a2",
+            "id": "shikigami/0027-workspace-terminal-cleanup",
+            "kind": "sql",
+            "position": 26,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "79f84d05ee8e273faa1b84175e50be59860d5b4c28e3dc9f67f79598b491c50b",
+            "id": "shikigami/0028-workspace-file-receipt-routing",
+            "kind": "sql",
+            "position": 27,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "b7f141bbe7a6053b62ec369bea7c45cbffa5b181db373d20bf1228f0f07b8fc3",
+            "id": "shikigami/0029-workspace-transfers",
+            "kind": "sql",
+            "position": 28,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "73dcad59c955c8569826d318ccb9ea7f113cda2747977af52724e68bbc524c9f",
+            "id": "shikigami/0030-workspace-followup-lookup",
+            "kind": "sql",
+            "position": 29,
+            "transactionMode": "transactional"
+          },
+          {
+            "checksum": "8521e118a9011e50342e3aa96b2e348d247418a0cc1c9e9e1175fb0ec92daf51",
+            "id": "shikigami/0031-objective-checkpoints",
+            "kind": "sql",
+            "position": 30,
+            "transactionMode": "transactional"
+          }
+        ],
+        "name": "shikigami",
+        "position": 5
+      }
+    ]
+  },
+  "ok": true,
+  "schemaVersion": 1
+}

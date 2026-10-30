@@ -110,7 +110,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.18.0.0"
+              , versionConstraint = Some "^>=0.22.0.0"
               }
           , Schema.Dependency.ByName "shinzui/kikan-en:kikan-en-client"
           , Schema.Dependency.ByName "shinzui/kikan-en:kikan-en-contract"
@@ -518,7 +518,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.18.0.0"
+              , versionConstraint = Some "^>=0.22.0.0"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/keiro:keiro-test-support"
@@ -527,7 +527,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Test
-              , versionConstraint = Some "^>=0.18.0.0"
+              , versionConstraint = Some "^>=0.22.0.0"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/kioku:kioku-core"
@@ -536,7 +536,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.7.0.0"
+              , versionConstraint = Some "^>=0.12.0.0"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/kioku:kioku-migrations"
@@ -545,7 +545,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.7.0.0"
+              , versionConstraint = Some "^>=0.12.0.0"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/kiroku:kiroku-store"
@@ -554,7 +554,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.8.0.0"
+              , versionConstraint = Some "^>=0.12.0.0"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/kiroku:kiroku-store-migrations"
@@ -563,7 +563,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.4.0.0"
+              , versionConstraint = Some "^>=0.7.2.0"
               }
           , Schema.Dependency.WithAugmentation
               { name = "pcapriotti/optparse-applicative:optparse-applicative"
@@ -574,6 +574,7 @@ in  Schema.Project::{
               , scope = Some Schema.DependencyScope.Regular
               , versionConstraint = Some ">=0.19 && <0.20"
               }
+          , Schema.Dependency.ByName "shinzui/pgmq-hs:pgmq-migration"
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/pg-migrate:pg-migrate"
               , extraDocs = [] : List Schema.DocRef.Type
@@ -581,7 +582,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=1.1.0.0"
+              , versionConstraint = Some "^>=1.2.0.0"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/pg-migrate:pg-migrate-cli"
@@ -590,7 +591,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=1.1.0.0"
+              , versionConstraint = Some "^>=1.2.0.0"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/pg-migrate:pg-migrate-embed"
@@ -599,7 +600,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=1.1.0.0"
+              , versionConstraint = Some "^>=1.2.0.0"
               }
           , Schema.Dependency.WithAugmentation
               { name = "UnkindPartition/tasty:tasty"
@@ -673,7 +674,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "==0.18.0.0"
+              , versionConstraint = Some "^>=0.22.0.0"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/keiro:keiro-ops"
@@ -682,7 +683,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "==0.18.0.0"
+              , versionConstraint = Some "^>=0.22.0.0"
               }
           , Schema.Dependency.ByName "shinzui/kioku:kioku-api"
           , Schema.Dependency.ByName "shinzui/kioku:kioku-core"
@@ -1028,6 +1029,7 @@ in  Schema.Project::{
       , "shinzui/pg-migrate:pg-migrate-cli"
       , "shinzui/pg-migrate:pg-migrate-embed"
       , "shinzui/pgmq-hs:pgmq-hasql"
+      , "shinzui/pgmq-hs:pgmq-migration"
       , "shinzui/servant-health:servant-health"
       , "shinzui/servant-health:servant-health:testkit"
       , "shinzui/servant-openapi-hs:servant-openapi-hs"

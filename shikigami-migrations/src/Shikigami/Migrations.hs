@@ -5,8 +5,8 @@
 -- composed with the components the runtime libraries publish.
 --
 -- @kioku-migrations@ publishes @kiokuMigrations@ as a 'MigrationComponent'
--- rather than a pre-concatenated list, so this module names the four components
--- explicitly and lets @pg-migrate@ order them from their declared dependencies,
+-- rather than a pre-concatenated list, so this module names the five components
+-- explicitly and lets @pg-migrate@ validate their declared dependency order,
 -- instead of relying on kioku to have pre-concatenated kiroku and keiro.
 --
 -- The durable migration identity is @\<component\>\/\<migration-name\>@, and the
@@ -29,14 +29,16 @@ module Shikigami.Migrations
     shikigamiMigrationPlan,
     reconcileShikigamiReadModels,
     verifyShikigamiMigrations,
+    verifyShikigamiSchema,
   )
 where
 
-import Control.Exception (throwIO)
+import Control.Exception (bracket, throwIO)
 import Data.ByteString (ByteString)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Set qualified as Set
 import Data.Text (Text)
+import Data.Text qualified as Text
 import Database.PostgreSQL.Migrate
   ( DefinitionError,
     MigrationComponent,
@@ -49,13 +51,17 @@ import Database.PostgreSQL.Migrate
     verifyMigrationPlan,
   )
 import Database.PostgreSQL.Migrate.Embed (embedMigrationManifest)
+import Hasql.Connection qualified as Connection
 import Hasql.Connection.Settings qualified as Settings
 import Keiro.Migrations qualified as Keiro
+import Keiro.Migrations.SchemaCheck qualified as Schema
 import Kioku.App (runAppIO, withNoopAppEnv)
 import Kioku.Migrations qualified as Kioku
 import Kioku.ReadModel (reconcileReadModelRegistry)
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Kiroku.Store.Migrations qualified as Kiroku
+import Language.Haskell.TH.Syntax qualified as TH
+import Pgmq.Migration qualified as Pgmq
 
 -- | Shikigami's own SQL, embedded at compile time from @sql-migrations/manifest@.
 -- The manifest's order is the migration order; the recompile plugin makes GHC
@@ -64,17 +70,16 @@ embeddedMigrationEntries :: NonEmpty (FilePath, ByteString)
 embeddedMigrationEntries =
   $(embedMigrationManifest "sql-migrations/manifest")
 
--- | The @shikigami@ component: the detector suppression table and the vendored
--- PGMQ schema. It depends on @kioku@, which in turn depends on @keiro@ and
--- @kiroku@, so the plan orders it last.
+-- | Application tables depend on Kioku and the upstream-owned PGMQ schema.
+-- The first-release baseline installs PGMQ exactly once through its component.
 shikigamiMigrations :: Either DefinitionError MigrationComponent
 shikigamiMigrations =
   migrationComponentFromEmbeddedSql
     "shikigami"
-    (Set.singleton "kioku")
+    (Set.fromList ["kioku", "pgmq"])
     embeddedMigrationEntries
 
--- | The complete Kiroku, Keiro, Kioku, and Shikigami plan in dependency order.
+-- | The complete Kiroku, Keiro, Kioku, PGMQ and application plan.
 --
 -- A 'DefinitionError' here means an embedded component is malformed, which is a
 -- compile-time-embedded fact rather than anything an operator can fix at run
@@ -84,8 +89,9 @@ shikigamiMigrationPlan = do
   kiroku <- componentOrDie "Kiroku" Kiroku.kirokuMigrations
   keiro <- componentOrDie "Keiro" Keiro.keiroMigrations
   kioku <- componentOrDie "Kioku" Kioku.kiokuMigrations
+  pgmq <- componentOrDie "PGMQ" Pgmq.pgmqMigrations
   shikigami <- componentOrDie "Shikigami" shikigamiMigrations
-  migrationPlan (kiroku :| [keiro, kioku, shikigami])
+  migrationPlan (kiroku :| [keiro, kioku, pgmq, shikigami])
   where
     componentOrDie label =
       either
@@ -122,3 +128,28 @@ verifyShikigamiMigrations connectionString = do
     Right report
       | null report.issues && null report.pendingMigrations && null report.unknownMigrations -> pure ()
     other -> ioError (userError ("runtime migration verification failed: " <> show other))
+
+-- | Independent live-object verification for the migration CLI. The released
+-- framework snapshot supports PostgreSQL 18 and refuses other server majors.
+verifyShikigamiSchema :: Text -> IO ()
+verifyShikigamiSchema connectionString =
+  bracket
+    (Connection.acquire (Settings.connectionString connectionString) >>= either (fail . show) pure)
+    Connection.release
+    \connection -> do
+      result <- Connection.use connection do
+        framework <- Schema.verifyExpectedSchemaSession
+        application <- Schema.snapshotSchema "shikigami"
+        pure ((<> Schema.compareSchemaSnapshot expectedApplicationSchema application) <$> framework)
+      case result of
+        Right (Right []) -> pure ()
+        other -> ioError (userError ("live schema verification failed: " <> show other))
+
+expectedApplicationSchema :: Text
+expectedApplicationSchema =
+  Text.pack
+    $( do
+         path <- TH.makeRelativeToProject "expected-schema.txt"
+         TH.addDependentFile path
+         TH.runIO (readFile path) >>= TH.lift
+     )

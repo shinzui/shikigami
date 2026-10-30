@@ -1,0 +1,17 @@
+    creation rollback leaves no objective, origin, receipt or lifecycle event:                                   OK (0.31s)
+    revocation race cannot commit a later unauthorized edit:                                                     OK (0.36s)
+    a legacy Skill overlay is acquired after recall and released before later lifecycle work:                    kioku recall: query embeddings disabled by AI policy; using keyword search
+    transient v2 failure leaves no value and a later advance succeeds:                                           kioku recall: query embeddings disabled by AI policy; using keyword search
+      approved answer before deadline wins over late timer:                                                      kioku recall: query embeddings disabled by AI policy; using keyword search
+    a later decision keeps its own program label and different model:                                            OK (0.30s)
+    expiry after dispatch holds accounting and retains a fenced late receipt:                                    OK (1.55s)
+      a late superseded model receipt settles during active progress:                                            OK (1.57s)
+      a late superseded model receipt settles after success without replacing output:                            OK (1.58s)
+    a fenced workspace cannot establish ownership while an accepted assignment remains active:                   OK (0.36s)
+    fence proof substitution refuses without advancing ownership:                                                OK (0.27s)
+    successor requires the established session and a retained fence before conditional admission:                OK (0.49s)
+    registered at-risk-customer flow escalates after acknowledgement timeout:                                    kioku recall: query embeddings disabled by AI policy; using keyword search
+      empty dimensions are wildcards and populated dimensions exclude mismatches:                                OK
+      evaluation accumulates independent reasons:                                                                OK
+    in-flight workflow survives a simulated deploy under a patch guard:                                          OK (0.30s)
+All 377 tests passed (123.78s)

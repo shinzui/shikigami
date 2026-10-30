@@ -1,0 +1,248 @@
+{
+  "checked_at": "2026-10-30",
+  "source_baseline": "dc19c4f1d3068b6f73384f2e82588d6ad690e16c",
+  "index_state": "2026-10-30T19:00:00Z",
+  "packages": [
+    {
+      "package": "keiro",
+      "version": "0.22.0.0",
+      "registry": "https://hackage.haskell.org/package/keiro-0.22.0.0/keiro.cabal",
+      "descriptor_sha256": "9ce08be6c4a841bc6e8bfc5389d4fc92a995314cac856d6cfc2cbb9d598b043a",
+      "source": "mori://shinzui/keiro",
+      "release_commit": "b28201f2063fa4f6dcb724cbf474959107e36b74",
+      "solved_version": "0.22.0.0"
+    },
+    {
+      "package": "keiro-core",
+      "version": "0.22.0.0",
+      "registry": "https://hackage.haskell.org/package/keiro-core-0.22.0.0/keiro-core.cabal",
+      "descriptor_sha256": "70812faa0adce48556c601521f0b21637287021936b601ee2c481274b4a8bbf3",
+      "source": "mori://shinzui/keiro",
+      "release_commit": "b28201f2063fa4f6dcb724cbf474959107e36b74",
+      "solved_version": "0.22.0.0"
+    },
+    {
+      "package": "keiro-dsl",
+      "version": "0.22.0.0",
+      "registry": "https://hackage.haskell.org/package/keiro-dsl-0.22.0.0/keiro-dsl.cabal",
+      "descriptor_sha256": "f72d9ff209f9ea289932096b5aaa9c2e0615aec4103f6a9158ce8a7839243af0",
+      "source": "mori://shinzui/keiro",
+      "release_commit": "b28201f2063fa4f6dcb724cbf474959107e36b74",
+      "solved_version": "0.22.0.0"
+    },
+    {
+      "package": "keiro-migrations",
+      "version": "0.22.0.0",
+      "registry": "https://hackage.haskell.org/package/keiro-migrations-0.22.0.0/keiro-migrations.cabal",
+      "descriptor_sha256": "8ef650f955416891d59d29fb671bd1f23414d1d4b162386bc23f3c6dbb1b2eda",
+      "source": "mori://shinzui/keiro",
+      "release_commit": "b28201f2063fa4f6dcb724cbf474959107e36b74",
+      "solved_version": "0.22.0.0"
+    },
+    {
+      "package": "keiro-ops",
+      "version": "0.22.0.0",
+      "registry": "https://hackage.haskell.org/package/keiro-ops-0.22.0.0/keiro-ops.cabal",
+      "descriptor_sha256": "d568b6238f471b65cbd352b9a9efe17a021153ff587d73e1d22c89e85b33641d",
+      "source": "mori://shinzui/keiro",
+      "release_commit": "b28201f2063fa4f6dcb724cbf474959107e36b74",
+      "solved_version": "0.22.0.0"
+    },
+    {
+      "package": "keiro-pgmq",
+      "version": "0.22.0.0",
+      "registry": "https://hackage.haskell.org/package/keiro-pgmq-0.22.0.0/keiro-pgmq.cabal",
+      "descriptor_sha256": "20b41a84c3ec8e3ec2b7bda43b8d4ce366c90c05de7eadc47a38001b481ac05d",
+      "source": "mori://shinzui/keiro",
+      "release_commit": "b28201f2063fa4f6dcb724cbf474959107e36b74",
+      "solved_version": "0.22.0.0"
+    },
+    {
+      "package": "keiro-test-support",
+      "version": "0.22.0.0",
+      "registry": "https://hackage.haskell.org/package/keiro-test-support-0.22.0.0/keiro-test-support.cabal",
+      "descriptor_sha256": "76a9292970b14c651342a2692557028811139a57e595362236eee45e62d75985",
+      "source": "mori://shinzui/keiro",
+      "release_commit": "b28201f2063fa4f6dcb724cbf474959107e36b74",
+      "solved_version": "0.22.0.0"
+    },
+    {
+      "package": "kioku-api",
+      "version": "0.12.0.0",
+      "registry": "https://hackage.haskell.org/package/kioku-api-0.12.0.0/kioku-api.cabal",
+      "descriptor_sha256": "5ff367fb8a9a6cbb71a5555c80cf314606163c74a079cd553716b2e464b01182",
+      "source": "mori://shinzui/kioku",
+      "release_commit": "4d5ffe0f3454791cfc0d820812dc5cf6cf099459",
+      "solved_version": "0.12.0.0"
+    },
+    {
+      "package": "kioku-core",
+      "version": "0.12.0.0",
+      "registry": "https://hackage.haskell.org/package/kioku-core-0.12.0.0/kioku-core.cabal",
+      "descriptor_sha256": "a767c23abc021b49997ef5038e0dd47d3de16f44931817941ef4c39c8423d1c4",
+      "source": "mori://shinzui/kioku",
+      "release_commit": "4d5ffe0f3454791cfc0d820812dc5cf6cf099459",
+      "solved_version": "0.12.0.0"
+    },
+    {
+      "package": "kioku-migrations",
+      "version": "0.12.0.0",
+      "registry": "https://hackage.haskell.org/package/kioku-migrations-0.12.0.0/kioku-migrations.cabal",
+      "descriptor_sha256": "e526eb5db80f28be4a6b7058f7556540c094c7ad117c48a1462a99688c261044",
+      "source": "mori://shinzui/kioku",
+      "release_commit": "4d5ffe0f3454791cfc0d820812dc5cf6cf099459",
+      "solved_version": "0.12.0.0"
+    },
+    {
+      "package": "kiroku-store",
+      "version": "0.12.0.0",
+      "registry": "https://hackage.haskell.org/package/kiroku-store-0.12.0.0/kiroku-store.cabal",
+      "descriptor_sha256": "f742ee73f0354c54f6c0f9ff60492a7983fcf2ce74d51a77d6617a7d8fa94a36",
+      "source": "mori://shinzui/kiroku",
+      "release_commit": "22d103e4f424caab06c6a2b76ad92b408c262bc0",
+      "solved_version": "0.12.0.0"
+    },
+    {
+      "package": "kiroku-store-migrations",
+      "version": "0.7.2.0",
+      "registry": "https://hackage.haskell.org/package/kiroku-store-migrations-0.7.2.0/kiroku-store-migrations.cabal",
+      "descriptor_sha256": "7a2e175fd9999d9b38a9027ffe124ecf5c6a8c7c6fafd1200ef32051c5258d20",
+      "source": "mori://shinzui/kiroku",
+      "release_commit": "22d103e4f424caab06c6a2b76ad92b408c262bc0",
+      "solved_version": "0.7.2.0"
+    },
+    {
+      "package": "shibuya-core",
+      "version": "0.12.0.0",
+      "registry": "https://hackage.haskell.org/package/shibuya-core-0.12.0.0/shibuya-core.cabal",
+      "descriptor_sha256": "75e59517323d0b44af8a30bdbe89a0edca2d9892f54f676aa941d8a69e33630f",
+      "source": "mori://shinzui/shibuya",
+      "release_commit": "14f35d8995cc3dc3e2671e4d2505abf9bf4f5a9e",
+      "solved_version": "0.12.0.0"
+    },
+    {
+      "package": "shibuya-kafka-adapter",
+      "version": "0.12.0.0",
+      "registry": "https://hackage.haskell.org/package/shibuya-kafka-adapter-0.12.0.0/shibuya-kafka-adapter.cabal",
+      "descriptor_sha256": "50e407cbde020a9701e29cd3623cb7c1ae2aad8365f0aebda08065ad1a117ad7",
+      "source": "mori://shinzui/shibuya",
+      "release_commit": "14f35d8995cc3dc3e2671e4d2505abf9bf4f5a9e",
+      "solved_version": "0.12.0.0"
+    },
+    {
+      "package": "shibuya-kiroku-adapter",
+      "version": "0.7.0.0",
+      "registry": "https://hackage.haskell.org/package/shibuya-kiroku-adapter-0.7.0.0/shibuya-kiroku-adapter.cabal",
+      "descriptor_sha256": "c8d18e2fee40520993e0eb957caa2ed67ec7a99507d6f80730daf8ddba684b49",
+      "source": "mori://shinzui/kiroku",
+      "release_commit": "22d103e4f424caab06c6a2b76ad92b408c262bc0",
+      "solved_version": "0.7.0.0"
+    },
+    {
+      "package": "shibuya-pgmq-adapter",
+      "version": "0.18.0.0",
+      "registry": "https://hackage.haskell.org/package/shibuya-pgmq-adapter-0.18.0.0/shibuya-pgmq-adapter.cabal",
+      "descriptor_sha256": "802569bfbd1b86caff21ba6f3839d4984a2485a342163ae0174e5c106972b890",
+      "source": "mori://shinzui/shibuya-pgmq-adapter",
+      "release_commit": "e549451978f93f28ccb39912404be9a8a3fea4d7",
+      "solved_version": "0.18.0.0"
+    },
+    {
+      "package": "pgmq-core",
+      "version": "0.7.0.0",
+      "registry": "https://hackage.haskell.org/package/pgmq-core-0.7.0.0/pgmq-core.cabal",
+      "descriptor_sha256": "2b0818b7bb9437615e4f2dc3ff1e690a441859631064a379cf2a31ef21f99afb",
+      "source": "mori://shinzui/pgmq-hs",
+      "release_commit": "88afb93802f790c1ecfbd3ed8bcce196c4430d13",
+      "solved_version": "0.7.0.0"
+    },
+    {
+      "package": "pgmq-config",
+      "version": "0.7.0.0",
+      "registry": "https://hackage.haskell.org/package/pgmq-config-0.7.0.0/pgmq-config.cabal",
+      "descriptor_sha256": "6fb28bbb248e05b32791ae38d3fd88f0bc7df6f1e91d3a145935352f918a070a",
+      "source": "mori://shinzui/pgmq-hs",
+      "release_commit": "88afb93802f790c1ecfbd3ed8bcce196c4430d13",
+      "solved_version": "0.7.0.0"
+    },
+    {
+      "package": "pgmq-effectful",
+      "version": "0.7.0.0",
+      "registry": "https://hackage.haskell.org/package/pgmq-effectful-0.7.0.0/pgmq-effectful.cabal",
+      "descriptor_sha256": "abeb93f5719c423939be5e98fdf71fd2d759a7ec305a0dd9029e58458d48a15e",
+      "source": "mori://shinzui/pgmq-hs",
+      "release_commit": "88afb93802f790c1ecfbd3ed8bcce196c4430d13",
+      "solved_version": "0.7.0.0"
+    },
+    {
+      "package": "pgmq-hasql",
+      "version": "0.7.0.0",
+      "registry": "https://hackage.haskell.org/package/pgmq-hasql-0.7.0.0/pgmq-hasql.cabal",
+      "descriptor_sha256": "e05dbeecbf5be02efd15ae7aadccaa7d4bd76ea679d19d3894f3680e6ebb6471",
+      "source": "mori://shinzui/pgmq-hs",
+      "release_commit": "88afb93802f790c1ecfbd3ed8bcce196c4430d13",
+      "solved_version": "0.7.0.0"
+    },
+    {
+      "package": "pg-migrate",
+      "version": "1.2.0.0",
+      "registry": "https://hackage.haskell.org/package/pg-migrate-1.2.0.0/pg-migrate.cabal",
+      "descriptor_sha256": "b5a3296f3a06440e280cd908fbf8a2b1c7b9bcdcaeaaceb2d762e29fce00f15a",
+      "source": "mori://shinzui/pg-migrate",
+      "release_commit": "13865052bef62688c40576ad36889221a0ba7e08",
+      "solved_version": "1.2.0.0"
+    },
+    {
+      "package": "pg-migrate-cli",
+      "version": "1.2.0.0",
+      "registry": "https://hackage.haskell.org/package/pg-migrate-cli-1.2.0.0/pg-migrate-cli.cabal",
+      "descriptor_sha256": "7f1e525c7a4427a8ecfc1e78f2328b3bcc01d591c139a8b7541a84e5d192762c",
+      "source": "mori://shinzui/pg-migrate",
+      "release_commit": "13865052bef62688c40576ad36889221a0ba7e08",
+      "solved_version": "1.2.0.0"
+    },
+    {
+      "package": "pg-migrate-embed",
+      "version": "1.2.0.0",
+      "registry": "https://hackage.haskell.org/package/pg-migrate-embed-1.2.0.0/pg-migrate-embed.cabal",
+      "descriptor_sha256": "dd1766befb8774b16a6742bd0ba425091897a1705ac0885e1e84d6ef178f7bd6",
+      "source": "mori://shinzui/pg-migrate",
+      "release_commit": "13865052bef62688c40576ad36889221a0ba7e08",
+      "solved_version": "1.2.0.0"
+    },
+    {
+      "package": "pg-migrate-import-codd",
+      "version": "1.2.0.0",
+      "registry": "https://hackage.haskell.org/package/pg-migrate-import-codd-1.2.0.0/pg-migrate-import-codd.cabal",
+      "descriptor_sha256": "d77adb0646d05daf571592b632cbdb886ec702033d11cb7329b6f44465ece171",
+      "source": "mori://shinzui/pg-migrate",
+      "release_commit": "13865052bef62688c40576ad36889221a0ba7e08",
+      "solved_version": "1.2.0.0"
+    },
+    {
+      "package": "relay-pagination",
+      "version": "0.1.1.2",
+      "registry": "https://hackage.haskell.org/package/relay-pagination-0.1.1.2/relay-pagination.cabal",
+      "descriptor_sha256": "6d1e6c9d79c1cb2de019def6483ec2ad40167717acd4ce02fe5975af4a5f7b04",
+      "solved_version": "0.1.1.2"
+    },
+    {
+      "package": "pgmq-migration",
+      "version": "0.7.0.0",
+      "registry": "https://hackage.haskell.org/package/pgmq-migration-0.7.0.0/pgmq-migration.cabal",
+      "descriptor_sha256": "9382f62ae9b7b07345d1fa00227131500d76e9e4eb44c663e4c8ba82ad249108",
+      "source": "mori://shinzui/pgmq-hs",
+      "release_commit": "88afb93802f790c1ecfbd3ed8bcce196c4430d13",
+      "solved_version": "0.7.0.0"
+    },
+    {
+      "package": "pg-migrate-test-support",
+      "version": "1.2.0.0",
+      "registry": "https://hackage.haskell.org/package/pg-migrate-test-support-1.2.0.0/pg-migrate-test-support.cabal",
+      "descriptor_sha256": "2de70c529895581a3b645061c3b42d6955bfd124b1a466b4bfdae9cc01641f3d",
+      "source": "mori://shinzui/pg-migrate",
+      "release_commit": "13865052bef62688c40576ad36889221a0ba7e08",
+      "solved_version": "1.2.0.0"
+    }
+  ]
+}

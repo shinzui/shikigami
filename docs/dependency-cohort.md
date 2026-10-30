@@ -10,20 +10,36 @@ the cohort moves. Before plan 80, the only exact constraint was `keiro-dsl`, whi
 and so no bound ties to the runtime's Keiro release. A drift between a matrix
 row and the solver's plan is a bug in one of them.
 
-## Configured baseline — checked 2026-10-29
+## Keiro 0.22 candidate — checked 2026-10-30
 
-`cabal.project` still pins Keiro/DSL 0.18.0.0 at the October 6 index snapshot.
-[MasterPlan 16](masterplans/16-upgrade-shikigami-to-keiro-0-22-and-retire-superseded-runtime-workarounds.md)
-and plans 92–95 define the 0.22 upgrade and its migration/replay gates; their
-implementation milestones remain unchecked. The
-[0.22 pattern audit](architecture/keiro-0.22-pattern-audit.md) describes a target,
-not an installed cohort. This documentation pass changes no dependency selection
-and makes no new latest-release claim.
+Plan 92 is implementing this candidate; build, generation and database acceptance
+remain required. The fixed index is `2026-10-30T19:00:00Z`. Authoritative released
+descriptor hashes, upstream release commits and actual solve selections are in
+[evidence/keiro-0.22/released-cohort.json](evidence/keiro-0.22/released-cohort.json).
 
-The two Kikan-En packages are co-developed sibling sources in `cabal.project`;
-a full build requires that checkout until they are replaced by a verified published
-commit. The Hackage table below covers the configured released families, while
-source-only dependencies retain their exact project pins.
+The Keiro runtime, core, DSL, operations, queue and migration/test packages move
+together to 0.22.0.0. Kioku API/core/migrations select 0.12.0.0, Kiroku Store
+0.12.0.0 with migrations 0.7.2.0, Shibuya core/Kafka 0.12.0.0, Kiroku adapter
+0.7.0.0, PGMQ adapter 0.18.0.0, PGMQ libraries 0.7.0.0 and pg-migrate 1.2.0.0.
+Relay Pagination moves to 0.1.1.2 as required by Kioku's released descriptor.
+
+These are compatibility selections: Store 0.13 and Kiroku adapter 0.7.0.1 do
+not fit Keiro 0.22's Store 0.12 bound. Kioku 0.12.0.1 requires Baikai Effectful
+0.4.0.5 and Baikai 0.10, beyond the application's frozen Baikai 0.7 cohort;
+0.12.0.0 admits that existing cohort without a bounds override. Published
+pg-migrate-test-support 1.2 admits ephemeral-pg 0.3.1; its obsolete allow-newer
+entry is removed. The unrelated third-party claude exception remains.
+
+Kikan-En contract/client now use verified published source commit
+`16704290d527d413568bfa40c983f5c3604c35c8` from
+`mori://shinzui/kikan-en/repos/kikan-en`; no sibling source paths participate.
+They have no Hackage releases. The final frozen deployment export still belongs
+to plan 95 and has not yet been refreshed.
+
+The fresh schema uses the published PGMQ component, including migration 0007,
+instead of the old vendored SQL. No developer database is altered. This deliberately
+establishes a first-release ledger under ADR-27; an old populated installation is
+not a supported upgrade path for this candidate.
 
 ## Keiro 0.18 configured cohort
 

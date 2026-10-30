@@ -1,0 +1,14 @@
+shikigami-migrations smoke
+  startup verifies the complete migrated ledger without applying work:      OK (0.21s)
+  startup refuses a pending migration and does not apply it:                OK (0.21s)
+  startup refuses a missing ledger and does not initialize it:              OK (0.28s)
+  startup refuses changed migration bytes:                                  OK (0.19s)
+  startup refuses an unknown migration without repairing it:                OK (0.22s)
+  fresh provisioning includes transport and store prerequisites:            OK (0.19s)
+  fresh application schema matches the reviewed snapshot and detects drift: OK (0.22s)
+  a fresh database applies the plan, and re-applying is a no-op:            OK (0.20s)
+  the applied plan spans all five components:                               OK (0.19s)
+  examples share one template and isolate their data:                       OK (0.39s)
+  an exception releases the clone before the next example:                  OK (0.36s)
+
+All 11 tests passed (2.65s)

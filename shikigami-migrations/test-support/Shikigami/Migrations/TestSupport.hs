@@ -11,17 +11,19 @@ where
 import Data.Text (Text)
 import Keiro.Test.Postgres qualified as Postgres
 import Kioku.Migrations qualified as Kioku
+import Pgmq.Migration qualified as Pgmq
 import Shikigami.Migrations (reconcileShikigamiReadModels, shikigamiMigrations)
 
 type DatabaseFixture = Postgres.Fixture
 
 -- | Keiro supplies Kiroku and Keiro. Add the application components exactly once;
--- Shikigami's component includes the transport schema used by its workers.
+-- The transport schema is owned by the published PGMQ component.
 withShikigamiMigratedSuite :: (DatabaseFixture -> IO a) -> IO a
 withShikigamiMigratedSuite use = do
   kioku <- either (fail . show) pure Kioku.kiokuMigrations
+  pgmq <- either (fail . show) pure Pgmq.pgmqMigrations
   shikigami <- either (fail . show) pure shikigamiMigrations
-  Postgres.withMigratedSuiteWith [kioku, shikigami] use
+  Postgres.withMigratedSuiteWith [kioku, pgmq, shikigami] use
 
 -- | Clone the suite template, reconcile Kioku's compiled read-model identities,
 -- and release the clone even when the example raises an exception. All caller

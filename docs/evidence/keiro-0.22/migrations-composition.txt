@@ -1,0 +1,13 @@
+shikigami-migrations
+  migration plan
+    runtime source membership, embedded bytes and checksum lock agree:          OK
+    application migration bodies are qualified and do not change search_path:   OK
+    body lint rejects unqualified DDL and session path changes:                 OK
+    runtime integrity refuses changed payloads and unlisted SQL:                OK
+    shikigami's own component is well-formed:                                   OK
+    shikigami embeds its own SQL:                                               OK
+    the lifecycle evidence migration is appended with both tables:              OK
+    the practice-review attention migration is appended without delivery state: OK
+    the plan orders all five components by dependency:                          OK
+
+All 9 tests passed (0.02s)

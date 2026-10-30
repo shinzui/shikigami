@@ -91,7 +91,7 @@ import Servant.Health (HealthApi, ProbeCheck, ProbeVerdict (Healthy, Unhealthy),
 import Servant.Health.Check (boolCheck, newFailureTracker, safeCheck, sequenceChecks, withProbeTimeout)
 import Servant.Server.Generic (genericServe)
 import Shibuya.App (Master, ProcessorId, ProcessorMetrics (..), getProcessorMetricsIO)
-import Shibuya.Core.Metrics (ProcessorState (Failed, Idle, Processing, Stopped))
+import Shibuya.Core.Metrics (ProcessorState (Failed, Idle, Paused, Processing, Stopped))
 import Shikigami.App.Config (Port, portNumber)
 import Shikigami.Health.Ping (databaseReachable, postgresCheckName)
 import Shikigami.Log qualified as Log
@@ -329,8 +329,11 @@ processorStateVerdict loop now = \case
   Nothing -> Unhealthy (loopCheckName loop) now
   Just ProcessorMetrics {state} -> case state of
     Idle -> Healthy
-    Processing _ lastActivity ->
+    Processing _ _ lastActivity ->
       let deadline = addUTCTime (loopStaleAfter loop) lastActivity
+       in if now > deadline then Unhealthy (loopCheckName loop) deadline else Healthy
+    Paused _ _ lastProgress ->
+      let deadline = addUTCTime (loopStaleAfter loop) lastProgress
        in if now > deadline then Unhealthy (loopCheckName loop) deadline else Healthy
     Failed _ failedAt -> Unhealthy (loopCheckName loop) failedAt
     Stopped -> Unhealthy (loopCheckName loop) now

@@ -27,6 +27,11 @@ provenance:
       at: 2026-10-30T19:46:17Z
       mode: "update"
       note: "Expand unused-service adoption to six children, current domain census, HTTP/live inspection, Haskell corpus and first-release qualification."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-30T20:18:57Z
+      mode: "implement"
+      note: "Resolve released companion metadata and begin dependency migration"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -43,20 +48,53 @@ Build and provision Shikigami with one released Keiro 0.22 cohort, including the
 
 ## Progress
 
-- [ ] M1: Released dependencies and matching DSL compile all packages and current generated consumers.
-- [ ] M2: Fresh composed schema, repeat application and fail-closed startup pass native database tests.
+- [x] M1 (2026-10-30): Released cohort/DSL compile all packages and test components; strict check, inspection, identical second scaffold and 122 conformance checks pass. Native core (377) and worker (248) tests pass; see `docs/evidence/keiro-0.22/plan-92-results.json`.
+- [x] M2 (2026-10-30): Fresh five-component schema, repeat application and read-only startup refusal pass 11 native PostgreSQL smoke tests and nine source/composition tests; evidence under `docs/evidence/keiro-0.22/migrations-*.txt`.
+
+M1 is underway (2026-10-30): the release-only solve passes at the fixed October
+30 snapshot, with published Kikan commit 16704290d527d413568bfa40c983f5c3604c35c8.
+`docs/evidence/keiro-0.22/released-cohort.json` records descriptor hashes and
+selected versions. Strict checking, inspection, deterministic generation and all 122 generated
+conformance checks pass. The dependency-only semantic diff is replay-neutral.
+Full consumer compilation passes.
+M2 now composes the upstream PGMQ owner and removes the vendored baseline;
+native smoke acceptance passed all eleven cases. No developer database was changed.
 
 ## Surprises & Discoveries
 
-The October 28 scope assumed a deployed population and an older domain census. The user and current tree invalidate those assumptions; no implementation acceptance is claimed.
+The October 28 scope assumed a deployed population and an older domain census. The user and current tree invalidate those assumptions; fresh-schema acceptance is recorded above.
+
+Kioku 0.12.0.1 requires Baikai Effectful 0.4.0.5/Baikai 0.10; 0.12.0.0 is
+compatible with the existing Baikai cohort. Kiroku adapter 0.7.0.1 requires
+Store 0.13, outside Keiro 0.22's bound; select adapter 0.7.0.0/Store 0.12.
+Kioku requires Relay Pagination 0.1.1.2, so advance its exact old constraint.
 
 ## Decision Log
 
 2026-10-30: Apply the user's first-release policy and exhaustive current-guide adoption. Replace old-history qualification with fresh provisioning and same-build recovery. Preserve real transaction, authority and privacy invariants.
 
+2026-10-30: Compose the released PGMQ component and make every application
+migration schema-qualified. Retire the old 0.15 ledger fixture, whose claimed
+historical bytes no longer describe the current component. ADR-38 records the
+owner boundary. Fresh provisioning and repeat-apply/startup refusals remain the
+authoritative acceptance checks.
+
 ## Outcomes & Retrospective
 
-Not implemented. Record outcomes, remaining profile limitations and triaged friction at completion.
+Completed 2026-10-30. All seven packages and generated consumers build with the
+released 0.22 cohort and immutable Kikan source. Native migration acceptance
+passes 11 cases; nine default source/composition tests include lock, membership,
+body lint and negative mutations. Live framework/application verification has a
+public migration CLI command and detects independent schema drift. Conformance
+passes 122 checks; core PostgreSQL and worker suites pass 377 and 248 cases.
+
+`docs/evidence/keiro-0.22/cohort-and-schema.md` records source/release selections,
+commands and evidence. The schema-check profile is PostgreSQL 18 because the
+released framework snapshot explicitly refuses other majors. No populated
+legacy upgrade, Linux runtime, exported final closure or final inspection
+capability is certified. Plans 93–107 and final plan 95 retain those obligations.
+ADR-38 records the upstream PGMQ/application schema owner and startup boundary.
+No implementation friction entry was required in this child.
 
 ## Context and Orientation
 

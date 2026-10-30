@@ -23,7 +23,7 @@ import Servant.Health (ProbeCheck, ProbeVerdict (Healthy, Unhealthy))
 import Servant.Health.TestKit (probeContractTests)
 import Shibuya.Core.Metrics
   ( ProcessorMetrics (..),
-    ProcessorState (Failed, Idle, Processing, Stopped),
+    ProcessorState (Failed, Idle, Paused, Processing, Stopped),
     emptyInFlightInfo,
     emptyProcessorMetrics,
   )
@@ -182,14 +182,14 @@ supervisedTests =
       testCase "a processor working within its bound is healthy" do
         now <- getCurrentTime
         let lastActivity = addUTCTime (negate (loopStaleAfter ConsumerLoop - 5)) now
-        processorStateVerdict ConsumerLoop now (Just (metricsIn (Processing (emptyInFlightInfo 1) lastActivity) now))
+        processorStateVerdict ConsumerLoop now (Just (metricsIn (Processing (emptyInFlightInfo 1) lastActivity lastActivity) now))
           @?= Healthy,
       -- The case a bare state check gets wrong. "Processing" is not by itself
       -- good news: a record in flight for ten minutes is a wedge.
       testCase "a processor stuck past its bound is unhealthy" do
         now <- getCurrentTime
         let lastActivity = addUTCTime (negate (loopStaleAfter ConsumerLoop + 5)) now
-            verdict = processorStateVerdict ConsumerLoop now (Just (metricsIn (Processing (emptyInFlightInfo 1) lastActivity) now))
+            verdict = processorStateVerdict ConsumerLoop now (Just (metricsIn (Processing (emptyInFlightInfo 1) lastActivity lastActivity) now))
         failedCheckOf verdict >>= (@?= loopCheckName ConsumerLoop)
         onsetOf verdict >>= (@?= addUTCTime (loopStaleAfter ConsumerLoop) lastActivity),
       -- What no heartbeat could report at all: the failure's own timestamp,
@@ -202,6 +202,14 @@ supervisedTests =
         onsetOf verdict >>= (@?= failedAt),
       -- Under IgnoreFailures a stopped processor is a silent death, which is the
       -- hole this whole plan exists to close.
+      testCase "a paused processor uses last progress for its health bound" do
+        now <- getCurrentTime
+        let recent = addUTCTime (-5) now
+            stale = addUTCTime (negate (loopStaleAfter ConsumerLoop + 5)) now
+        processorStateVerdict ConsumerLoop now (Just (metricsIn (Paused (emptyInFlightInfo 1) stale recent) now)) @?= Healthy
+        let verdict = processorStateVerdict ConsumerLoop now (Just (metricsIn (Paused (emptyInFlightInfo 1) recent stale) now))
+        failedCheckOf verdict >>= (@?= loopCheckName ConsumerLoop)
+        onsetOf verdict >>= (@?= addUTCTime (loopStaleAfter ConsumerLoop) stale),
       testCase "a stopped processor is unhealthy" do
         now <- getCurrentTime
         verdict <- pure (processorStateVerdict QueueLoop now (Just (metricsIn Stopped now)))

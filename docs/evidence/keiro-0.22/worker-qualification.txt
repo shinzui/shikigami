@@ -1,0 +1,7 @@
+      a processor working within its bound is healthy:                                                                        OK
+      a processor stuck past its bound is unhealthy:                                                                          OK
+      a paused processor uses last progress for its health bound:                                                             OK
+      a stopped processor is unhealthy:                                                                                       OK
+    failed dead-letter persistence halts without terminal ack:                                                                OK (0.20s)
+    graceful shutdown
+All 248 tests passed (174.98s)

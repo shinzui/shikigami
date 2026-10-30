@@ -78,7 +78,7 @@ create-database:
     just migrate
 
 # Apply the full schema via the shikigami-migrate executable (pg-migrate). One
-# pass applies the kiroku, keiro, kioku, and shikigami migration components in
+# pass applies the kiroku, keiro, kioku, pgmq and shikigami migration components in
 # dependency order — no copied .sql files; each library embeds its own — and
 # then reconciles keiro's read-model registry. pg-migrate records what it applied
 # and skips it next time, so re-running is a no-op.

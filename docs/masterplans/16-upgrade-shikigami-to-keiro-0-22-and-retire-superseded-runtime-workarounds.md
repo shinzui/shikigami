@@ -26,6 +26,11 @@ provenance:
       at: 2026-10-30T19:46:17Z
       mode: "update"
       note: "Expand unused-service adoption to six children, current domain census, HTTP/live inspection, Haskell corpus and first-release qualification."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-30T20:18:57Z
+      mode: "implement"
+      note: "Begin released cohort resolution under plan 92"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -54,7 +59,7 @@ Consulted decisions: [ADR-27](../adr/0027-the-first-release-establishes-one-clea
 
 | # | Workstream | Path | Hard Deps | Soft Deps | Status |
 |---|---|---|---|---|---|
-| EP-1 | Released cohort and fresh schema | [92](../plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md) | None | None | Not Started |
+| EP-1 | Released cohort and fresh schema | [92](../plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md) | None | None | Complete |
 | EP-2 | Guarded commands and complete domain adoption | [93](../plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md) | EP-1 | None | Not Started |
 | EP-3 | Native delivery and workflow recovery | [94](../plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md) | EP-1 | EP-2 | Not Started |
 | EP-4 | Administrative CLI, HTTP and live inspection | [106](../plans/106-expose-bounded-administrative-inspection-and-live-feeds.md) | EP-1 | EP-3 | Not Started |
@@ -77,9 +82,21 @@ EP-6 owns final source/release inventory validation, exact-candidate evidence, f
 
 ## Progress
 
-2026-10-30: Expanded planning is complete; all six children remain Not Started. EP-1 is eligible. The previous October 28 review applies to the old scope, not this revision. Final gates are fresh provisioning, useful runtime work, same-build restart/replay, native refusal atomicity, bounded inspection under failure and complete source/release dispositions for one exported candidate.
+2026-10-30: EP-1 is Complete. The released cohort and immutable Kikan source
+build all workspace/test components; strict checking, deterministic generation,
+122 conformance checks, 11 native migration cases, nine source/composition cases,
+377 core PostgreSQL cases and 248 worker cases pass. EP-2 is the next eligible
+child; EP-3 through EP-5 are also dependency-ready. The final frozen closure,
+Linux runtime and integrated inspection/recovery gates remain unqualified.
 
 ## Surprises & Discoveries
+
+EP-1 adopts upstream PGMQ ownership and removes the vendored baseline. Source
+integrity now runs independently of stale compilation, and migration operations
+separate ledger verification from live-object drift. The released framework
+snapshot supports PostgreSQL 18 only; no PostgreSQL 17 schema-check qualification
+is claimed. Release-audit ownership was reconciled so HTTP/header inspection,
+worker lifecycle and final release-tooling clauses remain with their consumers.
 
 The previous plan hardcoded six workspace members/two aggregates; the current workspace has ten members including new objective work. RunJobs is currently schema version 4 with three historical upcasters; they are cleanup candidates under the unused-service confirmation. Trigger.Consumer directly constructs Shibuya AppConfig. Ops already uses emptyAppHooks and the native tree; Kotei's duplicated-parser finding does not apply here. Rich evidence is not reconstructible from lifecycle events, so first-release freedom does not license destructive replay of those live-only targets.
 
@@ -89,7 +106,8 @@ The previous plan hardcoded six workspace members/two aggregates; the current wo
 
 ## Outcomes & Retrospective
 
-Implementation pending. No release, deployment or runtime compliance is certified by these plans.
+EP-1 is accepted; five children and the integrated first-release gate remain.
+No final release or deployment is certified.
 
 ## Revision Notes
 

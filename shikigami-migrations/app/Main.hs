@@ -51,29 +51,45 @@ import Database.PostgreSQL.Migrate.CLI
   )
 import Hasql.Connection.Settings qualified as Settings
 import Options.Applicative
-  ( execParser,
+  ( command,
+    execParser,
     fullDesc,
     helper,
     info,
     progDesc,
+    subparser,
     (<**>),
+    (<|>),
   )
-import Shikigami.Migrations (reconcileShikigamiReadModels, shikigamiMigrationPlan)
+import Shikigami.Migrations (MigrationPlan, reconcileShikigamiReadModels, shikigamiMigrationPlan, verifyShikigamiSchema)
 import System.Environment (lookupEnv)
 import System.Exit qualified as Exit
+
+data Command = Migrate MigrationCommand | VerifySchema
 
 main :: IO ()
 main = do
   plan <- either (fail . show) pure shikigamiMigrationPlan
-  command <-
+  parsed <-
     execParser
       ( info
-          (migrationCommandParser plan <**> helper)
+          ((subparser (command "verify-schema" (info (pure VerifySchema) (progDesc "Verify live framework and application schema objects (PostgreSQL 18)"))) <|> (Migrate <$> migrationCommandParser plan)) <**> helper)
           (fullDesc <> progDesc "Manage the Shikigami database schema")
       )
-  databaseUrl <-
-    lookupEnv "DATABASE_URL"
-      >>= maybe (fail "DATABASE_URL is required") pure
+  databaseUrl <- case parsed of
+    Migrate Plan {} -> pure ""
+    Migrate List {} -> pure ""
+    Migrate Check {} -> pure ""
+    Migrate New {} -> pure ""
+    _ -> lookupEnv "DATABASE_URL" >>= maybe (fail "DATABASE_URL is required") pure
+  case parsed of
+    VerifySchema -> do
+      verifyShikigamiSchema (Text.pack databaseUrl)
+      Text.IO.putStrLn "live framework and application schema match the embedded snapshots"
+    Migrate migration -> runMigration databaseUrl plan migration
+
+runMigration :: String -> MigrationPlan -> MigrationCommand -> IO ()
+runMigration databaseUrl plan command = do
   let environment =
         cliEnvironment
           (Settings.connectionString (Text.pack databaseUrl))

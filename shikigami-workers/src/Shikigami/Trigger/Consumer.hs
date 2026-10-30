@@ -215,9 +215,9 @@ runSubscription logger onSupervisor prefix metrics AppEnv {tracer} StreamConfig 
                       concurrency = Serial
                     }
                 appConfig =
-                  Shibuya.AppConfig
-                    { strategy = Shibuya.StopAllOnFailure,
-                      inboxSize = 1
+                  Shibuya.defaultAppConfig
+                    { Shibuya.strategy = Shibuya.StopAllOnFailure,
+                      Shibuya.inboxSize = 1
                     }
             appResult <- Shibuya.runApp appConfig [(Shibuya.ProcessorId streamTopic, processor)]
             case appResult of

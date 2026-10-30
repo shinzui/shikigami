@@ -3,8 +3,6 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 sql_dir="$root/shikigami-migrations/sql-migrations"
-historical="$sql_dir/0001-shikigami-fired.sql"
-vendored="$sql_dir/0002-pgmq-schema.sql"
 
 failures=0
 
@@ -20,27 +18,13 @@ report_matches() {
   fi
 }
 
-managed=()
-for file in "$sql_dir"/*.sql; do
-  if [[ "$file" != "$historical" && "$file" != "$vendored" ]]; then
-    managed+=("$file")
-  fi
-done
+# All application SQL belongs to the first-release baseline and is qualified.
+managed=("$sql_dir"/*.sql)
 
-# Runner-session path mutation makes otherwise identical migration bytes create
-# different objects in different hosts. The first Shikigami migration predates
-# this rule and is immutable because pg-migrate checksums applied bytes.
 report_matches \
   'application-managed SQL mutates search_path or the current schema' \
   '\bSET[[:space:]]+(LOCAL[[:space:]]+|SESSION[[:space:]]+)?(search_path|SCHEMA)\b|set_config[[:space:]]*\([[:space:]]*['\''"]search_path['\''"]' \
   "${managed[@]}"
-
-# Vendored upstream SQL remains in scope for dangerous session mutations. It is
-# checked separately so adding a vendor file never creates a blanket exception.
-report_matches \
-  'vendored PGMQ SQL mutates search_path or the current schema' \
-  '\bSET[[:space:]]+(LOCAL[[:space:]]+|SESSION[[:space:]]+)?(search_path|SCHEMA)\b|set_config[[:space:]]*\([[:space:]]*['\''"]search_path['\''"]' \
-  "$vendored"
 
 # Check the common object-bearing statements in application-owned SQL. CREATE
 # INDEX names are intentionally allowed to be unqualified, but their ON target
@@ -83,15 +67,8 @@ then
   failures=1
 fi
 
-if [[ ! -f "$historical" ]] || ! rg -q -i '^SET[[:space:]]+search_path[[:space:]]+TO[[:space:]]+kiroku,[[:space:]]*pg_catalog;' "$historical"; then
-  echo "migration-schema-isolation: the recorded historical exception changed or disappeared: $historical" >&2
-  failures=1
-else
-  echo "migration-schema-isolation: historical exception retained: ${historical#$root/} mutates search_path; applied bytes are checksum-immutable"
-fi
-
 if (( failures != 0 )); then
   exit 1
 fi
 
-echo "migration-schema-isolation: application SQL is schema-qualified; vendored PGMQ SQL has no session path mutation"
+echo "migration-schema-isolation: application SQL is schema-qualified; PGMQ is owned by pgmq-migration"
