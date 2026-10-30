@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-10-30
+* **Addition**: FRIC-31 records detour tooling friction with mori://shinzui/shikigami: Batch qualification retains open stdin in a fake unattended vendor
+* **Addition**: FRIC-30 records slowdown tooling friction with mori://shinzui/shikigami: Fixture-only corrections rebuild the qualified Linux dependency cohort
 * **Addition**: FRIC-29 records slowdown tooling friction with mori://shinzui/shikigami: Expanded workspace gates wait for another frozen cohort rebuild
 * **Update**: FRIC-28 resolved: Qualify UTF-8 controller setup without changing the repository payload environment.
 * **Addition**: FRIC-28 records detour environment friction with mori://shinzui/shikigami: Linux fixture locale rejects the UTF-8 declaration schema

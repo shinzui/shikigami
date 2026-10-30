@@ -22,7 +22,9 @@ adapter have passed the native accepted-executor qualification. An explicit
 `workspaces.process` configuration installs them into the configured worker;
 omitting it retains file revision 1. The normal parent/child workflow passes
 the full fourteen-case native gate.
-Handoff, integration and final IR-11 qualification remain delivery gates in
+The complete workspace-owned matrix now passes 22 cases, including integration,
+follow-up writes/cleanup and native fencing. Real objective ownership, accepted
+successor writes and final IR-11 qualification remain delivery gates in
 [plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md).
 Enablement requires the explicit reviewed process configuration and a qualified
 image and containment profile.
@@ -41,6 +43,7 @@ root:
 bash tests/workspace/run-apple.sh --prototype
 bash tests/workspace/run-apple.sh --git
 bash tests/workspace/run-apple.sh --workflow
+bash tests/workspace/run-apple.sh --workspace-gates
 ```
 
 The first command checks ten process/provisioning cases. The second includes
@@ -53,11 +56,15 @@ edit, and verifies one terminal result with exact commit and validation evidence
 It passes fourteen named cases. The focused `--workflow-only` mode runs three
 cases (native provisioning plus the normal workflow) for iteration; retain the
 combined `--workflow` gate for complete process/Git/workflow qualification.
-The expanded candidate is selected with `--workspace-gates`: it adds exact
+The expanded gate is selected with `--workspace-gates`: it adds exact
 artifact integration, conflicts and a combined-only validation failure, native
 same-owner follow-up writes and cleanup, transfer freeze/restart/settlement,
-late old-owner edit refusal, and journal/log privacy checks. Native results are
-still pending for this candidate. `--qualify` runs the same checks and then
+late old-owner edit refusal, and journal/log privacy checks. All 22 cases pass
+on runtime `20e8e80`;
+[bounded native facts](../evidence/plan-96/native-workspace-facts.json) retain
+artifacts, validation receipts, follow-up ownership and the fence. The focused
+`--continuing-only` and `--handoff-only` modes run seven and six cases
+respectively. `--qualify` runs the same checks and then
 refuses full qualification while the real objective ownership provider is
 unavailable. It never substitutes an objective ownership receipt. Neither mode
 enables the transfer-aware adapters in production.
@@ -135,8 +142,9 @@ transfer-aware tools. The explicit `configuredWorkspaceHostWithTransfers`
 composition selects file revision 3, process revision 2 and Git revision 2 under
 `ascii-exact-transfer-v1`. It preserves old adapters, pinned instructions and the
 ready Unix identity, and requires a separate retained successor admission.
-Production selection remains on the previously qualified revisions until real
-successor-write and Linux handoff qualification pass.
+Production selection remains on the previously qualified revisions until the
+real objective ownership and accepted native successor-write gate passes.
+Workspace-side native fencing and same-owner follow-up writes are qualified.
 Same-owner follow-ups at the original epoch reuse that allocation only after
 the preceding assignments and executions are terminal and all receipts settle.
 An unsettled allocation refuses reuse; it does not create a replacement copy.
@@ -144,7 +152,8 @@ An unsettled allocation refuses reuse; it does not create a replacement copy.
 Do not repair exposed receipt-directory permissions and then trust its contents.
 Do not remove pending workspace directories, replace receipt files, clear
 reservations or recycle reserved Unix identities to regain capacity. Explicit terminal cleanup retains provider metadata and receipts. The operator commands
-below are implemented; handoff and integrated-revision qualification remain open.
+below are implemented. Native integration and workspace fencing pass; real
+ownership transfer and accepted successor-write qualification remain open.
 
 ## Terminal cleanup
 

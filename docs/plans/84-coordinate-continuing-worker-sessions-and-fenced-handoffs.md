@@ -70,8 +70,13 @@ native successor writes remain gated. Consume
 `Shikigami.Workspace.TransferClient.workspaceTransferClient` through the private
 peer-checked supervisor RPC; session results alone supply no fence. IR-13's
 real ownership/checkpoint provider remains unimplemented in plans 98–99 under
-MasterPlan 17. This plan's real late-writer/restart/ownership integration and
-full IR-15 acceptance stay open; store fixtures cannot close them.
+MasterPlan 17. Plan 96's complete workspace-owned native matrix now passes 22
+cases,
+including integration, same-owner follow-up/cleanup and a real late old-owner
+edit refusal across provider restart. See its
+[bounded native evidence](../evidence/plan-96/native-workspace-facts.json).
+This plan's real verified-epoch successor/ownership integration and full IR-15
+acceptance stay open; workspace-only facts cannot close them.
 
 
 ## Surprises & Discoveries

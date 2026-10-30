@@ -1,0 +1,425 @@
+{
+  "artifactUriStatus": "Commit artifact URI convention pending; full Git object ids are scoped by the canonical fixture repository.",
+  "environment": {
+    "controller": "x86_64-linux",
+    "existingHostCredentials": false,
+    "host": "disposable Apple container",
+    "hostMounts": false,
+    "payloadAndGuard": "aarch64-linux"
+  },
+  "followup": {
+    "base": "85a70f3646132b61b736b24e6fec3dedea1f5cce",
+    "cleanup": {
+      "bindingDigest": "sha256:dab2c56823b913c06e28255d6aef681d37efe033e52e2aeafc36c09088c87ee4",
+      "filesTarget": "65040:48594",
+      "ownership": {
+        "assignment": [
+          "f6e7b208-3dc9-51f9-9601-c6165acc5d0f",
+          "5411c868-287e-53ad-9a0c-ee0ac68b6eec"
+        ],
+        "epoch": 0,
+        "owner": {
+          "kind": "verified",
+          "principalId": "agent_01h000000000000000triage"
+        },
+        "principal": {
+          "kind": "verified",
+          "principalId": "agent_01h000000000000000triage"
+        },
+        "rootId": "continuing-followup-root",
+        "runId": "86648747-b671-5d35-be5a-a29d68a71317"
+      },
+      "scratchTarget": "65040:48595",
+      "userId": 64020
+    },
+    "complete": true,
+    "followup": {
+      "assignmentId": "assignment:sha256:b318adcfa7888f04a949ed813f2fcc4e8fe5f2c2bde668d6c42308cc8300fab9",
+      "epoch": 0,
+      "owner": {
+        "kind": "verified",
+        "principalId": "agent_01h000000000000000triage"
+      },
+      "runId": "86648747-b671-5d35-be5a-a29d68a71317",
+      "workspace": {
+        "provider": "shikigami.workspace/1",
+        "resource": "80aecf12e640fe640dad24e896a2844d0295fe71a7bc01d733854a725b29e8ec"
+      }
+    },
+    "idleCleanupRefused": true,
+    "metadataPreserved": true,
+    "original": {
+      "assignment": [
+        "f6e7b208-3dc9-51f9-9601-c6165acc5d0f",
+        "eb66f6bf-9031-517b-803e-28940e335050"
+      ],
+      "epoch": 0,
+      "owner": {
+        "kind": "verified",
+        "principalId": "agent_01h000000000000000triage"
+      },
+      "principal": {
+        "kind": "verified",
+        "principalId": "agent_01h000000000000000triage"
+      },
+      "rootId": "continuing-followup-root",
+      "runId": "1ad0b859-1554-5c00-92d4-d74308d9fb0a"
+    },
+    "profile": {
+      "bindingDigest": "sha256:dab2c56823b913c06e28255d6aef681d37efe033e52e2aeafc36c09088c87ee4",
+      "instructionDigest": "sha256:41707e6dc582a05daef2172f5fb59e0d03a64e0d663b14f33b47e26206a36cef",
+      "ready": true,
+      "userId": 64020
+    },
+    "repository": "mori://fixture/repo",
+    "scopedInstructionsAndUnixProfilePreserved": true,
+    "terminalCleanupConverges": true,
+    "workspace": {
+      "provider": "shikigami.workspace/1",
+      "resource": "80aecf12e640fe640dad24e896a2844d0295fe71a7bc01d733854a725b29e8ec"
+    }
+  },
+  "format": 1,
+  "integration": {
+    "artifacts": [
+      {
+        "base": "85a70f3646132b61b736b24e6fec3dedea1f5cce",
+        "bindingDigest": "sha256:684053a05a2c793ba93e9b244f569ea8380de055532dc099adb5f81be879cc61",
+        "operationId": "operation:sha256:aec0a4703d6f1d84a8992aa88dbde5033bc0e59bb2dfcae2b57873fbdaf0baad",
+        "revision": "b6e978b13d36c605e94340132ceeb1c96e7edb8c"
+      },
+      {
+        "base": "85a70f3646132b61b736b24e6fec3dedea1f5cce",
+        "bindingDigest": "sha256:9796bd908def5782750e5fe0f9bd69a113f24be37605ef8fe130e4104dcb207c",
+        "operationId": "operation:sha256:59f75e2e03f1eff2514bdeeddc4ffe57c7d2f90304fae217b8730c94acbb8c62",
+        "revision": "9d34747a5c6537ee44ce7ccefaa15af8981d392d"
+      },
+      {
+        "base": "85a70f3646132b61b736b24e6fec3dedea1f5cce",
+        "bindingDigest": "sha256:f595f36d665c1309f464a03dafbe2555b1fcad88643ceee4d02daa623e8f4f1a",
+        "operationId": "operation:sha256:ef2bb895384dcff7ed61cd03fb8a18df10fa4dd86defd649bf7c396f9223ec7c",
+        "revision": "18340bde6dc38b3e793f8f166eb065ec90d055a2"
+      },
+      {
+        "base": "85a70f3646132b61b736b24e6fec3dedea1f5cce",
+        "bindingDigest": "sha256:32477a32d6a49b0968ffc284f1f7504165c1209bbe9f6a0e4492268ff81da621",
+        "operationId": "operation:sha256:86e6fd7fca25e1b979ac284df7bc8d6020b4177d50d65777d3252be1c74024c4",
+        "revision": "2692114875df5e7a49b0558cc5b4e930f5669f97"
+      }
+    ],
+    "combined": {
+      "parent": "85a70f3646132b61b736b24e6fec3dedea1f5cce",
+      "paths": [
+        "src/dependency.txt",
+        "src/integration-a",
+        "src/integration-c"
+      ],
+      "result": "0dca9ebed44f4a0b6dd7b264c528767c9e51c781",
+      "tree": "eeff47b417a8020639442e59311f41beff0c4507"
+    },
+    "combinedFailure": {
+      "attemptId": "tool:operation:sha256:3b337626567572f2f6736dd703c1d7550c6badcc558ae9edfb8294b840868822",
+      "bindingDigest": "sha256:cad6dcfb710ed92a8a44b5cec75729aba62255dc0d7f38773825ddab553eb7e7",
+      "bootId": "3a17c88f-7d3f-4de4-a1c6-8de50307d527",
+      "descendantsEmpty": true,
+      "exitCode": 77,
+      "fingerprint": "sha256:ccd455aedcf6645c09a6c0731e87b9d1ba6994bf498df54f2ae584bf2ecfa205",
+      "generation": 1,
+      "invocationId": "197df79d9c574d848d418df7895d2d01",
+      "operationId": "operation:sha256:3b337626567572f2f6736dd703c1d7550c6badcc558ae9edfb8294b840868822",
+      "outputComplete": true,
+      "stderr": {
+        "artifact": "stderr",
+        "bytes": 0,
+        "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+        "truncated": false
+      },
+      "stdout": {
+        "artifact": "stdout",
+        "bytes": 0,
+        "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+        "truncated": false
+      },
+      "termination": "ProcessExited",
+      "unit": "shikigami-workspace-2257fc8555f9e6c9da551f8af6f6b99bc4bc2d37c2cf3866cb9b7b4cf0665b3d.service"
+    },
+    "conflictsRefusePublication": true,
+    "processes": [
+      {
+        "base": "85a70f3646132b61b736b24e6fec3dedea1f5cce",
+        "executionId": "execution:sha256:6f1f020417cddfaedbfb9f976750bb7d4a4d9e8746024decc61e2aecb69bf43f",
+        "instructionDigest": "sha256:41707e6dc582a05daef2172f5fb59e0d03a64e0d663b14f33b47e26206a36cef",
+        "receipt": {
+          "attemptId": "tool:operation:sha256:16813044fe54e3fe70fc309231d0e7968b8fbbd4794b8423c53fd12089bc9124",
+          "bindingDigest": "sha256:32477a32d6a49b0968ffc284f1f7504165c1209bbe9f6a0e4492268ff81da621",
+          "bootId": "3a17c88f-7d3f-4de4-a1c6-8de50307d527",
+          "descendantsEmpty": true,
+          "exitCode": 0,
+          "fingerprint": "sha256:1e878a1276707125ffb29eb3ec29ecc17872d0e2b618cf6d5b96f21c386a57b8",
+          "generation": 1,
+          "invocationId": "b94177adeb9d452985d75141f9ef9cd1",
+          "operationId": "operation:sha256:16813044fe54e3fe70fc309231d0e7968b8fbbd4794b8423c53fd12089bc9124",
+          "outputComplete": true,
+          "stderr": {
+            "artifact": "stderr",
+            "bytes": 0,
+            "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+            "truncated": false
+          },
+          "stdout": {
+            "artifact": "stdout",
+            "bytes": 18,
+            "digest": "sha256:2236be18523a97b775796da60dcde4a57a0990343241ca94fd9e162b6b9e38a4",
+            "truncated": false
+          },
+          "termination": "ProcessExited",
+          "unit": "shikigami-workspace-b29a00516724365ac13995e856cf7362847693e5ddcadc73ad3713d05d4fb593.service"
+        },
+        "repository": "mori://fixture/repo"
+      },
+      {
+        "base": "85a70f3646132b61b736b24e6fec3dedea1f5cce",
+        "executionId": "execution:sha256:17009dc070ae1787d7bf7e6b1a7467c05193c23c09144fdf85381cd82ac63ee5",
+        "instructionDigest": "sha256:41707e6dc582a05daef2172f5fb59e0d03a64e0d663b14f33b47e26206a36cef",
+        "receipt": {
+          "attemptId": "tool:operation:sha256:37814742b3e528aedcad1d8853bdae1e8da82050c86d272a3ca265f263c1943d",
+          "bindingDigest": "sha256:9796bd908def5782750e5fe0f9bd69a113f24be37605ef8fe130e4104dcb207c",
+          "bootId": "3a17c88f-7d3f-4de4-a1c6-8de50307d527",
+          "descendantsEmpty": true,
+          "exitCode": 0,
+          "fingerprint": "sha256:e45ce6b087ea5face0417201f74631c9d433eb43863e47cdefbea73c445f261b",
+          "generation": 1,
+          "invocationId": "6056f5e506e3437091d5f85027b008a5",
+          "operationId": "operation:sha256:37814742b3e528aedcad1d8853bdae1e8da82050c86d272a3ca265f263c1943d",
+          "outputComplete": true,
+          "stderr": {
+            "artifact": "stderr",
+            "bytes": 0,
+            "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+            "truncated": false
+          },
+          "stdout": {
+            "artifact": "stdout",
+            "bytes": 18,
+            "digest": "sha256:2236be18523a97b775796da60dcde4a57a0990343241ca94fd9e162b6b9e38a4",
+            "truncated": false
+          },
+          "termination": "ProcessExited",
+          "unit": "shikigami-workspace-047ac1f267044f4a83f0954cb3a6f45c97efbcd463321d2d6a0e4c23d7848fdb.service"
+        },
+        "repository": "mori://fixture/repo"
+      },
+      {
+        "base": "85a70f3646132b61b736b24e6fec3dedea1f5cce",
+        "executionId": "execution:sha256:492b99df66945512c1fc20c3d790880c64f10b4af2573b425eccf3d199a19231",
+        "instructionDigest": "sha256:41707e6dc582a05daef2172f5fb59e0d03a64e0d663b14f33b47e26206a36cef",
+        "receipt": {
+          "attemptId": "tool:operation:sha256:3b337626567572f2f6736dd703c1d7550c6badcc558ae9edfb8294b840868822",
+          "bindingDigest": "sha256:cad6dcfb710ed92a8a44b5cec75729aba62255dc0d7f38773825ddab553eb7e7",
+          "bootId": "3a17c88f-7d3f-4de4-a1c6-8de50307d527",
+          "descendantsEmpty": true,
+          "exitCode": 77,
+          "fingerprint": "sha256:ccd455aedcf6645c09a6c0731e87b9d1ba6994bf498df54f2ae584bf2ecfa205",
+          "generation": 1,
+          "invocationId": "197df79d9c574d848d418df7895d2d01",
+          "operationId": "operation:sha256:3b337626567572f2f6736dd703c1d7550c6badcc558ae9edfb8294b840868822",
+          "outputComplete": true,
+          "stderr": {
+            "artifact": "stderr",
+            "bytes": 0,
+            "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+            "truncated": false
+          },
+          "stdout": {
+            "artifact": "stdout",
+            "bytes": 0,
+            "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+            "truncated": false
+          },
+          "termination": "ProcessExited",
+          "unit": "shikigami-workspace-2257fc8555f9e6c9da551f8af6f6b99bc4bc2d37c2cf3866cb9b7b4cf0665b3d.service"
+        },
+        "repository": "mori://fixture/repo"
+      },
+      {
+        "base": "85a70f3646132b61b736b24e6fec3dedea1f5cce",
+        "executionId": "execution:sha256:5a6c006c3464955b3ebff13cd28f043ebfbdfca8f4eb739ae7c938ff13d44576",
+        "instructionDigest": "sha256:41707e6dc582a05daef2172f5fb59e0d03a64e0d663b14f33b47e26206a36cef",
+        "receipt": {
+          "attemptId": "tool:operation:sha256:64bc0d2d9acd874bb900f3d322ca528e154ae587c57d4bd43c0e7cbeb039b88f",
+          "bindingDigest": "sha256:f595f36d665c1309f464a03dafbe2555b1fcad88643ceee4d02daa623e8f4f1a",
+          "bootId": "3a17c88f-7d3f-4de4-a1c6-8de50307d527",
+          "descendantsEmpty": true,
+          "exitCode": 0,
+          "fingerprint": "sha256:c17215ee2efa136400fb3c0a343c02279f09f47bf92b7bd9030f14c02e1d1b2b",
+          "generation": 1,
+          "invocationId": "5e4960340dd24866be5c36618dd5fcb4",
+          "operationId": "operation:sha256:64bc0d2d9acd874bb900f3d322ca528e154ae587c57d4bd43c0e7cbeb039b88f",
+          "outputComplete": true,
+          "stderr": {
+            "artifact": "stderr",
+            "bytes": 0,
+            "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+            "truncated": false
+          },
+          "stdout": {
+            "artifact": "stdout",
+            "bytes": 18,
+            "digest": "sha256:2236be18523a97b775796da60dcde4a57a0990343241ca94fd9e162b6b9e38a4",
+            "truncated": false
+          },
+          "termination": "ProcessExited",
+          "unit": "shikigami-workspace-250fae2b2ba61a481368ed3721c6c56b12877f159b861924aecf7d3cff2119c1.service"
+        },
+        "repository": "mori://fixture/repo"
+      },
+      {
+        "base": "85a70f3646132b61b736b24e6fec3dedea1f5cce",
+        "executionId": "execution:sha256:417ffd548cce6123ac5fb2a35e16668a19c9a615d4d5aa2506d05cfb7f4144b1",
+        "instructionDigest": "sha256:41707e6dc582a05daef2172f5fb59e0d03a64e0d663b14f33b47e26206a36cef",
+        "receipt": {
+          "attemptId": "tool:operation:sha256:6b84239fe0d0d1ad44ffadff006bc425c8b13f6832131b1a6f0bbb97761e6c07",
+          "bindingDigest": "sha256:684053a05a2c793ba93e9b244f569ea8380de055532dc099adb5f81be879cc61",
+          "bootId": "3a17c88f-7d3f-4de4-a1c6-8de50307d527",
+          "descendantsEmpty": true,
+          "exitCode": 0,
+          "fingerprint": "sha256:820baa3fe193a337d8af06a68072792b1aeaacc6abcf86ed9d64b6652ae7ee42",
+          "generation": 1,
+          "invocationId": "1cece02b0e834bd281551be25cc3424b",
+          "operationId": "operation:sha256:6b84239fe0d0d1ad44ffadff006bc425c8b13f6832131b1a6f0bbb97761e6c07",
+          "outputComplete": true,
+          "stderr": {
+            "artifact": "stderr",
+            "bytes": 0,
+            "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+            "truncated": false
+          },
+          "stdout": {
+            "artifact": "stdout",
+            "bytes": 18,
+            "digest": "sha256:2236be18523a97b775796da60dcde4a57a0990343241ca94fd9e162b6b9e38a4",
+            "truncated": false
+          },
+          "termination": "ProcessExited",
+          "unit": "shikigami-workspace-e08ca0bbd9d6e275dac844339aba0a588c94eba333fdbf5be0c01d1f9cac3c30.service"
+        },
+        "repository": "mori://fixture/repo"
+      },
+      {
+        "base": "85a70f3646132b61b736b24e6fec3dedea1f5cce",
+        "executionId": "execution:sha256:7a853771f8cde8f71881daf46c94df7de80d7dd70ab238a7f3b6ca8e7e4a1893",
+        "instructionDigest": "sha256:41707e6dc582a05daef2172f5fb59e0d03a64e0d663b14f33b47e26206a36cef",
+        "receipt": {
+          "attemptId": "tool:operation:sha256:a78ba0fe64386416a2b82ff69c31b7fa345e02bcf6bc1251808ab2f28f52bd12",
+          "bindingDigest": "sha256:56ee64407b0f0bee2446d755402dcfb3b5b22167dbc2d1906d50b927ef6e30b8",
+          "bootId": "3a17c88f-7d3f-4de4-a1c6-8de50307d527",
+          "descendantsEmpty": true,
+          "exitCode": 0,
+          "fingerprint": "sha256:c6f09d99d1684e8a21b089d01e135b31b9cf3d8c45014b37e771c154686d42af",
+          "generation": 1,
+          "invocationId": "4bca8886661e4694ab3b4a9a772a7fd6",
+          "operationId": "operation:sha256:a78ba0fe64386416a2b82ff69c31b7fa345e02bcf6bc1251808ab2f28f52bd12",
+          "outputComplete": true,
+          "stderr": {
+            "artifact": "stderr",
+            "bytes": 0,
+            "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+            "truncated": false
+          },
+          "stdout": {
+            "artifact": "stdout",
+            "bytes": 18,
+            "digest": "sha256:2236be18523a97b775796da60dcde4a57a0990343241ca94fd9e162b6b9e38a4",
+            "truncated": false
+          },
+          "termination": "ProcessExited",
+          "unit": "shikigami-workspace-97b01b9378bfdee4503e25797f87c94c6fe0f6bc1e22422f63546dc79f5bfa20.service"
+        },
+        "repository": "mori://fixture/repo"
+      }
+    ],
+    "unchangedBinaryFixtureBytes": 1048577,
+    "validation": {
+      "attemptId": "tool:operation:sha256:a78ba0fe64386416a2b82ff69c31b7fa345e02bcf6bc1251808ab2f28f52bd12",
+      "bindingDigest": "sha256:56ee64407b0f0bee2446d755402dcfb3b5b22167dbc2d1906d50b927ef6e30b8",
+      "bootId": "3a17c88f-7d3f-4de4-a1c6-8de50307d527",
+      "descendantsEmpty": true,
+      "exitCode": 0,
+      "fingerprint": "sha256:c6f09d99d1684e8a21b089d01e135b31b9cf3d8c45014b37e771c154686d42af",
+      "generation": 1,
+      "invocationId": "4bca8886661e4694ab3b4a9a772a7fd6",
+      "operationId": "operation:sha256:a78ba0fe64386416a2b82ff69c31b7fa345e02bcf6bc1251808ab2f28f52bd12",
+      "outputComplete": true,
+      "stderr": {
+        "artifact": "stderr",
+        "bytes": 0,
+        "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+        "truncated": false
+      },
+      "stdout": {
+        "artifact": "stdout",
+        "bytes": 18,
+        "digest": "sha256:2236be18523a97b775796da60dcde4a57a0990343241ca94fd9e162b6b9e38a4",
+        "truncated": false
+      },
+      "termination": "ProcessExited",
+      "unit": "shikigami-workspace-97b01b9378bfdee4503e25797f87c94c6fe0f6bc1e22422f63546dc79f5bfa20.service"
+    }
+  },
+  "plan": "docs/plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md",
+  "qualification": {
+    "productionTransferAdaptersEnabled": false,
+    "publicMetadataAndLogPrivacyPassed": true,
+    "realObjectiveOwnershipAndAcceptedSuccessorWrites": "unqualified",
+    "workspaceOwnedNativeCases": 22
+  },
+  "recordedAt": "2026-10-30T18:28:51.025164+00:00",
+  "repository": "mori://fixture/repo",
+  "runtimeRevision": "20e8e8087908173105a4f99bf8c6ac6ecc5e3ce3",
+  "workspaceFence": {
+    "acceptedLateOldOwnerEditRefused": true,
+    "authorityDeniedDuringFactualRecovery": true,
+    "fence": {
+      "fingerprint": "sha256:3b8f435248e00c8c539f4e4a3d7c33595c14b01f1fd03c8d91b818be54882299",
+      "format": 1,
+      "newEpoch": 1,
+      "oldEpoch": 0,
+      "operationId": "native-freeze",
+      "receipt": "sha256:a6773d8f97fcf2c1ce27296e7eb6a47355efda5e8a03bded0e74f431765457f3",
+      "workspace": {
+        "provider": "shikigami.workspace/1",
+        "resource": "541b238d679bbbf1076f0f634ff3fbad4061f17cd3296a9761862fed5d5cf58f"
+      }
+    },
+    "heldCollectorAndDetachedWriterRemainUnresolved": true,
+    "ownershipTransferPerformed": false,
+    "receipt": {
+      "attemptId": "tool:operation:sha256:725e4f81f78a27ff711c77a3d5c1d259b671f50570f47dda523be0b876a2ac52",
+      "bindingDigest": "sha256:3a8917e30610c28a1ca9d6ddcb2e0839e53fbcbd2ac0df0a7895db24bbc18ec1",
+      "bootId": "3a17c88f-7d3f-4de4-a1c6-8de50307d527",
+      "descendantsEmpty": true,
+      "exitCode": 143,
+      "fingerprint": "sha256:c555aa13f38103762ab51821ce7aeff538304b326adae94e623a2d86381c5bfa",
+      "generation": 1,
+      "invocationId": "92eb0963c8b34ac1a770afbfe5c0daf0",
+      "operationId": "operation:sha256:725e4f81f78a27ff711c77a3d5c1d259b671f50570f47dda523be0b876a2ac52",
+      "outputComplete": true,
+      "stderr": {
+        "artifact": "stderr",
+        "bytes": 0,
+        "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+        "truncated": false
+      },
+      "stdout": {
+        "artifact": "stdout",
+        "bytes": 0,
+        "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+        "truncated": false
+      },
+      "termination": "ProcessCancelled",
+      "unit": "shikigami-workspace-368504ac5dc1a342a964e385e4365c844c13dcbcd7b70bd33901201a0d943aaf.service"
+    },
+    "supervisorRestartPreservesListener": true,
+    "unestablishedSuccessorRefused": true
+  }
+}

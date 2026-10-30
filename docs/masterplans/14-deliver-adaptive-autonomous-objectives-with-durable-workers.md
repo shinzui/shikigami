@@ -171,8 +171,10 @@ only repository catalog admission, and no MasterPlan 17 child has started.
 2026-10-30 prerequisite update: plan 96 now supplies configured durable native
 workspace upgrades and the concrete peer-checked transfer provider, independent
 file/process/Git receipt recovery, retained successor/followup admissions and
-revision-pinned integration planning. Its new native integration/fence gates
-are being qualified; accepted native successor writes remain open. EP-4's
+revision-pinned integration planning. Its complete workspace-owned native matrix
+passes 22 cases, including
+integration, continuing writes/cleanup and fencing; accepted native successor
+writes and real objective ownership remain open. EP-4's
 joint late-writer/restart/ownership gate still requires the real objective
 provider from plan 99, whose plan-98 prerequisite is unimplemented. No child
 status or dependency edge changes. EP-5 remains gated by EP-4 and EP-6's live

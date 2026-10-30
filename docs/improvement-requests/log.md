@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-30
+* **Qualification**: IR-11 plan 96 passes all 22 workspace-owned native cases, including exact integration, continuing writes/cleanup, restart fencing and privacy. Preserve in-progress status and the separately owned real objective ownership/accepted successor gate; bounded evidence is retained in docs/evidence/plan-96/native-workspace-facts.json.
 * **Progress**: Refresh IR-11 implementation evidence: configured native durable upgrades and recovery are qualified; successor, integration and full reassignment gates remain open under plan 96 and the separately owned real objective provider.
 
 ## 2026-10-29

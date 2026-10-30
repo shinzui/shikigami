@@ -26,7 +26,7 @@ Historical review/completion records retain their original dates.
 | [IR-8](expose-addressed-agent-runs-over-http.md) | Completed | [MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md) | Plan 90 complete |
 | [IR-9](key-agent-continuity-by-meibo-principal.md) | Completed | [Plan 54](../plans/54-key-durable-agent-state-by-meibo-principal.md) | Plan 54 complete |
 | [IR-10](expose-agent-run-status-over-http.md) | Completed | [MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md) | Plan 91 complete |
-| [IR-11](provide-governed-mutable-repository-workspaces.md) | In progress | [Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) | Native durable upgrade/recovery delivered; successor and final reassignment gates remain |
+| [IR-11](provide-governed-mutable-repository-workspaces.md) | In progress | [Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) | Native upgrade/integration/follow-up/fencing pass; real ownership/successor gate remains |
 | [IR-12](compose-shikumi-decisions-in-durable-flows.md) | Completed | [MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md) | Plans 73–76 complete |
 | [IR-13](support-optional-major-task-tracking.md) | Accepted | [MasterPlan 17](../masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md) | Plans 98–102 not started; 97 superseded |
 | [IR-14](record-durable-model-tool-turns-and-compose-harness-policies.md) | In progress | [Plan 83](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) | 83 complete; continuing/integrated acceptance in 84/86 remains |

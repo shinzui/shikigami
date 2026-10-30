@@ -173,3 +173,16 @@ without manufacturing an ownership receipt or incrementing the epoch. They
 require the prior assignment results and actual executions to be terminal and
 all receipts settled. The original allocation, Unix profile and instruction
 bundle remain pinned; cleanup follows the latest retained admission.
+
+The native workspace-side gate now proves an in-flight detached writer and held
+collector keep a transfer unresolved, then recovers the original actual and
+exact fence across supervisor restart with authority denied. A real accepted
+late old-owner file edit refuses after fresh authority returns. These facts do
+not establish a successor epoch: no foreign ownership receipt is manufactured.
+Accepted native successor writes and joint objective integration remain open.
+
+The complete 22-case workspace-owned native matrix also verifies same-owner
+follow-up writes and terminal cleanup bound to the latest retained execution,
+while preserving the pinned instruction bundle, Unix identity and metadata.
+This does not waive the separate real ownership/successor gate or activate the
+new production composition.

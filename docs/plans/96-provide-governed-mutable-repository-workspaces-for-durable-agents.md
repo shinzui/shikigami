@@ -235,11 +235,12 @@ built; these host results do not qualify Linux owned writes or joint handoff.
 Native qualification scaffolding now adds `--workspace-gates` for the fourteen
 previous cases plus exact integration success/conflict/combined-only failure,
 same-owner accepted writes and terminal cleanup, and native transfer
-freeze/restart/settlement/late-owner refusal. This is a candidate, not passing
-evidence yet. `--qualify` runs those gates and then explicitly refuses the
+freeze/restart/settlement/late-owner refusal. The final passing evidence is
+recorded below. `--qualify` runs those gates and then explicitly refuses the
 unavailable real-objective/successor-write gate. It cannot return success by
 substituting a fixture ownership receipt. Production adapter selection remains
-unchanged. The native controller builds on Darwin; runtime execution is next. The fixture
+unchanged. The native controller builds on Darwin and the final Linux runtime
+passes the workspace matrix below. The fixture
 uses the configured host registry for actual effects and includes an accepted
 late old-owner file edit, lifecycle/authority revocation during factual
 recovery, and retained journal/log privacy checks. FRIC-29 records another
@@ -259,9 +260,62 @@ collector and detached writer retaining an unresolved fence, restart with the
 same listener and denied authority recovering the original actual and exact
 fence, fresh-authority refusal of an accepted late old-owner edit and an
 unestablished successor, and public metadata/log privacy. No objective receipt
-is manufactured. The corrected controller is rebuilding for follow-up reuse,
-native terminal cleanup and the complete combined gate. This does not qualify
+is manufactured. Bounded integration/process/fence facts are retained in
+[the native evidence artifact](../evidence/plan-96/native-workspace-facts.json).
+The corrected controller
+subsequently qualifies follow-up reuse, native terminal cleanup and the complete
+combined gate below. This does not qualify
 accepted successor writes or close Milestones 5–6.
+
+
+The corrected `20e8e80` controller passes `--continuing-only` (seven native
+cases, `/tmp/shikigami-96-final-continuing.log`, private evidence
+`/tmp/shikigami-workspace-run.jZzQdn/evidence`). A real follow-up child writes
+through the configured file-3 adapter in the same workspace, with unchanged
+instructions and Unix profile. Cleanup refuses the idle session, then converges
+after terminal closure and binds its intent to the latest admitted run. The
+retained follow-up evidence confirms one binding rather than a replacement
+copy. The same run repeats native fencing, recovery and privacy checks. The
+complete 22-case combined workspace matrix also passes on this candidate, as
+recorded below.
+
+
+The complete workspace-owned native matrix passes all 22 cases (2026-10-30,
+`/tmp/shikigami-96-final-native-apple.log`, runtime `20e8e80`, private evidence
+`/tmp/shikigami-workspace-run.roOtWM/evidence`). It includes the prior fourteen
+process/Git/normal-workflow cases, exact integration success/conflict/combined
+failure, same-owner follow-up writes and latest-run terminal cleanup, held
+collector/process fencing, restart recovery after authority denial, a real
+accepted late old-owner edit refusal, and public journal/log privacy. The
+container and generated credentials were removed successfully. The bounded
+[evidence artifact](../evidence/plan-96/native-workspace-facts.json) records exact
+bases/artifacts, combined commit/tree, actual validation receipts, the retained
+follow-up admission/Unix identity/cleanup ownership, and factual fence receipt.
+
+Milestones 5–6 remain open at the real objective ownership/accepted
+successor-write and full-request acceptance boundary. [Plan 99](99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md)'s
+real ownership provider (with [plan 98](98-persist-authoritative-objectives-and-conditional-commands.md)
+as its hard prerequisite) is unimplemented; this plan
+explicitly excludes its implementation and forbids fabricating its receipt.
+`--qualify` therefore retains its explicit refusal after the workspace checks.
+Production still selects the qualified older adapters; the new composition is
+available explicitly for qualification. Plans 84/86 and MasterPlan 14 retain
+their joint gates. Do not mark IR-11 or IR-15 complete from these workspace-only
+facts. Once the real provider exists, run its joint verified-epoch successor
+write/restart test before activating the newer production composition.
+
+Final host verification (2026-10-30): `cabal build all` passes. The complete
+earlier `cabal test all --test-options=-j2` run passes; the final rerun passes
+every other suite, including 533 core, 358 PostgreSQL and 247 worker cases,
+but its agent fixture waits for EOF on inherited input. Stopping only that
+fixture and rerunning the agent suite with stdin from `/dev/null` passes all
+37 cases (`/tmp/shikigami-96-final-agent-batch.log`); FRIC-31 records the harness
+workaround. The workflow gate against `cd8b86f`, native-system Nix flake checks,
+all seven runtime-cohort packaging tests and `git diff --check` pass. Strict
+friction validation and profile/log-enforced IR validation pass. Strict IR
+validation reports the same eight recommended-metadata omissions as `HEAD`,
+all in other requests; this revision adds none. These host checks supplement
+the complete 22-case native evidence without closing the real ownership gate.
 
 ## Surprises & Discoveries
 
@@ -351,11 +405,15 @@ admission. This supplies no synthetic IR-13 production receipt.
 ## Outcomes & Retrospective
 
 
-Milestones 1–4 are verified. Configured durable workers can perform governed file/process/local Git effects, recover their retained original-attempt receipts, and return one exact commit with validation evidence through the normal parent/child workflow. Explicit terminal cleanup is also implemented and tested. Handoff, integrated revision validation and full IR-11 acceptance remain outstanding in Milestones 5–6; IR-11 remains undelivered.
+Milestones 1–4 are verified. Configured durable workers can perform governed file/process/local Git effects, recover their retained original-attempt receipts, and return one exact commit with validation evidence through the normal parent/child workflow. Explicit terminal cleanup and transfer-aware admissions are implemented. Native exact-artifact integration and workspace-side freeze/restart/late-writer fencing now pass separately. Native follow-up writes, latest-run terminal cleanup and the complete 22-case workspace-owned matrix pass on the corrected controller. Real objective ownership and accepted successor writes remain open, so Milestones 5–6 and full IR-11 acceptance are not complete. Production still selects the earlier qualified adapters.
 
-FRIC-14 was resolved by restoring the missing upstream dependency sources. FRIC-15 was resolved by separating the typed and dynamic authorization fixtures' global provider keys. FRIC-16 was resolved by preserving the core/leaf package boundary for concrete IO fixtures. ADR-0063 distinguishes allocation/cleanup facts from fencing proof. ADR-0059 records frozen instruction and policy admission, while ADR-0025 records the qualified exact file/process/Git adapters and historical file-only compatibility. Handoff and integration gates remain open.
+FRIC-14 was resolved by restoring the missing upstream dependency sources. FRIC-15 was resolved by separating the typed and dynamic authorization fixtures' global provider keys. FRIC-16 was resolved by preserving the core/leaf package boundary for concrete IO fixtures. ADR-0063 distinguishes allocation/cleanup facts from fencing proof. ADR-0059 records frozen instruction and policy admission, while ADR-0025 records the qualified exact file/process/Git adapters and historical file-only compatibility. Real ownership and accepted successor qualification remain open.
 
-FRIC-25, FRIC-27 and FRIC-28 are resolved by qualified guest filesystem/manager readiness and UTF-8 controller setup. These changes preserve signed package verification and the independently cleared repository command environment. FRIC-26 remains logged: each frozen runtime rebuild still recompiles the complete dependency graph, as previously observed in FRIC-23. The native fixtures now have a focused workflow mode for iteration; the full combined gate remains fourteen cases.
+FRIC-25, FRIC-27 and FRIC-28 are resolved by qualified guest filesystem/manager readiness and UTF-8 controller setup. These changes preserve signed package verification and the independently cleared repository command environment. FRIC-26, FRIC-29 and FRIC-30 remain logged: each frozen runtime rebuild still recompiles the complete dependency graph, as previously observed in FRIC-23. Focused workflow, continuing and fence modes support iteration; the complete workspace-owned matrix is now 22 cases. Friction triage remains open because real ownership/successor qualification and full plan completion are not established.
+
+FRIC-31 remains logged: close stdin explicitly for batch host tests so the
+fake unattended vendor receives EOF. The corrected agent invocation passes;
+the underlying inherited-input behavior remains available to investigate.
 
 ## Context and Orientation
 
@@ -445,17 +503,17 @@ nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test --te
 nix develop --no-write-lock-file -c cabal test shikigami-workers-test --test-options='-p workspace' --test-show-details=direct
 ```
 
-Require a nonzero count of workspace tests in each suite; a successful empty selection is not evidence. On a disposable Linux VM with systemd as its service manager, cgroup v2, Nix and sudo permission to provision fixture services, run the following future runner from the same checkout. It must build/provision its immutable fixture root, isolated users, supervisor and temporary repositories, run only its own units, and tear those down after receipts settle. Use only fixture data. It must refuse unsupported hosts rather than skip cases or use the operator's real repositories.
+Require a nonzero count of workspace tests in each suite; a successful empty selection is not evidence. On a disposable Linux VM with systemd as its service manager, cgroup v2, Nix and sudo permission to provision fixture services, run the following runner from the same checkout. It provisions its immutable fixture root, isolated users, supervisor and temporary repositories, runs only its own units, and tears those down after receipts settle. Use only fixture data. It refuses unsupported hosts rather than skipping cases or using the operator's real repositories.
 
 ```bash
 nix develop --no-write-lock-file -c bash tests/workspace/run-linux.sh --qualify
 ```
 
-The runner uses sudo only for its scoped fixture service provisioning. It prints bounded named results for containment, duplicate launch, worker restart, supervisor restart, escaped-descendant cancellation, completion-receipt recovery, durable upgrade and handoff; all must pass with a nonzero case count. During the Milestone 3 prototype, `--prototype` selects the process cases and explicitly reports that full qualification is incomplete. The Linux full run remains mandatory even when pure and PostgreSQL tests pass on macOS. These are interfaces to implement, not commands claimed to exist today. At the final candidate:
+The runner uses sudo only for its scoped fixture service provisioning. It prints bounded named results for containment, duplicate launch, worker restart, supervisor restart, escaped-descendant cancellation, completion-receipt recovery, durable upgrade and handoff; all must pass with a nonzero case count. `--workspace-gates` selects the implemented 22-case workspace matrix, also available through `bash tests/workspace/run-apple.sh --workspace-gates` on macOS. `--qualify` additionally requires the real objective provider and accepted successor writes; it currently refuses that missing gate after the workspace checks. The Linux full run remains mandatory even when pure and PostgreSQL tests pass on macOS. At the final candidate:
 
 ```bash
 nix develop --no-write-lock-file -c cabal build all
-nix develop --no-write-lock-file -c cabal test all --test-show-details=direct
+nix develop --no-write-lock-file -c cabal test all --test-options=-j2 --test-show-details=direct </dev/null
 just keiro-gate
 nix flake check
 git diff --check

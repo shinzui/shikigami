@@ -2,7 +2,7 @@
 type: Improvement Request
 title: Provide governed mutable repository workspaces for durable agent runs
 description: Let a declared durable agent resolve an operator-approved repository into an isolated worktree and use bounded read, edit, validation, and Git capabilities under exact per-action authorization, returning structured change evidence.
-timestamp: "2026-10-30T16:34:26Z"
+timestamp: "2026-10-30T18:30:48Z"
 generated:
   by: process:codex
   at: "2026-10-11T03:04:54Z"
@@ -34,8 +34,11 @@ returns exact local commits. The fourteen-case native matrix proves the normal
 parent/child upgrade across worker restart and independent file/process/Git
 recovery. Operator listing and terminal cleanup are implemented. Concrete
 workspace fencing, retained successor/followup authority and exact-artifact
-integration planning are implemented; their expanded native qualification is
-pending. Production remains on the qualified earlier adapter revisions until
+integration planning pass the complete 22-case workspace-owned native matrix,
+including exact combined-tree validation and a combined-only failure.
+[Bounded native facts](../evidence/plan-96/native-workspace-facts.json) retain
+the artifacts, statuses, follow-up ownership and fence. Production remains on
+the qualified earlier adapter revisions until
 native successor-write/handoff gates pass. Full reassignment acceptance remains
 open alongside the separately owned real objective ownership provider from
 [plan 99](../plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md).

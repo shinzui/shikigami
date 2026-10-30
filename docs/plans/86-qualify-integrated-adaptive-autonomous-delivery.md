@@ -43,16 +43,17 @@ Prove [UC-1](../use-cases/adaptive-autonomous-delivery.md) finite delivery with 
 
 Implementation has not started. Seed unchecked milestone entries when implementation begins.
 
-
-
 Prerequisite update (2026-10-30):
 [plan 96](96-provide-governed-mutable-repository-workspaces-for-durable-agents.md)
 owns the installed configured workspace providers and the gated
 `workspace.integrate:1` artifact planner. The latter consumes exact retained
 worker commits under one execution root in a third workspace; edits, validation
-and commit remain separately accepted effects. Its native qualification is
-pending in plan 96. This supplies a concrete interface for this plan, not
-adaptive coordinator, objective completion or UC-1 acceptance evidence. Plan 85
+and commit remain separately accepted effects. Its complete workspace-owned
+native matrix passes 22 cases, with
+[exact artifact and validation evidence](../evidence/plan-96/native-workspace-facts.json);
+real ownership and accepted successor qualification remain open. This plan
+retains its adaptive coordinator, objective completion and UC-1 acceptance
+gates. Plan 85
 and the real IR-13 provider still gate this plan's live milestones.
 
 ## Surprises & Discoveries

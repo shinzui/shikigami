@@ -389,6 +389,8 @@ if [[ "$mode" == --workspace-gates || "$mode" == --qualify || "$mode" == --conti
   if [[ "$mode" != --handoff-only ]]; then
   "$prototype" continuing "$config" "$prefix" followup >"$prefix/continuing-followup.log" 2>&1
   cat "$prefix/continuing-followup.log"
+  /usr/bin/psql "$connection" -Atc "SELECT jsonb_agg(jsonb_build_object('workspace',b.binding->'workspace','repository',b.binding->'repository','base',b.binding->'base','original',b.binding->'request','followup',jsonb_build_object('runId',a.run_id,'assignmentId',a.admission->'assignmentId','workspace',a.admission->'workspace','owner',a.admission->'owner','epoch',a.admission->'epoch'),'profile',jsonb_build_object('ready',p.ready,'userId',p.user_id,'bindingDigest',p.profile->'bindingDigest','instructionDigest',p.profile->'instructionDigest'),'cleanup',c.plan,'complete',c.complete)) FROM shikigami.workspace_bindings b LEFT JOIN shikigami.workspace_successor_admissions a USING(resource) LEFT JOIN shikigami.workspace_process_profiles p USING(resource) LEFT JOIN shikigami.workspace_cleanup c USING(resource) WHERE b.binding->'request'->>'rootId'='continuing-followup-root'" >"$prefix/continuing-followup-evidence.json"
+  jq -e 'length==1 and (.[0] | .complete==true and .profile.ready==true and .followup.runId!=.original.runId and .followup.workspace==.workspace and .cleanup.ownership.runId==.followup.runId)' "$prefix/continuing-followup-evidence.json" >/dev/null
   fi
   "$prototype" continuing "$config" "$prefix" prepare >"$prefix/continuing-prepare.log" 2>&1
   if [[ -f /run/shikigami-workspace-prototype.clock-steps ]]; then
