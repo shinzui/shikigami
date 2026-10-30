@@ -25,7 +25,6 @@ import Keiro.Workflow
     runWorkflowWith,
   )
 import Kioku.Api.Types qualified as Kioku
-import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (MemoryId, SessionId, genMemoryId, genSessionId, idText)
 import Kioku.Memory qualified as Memory
 import Kioku.Memory.Domain (RecordMemoryData (..))
@@ -39,6 +38,7 @@ import Shikigami.Agent.Decl
     defaultMemoryPolicy,
   )
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent))
+import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.PracticeReview
@@ -429,7 +429,8 @@ withReviewEnv databaseFixture action =
             AppEnv
               { connectionSettings = defaultConnectionSettings connectionString,
                 tracer,
-                metrics = Nothing
+                metrics = Nothing,
+                store = Nothing
               }
       action appEnv session
 

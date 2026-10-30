@@ -30,7 +30,6 @@ import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), lookupAwakeable, registerAwakeableTx)
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
 import Keiro.Workflow.Child (runChildWorkflow)
-import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Error (StoreError)
@@ -45,6 +44,7 @@ import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as Agent
+import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest, newBehaviorEnv)
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
@@ -424,7 +424,7 @@ withRuntime :: DatabaseFixture -> (AppEnv -> KirokuStore -> BehaviorEnv -> IO a)
 withRuntime fixture use = withShikigamiFreshDatabase fixture \connection -> withStore (defaultConnectionSettings connection) \store -> do
   tracer <- noopTracer
   base <- newBehaviorEnv
-  use (AppEnv (defaultConnectionSettings connection) tracer Nothing) store base
+  use (AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing) store base
 
 withHttp :: ([ModelBinding] -> IO [Value] -> IO a) -> IO a
 withHttp = withHttpWithFailure False

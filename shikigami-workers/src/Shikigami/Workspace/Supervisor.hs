@@ -34,10 +34,10 @@ import Data.Text.Encoding qualified as Encoding
 import Data.Time (addUTCTime)
 import Effectful (Eff)
 import Hasql.Transaction (Transaction)
-import Kioku.App (AppEffects, AppEnv, runAppIO)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
+import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Capability.Overlay
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt

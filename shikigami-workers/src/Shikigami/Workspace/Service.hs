@@ -5,9 +5,9 @@ module Shikigami.Workspace.Service (ProcessScan (..), GitScan (..), FileScan (..
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (race)
 import Data.Maybe (listToMaybe)
-import Kioku.App (AppEnv, runAppIO)
 import Kiroku.Store.Transaction (runTransaction)
 import Network.Socket qualified as Socket
+import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Execution.Identity (OperationId)
 import Shikigami.Prelude
 import Shikigami.Workspace.FileProvider (FilePublication (..), publishFileReceipt)

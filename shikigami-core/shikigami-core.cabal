@@ -57,6 +57,7 @@ library
     Shikigami.Agent.Workflow.Name
     Shikigami.AgentRun.Ledger
     Shikigami.AgentRun.Status
+    Shikigami.App
     Shikigami.App.Config
     Shikigami.App.Config.Load
     Shikigami.App.Role
@@ -484,6 +485,7 @@ test-suite shikigami-core-postgres-test
   other-modules:
     Shikigami.AgentRun.LedgerSpec
     Shikigami.AgentWorkflowSpec
+    Shikigami.AppSpec
     Shikigami.DecisionEvidenceSpec
     Shikigami.DecisionWorkflowSpec
     Shikigami.DelegationBudgetSpec

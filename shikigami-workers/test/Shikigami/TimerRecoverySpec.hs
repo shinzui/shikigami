@@ -28,11 +28,11 @@ import Keiro.Timer
   )
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), currentRunGeneration, loadStepIndex, runWorkflowWith)
 import Keiro.Workflow.Awakeable (awakeableNamed)
-import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Connection qualified as StoreConnection
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..))
+import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Attempt (ExecutionWake (..), JobReference (..))
 import Shikigami.Execution.Identity (AttemptId (..), OperationId (..))
@@ -55,7 +55,7 @@ tests fixture =
         withShikigamiFreshDatabase fixture \connectionString ->
           withStore (defaultConnectionSettings connectionString) \store -> do
             tracer <- noopTracer
-            let appEnv = AppEnv (defaultConnectionSettings connectionString) tracer Nothing
+            let appEnv = AppEnv (defaultConnectionSettings connectionString) tracer Nothing Nothing
                 scheduler = testSchedulerEnv (StoreConnection.pool store)
                 name = WorkflowName "shikigami.execution"
                 workflowId = WorkflowId "timer-execution-fixture"
@@ -85,7 +85,7 @@ tests fixture =
         withShikigamiFreshDatabase fixture \connectionString ->
           withStore (defaultConnectionSettings connectionString) \store -> do
             tracer <- noopTracer
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connectionString, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connectionString, tracer, metrics = Nothing, store = Nothing}
                 scheduler = testSchedulerEnv (StoreConnection.pool store)
                 request = guardedTimerRequest
                 timerId = request.timerId

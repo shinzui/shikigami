@@ -23,6 +23,7 @@ module Shikigami.Trigger.Consumer
     processDecodedIntegrationEvent,
     processDecodedIntegrationEventWithDirectory,
     ackDecisionFor,
+    kafkaReconnectAllowed,
     ensureDeadLetterQueue,
   )
 where
@@ -43,13 +44,15 @@ import Data.Text.Encoding.Error (lenientDecode)
 import Data.Text.Read qualified as TextRead
 import Data.Word (Word8)
 import Effectful (runEff)
-import Effectful.Error.Static (runError)
+import Effectful.Error.Static (runErrorNoCallStack)
+import Effectful.Exception qualified as EffException
 import Hasql.Pool (Pool, UsageError)
 import Hasql.Pool qualified as Pool
 import Hasql.Transaction qualified as Tx
 import Kafka.Consumer
   ( ConsumerGroupId (..),
     OffsetReset (..),
+    RdKafkaRespErrT (RdKafkaRespErrAuthentication, RdKafkaRespErrFatal, RdKafkaRespErrSaslAuthenticationFailed),
     TopicName (..),
     brokersList,
     groupId,
@@ -57,13 +60,12 @@ import Kafka.Consumer
     offsetReset,
     topics,
   )
-import Kafka.Effectful (KafkaError, runKafkaConsumer)
+import Kafka.Effectful (KafkaError (..), runKafkaConsumer)
 import Kafka.Types (BrokerAddress (..))
 import Keiro.Inbox (runInboxTransaction)
 import Keiro.Inbox.Kafka (KafkaInboundRecord (..), integrationEventFromKafka)
 import Keiro.Inbox.Types (InboxDedupePolicy (PreferIntegrationMessageId), InboxResult (..), KafkaDeliveryRef (..))
 import Keiro.Integration.Event (IntegrationEvent, decodeJsonIntegrationEvent)
-import Kioku.App (AppEnv (..), runAppIO)
 import Kiroku.Store.Notification (NotifierStartError)
 import Kiroku.Store.Transaction (runTransaction)
 import Pgmq (MessageBody (..), MessageId (..), QueueName, SendMessage (..), createQueue)
@@ -82,6 +84,7 @@ import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkA
 import Shikigami.Agent.Run.Key (RunKey (..), runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByEvent))
 import Shikigami.Agent.RunJob qualified as RunJob
+import Shikigami.App (AppEnv (..), runAppIO)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), recordRunSkipTx)
 import Shikigami.Integration.Danwa qualified as Danwa
@@ -90,6 +93,7 @@ import Shikigami.Prelude
 import Shikigami.Telemetry.Metrics (ShikigamiMetrics, recordConsumerRecord)
 import Shikigami.Trigger.Enqueue (enqueueRunJobTx, envelopeOccurredAt, runJobFromEnvelopeWithIdentity)
 import Shikigami.Trigger.Stream (IncludeAgentActors, matchesStreamWith)
+import Shikigami.Workers.ConsumerApp (consumerAppConfig, withConsumerApp)
 
 -- | Connection and durable poison-record target for one Kafka subscription.
 data StreamConfig = StreamConfig
@@ -179,7 +183,7 @@ runSubscription ::
   (KafkaInboundRecord -> IO RecordDisposition) ->
   IO ()
 runSubscription logger onSupervisor prefix metrics AppEnv {tracer} StreamConfig {broker = streamBroker, topic = streamTopic, consumerGroupId = streamGroup} processRecord =
-  reconnect 1
+  permanentFailureCode `seq` reconnect 1
   where
     reconnect backoffSeconds = do
       -- Announced before every attempt, so the stretch between a lost
@@ -192,7 +196,7 @@ runSubscription logger onSupervisor prefix metrics AppEnv {tracer} StreamConfig 
               <> noAutoOffsetStore
           sub = topics [TopicName streamTopic] <> offsetReset Earliest
       result <-
-        runEff . runError @KafkaError . runTracing tracer $
+        runEff . runErrorNoCallStack @KafkaError . runTracing tracer $
           runKafkaConsumer props sub do
             adapter <- kafkaAdapter (defaultConfig [TopicName streamTopic])
             programmingFailure <- liftIO (newIORef Nothing)
@@ -214,21 +218,16 @@ runSubscription logger onSupervisor prefix metrics AppEnv {tracer} StreamConfig 
                       ordering = StrictInOrder,
                       concurrency = Serial
                     }
-                appConfig =
-                  Shibuya.defaultAppConfig
-                    { Shibuya.strategy = Shibuya.StopAllOnFailure,
-                      Shibuya.inboxSize = 1
-                    }
-            appResult <- Shibuya.runApp appConfig [(Shibuya.ProcessorId streamTopic, processor)]
-            case appResult of
-              Left err -> pure (Left err)
-              Right app -> do
-                liftIO (onSupervisor (Just (Shibuya.getAppMaster app, Shibuya.ProcessorId streamTopic)))
-                Shibuya.waitApp app
-                Shibuya.stopApp app
-                failure <- liftIO (readIORef programmingFailure)
-                pure (Right failure)
+            appResult <-
+              ( withConsumerApp consumerAppConfig [(Shibuya.ProcessorId streamTopic, processor)] \app -> do
+                  liftIO (onSupervisor (Just (Shibuya.getAppMaster app, Shibuya.ProcessorId streamTopic)))
+                  Shibuya.waitApp app
+                  liftIO (readIORef programmingFailure)
+              )
+                `EffException.finally` liftIO (onSupervisor Nothing)
+            pure appResult
       case result of
+        Left err | not (kafkaReconnectAllowed err) -> fail (Text.unpack (prefix <> " consumer refused a deterministic configuration, authentication or fatal error"))
         Left err -> retryAfter backoffSeconds (Text.pack (show err)) (min 30 (backoffSeconds * 2))
         Right (Left appError) -> fail (Text.unpack (prefix <> " consumer configuration failed: " <> Text.pack (show appError)))
         Right (Right (Just programmingFailure)) -> Exception.throwIO programmingFailure
@@ -243,6 +242,18 @@ runSubscription logger onSupervisor prefix metrics AppEnv {tracer} StreamConfig 
         ]
       threadDelay (seconds * 1_000_000)
       reconnect next
+
+-- | Recreating a connection cannot repair invalid configuration or credentials.
+-- A fatal client failure must reach the process supervisor rather than loop
+-- forever alongside a healthy probe listener. Broker outages retain backoff.
+kafkaReconnectAllowed :: KafkaError -> Bool
+kafkaReconnectAllowed = \case
+  KafkaBadConfiguration -> False
+  KafkaBadSpecification _ -> False
+  KafkaResponseError RdKafkaRespErrAuthentication -> False
+  KafkaResponseError RdKafkaRespErrSaslAuthenticationFailed -> False
+  KafkaResponseError RdKafkaRespErrFatal -> False
+  _ -> True
 
 trySynchronous :: IO value -> IO (Either Exception.SomeException value)
 trySynchronous action =

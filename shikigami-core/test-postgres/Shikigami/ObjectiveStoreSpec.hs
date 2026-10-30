@@ -15,12 +15,12 @@ import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (preparable)
 import Hasql.Transaction qualified as Tx
-import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests, denyAllActionAuthorizer)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkAgentPrincipal)
+import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Objective.Capability qualified as O
@@ -346,7 +346,7 @@ withDatabase fixture callback = withShikigamiFreshDatabase fixture \connection -
 environment :: Text -> IO AppEnv
 environment connection = do
   tracer <- noopTracer
-  pure (AppEnv (defaultConnectionSettings connection) tracer Nothing)
+  pure (AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing)
 
 withObjective :: DatabaseFixture -> (AppEnv -> WS.SessionAdmission -> ObjectiveId -> IO a) -> IO a
 withObjective fixture callback = SessionsFixture.withFixture fixture \env admission _ -> do

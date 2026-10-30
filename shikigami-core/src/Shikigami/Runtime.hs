@@ -13,9 +13,12 @@ import Keiro.Telemetry (KeiroMetrics, kirokuEventBridge)
 import Kiroku.Store.Connection (ConnectionSettings, KirokuStore, defaultConnectionSettings)
 import Kiroku.Store.Effect (runStorePool)
 import Kiroku.Store.Error (StoreError)
+import Shikigami.ExecutionLifecycle.Generated.EventStream (executionLifecycleEventStream)
 import Shikigami.Log qualified as Log
+import Shikigami.ObjectiveLifecycle.Generated.EventStream (objectiveLifecycleEventStream)
 import Shikigami.RunEvidence.Catalog qualified as Evidence
 import Shikigami.RunEvidence.Generated.EventStream (runEvidenceEventStream)
+import Shikigami.WorkerSessionLifecycle.Generated.EventStream (workerSessionLifecycleEventStream)
 
 -- | Register the validated query and projection catalog using the acquired
 -- runtime store. Registration failure refuses startup; this never rebuilds or
@@ -24,8 +27,11 @@ registerRuntimeCatalog :: KirokuStore -> IO ()
 registerRuntimeCatalog store = do
   result <-
     runEff . runErrorNoCallStack @StoreError . runStorePool store $
-      runEvidenceEventStream `seq`
-        Evidence.registerProjectionCatalog
+      executionLifecycleEventStream `seq`
+        workerSessionLifecycleEventStream `seq`
+          objectiveLifecycleEventStream `seq`
+            runEvidenceEventStream `seq`
+              Evidence.registerProjectionCatalog
   case result of
     Right (Right _) -> pure ()
     failure -> ioError (userError ("runtime catalog registration failed: " <> show failure))
@@ -36,6 +42,7 @@ registerRuntimeCatalog store = do
 runtimeConnectionSettings :: Log.Logger -> Maybe KeiroMetrics -> Text -> ConnectionSettings
 runtimeConnectionSettings logger metrics connectionString =
   defaultConnectionSettings connectionString
+    & #statementTimeout .~ Just (30 :: Int)
     & #eventHandler
       .~ Just
         ( kirokuEventBridge metrics \event ->

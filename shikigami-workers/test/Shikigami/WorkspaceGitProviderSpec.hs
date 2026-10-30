@@ -16,10 +16,10 @@ import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUID
 import Effectful (Eff)
 import Keiro.Workflow.Awakeable (AwakeableId (..))
-import Kioku.App (AppEffects, AppEnv, runAppIO)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization
 import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Capability.Provider (DurableAdapter (..))
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Executor qualified as Executor

@@ -15,10 +15,10 @@ import Data.Text qualified as Text
 import Effectful (Eff)
 import Effectful.Dispatch.Static (unsafeEff_)
 import Hasql.Transaction (Transaction)
-import Kioku.App (AppEffects, runAppIO)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization
 import Shikigami.Agent.Principal (AgentIdentity (CompatibilityIdentity))
+import Shikigami.App (AppEffects, runAppIO)
 import Shikigami.Capability.Provider (DurableAdapter (..), DurableToolContract (..))
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Executor qualified as Executor

@@ -31,7 +31,6 @@ import GHC.Generics (Generic)
 import GHC.Stack (HasCallStack, callStack, prettyCallStack)
 import Hasql.Transaction (Transaction)
 import Kikan.En.Action qualified as Kikan
-import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Kiroku.Store.Transaction (runTransaction)
 import Network.HTTP.Types (status200, status403, status404)
@@ -41,6 +40,7 @@ import Qualification (integrationCase)
 import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), identityText, mkAgentPrincipal)
+import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig (..), Role (AdminRole), revealSecretText)
 import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), requireDatabaseUrl, runAppConfig)
 import Shikigami.Decision.Contract (versionedDigest)
@@ -170,7 +170,7 @@ nativeProvision configFile specFile = do
   config <- runAppConfig AdminRole (ConfigOptions [configFile] [] [] NoDiagnostic)
   connection <- revealSecretText <$> requireDatabaseUrl "workspace-linux-fixture" config
   tracer <- noopTracer
-  let env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing}
+  let env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
   logger <- Log.newStderrLogger Log.Info
   authorizer <- requireRight =<< buildConfiguredActionAuthorizer logger config
   directory <- requireRight =<< startDirectory Log.silentLogger config.directorySettings
@@ -273,7 +273,7 @@ withRuntime configFile use = do
   config <- runAppConfig AdminRole (ConfigOptions [configFile] [] [] NoDiagnostic)
   connection <- revealSecretText <$> requireDatabaseUrl "workspace-linux-fixture" config
   tracer <- noopTracer
-  let env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing}
+  let env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
   authorizer <- requireRight =<< buildConfiguredActionAuthorizer Log.silentLogger config
   directory <- requireRight =<< startDirectory Log.silentLogger config.directorySettings
   socket <- maybe (fail "fixture supervisor configuration missing") (pure . (.socketPath)) config.workspaceSupervisorSettings

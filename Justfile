@@ -257,6 +257,7 @@ keiro-diff since="HEAD^":
     cabal run -v0 keiro-dsl -- diff domain/shikigami.keiro-workspace \
       --since {{since}} \
       --explain \
+      --deny AggGuardRelationUnknown,AggGuardRemedyUnavailable \
       --report-out build/keiro-diff.json \
       --replay-impact-out build/keiro-replay-impact.json
 

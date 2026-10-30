@@ -23,7 +23,6 @@ import Data.Vector qualified as Vector
 import Effectful (Eff)
 import GHC.Generics (Generic)
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
-import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
@@ -36,6 +35,7 @@ import Shikigami.Agent.Principal (identityText)
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob
 import Shikigami.Agent.Workflow qualified as Agent
+import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig (..), Role (AdminRole), revealSecretText)
 import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), requireDatabaseUrl, runAppConfig)
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
@@ -91,7 +91,7 @@ workflowCase configFile prefix stage = do
   config <- runAppConfig AdminRole (ConfigOptions [configFile] [] [] NoDiagnostic)
   connection <- revealSecretText <$> requireDatabaseUrl "workspace-workflow-fixture" config
   tracer <- noopTracer
-  let env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing}
+  let env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
   authorizer <- right =<< buildConfiguredActionAuthorizer Log.silentLogger config
   directory <- right =<< startDirectory Log.silentLogger config.directorySettings
   withStore env.connectionSettings \store -> do

@@ -4,10 +4,10 @@ module Shikigami.Workspace.Host (fileWorkspaceHost, governedWorkspaceHost, gover
 
 import Data.Generics.Labels ()
 import Data.Time (getCurrentTime)
-import Kioku.App (runAppIO)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.Principal (identityText)
+import Shikigami.App (runAppIO)
 import Shikigami.Capability.Catalog
 import Shikigami.Capability.Overlay (CapabilityDescriptor (..))
 import Shikigami.Capability.Provider

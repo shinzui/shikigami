@@ -28,13 +28,13 @@ import Hasql.Session qualified as Session
 import Keiro.Outbox qualified as Outbox
 import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowOutcome (..), WorkflowRunOptions (..), loadStepIndex, runWorkflowWith)
 import Keiro.Workflow.Child.Schema (lookupChildrenOfParent)
-import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), ProfileRequirement (..), RecipientFrom (SubjectOwner), RouterConfidence (RoutingHigh), SignalType (Reminder), Sink (..))
 import Shikigami.Agent.Delegate (delegatedWorkflowId)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as Agent
+import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Attestation.Compliance (ComplianceRollUp (..))
 import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Profile qualified as Profile
@@ -100,7 +100,7 @@ withRuntime fixture use = withShikigamiFreshDatabase fixture \connection ->
   withStore (defaultConnectionSettings connection) \store -> do
     tracer <- noopTracer
     behavior <- newBehaviorEnv
-    use (AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing}) store behavior
+    use (AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}) store behavior
 
 deps :: AppEnv -> KirokuStore -> BehaviorEnv -> ApiProvider -> Decision.DecisionServices -> Agent.AgentRunDeps
 deps app store behavior handler services =

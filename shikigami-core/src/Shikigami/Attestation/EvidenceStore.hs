@@ -29,7 +29,7 @@ import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Tx
-import Keiro.Command (CommandError (..), defaultRunCommandOptions)
+import Keiro.Command (CommandError (..))
 import Keiro.Projection (ProjectionCommandOutcome (..), runCommandWithCatalogProjections)
 import Keiro.Projection.Catalog qualified as ProjectionCatalog
 import Keiro.ReadModel (runQuery)
@@ -40,6 +40,7 @@ import Kiroku.Store.Connection (KirokuStore)
 import Kiroku.Store.Effect (Store, runStorePool)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
+import Shikigami.App (CommandEffects, commandOptions)
 import Shikigami.Attestation.CallFacts (CallComplianceFacts (..))
 import Shikigami.Attestation.Compliance (ComplianceRollUp (..))
 import Shikigami.Attestation.Evidence
@@ -102,7 +103,8 @@ persistEvidenceTransition ::
   ( IOE :> es,
     Store :> es,
     Error StoreError :> es,
-    KirokuStoreResource :> es
+    KirokuStoreResource :> es,
+    CommandEffects es
   ) =>
   EvidenceStore ->
   RunEvidence ->
@@ -114,7 +116,7 @@ persistEvidenceTransition = persistEvidenceTransitionUsing Nothing
 -- | Restarted finalization retains exact stored provider JSON while the common
 -- evaluator consumes normalized facts. No typed provider decoder is involved.
 persistEvidenceTransitionFacts ::
-  (IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es) =>
+  (IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es, CommandEffects es) =>
   [(CallComplianceFacts, Value)] ->
   EvidenceStore ->
   RunEvidence ->
@@ -124,7 +126,7 @@ persistEvidenceTransitionFacts ::
 persistEvidenceTransitionFacts facts = persistEvidenceTransitionUsing (Just facts)
 
 persistEvidenceTransitionUsing ::
-  (IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es) =>
+  (IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es, CommandEffects es) =>
   Maybe [(CallComplianceFacts, Value)] ->
   EvidenceStore ->
   RunEvidence ->
@@ -155,9 +157,10 @@ persistEvidenceTransitionUsing recovered evidenceStore runEvidence@RunEvidence {
                     Nothing -> callProjection (renderRunCorrelationId advancedRunId) <$> advancedCalls
                     Just facts -> [factsProjection (renderRunCorrelationId advancedRunId) fact raw | (fact, raw) <- facts]
               let (catalog, projectionSet) = Catalog.withLiveEvidence (\_ _ -> persistProjection projection callProjections)
+              options <- commandOptions
               result <-
                 runCommandWithCatalogProjections
-                  defaultRunCommandOptions
+                  options
                   runEvidenceEventStream
                   targetStream
                   command

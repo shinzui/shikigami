@@ -35,7 +35,6 @@ import Keiro.Workflow
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Keiro.Workflow.Child (awaitChild, spawnChild)
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
-import Kioku.App (AppEffects)
 import Kioku.Id (SessionId)
 import Kiroku.Store.Effect (Store)
 import Shikigami.Agent.Approval
@@ -46,6 +45,7 @@ import Shikigami.Agent.Approval
     armApprovalDeadline,
     reviewRequestIdFor,
   )
+import Shikigami.App (AppEffects)
 import Shikigami.Approval.Generated.WorkflowRuntime qualified as Generated
 import Shikigami.Prelude
 

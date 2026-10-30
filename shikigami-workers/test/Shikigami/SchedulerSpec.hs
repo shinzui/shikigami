@@ -16,7 +16,6 @@ import Hasql.Pool.Config qualified as Pool.Config
 import Keiro.Timer (TimerRow (..), TimerStatus (Firing), lookupTimer)
 import Keiro.Workflow qualified as Workflow
 import Keiro.Workflow.Sleep qualified as Sleep
-import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Connection qualified as StoreConnection
 import Pgmq (Message (..), MessageBody (..), ReadMessage (..), readMessage)
@@ -25,6 +24,7 @@ import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaul
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
+import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Log qualified as Log
@@ -46,7 +46,7 @@ tests databaseFixture =
         withShikigamiFreshDatabase databaseFixture \connStr ->
           withStore (defaultConnectionSettings connStr) \store -> do
             tracer <- noopTracer
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 env = testSchedulerEnv (StoreConnection.pool store) Map.empty SkipMissed Log.silentLogger
                 name = Workflow.WorkflowName "plan65.sleep"
                 first = Workflow.WorkflowId "first"
@@ -92,7 +92,7 @@ tests databaseFixture =
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             cron <- parseCronOrFail "* * * * *"
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 pool = StoreConnection.pool kirokuStore
                 firstDue = atMinute 1
                 env = testSchedulerEnv pool (Map.singleton "heartbeat" cron) FireAll Log.silentLogger
@@ -125,7 +125,7 @@ tests databaseFixture =
             tracer <- noopTracer
             cron <- parseCronOrFail "* * * * *"
             directory <- directoryWith Paused
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 pool = StoreConnection.pool kirokuStore
                 env =
                   (testSchedulerEnv pool (Map.singleton "heartbeat" cron) FireAll Log.silentLogger)
@@ -154,7 +154,7 @@ tests databaseFixture =
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             cron <- parseCronOrFail "* * * * *"
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 pool = StoreConnection.pool kirokuStore
                 env = testSchedulerEnv pool (Map.singleton "heartbeat" cron) SkipMissed Log.silentLogger
 
@@ -184,7 +184,7 @@ tests databaseFixture =
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             cron <- parseCronOrFail "* * * * *"
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 pool = StoreConnection.pool kirokuStore
                 env = testSchedulerEnv pool (Map.singleton "heartbeat" cron) FireAll Log.silentLogger
 
@@ -211,7 +211,7 @@ tests databaseFixture =
               tracer <- noopTracer
               cron <- parseCronOrFail "* * * * *"
               (logger, captured) <- capturingLogger
-              let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+              let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                   env = testSchedulerEnv brokenPool (Map.singleton "heartbeat" cron) SkipMissed logger
 
               fired <- runAppIO appEnv (scheduleFireAction env aDayLater (staleScheduleRow staleDue))
@@ -237,7 +237,7 @@ tests databaseFixture =
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             (logger, captured) <- capturingLogger
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 env = testSchedulerEnv (StoreConnection.pool kirokuStore) Map.empty SkipMissed logger
                 row =
                   (staleScheduleRow staleDue)
@@ -284,7 +284,7 @@ tests databaseFixture =
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             (logger, captured) <- capturingLogger
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 env = testSchedulerEnv (StoreConnection.pool kirokuStore) Map.empty SkipMissed logger
                 row =
                   (staleScheduleRow staleDue)

@@ -52,8 +52,8 @@ import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime)
 import Data.Time.Format.ISO8601 (iso8601Show)
-import Effectful (Eff, IOE, runEff, (:>))
-import Effectful.Error.Static (Error, runErrorNoCallStack, throwError_)
+import Effectful (Eff, IOE, (:>))
+import Effectful.Error.Static (Error, throwError_)
 import Effectful.Exception (trySync)
 import Effectful.Exception qualified as EffException
 import Hasql.Pool (Pool)
@@ -73,17 +73,15 @@ import Keiro.Workflow qualified as Workflow
 import Keiro.Workflow.Child (WorkflowChildFailed (..))
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
 import Kioku.Api.Types (Confidence (MediumConfidence), MemoryRecord, MemoryType (MemoryPattern))
-import Kioku.App (AppEffects, AppEnv (..))
 import Kioku.Id (MemoryId, SessionId, genMemoryId, genSessionId, idText)
 import Kioku.Memory qualified as Memory
 import Kioku.Memory.Domain (RecordMemoryData (..))
 import Kioku.Session qualified as Session
 import Kioku.Session.Domain (CompleteSessionData (..), FailSessionData (..), StartSessionData (..))
-import Kiroku.Store.Effect (Store, runStoreResource)
-import Kiroku.Store.Effect.Resource (withKirokuStore)
+import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
 import OpenTelemetry.Trace.Core qualified as Otel
-import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), Tracing, addAttribute, runTracing, withSpan')
+import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), Tracing, addAttribute, withSpan')
 import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Approval
@@ -106,6 +104,7 @@ import Shikigami.Agent.Run.Key (runKeyText)
 import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
+import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile (..), renderProfileResolutionError)
 import Shikigami.Behavior.Error (RunError, TransientBehaviorFailure (..), boundedBehaviorDetail)
@@ -324,12 +323,8 @@ runAgentRunWorkflow ::
   IO (Either StoreError (WorkflowOutcome (Either AgentRunFailure AgentRunResult)))
 runAgentRunWorkflow deps job =
   let env = (.appEnv) deps
-   in runEff
-        . runTracing (tracer env)
-        . runErrorNoCallStack
-        . withKirokuStore (connectionSettings env)
-        . runStoreResource
-        $ runWorkflowWith
+   in runAppIO env $
+        runWorkflowWith
           (shikigamiWorkflowRunOptions env)
           agentRunWorkflowName
           (runJobWorkflowId job)
@@ -1263,7 +1258,7 @@ publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa
           let messageId = Integration.messageId integrationEvent
               kind = sinkKindOf sink
               publish =
-                Otel.inSpan' (tracer depsAppEnv) "sink.publish" (spanArgs Consumer) \traceSpan -> do
+                Otel.inSpan' (depsAppEnv.tracer) "sink.publish" (spanArgs Consumer) \traceSpan -> do
                   Otel.addAttribute traceSpan "sink.kind" (Otel.toAttribute (sinkKindText kind))
                   currentTraceContext <- traceContextFromCurrentSpan
                   admittedIdentity <- case recordedIdentity of
@@ -1559,14 +1554,7 @@ completeSession deps selectedModelId recordedIdentity sid = liftIO do
         & runKioku deps
 
 runKioku :: AgentRunDeps -> Eff AppEffects a -> IO (Either StoreError a)
-runKioku deps action =
-  let env = (.appEnv) deps
-   in runEff
-        . runTracing (tracer env)
-        . runErrorNoCallStack
-        . withKirokuStore (connectionSettings env)
-        . runStoreResource
-        $ action
+runKioku deps = runAppIO deps.appEnv
 
 -- | Say what one sink actually did.
 --

@@ -15,10 +15,10 @@ import Data.Maybe (listToMaybe)
 import Data.Text qualified as Text
 import Hasql.Transaction (Transaction)
 import Kikan.En.Action (AgentAction (InvokeCapabilityTool), mkCapabilityToolTarget)
-import Kioku.App (AppEnv, runAppIO)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
+import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Prelude
 import Shikigami.Workspace.Allocation

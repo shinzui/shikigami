@@ -1,0 +1,11 @@
+{
+  "package": "shibuya-metrics",
+  "version": "0.12.0.0",
+  "registry": "https://hackage.haskell.org/package/shibuya-metrics-0.12.0.0",
+  "descriptorSha256": "89e4d2f541705dcf5c4fd09432c5e4f9ce75e1b9813d19c57c53d5facbcbec00",
+  "upstream": "mori://shinzui/shibuya/packages/shibuya-metrics",
+  "tag": "v0.12.0.0",
+  "tagCommit": "14f35d8995cc3dc3e2671e4d2505abf9bf4f5a9e",
+  "verifiedAt": "2026-10-30",
+  "purpose": "Public retained lifecycle health used by bracketed consumer ownership; no HTTP host is allocated by plan94."
+}

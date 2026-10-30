@@ -39,8 +39,7 @@ import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, addUTCTime)
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
-import Effectful (Eff, IOE, runEff, (:>))
-import Effectful.Error.Static (runErrorNoCallStack)
+import Effectful (Eff, IOE, (:>))
 import Keiro.Timer (TimerId (..), TimerRequest (..), TimerRow (..), scheduleTimerOnceTx)
 import Keiro.Workflow
   ( StepName (..),
@@ -56,15 +55,13 @@ import Keiro.Workflow
   )
 import Keiro.Workflow.Awakeable (AwakeableId, awakeableIdText, awakeableIdToUuid, awakeableNamed, signalAwakeable)
 import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), lookupAwakeable)
-import Kioku.App (AppEffects, AppEnv (..))
 import Kioku.Id (SessionId)
-import Kiroku.Store.Effect (Store, runStoreResource)
-import Kiroku.Store.Effect.Resource (withKirokuStore)
+import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId)
-import Shibuya.Telemetry.Effect (runTracing)
 import Shikigami.Agent.Workflow.Input (awaitInput, deliverInput)
+import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 import Shikigami.Sink.Permission (AgentIdentity, SinkKind (..), sinkKindText)
@@ -278,16 +275,9 @@ approvalTimeoutFireAction TimerRow {payload = timerPayload} =
               (WorkflowId ownerWorkflowId)
               (StepRecorded (awakeableStepPrefix <> awakeableIdText aid) eventPayload now)
 
--- | Kioku 0.2 replaced 'AppEnv''s pre-built store with the connection settings it
--- is built from, so the store is acquired per run rather than held open. This is
--- 'Kioku.App.runAppIO' spelled out locally; keep it in step with that function.
+-- | Use the shared service interpreter for store ownership and command options.
 runApp :: AppEnv -> Eff AppEffects a -> IO (Either StoreError a)
-runApp env =
-  runEff
-    . runTracing (tracer env)
-    . runErrorNoCallStack
-    . withKirokuStore (connectionSettings env)
-    . runStoreResource
+runApp = runAppIO
 
 notifyStepName :: StepName -> StepName
 notifyStepName (StepName name) = StepName (name <> ":notify")

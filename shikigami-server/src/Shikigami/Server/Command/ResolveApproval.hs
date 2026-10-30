@@ -12,10 +12,10 @@ import Data.Text qualified as Text
 import Data.Text.IO qualified as TextIO
 import Data.UUID qualified as UUID
 import Keiro.Workflow.Awakeable (AwakeableId (..), awakeableIdText)
-import Kioku.App (AppEnv (..))
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Options.Applicative
 import Shikigami.Agent.Approval (ApprovalDecision (..), resolveApproval)
+import Shikigami.App (AppEnv (..))
 import Shikigami.App.Config (AppConfig, revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Server.Telemetry (ServerTelemetry (..), withServerTelemetry)
@@ -49,7 +49,8 @@ runResolveApproval awakeableId decision config = do
           AppEnv
             { connectionSettings = defaultConnectionSettings connectionString,
               tracer,
-              metrics = Nothing
+              metrics = Nothing,
+              store = Nothing
             }
     resolved <- resolveApproval appEnv awakeableId decision
     let (message, status) = resolutionResult awakeableId resolved

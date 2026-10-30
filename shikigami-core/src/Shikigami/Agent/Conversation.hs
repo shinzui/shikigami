@@ -33,8 +33,8 @@ import Data.Maybe (listToMaybe)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, addUTCTime)
 import Data.UUID.V5 qualified as UUID.V5
-import Effectful (Eff, IOE, runEff, (:>))
-import Effectful.Error.Static (Error, runErrorNoCallStack)
+import Effectful (Eff, IOE, (:>))
+import Effectful.Error.Static (Error)
 import Hasql.Pool (Pool)
 import Hasql.Transaction qualified as Tx
 import Keiro.Command (defaultRunCommandOptions, runCommandWithSqlEvents)
@@ -67,19 +67,17 @@ import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), completeAwakeableTx, 
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
 import Keiro.Workflow.Instance (WorkflowInstanceRow (..), WorkflowStatus (..), lookupInstance)
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
-import Kioku.App (AppEffects, AppEnv (..), runAppIO)
 import Kioku.Distill.Timer (l1TimerScheduleProjection)
 import Kioku.Id (SessionId, genSessionId, idText, parseId)
 import Kioku.Session qualified as Session
 import Kioku.Session.Domain (CompleteSessionData (..), RecordTurnData (..), SessionCommand (..), StartSessionData (..))
 import Kioku.Session.EventStream (sessionEventStream, sessionStream)
 import Kioku.Session.ReadModel (SessionRow (..), TurnRow (..), sessionInlineProjection)
-import Kiroku.Store.Effect (Store, runStoreResource)
-import Kiroku.Store.Effect.Resource (KirokuStoreResource, withKirokuStore)
+import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId)
-import Shibuya.Telemetry.Effect (runTracing)
 import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
@@ -94,6 +92,7 @@ import Shikigami.Agent.Principal
   )
 import Shikigami.Agent.Run (renderLearning)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
+import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile (..), renderProfileResolutionError)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..), boundedBehaviorDetail)
@@ -997,17 +996,12 @@ runConversationWorkflow ::
   AddressedMessage ->
   IO (Either StoreError (WorkflowOutcome (Either Text ConversationTurnResult)))
 runConversationWorkflow env epoch mStart msg =
-  let AppEnv {connectionSettings, tracer} = (.appEnv) env
-   in runEff
-        . runTracing tracer
-        . runErrorNoCallStack
-        . withKirokuStore connectionSettings
-        . runStoreResource
-        $ runWorkflowWith
-          (shikigamiWorkflowRunOptions ((.appEnv) env))
-          conversationWorkflowName
-          (conversationWorkflowId epoch msg)
-          (conversationWorkflow env mStart)
+  runAppIO env.appEnv $
+    runWorkflowWith
+      (shikigamiWorkflowRunOptions ((.appEnv) env))
+      conversationWorkflowName
+      (conversationWorkflowId epoch msg)
+      (conversationWorkflow env mStart)
 
 deliverConversationInput :: ConversationEnv -> AddressedMessage -> IO Bool
 deliverConversationInput env = deliverConversationInputFromApp ((.appEnv) env)

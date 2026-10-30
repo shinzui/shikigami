@@ -8,12 +8,12 @@ import Data.ByteString.Lazy qualified as Lazy
 import Data.ByteString.Lazy.Char8 qualified as LazyChar
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Loader (loadAgentsReport, loadedAgents)
+import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig (..), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Directory (DirectoryRuntime (..))
@@ -92,7 +92,7 @@ environment label config = do
   connection <- revealSecretText <$> requireDatabaseUrl label config
   verifyShikigamiMigrations connection
   tracer <- noopTracer
-  pure (AppEnv (defaultConnectionSettings connection) tracer Nothing)
+  pure (AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing)
 
 readInstruction :: FilePath -> IO WorkerInstruction
 readInstruction path = do

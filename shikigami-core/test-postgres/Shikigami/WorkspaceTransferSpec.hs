@@ -5,12 +5,12 @@ import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Data.Text qualified as Text
 import Effectful (Eff)
-import Kioku.App (AppEffects, AppEnv, runAppIO)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
+import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Execution.Identity (AttemptId (..), OperationId (..))
 import Shikigami.Execution.SelectionRuntime qualified as Selection
 import Shikigami.Migrations.TestSupport (DatabaseFixture)

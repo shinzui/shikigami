@@ -25,13 +25,13 @@ import Effectful (Eff, IOE, (:>))
 import Hasql.Pool (Pool)
 import Keiro.Timer (TimerId (..), TimerRequest (..), TimerRow (..), scheduleTimerOnceTx)
 import Keiro.Workflow.Sleep (drainWorkflowSleepTimers)
-import Kioku.App (AppEnv (..))
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkAgentPrincipal)
+import Shikigami.App (AppEnv (..))
 import Shikigami.Directory qualified as Directory
 import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), recordRunSkip)
 import Shikigami.Execution.Timer qualified as ExecutionTimer
@@ -232,4 +232,4 @@ runSchedulerTimerWorker ::
   UTCTime ->
   Eff es Int
 runSchedulerTimerWorker appEnv env now =
-  drainWorkflowSleepTimers (metrics appEnv) now 100 (shikigamiTimerFallback env now)
+  drainWorkflowSleepTimers (appEnv.metrics) now 100 (shikigamiTimerFallback env now)

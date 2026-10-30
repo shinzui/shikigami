@@ -26,8 +26,8 @@ import Data.Text qualified as Text
 import Effectful.Dispatch.Static (unsafeEff_)
 import Keiro.Outbox (OutboxPublishSummary (..), PublishOutcome (PublishSucceeded), defaultPublishOptions, publishClaimedOutbox)
 import Keiro.Outbox.Types (OutboxRow (..))
-import Kioku.App (runAppIO)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
+import Shikigami.App (runAppIO)
 import Shikigami.Health.Worker (LoopName (OutboxLoop), beat)
 import Shikigami.Log qualified as Log
 import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, envHeartbeats, envKeiroMetrics, envLogger)

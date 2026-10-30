@@ -49,7 +49,6 @@ import Keiro.Workflow.Awakeable (AwakeableId (..), awakeableIdText, awakeableNam
 import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), countPendingAwakeables, lookupAwakeable, registerAwakeableTx)
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
 import Keiro.Workflow.Child (runChildWorkflow)
-import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Transaction (runTransaction)
@@ -61,6 +60,7 @@ import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunRouteKind (..))
+import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Behavior.Input (triggerOnly)
 import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv)
 import Shikigami.Behavior.Skill (SkillDir (..))
@@ -733,7 +733,7 @@ tests fixture =
           changed <- pure (snapshot & #instructions . #body .~ "changed instructions")
           run env (Store.admitExecution changed) >>= (@?= Left ExecutionIdentityConflict)
           tracer <- noopTracer
-          let restarted = AppEnv env.connectionSettings tracer env.metrics
+          let restarted = AppEnv env.connectionSettings tracer env.metrics Nothing
           fresh <- expectRight =<< run restarted (Store.authorizeReplay snapshot.executionId snapshot.identity (pure (Right ())))
           (restored, state) <- expectRight =<< run restarted (Store.loadExecution fresh)
           restored @?= snapshot
@@ -1338,7 +1338,7 @@ withConfiguredResourceFixture fixture configure editLimits use = withShikigamiFr
   tracer <- noopTracer
   now <- getCurrentTime
   session <- genSessionId
-  let env = AppEnv (defaultConnectionSettings connection) tracer Nothing
+  let env = AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing
       limits = editLimits (Map.insert R.Tokens (R.Limited 1000) (Map.fromList [(dimension, R.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]))
       selection = mustRight (resolveExecutionSelection "transcript-assignment" (mustRight (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just rootId) now)
       snapshot = configure (ExecutionSnapshot 1 (executionIdFor selection.assignmentId) "transcript-run" (AgentName "worker") (compatibilityIdentity "worker") session selection Nothing (SkillInstructions "fixture" "system" "PRIVATE_REPLAY_MARKER") (ReplayContext 1 (Just "system") [UserTurn [TextBlock "PRIVATE_REPLAY_MARKER"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing)

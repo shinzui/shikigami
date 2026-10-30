@@ -30,11 +30,11 @@ import Effectful (Eff, IOE, liftIO, (:>))
 import Keiro.Workflow (PatchId (..), StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), WorkflowRunOptions (..), defaultWorkflowRunOptions, loadStepIndex, patch, patchSetStepName, patchStepName, runWorkflowWith, step)
 import Keiro.Workflow.Instance (ResurrectOutcome (..), resurrectFailedWorkflow)
 import Keiro.Workflow.Resume (ResumeSummary (..), WorkflowDef (..), WorkflowResumeOptions (..), resumeWorkflowsOnceUpTo)
-import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Workflow.Input (awaitInput, deliverInputTo)
+import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Workflow.Versioning (shikigamiActivePatches, shikigamiWorkflowResumeOptions)
 import Test.Tasty (TestTree, testGroup)
@@ -47,7 +47,7 @@ tests databaseFixture =
     [ testCase "resume lease exceeds the synchronous behavior timeout" do
         tracer <- noopTracer
         let timeout = secondsToNominalDiffTime 300
-            appEnv = AppEnv {connectionSettings = defaultConnectionSettings "", tracer, metrics = Nothing}
+            appEnv = AppEnv {connectionSettings = defaultConnectionSettings "", tracer, metrics = Nothing, store = Nothing}
             WorkflowResumeOptions
               { leaseTtl,
                 runOptions = WorkflowRunOptions {leaseHeartbeat}
@@ -81,7 +81,7 @@ inFlightSurvivesDeploy databaseFixture =
   (withShikigamiFreshDatabase databaseFixture) \connStr ->
     withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
       tracer <- noopTracer
-      let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+      let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
       collectRuns <- newIORef (0 :: Int)
 
       -- The old deploy: the patch does not exist yet, so its options name none.
@@ -235,7 +235,7 @@ failedWorkflowResurrects :: DatabaseFixture -> IO ()
 failedWorkflowResurrects databaseFixture =
   withShikigamiFreshDatabase databaseFixture \connStr -> do
     tracer <- noopTracer
-    let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+    let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
         name = WorkflowName "plan65.failure"
         wid = WorkflowId "resurrect"
         ingested = step (StepName "ingest") (pure () :: Eff (Workflow : AppEffects) ())

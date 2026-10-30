@@ -20,12 +20,12 @@ import GHC.Stack (HasCallStack, callStack, prettyCallStack)
 import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Keiro.Workflow.Awakeable.Schema (registerAwakeableTx)
 import Keiro.Workflow.Types (WorkflowId (..))
-import Kioku.App (AppEffects, AppEnv, runAppIO)
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Agent.Decl (Behavior (Skill))
 import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Capability.Catalog
 import Shikigami.Capability.Overlay

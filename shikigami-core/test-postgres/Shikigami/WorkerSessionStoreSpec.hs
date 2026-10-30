@@ -14,7 +14,6 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (preparable)
 import Hasql.Transaction qualified as Tx
 import Keiro.Workflow.Types (WorkflowId (..))
-import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Kiroku.Store.Transaction (runTransaction)
@@ -24,6 +23,7 @@ import Shikigami.Agent.Delegate.Depth (DelegationDepth (..))
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (compatibilityIdentity)
+import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
 import Shikigami.Execution.Resources (Admission (..))
 import Shikigami.Execution.Resources qualified as R
@@ -283,7 +283,7 @@ withConfiguredFixture fixture configure callback = withShikigamiFreshDatabase fi
   parentSession <- genSessionId
   now <- getCurrentTime
   parent <- expectRight =<< loadAgent "../agents/heartbeat.dhall"
-  let env = AppEnv (defaultConnectionSettings connection) tracer Nothing
+  let env = AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing
       root = ExecutionRootId "session-root"
       admission =
         configure $

@@ -28,7 +28,6 @@ import Keiro.Workflow.Child qualified as Child
 import Keiro.Workflow.Child.Schema (ChildRow (..), lookupChild)
 import Keiro.Workflow.Child.Schema qualified as ChildSchema
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
-import Kioku.App (AppEffects, AppEnv)
 import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Agent.Delegate (Delegated (..), delegateAssignment)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError)
@@ -37,6 +36,7 @@ import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.RunFailure (AgentRunFailure)
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
+import Shikigami.App (AppEffects, AppEnv)
 import Shikigami.ContinuingWorker.Generated.WorkflowRuntime qualified as Generated
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Execution.Identity (OperationId (..))

@@ -3,8 +3,8 @@
 module Shikigami.Workspace.Profile (retainedProcessRule, retainedFileProfile, retainedSystemdProfile, profileStorageSafe) where
 
 import Data.Text qualified as Text
-import Kioku.App (AppEnv, runAppIO)
 import Kiroku.Store.Transaction (runTransaction)
+import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Prelude
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Process

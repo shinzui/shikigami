@@ -15,7 +15,6 @@ import Data.Time (UTCTime (..), fromGregorian, secondsToNominalDiffTime)
 import Keiro.Workflow (WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), defaultWorkflowRunOptions, loadStepIndex, runWorkflow)
 import Keiro.Workflow.Child (runChildWorkflow)
 import Keiro.Workflow.Child.Schema (lookupChildrenOfParent)
-import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Error (StoreError)
 import OpenTelemetry.Attributes (Attribute (..), PrimitiveAttribute (..), getAttributeMap)
@@ -45,6 +44,7 @@ import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
+import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Capability.Provider qualified as CapabilityProvider
@@ -536,7 +536,8 @@ withDatabaseTracer databaseFixture tracer use =
         AppEnv
           { connectionSettings = defaultConnectionSettings connectionString,
             tracer,
-            metrics = Nothing
+            metrics = Nothing,
+            store = Nothing
           }
         behaviorEnv
 

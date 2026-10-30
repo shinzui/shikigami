@@ -9,9 +9,9 @@ import Data.IORef
 import Data.Map.Strict qualified as Map
 import Data.Time (addUTCTime, getCurrentTime)
 import Hasql.Transaction (Transaction)
-import Kioku.App (AppEnv, runAppIO)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization
+import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))

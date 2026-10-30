@@ -17,7 +17,6 @@ import Keiro.Workflow.Awakeable (AwakeableId)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker, sleepNamed)
 import Kioku.Api.Types (Confidence (HighConfidence, MediumConfidence), MemoryRecord (..), MemoryType (MemoryConstraint, MemoryPattern), confidenceToText, memoryTypeToText)
-import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (MemoryId, SessionId, genSessionId, idText)
 import Kioku.Id qualified as NominalId
 import Kioku.Memory (MemoryWriteError (..))
@@ -37,6 +36,7 @@ import Shikigami.Agent.Delegate.Depth (DelegationDepth (..))
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..))
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent), compatibilityIdentity)
+import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..), atRiskCustomerLifecycleDiagram, flowDeclarationErrors, flowRegistry, lookupFlow, registeredFlowNames)
@@ -232,7 +232,7 @@ tests databaseFixture =
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl "at-risk-customer", identity = CompatibilityAgent "at-risk-customer", aliasPool = Nothing, sessionId = Nothing}
                 mid = deterministicFlowMemoryId (WorkflowName "shikigami.flow.spike") (WorkflowId "flow-crash-window") 0 "acknowledged"
                 note = object ["summary" .= ("at-risk customer alert acknowledged" :: Text)]
@@ -263,7 +263,7 @@ tests databaseFixture =
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             session <- genSessionId
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl "at-risk-customer", identity = CompatibilityAgent "at-risk-customer", aliasPool = Nothing, sessionId = Nothing}
                 replayedId = WorkflowId "flow-recall-replay"
                 freshId = WorkflowId "flow-recall-fresh"
@@ -292,7 +292,7 @@ tests databaseFixture =
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             session <- genSessionId
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
             outcome <- runFlowBody appEnv (spikeRuntime session) "at-risk-customer" supersessionFlow (WorkflowId "flow-supersession-spike") (object [])
             (firstId, secondId) <- case outcome of
               Right (Completed (Object o)) -> case (KeyMap.lookup "first" o, KeyMap.lookup "second" o) of
@@ -480,7 +480,7 @@ runFlowWorkflowWithAgent databaseFixture flowAgent flow workflowId =
     withStore (defaultConnectionSettings connStr) \kirokuStore -> do
       tracer <- noopTracer
       session <- genSessionId
-      let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+      let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
       outcome <- runFlowBody appEnv (spikeRuntime session) flowAgent flow workflowId (object [])
       count <- outboxCount appEnv
       pure (outcome, count)
@@ -505,7 +505,7 @@ runSleepSpike databaseFixture workflowId =
   (withShikigamiFreshDatabase databaseFixture) \connStr ->
     withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
       tracer <- noopTracer
-      let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+      let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
       runEff
         . runErrorNoCallStack
         . withKirokuStore (defaultConnectionSettings connStr)
@@ -539,7 +539,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
     runEff
       . runTracingNoop
       . runErrorNoCallStack
-      . withKirokuStore (connectionSettings appEnv)
+      . withKirokuStore (appEnv.connectionSettings)
       . runStoreResource
       $ runWorkflowWith
         (shikigamiWorkflowRunOptions appEnv)
@@ -630,7 +630,7 @@ withAtRiskFlow databaseFixture action =
       tracer <- noopTracer
       session <- genSessionId
       aidRef <- newIORef Nothing
-      let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+      let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
           runtime =
             FlowRuntime
               { approval = approvalEnv aidRef session,

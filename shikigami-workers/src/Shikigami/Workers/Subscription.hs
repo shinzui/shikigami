@@ -5,9 +5,9 @@ module Shikigami.Workers.Subscription
 where
 
 import Data.Aeson qualified as Aeson
-import Kioku.App (AppEnv (..))
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
+import Shikigami.App (AppEnv (..))
 import Shikigami.App.Config (AppConfig, Role (EventConsumerRole, StreamConsumerRole))
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
@@ -74,7 +74,7 @@ runConsumeStream config = do
       case deadLetterResult of
         Left err -> fail ("stream dead-letter queue reconciliation failed: " <> show err)
         Right () -> pure ()
-      let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics}
+      let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics, store = Just st}
           cfg =
             StreamConfig
               { broker = broker,
@@ -138,7 +138,7 @@ runConsumeEvents config = do
       case deadLetterResult of
         Left err -> fail ("stream dead-letter queue reconciliation failed: " <> show err)
         Right () -> pure ()
-      let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics}
+      let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics, store = Just st}
           cfg =
             StreamConfig
               { broker = broker,

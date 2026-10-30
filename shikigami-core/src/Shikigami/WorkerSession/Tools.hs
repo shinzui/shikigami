@@ -9,8 +9,8 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Effectful (Eff)
 import Effectful.Dispatch.Static (unsafeEff_)
-import Kioku.App (AppEffects, runAppIO)
 import Shikigami.Action.Authorization (ActionAuthorizer)
+import Shikigami.App (AppEffects, runAppIO)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Executor (BoundTool (..))
 import Shikigami.Execution.Policy.Types (RecoveryClass (IdempotentEffect), ToolInvoiceCost (NoInvoiceCost))

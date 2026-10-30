@@ -21,8 +21,8 @@ import Data.Aeson qualified as Aeson
 import Data.Text qualified as Text
 import Keiro.Telemetry (KeiroMetrics)
 import Keiro.Workflow.Sleep (drainWorkflowSleepTimers)
-import Kioku.App (AppEnv, runAppIO)
 import Kiroku.Store.Error (StoreError)
+import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Health.Worker (LoopName (TimerLoop), beat)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude

@@ -9,6 +9,7 @@ import Shikigami.StreamInboxSpec qualified as StreamInboxSpec
 import Shikigami.TelemetrySpec qualified as TelemetrySpec
 import Shikigami.TimerRecoverySpec qualified as TimerRecoverySpec
 import Shikigami.Workers.CommandSpec qualified as CommandSpec
+import Shikigami.Workers.ConsumerAppSpec qualified as ConsumerAppSpec
 import Shikigami.Workers.SupervisionSpec qualified as SupervisionSpec
 import Shikigami.WorkspaceContainedFileSpec qualified as WorkspaceContainedFileSpec
 import Shikigami.WorkspaceFileProviderSpec qualified as WorkspaceFileProviderSpec
@@ -51,6 +52,7 @@ main = do
               WorkspaceContainedFileSpec.tests,
               WorkspaceStoreSpec.tests databaseFixture,
               CommandSpec.tests,
+              ConsumerAppSpec.tests,
               HealthWorkerSpec.tests,
               RunJobWorkerSpec.tests databaseFixture,
               StatusSpec.tests databaseFixture,

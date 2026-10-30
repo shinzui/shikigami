@@ -52,6 +52,7 @@ library
     Shikigami.Workers.Command.Scheduler
     Shikigami.Workers.Command.Worker
     Shikigami.Workers.Config
+    Shikigami.Workers.ConsumerApp
     Shikigami.Workers.Registry
     Shikigami.Workers.Shutdown
     Shikigami.Workers.Subscription
@@ -122,6 +123,7 @@ library
     settei-optparse-applicative ==0.2.0.0,
     shibuya-core,
     shibuya-kafka-adapter,
+    shibuya-metrics >=0.12.0.0 && <0.13,
     shikigami-core,
     shikigami-migrations,
     shikumi-tools,
@@ -221,6 +223,7 @@ test-suite shikigami-workers-test
     Shikigami.TelemetrySpec
     Shikigami.TimerRecoverySpec
     Shikigami.Workers.CommandSpec
+    Shikigami.Workers.ConsumerAppSpec
     Shikigami.Workers.SupervisionSpec
     Shikigami.WorkspaceContainedFileSpec
     Shikigami.WorkspaceFileProviderSpec
@@ -258,6 +261,7 @@ test-suite shikigami-workers-test
     hasql-transaction,
     hs-opentelemetry-exporter-in-memory,
     hs-opentelemetry-sdk,
+    hw-kafka-client,
     keiro,
     keiro-pgmq,
     kioku-api,

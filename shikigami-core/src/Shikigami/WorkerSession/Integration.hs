@@ -4,7 +4,7 @@ module Shikigami.WorkerSession.Integration (IntegrationOutcome (..), integrateEv
 
 import Effectful (Eff)
 import Effectful.Exception (trySync)
-import Kioku.App (AppEffects)
+import Shikigami.App (AppEffects)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Prelude

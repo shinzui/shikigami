@@ -62,7 +62,7 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
-import Keiro.Command (CommandError (..), defaultRunCommandOptions)
+import Keiro.Command (CommandError (..))
 import Keiro.Projection (ProjectionCommandOutcome (..), runCommandWithCatalogProjections)
 import Keiro.ReadModel (runQuery)
 import Keiro.Stream qualified as Stream
@@ -75,6 +75,7 @@ import Kiroku.Store.Error (StoreError)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), assertMayDelegate, checkCycle, checkDepth)
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
+import Shikigami.App (CommandEffects, commandOptions)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId (..))
 import Shikigami.Execution.Resources (Admission (..))
@@ -93,7 +94,7 @@ import Shikigami.WorkerSessionLookup.Generated.ReadModel (workerSessionLookupRea
 
 type SessionReadEffects es = (IOE :> es, Store :> es, Error StoreError :> es)
 
-type SessionEffects es = (SessionReadEffects es, KirokuStoreResource :> es)
+type SessionEffects es = (SessionReadEffects es, KirokuStoreResource :> es, CommandEffects es)
 
 data SessionAccess = SessionAccess !WorkerSessionId !AgentIdentity !UTCTime
 
@@ -838,7 +839,8 @@ operationKey (OperationId key) = key
 persist :: (SessionEffects es) => WorkerSessionId -> Generated.WorkerSessionLifecycleCommand -> Transaction () -> Eff es (Either SessionError ())
 persist session command action = guarded do
   let (catalog, projections) = withLiveSession (\_ _ -> action)
-  result <- runCommandWithCatalogProjections defaultRunCommandOptions workerSessionLifecycleEventStream (Stream.entityStream workerSessionLifecycleCategory session.value) command catalog projections
+  options <- commandOptions
+  result <- runCommandWithCatalogProjections options workerSessionLifecycleEventStream (Stream.entityStream workerSessionLifecycleCategory session.value) command catalog projections
   pure case result of
     Right (ProjectionCommandApplied _) -> Right ()
     Right _ -> Left SessionProjectionUnavailable

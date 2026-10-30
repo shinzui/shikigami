@@ -18,8 +18,8 @@ import Data.ByteString qualified as Bytes
 import Data.Generics.Labels ()
 import Data.Text qualified as Text
 import Foreign.C
-import Kioku.App (AppEnv, runAppIO)
 import Kiroku.Store.Transaction (runTransaction)
+import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Prelude
 import Shikigami.Workspace.ContainedFile

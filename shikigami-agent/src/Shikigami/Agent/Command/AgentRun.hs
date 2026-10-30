@@ -10,7 +10,6 @@ import Data.Text qualified as Text
 import Data.Text.IO qualified as TIO
 import Data.Time (getCurrentTime)
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..))
-import Kioku.App (AppEnv (..), noopTracer)
 import Kioku.Id (genSessionId, idText)
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Shikigami.Action.Authorization (denyAllActionAuthorizer)
@@ -26,6 +25,7 @@ import Shikigami.Agent.Run (AgentRunResult (..), recordActivityAsMemory, renderM
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
+import Shikigami.App (AppEnv (..), noopTracer)
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
@@ -70,7 +70,7 @@ runAgentRun agentArg mActivity workspace config = do
       let settings = runtimeConnectionSettings logger Nothing connStr
       withStore settings $ \store -> do
         registerRuntimeCatalog store
-        let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = Nothing}
+        let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = Nothing, store = Just store}
         case mActivity of
           Just actPath -> do
             decoded <- Aeson.eitherDecodeFileStrict' actPath

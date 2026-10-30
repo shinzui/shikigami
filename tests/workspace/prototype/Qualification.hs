@@ -19,7 +19,6 @@ import Data.Time (addUTCTime, getCurrentTime)
 import Effectful (Eff)
 import GHC.Generics (Generic)
 import GHC.Stack (HasCallStack, callStack, prettyCallStack)
-import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Transaction (runTransaction)
@@ -27,6 +26,7 @@ import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
+import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig (..), Role (AdminRole), revealSecretText)
 import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), requireDatabaseUrl, runAppConfig)
 import Shikigami.Behavior.Skill (SkillDir (..))
@@ -87,7 +87,7 @@ withQualification configFile prefix use = do
   config <- runAppConfig AdminRole (ConfigOptions [configFile] [] [] NoDiagnostic)
   connection <- revealSecretText <$> requireDatabaseUrl "workspace-qualification" config
   tracer <- noopTracer
-  let env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing}
+  let env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
   authorizer <- right =<< buildConfiguredActionAuthorizer Log.silentLogger config
   directory <- right =<< startDirectory Log.silentLogger config.directorySettings
   socket <- maybe (fail "qualification socket absent") (pure . (.socketPath)) config.workspaceSupervisorSettings

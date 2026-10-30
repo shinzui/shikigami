@@ -18,10 +18,10 @@ import Data.Generics.Labels ()
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
 import Hasql.Transaction (Transaction)
-import Kioku.App (AppEnv, runAppIO)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.Principal (identityText)
+import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Execution.Resources qualified as Resources

@@ -1,0 +1,11 @@
+2026-10-30: plan94 current candidate after e203470
+Whole service: cabal build all --enable-tests -j2 passed.
+Core pure: all539 tests passed (6.27s).
+Core PostgreSQL: all375 tests passed (133.62s), serial; no skipped DB cases.
+Final workers: all258 tests passed (202.66s), serial; no skipped DB cases.
+New App runtime ownership/telemetry:2 passed (0.52s).
+ConsumerApp final suite includes10 policy/lifecycle cases and all passed.
+Whole just keiro-gate e203470: passed (strict check, exact inspect, idempotent scaffold, neutral diff and159 service-conformance assertions).
+Current runtime DSL diff: exit0, no findings; replay-neutral.
+Strict evolution policy now denies AggGuardRelationUnknown and AggGuardRemedyUnavailable.
+Final artifact/Linux/performance qualification and selected administrative inspection remain pending their owning children.

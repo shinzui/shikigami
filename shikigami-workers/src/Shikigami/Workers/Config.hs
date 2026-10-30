@@ -41,7 +41,6 @@ import Data.Map.Strict qualified as Map
 import Data.Time (NominalDiffTime)
 import Hasql.Pool (Pool)
 import Keiro.Telemetry (KeiroMetrics)
-import Kioku.App (AppEnv (..))
 import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
@@ -49,6 +48,7 @@ import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), DelegationBudget, IdentityDecl (..), Trigger (..))
 import Shikigami.Agent.Loader (AgentLoadReport)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
+import Shikigami.App (AppEnv (..))
 import Shikigami.Attestation.Resolve qualified as Profile
 import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Capability.Provider (emptyCapabilityRuntime)

@@ -4,10 +4,10 @@ module Shikigami.Workspace.Daemon (runWorkspaceSupervisor) where
 
 import Control.Concurrent.Async (race)
 import Control.Exception (bracket)
-import Kioku.App (AppEnv (..))
 import Kiroku.Store.Connection qualified as StoreConnection
 import Network.Socket qualified as Socket
 import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
+import Shikigami.App (AppEnv (..))
 import Shikigami.App.Config (AppConfig (..), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Attestation.Resolve qualified as Profile
@@ -49,7 +49,7 @@ runWorkspaceSupervisor config = do
         registerRuntimeCatalog store
         authorizer <- buildConfiguredActionAuthorizer logger config >>= either (const (refuse "workspace.supervisor.authorization_invalid")) pure
         directory <- startDirectory logger config.directorySettings >>= either (const (refuse "workspace.supervisor.directory_invalid")) pure
-        let appEnv = AppEnv {connectionSettings = connections, tracer, metrics}
+        let appEnv = AppEnv {connectionSettings = connections, tracer, metrics, store = Just store}
             resolveProfile profile version = do
               now <- getCurrentTime
               Profile.resolveProfile (Profile.postgresProfileStore (StoreConnection.pool store)) now profile version

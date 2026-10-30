@@ -13,14 +13,11 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (getCurrentTime)
-import Effectful (Eff, IOE, runEff)
-import Effectful.Error.Static (Error, runErrorNoCallStack)
-import Kioku.App (AppEnv (..))
+import Effectful (Eff)
 import Kiroku.Store.Connection qualified as StoreConnection
-import Kiroku.Store.Effect (Store, runStoreResource)
-import Kiroku.Store.Effect.Resource (KirokuStoreResource, withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
+import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
 import Shikigami.App.Config (AppConfig, Role (SchedulerRole))
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
@@ -83,7 +80,7 @@ runSchedulerCmd config = do
           )
       DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
         startProcessDirectory logger registry ((.directorySettings) config)
-      let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics}
+      let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics, store = Just st}
           env =
             SchedulerEnv
               { pool = storePool,
@@ -126,9 +123,5 @@ armAll logger appEnv schedules =
           ["agent" Aeson..= agentName, "error" Aeson..= Text.pack (show err)]
       Right () -> pure ()
 
-runStore :: AppEnv -> Eff '[Store, KirokuStoreResource, Error StoreError, IOE] a -> IO (Either StoreError a)
-runStore appEnv =
-  runEff
-    . runErrorNoCallStack @StoreError
-    . withKirokuStore (connectionSettings appEnv)
-    . runStoreResource
+runStore :: AppEnv -> Eff AppEffects a -> IO (Either StoreError a)
+runStore = runAppIO

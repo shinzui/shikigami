@@ -36,7 +36,7 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
-import Keiro.Command (CommandError (..), defaultRunCommandOptions)
+import Keiro.Command (CommandError (..))
 import Keiro.Projection (ProjectionCommandOutcome (..), runCommandWithCatalogProjections)
 import Keiro.ReadModel (runQuery)
 import Keiro.Stream qualified as Stream
@@ -44,6 +44,7 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Agent.Principal (identityText)
+import Shikigami.App (CommandEffects, commandOptions)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Execution.Transcript (PayloadRef (..))
@@ -60,7 +61,7 @@ import Shikigami.WorkerSession.Checkpoint qualified as CP
 import Shikigami.WorkerSession.Types qualified as WS
 import Prelude hiding (read)
 
-type ObjectiveEffects es = (IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es)
+type ObjectiveEffects es = (IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es, CommandEffects es)
 
 data Abort = Abort ObjectiveError | Retry deriving stock (Show)
 
@@ -422,7 +423,8 @@ writeReceipt receipt outcome = Tx.statement (receipt.objectiveId.value, operatio
 persist :: (ObjectiveEffects es) => ObjectiveId -> G.ObjectiveLifecycleCommand -> Transaction () -> Eff es (Either ObjectiveError ())
 persist objective command action = guarded do
   let (catalog, projections) = withLiveObjective (\_ _ -> action)
-  outcome <- runCommandWithCatalogProjections defaultRunCommandOptions objectiveLifecycleEventStream (Stream.entityStream objectiveLifecycleCategory objective.value) command catalog projections
+  options <- commandOptions
+  outcome <- runCommandWithCatalogProjections options objectiveLifecycleEventStream (Stream.entityStream objectiveLifecycleCategory objective.value) command catalog projections
   pure case outcome of
     Right (ProjectionCommandApplied _) -> Right ()
     Right _ -> Left ObjectiveUnavailable

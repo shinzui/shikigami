@@ -19,7 +19,6 @@ import Keiro.Projection.Catalog.Operations qualified as CatalogOps
 import Keiro.ReadModel.Rebuild qualified as Rebuild
 import Keiro.ReplayAudit qualified as ReplayAudit
 import Keiro.Workflow.Types (WorkflowId (..))
-import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id qualified as NominalId
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Error (StoreError)
@@ -28,6 +27,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types qualified as StoreTypes
 import Numeric.Natural (Natural)
 import Shikigami.Agent.Run.Key (RunKey (..))
+import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Attestation.Agent
 import Shikigami.Attestation.CallFacts (CallComplianceFacts (..), callComplianceFacts)
 import Shikigami.Attestation.Compliance
@@ -496,7 +496,8 @@ withEvidenceRuntime connectionString action =
           AppEnv
             { connectionSettings = defaultConnectionSettings connectionString,
               tracer,
-              metrics = Nothing
+              metrics = Nothing,
+              store = Nothing
             }
         store = postgresEvidenceStore kirokuStore
     registration <- runAppIO appEnv EvidenceCatalog.registerProjectionCatalog

@@ -28,7 +28,6 @@ import Keiro.Workflow (StepName (..), Workflow, WorkflowJournalEvent (..), appen
 import Keiro.Workflow.Awakeable (cancelAwakeable)
 import Keiro.Workflow.Child (awaitChild, spawnChild)
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
-import Kioku.App (AppEffects)
 import Kioku.Id (SessionId)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa), ApprovalDecision (..), ApprovalRequest (..))
@@ -36,6 +35,7 @@ import Shikigami.Agent.Approval.Workflow qualified as Approval
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunRouteKind (ExecutionOperationRoute))
+import Shikigami.App (AppEffects)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Executor (ExecutionRuntime (..), modelContext, runExecutionStore)

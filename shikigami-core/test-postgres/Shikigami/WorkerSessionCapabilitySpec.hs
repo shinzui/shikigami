@@ -16,7 +16,6 @@ import Keiro.Workflow.Awakeable (AwakeableId (..), awakeableIdText, awakeableIdT
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
 import Keiro.Workflow.Gc (WorkflowGcPolicy (..), gcWorkflowsOnce)
 import Keiro.Workflow.Instance (lookupInstance)
-import Kioku.App (AppEffects, AppEnv, runAppIO)
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizationFailure (..), ActionAuthorizer (..), allowAllActionAuthorizerForTests)
@@ -25,6 +24,7 @@ import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as Agent
+import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
 import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..))

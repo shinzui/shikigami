@@ -7,9 +7,9 @@ import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Hasql.Transaction (Transaction)
-import Kioku.App (AppEnv, runAppIO)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Principal (AgentIdentity (CompatibilityIdentity))
+import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Execution.Identity (ExecutionRootId (..))
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))

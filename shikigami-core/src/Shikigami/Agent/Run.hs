@@ -27,7 +27,6 @@ import Kioku.AI.File (loadAIRuntime)
 import Kioku.Api.Recall qualified as KiokuRecall
 import Kioku.Api.Scope (MemoryScope)
 import Kioku.Api.Types (Confidence (MediumConfidence), MemoryRecord (..), MemoryType (MemoryPattern))
-import Kioku.App (AppEnv, runAppIO)
 import Kioku.Id (MemoryId, SessionId, genMemoryId)
 import Kioku.Memory qualified as Memory
 import Kioku.Memory.Domain (RecordMemoryData (..))
@@ -37,6 +36,7 @@ import Kioku.Recall.Capability qualified as RecallCapability
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), RecallLimit, recallLimitInt)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (..))
+import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiReadContext, shikigamiWriteContext)
 import Shikigami.Memory.AliasStore qualified as AliasStore
 import Shikigami.Memory.Scope (agentScope, legacyAgentScope)

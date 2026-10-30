@@ -5,10 +5,10 @@ module Shikigami.Workspace.ConfiguredHost (configuredWorkspaceHost, configuredWo
 import Data.Map.Strict qualified as Map
 import Data.Time (getCurrentTime)
 import Hasql.Pool (Pool)
-import Kioku.App (AppEnv)
 import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Principal (identityText)
+import Shikigami.App (AppEnv)
 import Shikigami.Attestation.Resolve qualified as Profile
 import Shikigami.Directory (DirectoryHandle, identityLifecycleAdmission)
 import Shikigami.Execution.SelectionRuntime (currentExecutionAuthority)

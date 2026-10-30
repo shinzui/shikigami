@@ -22,6 +22,11 @@ provenance:
       at: 2026-10-30T19:46:17Z
       mode: "update"
       note: "Expand unused-service adoption to six children, current domain census, HTTP/live inspection, Haskell corpus and first-release qualification."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-30T21:20:20Z
+      mode: "implement"
+      note: "Begin native delivery and registered workflow recovery after accepted plans 92 and 93"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -38,20 +43,84 @@ Make actual queue, trigger, subscription and workflow paths correct under the ne
 
 ## Progress
 
-- [ ] M1: Startup, delivery admission, finalization and shutdown have native failure-path evidence.
-- [ ] M2: Every registered workflow and custom wake path passes same-build restart, cancellation and ownership-loss recovery.
+- [x] M1 (2026-10-30): Native ownership, admission, four-attempt finalization failure, invalid configuration, callback/cancellation/cleanup and joined admitted-work drain pass. Shared store/options, bounded queue/prefetch/health policies and all258 worker cases pass.
+- [x] M2 (2026-10-30): The five-family registry and current generation-specific wakes pass all375 serial PostgreSQL cases; all539 pure tests pass. Current effect interpretation changes are replay-neutral againste203470.
 
 ## Surprises & Discoveries
 
-The October 28 scope assumed a deployed population and an older domain census. The user and current tree invalidate those assumptions; no implementation acceptance is claimed.
+The October28 scope assumed a deployed population and an older domain census.
+The current common resume registry covers five workflow families. Existing native
+histories cover approval, conversation, execution and continuing-session recovery;
+those tests are retained after plan93's reset.
+
+M1 source review found unbracketed Shibuya application handles on both Kafka and
+PGMQ consumer paths. Kafka also reconnected after a retained permanent processor
+failure because waitApp returns for terminal processors. The shared allocator now
+masks ownership transfer, restores cancellation inside a finally boundary, stops
+exactly once and checks retained public lifecycle health. PGMQ selects
+StopAllOnFailure and retains the supported runJobWorkers allocator. Current native
+admission, finalization-failure, callback/cancellation cleanup and invalid-config
+cases pass; additional full runtime qualification remains in progress.
+
+The full worker candidate exposed one obsolete workspace patch-population test
+left after plan93; that test is removed, with current workspace admission/refusal
+coverage retained. Native permanent-finalizer failure can arrive as Shibuya's
+linked ProcessorFailure or retained public-health failure; the test runs its owner
+in an isolated async and accepts only those typed infrastructure paths, then
+checks one handler, four finalizer attempts and exactly one adapter cleanup.
+
+The initial eight native cases passed; final ConsumerApp covers ten policy/lifecycle cases and App runtime covers two service-interpreter cases.
+The store-reuse case deliberately supplies unusable connection settings while
+querying twice through the acquired handle. The options case supplies real
+process metrics and checks tracer/metric presence plus bounded seed verification.
+Whole consuming build and enabled test components pass, followed by all539 pure,375 PostgreSQL and258 worker cases.
+
+The released PGMQ path exposes no application retry-budget override through
+Keiro's public JobTuning. Retain its five-attempt/1.5second poll/ack default and
+rely on process supervision after exhaustion; no hidden adapter field or longer
+same-pool outage claim is introduced. Queue inbox capacity is now1 and initial
+visibility covers two configured attempt windows plus60seconds; active work still
+renews10/30seconds. Queue health uses attempt+30seconds. Idle paused processors
+stay healthy; paused admitted work still expires against last progress.
+
+Startup previously forced only RunEvidence validation explicitly. It now forces
+all four generated aggregate event streams before registration. Runtime connection
+settings now set the guide-required thirty-second statement timeout.
 
 ## Decision Log
+
+2026-10-30: Introduce the service-owned Shikigami.App interpreter over the released
+Kioku effect row plus a Reader of RunCommandOptions. Runtime environments may bind
+their already acquired KirokuStore; standalone commands may acquire one. The public
+runKirokuStoreWith interpreter removes repeated pool/notifier acquisition without
+casts or private APIs. Every aggregate catalog writer takes command options from
+that interpreter, carrying process tracer/metrics while preserving upstream bounds.
+This changes no recorded workflow operation, seed or wire value.
 
 2026-10-30: Apply the user's first-release policy and exhaustive current-guide adoption. Replace old-history qualification with fresh provisioning and same-build recovery. Preserve real transaction, authority and privacy invariants.
 
 ## Outcomes & Retrospective
 
-Not implemented. Record outcomes, remaining profile limitations and triaged friction at completion.
+Both milestones are accepted. The service interpreter reuses acquired stores and
+threads command telemetry across all four aggregate writers. Consumers own their
+Shibuya lifetimes through masked transfer and joined cleanup; infrastructure and
+non-retryable Kafka failures reach process supervision. Current queue intake,
+visibility and health budgets follow the configured attempt horizon, and idle
+paused health no longer expires solely because work is intentionally paused.
+
+[Native runtime evidence](../evidence/keiro-0.22/native-runtime-lifecycle.md) records
+the five-family recovery census, exact consumer policies and retained boundaries.
+[Results](../evidence/keiro-0.22/native-runtime-results.txt) record all539 pure,
+375 PostgreSQL and258 worker cases plus the whole enabled-component build. Current
+DSL diff is empty/replay-neutral; unknown guard relations/remedies now fail CI.
+
+The38 guide groups have clause dispositions. Pending selected inspection/provider
+and administrative clauses belong to106, and final artifact/Linux/load observations
+to95. Their pending rows stay visible; this child does not certify those profiles.
+REL20/27 inspection ownership is corrected to106 without changing the denominator.
+ADR38 records accepted ownership/budget decisions. The one remaining retired
+workspace patch-population test is removed; real current workspace refusal and
+recovery coverage remains. No new friction met the recording threshold.
 
 ## Context and Orientation
 

@@ -45,7 +45,6 @@ import Keiro.Workflow.Instance (lookupInstance)
 import Keiro.Workflow.Resume (ResumeSummary (..), defaultWorkflowResumeOptions, resumeWorkflowsOnce)
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
 import Kioku.Api.Types (Confidence (MediumConfidence), MemoryRecord (..), MemoryType (MemoryPattern))
-import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (SessionId, genMemoryId, genSessionId, idText)
 import Kioku.Memory qualified as Memory
 import Kioku.Memory.Domain (RecordMemoryData (..))
@@ -77,6 +76,7 @@ import Shikigami.Agent.Run.Key (RunKey (..), runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunFailure (..), AgentRunHooks (..), SinkIntent (..), agentRunFailureDetail, agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, executionRuntime, publishSinkIntent, runAgentRunWorkflow)
 import Shikigami.AgentRun.Status qualified as RunStatus
+import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Profile
   ( AllowedCall (..),
@@ -148,7 +148,7 @@ tests databaseFixture =
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 deps = testDeps appEnv behaviorEnv defaultAgentRunHooks
                 oldJob = retryVersioningJob "heartbeat:test-retry-old"
                 freshJob = retryVersioningJob "heartbeat:test-retry-fresh"
@@ -194,7 +194,7 @@ tests databaseFixture =
                         _ -> pure ()
                     )
             behaviorEnv <- newBehaviorEnvWithTraceSink (Just traceSink)
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 declaration = capabilityDecl "overlay-lifecycle" (Skill {path = "../agents/skills/triage-note"}) [workspaceReadId] (Just overlayIdentity) [KawaDigest {subjectType = "overlay", verb = "overlay.read"}]
                 hooks =
                   AgentRunHooks
@@ -236,7 +236,7 @@ tests databaseFixture =
             active <- newIORef False
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 unknownId = expectCapabilityRight (CapabilityOverlay.mkCapabilityId "workspace.unknown")
                 mutation = capabilityDescriptor "workspace.write" "v1" CapabilityOverlay.IdempotentMutation
                 provider = trackingCapabilityProvider events active "unused" workspaceReadV1 (Right ())
@@ -272,7 +272,7 @@ tests databaseFixture =
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
             attempts <- newIORef (0 :: Int)
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 hooks =
                   defaultAgentRunHooks
                     { beforeStepBody = \stepName ->
@@ -300,7 +300,7 @@ tests databaseFixture =
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
             attempts <- newIORef (0 :: Int)
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 hooks =
                   defaultAgentRunHooks
                     { beforeStepBody = \stepName ->
@@ -333,7 +333,7 @@ tests databaseFixture =
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [decl]
                 refusedJob =
                   job
@@ -360,7 +360,7 @@ tests databaseFixture =
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 neverDecl = withRecordPolicy Never decl
                 deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [neverDecl]
                 neverJob = job {idempotencyKey = RunKey "heartbeat:test-record-never"}
@@ -386,7 +386,7 @@ tests databaseFixture =
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 alwaysDecl = withRecordPolicy Always missingTaskDecl
                 deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [alwaysDecl]
 
@@ -405,7 +405,7 @@ tests databaseFixture =
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
             forM_ [1 .. 5 :: Int] (recordRecallFixture appEnv)
             limit <- either (assertFailure . Text.unpack) pure (mkRecallLimit 3)
             recalled <- recallPriorLearnings appEnv limit (agentScope (CompatibilityAgent "recall-limit-agent")) "recall fixture"
@@ -414,7 +414,7 @@ tests databaseFixture =
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 principal = either (error . Text.unpack) id (mkAgentPrincipal "agent_renamed")
                 aliasPool = pool kirokuStore
             recordLegacyRecallFixture appEnv "old-handle"
@@ -429,7 +429,7 @@ tests databaseFixture =
         (withShikigamiFreshDatabase databaseFixture) \connStr -> do
           tracer <- noopTracer
           let settings = defaultConnectionSettings connStr
-              appEnv = AppEnv {connectionSettings = settings, tracer, metrics = Nothing}
+              appEnv = AppEnv {connectionSettings = settings, tracer, metrics = Nothing, store = Nothing}
               principal = either (error . Text.unpack) id (mkAgentPrincipal "agent_heartbeat")
               verified = VerifiedIdentity principal
           withStore settings \firstStore -> do
@@ -453,7 +453,7 @@ tests databaseFixture =
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 deps = testDeps appEnv behaviorEnv defaultAgentRunHooks
 
             firstRun <- runAgentRunWorkflow deps job
@@ -477,7 +477,7 @@ tests databaseFixture =
             testWithApplication (pure (kawaDoorwayApplication received)) \port -> do
               tracer <- noopTracer
               behaviorEnv <- newBehaviorEnv
-              let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+              let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                   pool' = pool kirokuStore
                   deps =
                     (testDeps appEnv behaviorEnv defaultAgentRunHooks)
@@ -507,7 +507,7 @@ tests databaseFixture =
             behaviorEnv <- newBehaviorEnv
             counts <- newIORef Map.empty
             shouldCrash <- newIORef True
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 hooks =
                   defaultAgentRunHooks
                     { beforeStepBody = \stepName -> do
@@ -555,7 +555,7 @@ tests databaseFixture =
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [profiledDecl]
 
             result <- runAgentRunWorkflow deps profileRefusalJob
@@ -577,7 +577,7 @@ tests databaseFixture =
             behaviorEnv <- newBehaviorEnv
             resolverCalls <- newIORef (0 :: Int)
             shouldCrash <- newIORef True
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 profileStore = postgresProfileStore (pool kirokuStore)
                 originalContent = workflowProfile (ProfileVersion "1")
                 originalDigest = profileDigest originalContent
@@ -630,7 +630,7 @@ tests databaseFixture =
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 content = workflowProfileWith defaultThinkingProhibitions (ProfileVersion "1")
                 digest = profileDigest content
                 resolved = resolvedWorkflowProfile content digest
@@ -656,7 +656,7 @@ tests databaseFixture =
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 content = workflowProfileWith defaultThinkingProhibitions (ProfileVersion "1")
                 digest = profileDigest content
                 resolved = resolvedWorkflowProfile content digest
@@ -684,7 +684,7 @@ tests databaseFixture =
             behaviorEnv <- newBehaviorEnv
             counts <- newIORef Map.empty
             shouldCrash <- newIORef True
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 hooks =
                   defaultAgentRunHooks
                     { beforeStepBody = \stepName -> do
@@ -733,7 +733,7 @@ tests databaseFixture =
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [flowDecl]
 
             result <- runAgentRunWorkflow deps flowJob
@@ -759,7 +759,7 @@ tests databaseFixture =
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
             behaviorEnv <- newBehaviorEnv
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [flowDecl]
 
             recordPriorEscalation appEnv (runKeyText ((.idempotencyKey) flowMemoryJob))
@@ -800,7 +800,7 @@ tests databaseFixture =
                   newDirectoryHandle
                     (staticDirectorySource [PrincipalRecord {principalId = "agent_heartbeat", handle = "heartbeat", lifecycle = Directory.Active}])
                 refreshDirectory directory >>= either (assertFailure . Text.unpack) pure
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     env = (testConversationEnv appEnv behaviorEnv [conversationDecl]) {Conversation.directory = directory}
 
                 turn <- Conversation.runConversationTurn env conversationDecl firstAddressedMessage
@@ -820,7 +820,7 @@ tests databaseFixture =
               withStore (defaultConnectionSettings connStr) \kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     env = testConversationEnv appEnv behaviorEnv [conversationDecl]
 
                 firstTurn <- Conversation.runConversationTurn env conversationDecl firstAddressedMessage
@@ -878,7 +878,7 @@ tests databaseFixture =
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     env = testConversationEnv appEnv behaviorEnv [missingTaskDecl]
 
                 firstFailure <- Conversation.runConversationTurn env missingTaskDecl permanentConversationMessage
@@ -895,7 +895,7 @@ tests databaseFixture =
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     declaration = capabilityDecl "conversation-overlay" (Skill {path = "unused"}) [workspaceReadId] (Just overlayIdentity) []
                     env = testConversationEnv appEnv behaviorEnv [declaration]
                     message = permanentConversationMessage
@@ -918,7 +918,7 @@ tests databaseFixture =
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     env = testConversationEnv appEnv behaviorEnv [conversationDecl]
 
                 decoy <- startDecoyConversationSession appEnv "heartbeat" "conv_decoy_thread"
@@ -962,7 +962,7 @@ tests databaseFixture =
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     env = testConversationEnv appEnv behaviorEnv [conversationDecl]
 
                 -- Nothing has run, so there is no instance and no generation.
@@ -993,7 +993,7 @@ tests databaseFixture =
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     env = testConversationEnv appEnv behaviorEnv [conversationDecl]
                     messages = [conversationMessageNumbered n | n <- [1 .. 5]]
 
@@ -1072,7 +1072,7 @@ tests databaseFixture =
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     env = testConversationEnvIdle (secondsToNominalDiffTime 1) appEnv behaviorEnv [conversationDecl]
 
                 firstTurn <- Conversation.runConversationTurn env conversationDecl firstAddressedMessage
@@ -1109,7 +1109,7 @@ tests databaseFixture =
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     env = testConversationEnvIdle (secondsToNominalDiffTime 1) appEnv behaviorEnv [conversationDecl]
 
                 firstTurn <- Conversation.runConversationTurn env conversationDecl firstAddressedMessage
@@ -1153,7 +1153,7 @@ tests databaseFixture =
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     env = testConversationEnvIdle (secondsToNominalDiffTime 1) appEnv behaviorEnv [conversationDecl]
 
                 firstTurn <- Conversation.runConversationTurn env conversationDecl firstAddressedMessage
@@ -1217,7 +1217,7 @@ tests databaseFixture =
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     env = testConversationEnv appEnv behaviorEnv [missingTaskDecl]
 
                 failed <- Conversation.runConversationTurn env missingTaskDecl permanentConversationMessage
@@ -1246,7 +1246,7 @@ tests databaseFixture =
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     env = testConversationEnv appEnv behaviorEnv [conversationDecl]
                     thirdMessage = thirdAddressedMessage
 
@@ -1300,7 +1300,7 @@ tests databaseFixture =
         [ testCase "an explicitly enrolled root keeps one envelope and rejects descendant enrollment" do
             withShikigamiFreshDatabase databaseFixture \connStr -> do
               tracer <- noopTracer
-              let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+              let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
               now <- getCurrentTime
               let envelope = Resources.Envelope (Map.singleton Resources.LifetimeDescendants (Resources.Limited 1)) (addUTCTime 3600 now)
               first <- runAppIO appEnv (enrollRootRun envelope (capabilityJob "heartbeat" "new-root"))
@@ -1318,7 +1318,7 @@ tests databaseFixture =
               tracer <- noopTracer
               parentSession <- genSessionId
               now <- getCurrentTime
-              let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+              let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                   root = ExecutionRootId "delegation-resource-root"
                   envelope = Resources.Envelope (Map.singleton Resources.LifetimeDescendants (Resources.Limited 1)) (addUTCTime 3600 now)
                   parentName = WorkflowName "shikigami.test-resource-parent"
@@ -1348,7 +1348,7 @@ tests databaseFixture =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 parentSession <- genSessionId
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     deps = testDeps appEnv behaviorEnv defaultAgentRunHooks
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-parent"
                     parentWorkflowId = WorkflowId "delegate-parent-1"
@@ -1377,7 +1377,7 @@ tests databaseFixture =
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 parentSession <- genSessionId
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-cycle"
                     parentWorkflowId = WorkflowId "delegate-cycle-parent"
                     supervisor = decl {delegates = ["heartbeat"]}
@@ -1404,7 +1404,7 @@ tests databaseFixture =
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 parentSession <- genSessionId
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-exhausted"
                     parentWorkflowId = WorkflowId "delegate-exhausted-parent"
                     supervisor = decl {delegates = ["heartbeat"]}
@@ -1421,7 +1421,7 @@ tests databaseFixture =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 proofAgents <- loadProofAgents
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks proofAgents
                     parentWorkflowId = runJobWorkflowId researchSupervisorJob
                     webWorkflowId = delegatedWorkflowId parentWorkflowId "web-researcher" "delegate-0"
@@ -1494,7 +1494,7 @@ tests databaseFixture =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 proofAgents <- loadProofAgents
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks (flowDelegationDecl : proofAgents)
                     parentWorkflowId = runJobWorkflowId flowDelegationJob
                     childWorkflowId = delegatedWorkflowId parentWorkflowId "web-researcher" "web-researcher"
@@ -1520,7 +1520,7 @@ tests databaseFixture =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 proofAgents <- loadProofAgents
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     deniedDecl = flowDelegationDecl {delegates = []}
                     deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks (deniedDecl : proofAgents)
                 refused <- try @DelegationError (runAgentRunWorkflow deps flowDelegationDeniedJob)
@@ -1531,7 +1531,7 @@ tests databaseFixture =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 parentSession <- genSessionId
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [decl, missingTaskDecl]
                     supervisor = collectionSupervisorDecl
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-collect"
@@ -1557,7 +1557,7 @@ tests databaseFixture =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 parentSession <- genSessionId
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [decl, missingTaskDecl]
                     supervisor = collectionSupervisorDecl
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-cancel"
@@ -1589,7 +1589,7 @@ tests databaseFixture =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 testWithApplication (pure (\request respond -> if take 2 (pathInfo request) == ["v1", "sources"] then kawaDoorwayApplication remote request respond else approvalDanwaApplication asks request respond)) \port -> do
-                  let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                  let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                       danwaConfig = DanwaConfig {baseUrl = localApprovalBaseUrl port, agentParticipant = "part_agent_test"}
                       kizashiConfig = KizashiConfig {baseUrl = "http://127.0.0.1:1", defaultRecipient = "recipient:test"}
                   sinkHttp <- testSinkHttpFor danwaConfig
@@ -1676,7 +1676,7 @@ tests databaseFixture =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 aidRef <- newIORef Nothing
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     deps = testDepsWithApproval appEnv behaviorEnv defaultAgentRunHooks (approvalEnv aidRef)
 
                 parked <- runAgentRunWorkflow deps approvalJob
@@ -1716,7 +1716,7 @@ tests databaseFixture =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 aidRef <- newIORef Nothing
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     deps = testDepsWithApproval appEnv behaviorEnv defaultAgentRunHooks (approvalEnv aidRef)
 
                 parked <- runAgentRunWorkflow deps rejectedJob
@@ -1738,7 +1738,7 @@ tests databaseFixture =
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     runJob = approvalJob {idempotencyKey = RunKey "heartbeat:test-approval-notify-permanent"}
                     deps =
                       (testDepsWithApproval appEnv behaviorEnv defaultAgentRunHooks defaultApprovalEnv)
@@ -1768,7 +1768,7 @@ tests databaseFixture =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 posts <- newIORef (0 :: Int)
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     runJob = approvalJob {idempotencyKey = RunKey "heartbeat:test-approval-notify-transient"}
                     deps =
                       (testDepsWithApproval appEnv behaviorEnv defaultAgentRunHooks defaultApprovalEnv)
@@ -1806,7 +1806,7 @@ tests databaseFixture =
                 behaviorEnv <- newBehaviorEnv
                 attemptsRef <- newIORef (0 :: Int)
                 posts <- newIORef []
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     runJob = approvalJob {idempotencyKey = RunKey "heartbeat:test-approval-notify-crash-window"}
                     notifier =
                       ApprovalWorkflow.ApprovalNotifier
@@ -1866,7 +1866,7 @@ tests databaseFixture =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 aidRef <- newIORef Nothing
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     deps = testDepsWithApprovalAndDeadline appEnv behaviorEnv defaultAgentRunHooks (approvalEnv aidRef) (Just (secondsToNominalDiffTime 1))
 
                 parked <- runAgentRunWorkflow deps timeoutJob
@@ -1887,7 +1887,7 @@ tests databaseFixture =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 aidRef <- newIORef Nothing
-                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
+                let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     deps = testDepsWithApprovalAndDeadline appEnv behaviorEnv defaultAgentRunHooks (approvalEnv aidRef) (Just (secondsToNominalDiffTime 1))
 
                 parked <- runAgentRunWorkflow deps answeredBeforeDeadlineJob

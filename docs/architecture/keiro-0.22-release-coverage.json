@@ -246,8 +246,12 @@
       "section": "0.22.0.0 — 2026-10-27",
       "feature": "- `shard status` adds `observed_at`, `heartbeat_at`, `updated_at` and `lease_age_seconds` from database-clock observations.",
       "status": "pending",
-      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md",
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ],
+      "rationale": "Corrected provisional owner: this is selected administrative/HTTP inspection rather than a native delivery contract. Remains pending until106 executes it."
     },
     {
       "id": "REL-21",
@@ -267,9 +271,13 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.22.0.0 — 2026-10-27",
       "feature": "- Preserve multiline generated/default expressions in schema fingerprints so pooled and full-snapshot comparisons agree.",
-      "status": "pending",
+      "status": "implemented",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/cohort-and-schema.md",
+        "docs/evidence/keiro-0.22/migrations-smoke.txt"
+      ],
+      "rationale": "Plan92 current fresh schema and drift comparisons use the released fingerprint path; no application schema-fingerprint reimplementation exists."
     },
     {
       "id": "REL-23",
@@ -323,8 +331,12 @@
       "section": "0.22.0.0 — 2026-10-27",
       "feature": "- Delivery expiry terminates an incomplete response and returns shared admission without a second response. Health recovers after cancellation. Feeds retain fresh schema checks and clock-bearing snapshots; retiring views return `view_retiring` until cleanup joins.",
       "status": "pending",
-      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md",
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ],
+      "rationale": "Corrected provisional owner: this is selected administrative/HTTP inspection rather than a native delivery contract. Remains pending until106 executes it."
     },
     {
       "id": "REL-28",
@@ -442,9 +454,13 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.21.0.0 — 2026-10-14",
       "feature": "- Candidate Language 6 supports scalar list fields in integration contracts, with ordered JSON arrays, required-field and per-element decoding, and rejection of list-valued outbox or dedupe keys.",
-      "status": "pending",
+      "status": "not-applicable",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt"
+      ],
+      "rationale": "No generated public integration-contract list or literal/declared ID transition exists. Plan93 qualifies actual queue lineage, current codecs and total bindings without inventing a public contract."
     },
     {
       "id": "REL-37",
@@ -491,9 +507,13 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.21.0.0 — 2026-10-14",
       "feature": "- Generated read-model definitions, query contracts, holes, and harness imports share one whole-name stem, fixing [BUG-11](docs/bug-reports/11-read-model-harness-imports-inconsistent-keyword-segment-name.md). Scaffolding also checks provably missing imports between generated modules before writing.",
-      "status": "pending",
+      "status": "implemented",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt"
+      ],
+      "rationale": "Plan93 regenerates all four aggregate contracts and whole-name modules; every159 generated service assertion passes with real retained application witnesses."
     },
     {
       "id": "REL-41",
@@ -502,9 +522,13 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.21.0.0 — 2026-10-14",
       "feature": "- Generated aggregate harnesses prove hole-owned live initial transitions using the consumer's history-backed `LiveWitness` through `BehaviorContract`, which exports `behaviorObligationReport`. Pending or invalid witnesses fail whole-service conformance, fixing [BUG-10](docs/bug-reports/10-initial-hole-harness-requires-acceptance-from-empty-registers.md). Existing wire shapes, replay semantics, fold fingerprints, and snapshot identity remain unchanged for this fix.",
-      "status": "pending",
+      "status": "implemented",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt"
+      ],
+      "rationale": "Plan93 regenerates all four aggregate contracts and whole-name modules; every159 generated service assertion passes with real retained application witnesses."
     },
     {
       "id": "REL-42",
@@ -513,9 +537,15 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.21.0.0 — 2026-10-14",
       "feature": "- `diff --since` classifies command/event/state removals and writes compatibility and replay-impact reports before its breaking gate exits nonzero. Replay analysis resolves each revision against its own declarations.",
-      "status": "pending",
+      "status": "implemented",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/evidence/keiro-0.22/current-runtime-diff.json",
+        "docs/evidence/keiro-0.22/current-runtime-replay.json"
+      ],
+      "rationale": "Plan93 retains full strict breaking and replay reports before exit1; current94 runtime diff is empty/replay-neutral."
     },
     {
       "id": "REL-43",
@@ -524,9 +554,13 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.21.0.0 — 2026-10-14",
       "feature": "- Contract parsing accepts declared IDs named `List`, `Optional`, `Map`, and `Set`, including adjacent fields without semicolons. Literal/declared contract ID comparisons include resolved admission, so same-prefix widening or narrowing is classified as public breaking.",
-      "status": "pending",
+      "status": "not-applicable",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt"
+      ],
+      "rationale": "No generated public integration-contract list or literal/declared ID transition exists. Plan93 qualifies actual queue lineage, current codecs and total bindings without inventing a public contract."
     },
     {
       "id": "REL-44",
@@ -580,9 +614,13 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.20.0.0 — 2026-10-12",
       "feature": "- `ShardWorkerError` gains `ShardReaderStartupFailed`; extend exhaustive matches in consumer diagnostics and supervision code.",
-      "status": "pending",
+      "status": "not-applicable",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ],
+      "rationale": "Current census has no application Kiroku subscription/shard group, topology resize/rebind or direct ShardWorkerError match. No namespace or private checkpoint adapter is introduced just to exercise the release."
     },
     {
       "id": "REL-48",
@@ -617,9 +655,15 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.20.0.0 — 2026-10-12",
       "feature": "- `keiro-test-support` provides same-database resource fixtures for contention tests and a durable benchmark fixture with optional external PostgreSQL.",
-      "status": "pending",
+      "status": "implemented",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/guarded-outcome-m1.txt",
+        "docs/evidence/keiro-0.22/guarded-execution-protocol.md"
+      ],
+      "rationale": "Published native migrated fixtures are used for actual same-database concurrent requests and guarded rollback. No external benchmark fixture is claimed."
     },
     {
       "id": "REL-51",
@@ -628,9 +672,13 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.20.0.0 — 2026-10-12",
       "feature": "- `resizeShardCount`/`resizeShardCountTx` atomically equalize public Kiroku checkpoints and Keiro lease rows for stopped, fully relinquished groups. Same-size resize is supported and can replay already handled events.",
-      "status": "pending",
+      "status": "not-applicable",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ],
+      "rationale": "Current census has no application Kiroku subscription/shard group, topology resize/rebind or direct ShardWorkerError match. No namespace or private checkpoint adapter is introduced just to exercise the release."
     },
     {
       "id": "REL-52",
@@ -639,9 +687,13 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.20.0.0 — 2026-10-12",
       "feature": "- Refuse mismatched shard startup before writing rows and classify typed decode failures as deterministic. Existing projections retain the default stop-on-undecodable policy.",
-      "status": "pending",
+      "status": "not-applicable",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ],
+      "rationale": "Current census has no application Kiroku subscription/shard group, topology resize/rebind or direct ShardWorkerError match. No namespace or private checkpoint adapter is introduced just to exercise the release."
     },
     {
       "id": "REL-53",
@@ -725,9 +777,13 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.19.0.1 — 2026-10-05",
       "feature": "- No upgrade blueprint edge: existing consumers retain admitted plans; no source, fixture or database intervention is required.",
-      "status": "pending",
+      "status": "existing",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ],
+      "rationale": "The release explicitly has no consumer intervention. Plan92 selects the final published cohort; no fictional upgrade shim is added."
     },
     {
       "id": "REL-59",
@@ -753,9 +809,13 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.19.0.0 — 2026-09-25",
       "feature": "- Upgrade to [`shibuya-core`](mori://shinzui/shibuya/packages/shibuya-core) 0.10.0.0 and [`shibuya-pgmq-adapter`](mori://shinzui/shibuya/packages/shibuya-pgmq-adapter) 0.16.1.0. Shibuya 0.10 is a breaking release: `ShutdownConfig` gains `totalShutdownTimeout`, `ConfigError` and `PolicyError` gain constructors, `ProcessorState.Processing` gains a last-progress field, and a permanent framework-owned finalization failure now throws `ProcessorFailure` instead of halting gracefully. Consumers that construct or match these types directly must adapt; Keiro's own public API is unchanged by the upgrade.",
-      "status": "pending",
+      "status": "implemented",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ],
+      "rationale": "Current AppConfig defaults, three-field Processing/Paused health, total shutdown fields and native permanent-finalization failure paths are adopted. Handles are bracketed and failures reach process supervision."
     },
     {
       "id": "REL-61",
@@ -764,9 +824,13 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.19.0.0 — 2026-09-25",
       "feature": "- `keiro`: `RunCommandOptions` gains `seedVerifyInFlightLimit`, and `KeiroMetrics` gains `snapshotSeedSkipped` and `snapshotSeedVerificationFailed`. Code that constructs either record directly must supply the new fields.",
-      "status": "pending",
+      "status": "implemented",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ],
+      "rationale": "All four aggregate command writers use default-based interpreter options with real process telemetry. AppSpec verifies seedVerifyInFlightLimit1; newKeiroMetrics supplies the full released metric record."
     },
     {
       "id": "REL-62",
@@ -775,9 +839,13 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.19.0.0 — 2026-09-25",
       "feature": "- `keiro` bounds sampled snapshot-seed full replays to one in-flight task per process by default, with new counters for skipped samples and unexpected verification failures.",
-      "status": "pending",
+      "status": "existing",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ],
+      "rationale": "The process-wide verification bound stays at1 through defaults. All four application aggregate snapshots remain disabled; no sampling task or false skipped-success claim is invented."
     },
     {
       "id": "REL-63",
@@ -786,9 +854,14 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.19.0.0 — 2026-09-25",
       "feature": "- Category reads and category subscriptions now use Kiroku's category index, avoiding work proportional to the number of streams in the category.",
-      "status": "pending",
+      "status": "implemented",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/released-cohort.json"
+      ],
+      "rationale": "The final published Store0.12/Keiro0.22 cohort contains these internal read/retention fixes, and application code uses the public interpreter/read boundaries without a counteracting shim. AppSpec proves acquired-handle reuse; native histories pass. No statistical performance result is claimed."
     },
     {
       "id": "REL-64",
@@ -797,9 +870,14 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.19.0.0 — 2026-09-25",
       "feature": "- Kiroku 0.9.0.1's idle-publisher retention fix removes the worker and command heap growth reported as BUG-1 and BUG-2.",
-      "status": "pending",
+      "status": "implemented",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/released-cohort.json"
+      ],
+      "rationale": "The final published Store0.12/Keiro0.22 cohort contains these internal read/retention fixes, and application code uses the public interpreter/read boundaries without a counteracting shim. AppSpec proves acquired-handle reuse; native histories pass. No statistical performance result is claimed."
     },
     {
       "id": "REL-65",
@@ -808,9 +886,13 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.19.0.0 — 2026-09-25",
       "feature": "- Shibuya 0.10 and `shibuya-pgmq-adapter` 0.16.1.0 bring lifecycle and acknowledgement fixes to every Keiro worker: exception-safe startup and shutdown bounded by a total deadline, wake-ups for idle intake after a halt or finalization failure, a single failure delivery under `StopAllOnFailure`, exactly-once dead-letter movement across ambiguous commits, and serialized, cancellation-safe acknowledgement handles.",
-      "status": "pending",
+      "status": "implemented",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ],
+      "rationale": "Native ordinary/superseded admission, four-attempt finalization failure, callback/cancellation/cleanup failure, joined admitted-work drain and actual supervised PGMQ duplicate/DLQ tests exercise the released lifecycle. Both consumers own cleanup and infrastructure failure supervision."
     },
     {
       "id": "REL-66",
@@ -836,9 +918,13 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.19.0.0 — 2026-09-25",
       "feature": "- New `keiro-retention` test suite in `just verify` measures post-major heap across store, adapter, process-manager, router, projection, command, hydration, and tail-read workloads.",
-      "status": "pending",
+      "status": "not-applicable",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ],
+      "rationale": "This is a producer verification target, not a runtime consumer API. The service consumes the fixed released cohort; final application artifact/load observations remain95 obligations rather than a copied library benchmark."
     },
     {
       "id": "REL-68",
@@ -847,9 +933,13 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.19.0.0 — 2026-09-25",
       "feature": "- New `keiro-reexports` verification policy fails the build when generated code imports a `keiro-core` module that `keiro` does not re-export. The in-repo conformance suites depend on `keiro-core` directly and structurally cannot catch that omission, which shipped in 0.7.0.0 and was caught only at the 0.18.0.0 release gate.",
-      "status": "pending",
+      "status": "not-applicable",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ],
+      "rationale": "This is a producer CI policy, not an application runtime API. The complete released generated Cabal fragment still lists keiro-core, so downstream conformance compilation alone does not prove umbrella reexport completeness. No producer-policy clone is added; the service consumes the published fixed0.22 cohort."
     },
     {
       "id": "REL-69",

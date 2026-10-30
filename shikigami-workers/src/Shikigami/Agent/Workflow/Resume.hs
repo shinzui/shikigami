@@ -6,9 +6,9 @@
 -- journal and continues from the first step that did not.
 --
 -- The resume worker needs a /registry/: a map from workflow name to the code
--- that runs it. All three workflow families are registered here — agent runs, approval
--- children and conversations — because a resume worker that knows only one of them would
--- silently leave the other suspended forever.
+-- that runs it. The shared registry includes agent runs, approval children,
+-- conversations, execution drivers and continuing workers. Omitting any family
+-- would leave its suspended instances without a progress owner.
 module Shikigami.Agent.Workflow.Resume
   ( runResumeWorker,
     workflowRegistry,
@@ -38,7 +38,7 @@ import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, diffUTCTime, getCurrentTime)
 import Keiro.Workflow.Gc (runWorkflowGcWorkerWith)
 import Keiro.Workflow.Resume (ResumeSummary (..), WorkflowRegistry, resumeWorkflowsOnceUpTo, runWorkflowResumeWorkerWith)
-import Kioku.App (AppEffects, runAppIO)
+import Shikigami.App (AppEffects, runAppIO)
 import Shikigami.Health.Worker (LoopName (ResumeLoop, WorkflowGcLoop))
 import Shikigami.Log qualified as Log
 import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, conversationEnv, envLogger)

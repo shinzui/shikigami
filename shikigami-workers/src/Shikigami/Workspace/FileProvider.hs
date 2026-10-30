@@ -32,10 +32,10 @@ import Data.Text.Encoding qualified as Encoding
 import Effectful (Eff)
 import Effectful.Dispatch.Static (unsafeEff_)
 import Hasql.Transaction (Transaction)
-import Kioku.App (AppEffects, AppEnv, runAppIO)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.Principal (identityText)
+import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider (DurableAdapter (..), DurableToolContract (..))
 import Shikigami.Decision.Contract (versionedDigest)

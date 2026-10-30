@@ -3,9 +3,9 @@ module Shikigami.Workflow.Registry (workflowRegistry) where
 
 import Data.Map.Strict qualified as Map
 import Keiro.Workflow.Resume (WorkflowRegistry)
-import Kioku.App (AppEffects)
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Workflow qualified as Agent
+import Shikigami.App (AppEffects)
 import Shikigami.Execution.Driver qualified as Execution
 import Shikigami.WorkerSession.Workflow qualified as WorkerSession
 

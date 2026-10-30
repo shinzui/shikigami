@@ -61,7 +61,7 @@ Consulted decisions: [ADR-27](../adr/0027-the-first-release-establishes-one-clea
 |---|---|---|---|---|---|
 | EP-1 | Released cohort and fresh schema | [92](../plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md) | None | None | Complete |
 | EP-2 | Guarded commands and complete domain adoption | [93](../plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md) | EP-1 | None | Complete |
-| EP-3 | Native delivery and workflow recovery | [94](../plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md) | EP-1 | EP-2 | Not Started |
+| EP-3 | Native delivery and workflow recovery | [94](../plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md) | EP-1 | EP-2 | Complete |
 | EP-4 | Administrative CLI, HTTP and live inspection | [106](../plans/106-expose-bounded-administrative-inspection-and-live-feeds.md) | EP-1 | EP-3 | Not Started |
 | EP-5 | Haskell and service architecture practices | [107](../plans/107-adopt-current-haskell-and-service-architecture-practices.md) | EP-1 | None | Not Started |
 | EP-6 | Integrated first-release qualification | [95](../plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md) | EP-1, EP-2, EP-3, EP-4, EP-5 | None | Not Started |
@@ -82,13 +82,13 @@ EP-6 owns final source/release inventory validation, exact-candidate evidence, f
 
 ## Progress
 
-2026-10-30: EP-1 and EP-2 are Complete. Released cohort/fresh schema and native
-guarded command adoption are accepted. The current domain candidate passes 539 pure,
-373 PostgreSQL, 159 service-conformance, 13 queue and six diagram checks. Obsolete
-queue readers and nine production patch selections are retired under ADR-27 with
-strict breaking reports. Plans94/106 retain explicit delivery/operations clauses
-from the shared catalog guide. EP-3 is next; the final closure, Linux role runtime,
-HTTP/live inspection and whole-corpus final gate remain outstanding.
+2026-10-30: EP-1, EP-2 and EP-3 are Complete. The released schema/cohort, current
+domain contract and native delivery/recovery are accepted. Latest candidate passes
+539 pure,375 PostgreSQL and258 worker tests, including ten consumer policy/lifecycle
+cases and two store/options cases. The five-family registry and generation-specific
+wakes are covered. Shared source-guide clauses retain explicit pending owners for
+106's selected inspection/provider work and95's final artifact/Linux/load evidence.
+EP-4 is next; EP-5 and the final whole-corpus gate remain outstanding.
 
 ## Surprises & Discoveries
 

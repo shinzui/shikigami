@@ -71,7 +71,7 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
-import Keiro.Command (CommandError (CommandRejected, RetryExhausted, StoreFailed), DomainCommandHandler (..), DomainCommandOutcome (..), DomainDecision (..), SilentDomainDecision (SilentRejected), defaultRunCommandOptions)
+import Keiro.Command (CommandError (CommandRejected, RetryExhausted, StoreFailed), DomainCommandHandler (..), DomainCommandOutcome (..), DomainDecision (..), SilentDomainDecision (SilentRejected))
 import Keiro.Projection (DomainProjectionCommandOutcome (..), GuardedCatalogOutcome (..), runDomainCommandWithCatalogProjectionsGuarded)
 import Keiro.ReadModel (runQuery)
 import Keiro.Stream qualified as Stream
@@ -84,6 +84,7 @@ import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Approval (ApprovalDecision (..), ReviewRequestId, reviewRequestIdFor)
 import Shikigami.Agent.Principal (AgentIdentity)
+import Shikigami.App (CommandEffects, commandOptions)
 import Shikigami.Decision.Contract (ModelDescriptor, versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Catalog (withLiveExecution)
@@ -103,7 +104,7 @@ import Shikigami.Store.ExecutionSelection qualified as Calls
 
 type ExecutionReadEffects es = (IOE :> es, Store :> es, Error StoreError :> es)
 
-type ExecutionEffects es = (ExecutionReadEffects es, KirokuStoreResource :> es)
+type ExecutionEffects es = (ExecutionReadEffects es, KirokuStoreResource :> es, CommandEffects es)
 
 data ExecutionBinding = ExecutionBinding
   { identity :: !AgentIdentity,
@@ -1232,7 +1233,8 @@ persistGuarded :: (ExecutionEffects es) => ExecutionId -> Generated.ExecutionLif
 persistGuarded execution command precondition action = catchExecutionWith CheckFailed do
   let (catalog, projections) = withLiveExecution (\_ _ -> action)
       handler = DomainCommandHandler {eventStream = executionLifecycleEventStream, classifySilent = \_ -> SilentRejected ExecutionCommandRefused}
-  result <- runDomainCommandWithCatalogProjectionsGuarded defaultRunCommandOptions handler (Stream.entityStream executionLifecycleCategory execution.value) command catalog projections (const precondition)
+  options <- commandOptions
+  result <- runDomainCommandWithCatalogProjectionsGuarded options handler (Stream.entityStream executionLifecycleCategory execution.value) command catalog projections (const precondition)
   pure case result of
     Right (PreconditionRefused refusal) -> Left (CheckFailed refusal)
     Right (CatalogCommandOutcome (DomainProjectionCommandApplied DomainCommandOutcome {decision = DomainAccepted _})) -> Right ()

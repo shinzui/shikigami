@@ -8,10 +8,10 @@ import Data.Time (UTCTime (..), addUTCTime, fromGregorian)
 import Effectful (Eff)
 import Hasql.Transaction qualified as Tx
 import Keiro.Workflow.Types (WorkflowId (..))
-import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Decl (mkDelegationBudget)
+import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Resources
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
@@ -285,7 +285,7 @@ run env action = runAppIO env action >>= either (\err -> assertFailure (show err
 withFixture :: DatabaseFixture -> (AppEnv -> IO a) -> IO a
 withFixture fixture use = withShikigamiFreshDatabase fixture \connection -> do
   tracer <- noopTracer
-  use AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing}
+  use AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
 
 fromString :: String -> Data.Text.Text
 fromString = Data.Text.pack

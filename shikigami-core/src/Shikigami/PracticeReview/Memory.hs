@@ -66,7 +66,6 @@ import Effectful.Dispatch.Dynamic (interpret, send)
 import Keiro.Workflow (StepName (..), Workflow, step)
 import Kioku.Api.Scope (MemoryScope (..), ScopeKind (..))
 import Kioku.Api.Types qualified as Kioku
-import Kioku.App (AppEnv, runAppIO)
 import Kioku.Id (MemoryId, SessionId, idText, parseId)
 import Kioku.Memory (MemoryWriteError (..))
 import Kioku.Memory qualified as Memory
@@ -74,6 +73,7 @@ import Kioku.Memory.Domain (RecordMemoryData (..), SupersedeMemoryData (..))
 import Kioku.Memory.ReadModel (MemoryRow (..))
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Principal (ResolvedAgentIdentity)
+import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
 import Shikigami.Memory.Scope (shikigamiNamespace)
 import Shikigami.PracticeReview

@@ -33,8 +33,8 @@ import Hasql.Pool (Pool)
 import Hasql.Pool qualified as Pool
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction.Sessions qualified as Sessions
-import Kioku.App (AppEnv, runAppIO)
 import Kiroku.Store.Transaction qualified as StoreTransaction
+import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Attestation.CallFacts (CallComplianceFacts (..), factsFromTerminal)
 import Shikigami.Attestation.Evidence (CallRelationship (RootCall), configureEvidenceCall)
 import Shikigami.Attestation.Profile qualified as Profile

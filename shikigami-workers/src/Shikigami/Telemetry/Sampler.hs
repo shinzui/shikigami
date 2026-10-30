@@ -16,9 +16,9 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Hasql.Pool qualified as Pool
 import Keiro.Outbox (sampleOutboxBacklog)
-import Kioku.App (runAppIO)
 import Pgmq.Hasql.Sessions qualified as Pgmq
 import Pgmq.Hasql.Statements.Types (QueueMetrics (..))
+import Shikigami.App (runAppIO)
 import Shikigami.Health.Worker (LoopName (TelemetryLoop), beat)
 import Shikigami.Log qualified as Log
 import Shikigami.Telemetry.Metrics (recordQueueDepth)

@@ -20,25 +20,29 @@
 module Shikigami.Workers.Registry
   ( runWorkers,
     runQueueWorker,
+    queueTuningFor,
   )
 where
 
 import Control.Exception (throwIO)
 import Data.Aeson qualified as Aeson
+import Data.Int (Int32)
 import Data.Text qualified as Text
-import Keiro.PGMQ (Job (..), JobRuntime (..), defaultJobTuning, ensureJobQueueWith, jobProcessorWithContext, runJobEff, runJobWorkers)
-import Kioku.App (AppEnv (..))
-import Shibuya.App (ProcessorId (ProcessorId), SupervisionStrategy (IgnoreFailures), getAppMaster, getAppMetrics, waitApp)
+import Data.Time (NominalDiffTime)
+import Keiro.PGMQ (Job (..), JobPolling (PollEvery), JobRuntime (..), JobTuning, ensureJobQueueWith, jobProcessorWithContext, mkJobTuning, runJobEff, runJobWorkers)
+import Shibuya.App (ProcessorId (ProcessorId), SupervisionStrategy (StopAllOnFailure), getAppMaster, getAppMetrics, waitApp)
 import Shikigami.Agent.RunJob.Worker (handleRunJob, runJob)
 import Shikigami.Agent.Workflow.Resume (runResumeWorker, runWorkflowGc)
+import Shikigami.App (AppEnv (..))
 import Shikigami.Flow.SinkOutbox.Publisher (runOutboxPublisher)
-import Shikigami.Health.Worker (LoopName (DirectoryLoop, OutboxLoop, QueueLoop, ResumeLoop, TelemetryLoop, TimerLoop, WorkflowGcLoop), registerReport, supervisedLoopVerdict)
+import Shikigami.Health.Worker (LoopName (DirectoryLoop, OutboxLoop, QueueLoop, ResumeLoop, TelemetryLoop, TimerLoop, WorkflowGcLoop), registerReport, supervisedLoopVerdictWithStaleness)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Telemetry.Sampler (runTelemetrySampler)
 import Shikigami.Trigger.Timer (runTimerWorker)
 import Shikigami.Workers.Config (WorkerEnv (..), envDirectoryRefresher, envHeartbeats, envLogger)
+import Shikigami.Workers.ConsumerApp (withConsumerAppAcquisition)
 import Shikigami.Workers.Supervision (LoopExited (LoopExited), superviseLoops)
 
 -- | Start every worker loop and run until the process is stopped.
@@ -74,14 +78,15 @@ queueProcessorId = ProcessorId (jobName runJob)
 
 -- | Drain @shikigami_run_jobs@ under shibuya's supervisor.
 --
--- @IgnoreFailures@ keeps one poisoned message from taking the processor down;
--- the handler itself decides retry versus dead-letter per message.
+-- The handler decides retry versus dead-letter per message. Infrastructure or
+-- finalization failure stops the application and reaches process supervision.
 runQueueWorker :: WorkerEnv -> IO ()
 runQueueWorker env = do
+  tuning <- either (ioError . userError . Text.unpack) pure (queueTuningFor env.runTimeout)
   let runtime =
         JobRuntime
           { runtimePool = (.pool) env,
-            runtimeTracer = Just (tracer ((.appEnv) env))
+            runtimeTracer = Just (env.appEnv.tracer)
           }
   result <- runJobEff runtime do
     -- Queue reconciliation owns both the main queue and its policy-enabled DLQ.
@@ -95,39 +100,56 @@ runQueueWorker env = do
           "dlq" Aeson..= ("shikigami_run_jobs_dlq" :: Text)
         ]
     appResult <-
-      runJobWorkers
-        IgnoreFailures
-        100
-        [jobProcessorWithContext (RunJobs.jobTuningFor defaultJobTuning) runJob (handleRunJob env)]
+      withConsumerAppAcquisition
+        ( runJobWorkers
+            StopAllOnFailure
+            1
+            [jobProcessorWithContext tuning runJob (handleRunJob env)]
+        )
+        \app -> do
+          -- This loop reports its liveness through shibuya rather than beating,
+          -- because shibuya already tracks what the processor actually did. The
+          -- master is available only once the supervisor is running, which is why
+          -- the registry is filled here rather than at boot.
+          liftIO (registerReport (envHeartbeats env) QueueLoop (supervisedLoopVerdictWithStaleness (env.runTimeout + 30) QueueLoop (getAppMaster app) queueProcessorId))
+          waitApp app
+          -- A returning queue loop always reaches process supervision. Retained
+          -- failure health is available independently of live metric registration.
+          --
+          -- The metrics map is read for the log line, keyed by processor id and
+          -- rendered by shibuya's own codecs so it cannot drift from the states
+          -- the liveness probe reads. Expect it to be empty when the master shut
+          -- down rather than an individual processor failing: shibuya clears the
+          -- map on shutdown, so the states are already gone by the time this runs.
+          -- It is logged anyway because the non-empty case — a failed processor
+          -- under a master still standing — is the one an operator most needs, and
+          -- an empty map is itself the signal that the whole supervisor went.
+          metrics <- getAppMetrics app
+          liftIO do
+            Log.logError (envLogger env) "worker.queue.stopped" ["processors" Aeson..= metrics]
+            throwIO (LoopExited QueueLoop)
     case appResult of
       Left err -> liftIO do
         Log.logError (envLogger env) "worker.loop.failed" ["error" Aeson..= Text.pack (show err)]
         ioError (userError ("run-job processor failed to start: " <> show err))
-      Right app -> do
-        -- This loop reports its liveness through shibuya rather than beating,
-        -- because shibuya already tracks what the processor actually did. The
-        -- master is available only once the supervisor is running, which is why
-        -- the registry is filled here rather than at boot.
-        liftIO (registerReport (envHeartbeats env) QueueLoop (supervisedLoopVerdict QueueLoop (getAppMaster app) queueProcessorId))
-        waitApp app
-        -- Reaching here means the supervisor stopped. Under @IgnoreFailures@ a
-        -- processor that died takes its supervisor with it without raising
-        -- anything, so this is a silent death rather than a clean shutdown.
-        --
-        -- The metrics map is read for the log line, keyed by processor id and
-        -- rendered by shibuya's own codecs so it cannot drift from the states
-        -- the liveness probe reads. Expect it to be empty when the master shut
-        -- down rather than an individual processor failing: shibuya clears the
-        -- map on shutdown, so the states are already gone by the time this runs.
-        -- It is logged anyway because the non-empty case — a failed processor
-        -- under a master still standing — is the one an operator most needs, and
-        -- an empty map is itself the signal that the whole supervisor went.
-        metrics <- getAppMetrics app
-        liftIO do
-          Log.logError (envLogger env) "worker.queue.stopped" ["processors" Aeson..= metrics]
-          throwIO (LoopExited QueueLoop)
+      Right () -> pure ()
   case result of
     Left perr -> do
       Log.logError (envLogger env) "worker.queue.failed" ["error" Aeson..= Text.pack (show perr)]
       ioError (userError ("run-job queue reconciliation failed: " <> show perr))
     Right () -> pure ()
+
+-- | Serial processing with one inbox slot and one possible source-held row.
+-- Cover two configured attempt windows plus a minute for admission/finalization.
+-- The active handler renews to thirty seconds every ten seconds; queued work
+-- retains this initial horizon. Crash redelivery of queued work may therefore
+-- wait this long. Standard polling does not occupy a connection while idle.
+queueTuningFor :: NominalDiffTime -> Either Text JobTuning
+queueTuningFor timeout
+  | timeout <= 0 = Left "run-job timeout must be positive"
+  | visibility > toInteger (maxBound :: Int32) = Left "run-job timeout exceeds the supported visibility horizon"
+  | otherwise = case mkJobTuning (fromInteger visibility) 1 (PollEvery 1) of
+      Left failure -> Left (Text.pack (show failure))
+      Right tuning -> Right (RunJobs.jobTuningFor tuning)
+  where
+    visibility = 2 * ceiling timeout + 60

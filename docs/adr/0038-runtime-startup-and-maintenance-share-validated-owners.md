@@ -111,3 +111,35 @@ recipe for a populated old ledger. The superseded vendored SQL and historical
 0.15 upgrade fixture are retired. Startup still verifies read-only and refuses
 pending, drifted, unknown or missing history. Plan 92 records native acceptance: ten PostgreSQL smoke tests and five
 composition tests pass, including the required upstream migration identities.
+
+
+## Current runtime ownership — 2026-10-30
+
+Plan94 replaces per-action Kioku store acquisition in Shikigami workflows with
+`Shikigami.App`, a service interpreter over the released resource row plus
+Reader RunCommandOptions. Production environments bind their acquired store through
+public runKirokuStoreWith; standalone actions may acquire one. Every application
+aggregate writer receives process tracer/metrics through default-based options.
+No workflow step, seed or wire identity changes. Startup forces validation of all
+four aggregates and registers the shared catalog before intake; production
+statements now have a thirty-second timeout.
+
+Kafka and PGMQ Shibuya handles are bracketed with masked ownership transfer and
+joined cleanup. Infrastructure/finalizer failure reaches process supervision;
+Kafka configuration/authentication/fatal errors do not reconnect forever. The
+PGMQ worker uses StopAllOnFailure, client polling, batch1/inbox1 and an initial
+visibility horizon of two configured attempt windows plus60seconds. Active work
+renews its shorter lease; queued work after a crash may wait the initial horizon.
+Queue liveness follows attempt timeout plus30seconds. Idle paused processors are
+healthy, while paused admitted work retains the last-progress deadline.
+
+The current common registry has five families: agent run, approval, conversation,
+execution driver and continuing worker. Worker-owned bounded resumption remains
+necessary because the embedded operations row cannot interpret the resource-aware
+workflows; no cast or private API widens it. Inspection provider/collector wiring
+is separately qualified by plan106 and must not allocate another worker runtime.
+
+The acquired-handle interpreter is supplied by
+`mori://shinzui/kiroku/packages/kiroku-store`; the base effect row remains supplied
+by `mori://shinzui/kioku/packages/kioku-core`. Application code composes their
+released public interpreters and keeps ownership in the process root.

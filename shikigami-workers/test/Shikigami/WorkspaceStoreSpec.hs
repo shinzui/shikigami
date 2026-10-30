@@ -11,10 +11,10 @@ import Data.Time (UTCTime)
 import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUID
 import Hasql.Transaction (Transaction)
-import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Principal (AgentIdentity (..))
+import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Execution.Identity (ExecutionRootId (..))
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude ((&), (.~))
@@ -187,7 +187,7 @@ resolved source base policy = do
 withFixture :: DatabaseFixture -> (AppEnv -> FilePath -> FilePath -> ResolvedRepository -> IO a) -> IO a
 withFixture fixture use = withShikigamiFreshDatabase fixture \connection -> bracket temporary removeDirectoryRecursive \dir -> do
   tracer <- noopTracer
-  let env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing}
+  let env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
       source = dir </> "source"
       root = dir </> "workspaces"
   createDirectory source

@@ -29,8 +29,8 @@ import Data.UUID.V4 qualified as UUID
 import Data.Vector qualified as Vector
 import Effectful (Eff, runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
-import Kioku.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Agent.Principal (AgentIdentity)
+import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Behavior.Compatibility (validateResponseRequest)
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest)
 import Shikigami.Decision.Contract (versionedDigest)

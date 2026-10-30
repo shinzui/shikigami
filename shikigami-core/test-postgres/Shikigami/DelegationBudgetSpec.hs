@@ -7,10 +7,10 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Keiro.Workflow (WorkflowId (..))
-import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Shikigami.Agent.Decl (DelegationBudget, mkDelegationBudget)
 import Shikigami.Agent.Delegate.Context (DelegationBudgetId)
+import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Store.DelegationBudget
   ( BatchReservationResult (..),
@@ -135,5 +135,6 @@ withFixture databaseFixture use =
       AppEnv
         { connectionSettings = defaultConnectionSettings connectionString,
           tracer,
-          metrics = Nothing
+          metrics = Nothing,
+          store = Nothing
         }

@@ -11,7 +11,6 @@ import Data.Foldable (traverse_)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Time (nominalDiffTimeToSeconds)
-import Kioku.App (AppEnv (..))
 import Kiroku.Store.Connection qualified as StoreConnection
 import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
@@ -20,6 +19,7 @@ import Shikigami.Agent.Approval.Notification qualified as ApprovalNotification
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
 import Shikigami.Agent.Workflow.Resume (runBoundedResumeWorker)
+import Shikigami.App (AppEnv (..))
 import Shikigami.App.Config (AppConfig, Role (WorkerRole))
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
@@ -156,7 +156,7 @@ runWorkerCmdWith resumeBudget config = do
           )
       DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
         startProcessDirectory logger registry ((.directorySettings) config)
-      let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics}
+      let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics, store = Just st}
       workspace <- case traverse (configuredWorkspaceHost appEnv storePool directory actionAuthorizer) config.workspaceSettings of
         Left _ -> do
           Log.logError logger "worker.workspace.invalid" []

@@ -6,11 +6,11 @@ import Data.Text (Text)
 import Effectful (Eff, IOE, liftIO, runEff, (:>))
 import Effectful.Error.Static (runErrorNoCallStack)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), runWorkflow, step)
-import Kioku.App (AppEnv (..), noopTracer)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Effect (runStoreResource)
 import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
+import Shikigami.App (AppEnv (..), noopTracer)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase)
@@ -23,7 +23,7 @@ tests databaseFixture =
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer = tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer = tracer, metrics = Nothing, store = Nothing}
             counter <- newIORef (0 :: Int)
             shouldCrash <- newIORef True
 
@@ -50,7 +50,7 @@ runSpikeWorkflow ::
 runSpikeWorkflow appEnv counter shouldCrash =
   runEff
     . runErrorNoCallStack
-    . withKirokuStore (connectionSettings appEnv)
+    . withKirokuStore (appEnv.connectionSettings)
     . runStoreResource
     $ runWorkflow
       (WorkflowName "shikigami.spike")

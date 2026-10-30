@@ -12,7 +12,6 @@ import Hasql.Pool qualified as Pool
 import Keiro.Inbox (InboxRow (..), InboxStatus (InboxCompleted), KafkaDeliveryRef (..), lookupInbox)
 import Keiro.Inbox.Kafka (KafkaInboundRecord (..))
 import Keiro.Integration.Event (IntegrationContentType (ApplicationJson), IntegrationEvent (..), encodeJsonIntegrationEvent, integrationHeaders)
-import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Pgmq (Message (..), MessageBody (..), QueueName, ReadMessage (..), dropQueue, parseQueueName, readMessage)
 import Shibuya.Core.Ack (AckDecision (..))
@@ -20,6 +19,7 @@ import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), StreamMatch (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..))
+import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Log qualified as Log
@@ -135,7 +135,7 @@ tests databaseFixture =
       testCase "store failure yields TransientFailure" do
         tracer <- noopTracer
         let settings = defaultConnectionSettings "host=127.0.0.1 port=1 dbname=unavailable connect_timeout=1"
-            appEnv = AppEnv {connectionSettings = settings, tracer, metrics = Nothing}
+            appEnv = AppEnv {connectionSettings = settings, tracer, metrics = Nothing, store = Nothing}
         disposition <- processDecodedActivity Log.silentLogger appEnv ExcludeAgentActors [streamAgent] (const (pure ())) activityEvent (Just deliveryRef)
         case disposition of
           TransientFailure _ -> pure ()
@@ -204,7 +204,7 @@ withFixture databaseFixture use =
     let settings = defaultConnectionSettings connectionString
     withStore settings \store -> do
       tracer <- noopTracer
-      let appEnv = AppEnv {connectionSettings = settings, tracer, metrics = Nothing}
+      let appEnv = AppEnv {connectionSettings = settings, tracer, metrics = Nothing, store = Nothing}
       use appEnv (pool store)
 
 ensureQueue :: Pool.Pool -> IO ()

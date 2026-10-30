@@ -28,7 +28,6 @@ import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
 import Keiro.Outbox (listOutbox)
 import Keiro.Workflow (WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), loadStepIndex, runWorkflowWith)
-import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (SessionId, genSessionId, idText)
 import Kioku.Id qualified as NominalId
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
@@ -47,6 +46,7 @@ import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
+import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Capability.Provider qualified as CapabilityProvider
@@ -229,7 +229,7 @@ completeClassificationTests databaseFixture =
       withStore (defaultConnectionSettings connectionString) \_store -> do
         tracer <- noopTracer
         behaviorEnv <- newBehaviorEnv
-        let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connectionString, tracer, metrics = Nothing}
+        let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connectionString, tracer, metrics = Nothing, store = Nothing}
         forM_ cases \(label, expectedClassification, proposal, expectsAttention) -> do
           session <- genSessionId
           evidenceCalls <- newIORef 0
@@ -349,7 +349,7 @@ agentRunSpecialistTests databaseFixture =
         evaluatorCalls <- newIORef 0
         legacyAttentionCalls <- newIORef 0
         recipients <- expectRight (mkAttentionRecipientMap [("architecture-council", "recipient_triage")])
-        let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connectionString, tracer, metrics = Nothing}
+        let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connectionString, tracer, metrics = Nothing, store = Nothing}
             baseRuntime = incompleteRuntime evidenceCalls evaluatorCalls legacyAttentionCalls
             runtime = baseRuntime {attentionRecipients = recipients}
             deps = specialistAgentRunDeps appEnv behaviorEnv runtime
@@ -416,14 +416,14 @@ replayTests databaseFixture =
             evidenceCalls <- newIORef 0
             evaluatorCalls <- newIORef 0
             attentionCalls <- newIORef 0
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connectionString, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connectionString, tracer, metrics = Nothing, store = Nothing}
                 runtime = incompleteRuntime evidenceCalls evaluatorCalls attentionCalls
                 workflowId = WorkflowId "practice-review-incomplete-replay"
                 runInput :: WorkflowId -> Value -> IO (Either StoreError (WorkflowOutcome Value))
                 runInput selectedWorkflowId input =
                   runEff
                     . runErrorNoCallStack
-                    . withKirokuStore (connectionSettings appEnv)
+                    . withKirokuStore (appEnv.connectionSettings)
                     . runStoreResource
                     $ runWorkflowWith
                       (shikigamiWorkflowRunOptions appEnv)
@@ -535,11 +535,11 @@ atomicAttentionTests databaseFixture =
         (withShikigamiFreshDatabase databaseFixture) \connectionString ->
           withStore (defaultConnectionSettings connectionString) \KirokuStore {pool} -> do
             tracer <- noopTracer
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connectionString, tracer, metrics = Nothing}
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connectionString, tracer, metrics = Nothing, store = Nothing}
                 runAttention suffix runIdentifier validated =
                   runEff
                     . runErrorNoCallStack
-                    . withKirokuStore (connectionSettings appEnv)
+                    . withKirokuStore (appEnv.connectionSettings)
                     . runStoreResource
                     $ runWorkflowWith
                       (shikigamiWorkflowRunOptions appEnv)
@@ -667,7 +667,7 @@ runPracticeReviewInput ::
 runPracticeReviewInput appEnv behaviorEnv session runtime workflowId input =
   runEff
     . runErrorNoCallStack
-    . withKirokuStore (connectionSettings appEnv)
+    . withKirokuStore (appEnv.connectionSettings)
     . runStoreResource
     $ runWorkflowWith
       (shikigamiWorkflowRunOptions appEnv)

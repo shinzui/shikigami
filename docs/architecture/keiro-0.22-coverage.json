@@ -168,9 +168,28 @@
       "sourcePath": "runtime-patterns/getting-started.md",
       "sourceSha256": "0d844636458a5f29ed771ed52d1190bae1aa0365cf55ca29845addb76302c0fc",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "navigation-and-cross-owner-contracts",
+          "disposition": "existing",
+          "rationale": "This index adds no independent runtime mechanism. Its linked normative documents retain their own clause/evidence rows; pending inspection and final qualification are not certified by this navigation row."
+        },
+        {
+          "id": "published-fresh-schema",
+          "disposition": "implemented",
+          "rationale": "Completed plan92 supplies exact published cohort, all five migration owners, checksums, application/framework schema comparisons and startup refusal evidence."
+        },
+        {
+          "id": "current-service-contract",
+          "disposition": "implemented",
+          "rationale": "Plans92/93 establish the ten-member Language6 workspace and actual generated consumers; this child qualifies native startup, consumer ownership and five workflow families."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/inspection-bounded-live-feeds",
@@ -729,9 +748,28 @@
       "sourcePath": "runtime-patterns/keiro/brownfield-adoption.md",
       "sourceSha256": "b436f6a145aa2b0ef3f0baa47779756a0c554d902ceddfe9f1209ae40f757c35",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "current-codec-authority",
+          "disposition": "implemented",
+          "rationale": "Three total nominal identity bindings and two structural queue enums execute in production; plan93 current wire, fold and service witness evidence retains one codec authority."
+        },
+        {
+          "id": "absent-brownfield-population",
+          "disposition": "not-applicable",
+          "rationale": "ADR27 four unused-service facts permit the deliberate first-release reset. There is no production clone/old populated binary comparison; current same-build native histories are real and strict breaking reports retained."
+        },
+        {
+          "id": "protected-target-ownership",
+          "disposition": "existing",
+          "rationale": "LiveOnly/PreserveAndReconcile payloads remain atomic and cannot be recreated from lifecycle events; no destructive replay or fake total binding is asserted."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-command-cycle-and-errors",
@@ -778,8 +816,33 @@
       "sourceSha256": "6c5bd95b60deacc4c1b338e0fee234d741503ba4bfef00f59a7d7f53faa89f4f",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "ordinary-and-guarded-recovery",
+          "disposition": "existing",
+          "rationale": "TimerRecoverySpec drives the serving timer pass, recovers expired guarded claims to Dead and rejects stale completion tokens. A single bounded dispatcher owns recovery."
+        },
+        {
+          "id": "foreground-execution-disabled",
+          "disposition": "existing",
+          "rationale": "The embedded console has no application-authorized foreground Dead-timer execution hook. Read-only triage does not authorize payload disclosure or an external action."
+        },
+        {
+          "id": "published-fresh-schema",
+          "disposition": "implemented",
+          "rationale": "Completed plan92 supplies exact published cohort, all five migration owners, checksums, application/framework schema comparisons and startup refusal evidence."
+        },
+        {
+          "id": "selected-inspection-owner",
+          "disposition": "pending",
+          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-dsl-adoption",
@@ -858,9 +921,33 @@
       "sourcePath": "runtime-patterns/keiro/durable-workflows.md",
       "sourceSha256": "c6c71d7c49cc42e6df786e0d57f63c6ce241c1e6d4d9a4a3ec7c0390f5d42343",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "one-current-registry-and-options",
+          "disposition": "implemented",
+          "rationale": "The common production registry contains exactly five actual families. Service AppEffects preserves resource ownership and command options; all375 PostgreSQL cases pass."
+        },
+        {
+          "id": "journaled-recovery-and-opaque-publication",
+          "disposition": "existing",
+          "rationale": "Agent, approval, conversation, execution and worker-session native histories cover crash/replay, current allocated awakeables, duplicate effects and cancellation. No id is recomputed from coordinates."
+        },
+        {
+          "id": "progress-gc-and-custom-wakes",
+          "disposition": "existing",
+          "rationale": "One100-row timer pass, continuous concurrency1 resume and hourly90-day GC are explicit. Custom execution/session/listener wakes update logical rows and current generations through supported journal APIs."
+        },
+        {
+          "id": "first-release-shape",
+          "disposition": "implemented",
+          "rationale": "Plan93 consolidates obsolete patches; this child changes only effect interpretation/runners. Strict current diff is empty and replay-neutral; later deployments retain normal patch/version rules."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-evolution-and-rollout",
@@ -869,8 +956,33 @@
       "sourceSha256": "ed7ffeb46935aedcdf51a50efa164ee953900a139fb2bbf6f8dd38bfba41f333",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "strict-machine-readable-gates",
+          "disposition": "implemented",
+          "rationale": "The whole workspace check/conformance remains strict. just keiro-diff now denies AggGuardRelationUnknown and AggGuardRemedyUnavailable; current runtime diff is neutral."
+        },
+        {
+          "id": "reset-and-retained-history",
+          "disposition": "existing",
+          "rationale": "ADR27 reset has no deployed population. Plan93 retains exact breaking reports and independent current wire/fold evidence; same-build crash/replay is qualified rather than fabricated cross-build population evidence."
+        },
+        {
+          "id": "absent-identity-migrations",
+          "disposition": "not-applicable",
+          "rationale": "No process-reaction migration, queue-ordering change, new ID admission, event retirement, state codec or history truncation is introduced in this runtime child."
+        },
+        {
+          "id": "final-artifact-and-load-evidence",
+          "disposition": "pending",
+          "rationale": "Plan95 owns the final frozen role artifacts, Linux runtime and remaining application load observations. Native correctness and upstream practical acceptance do not establish a statistical or exhaustive performance pass.",
+          "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-generated-haskell-editions",
@@ -912,8 +1024,39 @@
       "sourceSha256": "9f64b810a81cd39bf4dabfb2afaa824bef5ee2b4a4d6237c594bcaed2855f657",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "runtime-and-resource-boundaries",
+          "disposition": "implemented",
+          "rationale": "One acquired store is reused; all four streams validate at startup; command options carry telemetry and bound verification. Native AppSpec proves ownership independently of connection settings."
+        },
+        {
+          "id": "terminal-wake-and-delivery-contracts",
+          "disposition": "existing",
+          "rationale": "Failure/resurrection, opaque allocations, generation rotation, dead-timer recovery and durable Kafka/PGMQ dispositions remain explicit; no ambiguity can become accepted work."
+        },
+        {
+          "id": "released-and-generated-boundaries",
+          "disposition": "implemented",
+          "rationale": "Published0.22 cohort, current Language6 metadata, complete regeneration and strict reset evidence are accepted by92/93."
+        },
+        {
+          "id": "selected-inspection-owner",
+          "disposition": "pending",
+          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        },
+        {
+          "id": "final-artifact-and-load-evidence",
+          "disposition": "pending",
+          "rationale": "Plan95 owns the final frozen role artifacts, Linux runtime and remaining application load observations. Native correctness and upstream practical acceptance do not establish a statistical or exhaustive performance pass.",
+          "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-identifier-domains",
@@ -1068,9 +1211,28 @@
       "sourcePath": "runtime-patterns/keiro/overview.md",
       "sourceSha256": "bab70af015f70b8944e120b4614b5a3ce9c9bc54820b6d88fa305529af560f0d",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "navigation-and-cross-owner-contracts",
+          "disposition": "existing",
+          "rationale": "This index adds no independent runtime mechanism. Its linked normative documents retain their own clause/evidence rows; pending inspection and final qualification are not certified by this navigation row."
+        },
+        {
+          "id": "published-fresh-schema",
+          "disposition": "implemented",
+          "rationale": "Completed plan92 supplies exact published cohort, all five migration owners, checksums, application/framework schema comparisons and startup refusal evidence."
+        },
+        {
+          "id": "current-native-runtime",
+          "disposition": "implemented",
+          "rationale": "Resource/default/constructor consumers and five workflow families are qualified by this child. Package publication is not presented as inspection or language promotion."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-projection-catalogs",
@@ -1088,9 +1250,9 @@
         },
         {
           "id": "delivery-and-freshness",
-          "disposition": "pending",
+          "disposition": "existing",
           "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-          "rationale": "Remaining runtime delivery/retry review belongs to the delivery child."
+          "rationale": "All current owners retain explicit atomic protected-payload invariants and immediate cursorless queries. No async application query owner exists. Native authority/fence/rollback and full current histories pass."
         },
         {
           "id": "administrative-catalog-lifecycle",
@@ -1116,8 +1278,44 @@
       "sourceSha256": "9214ceb29496c2cfe683730ff8a1bb8c7f904bcc1f06c5b442e0490b268f1309",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "single-catalog-registration-and-freshness",
+          "disposition": "existing",
+          "rationale": "All current application models are immediate/cursorless and observe atomic accepted facts; one validated catalog registers before queries/writers. A lagging view never supplies authority."
+        },
+        {
+          "id": "minimal-relational-authority-and-rich-payloads",
+          "disposition": "implemented",
+          "rationale": "Execution preconditions use the guarded runner with indexed ordered locks; payload/cursor/accounting writes and retained late refusals remain atomic. Rich protected data is LiveOnly because event history lacks it."
+        },
+        {
+          "id": "no-snapshot-or-truncation-consumer",
+          "disposition": "not-applicable",
+          "rationale": "All four aggregate streams use Never/no state codec. No application truncate-before or covering snapshot is enabled; no cache fallback or long replay equivalence is fabricated."
+        },
+        {
+          "id": "no-asynchronous-query-worker",
+          "disposition": "not-applicable",
+          "rationale": "No independent asynchronous application query owner exists. Replacing accepted protected payload authority with async delivery would violate current atomic/replay access invariants."
+        },
+        {
+          "id": "selected-inspection-owner",
+          "disposition": "pending",
+          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        },
+        {
+          "id": "final-artifact-and-load-evidence",
+          "disposition": "pending",
+          "rationale": "Plan95 owns the final frozen role artifacts, Linux runtime and remaining application load observations. Native correctness and upstream practical acceptance do not establish a statistical or exhaustive performance pass.",
+          "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-runtime-assembly",
@@ -1126,8 +1324,33 @@
       "sourceSha256": "fc3aa14b9238f42428a1669fb1aa0659878654635a83a98a37ed19181aedd6f3",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "one-store-and-startup-order",
+          "disposition": "implemented",
+          "rationale": "Shikigami.App reuses public runKirokuStoreWith for bound production roles. Migration handshake precedes telemetry/store, all four validated streams and the shared catalog precede intake."
+        },
+        {
+          "id": "default-options-and-safe-ownership",
+          "disposition": "implemented",
+          "rationale": "Command options use upstream defaults with process tracer/metrics; worker consumers mask transfer and finally stop/join. Runtime statements are bounded at30seconds."
+        },
+        {
+          "id": "actual-subscription-census",
+          "disposition": "not-applicable",
+          "rationale": "There is no application-owned Kiroku subscription, shard group, namespace fan-in or static member assignment. The four catalog owners are synchronous atomic authority with LiveOnly payloads. No unused subscription is introduced."
+        },
+        {
+          "id": "selected-inspection-owner",
+          "disposition": "pending",
+          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-service-workspaces",
@@ -1168,9 +1391,24 @@
       "sourcePath": "runtime-patterns/keiro/stream-scoped-repair.md",
       "sourceSha256": "fbbe7a77b28828609d69f64ea80a4daa89fb7d176084e61841c88f079dbe7d4f",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "existing",
+      "clauses": [
+        {
+          "id": "no-reconstructible-payload-policy",
+          "disposition": "not-applicable",
+          "rationale": "No StreamScopedReplay policy or application-owned replayable rich target exists. Protected source data is absent from lifecycle history; a fake clearer/replay closure would destroy authority."
+        },
+        {
+          "id": "refuse-unsupported-repair",
+          "disposition": "existing",
+          "rationale": "Current catalog operations cannot claim destructive recovery of LiveOnly payloads. Future repair must declare complete per-stream ownership and use supported catalog admission/locks;106 reviews exposed operations.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-telemetry",
@@ -1179,8 +1417,33 @@
       "sourceSha256": "e8d7686effdb6516f5e230135f2222ef95e4ed5e7d2c70c42c10b89776a55651",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "process-command-and-connection-instruments",
+          "disposition": "implemented",
+          "rationale": "Process instruments precede store construction; event bridge is installed and all aggregate catalog command options now carry tracer/metrics. AppSpec uses real metric handles."
+        },
+        {
+          "id": "workflow-worker-diagnostics",
+          "disposition": "existing",
+          "rationale": "Resume and GC hooks route failures through the application logger; bounded resume exports every summary field and continues on durable progress. Paused/failed health stays distinct."
+        },
+        {
+          "id": "bounded-seed-verification",
+          "disposition": "existing",
+          "rationale": "Default command options retain seedVerifyInFlightLimit1 and instrumentation uses newKeiroMetrics rather than custom records. No skipped sample is asserted as a pass."
+        },
+        {
+          "id": "collector-provider-and-trace-hook-composition",
+          "disposition": "pending",
+          "rationale": "Plan106 owns selected Kiroku/Shibuya inspection collectors/providers, callback composition before acquisition and explicit W3C enrichment/lifecycle tracing where wired. Existing command spans/bridge do not certify that pending assembly.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-two-schema-arrangement",
@@ -1188,9 +1451,23 @@
       "sourcePath": "runtime-patterns/keiro/two-schema-arrangement.md",
       "sourceSha256": "58f8b1dffe9ec0c0539141efe0818c24e79de2415d6ad7410a2860e1eebb73f3",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "published-fresh-schema",
+          "disposition": "implemented",
+          "rationale": "Completed plan92 supplies exact published cohort, all five migration owners, checksums, application/framework schema comparisons and startup refusal evidence."
+        },
+        {
+          "id": "qualified-runtime-sql",
+          "disposition": "existing",
+          "rationale": "Kiroku stays the authoritative store schema; application SQL is qualified and Keiro framework SQL uses supported APIs. No private framework-table mutation or implicit public search path is introduced."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-typeid-prefix-naming",
@@ -1198,9 +1475,23 @@
       "sourcePath": "runtime-patterns/keiro/typeid-prefix-naming.md",
       "sourceSha256": "32a432d7d1dcc95913e8f3331b82d4440197928f6371c395c626cc942c7708ff",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "existing",
+      "clauses": [
+        {
+          "id": "no-new-prefix-or-entity-generator",
+          "disposition": "not-applicable",
+          "rationale": "This child introduces no TypeID prefix. RunEvidence retains its existing descriptive shikigami_run_evidence identity; new technical-coordinate wrappers are not relabelled as allocated entities."
+        },
+        {
+          "id": "identity-is-not-a-locator",
+          "disposition": "existing",
+          "rationale": "Workflow/dedup technical identities retain prescribed deterministic semantics; no locator-derived UUID is presented as UUIDv7. Any future prefix choice/rename remains a durable contract decision."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-workflow-reliability",
@@ -1208,9 +1499,28 @@
       "sourcePath": "runtime-patterns/keiro/workflow-reliability.md",
       "sourceSha256": "471d050f8f27c4f607ff96547cf015d6f5ce8f2fb21a1dd8312adb7c94e41243",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "existing",
+      "clauses": [
+        {
+          "id": "lease-budget-and-failure-policy",
+          "disposition": "existing",
+          "rationale": "Resume lease is attempt timeout plus30seconds, direct runs set no lease heartbeat, concurrency stays1 and terminal failures use public resurrection. Native lease and failed-workflow tests pass."
+        },
+        {
+          "id": "five-families-and-exact-wakes",
+          "disposition": "existing",
+          "rationale": "Full375-case PostgreSQL run covers all five common-registry families, current awaits, rotation/cancellation/stale-owner races and no duplicate committed dispatch."
+        },
+        {
+          "id": "bounded-progress-and-retention",
+          "disposition": "existing",
+          "rationale": "Bounded resume stops on advanced0 and exports every blocked class. One timer pass and explicit90-day GC provide actual progress/retention; protected payload retention is separate."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-append-and-read",
@@ -1219,8 +1529,28 @@
       "sourceSha256": "43563cfbcf0b0c9415784c88436b648df0602a626602dc14854028c1a05fb6ba",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "public-concurrency-and-cursor-contracts",
+          "disposition": "existing",
+          "rationale": "Application aggregate commands use released catalog runners; raw workflow writes use supported journal owners. Native equal/conflicting retries preserve exact identity; no cursor arithmetic or placeholder expected-version success is introduced."
+        },
+        {
+          "id": "structured-read-errors",
+          "disposition": "existing",
+          "rationale": "Protected read failure remains an error, never a partial result. Native corrupt payload and authorization cases pass. AppSpec uses the payload-free visible-head read on the acquired store."
+        },
+        {
+          "id": "selected-inspection-owner",
+          "disposition": "pending",
+          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-checkpoint-inventory",
@@ -1229,8 +1559,23 @@
       "sourceSha256": "b528cc4dcab7a530ab96793fec1b6f34221380a018e19f786fbf8e57c82ca09b",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "actual-subscription-census",
+          "disposition": "not-applicable",
+          "rationale": "There is no application-owned Kiroku subscription, shard group, namespace fan-in or static member assignment. The four catalog owners are synchronous atomic authority with LiveOnly payloads. No unused subscription is introduced."
+        },
+        {
+          "id": "durable-observation-surface",
+          "disposition": "pending",
+          "rationale": "Plan106 supplies the selected public durable checkpoint provider, preserving one snapshot and every member without private table reads or manufactured missing rows.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-connection-settings",
@@ -1238,9 +1583,28 @@
       "sourcePath": "runtime-patterns/kiroku/connection-settings.md",
       "sourceSha256": "346a02fdb3e84c137d96cfbe06e1081021529d33fa6f2bd6103d68361227b139",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "authoritative-schema-and-bounded-pool",
+          "disposition": "implemented",
+          "rationale": "Runtime defaults retain pool10/idle30/schema kiroku; statementTimeout is explicitly30. All application SQL is qualified, so no unqualified application search-path dependence is added."
+        },
+        {
+          "id": "reuse-owned-handle",
+          "disposition": "implemented",
+          "rationale": "Production AppEnv binds its acquired store and independent actions use public runKirokuStoreWith. AppSpec succeeds twice with deliberately unusable fallback settings."
+        },
+        {
+          "id": "typed-hook-and-callback-contract",
+          "disposition": "existing",
+          "rationale": "No custom decoder hook or raw Store interpreter is introduced. Current bridge/observations are installed before acquisition; selected collector/OTel fan-out remains106 work."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-history-retention",
@@ -1249,8 +1613,28 @@
       "sourceSha256": "cdf24db037f9b8fd3c9a51fcc76a0484bf3ca4b64515fef1a715ab6451054e45",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "no-application-long-replay",
+          "disposition": "not-applicable",
+          "rationale": "No hand-owned multi-transaction replay, lease reacquisition or stream repair exists; LiveOnly payloads cannot be reconstructed. Application workflow GC uses the supported owner."
+        },
+        {
+          "id": "no-destructive-bypass",
+          "disposition": "existing",
+          "rationale": "No private DELETE/TRUNCATE or retention-coordinator mutation is introduced. Catalog/erasure operations remain supported preview/force protocols reviewed in106."
+        },
+        {
+          "id": "selected-inspection-owner",
+          "disposition": "pending",
+          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-inspection",
@@ -1269,8 +1653,28 @@
       "sourceSha256": "9277816f1f73f40d6292a557aec7805d55fad436fe2ab06c26705d45cc991044",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "supported-workflow-retention",
+          "disposition": "existing",
+          "rationale": "Hourly100-row90-day workflow GC owns terminal journals; live-parent children are excluded. It does not erase protected evidence or sink receipts."
+        },
+        {
+          "id": "no-new-erasure-or-links",
+          "disposition": "not-applicable",
+          "rationale": "No application general erasure, truncation, linking or raw table mutation is enabled. Future erasure needs separate privilege, authorization and audit; fixture database disposal is not a production erasure API."
+        },
+        {
+          "id": "selected-inspection-owner",
+          "disposition": "pending",
+          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-observability",
@@ -1279,8 +1683,28 @@
       "sourceSha256": "877468cbfad251fc7ade87fc9ea82e9111958b6c5fac6397b0198a105f7e2b8d",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "existing-bridge-and-startup-order",
+          "disposition": "implemented",
+          "rationale": "Telemetry precedes store construction; the Keiro bridge and bounded classifications remain installed. Shared App options now carry command metrics/tracer."
+        },
+        {
+          "id": "selected-collectors-providers-and-enrichment",
+          "disposition": "pending",
+          "rationale": "Plan106 owns selected Kiroku collector/OTel composition before acquisition, process versus durable providers, dedicated authenticated HTTP/live hosting and payload-free capabilities.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        },
+        {
+          "id": "health-versus-progress",
+          "disposition": "existing",
+          "rationale": "Worker probes distinguish idle, paused, failed, stopped and missing processors; queue staleness follows configured work. Durable subscription state is not inferred from process liveness."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-operational-invariants",
@@ -1289,8 +1713,38 @@
       "sourceSha256": "592b0ffc92e780a9cf6de0903fc8a2ded9018f83f060fc710c3277b77853a019",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "published-fresh-schema",
+          "disposition": "implemented",
+          "rationale": "Completed plan92 supplies exact published cohort, all five migration owners, checksums, application/framework schema comparisons and startup refusal evidence."
+        },
+        {
+          "id": "bounded-resources-and-retry-identity",
+          "disposition": "implemented",
+          "rationale": "Acquired stores are reused, production statement timeout30 is explicit, and typed/native command refusal/receipt tests preserve stable identities and no false success."
+        },
+        {
+          "id": "actual-subscription-census",
+          "disposition": "not-applicable",
+          "rationale": "There is no application-owned Kiroku subscription, shard group, namespace fan-in or static member assignment. The four catalog owners are synchronous atomic authority with LiveOnly payloads. No unused subscription is introduced."
+        },
+        {
+          "id": "supported-mutation-boundaries",
+          "disposition": "existing",
+          "rationale": "No raw framework mutation, cursor arithmetic, unbounded external callback or generic erasure bypass is introduced. Retention and administrative privileges remain explicit owners."
+        },
+        {
+          "id": "selected-inspection-owner",
+          "disposition": "pending",
+          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-overview",
@@ -1299,8 +1753,33 @@
       "sourceSha256": "353d857c3d7f04d50a608af547d4df1b5dc6b8d6b964bab9fc7450c399daaaeb",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "navigation-and-cross-owner-contracts",
+          "disposition": "existing",
+          "rationale": "This index adds no independent runtime mechanism. Its linked normative documents retain their own clause/evidence rows; pending inspection and final qualification are not certified by this navigation row."
+        },
+        {
+          "id": "published-fresh-schema",
+          "disposition": "implemented",
+          "rationale": "Completed plan92 supplies exact published cohort, all five migration owners, checksums, application/framework schema comparisons and startup refusal evidence."
+        },
+        {
+          "id": "actual-subscription-census",
+          "disposition": "not-applicable",
+          "rationale": "There is no application-owned Kiroku subscription, shard group, namespace fan-in or static member assignment. The four catalog owners are synchronous atomic authority with LiveOnly payloads. No unused subscription is introduced."
+        },
+        {
+          "id": "selected-inspection-owner",
+          "disposition": "pending",
+          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-subscriptions",
@@ -1309,8 +1788,28 @@
       "sourceSha256": "0177b04a5df60a9e5472aa689474a355a552b66a94f9cdf89ed80933b1e70e67",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "actual-subscription-census",
+          "disposition": "not-applicable",
+          "rationale": "There is no application-owned Kiroku subscription, shard group, namespace fan-in or static member assignment. The four catalog owners are synchronous atomic authority with LiveOnly payloads. No unused subscription is introduced."
+        },
+        {
+          "id": "no-forced-namespace-or-checkpoint-mutation",
+          "disposition": "not-applicable",
+          "rationale": "No namespace subscription, missing-checkpoint policy, overflow queue, shard resize/rebind or custom decoder is needed by a current application worker. Upstream-owned runtime maintenance uses its public APIs."
+        },
+        {
+          "id": "selected-inspection-owner",
+          "disposition": "pending",
+          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-transactions-and-projections",
@@ -1318,9 +1817,23 @@
       "sourcePath": "runtime-patterns/kiroku/transactions-and-projections.md",
       "sourceSha256": "dddbe88a15c12f74bf3239416c28dd3891b4da733fa9d7041725cb1fc11aa994",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "resource-aware-atomic-authority",
+          "disposition": "implemented",
+          "rationale": "The service interpreter supplies Store/resource/options; aggregate catalog runners retain atomic protected state. SQL callbacks contain no network effect and late owner errors leave the transaction before mapping."
+        },
+        {
+          "id": "retry-and-command-defect-separation",
+          "disposition": "existing",
+          "rationale": "Native concurrent acceptance, conflicting inputs, fence refusal and post-write failure prove rollback. Contention is not claimed deadlock-free; infrastructure errors never become accepted work."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-glossary",
@@ -1328,9 +1841,23 @@
       "sourcePath": "runtime-patterns/messaging/glossary.md",
       "sourceSha256": "9ba03cdeb99b15bbb30261907f86e5d8938adca247603272ba4b01fc1dd8ea0b",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "existing",
+      "clauses": [
+        {
+          "id": "navigation-and-cross-owner-contracts",
+          "disposition": "existing",
+          "rationale": "This index adds no independent runtime mechanism. Its linked normative documents retain their own clause/evidence rows; pending inspection and final qualification are not certified by this navigation row."
+        },
+        {
+          "id": "actual-vocabulary",
+          "disposition": "existing",
+          "rationale": "The runtime evidence distinguishes public integration envelopes, internal jobs, private events, receipt idempotency, visibility leases and logical-workflow wakes. No exactly-once distributed effect claim is made."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-gotchas",
@@ -1339,8 +1866,34 @@
       "sourceSha256": "14f3a206af5c8a042eb3664f61c511479c02cf46ded18df723e571844bc63d16",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "transport-finalization-and-ownership",
+          "disposition": "implemented",
+          "rationale": "Kafka remains serial with durable poison persistence before offset intent; PGMQ stays supervised with native DLQ transfer, active heartbeat, bounded prefetch horizon and StopAllOnFailure. Both handles are bracketed."
+        },
+        {
+          "id": "no-false-facade-adoption",
+          "disposition": "existing",
+          "rationale": "There is no process reaction, delegated inbox, partitioned queue or namespace consumer to enable. Current first-release codecs, authority and released schema are qualified by92/93/94."
+        },
+        {
+          "id": "selected-inspection-owner",
+          "disposition": "pending",
+          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        },
+        {
+          "id": "final-artifact-and-load-evidence",
+          "disposition": "pending",
+          "rationale": "Plan95 owns the final frozen role artifacts, Linux runtime and remaining application load observations. Native correctness and upstream practical acceptance do not establish a statistical or exhaustive performance pass.",
+          "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-inbox",
@@ -1349,8 +1902,28 @@
       "sourceSha256": "2f301e453c858168c37e7e591485d5f3860040246123f8025d87edb1b447ca13",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "atomic-table-backed-intake",
+          "disposition": "existing",
+          "rationale": "Kafka uses runInboxTransaction with PreferIntegrationMessageId. StreamInboxSpec proves duplicate suppression, atomic enqueue/rollback and no terminal offset intent when persistence fails."
+        },
+        {
+          "id": "delegated-intake-absent",
+          "disposition": "not-applicable",
+          "rationale": "Current intake can perform multiple queue/skip writes and uses table-backed receipts. No complete one-command downstream event receipt exists to justify delegated intake."
+        },
+        {
+          "id": "retention-and-operator-disposition",
+          "disposition": "pending",
+          "rationale": "Inbox inspection/repair/retention controls and retained replay policy are reviewed by the selected administrative owner; no deleted inbox row is promised permanent deduplication.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-integration-events",
@@ -1358,9 +1931,28 @@
       "sourcePath": "runtime-patterns/messaging/integration-events.md",
       "sourceSha256": "cf11b98f6e39f1c04c816e13b2f594518adf339382ece6c3bf6090d8ff4f2e72",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "existing",
+      "clauses": [
+        {
+          "id": "published-input-boundary",
+          "disposition": "existing",
+          "rationale": "Kafka accepts the public Keiro envelope then explicitly decodes application JSON/Danwa input. Source/message identity controls dedup; broker coordinates remain delivery diagnostics."
+        },
+        {
+          "id": "no-private-event-publication",
+          "disposition": "existing",
+          "rationale": "HTTP sink intents are durable application integration operations, not Kafka publishers or exposed private event streams. External protocol payloads remain hand-owned."
+        },
+        {
+          "id": "generated-contract-list-consumer-absent",
+          "disposition": "not-applicable",
+          "rationale": "No generated public integration contract declares a scalar list in this service. Actual ordered queue lineage is already qualified by93; no unused public declaration is added."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-kiroku-subscriptions",
@@ -1368,9 +1960,23 @@
       "sourcePath": "runtime-patterns/messaging/kiroku-subscriptions.md",
       "sourceSha256": "6be062904ed9fc1610ac24669592e51dfbdf7561931c750e98f6bea37e9c0717",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "not-applicable",
+      "clauses": [
+        {
+          "id": "actual-subscription-census",
+          "disposition": "not-applicable",
+          "rationale": "There is no application-owned Kiroku subscription, shard group, namespace fan-in or static member assignment. The four catalog owners are synchronous atomic authority with LiveOnly payloads. No unused subscription is introduced."
+        },
+        {
+          "id": "no-raw-ack-bridge",
+          "disposition": "not-applicable",
+          "rationale": "No application raw Kiroku acknowledgement stream or consumer-group processor exists. The service does not duplicate framework acknowledgement/retry ownership."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-outbox",
@@ -1379,8 +1985,28 @@
       "sourceSha256": "393695c90cd4ef08ac5a1d482c0589ec0a5c83ff8b791a574fe9a3dc10fe99ee",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "actual-http-sink-outbox",
+          "disposition": "existing",
+          "rationale": "Sink intent is recorded durably before HTTP publication; stable receipts and current native lost-response/restart/authorization tests prove idempotent delivery and uncertainty retention. Publication occurs outside the SQL transaction."
+        },
+        {
+          "id": "integration-producer-absent",
+          "disposition": "not-applicable",
+          "rationale": "No private-event IntegrationProducer or Kafka publisher is wired. Deterministic producer-identity migration/recordProducerEnqueueOutcome is not asserted for the distinct HTTP sink contract."
+        },
+        {
+          "id": "maintenance-and-retention-owner",
+          "disposition": "pending",
+          "rationale": "Selected administrative outbox/backlog/maintenance/retention controls and authorization are reviewed in106. Workflow journal GC does not claim to collect sink receipts or rejected/dead audit evidence.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-overview",
@@ -1388,9 +2014,23 @@
       "sourcePath": "runtime-patterns/messaging/overview.md",
       "sourceSha256": "c4487e9ccdac7aab757ce42afe6228b7c4284e524bda460f6f9ab1d6e50e9e0c",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "existing",
+      "clauses": [
+        {
+          "id": "navigation-and-cross-owner-contracts",
+          "disposition": "existing",
+          "rationale": "This index adds no independent runtime mechanism. Its linked normative documents retain their own clause/evidence rows; pending inspection and final qualification are not certified by this navigation row."
+        },
+        {
+          "id": "actual-transport-census",
+          "disposition": "existing",
+          "rationale": "Internal typed jobs use PGMQ, public event intake uses serial Kafka and workflow coordination uses journals. No process-manager or private-event subscription exists."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-pgmq-connection-faults",
@@ -1399,8 +2039,33 @@
       "sourceSha256": "10c30939a69cba30c476dd5ec864d3f9640b89b533a1da278a2948b93d0f4697",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "released-retry-and-supervision",
+          "disposition": "implemented",
+          "rationale": "The supported Keiro allocator retains adapter defaults: five total attempts,1.5seconds cumulative wait. Exhaustion reaches StopAllOnFailure/process restart; no longer same-pool failover SLA or hidden config fork is claimed."
+        },
+        {
+          "id": "polling-and-prefetch-budgets",
+          "disposition": "implemented",
+          "rationale": "PollEvery1/batch1/inbox1 and initial visibility2*attempt+60 keep queued work inside a configured horizon. Active work renews10/30seconds; invalid/overflowing horizon refuses before acquisition."
+        },
+        {
+          "id": "uncertain-enqueue-idempotency",
+          "disposition": "existing",
+          "rationale": "Stable logical job keys and atomic queue acceptance/receipts survive lost replies. Native run-job duplicate, unavailable persistence and execution repair cases preserve at-least-once semantics."
+        },
+        {
+          "id": "final-artifact-and-load-evidence",
+          "disposition": "pending",
+          "rationale": "Plan95 owns the final frozen role artifacts, Linux runtime and remaining application load observations. Native correctness and upstream practical acceptance do not establish a statistical or exhaustive performance pass.",
+          "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-pgmq-dead-letter-administration",
@@ -1409,8 +2074,29 @@
       "sourceSha256": "3712e3b33d5089dfbce27a2b2c109707cb8380a9c3b5ef01e3f7b7168a5589bf",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "actual-adapter-envelope",
+          "disposition": "existing",
+          "rationale": "Current supervised native DLQ tests retain original_queue and reason metadata. Physical transfer and claim ownership remain in the released adapter, not duplicated in application code."
+        },
+        {
+          "id": "selected-inspection-owner",
+          "disposition": "pending",
+          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        },
+        {
+          "id": "final-artifact-and-load-evidence",
+          "disposition": "pending",
+          "rationale": "Plan95 owns the final frozen role artifacts, Linux runtime and remaining application load observations. Native correctness and upstream practical acceptance do not establish a statistical or exhaustive performance pass.",
+          "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-pgmq-jobs",
@@ -1419,8 +2105,38 @@
       "sourceSha256": "09641aeea037e5271d799523a04383c2d2e3bc43bf54901b8c1564acd2c3bfc8",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "typed-current-contract-and-order",
+          "disposition": "implemented",
+          "rationale": "Generated RunJobs is the actual producer/consumer codec; validated policy has five attempts/delay60/DLQ. Independent work stays Unordered; no FIFO group requirement is invented."
+        },
+        {
+          "id": "native-consumption-and-lifetime",
+          "disposition": "implemented",
+          "rationale": "Keiro runJobWorkers remains the supported allocator, bracketed with StopAllOnFailure, standard polling, bounded intake/visibility and native finalizer/heartbeat cases."
+        },
+        {
+          "id": "frozen-identity-and-idempotency",
+          "disposition": "existing",
+          "rationale": "Queue/DLQ names stay unchanged; stable run/operation identities and accepted receipts handle duplicate deliveries. One-shot drains are not the serving worker."
+        },
+        {
+          "id": "partitioned-or-integration-queue-absent",
+          "disposition": "not-applicable",
+          "rationale": "No pg_partman retention, premake, grouped queue or PGMQ public integration-event transport exists."
+        },
+        {
+          "id": "selected-inspection-owner",
+          "disposition": "pending",
+          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-pgmq-queue-reconciliation",
@@ -1429,8 +2145,33 @@
       "sourceSha256": "88051e26b9ea31307aaae576c8f6ec2509463897d3647512291f09356026856b",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "published-fresh-schema",
+          "disposition": "implemented",
+          "rationale": "Completed plan92 supplies exact published cohort, all five migration owners, checksums, application/framework schema comparisons and startup refusal evidence."
+        },
+        {
+          "id": "additive-owned-queue-reconciliation",
+          "disposition": "existing",
+          "rationale": "ensureJobQueueWith provisions main and enabled DLQ before intake; native queue tests prove idempotent reconciliation and missing-DLQ repair. No drop/recreate repairs drift."
+        },
+        {
+          "id": "validated-identity-and-poll-fallback",
+          "disposition": "existing",
+          "rationale": "Physical names are validated and frozen; ordinary queues use standard polling. No partitioned notification, custom Pgmq interpreter or orphan JSON instance is added."
+        },
+        {
+          "id": "selected-inspection-owner",
+          "disposition": "pending",
+          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-process-managers",
@@ -1439,8 +2180,33 @@
       "sourceSha256": "73e498fc03bdc0825b8c558d19ee54b18e72018e8acf59fb0f8d86ed229f62ed",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "imperative-workflow-choice",
+          "disposition": "existing",
+          "rationale": "The five actual families are journaled imperative workflows with allocated waits/children, not Keiro ProcessManager instances."
+        },
+        {
+          "id": "no-manager-or-shard-consumer",
+          "disposition": "not-applicable",
+          "rationale": "No ProcessManager, ReactiveProcessManager, target dispatch identity, reaction provenance, source subscription or shard group is mounted. No descriptor is fabricated just because the API is released."
+        },
+        {
+          "id": "actual-timer-contract",
+          "disposition": "existing",
+          "rationale": "A single bounded public timer dispatcher recovers stale claims and routes sleeps/application deadlines. TimerRecoverySpec and scheduler tests prove original attempts, stable identities and refusal/rollback."
+        },
+        {
+          "id": "selected-inspection-owner",
+          "disposition": "pending",
+          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-shibuya-inspection",
@@ -1459,8 +2225,38 @@
       "sourceSha256": "a99fa9329b9ce3092cc02c6ddf5bd0ef21d8080a76919367ed374bde4b0c0b82",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "default-based-admission-and-finalization",
+          "disposition": "implemented",
+          "rationale": "Shared consumer helper uses defaultAppConfig; direct test Ingested supplies status. Superseded deliveries call neither handler nor finalizer; permanent finalization fails supervision after four same-decision attempts."
+        },
+        {
+          "id": "bracketed-startup-stop-and-cancellation",
+          "disposition": "implemented",
+          "rationale": "Masked ownership transfer, finally stop, callback/cleanup failure and admitted-work drain have native evidence. Deterministic/fatal Kafka and invalid Shibuya configuration do not reconnect forever."
+        },
+        {
+          "id": "health-and-configured-budgets",
+          "disposition": "implemented",
+          "rationale": "Idle paused processors remain healthy; busy paused work follows last progress. Queue health follows attempt+30, intake is bounded and detailed metrics remain default-basic."
+        },
+        {
+          "id": "batch-or-custom-finalizer-absent",
+          "disposition": "not-applicable",
+          "rationale": "No application batch processor, unbounded batch-key family or custom production adapter/finalizer exists; native fixtures exercise the released framework boundary."
+        },
+        {
+          "id": "selected-inspection-owner",
+          "disposition": "pending",
+          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-transport-selection",
@@ -1468,9 +2264,28 @@
       "sourcePath": "runtime-patterns/messaging/transport-selection.md",
       "sourceSha256": "365b337de081eea79106768358dfb946f5549f98ae9b699377dcbfa10df7675d",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "failure-semantics-match-real-transports",
+          "disposition": "existing",
+          "rationale": "Kafka intake remains StrictInOrder/Serial with durable poison persistence and no invented attempt count. Internal jobs use PGMQ leases/typed retry/DLQ and stable logical keys."
+        },
+        {
+          "id": "standard-polling-and-native-lifetime",
+          "disposition": "implemented",
+          "rationale": "The actual job uses standard PollEvery1, batch1/inbox1 and bounded visibility. Permanent failure reaches process supervision and resource cleanup is joined."
+        },
+        {
+          "id": "actual-subscription-census",
+          "disposition": "not-applicable",
+          "rationale": "There is no application-owned Kiroku subscription, shard group, namespace fan-in or static member assignment. The four catalog owners are synchronous atomic authority with LiveOnly payloads. No unused subscription is introduced."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
+        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/migrations-authoring",

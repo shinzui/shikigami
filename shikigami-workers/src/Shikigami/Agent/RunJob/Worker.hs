@@ -37,7 +37,6 @@ import Effectful (Eff, IOE, Limit (Limited), Persistence (Persistent), UnliftStr
 import Hasql.Pool qualified
 import Keiro.PGMQ (JobContext (..), JobOutcome (..), RetryDelay (..))
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..))
-import Kioku.App (AppEnv (..))
 import OpenTelemetry.Trace.Core qualified as Otel
 import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), addAttribute, runTracing, withSpan')
 import Shikigami.Agent.Conversation qualified as Conversation
@@ -48,6 +47,7 @@ import Shikigami.Agent.Run.Key (runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.AgentRun.Ledger (recordDeadLetter)
+import Shikigami.App (AppEnv (..))
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Directory.Store qualified as DirectoryStore
@@ -364,7 +364,7 @@ runConversationAgent env job addressed =
 -- its sinks.
 runOneAgent :: WorkerEnv -> RunJob -> IO JobOutcome
 runOneAgent env job =
-  runEff . runTracing (tracer ((.appEnv) env)) $
+  runEff . runTracing (env.appEnv.tracer) $
     withSpan' "agent.run" (spanArgs Consumer) \traceSpan -> do
       addAttribute traceSpan "agent.name" ((agentNameText ((.agentName) job)))
       addAttribute traceSpan "trigger.kind" (triggerKindText ((.triggerKind) job))

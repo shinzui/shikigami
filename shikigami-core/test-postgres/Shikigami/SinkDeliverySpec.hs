@@ -22,7 +22,6 @@ import Keiro.Integration.Event qualified as Integration
 import Keiro.Outbox qualified as Outbox
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
 import Kikan.En.Action (AgentAction, actionResource, canonicalResourceText)
-import Kioku.App (AppEnv (..), noopTracer, runAppIO)
 import Kioku.Session (SessionRow (..))
 import Kioku.Session qualified as Session
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
@@ -56,6 +55,7 @@ import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), ResolvedAgen
 import Shikigami.Agent.Run.Key (RunKey (..), runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
+import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig (..), appConfig, environmentBindings)
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
 import Shikigami.Behavior.Run (newBehaviorEnv)
@@ -535,7 +535,7 @@ withFixtureUsingTracer databaseFixture tracer label sinks kizashi danwa use =
     withStore (defaultConnectionSettings connectionString) \kirokuStore -> do
       behaviorEnv <- newBehaviorEnv
       sinkHttp <- testSinkHttpFor danwa
-      let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connectionString, tracer, metrics = Nothing}
+      let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connectionString, tracer, metrics = Nothing, store = Nothing}
           pool = Kiroku.Store.Connection.pool kirokuStore
           declaration = agentDeclaration sinks
           deps =

@@ -22,7 +22,8 @@ import Network.Wai (Application)
 import Servant.Health (ProbeCheck, ProbeVerdict (Healthy, Unhealthy))
 import Servant.Health.TestKit (probeContractTests)
 import Shibuya.Core.Metrics
-  ( ProcessorMetrics (..),
+  ( InFlightInfo (..),
+    ProcessorMetrics (..),
     ProcessorState (Failed, Idle, Paused, Processing, Stopped),
     emptyInFlightInfo,
     emptyProcessorMetrics,
@@ -37,6 +38,7 @@ import Shikigami.Health.Worker
     newHeartbeatsWithStaleness,
     probeApplication,
     processorStateVerdict,
+    processorStateVerdictWithStaleness,
     registerReport,
   )
 import Test.Tasty (TestTree, testGroup)
@@ -192,6 +194,13 @@ supervisedTests =
             verdict = processorStateVerdict ConsumerLoop now (Just (metricsIn (Processing (emptyInFlightInfo 1) lastActivity lastActivity) now))
         failedCheckOf verdict >>= (@?= loopCheckName ConsumerLoop)
         onsetOf verdict >>= (@?= addUTCTime (loopStaleAfter ConsumerLoop) lastActivity),
+      testCase "configured five-minute work outlives the old minute bound but still expires" do
+        started <- getCurrentTime
+        let metrics = Just (metricsIn (Processing (emptyInFlightInfo 1) started started) started)
+        processorStateVerdictWithStaleness 330 QueueLoop (addUTCTime 120 started) metrics @?= Healthy
+        let expired = processorStateVerdictWithStaleness 330 QueueLoop (addUTCTime 331 started) metrics
+        failedCheckOf expired >>= (@?= loopCheckName QueueLoop)
+        onsetOf expired >>= (@?= addUTCTime 330 started),
       -- What no heartbeat could report at all: the failure's own timestamp,
       -- rather than whenever the probe next looked.
       testCase "a failed processor is dated by its own failure, not the probe" do
@@ -206,8 +215,10 @@ supervisedTests =
         now <- getCurrentTime
         let recent = addUTCTime (-5) now
             stale = addUTCTime (negate (loopStaleAfter ConsumerLoop + 5)) now
-        processorStateVerdict ConsumerLoop now (Just (metricsIn (Paused (emptyInFlightInfo 1) stale recent) now)) @?= Healthy
-        let verdict = processorStateVerdict ConsumerLoop now (Just (metricsIn (Paused (emptyInFlightInfo 1) recent stale) now))
+            busy = (emptyInFlightInfo 1) {inFlight = 1}
+        processorStateVerdict ConsumerLoop now (Just (metricsIn (Paused (emptyInFlightInfo 1) recent stale) now)) @?= Healthy
+        processorStateVerdict ConsumerLoop now (Just (metricsIn (Paused busy stale recent) now)) @?= Healthy
+        let verdict = processorStateVerdict ConsumerLoop now (Just (metricsIn (Paused busy recent stale) now))
         failedCheckOf verdict >>= (@?= loopCheckName ConsumerLoop)
         onsetOf verdict >>= (@?= addUTCTime (loopStaleAfter ConsumerLoop) stale),
       testCase "a stopped processor is unhealthy" do

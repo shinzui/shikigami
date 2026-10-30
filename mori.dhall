@@ -947,6 +947,7 @@ in  Schema.Project::{
               }
           , Schema.Dependency.ByName "shinzui/shibuya:shibuya-core"
           , Schema.Dependency.ByName "shinzui/shibuya-kafka-adapter:shibuya-kafka-adapter"
+          , Schema.Dependency.ByName "shinzui/shibuya:shibuya-metrics"
           , Schema.Dependency.WithAugmentation
               { name = "UnkindPartition/tasty:tasty"
               , extraDocs = [] : List Schema.DocRef.Type
@@ -1039,6 +1040,7 @@ in  Schema.Project::{
       , "shinzui/settei:settei-yaml"
       , "shinzui/shibuya-kafka-adapter:shibuya-kafka-adapter"
       , "shinzui/shibuya:shibuya-core"
+      , "shinzui/shibuya:shibuya-metrics"
       , "shinzui/shikumi:shikumi"
       , "shinzui/shikumi:shikumi-tools"
       , "shinzui/shomei:shomei-client"

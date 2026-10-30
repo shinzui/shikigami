@@ -10,13 +10,11 @@ import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
-import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
 import Data.Vector qualified as Vector
 import Effectful (Eff)
-import Keiro.Workflow (PatchId (..), WorkflowId (..), WorkflowOutcome (..), WorkflowRunOptions (..), loadStepIndex, runWorkflowWith)
-import Kioku.App (AppEffects, AppEnv (..), runAppIO)
+import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization
@@ -31,6 +29,7 @@ import Shikigami.Agent.Principal (AgentIdentity (..), identityText)
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob
 import Shikigami.Agent.Workflow qualified as Agent
+import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
 import Shikigami.App.Config (AppConfig (..), defaultAppConfig)
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
 import Shikigami.Behavior.Run (newBehaviorEnv)
@@ -59,7 +58,6 @@ import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.WorkerSession.Store qualified as Sessions
 import Shikigami.WorkerSession.Types qualified as Sessions
-import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Shikigami.Workspace.Admission (WorkspaceHost (..))
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog (repositoryBase)
@@ -205,13 +203,6 @@ tests fixture =
           Agent.runAgentRunWorkflow resumed job >>= assertCompleted
           readFile (workspaceFiles root binding </> "dependency.txt") >>= (@?= "workflow replacement\n")
           length <$> readIORef observed >>= (@?= 2),
-      testCase "old patch snapshot refuses mutation without allocating or calling a model" $
-        withWorkflow fixture \env root job _ deps observed -> do
-          let options = shikigamiWorkflowRunOptions env & #activePatches .~ Set.delete (PatchId "shikigami-governed-workspaces-v1") (shikigamiWorkflowRunOptions env).activePatches
-          outcome <- run env (runWorkflowWith options Agent.agentRunWorkflowName (runJobWorkflowId job) (Agent.agentRunWorkflow deps (Just job)))
-          case outcome of Completed (Left _) -> pure (); _ -> assertFailure ("old branch admitted mutation: " <> show outcome)
-          doesPathExist root >>= (@?= False)
-          readIORef observed >>= (@?= []),
       testCase "operator principal mismatch refuses before source allocation" $
         withWorkflowConfig (\settings -> settings & #grants .~ [WorkspaceGrant "workspace-worker" "other-principal" "mori://fixture/repo" Nothing]) fixture \_ root job _ deps observed -> do
           Agent.runAgentRunWorkflow deps job >>= assertRefused

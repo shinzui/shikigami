@@ -4,7 +4,7 @@ module Shikigami.Execution.Foreground (driveExecutionForeground) where
 
 import Keiro.Workflow (WorkflowOutcome (..))
 import Keiro.Workflow.Child (runChildWorkflow)
-import Kioku.App (runAppIO)
+import Shikigami.App (runAppIO)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Driver
 import Shikigami.Execution.Executor

@@ -6,10 +6,10 @@ import Data.Aeson qualified as Aeson
 import Data.List (find)
 import Effectful (Eff)
 import Effectful.Exception (trySync)
-import Kioku.App (AppEffects)
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity)
+import Shikigami.App (AppEffects)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Identity (OperationId (..))

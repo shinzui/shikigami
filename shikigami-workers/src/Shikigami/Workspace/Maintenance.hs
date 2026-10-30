@@ -3,10 +3,10 @@ module Shikigami.Workspace.Maintenance (WorkspaceMaintenance (..), runWorkspaceM
 
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as Bytes
-import Kioku.App (AppEnv (..), noopTracer)
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), mkAgentPrincipal)
+import Shikigami.App (AppEnv (..), noopTracer)
 import Shikigami.App.Config (AppConfig (..), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Directory (DirectoryRuntime (..), identityLifecycleAdmission, startDirectory)
@@ -33,7 +33,7 @@ runWorkspaceMaintenance actor operation config = do
   tracer <- noopTracer
   authorizer <- buildConfiguredActionAuthorizer logger config >>= either (const refuse) pure
   directory <- startDirectory logger config.directorySettings >>= either (const refuse) pure
-  let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing}
+  let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
       runtime = MaintenanceRuntime appEnv settings.storageRoot authorizer (identityLifecycleAdmission directory.handle) (pure ())
   output <- case operation of
     ListWorkspaces cursor -> listWorkspaces runtime principal cursor

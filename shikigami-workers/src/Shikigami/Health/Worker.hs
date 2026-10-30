@@ -62,7 +62,9 @@ module Shikigami.Health.Worker
     loopLivenessCheck,
     loopLivenessAt,
     supervisedLoopVerdict,
+    supervisedLoopVerdictWithStaleness,
     processorStateVerdict,
+    processorStateVerdictWithStaleness,
     postgresReadiness,
     mkWorkerHealthChecks,
 
@@ -91,7 +93,7 @@ import Servant.Health (HealthApi, ProbeCheck, ProbeVerdict (Healthy, Unhealthy),
 import Servant.Health.Check (boolCheck, newFailureTracker, safeCheck, sequenceChecks, withProbeTimeout)
 import Servant.Server.Generic (genericServe)
 import Shibuya.App (Master, ProcessorId, ProcessorMetrics (..), getProcessorMetricsIO)
-import Shibuya.Core.Metrics (ProcessorState (Failed, Idle, Paused, Processing, Stopped))
+import Shibuya.Core.Metrics (InFlightInfo (..), ProcessorState (Failed, Idle, Paused, Processing, Stopped))
 import Shikigami.App.Config (Port, portNumber)
 import Shikigami.Health.Ping (databaseReachable, postgresCheckName)
 import Shikigami.Log qualified as Log
@@ -314,10 +316,15 @@ loopLivenessAt registry@Heartbeats {beats, staleAfter} now = do
 -- The error text from @Failed@ deliberately does not reach the probe body, which
 -- carries only the check name. It belongs in the logs.
 supervisedLoopVerdict :: LoopName -> Master -> ProcessorId -> IO ProbeVerdict
-supervisedLoopVerdict loop master processorId = do
+supervisedLoopVerdict loop = supervisedLoopVerdictWithStaleness (loopStaleAfter loop) loop
+
+-- | A queue's legitimate processing bound follows its configured attempt
+-- timeout; a fixed sixty-second probe must not kill a five-minute attempt.
+supervisedLoopVerdictWithStaleness :: NominalDiffTime -> LoopName -> Master -> ProcessorId -> IO ProbeVerdict
+supervisedLoopVerdictWithStaleness stale loop master processorId = do
   found <- getProcessorMetricsIO master processorId
   now <- getCurrentTime
-  pure (processorStateVerdict loop now found)
+  pure (processorStateVerdictWithStaleness stale loop now found)
 
 -- | The mapping itself, separated from reading it.
 --
@@ -325,15 +332,19 @@ supervisedLoopVerdict loop master processorId = do
 -- decision worth testing is here, and putting it behind a running supervisor
 -- would mean a test could only reach it by standing one up.
 processorStateVerdict :: LoopName -> UTCTime -> Maybe ProcessorMetrics -> ProbeVerdict
-processorStateVerdict loop now = \case
+processorStateVerdict loop = processorStateVerdictWithStaleness (loopStaleAfter loop) loop
+
+processorStateVerdictWithStaleness :: NominalDiffTime -> LoopName -> UTCTime -> Maybe ProcessorMetrics -> ProbeVerdict
+processorStateVerdictWithStaleness stale loop now = \case
   Nothing -> Unhealthy (loopCheckName loop) now
   Just ProcessorMetrics {state} -> case state of
     Idle -> Healthy
     Processing _ _ lastActivity ->
-      let deadline = addUTCTime (loopStaleAfter loop) lastActivity
+      let deadline = addUTCTime stale lastActivity
        in if now > deadline then Unhealthy (loopCheckName loop) deadline else Healthy
+    Paused info _ _ | info.inFlight <= 0 -> Healthy
     Paused _ _ lastProgress ->
-      let deadline = addUTCTime (loopStaleAfter loop) lastProgress
+      let deadline = addUTCTime stale lastProgress
        in if now > deadline then Unhealthy (loopCheckName loop) deadline else Healthy
     Failed _ failedAt -> Unhealthy (loopCheckName loop) failedAt
     Stopped -> Unhealthy (loopCheckName loop) now
