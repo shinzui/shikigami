@@ -8,6 +8,8 @@ module Shikigami.Workspace.Supervisor
     SupervisorBackend (..),
     systemdSupervisorBackend,
     workspaceExecDescriptor,
+    transferredWorkspaceExecDescriptor,
+    transferredWorkspaceExecBinding,
     workspaceExecSchema,
     workspaceExecBinding,
     superviseProcess,
@@ -54,10 +56,11 @@ import Shikigami.Workspace.ContainedFile
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Process
 import Shikigami.Workspace.ProcessStore qualified as Processes
-import Shikigami.Workspace.Provider (workspaceProcessAction)
+import Shikigami.Workspace.Provider (workspaceProcessAction, workspaceTransferredProcessAction)
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Store qualified as Workspaces
 import Shikigami.Workspace.Systemd qualified as Systemd
+import Shikigami.Workspace.TransferStore qualified as Transfers
 import Shikigami.Workspace.Types
 import Shikumi.Tool (ToolError (ToolRunFailed), renderToolError)
 import Shikumi.Tool.Output (ToolOutput, textToolOutput)
@@ -130,7 +133,13 @@ newtype SupervisorAbort = SupervisorAbort SupervisorError deriving stock (Show)
 instance Exception SupervisorAbort
 
 workspaceExecDescriptor :: CapabilityDescriptor
-workspaceExecDescriptor = CapabilityDescriptor (must (mkCapabilityId "workspace.exec")) (must (mkCapabilityRevision "1")) [CapabilityToolDescriptor "validate" IdempotentMutation]
+workspaceExecDescriptor = execDescriptorFor False
+
+transferredWorkspaceExecDescriptor :: CapabilityDescriptor
+transferredWorkspaceExecDescriptor = execDescriptorFor True
+
+execDescriptorFor :: Bool -> CapabilityDescriptor
+execDescriptorFor transferable = CapabilityDescriptor (must (mkCapabilityId "workspace.exec")) (must (mkCapabilityRevision (if transferable then "2" else "1"))) [CapabilityToolDescriptor "validate" IdempotentMutation]
   where
     must :: (Show e) => Either e a -> a; must = either (error . show) id
 
@@ -138,7 +147,13 @@ workspaceExecSchema :: Aeson.Value
 workspaceExecSchema = Aeson.object ["type" Aeson..= ("object" :: Text), "properties" Aeson..= Aeson.object ["rule" Aeson..= Aeson.object ["type" Aeson..= ("string" :: Text), "maxLength" Aeson..= (256 :: Int)]], "required" Aeson..= ["rule" :: Text], "additionalProperties" Aeson..= False]
 
 workspaceExecBinding :: ToolBinding
-workspaceExecBinding = ToolBinding "overlay__workspace-exec__validate" "workspace.exec:1" (versionedDigest "shikigami.tool-schema/1" workspaceExecSchema) UncertainEffect NoInvoiceCost
+workspaceExecBinding = execBindingFor False
+
+transferredWorkspaceExecBinding :: ToolBinding
+transferredWorkspaceExecBinding = execBindingFor True
+
+execBindingFor :: Bool -> ToolBinding
+execBindingFor transferable = ToolBinding "overlay__workspace-exec__validate" (if transferable then "workspace.exec:2" else "workspace.exec:1") (versionedDigest "shikigami.tool-schema/1" workspaceExecSchema) UncertainEffect NoInvoiceCost
 
 superviseProcess :: SupervisorRuntime -> SupervisorRequest -> IO (Either SupervisorError ProcessRecord)
 superviseProcess runtime request = protect do
@@ -179,9 +194,11 @@ loadAccepted runtime request = do
   (snapshot, _) <- execute runtime (Execution.loadExecution access)
   operation <- execute runtime (Execution.inspectOperation request.operationId) >>= maybe (abort SupervisorRefused) pure
   admission <- maybe (abort SupervisorRefused) pure snapshot.workspace
-  unless (admission.filePolicy == Just supervisedFilePolicy && workspaceExecDescriptor `elem` resolvedCapabilities snapshot.capabilities && operation.executionId == snapshot.executionId && operation.specification.kind == ToolOperation && operation.specification.name == workspaceExecBinding.name && operation.specification.recovery == UncertainEffect && operation.specification.scopeDigest == toolScopeDigest workspaceExecBinding && operation.specification.policyDigest == versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) (abort SupervisorRefused)
+  let transferable = admission.filePolicy == Just transferableFilePolicy
+      expected = execBindingFor transferable
+  unless (admission.filePolicy == Just (if transferable then transferableFilePolicy else supervisedFilePolicy) && execDescriptorFor transferable `elem` resolvedCapabilities snapshot.capabilities && operation.executionId == snapshot.executionId && operation.specification.kind == ToolOperation && operation.specification.name == expected.name && operation.specification.recovery == UncertainEffect && operation.specification.scopeDigest == toolScopeDigest expected && operation.specification.policyDigest == versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) (abort SupervisorRefused)
   tool <- execute runtime (Execution.readReplayPayload @ToolOperationInput access "operation-input" operation.input)
-  unless (tool.binding == workspaceExecBinding && tool.binding `elem` snapshot.toolBindings && tool.invocation.name == workspaceExecBinding.name && operation.specification.responsePosition == Just tool.position) (abort SupervisorRefused)
+  unless (tool.binding == expected && tool.binding `elem` snapshot.toolBindings && tool.invocation.name == expected.name && operation.specification.responsePosition == Just tool.position) (abort SupervisorRefused)
   response <- execute runtime (Execution.readReplayPayload @OperationOutcome access "operation-outcome" tool.response)
   assistant <- case response of ModelReturned value _ -> pure value; _ -> abort SupervisorRefused
   unless (tool.position >= 0 && take 1 (drop tool.position (toolInvocations assistant)) == [tool.invocation]) (abort SupervisorRefused)
@@ -191,7 +208,7 @@ loadAccepted runtime request = do
   rule <- either (const (abort SupervisorRefused)) pure (parseEither (Aeson.withObject "validation rule" (\fields -> if length fields /= 1 then fail "invalid rule request" else fields Aeson..: "rule")) tool.invocation.arguments)
   unless (bounded rule) (abort SupervisorRefused)
   (binding, state) <- transact runtime (Workspaces.inspectWorkspaceTx admission.workspace) >>= maybe (abort SupervisorRefused) pure
-  unless (state == Ready && admission.bindingDigest == workspaceBindingDigest binding && admission.runId == binding.request.runId && admission.runId == snapshot.runId && admission.assignmentId == snapshot.selection.assignmentId && Just admission.rootId == snapshot.selection.rootId && admission.rootId == binding.request.rootId && admission.owner == snapshot.identity && admission.owner == binding.request.owner && admission.epoch == binding.request.epoch && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base) (abort SupervisorRefused)
+  unless (state == Ready && matchesWorkspaceAdmission binding admission && admission.runId == snapshot.runId && admission.assignmentId == snapshot.selection.assignmentId && Just admission.rootId == snapshot.selection.rootId && admission.rootId == binding.request.rootId && admission.owner == snapshot.identity && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base) (abort SupervisorRefused)
   (command, profile) <- runtime.selectRule binding admission rule >>= either (const (abort SupervisorRefused)) pure
   profileIdentity <- Systemd.systemdProfileIdentity profile
   unless (validProcessCommand command && command.rule == rule && command.profile == profileIdentity) (abort SupervisorRefused)
@@ -225,7 +242,7 @@ lockedProcess runtime accepted = do
       let deadline = min root.envelope.cutoff (addUTCTime (fromIntegral command.timeoutSeconds) now)
           fingerprint = processFingerprint binding (bundleDigest accepted.admission.instructions) dispatch.operation command
           proposed = ProcessRecord dispatch.operation.operationId dispatch.attemptId dispatch.owner dispatch.generation (workspaceBindingDigest binding) (bundleDigest accepted.admission.instructions) fingerprint command deadline (processUnit dispatch.operation.operationId fingerprint) Nothing Nothing ProcessReserved Nothing (Just accepted.routing)
-      record <- transact runtime (Processes.reserveProcessTx binding proposed) >>= either (const (abort SupervisorRefused)) pure
+      record <- transact runtime ((if accepted.admission.filePolicy == Just transferableFilePolicy then Processes.reserveAdmittedProcessTx binding accepted.admission else Processes.reserveProcessTx binding) proposed) >>= either (const (abort SupervisorRefused)) pure
       unless (record == proposed) (abort SupervisorUnresolved)
       let candidate = record & #bootId .~ Just boot & #phase .~ ProcessLaunchRequested
           directory = processDirectory binding record
@@ -251,7 +268,7 @@ lockedProcess runtime accepted = do
               parent <- withContainedFile files path containedTargetIdentity
               unless (parent == Right identity) (abort SupervisorRefused)
               authorize runtime accepted candidate boot identity
-              granted <- transact runtime (Processes.requestProcessLaunchTx binding record boot) >>= either (const (abort SupervisorUnresolved)) pure
+              granted <- transact runtime ((if accepted.admission.filePolicy == Just transferableFilePolicy then Processes.requestAdmittedProcessLaunchTx binding accepted.admission else Processes.requestProcessLaunchTx binding) record boot) >>= either (const (abort SupervisorUnresolved)) pure
               unless granted (abort SupervisorUnresolved)
               -- The committed intent survives exceptions or acknowledgement loss.
               -- A new caller observes it and never issues another start request.
@@ -275,13 +292,13 @@ current runtime accepted record = do
   let dispatch = accepted.dispatch
       claim = Attempt.AttemptClaim (Attempt.JobReference 1 accepted.snapshot.executionId dispatch.operation.operationId dispatch.attemptId) dispatch.owner dispatch.generation
   execute runtime (Execution.checkStartedExecutionAttempt accepted.access claim)
-  transact runtime (Workspaces.checkWorkspaceOwnerTx accepted.binding accepted.admission.owner accepted.admission.epoch) >>= either (const (abort SupervisorRefused)) pure
+  transact runtime (if accepted.admission.filePolicy == Just transferableFilePolicy then Transfers.checkWorkspaceAdmissionOwnerTx accepted.binding accepted.admission else Workspaces.checkWorkspaceOwnerTx accepted.binding accepted.admission.owner accepted.admission.epoch) >>= either (const (abort SupervisorRefused)) pure
   forM_ record \retained -> getCurrentTime >>= \now -> when (now >= retained.deadline) (abort SupervisorRefused)
 
 authorize :: SupervisorRuntime -> AcceptedProcess -> ProcessRecord -> Text -> Text -> IO ()
 authorize runtime accepted record boot target = do
   principal <- either (const (abort SupervisorRefused)) pure (identityText accepted.admission.owner)
-  action <- either (const (abort SupervisorRefused)) pure (workspaceProcessAction accepted.binding accepted.admission accepted.dispatch record boot target)
+  action <- either (const (abort SupervisorRefused)) pure ((if accepted.admission.filePolicy == Just transferableFilePolicy then workspaceTransferredProcessAction else workspaceProcessAction) accepted.binding accepted.admission accepted.dispatch record boot target)
   runtime.authorizer.authorize principal action >>= either (const (abort SupervisorRefused)) (const (pure ()))
   current runtime accepted (Just record)
 
@@ -374,7 +391,7 @@ publishProcessReceipt runtime operationId = protect do
       operation <- execute runtime (Execution.inspectOperation operationId) >>= maybe (abort SupervisorUnresolved) pure
       let OperationId key = operationId
           context = OperationContext routing.executionId operationId key operation.fingerprint operation.specification.scopeDigest
-      unless (routing.identity == retained.identity && retained.rootId == Just binding.request.rootId && operation.executionId == routing.executionId && operation.specification.kind == ToolOperation && operation.specification.name == workspaceExecBinding.name && operation.specification.scopeDigest == toolScopeDigest workspaceExecBinding && operation.input.digest == routing.inputDigest && record.fingerprint == processFingerprint binding record.instructionDigest context record.command) (abort SupervisorUnresolved)
+      unless (routing.identity == retained.identity && retained.rootId == Just binding.request.rootId && operation.executionId == routing.executionId && operation.specification.kind == ToolOperation && operation.specification.name == workspaceExecBinding.name && operation.specification.scopeDigest `elem` map toolScopeDigest [workspaceExecBinding, transferredWorkspaceExecBinding] && operation.specification.recovery == UncertainEffect && operation.input.digest == routing.inputDigest && record.fingerprint == processFingerprint binding record.instructionDigest context record.command) (abort SupervisorUnresolved)
       actual <- execute runtime (Execution.inspectExecutionAttempt record.attemptId) >>= maybe (abort SupervisorUnresolved) pure
       unless (actual.executionId == routing.executionId && actual.operationId == operationId && actual.owner == Just record.claimOwner && actual.generation == record.generation && isNothing actual.call) (abort SupervisorUnresolved)
       let reference = Attempt.JobReference 1 routing.executionId operationId record.attemptId

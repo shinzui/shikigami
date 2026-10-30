@@ -1,6 +1,6 @@
 -- | Reserve before filesystem effects. Matching duplicate requests converge;
 -- reservation metadata remains immutable after the workspace becomes ready.
-module Shikigami.Workspace.Store (reserveWorkspaceTx, inspectWorkspaceTx, markWorkspaceReadyTx, checkWorkspaceOwnerTx, checkWorkspaceOperationTx, reserveWorkspaceEffectTx, recordWorkspaceReceiptTx, freezeWorkspaceTx, registerFileTx, inspectRegisteredFileTx, inspectFilePageTx, WorkspaceControl (..), inspectWorkspaceControlTx) where
+module Shikigami.Workspace.Store (reserveWorkspaceTx, inspectWorkspaceTx, markWorkspaceReadyTx, checkWorkspaceOwnerTx, checkWorkspaceOperationTx, reserveWorkspaceEffectTx, recordWorkspaceReceiptTx, freezeWorkspaceTx, registerFileTx, registerFileForOwnerTx, inspectRegisteredFileTx, inspectFilePageTx, WorkspaceControl (..), inspectWorkspaceControlTx) where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4)
 import Data.Aeson qualified as Aeson
@@ -138,11 +138,15 @@ recordWorkspaceReceiptTx binding receipt
 -- Called in the reservation transaction before writing any private intent or
 -- repository bytes. A duplicate cannot replace the original actual routing.
 registerFileTx :: WorkspaceBinding -> FileRegistration -> Transaction (Either WorkspaceError ())
-registerFileTx binding registration = do
+registerFileTx binding = registerFileForOwnerTx binding binding.request.owner binding.request.epoch
+
+registerFileForOwnerTx :: WorkspaceBinding -> AgentIdentity -> Integer -> FileRegistration -> Transaction (Either WorkspaceError ())
+registerFileForOwnerTx binding owner epoch registration = do
+  current <- checkWorkspaceOwnerTx binding owner epoch
   let receipt = registration.receipt
       OperationId key = receipt.operationId
   existing <- Tx.statement key selectEffect
-  if validProcessRouting registration.routing && registration.routing.identity == binding.request.owner && registration.routing.executionId == registration.operation.executionId && registration.operation.operationId == receipt.operationId && receipt.bindingDigest == workspaceBindingDigest binding && receipt.generation > 0 && receipt.state == EditPrepared && registration.claimOwner /= "" && maybe False (\(resource, fingerprint, _) -> resource == binding.workspace.resource && fingerprint == receipt.fingerprint) existing
+  if current == Right () && validProcessRouting registration.routing && registration.routing.identity == owner && registration.routing.executionId == registration.operation.executionId && registration.operation.operationId == receipt.operationId && receipt.bindingDigest == workspaceBindingDigest binding && receipt.generation > 0 && receipt.state == EditPrepared && registration.claimOwner /= "" && maybe False (\(resource, fingerprint, _) -> resource == binding.workspace.resource && fingerprint == receipt.fingerprint) existing
     then do
       Tx.statement (key, registration) insertFileRegistration
       retained <- inspectRegisteredFileTx receipt.operationId

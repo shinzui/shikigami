@@ -180,6 +180,26 @@ tests pass; worker executables build and `git diff --check` passes.
 Transfer-aware accepted tool adapters, real Linux
 handoff and revision integration remain outstanding; Milestone 5 stays open.
 
+The transfer-aware adapters and host are implemented (2026-10-30): file revision
+3, process revision 2 and Git revision 2 require `ascii-exact-transfer-v1` and
+explicit retained successor authority at every effect boundary. Historical
+adapters and C13 encodings remain available unchanged. The host derives the
+actual child from the established session, reads the original immutable
+instruction bundle under fresh authority, retains the ready Unix profile and
+conditionally admits the successor under a second exact grant and the shared
+lock. The actual accepted successor read passes without allocating or
+provisioning another workspace; denial and idle/terminal successor cleanup
+eligibility are tested. New process and Git revisions pass original-attempt
+receipt recovery tests. The real Kikan verifier rejects changed successor
+run/owner/epoch and historical-action reuse. Production configuration still
+selects the qualified older revisions; `configuredWorkspaceHostWithTransfers`
+is the explicit qualification composition. Enable it only after real Linux
+successor writes and handoff pass. Same-owner continuing follow-ups, native
+handoff qualification and integrated artifacts remain outstanding. All 533
+core, 358 PostgreSQL, 238 worker and five migration tests pass. New cleanup
+intents bind the retained ownership request; historical encodings omit that
+optional field and preserve their identity.
+
 ## Surprises & Discoveries
 
 2026-10-30 successor design: retain the original allocation and process profile

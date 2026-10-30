@@ -92,6 +92,8 @@ tests fixture =
         (_, started) <- right =<< run env (Sessions.startAssignment access (established.revision + 1) 1 (OperationId "successor-start") message.assignmentId)
         runId <- maybe (fail "missing successor child") pure started.childWorkflowId
         let admission = original & #runId .~ runId & #assignmentId .~ Selection.assignmentIdFor runId & #owner .~ successor & #epoch .~ 1
+        Right (Just child) <- run env (runTransaction (lookupSessionChildTx runId))
+        run env (runTransaction (successorWorkspaceTx child)) >>= (@?= Right binding)
         run env (runTransaction (checkWorkspaceAdmissionTx binding admission (OperationId "before-admission"))) >>= (@?= Left WorkspaceBindingConflict)
         run env (runTransaction (admitSuccessorTx binding admission)) >>= (@?= Right ())
         run env (runTransaction (admitSuccessorTx binding admission)) >>= (@?= Right ())

@@ -99,6 +99,19 @@ peer-checked RPC carries this workspace-side contract; historical process frames
 keep version 1. Instrumented process tests establish this boundary; real Linux
 handoff and accepted successor writes remain plan-96 gates.
 
+Transfer-aware file/process/Git adapters now check explicit retained successor
+admission, current session ownership and the real actual claim at every effect
+boundary. Their distinct profile and exact revisions prevent historical writers
+from accepting successor coordinates. Fresh action targets explicitly bind the
+successor run as well as assignment, owner and epoch; the original run was
+previously implicit in immutable allocation. Successor loading preserves the
+original ready Unix profile and pinned base instructions, then obtains fresh
+exact authority before conditional control establishment. Cleanup follows the
+latest retained successor execution, retaining live and idle sessions. The
+accepted-read and instrumented process/Git tests pass; production selection
+remains on the qualified older adapters until real Linux successor writes and
+handoff pass.
+
 ## Alternatives rejected
 
 Transferring on lease expiry would permit simultaneous writers. Cancelling a

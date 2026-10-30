@@ -2,6 +2,9 @@
 -- settlement preserves the original actual claim after authority is revoked.
 module Shikigami.Workspace.GitStore
   ( reserveGitTx,
+    reserveAdmittedGitTx,
+    prepareAdmittedGitTx,
+    requestAdmittedGitPublicationTx,
     prepareGitTx,
     requestGitPublicationTx,
     recordGitAppliedTx,
@@ -23,20 +26,29 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
+import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Prelude
 import Shikigami.Workspace.GitTypes
+import Shikigami.Workspace.Instructions (WorkspaceAdmission (..))
 import Shikigami.Workspace.ProcessStore (inspectProcessTx)
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Store qualified as Store
+import Shikigami.Workspace.TransferStore qualified as Transfers
 import Shikigami.Workspace.Types
 
 reserveGitTx :: WorkspaceBinding -> GitRecord -> Transaction (Either WorkspaceError GitRecord)
-reserveGitTx binding proposed
-  | not (validGitRecord proposed && proposed.phase == GitReserved && proposed.bindingDigest == workspaceBindingDigest binding && proposed.routing.identity == binding.request.owner && proposed.fingerprint == gitFingerprint binding proposed) = pure (Left InvalidWorkspaceRequest)
+reserveGitTx binding = reserveGitFor binding.request.owner (Store.checkWorkspaceOperationTx binding binding.request.owner binding.request.epoch) binding
+
+reserveAdmittedGitTx :: WorkspaceBinding -> WorkspaceAdmission -> GitRecord -> Transaction (Either WorkspaceError GitRecord)
+reserveAdmittedGitTx binding admission = reserveGitFor admission.owner (Transfers.checkWorkspaceAdmissionTx binding admission) binding
+
+reserveGitFor :: AgentIdentity -> (OperationId -> Transaction (Either WorkspaceError ())) -> WorkspaceBinding -> GitRecord -> Transaction (Either WorkspaceError GitRecord)
+reserveGitFor owner checkOperation binding proposed
+  | not (validGitRecord proposed && proposed.phase == GitReserved && proposed.bindingDigest == workspaceBindingDigest binding && proposed.routing.identity == owner && proposed.fingerprint == gitFingerprint binding proposed) = pure (Left InvalidWorkspaceRequest)
   | otherwise = do
-      available <- Store.checkWorkspaceOperationTx binding binding.request.owner binding.request.epoch proposed.operation.operationId
+      available <- checkOperation proposed.operation.operationId
       case available of
         Left err -> pure (Left err)
         Right () -> do
@@ -56,8 +68,14 @@ reserveGitTx binding proposed
     OperationId key = proposed.operation.operationId
 
 prepareGitTx :: WorkspaceBinding -> GitRecord -> GitCandidate -> Transaction (Either WorkspaceError GitRecord)
-prepareGitTx binding expected candidate = do
-  checked <- Store.checkWorkspaceOperationTx binding binding.request.owner binding.request.epoch expected.operation.operationId
+prepareGitTx binding = prepareGitFor (Store.checkWorkspaceOperationTx binding binding.request.owner binding.request.epoch) binding
+
+prepareAdmittedGitTx :: WorkspaceBinding -> WorkspaceAdmission -> GitRecord -> GitCandidate -> Transaction (Either WorkspaceError GitRecord)
+prepareAdmittedGitTx binding admission = prepareGitFor (Transfers.checkWorkspaceAdmissionTx binding admission) binding
+
+prepareGitFor :: (OperationId -> Transaction (Either WorkspaceError ())) -> WorkspaceBinding -> GitRecord -> GitCandidate -> Transaction (Either WorkspaceError GitRecord)
+prepareGitFor checkOperation binding expected candidate = do
+  checked <- checkOperation expected.operation.operationId
   if isLeft checked || expected.bindingDigest /= workspaceBindingDigest binding || not (validGitCandidate candidate && candidate.parent == expected.expectedParent)
     then pure (Left WorkspaceBindingConflict)
     else do
@@ -70,8 +88,14 @@ prepareGitTx binding expected candidate = do
 -- True consumes the only publication transition. An acknowledgement loss is
 -- observation-only; neither another worker nor the same worker receives it twice.
 requestGitPublicationTx :: WorkspaceBinding -> GitRecord -> Transaction (Either WorkspaceError Bool)
-requestGitPublicationTx binding expected = do
-  checked <- Store.checkWorkspaceOperationTx binding binding.request.owner binding.request.epoch expected.operation.operationId
+requestGitPublicationTx binding = requestGitPublicationFor (Store.checkWorkspaceOperationTx binding binding.request.owner binding.request.epoch) binding
+
+requestAdmittedGitPublicationTx :: WorkspaceBinding -> WorkspaceAdmission -> GitRecord -> Transaction (Either WorkspaceError Bool)
+requestAdmittedGitPublicationTx binding admission = requestGitPublicationFor (Transfers.checkWorkspaceAdmissionTx binding admission) binding
+
+requestGitPublicationFor :: (OperationId -> Transaction (Either WorkspaceError ())) -> WorkspaceBinding -> GitRecord -> Transaction (Either WorkspaceError Bool)
+requestGitPublicationFor checkOperation binding expected = do
+  checked <- checkOperation expected.operation.operationId
   if isLeft checked || expected.bindingDigest /= workspaceBindingDigest binding
     then pure (Left WorkspaceBindingConflict)
     else do

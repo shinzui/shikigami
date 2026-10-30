@@ -28,6 +28,7 @@ import Shikigami.Workspace.ProcessPolicy (ProcessProfile (..))
 import Shikigami.Workspace.ProcessProfileStore (inspectProcessProfileTx)
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Store qualified as Store
+import Shikigami.Workspace.TransferStore (currentWorkspaceRequestTx)
 import Shikigami.Workspace.Types
 import System.FilePath ((</>))
 import System.Posix.User (getEffectiveUserID)
@@ -80,7 +81,8 @@ cleanupWorkspace runtime actor ref = protect do
             uid <- maybe (fromIntegral <$> getEffectiveUserID) (pure . (.userId) . fst) profile
             files <- anchor (workspaceFiles binding.storageRoot binding)
             scratch <- anchor (workspaceScratch binding.storageRoot binding)
-            pure (CleanupPlan (workspaceBindingDigest binding) files scratch uid)
+            current <- transact runtime (currentWorkspaceRequestTx binding) >>= maybe (abort CleanupRefused) pure
+            pure (CleanupPlan (workspaceBindingDigest binding) files scratch uid (Just current))
         let authorize = grant runtime actor "cleanup" (toJSON (binding, plan))
         authorize
         done <- transact runtime (prepareCleanupTx binding plan) >>= either (const (abort CleanupRefused)) pure

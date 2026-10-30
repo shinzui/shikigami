@@ -1,4 +1,4 @@
-module Shikigami.WorkspaceFileProviderSpec (tests, withEffectAdapter, withEffectAdapterForTools, withEffectAdapterPolicyInput, executorForAdapter) where
+module Shikigami.WorkspaceFileProviderSpec (tests, withEffectAdapter, withEffectAdapterForTools, withEffectAdapterPolicyInput, withAcceptedWorkspaceTool, executorForAdapter) where
 
 import Baikai.Options (emptyOptions)
 import Baikai.StopReason (StopReason (ToolUse))
@@ -23,7 +23,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization
 import Shikigami.Action.Authorization qualified as Action
 import Shikigami.Agent.Decl (Behavior (Skill))
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName (..), agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Capability.Catalog
@@ -385,13 +385,25 @@ withEffectAdapterPolicyInput processPolicy toolCount qualify install wire logica
   run env (runTransaction (Store.markWorkspaceReadyTx binding)) >>= (@?= Right ())
   admission <- qualify <$> (right =<< loadWorkspaceAdmission binding assignment 65536)
   now <- getCurrentTime
+  _ <- right =<< run env Catalog.registerProjectionCatalog
+  run env (Roots.enrollRoot rootId (Resources.Envelope (Map.fromList [(dimension, Resources.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now))) >>= (@?= Right Resources.Accepted)
+  withAcceptedWorkspaceTool toolCount install (AgentName "worker") wire UUID.nil env admission runtime input \snapshot access reference -> use env binding snapshot access reference runtime input
+
+-- Accept real model/tool state against an already allocated workspace. This
+-- enables successive owners in one database without substituting dispatch ids.
+withAcceptedWorkspaceTool :: Int -> (FileRuntime -> DurableAdapter) -> AgentName -> Text.Text -> UUID.UUID -> AppEnv -> WorkspaceAdmission -> FileRuntime -> Aeson.Value -> (ExecutionSnapshot -> Execution.ReplayAccess -> Attempt.JobReference -> IO a) -> IO a
+withAcceptedWorkspaceTool toolCount install agent wire token env admission runtime input use = do
+  let assignment = admission.assignmentId
+      rootId = admission.rootId
+      identity = admission.owner
+  now <- getCurrentTime
   session <- genSessionId
   selection <- right (resolveExecutionSelection assignment (must (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just rootId) now)
   let adapter = install runtime
   registry <- right (installDurableAdapters [adapter] emptyCapabilityProviderRegistry)
   catalog <- right (mkCapabilityCatalog [adapter.descriptor])
-  capabilities <- right (resolveGovernedCapabilityOverlays (durableAdapterInstalled registry) catalog (\_ _ -> Right ()) (ResolutionSubject (Just "worker") Durable (Skill "fixture") Nothing) [adapter.descriptor.capability])
-  let initial = ExecutionSnapshot 1 (executionIdFor assignment) "file-run" (AgentName "worker") identity session selection Nothing (SkillInstructions "fixture" "system" "body") (ReplayContext 2 (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "edit fixture"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
+  capabilities <- right (resolveGovernedCapabilityOverlays (durableAdapterInstalled registry) catalog (\_ _ -> Right ()) (ResolutionSubject (Just (agentNameText agent)) Durable (Skill "fixture") Nothing) [adapter.descriptor.capability])
+  let initial = ExecutionSnapshot 1 (executionIdFor assignment) admission.runId agent identity session selection Nothing (SkillInstructions "fixture" "system" "body") (ReplayContext 2 (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "edit fixture"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
       native = Tools.NativeToolFactory (\_ -> pure (Right [])) (\_ _ _ -> pure (Right []))
   menu <- right =<< Tools.describeExecutionTools Log.silentLogger allowAllActionAuthorizerForTests registry native initial
   let chosen = filter (\tool -> tool.name == wire) menu.toolBindings
@@ -399,7 +411,6 @@ withEffectAdapterPolicyInput processPolicy toolCount qualify install wire logica
       snapshot = initial & #offeredTools .~ Aeson.toJSON (filterTools menu.offeredTools) & #toolBindings .~ [tool]
       model = OperationSpec (operationIdFor snapshot.executionId 0) ModelTurn RepeatableObservation "model" (versionedDigest "shikigami.harness-policy/1" (Aeson.toJSON snapshot.policy)) "scope" Nothing
   _ <- right =<< run env Catalog.registerProjectionCatalog
-  run env (Roots.enrollRoot rootId (Resources.Envelope (Map.fromList [(dimension, Resources.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now))) >>= (@?= Right Resources.Accepted)
   run env (Execution.admitExecution snapshot) >>= (@?= Right Resources.Accepted)
   access <- right =<< run env (Execution.authorizeReplay snapshot.executionId identity (pure (Right ())))
   (_, operation) <- right =<< run env (Execution.acceptOperation access 0 model (Aeson.object []))
@@ -413,12 +424,12 @@ withEffectAdapterPolicyInput processPolicy toolCount qualify install wire logica
   run env (Execution.recordOutcomeAndAdvance access 1 operation.specification.operationId outcome (NeedTool response 0) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.singleton Resources.Tokens 1) [Resources.CostMicroUsd] Nothing Nothing Nothing))) >>= (@?= Right Resources.Accepted)
   let toolInput = ToolOperationInput response 0 (ToolInvocation "replace-call" tool.name input) tool
       specification = OperationSpec (operationIdFor snapshot.executionId 1) ToolOperation tool.recovery tool.name (versionedDigest "shikigami.harness-policy/1" (Aeson.toJSON snapshot.policy)) (toolScopeDigest tool) (Just 0)
-      reference = Attempt.JobReference 1 snapshot.executionId specification.operationId (AttemptId "file-attempt")
-      submission = Attempt.AttemptSubmission (Execution.toolAttemptRequest reference.attemptId reference.operationId tool) Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)
+      reference = Attempt.JobReference 1 snapshot.executionId specification.operationId (AttemptId ("file-tool:" <> case specification.operationId of OperationId key -> key))
+      submission = Attempt.AttemptSubmission (Execution.toolAttemptRequest reference.attemptId reference.operationId tool) Nothing (Attempt.ExecutionWake (AwakeableId token) 0)
   _ <- right =<< run env (Execution.acceptOperation access 2 specification (Aeson.toJSON toolInput))
-  run env (runTransaction (registerAwakeableTx UUID.nil "shikigami.execution" (executionWorkflowId snapshot.executionId).unWorkflowId))
+  run env (runTransaction (registerAwakeableTx token "shikigami.execution" (executionWorkflowId snapshot.executionId).unWorkflowId))
   _ <- right =<< run env (Execution.submitExecutionAttemptWith access 3 submission (\_ -> pure ()))
-  use env binding snapshot access reference runtime input
+  use snapshot access reference
   where
     filterTools (Aeson.Array values) = Aeson.Array (filterVector values)
     filterTools value = value

@@ -86,7 +86,14 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace governed parent and child"
-    [ testCase "terminal cleanup recovers interruption without removing source, metadata or a sibling" $
+    [ testCase "historical cleanup plans retain their encoding without invented ownership" $ do
+        let original = Aeson.object ["bindingDigest" Aeson..= ("sha256:" <> Text.replicate 64 "a"), "filesTarget" Aeson..= ("1:2" :: Text.Text), "scratchTarget" Aeson..= ("1:3" :: Text.Text), "userId" Aeson..= (62000 :: Int)]
+        case Aeson.fromJSON original of
+          Aeson.Success (plan :: CleanupPlan) -> do
+            plan.ownership @?= Nothing
+            Aeson.toJSON plan @?= original
+          Aeson.Error err -> assertFailure err,
+      testCase "terminal cleanup recovers interruption without removing source, metadata or a sibling" $
         withWorkflow fixture \env root job _ deps _ -> do
           binding <- finishWorkspace env job deps
           writeFile (root </> "retained-sibling") "sibling"

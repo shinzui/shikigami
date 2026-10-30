@@ -10,8 +10,10 @@ module Shikigami.Workspace.TransferStore
     pendingWorkspaceOperationsTx,
     admitSuccessorTx,
     checkWorkspaceAdmissionTx,
+    checkWorkspaceAdmissionOwnerTx,
     checkSessionWriteTx,
     currentWorkspaceRequestTx,
+    successorWorkspaceTx,
   )
 where
 
@@ -152,6 +154,15 @@ matchesAdmission binding admission = admission.workspace == binding.workspace &&
 
 checkWorkspaceAdmissionTx :: WorkspaceBinding -> WorkspaceAdmission -> OperationId -> Transaction (Either WorkspaceError ())
 checkWorkspaceAdmissionTx binding admission operation = do
+  current <- checkWorkspaceAdmissionOwnerTx binding admission
+  case current of
+    Left err -> pure (Left err)
+    Right () -> Store.checkWorkspaceOperationTx binding admission.owner admission.epoch operation
+
+-- Launch transitions must validate ownership without treating their own
+-- already registered process as an unrelated unsettled process.
+checkWorkspaceAdmissionOwnerTx :: WorkspaceBinding -> WorkspaceAdmission -> Transaction (Either WorkspaceError ())
+checkWorkspaceAdmissionOwnerTx binding admission = do
   admitted <-
     if admission.runId == binding.request.runId && admission.owner == binding.request.owner && admission.epoch == binding.request.epoch
       then pure True
@@ -159,7 +170,7 @@ checkWorkspaceAdmissionTx binding admission operation = do
         retained <- Tx.statement admission.runId selectAdmission
         child <- lookupSessionChildTx admission.runId
         pure (admission.filePolicy == Just transferableFilePolicy && retained == Just admission && either (const False) (maybe False (\current -> current.owner == admission.owner && current.epoch == admission.epoch && current.rootId == admission.rootId)) child)
-  if admitted && matchesAdmission binding admission then Store.checkWorkspaceOperationTx binding admission.owner admission.epoch operation else pure (Left WorkspaceBindingConflict)
+  if admitted && matchesAdmission binding admission then Store.checkWorkspaceOwnerTx binding admission.owner admission.epoch else pure (Left WorkspaceBindingConflict)
 
 -- Consumer-side admission is not a bearer grant. Actual tool providers still
 -- validate their protected snapshot, actual claim and fresh exact IO authority.
@@ -181,6 +192,15 @@ currentWorkspaceRequestTx binding = do
       admission <- Tx.statement (binding.workspace.resource, toJSON current.owner, current.epoch) selectCurrentAdmission
       pure (fmap (\(run, session, assignment) -> WorkspaceRequest run (Just (WorkerSessionId session, AssignmentId assignment)) binding.request.rootId current.owner current.owner current.epoch) admission)
     Nothing -> pure Nothing
+
+successorWorkspaceTx :: SessionChild -> Transaction (Either WorkspaceError WorkspaceBinding)
+successorWorkspaceTx child = case child.handoff of
+  Just progress | progress.stage == TransferEstablished && isJust progress.fence && isJust progress.checkpoint -> do
+    matches <- Tx.statement (child.session.value, child.epoch, operationKey progress.operationId) selectSuccessorWorkspace
+    pure case matches of
+      [(binding, intent, proof)] | matchesFence intent proof && intent.sessionId == child.session && intent.newOwner == child.owner && intent.newEpoch == child.epoch && intent.rootId == child.rootId && binding.request.rootId == child.rootId && maybe False ((== child.session) . fst) binding.request.assignment -> Right binding
+      _ -> Left WorkspaceBindingConflict
+  _ -> pure (Left WorkspaceBindingConflict)
 
 textParam :: E.Params Text
 textParam = E.param (E.nonNullable E.text)
@@ -232,3 +252,6 @@ selectAdmission = preparable "SELECT admission FROM shikigami.workspace_successo
 
 selectCurrentAdmission :: Statement (Text, Aeson.Value, Integer) (Maybe (Text, Text, Text))
 selectCurrentAdmission = preparable "SELECT run_id,session_id,assignment_id FROM shikigami.workspace_successor_admissions WHERE resource=$1 AND admission->'owner'=$2 AND (admission->>'epoch')::bigint=$3 ORDER BY sequence DESC LIMIT 1" (contrazip3 textParam (E.param (E.nonNullable E.jsonb)) integerParam) (D.rowMaybe ((,,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text)))
+
+selectSuccessorWorkspace :: Statement (Text, Integer, Text) [(WorkspaceBinding, TransferIntent, FenceProof)]
+selectSuccessorWorkspace = preparable "SELECT b.binding,t.intent,t.proof FROM shikigami.workspace_transfers t JOIN shikigami.workspace_bindings b USING(resource) WHERE t.intent->>'sessionId'=$1 AND (t.intent->>'newEpoch')::bigint=$2 AND t.intent->>'operationId'=$3 AND t.proof IS NOT NULL AND b.state='ready' LIMIT 2" (contrazip3 textParam integerParam textParam) (D.rowList ((,,) <$> jsonRow <*> jsonRow <*> jsonRow))

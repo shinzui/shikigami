@@ -2,6 +2,8 @@
 -- launch grant; factual observations/receipts remain writable after revocation.
 module Shikigami.Workspace.ProcessStore
   ( reserveProcessTx,
+    reserveAdmittedProcessTx,
+    requestAdmittedProcessLaunchTx,
     requestProcessLaunchTx,
     observeProcessInvocationTx,
     recordProcessReceiptTx,
@@ -25,16 +27,24 @@ import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
 import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Prelude
+import Shikigami.Workspace.Instructions (WorkspaceAdmission (..))
 import Shikigami.Workspace.Process
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Store qualified as Store
+import Shikigami.Workspace.TransferStore qualified as Transfers
 import Shikigami.Workspace.Types
 
 reserveProcessTx :: WorkspaceBinding -> ProcessRecord -> Transaction (Either WorkspaceError ProcessRecord)
-reserveProcessTx binding proposed
+reserveProcessTx binding = reserveProcessFor (Store.checkWorkspaceOwnerTx binding binding.request.owner binding.request.epoch) (Store.checkWorkspaceOperationTx binding binding.request.owner binding.request.epoch) binding
+
+reserveAdmittedProcessTx :: WorkspaceBinding -> WorkspaceAdmission -> ProcessRecord -> Transaction (Either WorkspaceError ProcessRecord)
+reserveAdmittedProcessTx binding admission = reserveProcessFor (Transfers.checkWorkspaceAdmissionOwnerTx binding admission) (Transfers.checkWorkspaceAdmissionTx binding admission) binding
+
+reserveProcessFor :: Transaction (Either WorkspaceError ()) -> (OperationId -> Transaction (Either WorkspaceError ())) -> WorkspaceBinding -> ProcessRecord -> Transaction (Either WorkspaceError ProcessRecord)
+reserveProcessFor checkOwner checkOperation binding proposed
   | not valid = pure (Left InvalidWorkspaceRequest)
   | otherwise = do
-      owner <- Store.checkWorkspaceOwnerTx binding binding.request.owner binding.request.epoch
+      owner <- checkOwner
       case owner of
         Left err -> pure (Left err)
         Right () -> do
@@ -43,7 +53,7 @@ reserveProcessTx binding proposed
             Just actual | sameReservation actual proposed -> pure (Right actual)
             Just _ -> pure (Left WorkspaceBindingConflict)
             Nothing -> do
-              available <- Store.checkWorkspaceOperationTx binding binding.request.owner binding.request.epoch proposed.operationId
+              available <- checkOperation proposed.operationId
               fileOperation <- Tx.statement key hasFileOperation
               case available of
                 Right () | not fileOperation -> do
@@ -61,10 +71,16 @@ reserveProcessTx binding proposed
 -- It is not authority: the supervisor must independently recheck the actual
 -- attempt claim, lifecycle, deadline and fresh exact action before protected IO.
 requestProcessLaunchTx :: WorkspaceBinding -> ProcessRecord -> Text -> Transaction (Either WorkspaceError Bool)
-requestProcessLaunchTx binding expected boot
+requestProcessLaunchTx binding = requestProcessLaunchFor (Store.checkWorkspaceOwnerTx binding binding.request.owner binding.request.epoch) binding
+
+requestAdmittedProcessLaunchTx :: WorkspaceBinding -> WorkspaceAdmission -> ProcessRecord -> Text -> Transaction (Either WorkspaceError Bool)
+requestAdmittedProcessLaunchTx binding admission = requestProcessLaunchFor (Transfers.checkWorkspaceAdmissionOwnerTx binding admission) binding
+
+requestProcessLaunchFor :: Transaction (Either WorkspaceError ()) -> WorkspaceBinding -> ProcessRecord -> Text -> Transaction (Either WorkspaceError Bool)
+requestProcessLaunchFor checkOwner binding expected boot
   | expected.bindingDigest /= workspaceBindingDigest binding || not (hostIdentity boot) = pure (Left WorkspaceBindingConflict)
   | otherwise = do
-      owner <- Store.checkWorkspaceOwnerTx binding binding.request.owner binding.request.epoch
+      owner <- checkOwner
       if isLeft owner
         then pure (Left WorkspaceBindingConflict)
         else do

@@ -4,6 +4,9 @@ module Shikigami.Workspace.FileProvider
   ( FileRuntime (..),
     workspaceEditDescriptor,
     supervisedWorkspaceEditDescriptor,
+    transferredWorkspaceEditDescriptor,
+    transferredWorkspaceEditAdapter,
+    transferredWorkspaceEditAdapterWithCheckpoint,
     supervisedWorkspaceEditAdapter,
     supervisedWorkspaceEditAdapterWithCheckpoint,
     workspaceEditAdapter,
@@ -52,6 +55,7 @@ import Shikigami.Workspace.ProcessPolicy
 import Shikigami.Workspace.Profile (retainedFileProfile)
 import Shikigami.Workspace.Provider
 import Shikigami.Workspace.Store qualified as Store
+import Shikigami.Workspace.TransferStore qualified as Transfers
 import Shikigami.Workspace.Types
 import Shikumi.Tool (ToolError (..), mkDynTool, renderToolError)
 import Shikumi.Tool.Output (textToolOutput)
@@ -75,7 +79,10 @@ workspaceEditDescriptor = fileDescriptor FileOnly
 supervisedWorkspaceEditDescriptor :: CapabilityDescriptor
 supervisedWorkspaceEditDescriptor = fileDescriptor Supervised
 
-data FileMode = FileOnly | Supervised deriving stock (Eq)
+transferredWorkspaceEditDescriptor :: CapabilityDescriptor
+transferredWorkspaceEditDescriptor = fileDescriptor Transferred
+
+data FileMode = FileOnly | Supervised | Transferred deriving stock (Eq)
 
 fileDescriptor :: FileMode -> CapabilityDescriptor
 fileDescriptor mode = CapabilityDescriptor (must (mkCapabilityId "workspace.edit")) (must (mkCapabilityRevision (fileRevision mode))) [CapabilityToolDescriptor "read" Observation, CapabilityToolDescriptor "replace" IdempotentMutation]
@@ -95,13 +102,21 @@ supervisedWorkspaceEditAdapter = supervisedWorkspaceEditAdapterWithCheckpoint (p
 supervisedWorkspaceEditAdapterWithCheckpoint :: IO () -> FileRuntime -> DurableAdapter
 supervisedWorkspaceEditAdapterWithCheckpoint = fileAdapter Supervised
 
+transferredWorkspaceEditAdapter :: FileRuntime -> DurableAdapter
+transferredWorkspaceEditAdapter = transferredWorkspaceEditAdapterWithCheckpoint (pure ())
+
+transferredWorkspaceEditAdapterWithCheckpoint :: IO () -> FileRuntime -> DurableAdapter
+transferredWorkspaceEditAdapterWithCheckpoint = fileAdapter Transferred
+
 fileRevision :: FileMode -> Text
 fileRevision FileOnly = "1"
 fileRevision Supervised = "2"
+fileRevision Transferred = "3"
 
 filePolicyFor :: FileMode -> Text
 filePolicyFor FileOnly = nativeFilePolicy
 filePolicyFor Supervised = supervisedFilePolicy
+filePolicyFor Transferred = transferableFilePolicy
 
 fileAdapter :: FileMode -> IO () -> FileRuntime -> DurableAdapter
 fileAdapter mode checkpoint runtime =
@@ -167,14 +182,14 @@ withAccess mode runtime snapshot dispatch logical input perform = catch work (\(
                   binding <- runTx runtime (Store.inspectWorkspaceTx admission.workspace)
                   case (arguments, binding) of
                     (Right tool, Right (Just (bound, Ready)))
-                      | tool.invocation.arguments == input && tool.invocation.name == wireName logical && tool.binding `elem` snapshot.toolBindings && tool.binding.name == wireName logical && tool.binding.revision == "workspace.edit:" <> fileRevision mode && tool.binding.schemaDigest == versionedDigest "shikigami.tool-schema/1" (if logical == "read" then readSchema else replaceSchema) && tool.binding.recovery == (if logical == "read" then RepeatableObservation else IdempotentEffect) && tool.binding.invoiceCost == NoInvoiceCost && admission.bindingDigest == workspaceBindingDigest bound && admission.runId == bound.request.runId && admission.owner == snapshot.identity && Just admission.rootId == snapshot.selection.rootId -> do
+                      | tool.invocation.arguments == input && tool.invocation.name == wireName logical && tool.binding `elem` snapshot.toolBindings && tool.binding.name == wireName logical && tool.binding.revision == "workspace.edit:" <> fileRevision mode && tool.binding.schemaDigest == versionedDigest "shikigami.tool-schema/1" (if logical == "read" then readSchema else replaceSchema) && tool.binding.recovery == (if logical == "read" then RepeatableObservation else IdempotentEffect) && tool.binding.invoiceCost == NoInvoiceCost && admission.bindingDigest == workspaceBindingDigest bound && admission.runId == snapshot.runId && admission.assignmentId == snapshot.selection.assignmentId && matchesWorkspaceAdmission bound admission && admission.owner == snapshot.identity && Just admission.rootId == snapshot.selection.rootId -> do
                           let check = do
                                 lifecycle <- runtime.lifecycle snapshot
                                 if isLeft lifecycle
                                   then pure (Left FileEffectRefused)
                                   else do
                                     current <- owned (Execution.checkStartedExecutionAttempt permit claim)
-                                    owner <- runTx runtime (Store.checkWorkspaceOperationTx bound admission.owner admission.epoch dispatch.operation.operationId)
+                                    owner <- runTx runtime (if mode == Transferred then Transfers.checkWorkspaceAdmissionTx bound admission dispatch.operation.operationId else Store.checkWorkspaceOperationTx bound admission.owner admission.epoch dispatch.operation.operationId)
                                     pure (current >> owner >>= either (const (Left FileEffectRefused)) Right)
                           ready <- check
                           case ready of
@@ -182,7 +197,7 @@ withAccess mode runtime snapshot dispatch logical input perform = catch work (\(
                             Right () -> do
                               private <- case mode of
                                 FileOnly -> ensurePrivateDirectory bound.storageRoot
-                                Supervised -> do
+                                _ -> do
                                   root <- checkPrivateDirectory bound.storageRoot
                                   metadata <- checkPrivateDirectory (workspaceMetadata bound.storageRoot bound)
                                   pure (root >> metadata)
@@ -199,7 +214,7 @@ withAccess mode runtime snapshot dispatch logical input perform = catch work (\(
                                             Right () -> do
                                               profile <- case mode of
                                                 FileOnly -> pure (Right Nothing)
-                                                Supervised -> fmap (either (const (Left FileEffectRefused)) (Right . Just)) (retainedFileProfile runtime.appEnv bound admission)
+                                                _ -> fmap (either (const (Left FileEffectRefused)) (Right . Just)) (retainedFileProfile runtime.appEnv bound admission)
                                               case profile of
                                                 Left err -> pure (Left err)
                                                 Right selected -> perform bound admission selected check (prepareReceipt permit tool operation bound admission) (completeReceipt permit tool)
@@ -217,7 +232,7 @@ withAccess mode runtime snapshot dispatch logical input perform = catch work (\(
             reserved <- Store.reserveWorkspaceEffectTx bound admission.owner admission.epoch receipt.operationId receipt.fingerprint
             case reserved of
               Left err -> pure (Left err)
-              Right _ -> Store.registerFileTx bound registration
+              Right _ -> Store.registerFileForOwnerTx bound admission.owner admission.epoch registration
           pure (saved >>= either (const (Left FileEffectUnresolved)) Right)
         _ -> pure (Left FileEffectUnresolved)
     -- A recovered private receipt settles only its original actual attempt.
@@ -316,6 +331,7 @@ replaceFileFor mode checkpoint runtime snapshot dispatch input = case parseEithe
     replace profile binding admission check prepare complete file identity replacement = do
       let fingerprint = case profile of
             Nothing -> versionedDigest "shikigami.workspace-replacement/1" (toJSON (workspaceBindingDigest binding, dispatch.operation, input, identity))
+            Just retained | mode == Transferred -> versionedDigest "shikigami.workspace-replacement/3" (toJSON (workspaceBindingDigest binding, admission.runId, admission.assignmentId, admission.owner, admission.epoch, dispatch.operation, input, identity, retained))
             Just retained -> versionedDigest "shikigami.workspace-replacement/2" (toJSON (workspaceBindingDigest binding, dispatch.operation, input, identity, retained))
           receipt = FileReceipt dispatch.operation.operationId dispatch.attemptId dispatch.generation fingerprint (workspaceBindingDigest binding) (bundleDigest admission.instructions) replacement.path identity replacement.expected (contentDigest replacement.content) EditPrepared
           metadata = workspaceMetadata binding.storageRoot binding
@@ -388,7 +404,7 @@ replaceFileFor mode checkpoint runtime snapshot dispatch input = case parseEithe
             _ -> pure (Left FileEffectUnresolved)
 
 authorize :: FileRuntime -> Maybe ProcessProfile -> WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> Text -> Text -> Text -> Aeson.Value -> IO (Either FileEffectError ()) -> IO (Either FileEffectError ())
-authorize runtime profile binding admission dispatch kind path target input check = case (identityText admission.owner, maybe workspaceFileAction workspaceSupervisedFileAction profile binding admission dispatch kind path target (versionedDigest "shikigami.workspace-file-input/1" input), instructionsForPath admission.instructions path) of
+authorize runtime profile binding admission dispatch kind path target input check = case (identityText admission.owner, maybe workspaceFileAction (if admission.filePolicy == Just transferableFilePolicy then workspaceTransferredFileAction else workspaceSupervisedFileAction) profile binding admission dispatch kind path target (versionedDigest "shikigami.workspace-file-input/1" input), instructionsForPath admission.instructions path) of
   (Right principal, Right action, Right instructions) -> do
     policy <- runtime.admitTarget binding admission instructions kind path
     case policy of

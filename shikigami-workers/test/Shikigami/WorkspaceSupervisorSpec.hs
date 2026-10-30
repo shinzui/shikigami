@@ -54,7 +54,13 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace accepted process supervisor"
-    [ testCase "retained root cancellation requests stop after revocation and never fabricates settlement" $ rootCancellationCase fixture True,
+    [ testCase "transfer-aware process revision uses the peer service and independent original-attempt publisher" $ withProcessVersion True 1 fixture id True \file runtime _ calls snapshot reference -> withListener \path listener uid -> do
+        let client = ProcessClient path uid 3 3
+        withAsync (serveRpc (RpcPolicy [uid] 2 3) listener (dispatchSupervisorRpc runtime)) \_ -> do
+          Executor.executeAcceptedAttempt (Fixture.executorForAdapter (const (transferredWorkspaceExecAdapter client)) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+          publishProcessReceipt runtime reference.operationId >>= (@?= Right ProcessReceiptAcknowledged)
+          readIORef calls >>= (@?= (1, 1)),
+      testCase "retained root cancellation requests stop after revocation and never fabricates settlement" $ rootCancellationCase fixture True,
       testCase "a failed cancellation request remains unresolved and never fabricates settlement" $ rootCancellationCase fixture False,
       testCase "independent service recovers facts in the background with no connected worker" $ withProcess fixture id False \file runtime observed calls snapshot reference -> do
         Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
@@ -265,7 +271,10 @@ withProcess :: DatabaseFixture -> (SupervisorRuntime -> SupervisorRuntime) -> Bo
 withProcess = withProcessForTools 1
 
 withProcessForTools :: Int -> DatabaseFixture -> (SupervisorRuntime -> SupervisorRuntime) -> Bool -> (FileRuntime -> SupervisorRuntime -> IORef (Maybe SupervisorRequest) -> IORef (Int, Int) -> ExecutionSnapshot -> Attempt.JobReference -> IO a) -> IO a
-withProcessForTools toolCount fixture configure acknowledge use = do
+withProcessForTools = withProcessVersion False
+
+withProcessVersion :: Bool -> Int -> DatabaseFixture -> (SupervisorRuntime -> SupervisorRuntime) -> Bool -> (FileRuntime -> SupervisorRuntime -> IORef (Maybe SupervisorRequest) -> IORef (Int, Int) -> ExecutionSnapshot -> Attempt.JobReference -> IO a) -> IO a
+withProcessVersion transferred toolCount fixture configure acknowledge use = do
   observed <- newIORef Nothing
   calls <- newIORef (0, 0)
   let backend =
@@ -301,8 +310,8 @@ withProcessForTools toolCount fixture configure acknowledge use = do
           (const (pure (Right True)))
           (const (pure (Right ())))
       makeRuntime file = configure (SupervisorRuntime file.appEnv file.authorizer (const (pure (Right ()))) file.lifecycle select backend)
-      install file = adapter (makeRuntime file) observed file
-      qualify admission = admission & #filePolicy .~ Just supervisedFilePolicy
+      install file = adapterWithVersion transferred id (makeRuntime file) observed file
+      qualify admission = admission & #filePolicy .~ Just (if transferred then transferableFilePolicy else supervisedFilePolicy)
   Fixture.withEffectAdapterForTools toolCount qualify install workspaceExecBinding.name "validate" (Just (Aeson.object ["rule" Aeson..= ("validate" :: Text.Text)])) fixture \_ _ snapshot _ reference file _ ->
     use file (makeRuntime file) observed calls snapshot reference
   where
@@ -316,7 +325,10 @@ adapter :: SupervisorRuntime -> IORef (Maybe SupervisorRequest) -> FileRuntime -
 adapter = adapterWithRequest id
 
 adapterWithRequest :: (SupervisorRequest -> SupervisorRequest) -> SupervisorRuntime -> IORef (Maybe SupervisorRequest) -> FileRuntime -> DurableAdapter
-adapterWithRequest alter runtime observed file = DurableAdapter workspaceExecDescriptor [DurableToolContract "validate" "Validate one reviewed rule." workspaceExecSchema UncertainEffect NoInvoiceCost] \snapshot dispatch name ->
+adapterWithRequest = adapterWithVersion False
+
+adapterWithVersion :: Bool -> (SupervisorRequest -> SupervisorRequest) -> SupervisorRuntime -> IORef (Maybe SupervisorRequest) -> FileRuntime -> DurableAdapter
+adapterWithVersion transferred alter runtime observed file = DurableAdapter (if transferred then transferredWorkspaceExecDescriptor else workspaceExecDescriptor) [DurableToolContract "validate" "Validate one reviewed rule." workspaceExecSchema UncertainEffect NoInvoiceCost] \snapshot dispatch name ->
   pure
     ( Right
         ( mkDynTool name "Validate one reviewed rule." workspaceExecSchema \(_input :: Aeson.Value) -> unsafeEff_ do

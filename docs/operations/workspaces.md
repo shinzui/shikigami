@@ -122,8 +122,12 @@ session transfer intent and fresh parent authority before freezing admission.
 Frozen workspaces request process cancellation; missing settlement keeps the
 fence unresolved. Restart can reconcile an already admitted intent after
 revocation. These callbacks do not supply objective ownership or install
-transfer-aware tools; real successor-write and Linux handoff qualification
-remain open.
+transfer-aware tools. The explicit `configuredWorkspaceHostWithTransfers`
+composition selects file revision 3, process revision 2 and Git revision 2 under
+`ascii-exact-transfer-v1`. It preserves old adapters, pinned instructions and the
+ready Unix identity, and requires a separate retained successor admission.
+Production selection remains on the previously qualified revisions until real
+successor-write and Linux handoff qualification pass.
 
 Do not repair exposed receipt-directory permissions and then trust its contents.
 Do not remove pending workspace directories, replace receipt files, clear

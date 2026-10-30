@@ -8,6 +8,7 @@ import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Prelude
 import Shikigami.WorkerSession.Transfer (WorkspaceRef)
 import Shikigami.WorkerSession.Types (AssignmentId, WorkerSessionId)
+import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), bundleBase, bundleRepository, transferableFilePolicy)
 
 data WorkspaceRequest = WorkspaceRequest
   { runId :: !Text,
@@ -47,3 +48,16 @@ data WorkspaceError = InvalidWorkspaceRequest | WorkspaceBindingConflict | Works
 -- | Protected snapshot correlation, distinct from an allocation completion marker.
 workspaceBindingDigest :: WorkspaceBinding -> Text
 workspaceBindingDigest = versionedDigest "shikigami.workspace-binding/1" . toJSON
+
+-- Pure shape only. Successor authority additionally requires its exact retained
+-- admission and current session/owner checks in TransferStore at the IO boundary.
+matchesWorkspaceAdmission :: WorkspaceBinding -> WorkspaceAdmission -> Bool
+matchesWorkspaceAdmission binding admission =
+  admission.workspace == binding.workspace
+    && admission.bindingDigest == workspaceBindingDigest binding
+    && admission.rootId == binding.request.rootId
+    && bundleRepository admission.instructions == binding.repository
+    && bundleBase admission.instructions == binding.base
+    && ( (admission.runId == binding.request.runId && admission.owner == binding.request.owner && admission.epoch == binding.request.epoch)
+           || (admission.filePolicy == Just transferableFilePolicy && admission.epoch > binding.request.epoch && admission.epoch < 9223372036854775808 && admission.runId /= binding.request.runId && admission.runId /= "" && admission.assignmentId /= "")
+       )

@@ -1,6 +1,6 @@
 -- | Client for the independently supervised process owner. Installation is
 -- gated on Linux qualification; description/preparation perform no socket IO.
-module Shikigami.Workspace.ProcessProvider (ProcessClient (..), workspaceExecAdapter) where
+module Shikigami.Workspace.ProcessProvider (ProcessClient (..), workspaceExecAdapter, transferredWorkspaceExecAdapter) where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (throwIO)
@@ -11,7 +11,7 @@ import Shikigami.Execution.Policy.Types (RecoveryClass (UncertainEffect), ToolIn
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Execution.Transcript (ExecutionSnapshot (..))
 import Shikigami.Prelude
-import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), supervisedFilePolicy)
+import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), supervisedFilePolicy, transferableFilePolicy)
 import Shikigami.Workspace.Rpc
 import Shikigami.Workspace.Supervisor
 import Shikumi.Tool (mkDynTool)
@@ -27,15 +27,21 @@ data ProcessClient = ProcessClient
   }
 
 workspaceExecAdapter :: ProcessClient -> DurableAdapter
-workspaceExecAdapter client = DurableAdapter
-  workspaceExecDescriptor
+workspaceExecAdapter = execAdapterFor False
+
+transferredWorkspaceExecAdapter :: ProcessClient -> DurableAdapter
+transferredWorkspaceExecAdapter = execAdapterFor True
+
+execAdapterFor :: Bool -> ProcessClient -> DurableAdapter
+execAdapterFor transferable client = DurableAdapter
+  (if transferable then transferredWorkspaceExecDescriptor else workspaceExecDescriptor)
   [DurableToolContract "validate" "Validate one reviewed rule." workspaceExecSchema UncertainEffect NoInvoiceCost]
   \snapshot dispatch name -> pure $
     Right $
       mkDynTool name "Validate one reviewed rule." workspaceExecSchema \(_input :: Aeson.Value) -> unsafeEff_ do
         -- The server reads the accepted arguments from its store. A caller can
         -- supply only the retained actual-attempt coordinates, never argv.
-        unless (name == "validate" && dispatch.operation.executionId == snapshot.executionId && maybe False ((== Just supervisedFilePolicy) . (.filePolicy)) snapshot.workspace && workspaceExecBinding `elem` snapshot.toolBindings && client.waitSeconds >= 1 && client.waitSeconds <= 3600) uncertain
+        unless (name == "validate" && dispatch.operation.executionId == snapshot.executionId && maybe False ((== Just (if transferable then transferableFilePolicy else supervisedFilePolicy)) . (.filePolicy)) snapshot.workspace && (if transferable then transferredWorkspaceExecBinding else workspaceExecBinding) `elem` snapshot.toolBindings && client.waitSeconds >= 1 && client.waitSeconds <= 3600) uncertain
         let actual = SupervisorRequest snapshot.executionId dispatch.operation.operationId dispatch.attemptId dispatch.owner dispatch.generation
             call = callRpc client.socketPath client.serverUser client.requestSeconds
             consume result = case result of

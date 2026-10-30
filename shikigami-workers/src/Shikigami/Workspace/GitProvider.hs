@@ -5,6 +5,10 @@ module Shikigami.Workspace.GitProvider
   ( GitBackend (..),
     nativeGitBackend,
     workspaceGitDescriptor,
+    transferredWorkspaceGitDescriptor,
+    transferredGitBinding,
+    transferredWorkspaceGitAdapter,
+    transferredWorkspaceGitAdapterWithBackend,
     gitSchema,
     gitBinding,
     workspaceGitAdapter,
@@ -56,6 +60,7 @@ import Shikigami.Workspace.Profile (retainedFileProfile)
 import Shikigami.Workspace.Provider
 import Shikigami.Workspace.Store qualified as Workspaces
 import Shikigami.Workspace.Systemd qualified as Systemd
+import Shikigami.Workspace.TransferStore qualified as Transfers
 import Shikigami.Workspace.Types
 import Shikumi.Tool (ToolError (..), mkDynTool, renderToolError)
 import Shikumi.Tool.Output (ToolOutput, textToolOutput)
@@ -84,7 +89,13 @@ newtype GitAbort = GitAbort FileEffectError deriving stock (Show)
 instance Exception GitAbort
 
 workspaceGitDescriptor :: CapabilityDescriptor
-workspaceGitDescriptor = CapabilityDescriptor (must (mkCapabilityId "workspace.git")) (must (mkCapabilityRevision "1")) [CapabilityToolDescriptor "status" Observation, CapabilityToolDescriptor "diff" Observation, CapabilityToolDescriptor "commit" IdempotentMutation]
+workspaceGitDescriptor = gitDescriptorFor False
+
+transferredWorkspaceGitDescriptor :: CapabilityDescriptor
+transferredWorkspaceGitDescriptor = gitDescriptorFor True
+
+gitDescriptorFor :: Bool -> CapabilityDescriptor
+gitDescriptorFor transferable = CapabilityDescriptor (must (mkCapabilityId "workspace.git")) (must (mkCapabilityRevision (if transferable then "2" else "1"))) [CapabilityToolDescriptor "status" Observation, CapabilityToolDescriptor "diff" Observation, CapabilityToolDescriptor "commit" IdempotentMutation]
   where
     must :: (Show e) => Either e a -> a; must = either (error . show) id
 
@@ -93,7 +104,13 @@ gitSchema "commit" = Aeson.object ["type" Aeson..= ("object" :: Text), "properti
 gitSchema _ = Aeson.object ["type" Aeson..= ("object" :: Text), "properties" Aeson..= Aeson.object [], "additionalProperties" Aeson..= False]
 
 gitBinding :: Text -> ToolBinding
-gitBinding name = ToolBinding ("overlay__workspace-git__" <> name) "workspace.git:1" (versionedDigest "shikigami.tool-schema/1" (gitSchema name)) (if name == "commit" then IdempotentEffect else RepeatableObservation) NoInvoiceCost
+gitBinding = gitBindingFor False
+
+transferredGitBinding :: Text -> ToolBinding
+transferredGitBinding = gitBindingFor True
+
+gitBindingFor :: Bool -> Text -> ToolBinding
+gitBindingFor transferable name = ToolBinding ("overlay__workspace-git__" <> name) (if transferable then "workspace.git:2" else "workspace.git:1") (versionedDigest "shikigami.tool-schema/1" (gitSchema name)) (if name == "commit" then IdempotentEffect else RepeatableObservation) NoInvoiceCost
 
 gitDescription :: Text -> Text
 gitDescription "status" = "Inspect the isolated local repository's exact HEAD, captured tree and changed paths."
@@ -104,10 +121,19 @@ workspaceGitAdapter :: FileRuntime -> DurableAdapter
 workspaceGitAdapter = workspaceGitAdapterWithBackend nativeGitBackend
 
 workspaceGitAdapterWithBackend :: GitBackend -> FileRuntime -> DurableAdapter
-workspaceGitAdapterWithBackend backend runtime =
+workspaceGitAdapterWithBackend = gitAdapterFor False
+
+transferredWorkspaceGitAdapter :: FileRuntime -> DurableAdapter
+transferredWorkspaceGitAdapter = transferredWorkspaceGitAdapterWithBackend nativeGitBackend
+
+transferredWorkspaceGitAdapterWithBackend :: GitBackend -> FileRuntime -> DurableAdapter
+transferredWorkspaceGitAdapterWithBackend = gitAdapterFor True
+
+gitAdapterFor :: Bool -> GitBackend -> FileRuntime -> DurableAdapter
+gitAdapterFor transferable backend runtime =
   DurableAdapter
-    workspaceGitDescriptor
-    [DurableToolContract name (gitDescription name) (gitSchema name) (gitBinding name).recovery NoInvoiceCost | name <- ["status", "diff", "commit"]]
+    (gitDescriptorFor transferable)
+    [DurableToolContract name (gitDescription name) (gitSchema name) (gitBindingFor transferable name).recovery NoInvoiceCost | name <- ["status", "diff", "commit"]]
     ( \snapshot dispatch name ->
         pure
           ( Right
@@ -116,7 +142,7 @@ workspaceGitAdapterWithBackend backend runtime =
                   (gitDescription name)
                   (gitSchema name)
                   ( \input -> unsafeEff_ do
-                      result <- runGitTool backend runtime snapshot dispatch name input
+                      result <- runGitToolFor transferable backend runtime snapshot dispatch name input
                       case result of
                         Left FileEffectUnresolved -> throwIO (userError "workspace Git effect requires reconciliation")
                         Left FileEffectUnavailable -> throwIO (userError "workspace Git evidence is unavailable")
@@ -127,10 +153,13 @@ workspaceGitAdapterWithBackend backend runtime =
     )
 
 runGitTool :: GitBackend -> FileRuntime -> ExecutionSnapshot -> DispatchContext -> Text -> Aeson.Value -> IO (Either FileEffectError Aeson.Value)
-runGitTool backend runtime snapshot dispatch name input = protect do
+runGitTool = runGitToolFor False
+
+runGitToolFor :: Bool -> GitBackend -> FileRuntime -> ExecutionSnapshot -> DispatchContext -> Text -> Aeson.Value -> IO (Either FileEffectError Aeson.Value)
+runGitToolFor transferable backend runtime snapshot dispatch name input = protect do
   unless (name `elem` ["status", "diff", "commit"]) (abort FileEffectRefused)
   requested <- if name == "commit" then Just <$> parseCommit input else emptyInput input >> pure Nothing
-  accepted <- loadAccepted runtime snapshot dispatch name input
+  accepted <- loadAccepted transferable runtime snapshot dispatch name input
   _ <- backend.host >>= either (const (abort FileEffectRefused)) pure
   let binding = accepted.binding; metadata = workspaceMetadata binding.storageRoot binding
   needFile =<< checkPrivateDirectory binding.storageRoot
@@ -159,21 +188,21 @@ emptyInput :: Aeson.Value -> IO ()
 emptyInput (Aeson.Object fields) | null fields = pure ()
 emptyInput _ = abort FileEffectRefused
 
-loadAccepted :: FileRuntime -> ExecutionSnapshot -> DispatchContext -> Text -> Aeson.Value -> IO AcceptedGit
-loadAccepted runtime snapshot dispatch name input = do
+loadAccepted :: Bool -> FileRuntime -> ExecutionSnapshot -> DispatchContext -> Text -> Aeson.Value -> IO AcceptedGit
+loadAccepted transferable runtime snapshot dispatch name input = do
   access <- execute runtime.appEnv (Execution.authorizeReplay snapshot.executionId snapshot.identity (runtime.replayAuthority snapshot))
   (retained, _) <- execute runtime.appEnv (Execution.loadExecution access)
   operation <- execute runtime.appEnv (Execution.inspectOperation dispatch.operation.operationId) >>= maybe (abort FileEffectRefused) pure
   admission <- maybe (abort FileEffectRefused) pure snapshot.workspace
-  let expected = gitBinding name; OperationId key = dispatch.operation.operationId
-  unless (retained == snapshot && admission.filePolicy == Just supervisedFilePolicy && workspaceGitDescriptor `elem` resolvedCapabilities snapshot.capabilities && dispatch.operation == OperationContext snapshot.executionId dispatch.operation.operationId key operation.fingerprint operation.specification.scopeDigest && operation.executionId == snapshot.executionId && operation.specification.kind == ToolOperation && operation.specification.name == expected.name && operation.specification.recovery == expected.recovery && operation.specification.scopeDigest == toolScopeDigest expected && operation.specification.policyDigest == versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) (abort FileEffectRefused)
+  let expected = gitBindingFor transferable name; OperationId key = dispatch.operation.operationId
+  unless (retained == snapshot && admission.filePolicy == Just (if transferable then transferableFilePolicy else supervisedFilePolicy) && gitDescriptorFor transferable `elem` resolvedCapabilities snapshot.capabilities && dispatch.operation == OperationContext snapshot.executionId dispatch.operation.operationId key operation.fingerprint operation.specification.scopeDigest && operation.executionId == snapshot.executionId && operation.specification.kind == ToolOperation && operation.specification.name == expected.name && operation.specification.recovery == expected.recovery && operation.specification.scopeDigest == toolScopeDigest expected && operation.specification.policyDigest == versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) (abort FileEffectRefused)
   tool <- execute runtime.appEnv (Execution.readReplayPayload @ToolOperationInput access "operation-input" operation.input)
   unless (tool.binding == expected && expected `elem` snapshot.toolBindings && tool.invocation.name == expected.name && tool.invocation.arguments == input && operation.specification.responsePosition == Just tool.position) (abort FileEffectRefused)
   response <- execute runtime.appEnv (Execution.readReplayPayload @OperationOutcome access "operation-outcome" tool.response)
   assistant <- case response of ModelReturned value _ -> pure value; _ -> abort FileEffectRefused
   unless (tool.position >= 0 && take 1 (drop tool.position (toolInvocations assistant)) == [tool.invocation]) (abort FileEffectRefused)
   (binding, state) <- transact runtime.appEnv (Workspaces.inspectWorkspaceTx admission.workspace) >>= maybe (abort FileEffectRefused) pure
-  unless (state == Ready && admission.bindingDigest == workspaceBindingDigest binding && admission.runId == binding.request.runId && admission.runId == snapshot.runId && admission.assignmentId == snapshot.selection.assignmentId && Just admission.rootId == snapshot.selection.rootId && admission.rootId == binding.request.rootId && admission.owner == snapshot.identity && admission.owner == binding.request.owner && admission.epoch == binding.request.epoch && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base) (abort FileEffectRefused)
+  unless (state == Ready && matchesWorkspaceAdmission binding admission && admission.runId == snapshot.runId && admission.assignmentId == snapshot.selection.assignmentId && Just admission.rootId == snapshot.selection.rootId && admission.rootId == binding.request.rootId && admission.owner == snapshot.identity && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base) (abort FileEffectRefused)
   let next = if tool.position + 1 < length (toolInvocations assistant) then NeedTool tool.response (tool.position + 1) else NeedModel
   pure (AcceptedGit snapshot access binding admission dispatch (GitRouting snapshot.executionId snapshot.identity operation.input.digest next))
 
@@ -183,7 +212,7 @@ current runtime accepted = do
   let dispatch = accepted.dispatch
       claim = Attempt.AttemptClaim (Attempt.JobReference 1 accepted.snapshot.executionId dispatch.operation.operationId dispatch.attemptId) dispatch.owner dispatch.generation
   execute runtime.appEnv (Execution.checkStartedExecutionAttempt accepted.access claim)
-  transact runtime.appEnv (Workspaces.checkWorkspaceOperationTx accepted.binding accepted.admission.owner accepted.admission.epoch dispatch.operation.operationId) >>= either (const (abort FileEffectRefused)) pure
+  transact runtime.appEnv (if accepted.admission.filePolicy == Just transferableFilePolicy then Transfers.checkWorkspaceAdmissionTx accepted.binding accepted.admission dispatch.operation.operationId else Workspaces.checkWorkspaceOperationTx accepted.binding accepted.admission.owner accepted.admission.epoch dispatch.operation.operationId) >>= either (const (abort FileEffectRefused)) pure
 
 admitPath :: FileRuntime -> AcceptedGit -> ProcessProfile -> Text -> Text -> IO ()
 admitPath runtime accepted profile kind path = do
@@ -204,7 +233,7 @@ grant runtime accepted action = do
 
 observe :: GitBackend -> FileRuntime -> AcceptedGit -> ProcessProfile -> Text -> Text -> IO Aeson.Value
 observe backend runtime accepted profile target name = do
-  grant runtime accepted (workspaceGitObservationAction accepted.binding accepted.admission accepted.dispatch profile name accepted.routing.inputDigest target)
+  grant runtime accepted ((if accepted.admission.filePolicy == Just transferableFilePolicy then workspaceTransferredGitObservationAction else workspaceGitObservationAction) accepted.binding accepted.admission accepted.dispatch profile name accepted.routing.inputDigest target)
   headId <- Objects.readHead metadata >>= either (const (abort FileEffectRefused)) pure
   captured <- capture backend runtime accepted profile target
   paths <- Objects.changedPaths metadata headId captured.tree >>= either (const (abort FileEffectTooLarge)) pure
@@ -236,10 +265,10 @@ commit backend runtime accepted profile target request = do
       reconciled <- reconcileLocked runtime.appEnv binding old
       resultValue binding reconciled
     Nothing -> do
-      original <- transact runtime.appEnv (Git.reserveGitTx binding proposed) >>= either (const (abort FileEffectRefused)) pure
+      original <- transact runtime.appEnv ((if accepted.admission.filePolicy == Just transferableFilePolicy then Git.reserveAdmittedGitTx binding accepted.admission else Git.reserveGitTx binding) proposed) >>= either (const (abort FileEffectRefused)) pure
       unless (original == proposed) (abort FileEffectUnresolved)
       attempted <- protect do
-        grant runtime accepted (workspaceGitAction binding accepted.admission dispatch profile original)
+        grant runtime accepted ((if accepted.admission.filePolicy == Just transferableFilePolicy then workspaceTransferredGitAction else workspaceGitAction) binding accepted.admission dispatch profile original)
         headId <- Objects.readHead metadata >>= either (const (abort FileEffectRefused)) pure
         unless (headId == request.expectedParent) (abort FileEffectConflict)
         captured <- capture backend runtime accepted profile target
@@ -250,11 +279,11 @@ commit backend runtime accepted profile target request = do
         object <- Objects.storeCommit metadata headId captured.tree (Objects.GitAuthor "Shikigami Agent" "shikigami@example.invalid") original.createdAt original.operation.operationId request.message >>= either (const (abort FileEffectUnresolved)) pure
         let candidate = GitCandidate headId captured.tree object paths
         unless (validGitCandidate candidate) (abort FileEffectTooLarge)
-        prepared <- transact runtime.appEnv (Git.prepareGitTx binding original candidate) >>= either (const (abort FileEffectUnresolved)) pure
+        prepared <- transact runtime.appEnv ((if accepted.admission.filePolicy == Just transferableFilePolicy then Git.prepareAdmittedGitTx binding accepted.admission else Git.prepareGitTx binding) original candidate) >>= either (const (abort FileEffectUnresolved)) pure
         _ <- bounded (gitEvidence binding prepared)
         writePrivate metadata prepared
-        grant runtime accepted (workspaceGitAction binding accepted.admission dispatch profile prepared)
-        permitted <- transact runtime.appEnv (Git.requestGitPublicationTx binding prepared) >>= either (const (abort FileEffectUnresolved)) pure
+        grant runtime accepted ((if accepted.admission.filePolicy == Just transferableFilePolicy then workspaceTransferredGitAction else workspaceGitAction) binding accepted.admission dispatch profile prepared)
+        permitted <- transact runtime.appEnv ((if accepted.admission.filePolicy == Just transferableFilePolicy then Git.requestAdmittedGitPublicationTx binding accepted.admission else Git.requestGitPublicationTx binding) prepared) >>= either (const (abort FileEffectUnresolved)) pure
         unless permitted (abort FileEffectUnresolved)
         current runtime accepted
         Objects.publishCommit metadata candidate.parent candidate.result >>= either (const (abort FileEffectUnresolved)) pure
@@ -355,9 +384,12 @@ publishGitReceipt env operationId = protect do
   case gitToolResult binding record of
     Nothing -> pure AwaitingGitReceipt
     Just result -> do
-      let routing = record.routing; expected = gitBinding "commit"
+      let routing = record.routing
       (state, retained, _) <- execute env (Execution.inspectExecution routing.executionId) >>= maybe (abort FileEffectUnresolved) pure
       operation <- execute env (Execution.inspectOperation operationId) >>= maybe (abort FileEffectUnresolved) pure
+      expected <- case filter (\tool -> operation.specification.scopeDigest == toolScopeDigest tool) [gitBinding "commit", transferredGitBinding "commit"] of
+        [tool] -> pure tool
+        _ -> abort FileEffectUnresolved
       let OperationId key = operationId
       unless (routing.identity == retained.identity && retained.rootId == Just binding.request.rootId && record.operation == OperationContext routing.executionId operationId key operation.fingerprint operation.specification.scopeDigest && operation.executionId == routing.executionId && operation.specification.kind == ToolOperation && operation.specification.name == expected.name && operation.specification.recovery == expected.recovery && operation.specification.scopeDigest == toolScopeDigest expected && operation.input.digest == routing.inputDigest) (abort FileEffectUnresolved)
       actual <- execute env (Execution.inspectExecutionAttempt record.attemptId) >>= maybe (abort FileEffectUnresolved) pure

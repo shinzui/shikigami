@@ -56,7 +56,22 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace accepted Git provider"
-    [ testCase "declared exact commit uses the accepted claim and duplicate delivery creates one commit" $ withGit fixture "commit" \env binding snapshot access reference runtime profile backend -> do
+    [ testCase "transfer-aware Git revision recovers its original exact commit after freeze" $ withGitVersion True fixture "commit" \env binding snapshot _ reference runtime profile backend -> do
+        profileReady env binding profile
+        publications <- newIORef (0 :: Int)
+        Bytes.writeFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") "new dependency\n"
+        let interrupted = backend & #afterPublication .~ (modifyIORef' publications (+ 1) >> throwIO (userError "lost transferred Git acknowledgement"))
+        execute (Fixture.executorForAdapter (transferredWorkspaceGitAdapterWithBackend interrupted) runtime) snapshot reference
+        readIORef publications >>= (@?= 1)
+        Just before <- run env (runTransaction (Git.inspectGitTx reference.operationId))
+        run env (runTransaction (Store.freezeWorkspaceTx binding binding.request.owner 0)) >>= (@?= Right ())
+        publishGitReceipt env reference.operationId >>= (@?= Right GitReceiptAcknowledged)
+        publishGitReceipt env reference.operationId >>= (@?= Right GitReceiptAcknowledged)
+        Just after <- run env (runTransaction (Git.inspectGitTx reference.operationId))
+        after.phase @?= GitApplied
+        after.candidate @?= before.candidate
+        readIORef publications >>= (@?= 1),
+      testCase "declared exact commit uses the accepted claim and duplicate delivery creates one commit" $ withGit fixture "commit" \env binding snapshot access reference runtime profile backend -> do
         profileReady env binding profile
         writes <- newIORef (0 :: Int)
         let counted = backend & #afterPublication .~ modifyIORef' writes (+ 1)
@@ -208,13 +223,16 @@ tests fixture =
     ]
 
 withGit :: DatabaseFixture -> Text.Text -> (AppEnv -> WorkspaceBinding -> ExecutionSnapshot -> Execution.ReplayAccess -> Attempt.JobReference -> FileRuntime -> ProcessProfile -> GitBackend -> IO a) -> IO a
-withGit fixture name use = do
+withGit = withGitVersion False
+
+withGitVersion :: Bool -> DatabaseFixture -> Text.Text -> (AppEnv -> WorkspaceBinding -> ExecutionSnapshot -> Execution.ReplayAccess -> Attempt.JobReference -> FileRuntime -> ProcessProfile -> GitBackend -> IO a) -> IO a
+withGitVersion transferred fixture name use = do
   properties <- Systemd.systemdPropertiesIdentity
   let digest = "sha256:" <> Text.replicate 64 "a"
       policy = ProcessPolicy 1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") properties [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] ["src"]
       backend = GitBackend (pure (Right "11111111-1111-4111-8111-111111111111")) fixtureCapture (pure ())
       input binding = Just (if name == "commit" then Aeson.toJSON (GitCommitRequest binding.base "chore(deps): PRIVATE_COMMIT_MESSAGE") else Aeson.object [])
-  Fixture.withEffectAdapterPolicyInput (Just policy) 1 (\admission -> admission & #filePolicy .~ Just supervisedFilePolicy) (workspaceGitAdapterWithBackend backend) ("overlay__workspace-git__" <> name) name input fixture \env binding snapshot access reference runtime _ -> do
+  Fixture.withEffectAdapterPolicyInput (Just policy) 1 (\admission -> admission & #filePolicy .~ Just (if transferred then transferableFilePolicy else supervisedFilePolicy)) ((if transferred then transferredWorkspaceGitAdapterWithBackend else workspaceGitAdapterWithBackend) backend) ("overlay__workspace-git__" <> name) name input fixture \env binding snapshot access reference runtime _ -> do
     admission <- maybe (fail "missing Git admission") pure snapshot.workspace
     (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest admission.instructions) policy (IdentityRange 62000 62001)))
     use env binding snapshot access reference runtime profile backend

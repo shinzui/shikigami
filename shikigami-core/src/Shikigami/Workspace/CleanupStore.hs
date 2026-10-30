@@ -11,7 +11,7 @@ module Shikigami.Workspace.CleanupStore
   )
 where
 
-import Contravariant.Extras (contrazip2, contrazip3)
+import Contravariant.Extras (contrazip2, contrazip4)
 import Data.Aeson qualified as Aeson
 import Data.Functor.Contravariant ((>$<))
 import Data.Text qualified as Text
@@ -25,16 +25,21 @@ import Shikigami.Execution.Transcript (ExecutionId (..), executionIdFor)
 import Shikigami.Prelude
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Store qualified as Store
+import Shikigami.Workspace.TransferStore (currentWorkspaceRequestTx)
 import Shikigami.Workspace.Types
 
 data CleanupPlan = CleanupPlan
   { bindingDigest :: !Text,
     filesTarget :: !Text,
     scratchTarget :: !Text,
-    userId :: !Int
+    userId :: !Int,
+    ownership :: !(Maybe WorkspaceRequest)
   }
   deriving stock (Eq, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving anyclass (FromJSON)
+
+instance ToJSON CleanupPlan where
+  toJSON = Aeson.genericToJSON Aeson.defaultOptions {Aeson.omitNothingFields = True}
 
 instance Show CleanupPlan where show _ = "CleanupPlan <protected>"
 
@@ -50,11 +55,12 @@ prepareCleanupTx binding plan
         Just (original, done) | original == plan -> pure (Right done)
         Just _ -> pure (Left WorkspaceBindingConflict)
         Nothing -> do
-          owner <- Store.checkWorkspaceOwnerTx binding binding.request.owner binding.request.epoch
+          current <- currentWorkspaceRequestTx binding
+          owner <- maybe (pure (Left WorkspaceBindingConflict)) (\request -> Store.checkWorkspaceOwnerTx binding request.owner request.epoch) current
           terminal <- cleanupEligibleTx binding
           case owner of
-            Right () | terminal -> do
-              frozen <- Store.freezeWorkspaceTx binding binding.request.owner binding.request.epoch
+            Right () | terminal && maybe (current == Just binding.request) (\request -> current == Just request) plan.ownership -> do
+              frozen <- maybe (pure (Left WorkspaceBindingConflict)) (\request -> Store.freezeWorkspaceTx binding request.owner request.epoch) current
               case frozen of
                 Left err -> pure (Left err)
                 Right () -> do
@@ -77,8 +83,12 @@ listWorkspacesTx storageRoot cursor = Tx.statement (Text.pack storageRoot, curso
 
 cleanupEligibleTx :: WorkspaceBinding -> Transaction Bool
 cleanupEligibleTx binding = do
-  let ExecutionId execution = executionIdFor (assignmentIdFor binding.request.runId)
-  Tx.statement (binding.workspace.resource, execution, toJSON binding) terminalWorkspace
+  current <- currentWorkspaceRequestTx binding
+  case current of
+    Nothing -> pure False
+    Just request -> do
+      let ExecutionId execution = executionIdFor (assignmentIdFor request.runId)
+      Tx.statement (binding.workspace.resource, execution, toJSON binding, toJSON request) terminalWorkspace
 
 jsonParam :: (ToJSON a) => E.Params a
 jsonParam = toJSON >$< E.param (E.nonNullable E.jsonb)
@@ -104,9 +114,9 @@ listBindings = preparable "SELECT binding FROM shikigami.workspace_bindings WHER
 -- The retained execution is terminal and receipt-complete, all external effects
 -- are settled, and no continuing session sharing this root remains live. A
 -- missing execution or missing ownership metadata refuses orphan adoption.
-terminalWorkspace :: Statement (Text, Text, Aeson.Value) Bool
+terminalWorkspace :: Statement (Text, Text, Aeson.Value, Aeson.Value) Bool
 terminalWorkspace =
   preparable
-    "SELECT EXISTS(SELECT 1 FROM shikigami.workspace_bindings w JOIN shikigami.executions e ON e.execution_id=$2 WHERE w.resource=$1 AND w.binding=$3 AND w.state='ready' AND e.binding->'identity'=$3->'request'->'owner' AND e.binding->'rootId'=$3->'request'->'rootId' AND e.state->>'phase' IN ('Succeeded','Failed','Cancelled') AND COALESCE((e.state->>'pendingReceipts')::bigint,0)=0 AND (e.state->'activeOperation' IS NULL OR e.state->'activeOperation'='null'::jsonb)) AND NOT EXISTS(SELECT 1 FROM shikigami.workspace_effects WHERE resource=$1 AND NOT settled) AND NOT EXISTS(SELECT 1 FROM shikigami.workspace_processes WHERE resource=$1 AND NOT settled) AND NOT EXISTS(SELECT 1 FROM shikigami.worker_sessions s WHERE s.binding->'rootId'=$3->'request'->'rootId' AND s.state->>'phase' NOT IN ('Failed','Cancelled'))"
-    (contrazip3 textParam textParam (E.param (E.nonNullable E.jsonb)))
+    "SELECT EXISTS(SELECT 1 FROM shikigami.workspace_bindings w JOIN shikigami.executions e ON e.execution_id=$2 WHERE w.resource=$1 AND w.binding=$3 AND w.state='ready' AND e.binding->'identity'=$4->'owner' AND e.binding->'rootId'=$4->'rootId' AND e.state->>'phase' IN ('Succeeded','Failed','Cancelled') AND COALESCE((e.state->>'pendingReceipts')::bigint,0)=0 AND (e.state->'activeOperation' IS NULL OR e.state->'activeOperation'='null'::jsonb)) AND NOT EXISTS(SELECT 1 FROM shikigami.workspace_effects WHERE resource=$1 AND NOT settled) AND NOT EXISTS(SELECT 1 FROM shikigami.workspace_processes WHERE resource=$1 AND NOT settled) AND NOT EXISTS(SELECT 1 FROM shikigami.worker_sessions s WHERE s.binding->'rootId'=$4->'rootId' AND s.state->>'phase' NOT IN ('Failed','Cancelled'))"
+    (contrazip4 textParam textParam (E.param (E.nonNullable E.jsonb)) (E.param (E.nonNullable E.jsonb)))
     (D.singleRow (D.column (D.nonNullable D.bool)))

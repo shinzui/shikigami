@@ -1,6 +1,6 @@
 -- | Production composition of reviewed repository policy, exact agent grants,
 -- current principal/profile authority and exact retained workspace adapters.
-module Shikigami.Workspace.ConfiguredHost (configuredWorkspaceHost) where
+module Shikigami.Workspace.ConfiguredHost (configuredWorkspaceHost, configuredWorkspaceHostWithTransfers) where
 
 import Data.Map.Strict qualified as Map
 import Data.Time (getCurrentTime)
@@ -18,17 +18,26 @@ import Shikigami.Prelude
 import Shikigami.Workspace.Admission (WorkspaceHost)
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.FileProvider
-import Shikigami.Workspace.GitProvider (workspaceGitAdapter)
+import Shikigami.Workspace.GitProvider (transferredWorkspaceGitAdapter, workspaceGitAdapter)
 import Shikigami.Workspace.Host
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.ProcessProvider
+import Shikigami.Workspace.Profile (retainedFileProfile)
 import Shikigami.Workspace.Provision
 import Shikigami.Workspace.Settings
 import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Types
 
 configuredWorkspaceHost :: AppEnv -> Pool -> DirectoryHandle -> ActionAuthorizer -> WorkspaceSettings -> Either Text WorkspaceHost
-configuredWorkspaceHost appEnv pool directory authorizer settings = do
+configuredWorkspaceHost = configuredWorkspaceHostFor False
+
+-- Explicit qualification composition. Production selection remains on the
+-- qualified historical revisions until the real Linux successor gate passes.
+configuredWorkspaceHostWithTransfers :: AppEnv -> Pool -> DirectoryHandle -> ActionAuthorizer -> WorkspaceSettings -> Either Text WorkspaceHost
+configuredWorkspaceHostWithTransfers = configuredWorkspaceHostFor True
+
+configuredWorkspaceHostFor :: Bool -> AppEnv -> Pool -> DirectoryHandle -> ActionAuthorizer -> WorkspaceSettings -> Either Text WorkspaceHost
+configuredWorkspaceHostFor transferable appEnv pool directory authorizer settings = do
   catalog <- validateWorkspaceSettings settings
   let resolve agent identity = do
         principal <- either (const refused) Right (identityText identity)
@@ -56,12 +65,19 @@ configuredWorkspaceHost appEnv pool directory authorizer settings = do
       let client = ProcessClient process.socketPath process.serverUser process.requestSeconds process.waitSeconds
           prepare assignment binding admission = case Map.lookup binding.repository process.policies of
             Nothing -> pure refused
-            Just policy -> do
-              let provision = ProvisionRuntime appEnv authorizer (current assignment) nativeProvisionBackend
-                  supervised = admission & #filePolicy .~ Just supervisedFilePolicy
-              result <- provisionWorkspaceProfile provision binding supervised policy process.identities
-              pure (either (const refused) (const (Right supervised)) result)
-      governedWorkspaceHost runtime [supervisedWorkspaceEditAdapter runtime, workspaceExecAdapter client, workspaceGitAdapter runtime] [workspaceEditAdapter runtime] prepare settings.storageRoot select current
+            Just policy
+              | admission.runId /= binding.request.runId -> do
+                  retained <- retainedFileProfile appEnv binding admission
+                  pure (either (const refused) (const (Right admission)) retained)
+              | otherwise -> do
+                  let provision = ProvisionRuntime appEnv authorizer (current assignment) nativeProvisionBackend
+                      accepted = if transferable then admission else admission & #filePolicy .~ Just supervisedFilePolicy
+                  result <- provisionWorkspaceProfile provision binding accepted policy process.identities
+                  pure (either (const refused) (const (Right accepted)) result)
+          selected = if transferable then [transferredWorkspaceEditAdapter runtime, transferredWorkspaceExecAdapter client, transferredWorkspaceGitAdapter runtime] else [supervisedWorkspaceEditAdapter runtime, workspaceExecAdapter client, workspaceGitAdapter runtime]
+          historical = if transferable then [workspaceEditAdapter runtime, supervisedWorkspaceEditAdapter runtime, workspaceExecAdapter client, workspaceGitAdapter runtime] else [workspaceEditAdapter runtime]
+          host = if transferable then governedWorkspaceHostWithTransfers else governedWorkspaceHost
+      host runtime selected historical prepare settings.storageRoot select current
   where
     refused = Left "workspace operator policy refused"
     targetPolicy binding admission _scoped kind path = pure do
