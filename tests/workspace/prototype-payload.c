@@ -5,6 +5,9 @@
 #include <sys/prctl.h>
 #include <sys/ptrace.h>
 #include <sys/socket.h>
+#include <sys/timerfd.h>
+#include <poll.h>
+#include <stdint.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <netinet/in.h>
@@ -15,9 +18,39 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <time.h>
 #ifndef HOST_SECRET_PATH
 #define HOST_SECRET_PATH "/var/lib/shikigami-prototype-unmounted/host-secret"
 #endif
+static void stamp(const char *phase) {
+  struct timespec real, monotonic, boot;
+  if (clock_gettime(CLOCK_REALTIME, &real) || clock_gettime(CLOCK_MONOTONIC, &monotonic) || clock_gettime(CLOCK_BOOTTIME, &boot)) return;
+  int fd = open("/workspace/src/clock-evidence", O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0600);
+  if (fd < 0) return;
+  char line[256];
+  int size = snprintf(line, sizeof(line), "%s %lld.%09ld %lld.%09ld %lld.%09ld\n", phase, (long long)real.tv_sec, real.tv_nsec, (long long)monotonic.tv_sec, monotonic.tv_nsec, (long long)boot.tv_sec, boot.tv_nsec);
+  if (size > 0 && (size_t)size < sizeof(line)) (void)write(fd, line, (size_t)size);
+  close(fd);
+}
+/* Apple's VM agent steps realtime every thirty seconds. Observe that boundary
+ * before a short fixture command; the production deadline guard stays enabled.
+ * This helper neither changes clocks nor grants command authority. */
+static int await_clock_step(void) {
+  struct timespec now;
+  if (clock_gettime(CLOCK_REALTIME, &now)) return 1;
+  int fd = timerfd_create(CLOCK_REALTIME, TFD_CLOEXEC | TFD_NONBLOCK);
+  if (fd < 0) return 1;
+  struct itimerspec deadline = {.it_value = {.tv_sec = now.tv_sec + 3600, .tv_nsec = now.tv_nsec}};
+  if (timerfd_settime(fd, TFD_TIMER_ABSTIME | TFD_TIMER_CANCEL_ON_SET, &deadline, NULL)) { close(fd); return 1; }
+  struct pollfd watched = {.fd = fd, .events = POLLIN};
+  int ready;
+  do { ready = poll(&watched, 1, 35000); } while (ready < 0 && errno == EINTR);
+  uint64_t ticks;
+  int stepped = ready > 0 && read(fd, &ticks, sizeof(ticks)) < 0 && errno == ECANCELED;
+  close(fd);
+  if (stepped) puts("Observed disposable guest clock step before command admission");
+  return stepped ? 0 : 1;
+}
 #ifndef SIBLING_SECRET_PATH
 #define SIBLING_SECRET_PATH "/var/lib/shikigami-prototype-unmounted/sibling/secret"
 #endif
@@ -60,13 +93,18 @@ static int denials(void) {
   return 0;
 }
 int main(int argc, char **argv) {
+  if (argc == 2 && !strcmp(argv[1], "--await-clock-step")) return await_clock_step();
   if (argc != 2 || strcmp(argv[1], "validate")) return 64;
   FILE *input = fopen("/workspace/src/mode", "r");
   char mode[32] = {0};
   if (!input || !fgets(mode, sizeof(mode), input)) return 65;
   fclose(input);
   mode[strcspn(mode, "\n")] = 0;
-  if (write_marker("/workspace/src/launch-count", "1", 1) || write_marker("/workspace/src/command-ready", "1", 0)) return 66;
+  stamp("begin");
+  if (write_marker("/workspace/src/launch-count", "1", 1)) return 66;
+  stamp("count-saved");
+  if (write_marker("/workspace/src/command-ready", "1", 0)) return 66;
+  stamp("ready-saved");
   if (!strcmp(mode, "denials")) return denials();
   if (!strcmp(mode, "orphan")) {
     pid_t child = fork();
@@ -79,9 +117,17 @@ int main(int argc, char **argv) {
       usleep(50000);
     }
   }
-  if (!strcmp(mode, "slow")) for (int i = 0; i < 50; ++i) usleep(300000);
+  stamp("wait-begin");
+  if (!strcmp(mode, "slow")) {
+    while (access("/workspace/src/release-command", F_OK)) {
+      if (errno != ENOENT) return 72;
+      usleep(10000);
+    }
+  }
   else if (strcmp(mode, "complete")) return 70;
+  stamp("output-begin");
   char output[8192]; memset(output, 'x', sizeof(output));
   for (int i = 0; i < 16; ++i) if (write(1, output, sizeof(output)) < 0 || write(2, output, sizeof(output)) < 0) return 71;
+  stamp("done");
   return 0;
 }

@@ -112,8 +112,9 @@ allocating another actual attempt. The publisher validates original actor,
 claim generation, accepted input and fingerprint, and grants no replay-read or
 fresh execution authority. Root cancellation does not erase facts or unrelated
 billing holds. Historical records without routing remain readable and gain no
-launch authority. The independent service and real Linux restart qualification
-remain explicit plan-96 enablement gates.
+launch authority. The independent service and real Linux restart fixture now
+qualify this process boundary; production worker installation remains separately
+gated by plan 96.
 
 Supervisor intake uses a private filesystem Unix socket retained by systemd
 socket activation. The service adopts only the configured listening stream
@@ -126,8 +127,9 @@ it must not shut down or unlink the manager's listener. A transport error or
 caller timeout keeps the original effect uncertain. Observation can recover
 retained facts, but never issues a second launch. The live client and factual
 publisher share deterministic result rendering. The native listener substrate
-and accepted-executor Unix fixtures are qualified separately; neither replaces
-the complete Linux supervisor restart gate.
+and accepted-executor Unix fixtures remain separate evidence boundaries. The
+coupled Linux prototype additionally proves worker and supervisor SIGKILL,
+retention of the manager-owned listener and original-attempt settlement.
 
 Process profile revision 2 also binds an immutable deadline executable. It runs
 as the unprivileged init of the private PID namespace, refuses expired starts
@@ -142,8 +144,12 @@ The collector still independently checks matching invocation, bounded complete
 output and an empty cgroup. Loaded units can wait in a queue before receiving
 their first invocation identity: capture remains open for a bounded interval,
 but an identity lost or changed after pinning remains evidence loss. Native
-deadline and Nix-root probes qualify this substrate; full service restart
-integration remains a plan-96 gate.
+deadline and Nix-root probes qualify this substrate; the coupled accepted
+fixture separately qualifies service restart integration. Apple VM agents can
+periodically step realtime: such a change must still expire the guard. Short
+qualification commands may coordinate with an observed clock step and release
+a held payload after the intended restart boundary; this supplies no exemption
+for a long-running command or proof of successful validation after clock loss.
 
 The independent service also observes retained root cancellation, overage and
 cutoff controls without reviving the former actor's authority. Under the shared
@@ -188,9 +194,11 @@ path restrictions and the process barrier, and uses owned publication. Revision
 1 preserves its original hashes and refuses the supervised filesystem profile.
 The configured socket-activated daemon uses existing directory/profile/C13
 services and ready retained rules. These implementations and their separate
-native/instrumented checks do not enable process-backed configured workers;
-coupled native provisioning, file edits and complete service restart acceptance
-still require the Linux prototype gate.
+native/instrumented checks do not enable process-backed configured workers.
+The ten-case coupled Linux prototype now qualifies native provisioning and
+owned edits, duplicate requests, worker/supervisor restart, cancellation, offline
+receipt recovery, isolation, missing-evidence retention and fresh denial. Local
+Git receipt qualification and production composition remain plan-96 gates.
 
 ## Alternatives rejected
 

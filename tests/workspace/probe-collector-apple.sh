@@ -241,5 +241,22 @@ echo 'PASS same-UID repository code cannot write, trace or stop its trusted dead
 if "$prefix/root/bin/deadline" 1 "$(($(date +%s%N) + 1000000000))" -- /bin/true; then exit 1; else [[ $? == 78 ]]; fi
 if "$prefix/root/bin/deadline" 1 999999999999999999999 -- /bin/true; then exit 1; else [[ $? == 64 ]]; fi
 echo 'PASS unsupported execution context and malformed deadline refuse before running a command'
-echo 'Collector, deadline and cancellation probe passed (17 cases); full supervisor RPC and PostgreSQL integration remain unqualified.'
+prepare 12
+deadline=$(($(date +%s%N) + 12000000000))
+before=$(wc -c <"$prefix/workspace/launch-count")
+launch /bin/payload orphan
+for _ in {1..100}; do [[ $(wc -c <"$prefix/workspace/launch-count") -gt "$before" ]] && break; sleep 0.05; done
+[[ $(wc -c <"$prefix/workspace/launch-count") -gt "$before" ]]
+# This changes only the disposable guest VM's clock. Keep cancellation on clock
+# discontinuity enabled; never suppress that protection to pass qualification.
+date --set='+1 second' >/dev/null
+wait_file "$op/complete.json"
+jq -e '.exitCode==124 and .descendantsEmpty and .outputComplete' "$op/complete.json" >/dev/null
+[[ $(date +%s%N) -lt "$deadline" ]]
+[[ $(cat "$op/stderr") == 'workspace deadline clock changed' ]]
+before=$(wc -c <"$prefix/workspace/orphan")
+sleep 0.3
+[[ $(wc -c <"$prefix/workspace/orphan") == "$before" ]]
+echo 'PASS a realtime clock change expires the guard and settles every descendant before the original cutoff'
+echo 'Collector, deadline and cancellation probe passed (18 cases); full supervisor RPC and PostgreSQL integration remain unqualified.'
 GUEST

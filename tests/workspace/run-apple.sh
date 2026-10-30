@@ -31,10 +31,17 @@ cleanup() {
       container exec "$name" /bin/bash -c '
         cd "$1"
         files=()
-        for name in provision.log diagnostics.log process-debug.log http-status.log authority.log oauth.log supervisor.log migrations.log nix-tool.log nix-guard.log pg-init.log pg-start.log; do [[ ! -f "$name" ]] || files+=("$name"); done
+        for name in provision.log diagnostics.log process-debug.log clock-events.log clock-service.log clock-barrier.log http-status.log authority.log oauth.log supervisor.log migrations.log nix-tool.log nix-guard.log pg-init.log pg-start.log; do [[ ! -f "$name" ]] || files+=("$name"); done
         for case_name in duplicate worker-restart supervisor-restart cancellation completion-recovery denials capture-loss authority-denial; do
           for kind in prepare worker inspect verify; do name="$kind-$case_name.log"; [[ ! -f "$name" ]] || files+=("$name"); done
           name="status-$case_name.json"; [[ ! -f "$name" ]] || files+=("$name")
+          if [[ -f "$name" ]]; then
+            workspace=$(jq -r .files "$name")
+            if [[ "$workspace" =~ ^/var/lib/shikigami-prototype-[a-zA-Z0-9]+/workspaces/[a-f0-9]{64}/files$ && ! -L "$workspace/src" && ! -L "$workspace/src/clock-evidence" && -f "$workspace/src/clock-evidence" ]]; then
+              head -c 8192 "$workspace/src/clock-evidence" >"payload-clock-$case_name.log"
+              files+=("payload-clock-$case_name.log")
+            fi
+          fi
         done
         tar -cf - "${files[@]}"
       ' fixture "$prefix" | tar -xf - -C "$taskdir/evidence" || { if [[ $result == 0 ]]; then result=1; fi; }
@@ -82,6 +89,7 @@ SSH
 systemctl daemon-reload
 systemctl start dbus ssh
 : >/run/shikigami-workspace-prototype.disposable
+: >/run/shikigami-workspace-prototype.clock-steps
 GUEST
 container exec --interactive "$name" /bin/sh -c 'cat >/root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys' <"$taskdir/key.pub"
 hostkey=$(container exec "$name" cat /etc/ssh/ssh_host_ed25519_key.pub)

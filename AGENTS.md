@@ -60,14 +60,29 @@ admission or supervisor restart recovery.
 
 `bash tests/workspace/probe-collector-apple.sh` qualifies the independent bounded
 output collector and absolute deadline guard using the compiled production
-systemd properties (17 cases).
+systemd properties (18 cases).
 It covers output draining, duplicate-unit refusal, cancellation, timeout,
 collector loss, mismatched evidence, metadata privacy and literal arguments in
 a cleared environment. It also checks queued and expired starts, orphan
 descendants, retained exit status and protection of the trusted deadline parent.
+It also injects a disposable guest clock change and requires early expiration
+plus complete descendant settlement.
 Cancellation checks also reject another boot, invocation or fingerprint. The
 default arm64 probe passes; the optional `amd64` probe currently fails its first
 isolated payload under translation (FRIC-22). Qualify the architecture and
 containment profile actually used by a plan.
 Full supervisor RPC, accepted launch and restart
 qualification remain separate gates; this probe does not enable process tools.
+
+`bash tests/workspace/run-apple.sh --prototype` runs the coupled accepted-executor
+fixture with native arm64 payloads/guards and a configured-builder Haskell
+controller outside the command namespace. All ten provisioning, owned-edit,
+duplicate, restart, cancellation, isolation and receipt-recovery cases pass.
+This does not enable configured process tools or qualify Git commits/handoff.
+
+Apple container 1.5.0 synchronizes guest realtime every thirty seconds (FRIC-24).
+That clock step correctly expires the production absolute-deadline guard. The
+fixture observes a clock step before short command admission and releases held
+commands only after checking the intended restart boundary. Keep clock-change
+protection enabled; do not treat these results as qualification for long-running
+commands across clock changes.

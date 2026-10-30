@@ -46,6 +46,8 @@ trap cleanup EXIT
 diagnose() {
   result=$?
   trap - ERR
+  journalctl -u systemd-timesyncd.service -n 10 --output=short-monotonic --no-pager >"$prefix/clock-events.log" 2>&1 || true
+  systemctl show systemd-timesyncd.service --property=ActiveState,StatusText >"$prefix/clock-service.log" 2>&1 || true
   if "$pg_started"; then
     /usr/bin/psql "$connection" -Atc "SELECT (SELECT count(*) FROM shikigami.workspace_bindings), (SELECT count(*) FROM shikigami.workspace_bindings WHERE state='ready'), (SELECT count(*) FROM shikigami.workspace_process_profiles), (SELECT count(*) FROM shikigami.workspace_process_profiles WHERE ready)" >"$prefix/diagnostics.log" 2>&1 || true
     for uid in 64000 64001; do if getent passwd "$uid" >/dev/null; then echo "identity $uid present"; else echo "identity $uid absent"; fi; done >>"$prefix/diagnostics.log"
@@ -151,7 +153,12 @@ for _ in {1..200}; do
   sleep 0.1
 done
 jq -Rse 'split("\n") | any(.[]; try (fromjson | .event=="workspace.supervisor.started") catch false)' "$prefix/supervisor.log" >/dev/null
-prepare() { "$prototype" prepare "$config" "$prefix" "$1" "$2" >"$prefix/prepare-$1.log" 2>&1; }
+prepare() {
+  if [[ -f /run/shikigami-workspace-prototype.clock-steps ]]; then
+    /usr/bin/timeout 40 "$prefix/root/bin/probe" --await-clock-step >>"$prefix/clock-barrier.log"
+  fi
+  "$prototype" prepare "$config" "$prefix" "$1" "$2" >"$prefix/prepare-$1.log" 2>&1
+}
 inspect() { "$prototype" inspect "$config" "$prefix" "$1" >"$prefix/inspect-$1.log" 2>&1; }
 start_worker() {
   systemd-run --quiet --unit="$task-$1.service" -p Type=exec -p Restart=no -p RemainAfterExit=yes -p UMask=0077 -p StandardOutput=null -p "StandardError=file:$prefix/worker-$1.log" -- "$prototype" worker "$config" "$prefix" "$1"
@@ -185,10 +192,19 @@ wait_settled() {
   return 1
 }
 verify() { "$prototype" verify "$config" "$prefix" "$1" "$2" >"$prefix/verify-$1.log" 2>&1; }
+release_command() {
+  files=$(jq -r .files "$prefix/status-$1.json")
+  python3 - "$files/src/release-command" <<'RELEASE'
+import os,sys
+fd=os.open(sys.argv[1],os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+os.close(fd)
+RELEASE
+}
 prepare duplicate slow
 start_worker duplicate
 wait_ready duplicate
 "$prototype" duplicate "$config" "$prefix" duplicate
+release_command duplicate
 wait_settled duplicate
 "$prototype" worker "$config" "$prefix" duplicate
 verify duplicate success
@@ -197,6 +213,7 @@ prepare worker-restart slow
 start_worker worker-restart
 wait_ready worker-restart
 systemctl kill --kill-whom=main --signal=KILL "$task-worker-restart.service"
+release_command worker-restart
 wait_settled worker-restart
 systemctl restart "$task-worker-restart.service"
 verify worker-restart success
@@ -206,6 +223,7 @@ start_worker supervisor-restart
 wait_ready supervisor-restart
 listener=$(stat -c %i "$prefix/rpc/supervisor.sock")
 systemctl kill --kill-whom=main --signal=KILL "$service"
+release_command supervisor-restart
 wait_settled supervisor-restart
 [[ $(stat -c %i "$prefix/rpc/supervisor.sock") == "$listener" ]]
 verify supervisor-restart success
@@ -230,6 +248,7 @@ start_worker completion-recovery
 wait_ready completion-recovery
 directory=$(jq -r .directory "$prefix/status-completion-recovery.json")
 systemctl stop "$socket" "$service"
+release_command completion-recovery
 for _ in {1..400}; do [[ -f "$directory/complete.json" ]] && break; sleep 0.1; done
 [[ -f "$directory/complete.json" ]]
 inspect completion-recovery

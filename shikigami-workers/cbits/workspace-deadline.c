@@ -98,7 +98,17 @@ int main(int argc, char **argv) {
     if (interrupted) return stop_namespace(128 + interrupted);
     int ready = poll(timers, 2, 10);
     if (ready < 0) { if (errno == EINTR) continue; return stop_namespace(70); }
-    if (timers[0].revents || timers[1].revents) return stop_namespace(124);
+    if (timers[0].revents || timers[1].revents) {
+      uint64_t ticks;
+      if (read(real_timer, &ticks, sizeof(ticks)) < 0 && errno == ECANCELED) {
+        /* Protected bounded output only; payloads can spoof text, so this is
+         * diagnostic and never substitutes for the collector's unit facts. */
+        static const char message[] = "workspace deadline clock changed\n";
+        ssize_t ignored = write(STDERR_FILENO, message, sizeof(message) - 1);
+        (void)ignored;
+      }
+      return stop_namespace(124);
+    }
     for (int turn = 0; turn < 128; turn++) {
       int status;
       pid_t waited = waitpid(-1, &status, WNOHANG);

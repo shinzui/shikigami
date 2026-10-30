@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-30
+* **Addition**: FRIC-24 records detour environment friction with mori://apple/container: Apple guest clock synchronization cancels absolute deadline guards
 * **Addition**: FRIC-23 records slowdown tooling friction with mori://shinzui/shikigami: Frozen runtime rebuilds the full dependency graph for each fixture edit
 * **Addition**: FRIC-22 records detour environment friction with mori://apple/container: Translated amd64 commands fail inside the qualified private workspace profile
 
