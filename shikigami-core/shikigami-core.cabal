@@ -30,7 +30,6 @@ library
   import: common
   hs-source-dirs: src
   autogen-modules: Paths_shikigami_core
-  other-modules: Paths_shikigami_core
   exposed-modules:
     Shikigami.Action.Authorization
     Shikigami.Action.Authorization.Config
@@ -134,6 +133,25 @@ library
     Shikigami.Memory.Access
     Shikigami.Memory.AliasStore
     Shikigami.Memory.Scope
+    Shikigami.Objective.Acceptance
+    Shikigami.Objective.Capability
+    Shikigami.Objective.Catalog
+    Shikigami.Objective.Command
+    Shikigami.Objective.Live
+    Shikigami.Objective.Store
+    Shikigami.Objective.Types
+    Shikigami.ObjectiveLifecycle.BehaviorHoles
+    Shikigami.ObjectiveLifecycle.Generated.BehaviorContract
+    Shikigami.ObjectiveLifecycle.Generated.Codec
+    Shikigami.ObjectiveLifecycle.Generated.Domain
+    Shikigami.ObjectiveLifecycle.Generated.EventStream
+    Shikigami.ObjectiveLifecycle.Generated.Harness
+    Shikigami.ObjectiveLifecycle.Generated.Projection
+    Shikigami.ObjectiveLifecycle.Generated.Transducer
+    Shikigami.ObjectiveLookup.Generated.ReadModel
+    Shikigami.ObjectiveLookup.Generated.ReadModelHarness
+    Shikigami.ObjectiveLookup.Generated.ReadModelTable
+    Shikigami.ObjectiveLookup.ReadModelHoles
     Shikigami.PracticeReview
     Shikigami.PracticeReview.Attention
     Shikigami.PracticeReview.Authorization
@@ -216,6 +234,7 @@ library
   -- authoritative build inventory for the generated layer. Never edit a
   -- generated module; change domain/*.keiro and scaffold again.
   other-modules:
+    Paths_shikigami_core
     Shikigami.AgentRun.Generated.WorkflowFacts
     Shikigami.AgentRun.Generated.WorkflowRuntime
     Shikigami.Approval.Generated.WorkflowFacts
@@ -241,6 +260,7 @@ library
     Shikigami.Generated.Nominals.Internal
     Shikigami.Generated.ProjectionCatalog
     Shikigami.Generated.ReplayAudit
+    Shikigami.Objective.Authority
     Shikigami.ProjectionCatalog.ProjectionCatalogHoles
     Shikigami.RunEvidence.BehaviorHoles
     Shikigami.RunEvidence.Generated.BehaviorContract
@@ -366,6 +386,7 @@ test-suite shikigami-core-test
     Shikigami.KanmonClientSpec
     Shikigami.KeiroSpecificationSpec
     Shikigami.LogSpec
+    Shikigami.ObjectiveSpec
     Shikigami.PackageArchitectureSpec
     Shikigami.PracticeReviewEvidenceSpec
     Shikigami.PracticeReviewSpec
@@ -463,6 +484,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.Fixture.SinkHttp
     Shikigami.FlowLifecycleSpec
     Shikigami.GrantStoreSpec
+    Shikigami.ObjectiveStoreSpec
     Shikigami.PracticeReviewEvidenceSpec
     Shikigami.PracticeReviewMemorySpec
     Shikigami.PracticeReviewOrchestrationSpec
@@ -522,6 +544,7 @@ test-suite shikigami-core-postgres-test
     kiroku-store,
     lens,
     pgmq-hasql,
+    process,
     servant-client,
     settei,
     settei-env,

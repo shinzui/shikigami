@@ -10,3 +10,4 @@ spec shikigami-execution.keiro
 spec shikigami-execution-driver.keiro
 spec shikigami-worker-session.keiro
 spec shikigami-continuing-worker.keiro
+spec shikigami-objective.keiro

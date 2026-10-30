@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-29T13:05:53Z
       mode: "update"
       note: "Define assignment-scoped checkpoint preconditions, revision invalidation, shared configuration and atomic creator receipts/origins."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-30T19:12:51Z
+      mode: "implement"
+      note: "Implement objective domain, conditional persistence and acceptance with PostgreSQL qualification."
 ---
 
 # Persist authoritative objectives and conditional commands
@@ -40,16 +45,20 @@ After this plan, Shikigami's own PostgreSQL store holds authoritative objectives
 
 ## Progress
 
-- [ ] Milestone 1: `domain/shikigami-objective.keiro`, its generated modules, the additive `objective-checkpoints` migration and `Shikigami.Objective.Types`/`Command` compile, register in the shared catalog, define shared operator configuration and pass `just migration-schema-isolation`.
-- [ ] Milestone 2: one command executor in `Shikigami.Objective.Capability` and `Store` commits objective state, lifecycle event, protected payload and receipt atomically with in-transaction authorization; the conditional and idempotent cases in `ObjectiveStoreSpec` pass.
-- [ ] Milestone 3: `Shikigami.Objective.Acceptance` and graph validation reject stale or incomplete completion, a real session result projects into `ObjectiveVersion`, and the concurrency and crash-window cases pass against a fresh database connection.
+- [x] Milestone 1 (2026-10-30): objective domain, generated catalog/read model, additive migration `0031-objective-checkpoints.sql`, closed command types and default-deny shared configuration compile. `cabal build all`, 542 unit tests (including loader cases), migration application in the PostgreSQL harness and `just migration-schema-isolation` pass.
+- [x] Milestone 2 (2026-10-30): one authenticated conditional executor atomically writes state, lifecycle, protected payload and receipt. The 377-case PostgreSQL suite passes, including 19 objective cases for public conflicts, retained negative outcomes, source-authentic sibling checkpoints, revocation, atomic creation/origins and rollback.
+- [ ] Milestone 3: graph/acceptance validation, real worker result projection, terminal reconciliation and separate-process receipt recovery pass in the same 19 objective PostgreSQL cases. The final committed-candidate Keiro gate remains pending.
 
-Planning baseline `3900c0e634d9b559e92a6989bb10f9943e0beab1`, inspected 2026-10-28. No implementation or test results are claimed.
+Planning baseline `3900c0e634d9b559e92a6989bb10f9943e0beab1`, inspected 2026-10-28. Implementation baseline: `86954e17d57099a7c48499402946bb4558752afa` (2026-10-30).
+
+Implementation is present. The checked-in Cabal project resolves without the optional local project. The full suites have passed 542 unit cases and 377 PostgreSQL cases (19 new objective cases), including real worker result/checkpoint ingestion and separate-process acknowledgement loss. The final root-optional interface and package-formatting reconciliation are validated; only the committed-candidate Keiro gate remains.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+The released checked lifecycle runner can reject a raced command before its projection handler executes. The store therefore performs a locked inspection, retains only definitive negative outcomes there, and repeats positive validation inside the checked append/projection transaction. Raced positive candidates return to inspection; they do not fabricate negative receipts.
+
+Worker success and verifier success need separate retained dispositions. The existing worker result receipt authenticates produced output, but does not attest an objective criterion or user journey. Ordinary results now project as `ResultObserved`; automatic acceptance requires verifier-owned criterion/journey facts. This implements the plan's prohibition on completing from child success alone.
 
 
 ## Decision Log
@@ -67,9 +76,17 @@ Planning baseline `3900c0e634d9b559e92a6989bb10f9943e0beab1`, inspected 2026-10-
   Date: 2026-10-28
 
 
+- Decision: Retain withdrawn assignment identities, index stable worker references, and bind evidence to assignment instruction/dependency revision and owner epoch as well as objective instruction/criteria revisions.
+  Rationale: Prevent identity reuse and stale integrated acceptance, including instructions that change and later return to their original text; enable provider lookup without scanning objective payloads.
+  Date: 2026-10-30
+
+- Decision: Keep admitted access package-private and run source/fence verification outside locks, followed by a fresh exact action check and transactional membership/permission validation.
+  Rationale: Public identity-shaped JSON cannot mint authority, and revocation or an unavailable external verifier cannot bypass receipt recovery.
+  Date: 2026-10-30
+
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Implementation and runtime qualification are complete pending the final committed-candidate gate. No worker-provider, public API/CLI or model/Flow surface is enabled by this plan. FRIC-32 is resolved by formatter ownership exclusions. FRIC-33 is accepted: strict request-bundle validation still reports the same eight missing recommended metadata fields as the implementation baseline; its output compares byte-for-byte equal, and no historical review entries were invented.
 
 
 ## Context and Orientation
@@ -89,7 +106,7 @@ Relevant decisions, found by scanning `docs/adr/` filenames and headings (the bu
 [Plan 84](84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) has implemented the consumer mechanics and is waiting on the real provider that plan 99 builds on this store; this plan does not touch plan 84's modules. [Plan 85](85-adapt-durable-delivery-through-validated-coordinator-decisions.md) will later submit integrated acceptance to the `Shikigami.Objective.Acceptance` contract defined here rather than keeping a second completion store.
 
 
-The reviewed contracts are recorded in [ADR 0067](../adr/0067-objective-checkpoints-use-assignment-scoped-preconditions.md) (checkpoint preconditions and instruction invalidation) and [ADR 0068](../adr/0068-objective-creation-has-authority-before-association.md) (creation authority before association). These are accepted design decisions; implementation and acceptance evidence remain outstanding.
+The reviewed contracts are recorded in [ADR 0067](../adr/0067-objective-checkpoints-use-assignment-scoped-preconditions.md) (checkpoint preconditions and instruction invalidation) and [ADR 0068](../adr/0068-objective-creation-has-authority-before-association.md) (creation authority before association). These decisions now have their store implementation here; runtime-origin validators and production worker providers remain plan 99. [ADR 0070](../adr/0070-objective-receipts-and-integrated-acceptance-share-one-command-owner.md) records the shared command/receipt and integrated-acceptance boundary.
 
 ## Plan of Work
 
@@ -188,6 +205,8 @@ Migrations are additive, schema-qualified and manifest-ordered; never edit or re
 
 `Shikigami.Objective.Types` owns `ObjectiveId`, `ObjectiveAssignmentId`, the access-principal sum, versioned snapshots, receipts and evidence references. `Shikigami.Objective.Command` owns the closed command sum and the internal provider-only commands. `Shikigami.Objective.Capability` owns authenticated command admission; `Shikigami.Objective.Store` owns conditional persistence; `Shikigami.App.Config` and its loader own shared enablement, local operator identity and creation policy, delivered here in milestone 1. `Shikigami.Objective.Catalog` owns projections; `Shikigami.Objective.Acceptance` owns completion. Plan 99 adapts the worker providers over these, plan 100 the HTTP and CLI envelope, plan 101 the native tool and Flow effect; none adds a second executor. Existing dependencies and the selected cohort are used unchanged: `mori://shinzui/keiro` for aggregates and `runCommandWithCatalogProjections`, `mori://shinzui/kiroku/packages/kiroku-store` and `mori://shinzui/kioku/packages/kioku-core` for the existing stores, and `mori://shinzui/kikan-en` for the exact capability action contract. Locate any further dependency API through Mori and read its source before use; verify registry releases and upstream tags before changing bounds or pins, because local registry metadata can lag. This plan has no hard prerequisite within MasterPlan 17.
 
+
+The concrete store also exposes `Capability.readObjectiveVersion` and `Store.referenceFor` for indexed worker-reference projection. `ObjectiveHost` supplies authenticated context, exact action authorization, origin/fence validation and retained verifier-result interpretation; its callbacks are trusted runtime configuration, never command fields. `EvidenceVerification` distinguishes `ResultObserved` from verifier-backed `CheckPassed`/`CheckFailed` and records the verified criterion and journey. A successful child result is progress only. Finite assignments may omit root/cutoff/session; projection into `ObjectiveVersion` requires an admitted root and cutoff. The provider ID is `shikigami-objective-v1` and its opaque key is indexed in assignment rows. `SHIKIGAMI_OBJECTIVES` (or YAML key `objectives`) loads a JSON object with `enabled`, optional `operator`, `administration` (`OwnObjectivesOnly` or `AdministerAll`) and default-empty `agentCreation` recorded principal IDs. Disabled HTTP authentication grants none of these identities.
 
 ## Revision Notes
 

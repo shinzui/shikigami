@@ -44,6 +44,7 @@ import Shikigami.KanmonClientSpec qualified as KanmonClientSpec
 import Shikigami.KeiroSpecificationSpec qualified as KeiroSpecificationSpec
 import Shikigami.Log qualified as Log
 import Shikigami.LogSpec qualified as LogSpec
+import Shikigami.ObjectiveSpec qualified as ObjectiveSpec
 import Shikigami.PackageArchitectureSpec qualified as PackageArchitectureSpec
 import Shikigami.PracticeReviewEvidenceSpec qualified as PracticeReviewEvidenceSpec
 import Shikigami.PracticeReviewSpec qualified as PracticeReviewSpec
@@ -94,6 +95,7 @@ main =
           WorkspaceActionProofSpec.tests,
           AgentLoaderSpec.tests,
           ApprovalNotificationSpec.tests,
+          ObjectiveSpec.tests,
           AppConfigSpec.tests,
           AttestationContractsSpec.tests,
           BehaviorInputSpec.tests,

@@ -192,6 +192,7 @@ import Shikigami.Decision.Contract (DecisionFailure, ModelAlias (..))
 import Shikigami.Decision.ModelCatalog qualified as Decision
 import Shikigami.Directory (DirectorySettings (..))
 import Shikigami.Execution.Policy.Types qualified as Harness
+import Shikigami.Objective.Types (ObjectiveSettings, defaultObjectiveSettings)
 import Shikigami.PracticeReview.Capability
   ( AttentionRecipientMap,
     emptyAttentionRecipientMap,
@@ -490,7 +491,8 @@ data AppConfig = AppConfig
     harness :: !Harness.HarnessPolicy,
     actionAuthorization :: !ActionAuthorizationConfig,
     workspaceSettings :: !(Maybe WorkspaceSettings),
-    workspaceSupervisorSettings :: !(Maybe WorkspaceSupervisorSettings)
+    workspaceSupervisorSettings :: !(Maybe WorkspaceSupervisorSettings),
+    objectiveSettings :: !ObjectiveSettings
   }
   deriving stock (Generic, Eq)
 
@@ -549,6 +551,7 @@ appConfig =
     <*> actionAuthorizationConfig
     <*> optional (secretSetting workspacesKey "Approved workspace repositories, reviewed instruction digests, path restrictions and exact agent/principal grants" jsonDecoder)
     <*> optional (secretSetting workspaceSupervisorKey "Private systemd socket and bounded peer-checked workspace supervisor intake" jsonDecoder)
+    <*> withDefault (secretSetting (stableKey "objectives") "Objective enablement, local operator and default-deny recorded agent creation grants" jsonDecoder) (constant "objectives-disabled" "Objective tracking requires explicit enablement" defaultObjectiveSettings)
 
 -- | Which provider runs a Skill behavior, and what the real branch needs.
 --
@@ -1518,6 +1521,7 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_BEHAVIOR_PROVIDER") behaviorProviderKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_DECISION_MODELS") behaviorDecisionModelsKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_HARNESS") behaviorHarnessKey,
+          binding (EnvName "SHIKIGAMI_OBJECTIVES") (stableKey "objectives"),
           binding (EnvName "SHIKIGAMI_WORKSPACES") workspacesKey,
           binding (EnvName "SHIKIGAMI_WORKSPACE_SUPERVISOR") workspaceSupervisorKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_MODEL") behaviorModelKey,

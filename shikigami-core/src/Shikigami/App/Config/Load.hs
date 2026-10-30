@@ -80,6 +80,7 @@ import Options.Applicative (Parser, ParserInfo)
 import Options.Applicative qualified as Options
 import Settei
 import Settei.Env
+import Shikigami.Objective.Types (validateSettings)
 
 -- Imported explicitly: 'SetteiOptions' has fields with the same names as
 -- 'ConfigOptions', and this module wants its own.
@@ -266,6 +267,7 @@ appConfigRun role options fileSources environment =
               Left problems -> failed resolutionExitCode (renderErrorsText problems <> explainOnFailure options result)
               Right config | Left refusal <- validateProviderSelection ((.behaviorProvider) config) -> failed resolutionExitCode (renderResponseCompatibilityError refusal)
               Right config | Left refusal <- config.decisionModelCatalog -> failed resolutionExitCode (renderDecisionFailure refusal)
+              Right config | Left refusal <- validateSettings config.objectiveSettings -> failed resolutionExitCode refusal
               Right config -> case missingRequirements role config of
                 missing@(_ : _) -> failed resolutionExitCode (renderMissing role missing)
                 [] -> case resolutionDiagnostic ((.diagnosticMode) options) result of

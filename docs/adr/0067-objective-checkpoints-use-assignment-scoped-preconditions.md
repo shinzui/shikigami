@@ -2,7 +2,7 @@
 
 Date: 2026-10-29
 
-Status: accepted design; implementation pending MasterPlan 17
+Status: accepted; persistence implemented by plan 98, runtime adapters pending MasterPlan 17
 
 ## Context
 
@@ -51,8 +51,7 @@ invalidation. A second provider executor would duplicate authorization and recei
 Instruction and status changes update the bounded assignment graph under the objective
 lock. The graph must remain bounded as planned. Store and provider tests must prove
 sibling commits, public conflicts, instruction-only invalidation, reverted-instruction
-invalidation and accepted-receipt recovery after later changes. This decision makes no
-claim that those tests or the objective provider are implemented.
+invalidation and accepted-receipt recovery after later changes. Plan 98 now supplies those store tests using real worker-session results and retained intents. An inactive flag is an equality precondition, not a requirement that the flag be true: newly prepared intents can reconcile previously accepted results after cancellation, while fresh work remains denied. The production objective provider remains plan 99.
 
 ## References
 

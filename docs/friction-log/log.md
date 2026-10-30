@@ -1,6 +1,10 @@
 # Bundle Update Log
 
 ## 2026-10-30
+* **Update**: FRIC-33 accepted: Baseline and current strict validation outputs compare byte-for-byte equal; retain the inherited eight diagnostics as a known qualification limit.
+* **Addition**: FRIC-33 records detour process friction with mori://shinzui/shikigami: Strict request-bundle validation has inherited recommended-field failures
+* **Update**: FRIC-32 resolved: Resolve the formatter/generator conflict through explicit ownership exclusions, verified with nix fmt on a generated module and the package definition.
+* **Addition**: FRIC-32 records detour tooling friction with mori://shinzui/shikigami: Pre-commit formatting conflicts with deterministic Keiro generation
 * **Addition**: FRIC-31 records detour tooling friction with mori://shinzui/shikigami: Batch qualification retains open stdin in a fake unattended vendor
 * **Addition**: FRIC-30 records slowdown tooling friction with mori://shinzui/shikigami: Fixture-only corrections rebuild the qualified Linux dependency cohort
 * **Addition**: FRIC-29 records slowdown tooling friction with mori://shinzui/shikigami: Expanded workspace gates wait for another frozen cohort rebuild

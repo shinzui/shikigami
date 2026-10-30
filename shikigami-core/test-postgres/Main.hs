@@ -12,6 +12,7 @@ import Shikigami.ExecutionTranscriptSpec qualified as ExecutionTranscriptSpec
 import Shikigami.FlowLifecycleSpec qualified as FlowLifecycleSpec
 import Shikigami.GrantStoreSpec qualified as GrantStoreSpec
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
+import Shikigami.ObjectiveStoreSpec qualified as ObjectiveStoreSpec
 import Shikigami.PracticeReviewMemorySpec qualified as PracticeReviewMemorySpec
 import Shikigami.PracticeReviewOrchestrationSpec qualified as PracticeReviewOrchestrationSpec
 import Shikigami.ProfileResolutionSpec qualified as ProfileResolutionSpec
@@ -25,14 +26,21 @@ import Shikigami.WorkerSessionSpec qualified as WorkerSessionSpec
 import Shikigami.WorkerSessionStoreSpec qualified as WorkerSessionStoreSpec
 import Shikigami.WorkflowVersioningSpec qualified as WorkflowVersioningSpec
 import Shikigami.WorkspaceTransferSpec qualified as WorkspaceTransferSpec
+import System.Environment (getArgs)
 import Test.Tasty (defaultMain, testGroup)
 
 main :: IO ()
-main = withShikigamiMigratedSuite \databaseFixture ->
+main = do
+  args <- getArgs
+  if args == ["--objective-commit-and-exit"] then ObjectiveStoreSpec.crashWriter else suite
+
+suite :: IO ()
+suite = withShikigamiMigratedSuite \databaseFixture ->
   defaultMain
     ( testGroup
         "shikigami postgres"
-        [ LedgerSpec.tests databaseFixture,
+        [ ObjectiveStoreSpec.tests databaseFixture,
+          LedgerSpec.tests databaseFixture,
           AgentWorkflowSpec.tests databaseFixture,
           DecisionEvidenceSpec.tests databaseFixture,
           DecisionWorkflowSpec.tests databaseFixture,

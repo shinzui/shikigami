@@ -22,6 +22,11 @@ provenance:
       at: 2026-10-29T13:05:53Z
       mode: "update"
       note: "Apply review findings: distinct checkpoint preconditions, instruction invalidation, early shared configuration and autonomous objective creation; add ADRs 0067-0068."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-30T19:36:19Z
+      mode: "update"
+      note: "Record EP-1 implementation, shared store interfaces and remaining provider/API/tool qualification gates."
 ---
 
 # Track durable objectives and authoritative assignment checkpoints without Rei
@@ -65,7 +70,7 @@ The reviewed contracts are recorded in [ADR 0067](../adr/0067-objective-checkpoi
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| EP-1 | Persist authoritative objectives and conditional commands | [docs/plans/98-persist-authoritative-objectives-and-conditional-commands.md](../plans/98-persist-authoritative-objectives-and-conditional-commands.md) | None | None | Not Started |
+| EP-1 | Persist authoritative objectives and conditional commands | [docs/plans/98-persist-authoritative-objectives-and-conditional-commands.md](../plans/98-persist-authoritative-objectives-and-conditional-commands.md) | None | None | In Progress |
 | EP-2 | Supply trusted objective associations and the real checkpoint, ownership and scope providers | [docs/plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md](../plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md) | EP-1 | External plan 96 (real fence proof) | Not Started |
 | EP-3 | Expose governed objective inspection through the API and CLI | [docs/plans/100-expose-governed-objective-inspection-through-the-api-and-cli.md](../plans/100-expose-governed-objective-inspection-through-the-api-and-cli.md) | EP-1; EP-2 M1 for its milestone 3 | None | Not Started |
 | EP-4 | Make objective capabilities durable for agents and conversations | [docs/plans/101-make-objective-capabilities-durable-for-agents-and-conversations.md](../plans/101-make-objective-capabilities-durable-for-agents-and-conversations.md) | EP-1, EP-2 | None | Not Started |
@@ -95,9 +100,11 @@ EP-3 and EP-4 proceed in parallel once EP-2 is Complete; EP-3 milestones 1–2 c
 
 ## Integration Points
 
+EP-1 exposes `Objective.Capability.readObjectiveVersion` over indexed references and trusted `ObjectiveHost` callbacks for authenticated context, source/fence checks and retained verifier results. Finite assignments may omit a resource root and session; the version projection refuses until an admitted root/cutoff is bound. Worker results are observations, while automatic acceptance requires verifier-backed criterion and journey facts. EP-2 must supply real host callbacks before wiring providers. [ADR 0070](../adr/0070-objective-receipts-and-integrated-acceptance-share-one-command-owner.md) records this shared boundary.
+
 **Objective types, closed command sum and command owner — EP-1 owns; EP-2, EP-3 and EP-4 adapt.** `shikigami-core/src/Shikigami/Objective/Types.hs` defines `ObjectiveId`, `ObjectiveAssignmentId`, the access-principal sum, versioned snapshots, receipts and evidence references. `Objective/Command.hs` defines the closed public sum (`ReviseInstructions`, `ReviseCriteria`, `SetAssignments`, `RecordProgress`, `RecordEvidence`, `SetNextAction`, `SetBlocked`, `ProposeCompletion`, `AcceptCompletion`, `CancelObjective`, `GrantMember`, `RevokeMember`, `BindConversation`, `LinkExternal`) plus the internal provider-only commands for checkpoint ingestion and ownership transfer. `Objective/Capability.hs` is the single authenticated command admission owner, `Objective/Store.hs` the conditional persistence and `Objective/Acceptance.hs` the completion contract. EP-2's providers call the internal commands and `BindConversation`; EP-3 wraps the public sum in the `format: 1` envelope with `operationKey`, `expectedRevision` and `command` (discriminant `tag`); EP-4's tool and Flow effect inject operation key and trusted actor and never accept them from model JSON. No adapter adds a second executor or a second authorization order.
 
-**Assignment identity and the worker consumer records — EP-1 owns the fields; EP-2 owns the provider.** An `ObjectiveAssignmentId` is distinct from a continuing session's per-message `AssignmentId` and stores its own assignment revision, which is the `assignmentRevision` that `ObjectiveVersion` reports. Provider id `shikigami-objective-v1` encodes the objective id and assignment id together in the opaque `ObjectiveRef` key; existing `ObjectiveRef` codecs stay intact. Conflict is defined per addressed assignment: a commit validates the assignment revision, criteria revision, owner and epoch, root and active flag, with instruction and status changes invalidating all assignment revisions, and treats the objective-wide revision as an ordering base that the receipt must still exceed. The early producer/consumer check, owned by EP-2 milestone 2, is that two sibling assignment checkpoints prepared from the same expected objective revision both commit without reconciliation, and that a lost acknowledgement followed by a retry returns the original receipt through `shikigami-core/src/Shikigami/WorkerSession/Integration.hs`.
+**Assignment identity and the worker consumer records — EP-1 owns the fields; EP-2 owns the provider.** An `ObjectiveAssignmentId` is distinct from a continuing session's per-message `AssignmentId` and stores its own assignment revision, which is the `assignmentRevision` that `ObjectiveVersion` reports. Provider id `shikigami-objective-v1` binds the objective id and assignment id in an opaque digest indexed by `shikigami.objective_assignments.reference_key`; existing `ObjectiveRef` codecs stay intact. Conflict is defined per addressed assignment: a commit validates the assignment revision, criteria revision, owner and epoch, root and active flag, with instruction and status changes invalidating all assignment revisions, and treats the objective-wide revision as an ordering base that the receipt must still exceed. The early producer/consumer check, owned by EP-2 milestone 2, is that two sibling assignment checkpoints prepared from the same expected objective revision both commit without reconciliation, and that a lost acknowledgement followed by a retry returns the original receipt through `shikigami-core/src/Shikigami/WorkerSession/Integration.hs`.
 
 **Command preconditions — EP-1 owns; EP-2 consumes.** Public commands and ownership transfer use exact expected objective revision equality. Internal checkpoint ingestion uses assignment-scoped equality and an objective revision ordering base, all checked by the same executor under the objective lock; the next revision is allocated from current state. EP-1 increments every assignment revision atomically on objective instruction or status changes, even if later reverted, preserving the existing checkpoint codec. EP-1 proves these rules at the store boundary; EP-2 proves them through the real session consumer.
 
@@ -120,10 +127,10 @@ EP-3 and EP-4 proceed in parallel once EP-2 is Complete; EP-3 milestones 1–2 c
 
 ## Progress
 
-2026-10-29: Review findings applied to all five children; planning only, no child has started. Acceptance now includes autonomous first-objective creation and instruction-only checkpoint invalidation. The single-plan draft, plan 97, is superseded. Cross-plan gates:
+2026-10-30: EP-1 implements the objective store, shared configuration and acceptance boundary; its final committed-candidate gate is pending. EP-2 through EP-5 remain unstarted. The real-provider gate on plan 84 remains open. The single-plan draft, plan 97, remains superseded. Cross-plan gates:
 
 - [ ] Plan 84's IR-13 completion gate: closed when EP-2 is Complete and plan 84's Progress and the MasterPlan 14 registry carry the real provider evidence.
-- [ ] IR-13 lifecycle: `accepted` with this MasterPlan as `targetPlan` now, `in-progress` at the first implementation commit, `completed` only with EP-5 evidence.
+- [ ] IR-13 lifecycle: `in-progress` with this MasterPlan as `targetPlan`; `completed` only with EP-5 evidence.
 
 
 ## Surprises & Discoveries

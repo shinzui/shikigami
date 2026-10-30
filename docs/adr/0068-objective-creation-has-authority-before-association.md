@@ -2,7 +2,7 @@
 
 Date: 2026-10-29
 
-Status: accepted design; implementation pending MasterPlan 17
+Status: accepted; persistence implemented by plan 98, runtime adapters pending MasterPlan 17
 
 ## Context
 
@@ -56,8 +56,7 @@ Creation and access to existing objectives have distinct authority checks within
 command owner. Recovery tests must start with no objective, lose the creation
 acknowledgement, recover exactly one receipt and origin, and continue through the same
 frozen binding. Denied creation and unrelated objective selectors must fail. Later-run
-and conversation continuity must work with memory recall disabled. These are planned
-acceptance requirements, not claims of implemented behavior.
+and conversation continuity must work with memory recall disabled. Plan 98 now qualifies creator-scoped persistence, origin/receipt atomicity, default-deny creation and recovery after process exit. Frozen scope admission, runtime-origin validation and later-run/conversation continuity remain acceptance for plans 99–102.
 
 ## References
 

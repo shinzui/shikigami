@@ -1,0 +1,92 @@
+language keiro-dsl 6
+context shikigami
+layout collocated
+
+target objective_rows {
+  schema = "shikigami"
+  table = "objectives"
+  reset = preserve
+}
+target objective_assignments {
+  schema = "shikigami"
+  table = "objective_assignments"
+  reset = preserve
+}
+target objective_payloads {
+  schema = "shikigami"
+  table = "objective_payloads"
+  reset = preserve
+}
+target objective_receipts {
+  schema = "shikigami"
+  table = "objective_receipts"
+  reset = preserve
+}
+target objective_origins {
+  schema = "shikigami"
+  table = "objective_origins"
+  reset = preserve
+}
+target objective_associations {
+  schema = "shikigami"
+  table = "objective_associations"
+  reset = preserve
+}
+target objective_scopes {
+  schema = "shikigami"
+  table = "objective_scopes"
+  reset = preserve
+}
+target objective_cursors {
+  schema = "shikigami"
+  table = "objective_cursors"
+  reset = preserve
+}
+rebuild-group objective_store {
+  targets = [ objective_rows objective_assignments objective_payloads objective_receipts objective_origins objective_associations objective_scopes objective_cursors ]
+  order = [ objective_rows objective_assignments objective_payloads objective_receipts objective_origins objective_associations objective_scopes objective_cursors ]
+}
+projection-owner objective_writer {
+  source = aggregate ObjectiveLifecycle
+  delivery = inline
+  group = objective_store
+  targets = [ objective_rows objective_assignments objective_payloads objective_receipts objective_origins objective_associations objective_scopes objective_cursors ]
+  order = 40
+  replay = live-only "Objective commands require protected state, evidence and authority"
+}
+readmodel objective_lookup {
+  columns {
+    objective_id text required
+    state jsonb required
+    updated_at timestamptz required
+  }
+  version = 1
+  shape = "fnv1a:39d57c7a554b1da9"
+  freshness = immediate
+  group = objective_store
+  targets = [ objective_rows objective_assignments objective_payloads objective_receipts objective_origins objective_associations objective_scopes objective_cursors ]
+  backing = objective_rows
+}
+
+aggregate ObjectiveLifecycle
+  regs
+    objectiveId Text = ""
+    revision Int = 0
+  states Missing Present
+  command CreateObjective { objectiveId:Text }
+  command ApplyObjectiveTransition { objectiveId:Text expected:Int revision:Int fingerprint:Text }
+  event ObjectiveCreated = fields(CreateObjective)
+  event ObjectiveTransitionApplied = fields(ApplyObjectiveTransition)
+
+  Missing -- CreateObjective -->
+    write objectiveId := cmd.objectiveId
+    emit ObjectiveCreated
+    goto Present
+
+  Present -- ApplyObjectiveTransition -->
+    guard cmd.objectiveId == reg.objectiveId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit ObjectiveTransitionApplied
+    goto Present
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

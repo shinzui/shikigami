@@ -29,6 +29,7 @@ import Baikai.Api (Api (..))
 import Baikai.Model qualified as Model
 import Baikai.Models.Generated (allModels)
 import Baikai.Options qualified as Options
+import Control.Monad (forM_)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as ByteString
 import Data.List (sort)
@@ -57,6 +58,7 @@ import Shikigami.Agent.Decl (delegationBudgetNatural)
 import Shikigami.App.Config
 import Shikigami.App.Config.Load
 import Shikigami.Execution.Policy.Types qualified as Harness
+import Shikigami.Objective.Types (ObjectiveSettings (..), defaultObjectiveSettings)
 import Shikigami.PracticeReview.Capability (renderAttentionRecipientMap)
 import Shikigami.Sink.Auth (TokenSource (..), credentialToken, matchesBearerHeader, staticTokenSource)
 import Shikigami.Sink.Permission (SinkKind (..))
@@ -69,7 +71,8 @@ tests :: TestTree
 tests =
   testGroup
     "application configuration"
-    [ httpAuthTests,
+    [ objectiveConfigurationTests,
+      httpAuthTests,
       surfaceTests,
       precedenceTests,
       strictnessTests,
@@ -147,6 +150,7 @@ surfaceTests =
                 "kafka.groups.events",
                 "kafka.groups.stream",
                 "kafka.include_agent_actors",
+                "objectives",
                 "practice_review.attention_recipients",
                 "scheduler.catch_up",
                 "sinks.danwa.agent_participant",
@@ -200,6 +204,7 @@ surfaceTests =
               ("SHIKIGAMI_APPROVAL_REQUIRE", "approval.require"),
               ("SHIKIGAMI_BEHAVIOR_DECISION_MODELS", "behavior.decisionModels"),
               ("SHIKIGAMI_BEHAVIOR_HARNESS", "behavior.harness"),
+              ("SHIKIGAMI_OBJECTIVES", "objectives"),
               ("SHIKIGAMI_WORKSPACES", "workspaces"),
               ("SHIKIGAMI_WORKSPACE_SUPERVISOR", "workspace.supervisor"),
               ("SHIKIGAMI_BEHAVIOR_MODEL", "behavior.model"),
@@ -944,4 +949,23 @@ httpAuthTests =
           _ -> assertFailure "bearer mode missing"
         let result = runWith ((optionsWith [] [cliOverride httpAuthModeKey "bearer"]) {diagnosticMode = ExplainText}) [] [("SHIKIGAMI_API_TOKEN", secret)]
         assertBool "secret absent from explanation" (not (secret `Text.isInfixOf` (result.standardError <> result.standardOutput)))
+    ]
+
+objectiveConfigurationTests :: TestTree
+objectiveConfigurationTests =
+  testGroup
+    "objective configuration"
+    [ testCase "defaults disable tracking and deny agent creation" do
+        defaultAppConfig.objectiveSettings @?= defaultObjectiveSettings,
+      testCase "explicit recorded creation grants resolve without providers" do
+        config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_OBJECTIVES", "{\"enabled\":true,\"operator\":\"local-admin\",\"agentCreation\":[\"agent_worker\"]}")]
+        config.objectiveSettings.enabled @?= True
+        config.objectiveSettings.operator @?= Just "local-admin"
+        config.objectiveSettings.agentCreation @?= ["agent_worker"],
+      testCase "disabled tracking remains disabled with grants" do
+        config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_OBJECTIVES", "{\"enabled\":false,\"agentCreation\":[\"agent_worker\"]}")]
+        config.objectiveSettings.enabled @?= False,
+      testCase "invalid operator and unrecorded creation identities fail loader" do
+        forM_ ["{\"enabled\":true,\"operator\":\"\"}", "{\"agentCreation\":[\"worker\"]}", "{\"administration\":\"AdministerAll\"}"] \value ->
+          (runWith (diagnosticOptions CheckConfig) [] [("SHIKIGAMI_OBJECTIVES", value)]).exitCode @?= resolutionExitCode
     ]
