@@ -20,7 +20,10 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Keiro.Workflow.Awakeable (AwakeableId, awakeableIdText)
 import Options.Applicative
+import Settei.Env (envSnapshot, environmentSource)
 import Shikigami.Agent.Approval (ApprovalDecision (..))
+import Shikigami.App.Config (AppConfig (..), Role (..), environmentBindings, revealSecretText)
+import Shikigami.App.Config.Load (ConfigOptions (..), ConfigRun (..), DiagnosticMode (..), appConfigRun)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Server.Command (adminInfo, adminPrefs, adminSubcommands)
 import Shikigami.Server.Command.Ops (redactDatabaseUrl)
@@ -222,6 +225,22 @@ tests =
         mapM_
           (\verb -> assertBool ("wf help does not mention " <> verb <> ":\n" <> rendered) (verb `isInfixOf` rendered))
           ["list", "show", "cancel", "resurrect", "lease"],
+      testCase "native database option participates in Settei precedence and redacted diagnostics" do
+        let target = "postgresql://operator:SECRET_CLI_PASSWORD@localhost/cli-target"
+            environment = environmentSource environmentBindings (envSnapshot [("PG_CONNECTION_STRING", "postgresql:///shell-target")])
+        case execParserPure adminPrefs adminInfo ["--database-url", target, "aggregate", "types"] of
+          Success (Just (_, sources), options) -> do
+            let configured = options {namedSources = options.namedSources <> sources}
+                run = appConfigRun AdminRole configured (Right []) environment
+            run.exitCode @?= 0
+            case run.resolved of
+              Just config -> fmap revealSecretText config.databaseUrl @?= Just (Text.pack target)
+              Nothing -> assertBool "native database option was not resolved" False
+            let diagnostic = appConfigRun AdminRole (configured {diagnosticMode = ExplainJson}) (Right []) environment
+            diagnostic.exitCode @?= 0
+            assertBool "named flag appears in provenance" ("--database-url" `Text.isInfixOf` diagnostic.standardOutput)
+            assertBool "secret flag value is redacted" (not ("SECRET_CLI_PASSWORD" `Text.isInfixOf` diagnostic.standardOutput))
+          _ -> assertBool "native database option did not parse" False,
       -- keiro-ops declares --force before its subcommand, but the message it
       -- prints tells the operator to re-run `... wf cancel NAME ID --force`
       -- with the flag last. This pins that the printed form actually parses, so

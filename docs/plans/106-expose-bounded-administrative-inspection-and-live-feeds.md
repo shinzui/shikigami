@@ -11,6 +11,12 @@ provenance:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-10-30T19:39:42Z
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-30T21:54:48Z
+      mode: "implement"
+      note: "Begin safe aggregate catalogs and isolated authenticated inspection after accepted runtime ownership"
 ---
 
 # Expose bounded administrative inspection and live feeds
@@ -21,13 +27,13 @@ Provide safe native CLI inspection plus authenticated administrative HTTP and bo
 
 ## Progress
 
-- [ ] M1: All actual aggregate catalogs and bounded native CLI reads are tested with safe display encoders.
+- [x] (2026-10-30) M1: All four generated aggregate descriptors have explicit safe display encoders; native CLI type/list/show/snapshot and bounded workflow/timer/projection reads pass, with typed cursor/limit and corrupt-history refusal evidence. The complete server suite passes 71 cases. See [M1 evidence](../evidence/keiro-0.22/native-inspection-cli.md).
 - [ ] M2: Administrative HTTP surfaces use dedicated capacity, explicit authorization and native mutation policy.
 - [ ] M3: Live feeds pass overflow, slow-client, schema, cancellation and joined-shutdown tests.
 
 ## Surprises & Discoveries
 
-The October 28 scope assumed a deployed population and an older domain census. The user and current tree invalidate those assumptions; no implementation acceptance is claimed.
+The October 28 scope assumed a deployed population and an older domain census. The current census has four aggregates. Keiro 0.22 publicly exports the invocation/global option records, so the old database-URL environment adapter is unnecessary: the resolved Settei value now goes directly into the native invocation.
 
 ## Decision Log
 

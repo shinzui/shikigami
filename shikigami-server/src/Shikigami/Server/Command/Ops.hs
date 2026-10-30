@@ -39,24 +39,11 @@
 --
 -- == How the database URL reaches the tree
 --
--- "Keiro.Ops" exports @OpsInvocation@ without its constructor, so the parsed
--- value is opaque and its @globalOptions.databaseUrl@ cannot be written. What
--- @runOpsInvocation@ does instead is resolve the connection string itself,
--- preferring @--database-url@, then @KEIRO_OPS_DATABASE_URL@, then
--- @DATABASE_URL@ (@keiro-ops\/src\/Keiro\/Ops\/Env.hs:56-61@).
---
--- So 'runOps' sets @KEIRO_OPS_DATABASE_URL@ in its own process, from the
--- Settei-resolved 'AppConfig', immediately before the call. That preserves the
--- intended precedence — an explicit @--database-url@ still wins — and it does
--- not weaken this repository's rule that configuration comes from Settei:
--- Settei still decides the value, and the environment is only the wire it
--- travels down into a library that offers no other entry point.
---
--- Setting it is not conditional on the operator having supplied one.
--- 'requireDatabaseUrl' fails with the same message and exit code as any other
--- missing required key, which is better than falling through to a
--- @DATABASE_URL@ that happens to be in the operator's shell and silently aiming
--- the console at a database @shikigami --explain-config@ does not name.
+-- The released public invocation record accepts the resolved connection string.
+-- Its native --database-url flag contributes a named Settei source, so config
+-- diagnostics and precedence see the same target the console uses. No process
+-- environment adapter remains, and the library cannot fall back to a different
+-- shell database once the value is supplied explicitly.
 --
 -- == What the audit line can and cannot say
 --
@@ -74,8 +61,7 @@
 -- They name the command from the process's own argument vector, and they stop
 -- there. The plan behind this module asked for outcome-named events —
 -- @operator.workflow.cancelled@, @operator.dlq.redriven@ — and that is not
--- honestly available: @OpsInvocation@ is abstract, so the verb cannot be read
--- from the parsed value, and the only result @runOpsInvocation@ returns is an
+-- available from the runner: the only result @runOpsInvocation@ returns is an
 -- 'ExitCode'. An exit code does not carry the outcome. @wf cancel --force@
 -- against an already-terminal instance reports @already_completed@ and exits
 -- /zero/, so a line reading @operator.workflow.cancelled@ inferred from a
@@ -90,6 +76,7 @@ module Shikigami.Server.Command.Ops
   ( shikigamiOpsHooks,
     opsInvocationParser,
     runOps,
+    opsConfigSources,
     -- | Exported for "Shikigami.Server.CommandSpec", which pins that no spelling
     -- of @--database-url@ survives into an audit line.
     redactDatabaseUrl,
@@ -103,19 +90,23 @@ import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUID.V4
 import Keiro.Ops
   ( AppHooks (..),
-    OpsInvocation,
+    OpsInvocation (..),
     emptyAppHooks,
     opsCommandTree,
     runOpsInvocation,
   )
 import Keiro.Ops.Embed (OpsAuditConfig (..))
+import Keiro.Ops.Env (GlobalOptions (..))
 import Keiro.Projection.Catalog.Operations (projectionCatalogOperations)
 import Options.Applicative (Parser, infoParser)
-import Shikigami.App.Config (AppConfig, revealSecretText)
+import Settei.Optparse (cliOverride, cliSources)
+import Settei.Source (Source)
+import Shikigami.App.Config (AppConfig, databaseConnectionStringKey, revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
+import Shikigami.Inspection.Aggregates (aggregateCatalog)
 import Shikigami.Log qualified as Log
 import Shikigami.RunEvidence.Catalog qualified as Evidence
-import System.Environment (getArgs, setEnv)
+import System.Environment (getArgs)
 import System.Exit (ExitCode (ExitFailure, ExitSuccess), exitWith)
 
 -- | Mount only application hooks whose public effects match the runtime.
@@ -123,7 +114,8 @@ shikigamiOpsHooks :: AppHooks
 shikigamiOpsHooks =
   emptyAppHooks
     { replayAudit = Just (OpsAuditConfig Evidence.auditTargets),
-      projectionCatalog = Just (projectionCatalogOperations Evidence.validatedProjectionCatalog)
+      projectionCatalog = Just (projectionCatalogOperations Evidence.validatedProjectionCatalog),
+      aggregates = Just aggregateCatalog
     }
 
 -- | The mounted tree's parser, lifted out of the 'ParserInfo' @keiro-ops@
@@ -147,7 +139,7 @@ opsInvocationParser = infoParser (opsCommandTree shikigamiOpsHooks)
 runOps :: OpsInvocation -> AppConfig -> IO ()
 runOps invocation config = do
   secret <- requireDatabaseUrl "ops" config
-  setEnv "KEIRO_OPS_DATABASE_URL" (Text.unpack (revealSecretText secret))
+  let configured = invocation {globalOptions = invocation.globalOptions {databaseUrl = Just (revealSecretText secret)}}
   logger <- Log.newStderrLogger Log.Info
   command <- auditedCommand
   correlation <- UUID.toText <$> UUID.V4.nextRandom
@@ -155,7 +147,7 @@ runOps invocation config = do
     logger
     "operator.ops.invoked"
     ["command" Aeson..= command, "invocation" Aeson..= correlation]
-  exitCode <- runOpsInvocation shikigamiOpsHooks invocation
+  exitCode <- runOpsInvocation shikigamiOpsHooks configured
   Log.logInfo
     logger
     "operator.ops.finished"
@@ -167,10 +159,16 @@ runOps invocation config = do
     ExitSuccess -> pure ()
     failure -> exitWith failure
 
+-- | Native flags remain real Settei sources, including redacted diagnostics.
+-- The released public invocation record then carries the resolved value directly.
+opsConfigSources :: OpsInvocation -> [Source]
+opsConfigSources invocation =
+  maybe [] (\value -> cliSources "--database-url" [cliOverride databaseConnectionStringKey value]) invocation.globalOptions.databaseUrl
+
 -- | The invocation as the operator typed it, with any connection string removed.
 --
--- Read from the process arguments because the parsed 'OpsInvocation' is opaque.
--- That is a fair source: it is exactly what was asked for, and it is the same
+-- Read from the process arguments to preserve the operator spelling.
+-- This is exactly what was asked for, and it is the same
 -- text @keiro-ops@ echoes back in its own preview messages.
 auditedCommand :: IO Text
 auditedCommand = redactDatabaseUrl . map Text.pack <$> getArgs

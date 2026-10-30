@@ -42,7 +42,7 @@ import Control.Lens ((&), (.~))
 import Data.Generics.Labels ()
 import Data.Maybe (catMaybes)
 import Data.Text qualified as Text
-import Options.Applicative
+import Options.Applicative hiding (action)
 import Settei.Optparse (namedOption)
 import Settei.Source (Source)
 import Shikigami.Agent.Name (AgentName (..))
@@ -59,7 +59,7 @@ import Shikigami.Server.Command.DanwaSpike (runDanwaSpike)
 import Shikigami.Server.Command.EnqueueRun (runEnqueueRun)
 import Shikigami.Server.Command.Executions (runExecutionsInspect)
 import Shikigami.Server.Command.Grants (runGrantsGrant, runGrantsList, runGrantsRevoke)
-import Shikigami.Server.Command.Ops (opsInvocationParser, runOps)
+import Shikigami.Server.Command.Ops (opsConfigSources, opsInvocationParser, runOps)
 import Shikigami.Server.Command.PublishFixture (runPublishFixture)
 import Shikigami.Server.Command.RenderLifecycle (runRenderLifecycle)
 import Shikigami.Server.Command.ResolveApproval (resolveApprovalOptionsParser, runResolveApproval)
@@ -103,7 +103,7 @@ adminInfo =
         <> failureCode usageExitCode
     )
   where
-    opsAction = (\invocation -> (runOps invocation, [])) <$> opsInvocationParser
+    opsAction = (\invocation -> (runOps invocation, opsConfigSources invocation)) <$> opsInvocationParser
 
 -- | The parser preferences this command line is run with.
 --

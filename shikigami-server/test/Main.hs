@@ -12,6 +12,7 @@ import Shikigami.AgentRun.HandlerSpec qualified as RunHandlerSpec
 import Shikigami.App.Config (defaultAppConfig)
 import Shikigami.Caller.VerifierSpec qualified as VerifierSpec
 import Shikigami.Directory (disabledDirectoryHandle)
+import Shikigami.InspectionSpec qualified as InspectionSpec
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
 import Shikigami.Server.AgentsSpec qualified as AgentsSpec
@@ -32,6 +33,7 @@ main = withShikigamiMigratedSuite \databaseFixture ->
     ( testGroup
         "shikigami-server"
         [ probeContractTests "health probes" mkTestApplication,
+          InspectionSpec.tests databaseFixture,
           AgentsSpec.tests databaseFixture,
           HandlerSpec.tests,
           RunHandlerSpec.tests databaseFixture,

@@ -144,6 +144,7 @@ test-suite shikigami-server-test
     Shikigami.Agent.HandlerSpec
     Shikigami.AgentRun.HandlerSpec
     Shikigami.Caller.VerifierSpec
+    Shikigami.InspectionSpec
     Shikigami.Server.AgentsSpec
     Shikigami.Server.CommandSpec
     Shikigami.Server.DispatchSpec
@@ -160,11 +161,13 @@ test-suite shikigami-server-test
     -rtsopts
     -with-rtsopts=-N
 
+  build-tool-depends: shikigami-server:shikigami
   build-depends:
     aeson,
     base,
     bytestring,
     containers,
+    directory,
     generic-lens,
     hasql,
     hasql-pool,
@@ -176,12 +179,14 @@ test-suite shikigami-server-test
     http-client,
     http-types,
     keiro,
+    keiro-ops,
     keiro-pgmq,
     kiroku-store,
     lens,
     openapi-hs,
     optparse-applicative,
     pgmq-hasql,
+    process,
     relay-pagination,
     relay-pagination-conformance,
     servant,

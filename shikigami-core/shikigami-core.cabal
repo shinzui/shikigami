@@ -131,6 +131,7 @@ library
     Shikigami.Generated.Conformance
     Shikigami.Health.Ping
     Shikigami.Id.Name
+    Shikigami.Inspection.Aggregates
     Shikigami.Integration.Danwa
     Shikigami.Log
     Shikigami.Log.Correlation
