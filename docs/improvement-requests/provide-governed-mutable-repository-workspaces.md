@@ -2,7 +2,7 @@
 type: Improvement Request
 title: Provide governed mutable repository workspaces for durable agent runs
 description: Let a declared durable agent resolve an operator-approved repository into an isolated worktree and use bounded read, edit, validation, and Git capabilities under exact per-action authorization, returning structured change evidence.
-timestamp: "2026-10-28T20:16:48Z"
+timestamp: "2026-10-30T16:34:26Z"
 generated:
   by: process:codex
   at: "2026-10-11T03:04:54Z"
@@ -27,11 +27,22 @@ reviews:
 
 ## Status
 
-**In progress under [plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md).** Repository catalog admission is implemented; durable workspace allocation, mutation providers, recovery and qualification remain outstanding. This request supplies the execution capability needed by the agent-driven upgrade
-portion of `mori://shinzui/mori/okf/use-cases/concepts/UC-2`. The existing one-off
-`workspace.read` overlay is observation-only, is currently blocked by a deny-all authorizer, and is
-not installed in the durable worker, whose capability runtime is empty. It therefore cannot bump a
-dependency, repair a build, run validation, or commit a result.
+**In progress under [plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md).**
+The configured durable worker now admits isolated workspaces, freezes scoped
+repository instructions, applies governed edits, runs contained validation and
+returns exact local commits. The fourteen-case native matrix proves the normal
+parent/child upgrade across worker restart and independent file/process/Git
+recovery. Operator listing and terminal cleanup are implemented. Concrete
+workspace fencing, retained successor/followup authority and exact-artifact
+integration planning are implemented; their expanded native qualification is
+pending. Production remains on the qualified earlier adapter revisions until
+native successor-write/handoff gates pass. Full reassignment acceptance remains
+open alongside the separately owned real objective ownership provider from
+[plan 99](../plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md).
+
+This request supplies the execution capability needed by the agent-driven
+upgrade portion of `mori://shinzui/mori/okf/use-cases/concepts/UC-2`. The original
+one-off `workspace.read` overlay remains distinct and observation-only.
 
 It also supplies repository execution for
 [UC-1: Adaptive autonomous delivery](../use-cases/adaptive-autonomous-delivery.md).

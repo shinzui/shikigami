@@ -33,6 +33,11 @@ provenance:
       at: 2026-10-29T13:10:20Z
       mode: "update"
       note: "Refresh real-provider prerequisite ownership without changing acceptance gates"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-30T16:34:26Z
+      mode: "update"
+      note: "Record plan 96 workspace provider readiness while retaining the real joint handoff and IR-13 gates"
 ---
 
 # Coordinate continuing worker sessions and fenced handoffs
@@ -56,11 +61,17 @@ A coordinator can send a second assignment to the same worker, recover accepted 
 - [x] Milestone 3: Durable fenced-transfer mechanics against deterministic owners (2026-10-28); real IR-11/IR-13 qualification remains a completion gate.
 - [ ] Milestone 4: Governed Flow/Skill/operator command mechanics qualified against deterministic adapters (2026-10-28); real-provider runtime qualification remains open.
 
-Implementation started after plan 83 completed at `a0d6f2a`. As of 2026-10-29, IR-11 is in progress under plan 96 (pure catalog admission
-only), and IR-13 is accepted under MasterPlan 17 / plans 98–102. Neither
-supplies a complete real provider yet. Build
-mechanics against explicit deterministic adapters; preserve both real-provider
-acceptance gates and do not claim full IR-15 delivery from those fixtures.
+Implementation started after plan 83 completed at `a0d6f2a`. As of 2026-10-30,
+[plan 96](96-provide-governed-mutable-repository-workspaces-for-durable-agents.md)
+has qualified configured durable upgrades with native edit/process/Git recovery
+and implemented the concrete workspace transfer owner, retained successor
+admission and exact artifact integration. Transfer-aware adapter activation and
+native successor writes remain gated. Consume
+`Shikigami.Workspace.TransferClient.workspaceTransferClient` through the private
+peer-checked supervisor RPC; session results alone supply no fence. IR-13's
+real ownership/checkpoint provider remains unimplemented in plans 98–99 under
+MasterPlan 17. This plan's real late-writer/restart/ownership integration and
+full IR-15 acceptance stay open; store fixtures cannot close them.
 
 
 ## Surprises & Discoveries

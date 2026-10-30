@@ -17,6 +17,12 @@ provenance:
       at: 2026-10-22T01:19:09Z
       verdict: "approved"
       note: "Workers.Config emptyCapabilityRuntime, tools/qualification and readiness evidence paths verified; external gates explicit"
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-30T16:34:26Z
+      mode: "update"
+      note: "Point qualification at plan 96 retained artifact integration without closing adaptive or objective acceptance"
 ---
 
 # Qualify integrated adaptive autonomous delivery
@@ -37,6 +43,17 @@ Prove [UC-1](../use-cases/adaptive-autonomous-delivery.md) finite delivery with 
 
 Implementation has not started. Seed unchecked milestone entries when implementation begins.
 
+
+
+Prerequisite update (2026-10-30):
+[plan 96](96-provide-governed-mutable-repository-workspaces-for-durable-agents.md)
+owns the installed configured workspace providers and the gated
+`workspace.integrate:1` artifact planner. The latter consumes exact retained
+worker commits under one execution root in a third workspace; edits, validation
+and commit remain separately accepted effects. Its native qualification is
+pending in plan 96. This supplies a concrete interface for this plan, not
+adaptive coordinator, objective completion or UC-1 acceptance evidence. Plan 85
+and the real IR-13 provider still gate this plan's live milestones.
 
 ## Surprises & Discoveries
 
@@ -59,7 +76,7 @@ To be filled during implementation. Do not claim request completion until every 
 ## Context and Orientation
 
 
-The use case requires two repository workstreams, an evidence-triggered adaptation, restart recovery and integrated user-journey checks. `shikigami-workers/src/Shikigami/Workers/Config.hs` currently installs `emptyCapabilityRuntime`; writable workspaces are not available merely because the agent declares a tool. `docs/plans/48-add-a-portable-one-off-repository-agent-harness.md` and completed read-only plan 59 do not implement IR-11. Existing `tools/qualification/` and `docs/evidence/local-qualification/readiness.md` separate environment readiness from actual runtime proof; their baseline cannot establish autonomous coding.
+The use case requires two repository workstreams, an evidence-triggered adaptation, restart recovery and integrated user-journey checks. `shikigami-workers/src/Shikigami/Workers/Config.hs` installs the reviewed configured workspace host when operator workspace settings are supplied; absent settings retain `emptyCapabilityRuntime`. A declaration alone grants no allocation or tool authority. `docs/plans/48-add-a-portable-one-off-repository-agent-harness.md` and completed read-only plan 59 do not implement IR-11. Existing `tools/qualification/` and `docs/evidence/local-qualification/readiness.md` separate environment readiness from actual runtime proof; their baseline cannot establish autonomous coding.
 
 [ADR 0025](../adr/0025-capability-overlays-are-requests-for-additive-model-tools.md) requires admitted provider revisions; [ADR 0036](../adr/0036-external-agent-actions-require-fresh-exact-authorization.md) requires live external authority. [ADR 0040](../adr/0040-response-options-and-foreground-launches-have-separate-authority.md) says a foreground process exit is not durable agent completion. The `IntegratedAcceptance` contract from plan 85 binds exact artifact/evidence identities to the criteria revision; IR-11 owns workspace creation/edit/process/Git/integration and IR-13 owns objective completion.
 

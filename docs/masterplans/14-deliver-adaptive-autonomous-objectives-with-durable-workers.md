@@ -32,6 +32,11 @@ provenance:
       at: 2026-10-29T00:33:08Z
       mode: "update"
       note: "Record plan 96 as IR-11 owner and MasterPlan 17 (plan 99) as IR-13 provider owner in the registry note and Progress; gates remain open"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-30T16:34:26Z
+      mode: "update"
+      note: "Refresh workspace prerequisite readiness and preserve separately owned real ownership and joint qualification gates"
 ---
 
 # Deliver adaptive autonomous objectives with durable workers
@@ -161,6 +166,18 @@ coordination-scope providers that close EP-4's IR-13 gate. Both gates stay open
 until real provider evidence is recorded here and in plan 84; plan 96 has landed
 only repository catalog admission, and no MasterPlan 17 child has started.
 
+
+
+2026-10-30 prerequisite update: plan 96 now supplies configured durable native
+workspace upgrades and the concrete peer-checked transfer provider, independent
+file/process/Git receipt recovery, retained successor/followup admissions and
+revision-pinned integration planning. Its new native integration/fence gates
+are being qualified; accepted native successor writes remain open. EP-4's
+joint late-writer/restart/ownership gate still requires the real objective
+provider from plan 99, whose plan-98 prerequisite is unimplemented. No child
+status or dependency edge changes. EP-5 remains gated by EP-4 and EP-6's live
+milestones remain gated by both real providers. Plan 96's workspace-only
+fixtures cannot complete this MasterPlan's integrated acceptance.
 
 ## Surprises & Discoveries
 
