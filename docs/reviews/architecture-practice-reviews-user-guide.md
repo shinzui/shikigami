@@ -91,8 +91,8 @@ does not say so.
 - `App/Config.hs` lines 795-813 and `AppConfigSpec.hs` lines 297-303:
   `practice_review.attention_recipients`, its environment binding, and the
   three refusals the guide describes.
-- `2026-08-21-15-13-00-sink-deliveries.sql` lines 5-17 and
-  `2026-08-26-20-30-00-practice-review-attention.sql`: every column the
+- `0008-sink-deliveries.sql` lines 5-17 and
+  `0012-practice-review-attention.sql`: every column the
   guide's query names.
 - `grep -rn enqueueAuthorizedPracticeReviewResolution` over all package
   `src` and `app` trees: one match, the defining module.

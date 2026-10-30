@@ -3,8 +3,8 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 sql_dir="$root/shikigami-migrations/sql-migrations"
-historical="$sql_dir/2026-06-24-12-00-00-shikigami-fired.sql"
-vendored="$sql_dir/2026-06-24-13-00-00-pgmq-schema.sql"
+historical="$sql_dir/0001-shikigami-fired.sql"
+vendored="$sql_dir/0002-pgmq-schema.sql"
 
 failures=0
 

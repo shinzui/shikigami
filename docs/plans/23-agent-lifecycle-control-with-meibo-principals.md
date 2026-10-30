@@ -538,7 +538,7 @@ Create the migration through the owning CLI:
 DATABASE_URL=postgresql:///unused nix develop -c cabal run shikigami-migrate -- \
   new \
   --manifest shikigami-migrations/sql-migrations/manifest \
-  --name 2026-08-23-00-41-28-agent-load-state-and-run-skips \
+  --name 0010-agent-load-state-and-run-skips \
   --description 'Persist agent load state and lifecycle admission skips'
 # Edit only the generated SQL; the authoring command appends its basename to the manifest.
 nix develop -c cabal test shikigami-migrations

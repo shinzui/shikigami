@@ -112,7 +112,7 @@ This section must always reflect the actual current state of the work.
       took the documented shikigami-side fallback. See the Decision Log entry of 2026-08-20.
 - [x] (2026-08-20) M1: indexed session resolution — the fallback index
       `shikigami.conversation_sessions` (migration
-      `shikigami-migrations/sql-migrations/2026-08-20-17-30-49-conversation-session-index.sql`),
+      `shikigami-migrations/sql-migrations/0006-conversation-session-index.sql`),
       read and written through the new
       `shikigami-core/src/Shikigami/Agent/Conversation/SessionIndex.hs`. `resolveSession` is now
       three arms: keyed hit confirmed against kioku, scan-and-backfill on a miss, start on

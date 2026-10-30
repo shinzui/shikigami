@@ -46,14 +46,14 @@ compositionTests =
           "no SQL was embedded from sql-migrations/manifest"
           (not (null (foldr (:) [] embeddedMigrationEntries))),
       testCase "the lifecycle evidence migration is appended with both tables" do
-        let filename = "2026-08-23-00-41-28-agent-load-state-and-run-skips.sql"
+        let filename = "0010-agent-load-state-and-run-skips.sql"
         case lookup filename (NonEmpty.toList embeddedMigrationEntries) of
           Nothing -> assertFailure (filename <> " is missing from the embedded manifest")
           Just sql -> do
             assertBool "agent_load_state DDL is missing" ("shikigami.agent_load_state" `ByteString.isInfixOf` sql)
             assertBool "run_skips DDL is missing" ("shikigami.run_skips" `ByteString.isInfixOf` sql),
       testCase "the practice-review attention migration is appended without delivery state" do
-        let filename = "2026-08-26-20-30-00-practice-review-attention.sql"
+        let filename = "0012-practice-review-attention.sql"
         case lookup filename (NonEmpty.toList embeddedMigrationEntries) of
           Nothing -> assertFailure (filename <> " is missing from the embedded manifest")
           Just sql -> do

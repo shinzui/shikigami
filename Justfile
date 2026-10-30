@@ -118,12 +118,10 @@ hurl:
 # Scaffold a new shikigami migration and append it to the manifest.
 #
 # pg-migrate orders migrations by their position in
-# shikigami-migrations/sql-migrations/manifest, not by filename. The timestamped
-# filename convention is nonetheless load-bearing once a migration has been
-# applied: the durable migration identity is <component>/<filename without
-# extension>, so renaming an applied file renames an applied migration. A new
-# file follows the convention for consistency, and appending puts it last, which
-# is what an additive migration wants.
+# shikigami-migrations/sql-migrations/manifest, not by filename. Filenames use
+# contiguous four-digit numbers (0001-<slug>.sql, 0002-<slug>.sql, ...).
+# The durable migration identity is <component>/<filename without extension>,
+# so names are fixed once deployed; append new migrations without renumbering.
 #
 # Both the manifest and every file it lists are compilation dependencies: a stray
 # .sql file or a missing manifest entry fails the build rather than silently
@@ -140,9 +138,21 @@ new-migration name="":
       echo "error: name must match [a-z0-9-] (got '{{name}}')" >&2
       exit 1
     fi
-    ts="$(date -u '+%Y-%m-%d-%H-%M-%S')"
-    file="${ts}-{{name}}.sql"
     dir="shikigami-migrations/sql-migrations"
+    next=1
+    while IFS= read -r entry || [ -n "$entry" ]; do
+      expected="$(printf '%04d' "$next")"
+      if [[ ! "$entry" =~ ^${expected}-[a-z0-9][a-z0-9-]*\.sql$ ]]; then
+        echo "error: expected migration ${expected}-<slug>.sql, got '$entry'" >&2
+        exit 1
+      fi
+      next=$((next + 1))
+    done < "${dir}/manifest"
+    if (( next > 9999 )); then
+      echo "error: four-digit migration numbers are exhausted" >&2
+      exit 1
+    fi
+    file="$(printf '%04d' "$next")-{{name}}.sql"
     dest="${dir}/${file}"
     if [ -e "$dest" ]; then
       echo "error: $dest already exists" >&2
@@ -150,12 +160,14 @@ new-migration name="":
     fi
     cat > "$dest" <<EOF
     -- Migration: {{name}}
-    -- Created: ${ts} UTC
     -- Write idempotent DDL (CREATE ... IF NOT EXISTS) so re-application is safe.
 
     -- Qualify every persistent object with its owning schema. Migration SQL may
     -- not mutate search_path. Validate with: just migration-schema-isolation.
     EOF
+    if [[ -s "${dir}/manifest" && -n "$(tail -c 1 "${dir}/manifest")" ]]; then
+      printf '\n' >> "${dir}/manifest"
+    fi
     printf '%s\n' "$file" >> "${dir}/manifest"
     echo "Created $dest and appended it to ${dir}/manifest"
 

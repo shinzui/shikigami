@@ -152,7 +152,7 @@ transaction that inserts the reservation row, links the review id to the key, ap
 workflow journal result, and, for the winning insert only, writes the outbox message and
 its pending delivery receipt. The tables are `shikigami.practice_review_attention` and
 `shikigami.practice_review_attention_reviews`, created by
-`shikigami-migrations/sql-migrations/2026-08-26-20-30-00-practice-review-attention.sql`.
+`shikigami-migrations/sql-migrations/0012-practice-review-attention.sql`.
 
 The defect in M1 is an ordering. `reserveAttention` in `shikigami-core/src/Shikigami/PracticeReview/Attention.hs` calls
 `insertAttentionTx` and `linkAttentionReviewTx` before it runs the transaction returned by

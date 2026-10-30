@@ -150,7 +150,7 @@ cabal run -v0 keiro-dsl -- scaffold domain/shikigami.keiro-workspace --out shiki
 just migration-schema-isolation
 ```
 
-The migration command prints the created timestamped path and appends it to the manifest; do not run it twice for one change. The schema check must exit zero. The PostgreSQL suite applies migrations to disposable databases through `shikigami-core/test-postgres/Main.hs`; no production connection is needed.
+The migration command prints the created numbered path and appends it to the manifest; do not run it twice for one change. The schema check must exit zero. The PostgreSQL suite applies migrations to disposable databases through `shikigami-core/test-postgres/Main.hs`; no production connection is needed.
 
 After registering the new test groups, run focused checks while implementing and the complete suites at the milestone boundary:
 

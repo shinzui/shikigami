@@ -740,7 +740,7 @@ keeps deterministic steps as `NotApplicable`, and accepts mixed permitted models
 focused tests cover lifecycle, collection, accounting, one isolated mutation per reason,
 multi-reason accumulation, finalization, and durable restart/replay behavior.
 
-Migration `2026-08-20-01-53-56-run-evidence-and-call-records` adds the run and call projections.
+Migration `0005-run-evidence-and-call-records` adds the run and call projections.
 It applied successfully to the development database; status reported 58 applied, zero pending,
 zero unknown, and zero issues. A fresh ephemeral database, event hydration across recreated
 stores, sanctioned and rejected run-id queries, and lost-response replay all pass. No Kioku read

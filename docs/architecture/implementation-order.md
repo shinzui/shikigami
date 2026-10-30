@@ -283,7 +283,7 @@ tuple before any provider request.
 
 **Plan 51** introduced **Shikigami's first checked aggregate**. `RunEvidence` has seven legal
 transitions and 56 generated behavior obligations, `domain/shikigami-run-evidence.keiro` is the
-workspace's third member, and migration `2026-08-20-01-53-56-run-evidence-and-call-records` adds
+workspace's third member, and migration `0005-run-evidence-and-call-records` adds
 the run and call projections under one atomic lifecycle boundary (ADR 0010). The 2026-08-19 review
 predicted this plan would turn on most of keiro-dsl's checked surface; it did.
 `docs/architecture/shikigami-domain-inventory.md` is the intended reference for what the

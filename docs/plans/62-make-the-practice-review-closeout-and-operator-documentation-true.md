@@ -108,7 +108,7 @@ thinking settings a run may use. The reviewer declaration
 (`agents/proof/opentelemetry-practice-reviewer.dhall`) requires profile
 `sanctioned-review` version `1`. At run time `Shikigami.Attestation.Resolve.resolveProfile`
 reads `shikigami.sanctioned_execution_profiles` (created by
-`shikigami-migrations/sql-migrations/2026-08-19-20-28-05-sanctioned-execution-profiles.sql`),
+`shikigami-migrations/sql-migrations/0004-sanctioned-execution-profiles.sql`),
 re-hashes `profile_content`, and refuses a row that is absent, not `active`, expired,
 or whose stored digest disagrees with the content. The row shape is `(profile_id, version,
 issuer, lifecycle, valid_from, valid_until, profile_content, profile_digest)`, with a check

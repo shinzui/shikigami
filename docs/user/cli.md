@@ -367,7 +367,7 @@ against a running Danwa, not part of the runtime path.
 | `just create-database` | create the dev DB if missing, then `just migrate` (idempotent) |
 | `just migrate` | apply Kiroku, Keiro, Kioku, and Shikigami components and reconcile read models |
 | `just migrate-status` | inspect the migration status |
-| `just new-migration <slug>` | scaffold a new timestamped migration file |
+| `just new-migration <slug>` | scaffold the next numbered migration file (e.g. `0031-<slug>.sql`) and append it to the manifest |
 
 → See [Getting Started](./getting-started.md).
 

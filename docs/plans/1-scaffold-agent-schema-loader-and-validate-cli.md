@@ -83,7 +83,7 @@ This section must always reflect the actual current state of the work.
 
 - [x] Create `shikigami-migrations/src/Shikigami/Migrations.hs` composing
       `kiokuMigrations <> shikigamiOwnMigrations` (NOT re-adding kiroku/keiro — kioku already does).
-- [x] Create `shikigami-migrations/sql-migrations/2026-06-24-12-00-00-shikigami-fired.sql` (the
+- [x] Create `shikigami-migrations/sql-migrations/0001-shikigami-fired.sql` (the
       `shikigami_fired` DDL; NO `agent_runs` table).
 - [x] Create `shikigami-migrations/app/Main.hs` (the `shikigami-migrate` codd executable).
 - [x] Create `shikigami-migrations/test-support/Shikigami/Migrations/TestSupport.hs`
@@ -1063,7 +1063,7 @@ orders it):
 ```bash
 # If the Justfile is in place you can scaffold the file:
 just new-migration shikigami-fired
-# else create it by hand: shikigami-migrations/sql-migrations/2026-06-24-12-00-00-shikigami-fired.sql
+# else create it by hand: shikigami-migrations/sql-migrations/0001-shikigami-fired.sql
 ```
 
 Its body (the DDL is copied verbatim from `agents/detectors/README.md`; the `search_path` line follows

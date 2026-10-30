@@ -38,7 +38,7 @@ A grant or revocation takes effect on the next sink dispatch with no rebuild and
       Portfolio Reconciliation). Confirmed 2026-08-06.
 - [x] Milestone 1: `shikigami.sink_grants` pg-migrate change added to the manifest, applied,
       verified, and seeded with the five current defaults. Done 2026-08-06 —
-      `shikigami-migrations/sql-migrations/2026-08-06-04-02-23-sink-grants.sql`, nine seed rows,
+      `shikigami-migrations/sql-migrations/0003-sink-grants.sql`, nine seed rows,
       41/41 `already_applied` on re-run, `migrate-status` `issues=0`, and
       `shikigami-migrations-smoke` green (it applies the whole plan to a fresh ephemeral
       database, so the change is proved from empty as well as incrementally).

@@ -507,7 +507,7 @@ Keiro 0.14 and Kioku 0.5 add two entries: Keiro `0031` adds terminal rejected-ou
 columns, constraints, and partial-index exclusions; Kioku `0013` adds the partition-aware
 full-text index when `btree_gin` is available and retains the old correctness-preserving index
 otherwise. The dependency-composed plan is therefore 55 entries (Kiroku 11, Keiro 31, Kioku
-13). Shikigami's ninth entry, `2026-08-22-22-35-00-delegation-budgets.sql`, adds the
+13). Shikigami's ninth entry, `0009-delegation-budgets.sql`, adds the
 shared delegation ledger; the complete application plan is now 64 entries.
 
 Kioku 0.5.1.0 is a bounds/API-adaptation release and adds no migration, so those counts and the

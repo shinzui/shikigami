@@ -105,7 +105,7 @@ implementation. Provide concise evidence.
   Haskell SQL string (`Pgmq.Migration.Migrations.V1_11_0` → `vendor/pgmq/pgmq-extension/sql/pgmq.sql`).
   Since the nix postgres has no `pgmq` extension (`CREATE EXTENSION pgmq` → not available), shikigami
   vendors that same `pgmq.sql` (2075 lines) as a codd migration
-  `shikigami-migrations/sql-migrations/2026-06-24-13-00-00-pgmq-schema.sql` (codd parses its
+  `shikigami-migrations/sql-migrations/0002-pgmq-schema.sql` (codd parses its
   dollar-quoted functions fine; `pg_partman` is only needed for partitioned queues, which we don't
   use). `enqueueRunJob` then only does `createQueue` (idempotent) + `sendMessage`; no pgmq-migration
   dep. `just create-database`/`migrate` installs the pgmq schema. Note: adding a NEW `sql-migrations/`

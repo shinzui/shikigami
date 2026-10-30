@@ -8,7 +8,7 @@ generated:
 reviewId: REV-3
 subject: mori://shinzui/shikigami
 subjectKind: migration
-component: 2026-08-26-20-30-00-practice-review-attention.sql
+component: 0012-practice-review-attention.sql
 reviewedSha: 62861267b8e4994ad15e7083ca0eb6b9a5dc2999
 coverage: full
 reviewedAt: "2026-08-27T00:12:00Z"
@@ -63,13 +63,13 @@ sides.
 
 ## Evidence
 
-- `shikigami-migrations/sql-migrations/2026-08-26-20-30-00-practice-review-attention.sql`
+- `shikigami-migrations/sql-migrations/0012-practice-review-attention.sql`
   and its manifest line; `shikigami-migrations/test/Main.hs` lines 55-62
   assert both table names are present and `delivery_status` is absent.
 - Migration contract suite: 5 tests passed; fresh and apply-again smoke
   suite: 2 tests passed, both in the full serialized run at the reviewed
   commit.
-- `2026-08-21-15-13-00-sink-deliveries.sql` lines 5-17 define
+- `0008-sink-deliveries.sql` lines 5-17 define
   `outbox_message_id`, `status`, `detail`, and `updated_at`, the columns the
   guide's join reads.
 - `Attention.hs` lines 334-383 bind eleven and three parameters to the

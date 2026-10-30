@@ -23,7 +23,7 @@ that the host's path remains byte-for-byte unchanged.
 `tools/check-migration-schema-isolation.sh` rejects application migration-session
 `search_path`/`SET SCHEMA` mutation and common unqualified persistent-object
 references. It scans the vendored PGMQ snapshot separately. The exact historical
-`2026-06-24-12-00-00-shikigami-fired.sql` exception is reported because applied
+`0001-shikigami-fired.sql` exception is reported because applied
 pg-migrate bytes are checksum-immutable; every later application migration is
 schema-qualified. `just new-migration` now generates a qualified-object reminder
 instead of a `SET search_path` statement.

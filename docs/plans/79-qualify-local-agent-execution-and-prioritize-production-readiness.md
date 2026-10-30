@@ -107,7 +107,7 @@ The current-tree static migration check passed on 2026-10-06 UTC:
 
 ```text
 $ bash tools/check-migration-schema-isolation.sh
-migration-schema-isolation: historical exception retained: shikigami-migrations/sql-migrations/2026-06-24-12-00-00-shikigami-fired.sql mutates search_path; applied bytes are checksum-immutable
+migration-schema-isolation: historical exception retained: shikigami-migrations/sql-migrations/0001-shikigami-fired.sql mutates search_path; applied bytes are checksum-immutable
 migration-schema-isolation: application SQL is schema-qualified; vendored PGMQ SQL has no session path mutation
 ```
 

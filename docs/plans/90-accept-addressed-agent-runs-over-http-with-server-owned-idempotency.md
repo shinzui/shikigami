@@ -147,7 +147,7 @@ the queue send, modelled on the receipts of
 [ADR 0022](../adr/0022-the-journal-ends-at-enqueue-and-receipts-own-delivery-truth.md). The
 run-skip evidence in `shikigami-core/src/Shikigami/Directory/Store.hs` (`recordRunSkipTx`) is
 the precedent for a Shikigami-owned table written through hasql with schema-qualified
-statements, and `shikigami-migrations/sql-migrations/2026-08-23-00-41-28-agent-load-state-and-run-skips.sql`
+statements, and `shikigami-migrations/sql-migrations/0010-agent-load-state-and-run-skips.sql`
 is the precedent migration. New migrations are scaffolded with `just new-migration <slug>` and
 checked by `just migration-schema-isolation`.
 

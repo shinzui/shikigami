@@ -61,6 +61,14 @@ boundary. Embedders can consume `shikigamiMigrationPlan` and
 - [Migration executable](../../shikigami-migrations/app/Main.hs): command wiring and successful-up reconciliation.
 - [TestSupport.hs](../../shikigami-migrations/test-support/Shikigami/Migrations/TestSupport.hs): suite and per-example fixture lifecycle.
 
+Application SQL files use contiguous four-digit prefixes in manifest order:
+`0001-shikigami-fired.sql` through `0030-workspace-followup-lookup.sql`.
+`just new-migration <slug>` appends the next number. This numbering follows
+[pg-migrate's authoring guide](mori://shinzui/pg-migrate/docs/user-guide).
+The timestamped names were replaced before Shikigami had users, preserving SQL
+bytes and execution order. Recreate any disposable development database with the
+old names; there is no ledger conversion or compatibility migration.
+
 ## Limits
 
 The migration binary reads `DATABASE_URL` directly; it does not use the shared
