@@ -66,7 +66,12 @@ container run --rm --detach --name "$name" --arch arm64 --rosetta --cpus 4 --mem
 created=true
 container exec --interactive "$name" /usr/bin/timeout 300 /bin/bash -s <<'GUEST'
 set -euo pipefail
-systemctl start local-fs.target
+guest_ready=false
+for _ in {1..200}; do
+  if systemctl start local-fs.target 2>/dev/null; then guest_ready=true; break; fi
+  sleep 0.1
+done
+"$guest_ready"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y --no-install-recommends dbus gcc libc6-dev nix-bin sudo ca-certificates postgresql libpq-dev git jq python3 openssh-server >/dev/null 2>&1
