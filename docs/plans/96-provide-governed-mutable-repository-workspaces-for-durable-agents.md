@@ -245,6 +245,24 @@ late old-owner file edit, lifecycle/authority revocation during factual
 recovery, and retained journal/log privacy checks. FRIC-29 records another
 frozen-cohort rebuild delay.
 
+
+Native integration and workspace fencing are verified separately (2026-10-30).
+The `a8614b2` runtime passes the prior fourteen native cases plus all three
+integration cases, with five successful local/combined receipts and the expected
+combined exit 77 retained in private evidence
+(`/tmp/shikigami-workspace-run.WWF9ao/evidence`). Its follow-up fixture correctly
+refuses a reused original message operation key; the controller now uses distinct
+next-message/start keys. A focused `--handoff-only` run passes all six cases
+(`/tmp/shikigami-96-handoff-focused.log`, private evidence
+`/tmp/shikigami-workspace-run.8mku5B/evidence`): native provisioning, a held
+collector and detached writer retaining an unresolved fence, restart with the
+same listener and denied authority recovering the original actual and exact
+fence, fresh-authority refusal of an accepted late old-owner edit and an
+unestablished successor, and public metadata/log privacy. No objective receipt
+is manufactured. The corrected controller is rebuilding for follow-up reuse,
+native terminal cleanup and the complete combined gate. This does not qualify
+accepted successor writes or close Milestones 5–6.
+
 ## Surprises & Discoveries
 
 2026-10-30 successor design: retain the original allocation and process profile

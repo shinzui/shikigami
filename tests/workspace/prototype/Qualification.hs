@@ -5,6 +5,7 @@ module Qualification (Qualification (..), Ready (..), withQualification, loadAss
 
 import Accepted
 import Baikai.Options (emptyOptions)
+import Control.Concurrent (threadDelay)
 import Control.Monad (forM, unless, void, when)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -17,6 +18,7 @@ import Data.Text.Encoding qualified as Encoding
 import Data.Time (addUTCTime, getCurrentTime)
 import Effectful (Eff)
 import GHC.Generics (Generic)
+import GHC.Stack (HasCallStack, callStack, prettyCallStack)
 import Kioku.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
@@ -105,7 +107,15 @@ loadAssignment q root runId owner = do
   session <- genSessionId
   selection <- right (resolveExecutionSelection (assignmentIdFor runId) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just root) now)
   let assignment = SkillAssignment runId (AgentName "fixture") owner session selection Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host cannot dispatch a model")
-  right =<< q.host.load assignment
+  let awaitAdmission remaining = do
+        result <- q.host.load assignment
+        case result of
+          Right admitted -> pure admitted
+          Left _ | remaining > (0 :: Int) -> threadDelay 100000 >> awaitAdmission (remaining - 1)
+          _ -> right result
+  -- The independent receipt scanner shares this lock. Retry only the same
+  -- authoritative child; a busy lock never supplies admission or a new copy.
+  awaitAdmission 30
 
 runTools :: Qualification -> Prepared -> IO (Prepared, [Aeson.Value])
 runTools q first = loop first []
@@ -196,8 +206,8 @@ asEither (Aeson.Error err) _ = Left err
 run :: AppEnv -> Eff AppEffects a -> IO a
 run env action = right =<< runAppIO env action
 
-right :: Either e a -> IO a
-right = either (const (fail "qualification boundary refused")) pure
+right :: (HasCallStack) => Either e a -> IO a
+right = either (const (fail ("qualification boundary refused\n" <> prettyCallStack callStack))) pure
 
 executeConfigured :: Qualification -> Prepared -> IO ()
 executeConfigured q = executeWithProviders q.host.capabilities.providers q.env q.authorizer q.current

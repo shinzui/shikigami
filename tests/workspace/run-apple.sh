@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 mode=${1:---prototype}
-[[ "$mode" == --prototype || "$mode" == --provision || "$mode" == --git || "$mode" == --workflow || "$mode" == --workflow-only || "$mode" == --workspace-gates || "$mode" == --qualify ]] || { echo 'Usage: run-apple.sh --prototype|--provision|--git|--workflow|--workflow-only|--workspace-gates|--qualify [RUNTIME]'; exit 64; }
+[[ "$mode" == --prototype || "$mode" == --provision || "$mode" == --git || "$mode" == --workflow || "$mode" == --workflow-only || "$mode" == --workspace-gates || "$mode" == --qualify || "$mode" == --continuing-only || "$mode" == --handoff-only ]] || { echo 'Usage: run-apple.sh --prototype|--provision|--git|--workflow|--workflow-only|--workspace-gates|--qualify|--continuing-only|--handoff-only [RUNTIME]'; exit 64; }
 taskdir=$(mktemp -d /tmp/shikigami-workspace-run.XXXXXX)
 chmod 700 "$taskdir"
 if [[ $# -ge 2 ]]; then runtime=$2; else
@@ -31,7 +31,7 @@ cleanup() {
       container exec "$name" /bin/bash -c '
         cd "$1"
         files=()
-        for name in provision.log diagnostics.log process-debug.log clock-events.log clock-service.log clock-barrier.log http-status.log authority.log oauth.log supervisor.log migrations.log nix-tool.log nix-guard.log pg-init.log pg-start.log workflow-admit.log workflow-edit.log workflow-run.log workflow-verify.log workflow-evidence.json workflow-model-calls integration.log integration-evidence.json continuing-followup.log continuing-prepare.log continuing-freeze.log continuing-settled.log continuing-late.log continuing-evidence.json continuing-status.json continuing-worker.log public-metadata.jsonl; do [[ ! -f "$name" ]] || files+=("$name"); done
+        for name in provision.log diagnostics.log process-debug.log clock-events.log clock-service.log clock-barrier.log http-status.log authority.log oauth.log supervisor.log migrations.log nix-tool.log nix-guard.log pg-init.log pg-start.log workflow-admit.log workflow-edit.log workflow-run.log workflow-verify.log workflow-evidence.json workflow-model-calls integration.log integration-evidence.json integration-process-evidence.json continuing-followup.log continuing-prepare.log continuing-freeze.log continuing-settled.log continuing-late.log continuing-evidence.json continuing-status.json continuing-worker.log public-metadata.jsonl continuing-diagnostics.jsonl; do [[ ! -f "$name" ]] || files+=("$name"); done
         for case_name in duplicate worker-restart supervisor-restart cancellation completion-recovery denials capture-loss authority-denial git-upgrade git-recovery git-denial; do
           for kind in prepare worker inspect verify advance git-worker duplicate; do name="$kind-$case_name.log"; [[ ! -f "$name" ]] || files+=("$name"); done
           name="status-$case_name.json"; [[ ! -f "$name" ]] || files+=("$name")

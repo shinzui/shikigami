@@ -16,6 +16,7 @@ import Data.UUID.V4 qualified as UUID
 import Data.Vector qualified as Vector
 import Effectful (Eff)
 import GHC.Generics (Generic)
+import GHC.Stack (HasCallStack, callStack, prettyCallStack)
 import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Keiro.Workflow.Awakeable.Schema (registerAwakeableTx)
 import Keiro.Workflow.Types (WorkflowId (..))
@@ -166,8 +167,8 @@ policyDigest snapshot = versionedDigest "shikigami.harness-policy/1" (Aeson.toJS
 run :: AppEnv -> Eff AppEffects a -> IO a
 run env action = right =<< runAppIO env action
 
-right :: Either e a -> IO a
-right = either (const (fail "accepted fixture boundary refused")) pure
+right :: (HasCallStack) => Either e a -> IO a
+right = either (const (fail ("accepted fixture boundary refused\n" <> prettyCallStack callStack))) pure
 
 must :: Either e a -> a
 must = either (const (error "fixture definition refused")) id

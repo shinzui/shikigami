@@ -134,8 +134,8 @@ followup q = do
   originalAssignment <- maybe (fail "original assignment absent") pure active.activeAssignment
   void (right =<< run q.env (Sessions.recordResult access active.revision 0 (OperationId "followup-original-result") (AssignmentResult 1 originalAssignment AssignmentFailed (Just first.snapshot.executionId) Aeson.Null [])))
   Just (idle, _) <- right =<< run q.env (Sessions.inspectSession session)
-  (_, message) <- right =<< run q.env (Sessions.acceptMessage access idle.revision 0 (OperationId "followup-message") (Instruction 1 FollowUp "continue accepted repository" 1 1 1 Nothing))
-  (_, started) <- right =<< run q.env (Sessions.startAssignment access (idle.revision + 1) 0 (OperationId "followup-start") message.assignmentId)
+  (_, message) <- right =<< run q.env (Sessions.acceptMessage access idle.revision 0 (OperationId "followup-next-message") (Instruction 1 FollowUp "continue accepted repository" 1 1 1 Nothing))
+  (_, started) <- right =<< run q.env (Sessions.startAssignment access (idle.revision + 1) 0 (OperationId "followup-next-start") message.assignmentId)
   nextRun <- maybe (fail "followup child absent") pure started.childWorkflowId
   next <- loadAssignment q root nextRun original.owner
   unless (next.workspace == original.workspace && next.bindingDigest == original.bindingDigest && next.instructions == original.instructions && next.epoch == original.epoch) (fail "followup allocation or accepted instructions changed")

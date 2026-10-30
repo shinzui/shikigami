@@ -5,7 +5,7 @@ set -eEuo pipefail
 export LANG=C.UTF-8 LC_ALL=C.UTF-8
 mode=${1:-}
 runtime=${2:-}
-[[ $# == 2 && ( "$mode" == --prototype || "$mode" == --provision || "$mode" == --git || "$mode" == --workflow || "$mode" == --workflow-only || "$mode" == --workspace-gates || "$mode" == --qualify ) && "$runtime" == /nix/store/* ]] || { echo 'Usage: run-linux.sh --prototype|--provision|--git|--workflow|--workflow-only|--workspace-gates|--qualify RUNTIME'; exit 64; }
+[[ $# == 2 && ( "$mode" == --prototype || "$mode" == --provision || "$mode" == --git || "$mode" == --workflow || "$mode" == --workflow-only || "$mode" == --workspace-gates || "$mode" == --qualify || "$mode" == --continuing-only || "$mode" == --handoff-only ) && "$runtime" == /nix/store/* ]] || { echo 'Usage: run-linux.sh --prototype|--provision|--git|--workflow|--workflow-only|--workspace-gates|--qualify|--continuing-only|--handoff-only RUNTIME'; exit 64; }
 [[ $(uname -s) == Linux && $(id -u) == 0 && -f /run/shikigami-workspace-prototype.disposable ]] || { echo 'REFUSED: a marked disposable Linux guest running as root is required'; exit 78; }
 [[ $(ps -p 1 -o comm=) == systemd && $(stat -fc %T /sys/fs/cgroup) == cgroup2fs ]]
 sudo -n true
@@ -63,6 +63,7 @@ diagnose() {
   systemctl show systemd-timesyncd.service --property=ActiveState,StatusText >"$prefix/clock-service.log" 2>&1 || true
   if "$pg_started"; then
     /usr/bin/psql "$connection" -Atc "SELECT (SELECT count(*) FROM shikigami.workspace_bindings), (SELECT count(*) FROM shikigami.workspace_bindings WHERE state='ready'), (SELECT count(*) FROM shikigami.workspace_process_profiles), (SELECT count(*) FROM shikigami.workspace_process_profiles WHERE ready)" >"$prefix/diagnostics.log" 2>&1 || true
+    /usr/bin/psql "$connection" -Atc "SELECT jsonb_build_object('kind','execution','data',to_jsonb(e)) FROM shikigami.executions e WHERE binding->>'rootId' LIKE 'continuing-%' UNION ALL SELECT jsonb_build_object('kind','session','data',to_jsonb(s)) FROM shikigami.worker_sessions s UNION ALL SELECT jsonb_build_object('kind','message','data',to_jsonb(m)) FROM shikigami.worker_session_messages m UNION ALL SELECT jsonb_build_object('kind','admission','data',to_jsonb(a)) FROM shikigami.workspace_successor_admissions a UNION ALL SELECT jsonb_build_object('kind','control','data',to_jsonb(c)) FROM shikigami.workspace_controls c UNION ALL SELECT jsonb_build_object('kind','operation','data',to_jsonb(o)) FROM shikigami.execution_transcript_operations o JOIN shikigami.executions e USING(execution_id) WHERE e.binding->>'rootId' LIKE 'continuing-%'" >"$prefix/continuing-diagnostics.jsonl" 2>/dev/null || true
     for uid in 64000 64001; do if getent passwd "$uid" >/dev/null; then echo "identity $uid present"; else echo "identity $uid absent"; fi; done >>"$prefix/diagnostics.log"
     for marker in "$prefix"/workspaces/*/metadata/profile-provision.json; do [[ ! -f "$marker" ]] || jq '{ready}' "$marker" >>"$prefix/diagnostics.log"; done
     for directory in "$prefix"/workspaces/*/files "$prefix"/workspaces/*/scratch; do [[ ! -d "$directory" ]] || stat -c '%u:%g:%a' "$directory" >>"$prefix/diagnostics.log"; done
@@ -245,7 +246,7 @@ duplicate_original() {
   done
   return 1
 }
-if [[ "$mode" != --workflow-only ]]; then
+if [[ "$mode" != --workflow-only && "$mode" != --continuing-only && "$mode" != --handoff-only ]]; then
 prepare duplicate slow
 start_worker duplicate
 wait_ready duplicate
@@ -378,11 +379,17 @@ if [[ "$mode" == --workflow || "$mode" == --workflow-only || "$mode" == --worksp
   fi
 fi
 
-if [[ "$mode" == --workspace-gates || "$mode" == --qualify ]]; then
+if [[ "$mode" == --workspace-gates || "$mode" == --qualify || "$mode" == --continuing-only || "$mode" == --handoff-only ]]; then
+  if [[ "$mode" != --continuing-only && "$mode" != --handoff-only ]]; then
   "$prototype" integration "$config" "$prefix" >"$prefix/integration.log" 2>&1
   cat "$prefix/integration.log"
+  /usr/bin/psql "$connection" -Atc "SELECT jsonb_agg(jsonb_build_object('repository',b.binding->'repository','base',b.binding->'base','process',p.record) ORDER BY p.operation_id) FROM shikigami.workspace_processes p JOIN shikigami.workspace_bindings b USING(resource) WHERE b.binding->'request'->>'rootId'='integration-qualification-root'" >"$prefix/integration-process-evidence.json"
+  jq -e 'length==6 and ([.[] | select(.process.receipt.termination=="ProcessExited" and .process.receipt.exitCode==0)] | length)==5 and ([.[] | select(.process.receipt.termination=="ProcessExited" and .process.receipt.exitCode==77)] | length)==1' "$prefix/integration-process-evidence.json" >/dev/null
+  fi
+  if [[ "$mode" != --handoff-only ]]; then
   "$prototype" continuing "$config" "$prefix" followup >"$prefix/continuing-followup.log" 2>&1
   cat "$prefix/continuing-followup.log"
+  fi
   "$prototype" continuing "$config" "$prefix" prepare >"$prefix/continuing-prepare.log" 2>&1
   if [[ -f /run/shikigami-workspace-prototype.clock-steps ]]; then
     /usr/bin/timeout 40 "$prefix/root/bin/probe" --await-clock-step >>"$prefix/clock-barrier.log"
@@ -476,7 +483,13 @@ for path in files:
     assert not any(marker in body for marker in markers), 'public fixture metadata/log privacy check failed'
 print('PASS retained workflow/operation metadata and public logs exclude fixture contents, credentials and bearer authority')
 PRIVACY
-  echo 'Workspace-owned native gates passed (22 cases). Real objective ownership and accepted successor writes remain unqualified.'
+  if [[ "$mode" == --handoff-only ]]; then
+    echo 'Focused workspace fence gates passed (6 cases); successor and full matrix gates remain separate.'
+  elif [[ "$mode" == --continuing-only ]]; then
+    echo 'Focused continuing workspace gates passed (7 cases); the full matrix remains separate.'
+  else
+    echo 'Workspace-owned native gates passed (22 cases). Real objective ownership and accepted successor writes remain unqualified.'
+  fi
 
   if [[ "$mode" == --qualify ]]; then
     echo 'REFUSED full qualification: the real IR-13 ownership provider is not installed; no substitute receipt is permitted.'
