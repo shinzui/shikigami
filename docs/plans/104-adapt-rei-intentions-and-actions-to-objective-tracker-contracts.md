@@ -11,6 +11,18 @@ provenance:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-10-29T13:15:58Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-30T03:15:57Z
+      verdict: "approved"
+      note: "Reviewed and refreshed dispatch ownership, destination routing and audited attestation; ready subject to unchanged prerequisites."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-30T03:15:57Z
+      mode: "update"
+      note: "Clarify shared dispatch and evidence-based delivery attestation; preserve planning status and hard dependencies."
 ---
 
 # Adapt Rei intentions and actions to objective tracker contracts
@@ -86,7 +98,7 @@ Create `shikigami-core/src/Shikigami/Objective/Tracker/Rei.hs` using `Rei.Client
 
 Add `tests/objective-trackers/with-rei.sh`: build or accept an explicit tested Rei server binary, provision a disposable database and service identity, select an unused loopback port, start the real server and its projection workers, and publish isolated connection configuration to the test process. Use the upstream fixture setup discovered through `mori://shinzui/rei`, project-relative `rei-api/test/hurl/run-isolated.sh` and `rei-api/test-client/run.sh` (artifact-level URIs pending), as the verified starting point. The launcher owns and cleans up only its resources; it must not read the user’s normal Rei endpoint or credentials. Record server commit/version and configuration fingerprint without tokens. A mock is not a fallback for this milestone.
 
-Run one existing-intention read and one authenticated action creation through EP-1’s retained publication path. The test creates the intention as setup, verifies `streamPosition` and later the returned action ID through the real read API with bounded projection-lag polling. Capture the exact response codecs and two failure channels. Missing live capability or setup must leave the milestone unaccepted with a concrete reason, not a passing fake. Accept the milestone only after the shared engine recognizes the real receipt and an unauthorized request is refused.
+Run one existing-intention read and one authenticated action creation through EP-1’s retained publication path and `Tracker/Dispatch.hs`, injecting the real adapter directly before process-loop wiring in milestone 2. The test creates the intention as setup, verifies `streamPosition` and later the returned action ID through the real read API with bounded projection-lag polling. Capture the exact response codecs and two failure channels. Missing live capability or setup must leave the milestone unaccepted with a concrete reason, not a passing fake. Accept the milestone only after the shared engine recognizes the real receipt and an unauthorized request is refused.
 
 ### Milestone 2 — Mapping, dispatch and uncertainty
 
@@ -96,9 +108,9 @@ Map Rei title to external display metadata, `noteGuidance` to an optional instru
 
 Publish only bounded allowlisted summaries using `recordAction`; include objective identity, revision and logical publication marker in the description as attribution, with a retained timestamp. The marker is not a server deduplication key. Leave `actor` unset unless the deployment has explicitly mapped and authorized a Rei performer; credential identity and Shikigami actor attribution remain distinct. Retain returned `actionId` and request digest. Never call the legacy `/v1/agent-actions` sink for this provider, and do not send completion through Rei’s complete command.
 
-Advertise no server idempotency or conditional action-append capability. A connection failure, response loss, undecodable success or expired in-flight lease may follow a committed action: report Unknown and quarantine. Retry only reads and sends proven not dispatched; classify documented definitive rejections separately. A 5xx is not proof of non-commit without endpoint-specific evidence. Reconciliation with a known action ID verifies intention and payload through `getAction`. A bounded actions scan may find a candidate marker, but no match under projection lag proves nothing; a marker alone is not authoritative against forgery or multiple matches. Require authorized attestation of exact remote receipt and request attribution where the API cannot prove it, retain the attestation, or leave Unknown. Never automatically resend an ambiguous append.
+Advertise no server idempotency or conditional action-append capability. A connection failure, response loss, undecodable success or expired in-flight lease may follow a committed action: report Unknown and quarantine. Retry only reads and sends proven not dispatched; classify documented definitive rejections separately. A 5xx is not proof of non-commit without endpoint-specific evidence. Reconciliation with a known action ID verifies intention and payload through `getAction`. A bounded actions scan may find a candidate marker, but no match under projection lag proves nothing; a marker alone is not authoritative against forgery or multiple matches. Where the API cannot prove attribution, retain the verified candidate resource/payload and use plan 103’s typed `attest-delivery` command under explicit operator reconciliation permission, or leave Unknown. A candidate marker alone cannot transition the receipt. Test one valid attested transition and refusal of forged or mismatched evidence; retain its evidence kind so operators can distinguish it from provider proof. Never automatically resend an ambiguous append.
 
-Create `shikigami-workers/src/Shikigami/Objective/Tracker/Worker.hs` for bounded observation polling and provider dispatch, and extend the existing `Flow/SinkOutbox/Publisher.hs` router by destination. Each batch still has one publisher owner; legacy sinks retain their path. Wire the adapter into `Workers/Config.hs`, `Workers/Command/Worker.hs` and the existing supervision/health registry with explicit configuration. Shared HTTP manager and opaque credentials are constructed at process boundaries. Unknown tracker results retire transport retry into EP-1’s durable quarantine; they are never counted as delivered sync receipts. Paused/revoked bindings stop fresh network writes and preserve read-only reconciliation where authorized.
+Create `shikigami-workers/src/Shikigami/Objective/Tracker/Worker.hs` for bounded observation polling and provider dispatch, and extend the existing `Flow/SinkOutbox/Publisher.hs` router by destination. Each batch still has one publisher owner; legacy sinks retain their path. Route both the publish callback and the post-success callback: `runOutboxPublisher` currently invokes `AgentWorkflow.reconcilePublishedSinkIntent` for every `PublishSucceeded` row. Tracker rows, including success that only acknowledges quarantine, must use tracker reconciliation and never enter that legacy callback. A mixed batch containing a delivered sink, a delivered tracker publication and a quarantined tracker publication must preserve all three independent receipts. Worker scheduling invokes plan 103’s `Tracker/Dispatch.hs`; it does not implement a second delivery state machine. Wire the adapter into `Workers/Config.hs`, `Workers/Command/Worker.hs` and the existing supervision/health registry with explicit configuration. Shared HTTP manager and opaque credentials are constructed at process boundaries. Unknown tracker results retire transport retry into EP-1’s durable quarantine; they are never counted as delivered sync receipts. Paused/revoked bindings stop fresh network writes and preserve read-only reconciliation where authorized.
 
 ### Milestone 3 — Fault qualification and isolation
 
@@ -168,3 +180,8 @@ A pending intent retains its adapter revision and complete bytes. A retired adap
 
 
 Hard prerequisite: [plan 103](103-persist-provider-neutral-objective-tracker-bindings-and-synchronization-receipts.md) Complete. Consume its `Tracker/Provider.hs` interface and reuse the same conformance cases; do not add a Rei-only synchronization executor. Dependencies are `mori://shinzui/rei/packages/rei-api-client` and `mori://shinzui/rei/packages/rei-api-contract`, whose released compatibility must be checked before bounds are chosen. The production adapter belongs in core as a domain HTTP client, without Rei core/server imports; manager, credentials and loops remain at executable boundaries. [Plan 105](105-expose-and-qualify-recoverable-external-objective-synchronization.md) consumes the adapter and isolated launcher. Any upstream API enhancement is a separately recorded prerequisite with a canonical Mori handle, never an assumed new route.
+
+
+## Revision Notes
+
+2026-10-29: MasterPlan 18 review clarified shared dispatch ownership and the supported evidence-based attestation path, including negative and replay acceptance. The whole-child prerequisites and planning-only status remain unchanged.

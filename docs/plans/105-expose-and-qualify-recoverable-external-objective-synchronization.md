@@ -11,6 +11,18 @@ provenance:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-10-29T13:15:58Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-30T03:15:57Z
+      verdict: "approved"
+      note: "Reviewed and refreshed dispatch ownership, destination routing and audited attestation; ready subject to unchanged prerequisites."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-30T03:15:57Z
+      mode: "update"
+      note: "Clarify shared dispatch and evidence-based delivery attestation; preserve planning status and hard dependencies."
 ---
 
 # Expose and qualify recoverable external objective synchronization
@@ -84,9 +96,9 @@ Upstream decisions were discovered through Mori: `mori://shinzui/rei/okf/adrs/co
 
 Create `shikigami-api/src/Shikigami/Objective/Tracker/Api.hs`, `shikigami-server/src/Shikigami/Objective/Tracker/Handler.hs` and `shikigami-server/src/Shikigami/Server/Command/ObjectiveTrackers.hs`. Extend the objective vertical from plan 100, `shikigami-client/src/Shikigami/Client.hs`, `Server/App.hs` and `Server/Command.hs`. Mount under existing objective authentication and resource checks. Use the project’s typed response/error and Relay pagination conventions; defaults are 20 and maximum 100, command bodies at most 1 MiB, protected summary replies at most 16 KiB.
 
-Expose `/objectives/:id/trackers` for admitted bindings, binding inspection and commands. Nested paged observations, proposals and deliveries expose independent histories. Closed commands include bind, pause, resume, detach, observe, apply-proposal, reject-proposal, resolve-conflict and reconcile-delivery, each with stable operation key and expected binding/local revisions as applicable. Bind requires explicit connection, resource ID and reviewed field policy; it never treats a passive link as authorization. Any requested network observation or reconciliation is queued through the durable owner, so HTTP timeouts do not silently repeat side effects. Return 202 for newly queued work, 200 for retained operation status/replay, 409 for stale versions, and bounded 403/404 errors without leaking inaccessible resources. Both application commands and connection-use policy must authorize the caller. Missing or unavailable providers are explicit 503 responses, not a fallback to legacy sinks.
+Expose `/objectives/:id/trackers` for admitted bindings, binding inspection and commands. Nested paged observations, proposals and deliveries expose independent histories. Closed commands include bind, pause, resume, detach, observe, apply-proposal, reject-proposal, resolve-conflict, reconcile-delivery and attest-delivery, each with stable operation key and expected binding/local revisions as applicable. Bind requires explicit connection, resource ID and reviewed field policy; it never treats a passive link as authorization. Any requested network observation or reconciliation is queued through the durable owner, so HTTP timeouts do not silently repeat side effects. Return 202 for newly queued work, 200 for retained operation status/replay, 409 for stale versions, and bounded 403/404 errors without leaking inaccessible resources. Both application commands and connection-use policy must authorize the caller. Missing or unavailable providers are explicit 503 responses, not a fallback to legacy sinks.
 
-Add `shikigami objectives trackers bind|inspect|proposals|deliveries|command` as adapters over the same owner, using the configured operator identity. A command file carries the closed command request; no flag impersonates an agent or external user. `inspect` displays local objective revision/status, external observed position/status, last successful observation, pending/conflicted proposal count and delivery states separately. Provide before/after previews and evidence references for proposal decisions; external text is untrusted task input, never an instruction to change runtime authority. Never expose credentials or remote internal error bodies. Test anonymous access, another objective owner, revoked membership, connection-use denial, wrong incarnation and stale command replay.
+Add `shikigami objectives trackers bind|inspect|proposals|deliveries|command` as adapters over the same owner, using the configured operator identity. A command file carries the closed command request; no flag impersonates an agent or external user. `inspect` displays local objective revision/status, external observed position/status, last successful observation, pending/conflicted proposal count and delivery states separately. Expose `attest-delivery` through the same command-file path with publication/attempt identity, expected receipt revision, exact remote receipt, retained verification reference/digest and bounded reason. Require explicit operator reconciliation permission in addition to resource access. Display provider-proved and operator-attested deliveries separately; refuse unverified, mismatched or stale evidence and test identical command replay. Automated reconciliation that finds only a matching marker must remain Unknown until this authorized decision succeeds. Provide before/after previews and evidence references for proposal decisions; external text is untrusted task input, never an instruction to change runtime authority. Never expose credentials or remote internal error bodies. Test anonymous access, another objective owner, revoked membership, connection-use denial, wrong incarnation and stale command replay.
 
 ### Milestone 2 — Real linked-objective qualification
 
@@ -94,7 +106,7 @@ Add `tests/objective-trackers/run.sh` and fixtures under `fixtures/qualification
 
 Create an ordinary objective through the native path and a Rei intention as explicit test setup; bind them without overwriting either. Record progress and observe exactly one attributable Rei action and its local Delivered receipt. Change Rei note guidance and poll until its source position is visible. Show a proposal while local instructions remain unchanged; explicitly apply it at the current local revision, then prove an old worker checkpoint conflicts. Race a local instruction edit against another proposal: expect Conflict and retained evidence, not last-write-wins. Reject a proposal and verify repeated observations do not repropose the identical rejected version. An own outbound action changes Rei stream position without producing an import loop.
 
-Complete the Rei intention and verify the objective stays open until its independent integrated acceptance succeeds. Cancel or reopen externally and verify only an explicit authorized local decision affects work. Stop Rei, commit more local progress, restart both services and recover pending publications. Drop a real action response after commit and prove quarantine, no second POST and eventual evidence-based reconciliation; test revocation before dispatch and a paused binding with accepted outstanding facts. Delete or lose access to the remote record without deleting local evidence. Bind another connection with the same textual remote ID and prove incarnation isolation. Finish by running MasterPlan 17’s no-Rei qualification with tracking disabled.
+Complete the Rei intention and verify the objective stays open until its independent integrated acceptance succeeds. Cancel or reopen externally and verify only an explicit authorized local decision affects work. Stop Rei, commit more local progress, restart both services and recover pending publications. Drop a real action response after commit and prove quarantine, no second POST and eventual evidence-based reconciliation through the public controls: first retain Unknown when a marker is insufficient, then submit a verified receipt attestation as the authorized operator and recover the same Delivered receipt after losing that command’s acknowledgement; test revocation before dispatch and a paused binding with accepted outstanding facts. Delete or lose access to the remote record without deleting local evidence. Bind another connection with the same textual remote ID and prove incarnation isolation. Finish by running MasterPlan 17’s no-Rei qualification with tracking disabled.
 
 The runner emits objective/binding IDs, source positions, receipt IDs, counts of actual action POSTs and the final independent statuses. Required facts are: applied instructions invalidate old checkpoints; stale proposals conflict; external completion does not complete locally; lost acknowledgement produces Unknown with one remote action; successful reconciliation retains the original publication; unlinked/no-Rei work passes unchanged. No real repository fence qualification is claimed.
 
@@ -172,3 +184,8 @@ CLI/API commands use immutable keys and expose retained operations after timeout
 
 
 Hard prerequisites: [plan 103](103-persist-provider-neutral-objective-tracker-bindings-and-synchronization-receipts.md) and [plan 104](104-adapt-rei-intentions-and-actions-to-objective-tracker-contracts.md) Complete, transitively MasterPlan 17 Complete. This child owns public schema, CLI and final qualification; all commands call `Objective/Tracker/Command.hs`, all objective writes call the existing objective owner, and all real Rei calls use `Objective/Tracker/Rei.hs`. It does not add an alternative synchronization engine or new provider dependency. Relevant public source is `mori://shinzui/rei/packages/rei-api-contract`; exact upstream ADR references are recorded in Context and Orientation.
+
+
+## Revision Notes
+
+2026-10-29: MasterPlan 18 review clarified shared dispatch ownership and the supported evidence-based attestation path, including negative and replay acceptance. The whole-child prerequisites and planning-only status remain unchanged.

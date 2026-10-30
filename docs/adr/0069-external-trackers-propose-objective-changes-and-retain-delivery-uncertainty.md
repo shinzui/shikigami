@@ -51,7 +51,13 @@ instructions proposals, retains lifecycle observations, and publishes attributab
 progress summaries as actions. It does not automatically create, complete or reopen
 intentions. An outbound attribution marker is not an idempotency key. Unknown append
 results remain quarantined; remote action evidence or explicit audited attestation may
-resolve them without sending another action. Credentials and manager lifetimes remain
+resolve them without sending another action. Attestation is a typed, idempotent command
+with explicit operator reconciliation permission, immutable publication/attempt identity,
+expected receipt revision and an exact remote receipt whose resource and payload have
+been verified through the provider. It records the authenticated actor and reason and
+distinguishes operator-attested delivery from provider proof. Neither a marker nor a
+free-text assertion suffices; attestation cannot prove non-application or authorize
+resend. Suppression of future sends preserves any existing Unknown outcome. Credentials and manager lifetimes remain
 at process boundaries, and runtime integration never shells out to a CLI.
 
 ## Alternatives rejected
@@ -65,7 +71,10 @@ test would fail to prove the actual provider's semantics.
 ## Consequences
 
 The shared engine, concrete Rei adapter and supported API/CLI qualification are separate
-children of MasterPlan 18. The engine is tested with strong and weak deterministic
+children of MasterPlan 18. The shared engine owns production dispatch and reconciliation
+transitions as well as receipts; process loops only schedule that engine. Both publication
+and post-success outbox reconciliation route by destination, so quarantine cannot be
+interpreted by the legacy sink handler as delivery. The engine is tested with strong and weak deterministic
 providers; Rei is additionally tested against its real disposable API server, including
 lost responses and projection lag. All plans remain unimplemented at this decision.
 MasterPlan 17's no-Rei feature and acceptance gate remain independently useful.

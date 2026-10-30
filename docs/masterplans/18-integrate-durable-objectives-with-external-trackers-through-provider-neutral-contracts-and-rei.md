@@ -10,6 +10,18 @@ provenance:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-10-29T13:15:36Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-30T03:15:57Z
+      verdict: "approved"
+      note: "Reviewed and refreshed dispatch ownership, destination routing and audited attestation; ready subject to unchanged prerequisites."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-30T03:15:57Z
+      mode: "update"
+      note: "Clarify shared dispatch and evidence-based delivery attestation; preserve planning status and hard dependencies."
 ---
 
 # Integrate durable objectives with external trackers through provider-neutral contracts and Rei
@@ -68,9 +80,11 @@ EP-1 consumes the delivered objective transaction and authorization owner. EP-2 
 
 **Field ownership — EP-1 owns, EP-2 maps.** Local criteria, assignments, owners, authority, pending effects, budgets and completion stay Shikigami-owned. A binding may designate external instructions as proposal input; local edits remain legal and create visible divergence against the last accepted import base. Initial linking never overwrites content. Cancellation is a separately authorized proposal; reopening a remote record cannot revive a terminal local objective. EP-3 presents before/after values and expected revisions. Outbound summaries never write inbound fields and carry source objective/revision/receipt markers to prevent feedback loops.
 
-**Delivery and worker composition — EP-1 owns semantic receipts; EP-2 owns dispatch wiring.** The objective transaction enqueues one immutable publication per eligible binding and revision with a protected bounded payload. A dedicated integration-event destination routes through the existing outbox publisher; extend its dispatcher rather than starting a competing unfiltered publisher. EP-2 implements `shikigami-workers/src/Shikigami/Objective/Tracker/Worker.hs`, routing in `Flow/SinkOutbox/Publisher.hs`, polling and `Workers/Config.hs` composition. EP-1 defines retry/quarantine decisions. A transport row consumed into quarantine is not a delivered receipt. Legacy sink messages continue through their existing handler.
+**Delivery and worker composition — EP-1 owns the dispatch state machine and semantic receipts; EP-2 owns process wiring.** The objective transaction enqueues one immutable publication per eligible binding and revision with a protected bounded payload. A dedicated integration-event destination routes through the existing outbox publisher; extend its dispatcher rather than starting a competing unfiltered publisher. EP-2 implements `shikigami-workers/src/Shikigami/Objective/Tracker/Worker.hs`, routing in `Flow/SinkOutbox/Publisher.hs`, polling and `Workers/Config.hs` composition. EP-1 implements those decisions in `Tracker/Dispatch.hs`, exercised by deterministic providers; EP-2 injects Rei into that same executor. Route both the publish callback and the post-success reconciliation callback by destination. The current publisher calls legacy sink reconciliation for every successful row, including what will become quarantined tracker rows; EP-2 must prove mixed-batch isolation. A transport row consumed into quarantine is not a delivered receipt. Legacy sink messages continue through their existing handler.
 
 **Rei adapter — EP-2 owns.** `shikigami-core/src/Shikigami/Objective/Tracker/Rei.hs` wraps the typed client from `mori://shinzui/rei/packages/rei-api-client` without importing Rei core or server. Manager/token lifetimes stay at process boundaries. The current append-action API has no idempotency key, so unknown sends are quarantined and reconciled without automatic resend. HTTP/CLI control hosts reuse this adapter; no shelling out to mina or rei in production.
+
+**Reconciliation evidence — EP-1 owns the command and receipt schema; EP-2 supplies remote verification; EP-3 exposes it.** A typed `attest-delivery` command identifies the publication, attempt, exact remote receipt, retained verified payload digest, expected receipt revision and a bounded reason. It requires explicit operator reconciliation permission and records the authenticated actor. Attestation can establish attribution only after a provider read verifies resource and payload; it cannot invent a receipt, prove non-application or authorize resend. Inspection distinguishes provider proof from operator-attested delivery. Unknown outcomes remain visible when evidence is insufficient. Suppressing future publication never rewrites an Unknown receipt as unsent.
 
 **Public controls and qualification — EP-3 owns.** Add authenticated `/objectives/:id/trackers` resources, operator CLI, documentation, `tests/objective-trackers/run.sh` and qualification fixtures. EP-2 owns the real Rei disposable-server test launcher reused by EP-3. Neither harness may silently select the user’s default Rei server or credentials. Multi-provider neutrality is proven with a second deterministic provider, while Rei interoperability is proved with its actual server.
 
@@ -80,7 +94,7 @@ EP-1 consumes the delivered objective transaction and authorization owner. EP-2 
 ## Progress
 
 
-2026-10-29: Planning only. All children are Not Started and implementation waits on MasterPlan 17. The registry owns status. Remaining initiative acceptance is a real disposable Rei roundtrip plus fault/restart qualification through public controls; an adapter mock alone cannot close it.
+2026-10-29 review at `05030629901d7ce95cdcd9aba3b1fa01b25f06c0`: Planning only. Objective modules and the no-Rei qualification runner are still absent; the prerequisite has not advanced. Rei remains at the inspected revision. Review fixes define shared dispatch ownership, both outbox routing callbacks, and the missing attestation contract across all children. All children are Not Started and implementation waits on MasterPlan 17. The registry owns status. Remaining initiative acceptance is a real disposable Rei roundtrip plus fault/restart qualification through public controls; an adapter mock alone cannot close it.
 
 
 ## Surprises & Discoveries
@@ -105,7 +119,17 @@ The existing ReiAction sink claims Rei has no HTTP API and posts to `/v1/agent-a
   Date: 2026-10-29
 
 
+- Decision: Keep delivery execution in EP-1 and make evidence-based attestation a shared command consumed by EP-2 and EP-3.
+  Rationale: Deterministic conformance must exercise the production state machine, and a real lost response must have a supported recovery path without inventing proof or retrying an append. Destination routing includes post-success reconciliation as well as dispatch.
+  Date: 2026-10-29
+
+
 ## Outcomes & Retrospective
 
 
 (To be filled during and after implementation; no runtime acceptance is claimed.)
+
+
+## Revision Notes
+
+2026-10-29: Reviewed all three children against the working tree and the Mori-located Rei source. Retained decomposition and whole-plan prerequisites; clarified shared execution ownership, mixed-outbox routing and audited delivery attestation, cascading acceptance to plans 103–105 and ADR 0069. No implementation or live interoperability is claimed.

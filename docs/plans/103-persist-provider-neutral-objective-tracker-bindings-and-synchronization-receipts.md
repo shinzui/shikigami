@@ -11,6 +11,18 @@ provenance:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-10-29T13:15:58Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-30T03:15:57Z
+      verdict: "approved"
+      note: "Reviewed and refreshed dispatch ownership, destination routing and audited attestation; ready subject to unchanged prerequisites."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-30T03:15:57Z
+      mode: "update"
+      note: "Clarify shared dispatch and evidence-based delivery attestation; preserve planning status and hard dependencies."
 ---
 
 # Persist provider-neutral objective tracker bindings and synchronization receipts
@@ -96,9 +108,13 @@ Apply/reject commands for proposals include a stable operation key, binding revi
 
 ### Milestone 3 — Recovery and provider conformance
 
+Implement `shikigami-core/src/Shikigami/Objective/Tracker/Dispatch.hs` as the shared provider-injected executor for attempt admission, dispatch, outcome persistence and reconciliation. The deterministic providers below call this production executor; plan 104 supplies process scheduling and the Rei implementation without reimplementing its retry rules.
+
 Add `Tracker/Conformance.hs` in test support or the existing test tree: run the same contract cases against two deterministic providers, one with server-key deduplication and one with append-only non-idempotent writes. Define the application receipt states `Pending`, `Attempting`, `Delivered`, `Rejected`, `Conflict`, `Unknown` and `Suppressed`. Before network dispatch persist the exact attempt and binding fence; an expired attempt claim becomes Unknown unless a remote idempotency guarantee permits the original request to be safely replayed. A local lease alone never proves a request was not sent. Persist delivered remote ID and digest before transport acknowledgement. Crash after remote acknowledgement but before receipt persistence must remain recoverable as Unknown, never Pending.
 
-Unknown work is quarantined from automatic transport retry, retaining its payload and attempt. Returning transport success to retire a quarantined outbox row only acknowledges quarantine; the independent delivery receipt remains Unknown and public inspection must show that. For ordered non-idempotent publication, an unknown earlier attempt blocks later sends for that binding; other bindings continue. Proven-applied reconciliation retains the remote receipt. Proven-not-applied allows a new actual attempt under the original logical operation only if no earlier request can still arrive; an empty eventually consistent read is insufficient. Otherwise remain Unknown. Operator acknowledgement may suppress further publication with an audited reason but cannot claim delivery or non-application. Do not introduce a force-resend control for uncertain effects.
+Unknown work is quarantined from automatic transport retry, retaining its payload and attempt. Returning transport success to retire a quarantined outbox row only acknowledges quarantine; the independent delivery receipt remains Unknown and public inspection must show that. For ordered non-idempotent publication, an unknown earlier attempt blocks later sends for that binding; other bindings continue. Proven-applied reconciliation retains the remote receipt. Proven-not-applied allows a new actual attempt under the original logical operation only if no earlier request can still arrive; an empty eventually consistent read is insufficient. Otherwise remain Unknown. Operator acknowledgement may suppress further publication with an audited reason but cannot claim delivery or non-application. Do not introduce a force-resend control for uncertain effects. Suppressing future publication is separate from outcome certainty: an existing Unknown receipt stays Unknown and retains the ordering barrier until reconciled.
+
+Define `attest-delivery` in the closed command sum now, rather than leaving plan 104’s recovery path to an ad hoc operator procedure. Its immutable request includes publication and attempt IDs, connection incarnation, exact remote receipt ID, retained provider-verification evidence and payload digest, expected receipt revision and bounded reason. Reconciliation first fetches and retains remote resource/payload verification outside the transaction. The attestation transaction rechecks that evidence against the original request and current receipt, authenticates the actor with explicit operator reconciliation permission, and atomically retains the attestation and Delivered receipt with evidence kind `operator-attested`. Provider-proved delivery has a distinct evidence kind. A marker, free-text reason or operator role alone is insufficient; attestation cannot assert non-application or authorize retry. Test unauthorized actors, wrong resource/digest/incarnation, stale receipt revisions, absent verification, conflicting reuse of an operation key and identical replay after acknowledgement loss.
 
 Ordered source positions must never decrease within a connection incarnation. Equal position with different bytes is a visible conflict; lower positions are ignored with retained diagnostics. Advances with identical mapped fields update the observation watermark without issuing another objective command. Our outbound action echoes do not create new import proposals. Polling retains bounded work and resumes by binding; it does not assume webhook delivery or a global monotone feed. Acceptance includes rebinding with a stale worker, projection lag, pause/revocation, unknown blocked ordering, cross-binding isolation, and unchanged behavior with tracking disabled.
 
@@ -156,3 +172,8 @@ Keep durable protocol readers and apply additive migrations. Retain binding gene
 
 
 Hard prerequisite: [MasterPlan 17](../masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md) Complete. This plan owns the contracts and transaction seams described above; [plan 104](104-adapt-rei-intentions-and-actions-to-objective-tracker-contracts.md) supplies the production provider, and [plan 105](105-expose-and-qualify-recoverable-external-objective-synchronization.md) supplies public commands. The existing Keiro outbox and checked catalog are located through `mori://shinzui/keiro`; use public APIs as demonstrated by `Sink/Intent.hs`, never framework-table SQL. No Rei package dependency is introduced here.
+
+
+## Revision Notes
+
+2026-10-29: MasterPlan 18 review clarified shared dispatch ownership and the supported evidence-based attestation path, including negative and replay acceptance. The whole-child prerequisites and planning-only status remain unchanged.
