@@ -11,8 +11,8 @@ module Shikigami.ObjectiveLifecycle.Generated.Transducer
 
 import Shikigami.ObjectiveLifecycle.Generated.Domain
 import Data.Text (Text)
-import Shikigami.Generated.NominalProjections qualified as NominalProjections
-import Shikigami.Objective.Types (ObjectiveId)
+import Shikigami.Generated.Nominals (ObjectiveId)
+import Shikigami.Generated.Nominals qualified as GeneratedNominals
 import Keiki.Builder qualified as B
 import Keiki.Core (HsPred, SymTransducer, (.==), (.>), (.&&))
 import Keiki.Core qualified as K
@@ -38,8 +38,8 @@ objectiveLifecycleTransducer =
         B.goto ObjectiveLifecyclePresent
     B.from ObjectiveLifecyclePresent do
       B.onCmd inCtorApplyObjectiveTransition $ \d -> B.do
-        let commandObjectiveId = K.inpProj NominalProjections.objectiveIdentityWitness inCtorApplyObjectiveTransition (#objectiveId :: K.Index (RegFieldsOf ApplyObjectiveTransitionData) ObjectiveId)
-            registerObjectiveId = K.regProj NominalProjections.objectiveIdentityWitness (#objectiveId :: K.Index ObjectiveLifecycleRegs ObjectiveId)
+        let commandObjectiveId = K.inpProj GeneratedNominals.objectiveIdEqualityWitness inCtorApplyObjectiveTransition (#objectiveId :: K.Index (RegFieldsOf ApplyObjectiveTransitionData) ObjectiveId)
+            registerObjectiveId = K.regProj GeneratedNominals.objectiveIdEqualityWitness (#objectiveId :: K.Index ObjectiveLifecycleRegs ObjectiveId)
         B.requireGuard $
           (commandObjectiveId .== registerObjectiveId
           .&& d.expected .== B.reg @"revision")
@@ -58,7 +58,7 @@ objectiveLifecycleTransducer =
     _ -> False
 
 objectiveLifecycleFoldFingerprint :: Text
-objectiveLifecycleFoldFingerprint = "eea6752a22573dfc3c3ef701a3189dbe"
+objectiveLifecycleFoldFingerprint = "f36259bde91df3202d0d3fd6ddf14188"
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)

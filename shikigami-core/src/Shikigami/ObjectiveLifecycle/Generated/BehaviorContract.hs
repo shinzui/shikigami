@@ -131,17 +131,17 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- ObjectiveLifecycleMissing x CreateObjective: live transition
+  [ -- ObjectiveLifecyclePresent x ApplyObjectiveTransition: live transition
     BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-1ce7f8d93df9e812"
+      { key = BehaviorKey "behavior-v1-42913b8f19bc7b4b"
       , kind = LiveTransition
       , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardTotal
-      , source = ObjectiveLifecycleMissing
-      , commandName = "CreateObjective"
-      , expectedEdge = (Just (K.EdgeRef ObjectiveLifecycleMissing 0))
+      , guardCoverage = GuardUnknown
+      , source = ObjectiveLifecyclePresent
+      , commandName = "ApplyObjectiveTransition"
+      , expectedEdge = (Just (K.EdgeRef ObjectiveLifecyclePresent 0))
       , target = Just ObjectiveLifecyclePresent
-      , eventKinds = ["ObjectiveCreated"]
+      , eventKinds = ["ObjectiveTransitionApplied"]
       }
   , -- ObjectiveLifecyclePresent x CreateObjective: required rejection
     BehaviorRequirement
@@ -167,17 +167,17 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
-  , -- ObjectiveLifecyclePresent x ApplyObjectiveTransition: live transition
+  , -- ObjectiveLifecycleMissing x CreateObjective: live transition
     BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-e525daa23e3f754a"
+      { key = BehaviorKey "behavior-v1-adf83e7176c29279"
       , kind = LiveTransition
       , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ObjectiveLifecyclePresent
-      , commandName = "ApplyObjectiveTransition"
-      , expectedEdge = (Just (K.EdgeRef ObjectiveLifecyclePresent 0))
+      , guardCoverage = GuardTotal
+      , source = ObjectiveLifecycleMissing
+      , commandName = "CreateObjective"
+      , expectedEdge = (Just (K.EdgeRef ObjectiveLifecycleMissing 0))
       , target = Just ObjectiveLifecyclePresent
-      , eventKinds = ["ObjectiveTransitionApplied"]
+      , eventKinds = ["ObjectiveCreated"]
       }
   ]
 

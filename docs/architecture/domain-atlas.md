@@ -104,7 +104,7 @@ stateDiagram-v2
 stateDiagram-v2
     [*] --> ObjectiveLifecycleMissing
     ObjectiveLifecycleMissing --> ObjectiveLifecyclePresent : CreateObjective / ObjectiveCreated<br/>u: objectiveId := CreateObjective.objectiveId, (keep)<br/>g: CreateObjective
-    ObjectiveLifecyclePresent --> ObjectiveLifecyclePresent : ApplyObjectiveTransition / ObjectiveTransitionApplied<br/>u: revision := ApplyObjectiveTransition.revision, (keep)<br/>g: (ApplyObjectiveTransition &amp;&amp; ((ApplyObjectiveTransition.objectiveId.ObjectiveIdentity == objectiveId.ObjectiveIdentity &amp;&amp; ApplyObjectiveTransition.expected == revision) &amp;&amp; ApplyObjectiveTransition.revision ＞ revision))
+    ObjectiveLifecyclePresent --> ObjectiveLifecyclePresent : ApplyObjectiveTransition / ObjectiveTransitionApplied<br/>u: revision := ApplyObjectiveTransition.revision, (keep)<br/>g: (ApplyObjectiveTransition &amp;&amp; ((ApplyObjectiveTransition.objectiveId.ObjectiveId == objectiveId.ObjectiveId &amp;&amp; ApplyObjectiveTransition.expected == revision) &amp;&amp; ApplyObjectiveTransition.revision ＞ revision))
 ```
 
 ## Run evidence

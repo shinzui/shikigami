@@ -18,7 +18,15 @@ tests :: TestTree
 tests =
   testGroup
     "Objectives"
-    [ testCase "bounded graphs reject cycles, duplicates and dangling dependencies" do
+    [ testCase "objective identity admits only its canonical TypeID-v7 domain" do
+        let canonical = "shikigami_objective_01h455vb4pex5vsknk084sn02q"
+        identifier <- either (assertFailure . show) pure (parseObjectiveId canonical)
+        objectiveIdText identifier @?= canonical
+        Aeson.toJSON identifier @?= Aeson.String canonical
+        mapM_
+          (assertBool "invalid objective identity refused" . either (const True) (const False) . parseObjectiveId)
+          ["", "objective-digest", "shikigami_run_evidence_01h455vb4pex5vsknk084sn02q", "SHIKIGAMI_OBJECTIVE_01h455vb4pex5vsknk084sn02q", "shikigami_objective_0000000000a000000000000000"],
+      testCase "bounded graphs reject cycles, duplicates and dangling dependencies" do
         validateGraph [draft "a" [], draft "b" [ObjectiveAssignmentId "a"]] @?= Right ()
         mapM_
           (assertBool "graph refused" . either (const True) (const False) . validateGraph)
@@ -46,7 +54,7 @@ tests =
     proposal = CompletionProposal 0 0 0 ["artifact"] ["check"] []
     assignment = Assignment (draft "a" [] & #state .~ Done) 0 0 0 []
     evidence = Evidence (Attestation "check" "human" "artifact" "reviewed" False) (EvidenceVerification CheckPassed (Just "human") False) (ObjectiveAssignmentId "a") (assignmentMeaning assignment) actor 0 0 0
-    objective = Objective (ObjectiveId "fixture") actor [Member actor [Owner]] "title" "goal" "instructions" 1 0 0 [criterion] Open [assignment] [evidence] [] [] [] [] [] (Just (proposal, actor)) Nothing
+    objective = Objective (either (error . show) id (parseObjectiveId "shikigami_objective_01h455vb4pex5vsknk084sn02q")) actor [Member actor [Owner]] "title" "goal" "instructions" 1 0 0 [criterion] Open [assignment] [evidence] [] [] [] [] [] (Just (proposal, actor)) Nothing
 
 draft :: Text -> [ObjectiveAssignmentId] -> AssignmentDraft
 draft key dependencies = AssignmentDraft (ObjectiveAssignmentId key) "work" dependencies (compatibilityIdentity "worker") Pending Nothing (Just (ExecutionRootId "root")) (Just (UTCTime (fromGregorian 2027 1 1) 0))

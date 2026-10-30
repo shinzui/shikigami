@@ -32,7 +32,7 @@ Review and fix every applicable Haskell and service-architecture guideline acros
 
 ## Surprises & Discoveries
 
-The native Relay query formatter owns a public JSON error protocol. Rewriting its response through private WAI constructors concealed that contract and was removed. Static configuration discovery previously read sources before selecting its static diagnostic; a FIFO exposes the resulting block. Both shared and interactive loaders now select static diagnostics before IO. The domain identity review found that ObjectiveId is application-owned and cannot be accepted as an arbitrary-text technical identity. That correction and the complete scalar/newtype review remain open.
+The native Relay query formatter owns a public JSON error protocol. Rewriting its response through private WAI constructors concealed that contract and was removed. Static configuration discovery previously read sources before selecting its static diagnostic; a FIFO exposes the resulting block. Both shared and interactive loaders now select static diagnostics before IO. The domain identity review found that ObjectiveId is application-owned and cannot be accepted as an arbitrary-text technical identity. The correction uses a generated checked TypeID-v7 domain while the atomic creator-scoped receipt remains the deduplication authority (ADR-73). The complete scalar/newtype review remains open.
 
 ## Decision Log
 

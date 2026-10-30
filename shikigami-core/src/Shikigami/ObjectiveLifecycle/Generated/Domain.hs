@@ -6,8 +6,7 @@ import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Keiki.Core (RegFile (..))
-import Shikigami.DomainBindings qualified as DomainBindings
-import Shikigami.Objective.Types (ObjectiveId)
+import Shikigami.Generated.Nominals (ObjectiveId, parseObjectiveId)
 import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)
 
 data ObjectiveLifecycleVertex = ObjectiveLifecycleMissing | ObjectiveLifecyclePresent
@@ -54,7 +53,7 @@ type ObjectiveLifecycleRegs =
 
 initialObjectiveLifecycleRegs :: RegFile ObjectiveLifecycleRegs
 initialObjectiveLifecycleRegs =
-  RCons (Proxy @"objectiveId") DomainBindings.initialObjectiveIdentity $
+  RCons (Proxy @"objectiveId") (case parseObjectiveId "shikigami_objective_01h455vb4pex5vsknk084sn02q" of Right parsed -> parsed; Left _ -> error "generated valid ID sample failed to parse") $
   RCons (Proxy @"revision") 0 RNil
 
 $(deriveAggregateCtorsAll ''ObjectiveLifecycleCommand ''ObjectiveLifecycleRegs)

@@ -6,17 +6,16 @@ module Shikigami.ObjectiveLifecycle.Generated.Codec (
 ) where
 
 import Shikigami.ObjectiveLifecycle.Generated.Domain
+import Shikigami.Generated.Nominals (objectiveIdText)
+import Shikigami.Generated.Nominals.Internal (unsafeObjectiveIdFromLegacyText)
 import Data.Aeson (Value, object, withObject, (.:), (.=))
 import Data.Aeson.Types (parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as T
-import Keiro.Codec.Nominal (nominalFromRepresentation, nominalToRepresentation)
 import Keiro.Codec (Codec (..), EventType (..))
 
-
-import Shikigami.DomainBindings qualified as DomainBindings
 
 
 
@@ -42,12 +41,12 @@ encodeObjectiveLifecycleEvent = \case
   ObjectiveCreated payload ->
     object
       [ "kind" .= ("ObjectiveCreated" :: Text)
-      , "objectiveId" .= nominalToRepresentation DomainBindings.objectiveIdentityBinding payload.objectiveId
+      , "objectiveId" .= objectiveIdText payload.objectiveId
       ]
   ObjectiveTransitionApplied payload ->
     object
       [ "kind" .= ("ObjectiveTransitionApplied" :: Text)
-      , "objectiveId" .= nominalToRepresentation DomainBindings.objectiveIdentityBinding payload.objectiveId
+      , "objectiveId" .= objectiveIdText payload.objectiveId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       , "fingerprint" .= payload.fingerprint
@@ -61,12 +60,12 @@ parseObjectiveLifecycleEvent (EventType tag) = mapLeftText . parseEither (withOb
         "ObjectiveCreated" ->
           ObjectiveCreated
             <$> ( ObjectiveCreatedData
-                    <$> (nominalFromRepresentation DomainBindings.objectiveIdentityBinding <$> o .: "objectiveId")
+                    <$> (unsafeObjectiveIdFromLegacyText <$> o .: "objectiveId")
                 )
         "ObjectiveTransitionApplied" ->
           ObjectiveTransitionApplied
             <$> ( ObjectiveTransitionAppliedData
-                    <$> (nominalFromRepresentation DomainBindings.objectiveIdentityBinding <$> o .: "objectiveId")
+                    <$> (unsafeObjectiveIdFromLegacyText <$> o .: "objectiveId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                     <*> o .: "fingerprint"

@@ -27,6 +27,7 @@ import Data.ByteString.Lazy qualified as Lazy
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.Int (Int64)
+import Data.KindID qualified as KindID
 import Data.List (find, nub)
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
@@ -128,7 +129,8 @@ readVersion :: (ObjectiveEffects es) => Access -> WS.ObjectiveRef -> Eff es (Eit
 readVersion access reference = protected do
   unless (reference.provider == "shikigami-objective-v1") (abort ObjectiveMissing)
   (objective, assignment) <- Tx.statement reference.key selectReference >>= maybe (abort ObjectiveMissing) pure
-  current <- locked (ObjectiveId objective)
+  identifier <- either (const (abort ObjectiveUnavailable)) pure (parseObjectiveId objective)
+  current <- locked identifier
   checkAccess access current
   require (versionFor current (ObjectiveAssignmentId assignment))
 
@@ -136,21 +138,22 @@ readReceipt :: (ObjectiveEffects es) => Access -> ObjectiveId -> OperationId -> 
 readReceipt access objective operation = protected do
   current <- locked objective
   checkAccess access current
-  fmap snd <$> Tx.statement (objective.value, (operationKey operation)) selectReceipt
+  fmap snd <$> Tx.statement ((objectiveIdText objective), (operationKey operation)) selectReceipt
 
 lookupCommandReceipt :: (ObjectiveEffects es) => Access -> ObjectiveId -> OperationId -> Mutation -> Eff es (Either ObjectiveError (Maybe (Either ObjectiveError Receipt)))
 lookupCommandReceipt access objective operation mutation = protected do
   current <- locked objective
   checkAccess access current
   unless (authorized access current mutation) (abort ObjectiveDenied)
-  fmap snd <$> Tx.statement (objective.value, operationKey operation) selectReceipt
+  fmap snd <$> Tx.statement ((objectiveIdText objective), operationKey operation) selectReceipt
 
 create :: (ObjectiveEffects es) => Access -> OperationId -> Maybe CreationOrigin -> CreateRequest -> IO (Either ObjectiveError ()) -> Eff es (Either ObjectiveError Receipt)
 create access operation origin request verifyOrigin = guarded do
   unless (creationAllowed access.settings access.actor) (throwIO (Abort ObjectiveDenied))
   unless (validKey (operationKey operation)) (throwIO (Abort (ObjectiveInvalid "invalid operation key")))
+  allocated <- KindID.toText <$> KindID.genKindID @"shikigami_objective"
+  identifier <- either (const (throwIO (Abort ObjectiveUnavailable))) pure (parseObjectiveId allocated)
   let creator = versionedDigest "shikigami.objective-creator/1" (toJSON access.actor)
-      identifier = ObjectiveId ("objective-" <> versionedDigest "shikigami.objective-id/1" (toJSON (access.actor, operation)))
       fingerprint = versionedDigest "shikigami.objective-create/1" (toJSON (access.actor, operation, origin, request))
       initial = Objective identifier access.actor [Member access.actor [Owner, Coordinator, Completer]] request.title request.goal request.instructions 0 0 0 request.criteria Open [] [] [] [] [] request.external [] Nothing Nothing
       payload = toJSON (request, origin, initial)
@@ -181,10 +184,10 @@ create access operation origin request verifyOrigin = guarded do
         when (isJust old) (throw Retry)
         now <- Tx.statement () currentTime
         unless (now < access.expiresAt && creationAllowed access.settings access.actor) (abort ObjectiveDenied)
-        Tx.statement (identifier.value, initial) insertObjective
+        Tx.statement ((objectiveIdText identifier), initial) insertObjective
         writePayload identifier digest payload
         writeReceipt receipt (Right receipt)
-        Tx.statement (creator, (operationKey operation), identifier.value, fingerprint, toJSON origin, receipt) insertOrigin
+        Tx.statement (creator, (operationKey operation), (objectiveIdText identifier), fingerprint, toJSON origin, receipt) insertOrigin
       recovered <- lookupOriginal
       pure case recovered of Right (Just old) -> Right old; Left err -> Left err; _ -> result >> Left ObjectiveUnresolved
 
@@ -201,7 +204,7 @@ execute access identifier expected operation mutation = guarded do
       current <- locked identifier
       checkAccess access current
       unless (authorized access current mutation) (abort ObjectiveDenied)
-      old <- Tx.statement (identifier.value, (operationKey operation)) selectReceipt
+      old <- Tx.statement ((objectiveIdText identifier), (operationKey operation)) selectReceipt
       case old of
         Just (digest, outcome) -> pure (Left (if digest == fingerprint then outcome else Left ObjectiveConflict))
         Nothing -> do
@@ -211,7 +214,7 @@ execute access identifier expected operation mutation = guarded do
           case next of
             Left err | err == ObjectiveUnavailable -> pure (Left (Left err))
             Left err -> do
-              Tx.statement (identifier.value, (operationKey operation), fingerprint, Left err :: Either ObjectiveError Receipt) insertReceipt
+              Tx.statement ((objectiveIdText identifier), (operationKey operation), fingerprint, Left err :: Either ObjectiveError Receipt) insertReceipt
               pure (Left (Left err))
             Right _ -> pure (Right current)
     loop remaining
@@ -229,7 +232,7 @@ execute access identifier expected operation mutation = guarded do
                 checkAccess access current
                 unless (authorized access current mutation) (abort ObjectiveDenied)
                 unless (current.revision == before.revision) (throw Retry)
-                old <- Tx.statement (identifier.value, (operationKey operation)) selectReceipt
+                old <- Tx.statement ((objectiveIdText identifier), (operationKey operation)) selectReceipt
                 when (isJust old) (throw Retry)
                 now <- Tx.statement () currentTime
                 validateSources current mutation >>= require
@@ -240,8 +243,8 @@ execute access identifier expected operation mutation = guarded do
                 saveSnapshot next
                 writePayload identifier digest payload
                 case mutation of
-                  Internal (IngestCheckpoint assignment intent _ _) -> Tx.statement (identifier.value, assignment.value, intent.sessionId.value, fromInteger intent.throughCursor) saveCursor
-                  Public (BindConversation conversation) -> Tx.statement (conversation, identifier.value, toJSON receipt) bindConversation
+                  Internal (IngestCheckpoint assignment intent _ _) -> Tx.statement ((objectiveIdText identifier), assignment.value, intent.sessionId.value, fromInteger intent.throughCursor) saveCursor
+                  Public (BindConversation conversation) -> Tx.statement (conversation, (objectiveIdText identifier), toJSON receipt) bindConversation
                   _ -> pure ()
                 writeReceipt receipt (Right receipt)
               case applied of
@@ -388,7 +391,7 @@ validateSources objective mutation = do
     Internal (IngestCheckpoint key intent inputs _) -> do
       storedIntent <- Tx.statement (intent.sessionId.value, operationKey intent.operationId) selectCheckpoint
       let original = storedIntent >>= \value -> case Aeson.fromJSON value of Aeson.Success decoded -> Just decoded; _ -> Nothing
-      cursor <- fromMaybe 0 <$> Tx.statement (objective.objectiveId.value, key.value, intent.sessionId.value) selectCursor
+      cursor <- fromMaybe 0 <$> Tx.statement ((objectiveIdText objective.objectiveId), key.value, intent.sessionId.value) selectCursor
       case find ((== key) . (.definition.assignmentId)) objective.assignments of
         Just assignment -> pure do
           unless (assignment.definition.sessionId == Just intent.sessionId && intent.actor `matchesActor` objective && original == Just intent && intent.objective == referenceFor objective.objectiveId key && cursor == intent.previousCursor && intent.throughCursor > cursor && intent.throughCursor - cursor <= 100 && map (.cursor) intent.events == [cursor + 1 .. intent.throughCursor]) (Left ObjectiveConflict)
@@ -406,18 +409,18 @@ referenceFor :: ObjectiveId -> ObjectiveAssignmentId -> WS.ObjectiveRef
 referenceFor objective assignment = WS.ObjectiveRef "shikigami-objective-v1" (versionedDigest "shikigami.objective-assignment-ref/1" (toJSON (objective, assignment)))
 
 locked :: ObjectiveId -> Transaction Objective
-locked identifier = Tx.statement identifier.value lockObjective >>= maybe (abort ObjectiveMissing) pure
+locked identifier = Tx.statement (objectiveIdText identifier) lockObjective >>= maybe (abort ObjectiveMissing) pure
 
 saveSnapshot :: Objective -> Transaction ()
 saveSnapshot objective = do
-  Tx.statement (objective.objectiveId.value, objective) updateObjective
-  forM_ objective.assignments \assignment -> Tx.statement (objective.objectiveId.value, assignment.definition.assignmentId.value, (referenceFor objective.objectiveId assignment.definition.assignmentId).key, assignment) saveAssignment
+  Tx.statement ((objectiveIdText objective.objectiveId), objective) updateObjective
+  forM_ objective.assignments \assignment -> Tx.statement ((objectiveIdText objective.objectiveId), assignment.definition.assignmentId.value, (referenceFor objective.objectiveId assignment.definition.assignmentId).key, assignment) saveAssignment
 
 writePayload :: ObjectiveId -> Text -> Aeson.Value -> Transaction ()
-writePayload objective digest payload = Tx.statement (objective.value, digest, payload) insertPayload
+writePayload objective digest payload = Tx.statement ((objectiveIdText objective), digest, payload) insertPayload
 
 writeReceipt :: Receipt -> Either ObjectiveError Receipt -> Transaction ()
-writeReceipt receipt outcome = Tx.statement (receipt.objectiveId.value, operationKey receipt.operationId, receipt.fingerprint, outcome) insertReceipt
+writeReceipt receipt outcome = Tx.statement ((objectiveIdText receipt.objectiveId), operationKey receipt.operationId, receipt.fingerprint, outcome) insertReceipt
 
 -- A rejected Keiro command or concurrent duplicate is retried through the locked
 -- inspector. Transport failure remains unavailable/uncertain, never a rejection.
@@ -425,7 +428,7 @@ persist :: (ObjectiveEffects es) => ObjectiveId -> G.ObjectiveLifecycleCommand -
 persist objective command action = guarded do
   let (catalog, projections) = withLiveObjective (\_ _ -> action)
   options <- commandOptions
-  outcome <- runCommandWithCatalogProjections options objectiveLifecycleEventStream (Stream.entityStream objectiveLifecycleCategory objective.value) command catalog projections
+  outcome <- runCommandWithCatalogProjections options objectiveLifecycleEventStream (Stream.entityStream objectiveLifecycleCategory (objectiveIdText objective)) command catalog projections
   pure case outcome of
     Right (ProjectionCommandApplied _) -> Right ()
     Right _ -> Left ObjectiveUnavailable

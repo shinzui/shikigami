@@ -2,14 +2,7 @@ language keiro-dsl 6
 context shikigami
 layout collocated
 
-mapped nominal ObjectiveIdentity : Text {
-  haskell package=shikigami-core module=Shikigami.Objective.Types type=ObjectiveId
-  binding = "Shikigami.DomainBindings.objectiveIdentityBinding"
-  binding-version = "1"
-  canonical-type = "shikigami.ObjectiveId.v1"
-  fixtures = "Shikigami.DomainBindings.objectiveIdentityCases"
-  initial = "Shikigami.DomainBindings.initialObjectiveIdentity"
-}
+id ObjectiveId prefix=shikigami_objective
 
 target objective_rows {
   schema = "shikigami"
@@ -79,11 +72,11 @@ readmodel objective_lookup {
 
 aggregate ObjectiveLifecycle
   regs
-    objectiveId ObjectiveIdentity = initial
+    objectiveId ObjectiveId = placeholder
     revision Int = 0
   states Missing Present
-  command CreateObjective { objectiveId:ObjectiveIdentity }
-  command ApplyObjectiveTransition { objectiveId:ObjectiveIdentity expected:Int revision:Int fingerprint:Text }
+  command CreateObjective { objectiveId:ObjectiveId }
+  command ApplyObjectiveTransition { objectiveId:ObjectiveId expected:Int revision:Int fingerprint:Text }
   event ObjectiveCreated = fields(CreateObjective)
   event ObjectiveTransitionApplied = fields(ApplyObjectiveTransition)
 

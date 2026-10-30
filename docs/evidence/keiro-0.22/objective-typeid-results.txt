@@ -1,0 +1,7 @@
+ExecPlan 107 ObjectiveId first-release correction; source parent 596bf36.
+Strict differ exited 1 as expected: two EvtFieldTypeChanged breaking findings, one added ID declaration, removed nominal binding and ObjectiveLifecycle fold warning. Reports retained separately.
+Only ObjectiveLifecycle fold changes: eea6752a22573dfc3c3ef701a3189dbe -> f36259bde91df3202d0d3fd6ddf14188. Other three unchanged.
+Core pure: all 542 tests passed.
+Core PostgreSQL: all 375 tests passed serially (103.15s), no DB skip. Includes canonical generated ID parsing, concurrent creator-scoped creation, one native category event, full origin rollback, lost acknowledgement/process-exit receipt recovery and checkpoint authority cases.
+An initial unbounded-parallel invocation exceeded fixture PostgreSQL connection limits and was rejected; it is not acceptance evidence.
+Generated service conformance: 156 assertions passed. All 6 diagram tests passed after regeneration.

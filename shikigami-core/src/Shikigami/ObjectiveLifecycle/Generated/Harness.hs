@@ -5,12 +5,9 @@ module Shikigami.ObjectiveLifecycle.Generated.Harness (harnessAssertions) where
 import Shikigami.ObjectiveLifecycle.Generated.Domain
 import Shikigami.ObjectiveLifecycle.Generated.Codec (encodeObjectiveLifecycleEvent, parseObjectiveLifecycleEvent, objectiveLifecycleCodec)
 import Shikigami.ObjectiveLifecycle.Generated.Transducer (objectiveLifecycleTransducer)
-import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, fieldWitnessAgrees, (!))
+import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, (!))
 import Keiro.Codec (eventType)
-import Data.List.NonEmpty qualified as NonEmpty
-import Keiro.Codec.Nominal (nominalDomainRoundTrip, nominalFixtureCases, nominalFixtureDomain, nominalRepresentationRoundTrip, nominalToRepresentation)
-import Shikigami.Generated.NominalProjections qualified as NominalProjections
-import Shikigami.DomainBindings qualified as DomainBindings
+import Shikigami.Generated.Nominals (ObjectiveId, parseObjectiveId)
 
 -- | (label, passed). A driver runs these and exits non-zero on any False,
 -- naming the failing assertion. Filling a hole wrongly turns a specific
@@ -23,21 +20,26 @@ harnessAssertions =
   , ("golden round-trip: ObjectiveTransitionApplied", roundTrips sampleEventObjectiveTransitionApplied)
   , ("accepts CreateObjective from ObjectiveLifecycleMissing", acceptCreateObjective)
   ]
-  ++ nominalConformanceAssertions
   ++ forwardReplayCreateObjective
 
 roundTrips :: ObjectiveLifecycleEvent -> Bool
 roundTrips e = parseObjectiveLifecycleEvent (eventType objectiveLifecycleCodec e) (encodeObjectiveLifecycleEvent e) == Right e
 
+sampleObjectiveId :: ObjectiveId
+sampleObjectiveId =
+  case parseObjectiveId "shikigami_objective_01h455vb4pex5vsknk084sn02q" of
+    Right parsed -> parsed
+    Left problem -> error (show problem)
+
 sampleEventObjectiveCreated :: ObjectiveLifecycleEvent
-sampleEventObjectiveCreated = ObjectiveCreated (ObjectiveCreatedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.objectiveIdentityCases))))
+sampleEventObjectiveCreated = ObjectiveCreated (ObjectiveCreatedData sampleObjectiveId)
 
 sampleEventObjectiveTransitionApplied :: ObjectiveLifecycleEvent
-sampleEventObjectiveTransitionApplied = ObjectiveTransitionApplied (ObjectiveTransitionAppliedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.objectiveIdentityCases))) 0 0 "sample-fingerprint")
+sampleEventObjectiveTransitionApplied = ObjectiveTransitionApplied (ObjectiveTransitionAppliedData sampleObjectiveId 0 0 "sample-fingerprint")
 
 acceptCreateObjective :: Bool
 acceptCreateObjective =
-  case step objectiveLifecycleTransducer (ObjectiveLifecycleMissing, initialObjectiveLifecycleRegs) (CreateObjective (CreateObjectiveData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.objectiveIdentityCases))))) of
+  case step objectiveLifecycleTransducer (ObjectiveLifecycleMissing, initialObjectiveLifecycleRegs) (CreateObjective (CreateObjectiveData sampleObjectiveId)) of
     Just (v, _, _) -> v == ObjectiveLifecyclePresent
     Nothing -> False
 
@@ -45,7 +47,7 @@ acceptCreateObjective =
 -- replay the emitted chain, and compare the final vertex and every register.
 forwardReplayCreateObjective :: [(String, Bool)]
 forwardReplayCreateObjective =
-  case step objectiveLifecycleTransducer (ObjectiveLifecycleMissing, initialObjectiveLifecycleRegs) (CreateObjective (CreateObjectiveData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.objectiveIdentityCases))))) of
+  case step objectiveLifecycleTransducer (ObjectiveLifecycleMissing, initialObjectiveLifecycleRegs) (CreateObjective (CreateObjectiveData sampleObjectiveId)) of
     Nothing -> [(prefix <> "forward step accepted", False)]
     Just (forwardVertex, forwardRegs, emitted) ->
       case mapM (\event -> parseObjectiveLifecycleEvent (eventType objectiveLifecycleCodec event) (encodeObjectiveLifecycleEvent event)) emitted of
@@ -60,10 +62,3 @@ forwardReplayCreateObjective =
               ]
   where
     prefix = "forward/replay equality: CreateObjective from ObjectiveLifecycleMissing -- "
-
-nominalConformanceAssertions :: [(String, Bool)]
-nominalConformanceAssertions =
-  [ ("nominal domain law: ObjectiveIdentity", all (\fixture -> nominalDomainRoundTrip DomainBindings.objectiveIdentityBinding (nominalFixtureDomain fixture)) (NonEmpty.toList (nominalFixtureCases DomainBindings.objectiveIdentityCases)))
-  , ("nominal representation law: ObjectiveIdentity", all (\fixture -> let domainValue = nominalFixtureDomain fixture in nominalRepresentationRoundTrip DomainBindings.objectiveIdentityBinding (nominalToRepresentation DomainBindings.objectiveIdentityBinding domainValue)) (NonEmpty.toList (nominalFixtureCases DomainBindings.objectiveIdentityCases)))
-  , ("nominal projection agreement: ObjectiveIdentity", all (\fixture -> fieldWitnessAgrees NominalProjections.objectiveIdentityWitness (nominalToRepresentation DomainBindings.objectiveIdentityBinding) (nominalFixtureDomain fixture)) (NonEmpty.toList (nominalFixtureCases DomainBindings.objectiveIdentityCases)))
-  ]

@@ -1155,12 +1155,12 @@
         {
           "id": "declared-typeid-admission",
           "disposition": "existing",
-          "rationale": "RunEvidenceId retains generated abstract TypeID-v7 admission. Current domain parser and malformed-ID tests remain active; no raw internal replay constructor is introduced."
+          "rationale": "RunEvidenceId and ObjectiveId use generated abstract TypeID-v7 admission. Objective creation now allocates UUIDv7 while creator-scoped operation receipts deduplicate; canonical/prefix/version tests and atomic concurrent creation pass."
         },
         {
           "id": "technical-identity-bindings",
           "disposition": "implemented",
-          "rationale": "Execution/worker-session/objective technical coordinates now preserve actual newtypes via nominal Text isomorphisms. They are not prefix-bearing TypeID domains; generation/SQL identity is unchanged."
+          "rationale": "Execution and worker-session coordinates preserve their runtime-owned UUIDv5/technical identities via nominal Text bindings. Objective is service-owned and was corrected to generated TypeID-v7 under ADR-73; it is not a technical-identity exception."
         },
         {
           "id": "v5-public-and-keyed-consumers",
@@ -1174,7 +1174,11 @@
         "docs/architecture/shikigami-domain-inventory.md",
         "docs/evidence/keiro-0.22/current-domain-check.json",
         "docs/evidence/keiro-0.22/current-domain-coverage.json",
-        "docs/evidence/keiro-0.22/current-fold-identities.json"
+        "docs/evidence/keiro-0.22/current-fold-identities.json",
+        "docs/adr/0073-objective-identity-is-allocated-and-creation-receipts-own-deduplication.md",
+        "docs/evidence/keiro-0.22/objective-typeid-fold-identities.json",
+        "docs/evidence/keiro-0.22/objective-typeid-reset-diff.json",
+        "docs/evidence/keiro-0.22/objective-typeid-results.txt"
       ]
     },
     {
@@ -1259,7 +1263,7 @@
         {
           "id": "total-existing-domain-isomorphisms",
           "disposition": "implemented",
-          "rationale": "DomainBindings wraps/unwraps Text for existing ExecutionId, WorkerSessionId and ObjectiveId with canonical identity, deterministic edge fixtures and declared empty initials."
+          "rationale": "DomainBindings wraps/unwraps Text for existing runtime-owned ExecutionId and WorkerSessionId with deterministic edge fixtures and declared empty initials. ObjectiveId is now a generated checked TypeID domain, not a nominal Text isomorphism."
         },
         {
           "id": "actual-guards-and-wire",
@@ -1278,7 +1282,11 @@
         "docs/architecture/shikigami-domain-inventory.md",
         "docs/evidence/keiro-0.22/current-domain-check.json",
         "docs/evidence/keiro-0.22/current-domain-coverage.json",
-        "docs/evidence/keiro-0.22/current-fold-identities.json"
+        "docs/evidence/keiro-0.22/current-fold-identities.json",
+        "docs/adr/0073-objective-identity-is-allocated-and-creation-receipts-own-deduplication.md",
+        "docs/evidence/keiro-0.22/objective-typeid-fold-identities.json",
+        "docs/evidence/keiro-0.22/objective-typeid-reset-diff.json",
+        "docs/evidence/keiro-0.22/objective-typeid-results.txt"
       ]
     },
     {

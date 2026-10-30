@@ -16,7 +16,9 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (preparable)
 import Hasql.Transaction qualified as Tx
 import Kiroku.Store.Connection (defaultConnectionSettings)
+import Kiroku.Store.Read qualified as StoreRead
 import Kiroku.Store.Transaction (runTransaction)
+import Kiroku.Store.Types qualified as StoreTypes
 import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests, denyAllActionAuthorizer)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkAgentPrincipal)
@@ -69,9 +71,12 @@ tests fixture =
           (left, rightResult) <- concurrently create create
           first <- right left
           rightResult @?= Right first
+          parseObjectiveId (objectiveIdText first.objectiveId) @?= Right first.objectiveId
+          assertBool "allocated objective uses its owned TypeID prefix" ("shikigami_objective_" `Text.isPrefixOf` objectiveIdText first.objectiveId)
           run env (O.createObjective ownerHost (OperationId "create") (Just origin) request) >>= (@?= Right first)
           count env "shikigami.objectives" >>= (@?= 1)
           count env "shikigami.objective_origins" >>= (@?= 1)
+          objectiveEventCount env >>= (@?= 1)
           current <- get env first.objectiveId
           current.members @?= [Member owner [Owner, Coordinator, Completer]]
           other <- right =<< run env (O.createObjective (host (VerifiedCaller "other")) (OperationId "create") Nothing request)
@@ -83,6 +88,7 @@ tests fixture =
           sql env "CREATE TRIGGER reject_origin BEFORE INSERT ON shikigami.objective_origins FOR EACH ROW EXECUTE FUNCTION shikigami.reject_objective_origin()"
           _ <- try @SomeException (run env (O.createObjective ownerHost (OperationId "create") (Just origin) request))
           mapM_ (\table -> count env table >>= (@?= 0)) ["shikigami.objectives", "shikigami.objective_origins", "shikigami.objective_receipts", "shikigami.objective_payloads"]
+          objectiveEventCount env >>= (@?= 0)
           sql env "DROP TRIGGER reject_origin ON shikigami.objective_origins"
           _ <- right =<< run env (O.createObjective ownerHost (OperationId "create") (Just origin) request)
           count env "shikigami.objectives" >>= (@?= 1),
@@ -395,6 +401,9 @@ assertLeft = either (const (pure ())) (assertFailure . show)
 
 count :: AppEnv -> Text -> IO Int64
 count env table = run env (runTransaction (Tx.statement () (preparable ("SELECT count(*) FROM " <> table) E.noParams (D.singleRow (D.column (D.nonNullable D.int8))))))
+
+objectiveEventCount :: AppEnv -> IO Int
+objectiveEventCount env = run env (length <$> StoreRead.readCategory (StoreTypes.CategoryName "objectiveLifecycle") (StoreTypes.GlobalPosition 0) 100)
 
 sql :: AppEnv -> Text -> IO ()
 sql env statement = run env (runTransaction (Tx.sql (Text.encodeUtf8 statement)))

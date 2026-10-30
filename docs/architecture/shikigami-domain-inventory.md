@@ -39,12 +39,17 @@ law. Hand-written string adapters are removed. `AgentName`, `RunKey` and
 not total isomorphisms over Text/Int. Upstream `SessionId`/`WorkflowId` are opaque
 identities. Queue decoding still reaches these real parsers before execution.
 
-Execution, worker-session and objective aggregate identities now use nominal
-Text bindings to the existing `ExecutionId`, `WorkerSessionId` and `ObjectiveId`
-types. Their total bindings preserve technical identity text, including the empty
-initial sentinel; application admission still enforces real authority and key
-constraints. They are not declared TypeID-v7 values. The three affected aggregates
-have declaration-specific fold changes; RunEvidence's fingerprint is unchanged.
+Execution and worker-session aggregate identities use nominal Text bindings to
+`ExecutionId` and `WorkerSessionId`. They preserve their runtime-owned UUIDv5
+technical coordinates and empty initial sentinel. They are not TypeID-v7 domains.
+
+Objective is an application-owned entity: `ObjectiveId` now uses the generated
+abstract TypeID-v7 domain with prefix `shikigami_objective`. Creation allocates a
+UUIDv7 ID, while creator-scoped operation receipts retain deduplication authority.
+Concurrent losing candidates roll back before recovering the committed receipt.
+[ADR 73](../adr/0073-objective-identity-is-allocated-and-creation-receipts-own-deduplication.md)
+and the retained strict breaking diff describe this first-release correction.
+RunEvidence retains its separate generated TypeID-v7 domain.
 All four current aggregate event streams explicitly use `snapshotPolicy = Never`
 and no state codec, so this change does not claim cache fallback qualification
 for a snapshot consumer that does not exist. Same-build event/journal replay,

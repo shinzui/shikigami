@@ -1,21 +1,17 @@
 -- | Durable values are identities and evidence references, never authority.
 -- Authentication and fresh action decisions belong to Objective.Capability.
-module Shikigami.Objective.Types where
+module Shikigami.Objective.Types (module Shikigami.Objective.Types, ObjectiveId, parseObjectiveId, objectiveIdText) where
 
 import Data.Aeson ((.!=), (.:?))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.List (nub)
 import Data.Text qualified as Text
-import Keiki.Shape (CanonicalTypeName (..))
 import Shikigami.Agent.Principal (AgentIdentity, identityText, mkAgentPrincipal)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
+import Shikigami.Generated.Nominals (ObjectiveId, objectiveIdText, parseObjectiveId)
 import Shikigami.Prelude
 import Shikigami.WorkerSession.Types (AssignmentId, ResultReceipt, WorkerSessionId)
-
-newtype ObjectiveId = ObjectiveId {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
 
 newtype ObjectiveAssignmentId = ObjectiveAssignmentId {value :: Text}
   deriving stock (Eq, Ord, Show, Generic)
@@ -239,6 +235,3 @@ validPrincipal = \case
   VerifiedCaller value -> validKey value
   LocalOperator value -> validKey value
   RecordedAgent identity -> either (const False) validKey (identityText identity)
-
-instance CanonicalTypeName ObjectiveId where
-  canonicalTypeName _ = "shikigami.ObjectiveId.v1"

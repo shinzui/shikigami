@@ -706,7 +706,7 @@
   - output: ObjectiveTransitionApplied
   - output fields: ObjectiveTransitionApplied[field 0: ApplyObjectiveTransition.objectiveId; field 1: ApplyObjectiveTransition.expected; field 2: ApplyObjectiveTransition.revision; field 3: ApplyObjectiveTransition.fingerprint]
   - guard (structural): PAnd PInCtor PAnd PAnd PEq PEq PCmp CmpGt
-  - guard (pretty): (ApplyObjectiveTransition && ((ApplyObjectiveTransition.objectiveId.ObjectiveIdentity == objectiveId.ObjectiveIdentity && ApplyObjectiveTransition.expected == revision) && ApplyObjectiveTransition.revision > revision))
+  - guard (pretty): (ApplyObjectiveTransition && ((ApplyObjectiveTransition.objectiveId.ObjectiveId == objectiveId.ObjectiveId && ApplyObjectiveTransition.expected == revision) && ApplyObjectiveTransition.revision > revision))
   - written slots: revision
 
 # Run evidence

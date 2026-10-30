@@ -7,7 +7,6 @@ import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)
 import Keiro.Codec.Nominal (nominalToRepresentation)
 import Shikigami.DomainBindings qualified as DomainBindings
 import Shikigami.Execution.Transcript (ExecutionId)
-import Shikigami.Objective.Types (ObjectiveId)
 import Shikigami.WorkerSession.Types (WorkerSessionId)
 
 data ExecutionIdentityNominalProjection
@@ -21,18 +20,6 @@ instance FieldProjection ExecutionIdentityNominalProjection where
 
 executionIdentityWitness :: FieldWitness ExecutionIdentityNominalProjection
 executionIdentityWitness = fieldWitness @ExecutionIdentityNominalProjection
-
-data ObjectiveIdentityNominalProjection
-
-instance FieldProjection ObjectiveIdentityNominalProjection where
-  type FieldName ObjectiveIdentityNominalProjection = "ObjectiveIdentity"
-  type FieldOwner ObjectiveIdentityNominalProjection = ObjectiveId
-  type FieldResult ObjectiveIdentityNominalProjection = Text
-  fieldShapeId _ = "shikigami.ObjectiveId.v1"
-  projectFieldValue _ = nominalToRepresentation DomainBindings.objectiveIdentityBinding
-
-objectiveIdentityWitness :: FieldWitness ObjectiveIdentityNominalProjection
-objectiveIdentityWitness = fieldWitness @ObjectiveIdentityNominalProjection
 
 data WorkerSessionIdentityNominalProjection
 

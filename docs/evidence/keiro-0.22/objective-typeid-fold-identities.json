@@ -1,0 +1,26 @@
+[
+  {
+    "aggregate": "ExecutionLifecycle",
+    "before": "dcb54c2c08dc93a15d777f0516cb3bbd",
+    "after": "dcb54c2c08dc93a15d777f0516cb3bbd",
+    "changed": false
+  },
+  {
+    "aggregate": "WorkerSessionLifecycle",
+    "before": "b6c71cca77fae715bdf11f112f991d69",
+    "after": "b6c71cca77fae715bdf11f112f991d69",
+    "changed": false
+  },
+  {
+    "aggregate": "ObjectiveLifecycle",
+    "before": "eea6752a22573dfc3c3ef701a3189dbe",
+    "after": "f36259bde91df3202d0d3fd6ddf14188",
+    "changed": true
+  },
+  {
+    "aggregate": "RunEvidence",
+    "before": "f3498d651a5f18786ed1bb41eb3d4977",
+    "after": "f3498d651a5f18786ed1bb41eb3d4977",
+    "changed": false
+  }
+]

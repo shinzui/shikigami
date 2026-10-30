@@ -1,0 +1,1 @@
+{"aggregates":{"ObjectiveLifecycle":{"eventTypes":["ObjectiveCreated","ObjectiveTransitionApplied"],"includeSnapshotStreams":true}},"verdict":"affected"}
