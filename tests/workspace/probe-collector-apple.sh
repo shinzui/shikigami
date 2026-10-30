@@ -133,9 +133,17 @@ wait_file "$prefix/workspace/command-exited"
 before=$(wc -c <"$prefix/workspace/descendant")
 sleep 0.3
 [[ $(wc -c <"$prefix/workspace/descendant") -gt "$before" && ! -f "$op/complete.json" ]]
+boot=$(cat /proc/sys/kernel/random/boot_id)
+invocation=$(jq -r .invocationId "$op/observed.json")
+if "$prefix/collector" --stop "$unit" "$fingerprint" '22222222-2222-4222-8222-222222222222' "$invocation"; then exit 1; fi
+echo 'PASS a different host boot cannot request cancellation'
+if "$prefix/collector" --stop "$unit" "$fingerprint" "$boot" '33333333333333333333333333333333'; then exit 1; fi
+echo 'PASS a different invocation cannot request cancellation'
+if "$prefix/collector" --stop "$unit" "sha256:$(printf '%064x' 999)" "$boot" "$invocation"; then exit 1; fi
+echo 'PASS a different retained fingerprint cannot request cancellation'
 printf cancel >"$op/cancel"
 sync -f "$op/cancel"
-systemctl stop "$unit"
+"$prefix/collector" --stop "$unit" "$fingerprint" "$boot" "$invocation"
 wait_file "$op/complete.json"
 jq -e '.termination=="ProcessCancelled" and .descendantsEmpty and .outputComplete' "$op/complete.json" >/dev/null
 before=$(wc -c <"$prefix/workspace/descendant")
@@ -166,7 +174,12 @@ echo 'PASS runtime timeout settles the whole group without inventing an unavaila
 prepare 5
 accepted="$fingerprint"
 fingerprint="sha256:$(printf '%064x' 999)"
-launch /bin/payload slow
+# Refusal may close capture before systemd finishes opening the FIFO. Either
+# launch acknowledgement is possible; neither supplies completion evidence.
+if ! launch /bin/payload slow; then
+  [[ $(systemctl show --value -p LoadState "$unit") == loaded ]]
+  [[ $(systemctl show --value -p Description "$unit") == "shikigami-workspace/1 $fingerprint" ]]
+fi
 fingerprint="$accepted"
 wait_file "$op/unresolved.json"
 [[ ! -f "$op/complete.json" && ! -f "$op/observed.json" ]]
@@ -226,5 +239,5 @@ echo 'PASS same-UID repository code cannot write, trace or stop its trusted dead
 if "$prefix/root/bin/deadline" 1 "$(($(date +%s%N) + 1000000000))" -- /bin/true; then exit 1; else [[ $? == 78 ]]; fi
 if "$prefix/root/bin/deadline" 1 999999999999999999999 -- /bin/true; then exit 1; else [[ $? == 64 ]]; fi
 echo 'PASS unsupported execution context and malformed deadline refuse before running a command'
-echo 'Collector and deadline probe passed (14 cases); full supervisor RPC and PostgreSQL integration remain unqualified.'
+echo 'Collector, deadline and cancellation probe passed (17 cases); full supervisor RPC and PostgreSQL integration remain unqualified.'
 GUEST

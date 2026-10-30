@@ -54,7 +54,9 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace accepted process supervisor"
-    [ testCase "independent service recovers facts in the background with no connected worker" $ withProcess fixture id False \file runtime observed calls snapshot reference -> do
+    [ testCase "retained root cancellation requests stop after revocation and never fabricates settlement" $ rootCancellationCase fixture True,
+      testCase "a failed cancellation request remains unresolved and never fabricates settlement" $ rootCancellationCase fixture False,
+      testCase "independent service recovers facts in the background with no connected worker" $ withProcess fixture id False \file runtime observed calls snapshot reference -> do
         Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         let revoked = runtime & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked")) & #authorizer .~ denyAllActionAuthorizer & #selectRule .~ (\_ _ _ -> pure (Left "revoked"))
             waitCommitted = do
@@ -237,6 +239,7 @@ tests fixture =
                       pure result
                   )
                   (const (pure (Right marker)))
+                  runtime.backend.stop
         mapM_
           ( \marker -> withProcess fixture (configure marker) True \file runtime observed calls snapshot reference -> do
               Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
@@ -296,6 +299,7 @@ withProcessForTools toolCount fixture configure acknowledge use = do
               pure (if acknowledge then Right () else Left Systemd.SystemdUncertain)
           )
           (const (pure (Right True)))
+          (const (pure (Right ())))
       makeRuntime file = configure (SupervisorRuntime file.appEnv file.authorizer (const (pure (Right ()))) file.lifecycle select backend)
       install file = adapter (makeRuntime file) observed file
       qualify admission = admission & #filePolicy .~ Just supervisedFilePolicy
@@ -338,3 +342,39 @@ stored file action = right =<< (right =<< runAppIO file.appEnv action)
 
 right :: (Show e) => Either e a -> IO a
 right = either (\err -> assertFailure (show err) >> fail "unreachable") pure
+
+rootCancellationCase :: DatabaseFixture -> Bool -> IO ()
+rootCancellationCase fixture stopAcknowledged = do
+  stops <- newIORef (0 :: Int)
+  directory <- newIORef Nothing
+  let configure runtime =
+        runtime
+          & #backend
+          .~ ( runtime.backend
+                 { launch = \profile files scratch target record -> do
+                     result <- runtime.backend.launch profile files scratch target record
+                     writeIORef directory (Just target)
+                     removeFile (target </> "complete.json")
+                     pure result,
+                   stop = \_ -> do
+                     target <- readIORef directory >>= maybe (fail "missing fixture capture") pure
+                     Bytes.readFile (target </> "cancel") >>= (@?= "1\n")
+                     modifyIORef' stops (+ 1)
+                     pure (if stopAcknowledged then Right () else Left Systemd.SystemdUncertain)
+                 }
+             )
+  withProcess fixture configure True \file runtime observed calls snapshot reference -> do
+    Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+    readIORef stops >>= (@?= 0)
+    Just admission <- pure snapshot.workspace
+    root <- stored file (Roots.inspectRoot admission.rootId)
+    stored file (Roots.setRootControl admission.rootId root.revision True Nothing)
+    let revoked = runtime & #authorizer .~ denyAllActionAuthorizer & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked")) & #selectRule .~ (\_ _ _ -> pure (Left "revoked"))
+    page <- right =<< scanProcessReceipts revoked Nothing
+    page.acknowledged @?= 0
+    page.pending @?= 1
+    readIORef stops >>= (@?= 1)
+    Just retained <- transaction file (Processes.inspectProcessTx reference.operationId)
+    retained.receipt @?= Nothing
+    retained.phase @?= (if stopAcknowledged then ProcessLaunchRequested else ProcessUnresolved)
+    readIORef calls >>= (@?= (1, 1))

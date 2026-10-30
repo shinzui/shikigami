@@ -106,11 +106,12 @@ data SupervisorBackend = SupervisorBackend
   { bootIdentity :: !(IO (Either Systemd.SystemdError Text)),
     capture :: !(Systemd.SystemdProfile -> FilePath -> ProcessRecord -> IO (Either Systemd.SystemdError ())),
     launch :: !(Systemd.SystemdProfile -> FilePath -> FilePath -> FilePath -> ProcessRecord -> IO (Either Systemd.SystemdError ())),
-    collectorActive :: !(ProcessRecord -> IO (Either Systemd.SystemdError Bool))
+    collectorActive :: !(ProcessRecord -> IO (Either Systemd.SystemdError Bool)),
+    stop :: !(ProcessRecord -> IO (Either Systemd.SystemdError ()))
   }
 
 systemdSupervisorBackend :: SupervisorBackend
-systemdSupervisorBackend = SupervisorBackend Systemd.systemdBootIdentity Systemd.startCollector Systemd.startProcess Systemd.collectorActive
+systemdSupervisorBackend = SupervisorBackend Systemd.systemdBootIdentity Systemd.startCollector Systemd.startProcess Systemd.collectorActive Systemd.stopProcess
 
 data AcceptedProcess = AcceptedProcess
   { snapshot :: !ExecutionSnapshot,
@@ -291,6 +292,7 @@ observe runtime binding record = do
     ProcessRefused -> pure record
     ProcessSettled -> pure record
     _ -> do
+      stopControlled runtime binding record directory
       receipt <- reconcileCollector runtime.appEnv directory record
       case receipt of
         Left _ -> do
@@ -304,6 +306,34 @@ observe runtime binding record = do
             pure ()
         Right (Just _) -> pure ()
       transact runtime (Processes.inspectProcessTx record.operationId) >>= maybe (abort SupervisorUnavailable) pure
+
+-- Retained root control and the original cutoff govern already admitted work.
+-- Failure to read current control never invents a stop decision or prevents
+-- factual receipt recovery. The private cancellation marker precedes the stop
+-- request; neither is a receipt or permission to reuse this workspace.
+stopControlled :: SupervisorRuntime -> WorkspaceBinding -> ProcessRecord -> FilePath -> IO ()
+stopControlled runtime binding record directory = do
+  now <- getCurrentTime
+  root <- runAppIO runtime.appEnv (Roots.inspectRoot binding.request.rootId)
+  let controlled =
+        now >= record.deadline || case root of
+          Right (Right currentRoot) -> isLeft (Resources.checkRoot now currentRoot.revision currentRoot)
+          _ -> False
+  when controlled do
+    needFile =<< checkPrivateDirectory directory
+    marker <- withContainedFile directory "cancel" \file -> do
+      old <- readContainedFile 16 file
+      case old of
+        Left err -> pure (Left err)
+        Right Nothing -> replaceContainedFile directory file Nothing "1\n"
+        Right (Just bytes) | bytes == "1\n" -> pure (Right ())
+        _ -> pure (Left FilePathRefused)
+    needFile marker
+    requested <- runtime.backend.stop record
+    when (isLeft requested) (void (transact runtime (Processes.markProcessUnresolvedTx record)))
+  where
+    isLeft (Left _) = True
+    isLeft _ = False
 
 -- One deterministic result encoding is shared by the live adapter and the
 -- factual late-receipt publisher. Command arguments and output bodies are absent.

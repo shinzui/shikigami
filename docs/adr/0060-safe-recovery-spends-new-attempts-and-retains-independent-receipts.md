@@ -142,8 +142,18 @@ The collector still independently checks matching invocation, bounded complete
 output and an empty cgroup. Loaded units can wait in a queue before receiving
 their first invocation identity: capture remains open for a bounded interval,
 but an identity lost or changed after pinning remains evidence loss. Native
-deadline and Nix-root probes qualify this substrate; accepted root-control and
-full service restart integration remain plan-96 gates.
+deadline and Nix-root probes qualify this substrate; full service restart
+integration remains a plan-96 gate.
+
+The independent service also observes retained root cancellation, overage and
+cutoff controls without reviving the former actor's authority. Under the shared
+workspace lock it durably marks cancellation, verifies boot/unit/fingerprint and
+any pinned invocation, and requests whole-unit stop while retaining the unit
+object. Stop acceptance is never settlement: only the collector's matching
+receipt with complete output and an empty descendant cgroup opens the process
+barrier. Failed stops remain unresolved and retry only cancellation, never
+launch. Missing current root data cannot fabricate a control decision or block
+recovery of already retained completion facts.
 
 Supervised workspace policies retain the complete reviewed rule set, immutable
 image/helper coordinates, compiled containment-property identity and file
@@ -170,8 +180,17 @@ recover only under the same reserved identity. Private metadata stays outside
 the provisioned tree. A separate owned-publication primitive creates/replaces
 files as that identity and preserves executable intent, so later isolated
 commands retain access. Existing file-only publication keeps its original
-behavior. These primitives and their Apple-container checks do not enable a
-process-backed file adapter or qualify account/admission recovery.
+behavior. The coupled provisioner retains prepared and ready private receipts,
+refuses adoption without its own prepared receipt and checks the exact account,
+group and supplementary groups before readiness. File adapter revision 2 binds
+the complete ready profile into authority/recovery hashes, enforces retained
+path restrictions and the process barrier, and uses owned publication. Revision
+1 preserves its original hashes and refuses the supervised filesystem profile.
+The configured socket-activated daemon uses existing directory/profile/C13
+services and ready retained rules. These implementations and their separate
+native/instrumented checks do not enable process-backed configured workers;
+coupled native provisioning, file edits and complete service restart acceptance
+still require the Linux prototype gate.
 
 ## Alternatives rejected
 

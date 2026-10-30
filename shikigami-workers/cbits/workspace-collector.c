@@ -89,6 +89,43 @@ static int get_string(sd_bus *bus, const char *path, const char *interface,
   if (result >= 0 && value && strlen(value) < size) strcpy(out, value); else result = -1;
   free(value); return result < 0 ? -1 : 0;
 }
+/* Request cancellation of only the retained unit on this boot. RefUnit keeps
+ * its object alive across validation and Stop; acceptance is never settlement.
+ * Contract: mori://systemd/systemd, man/org.freedesktop.systemd1.xml
+ * (artifact URI pending).
+ */
+int shikigami_workspace_stop(const char *unit, const char *fingerprint,
+                            const char *expected_boot, const char *invocation) {
+  sd_bus *bus = NULL; sd_bus_message *reply = NULL;
+  char boot[37], loaded[32], actual[256], expected[256], *object = NULL;
+  int referenced = 0, result = 1;
+  if (!valid_unit(unit) || strncmp(fingerprint, "sha256:", 7) ||
+      !hex_id(fingerprint + 7, 64) || read_boot(boot) || strcmp(boot, expected_boot) ||
+      (*invocation && !hex_id(invocation, 32))) return 1;
+  snprintf(expected, sizeof(expected), "shikigami-workspace/1 %s", fingerprint);
+  if (sd_bus_open_system(&bus) < 0 || sd_bus_set_method_call_timeout(bus, 500000) < 0) goto done;
+  if (sd_bus_call_method(bus, DEST, MANAGER, DEST ".Manager", "RefUnit", NULL, NULL, "s", unit) < 0) goto done;
+  referenced = 1;
+  if (sd_bus_call_method(bus, DEST, MANAGER, DEST ".Manager", "GetUnit", NULL, &reply, "s", unit) < 0) goto done;
+  const char *path;
+  if (sd_bus_message_read(reply, "o", &path) < 0 || !(object = strdup(path))) goto done;
+  sd_bus_message_unref(reply); reply = NULL;
+  if (get_string(bus, object, UNIT, "LoadState", loaded, sizeof(loaded)) || strcmp(loaded, "loaded") ||
+      get_string(bus, object, UNIT, "Description", actual, sizeof(actual)) || strcmp(actual, expected)) goto done;
+  if (*invocation) {
+    const void *bytes = NULL; size_t size = 0; char observed[33] = {0};
+    if (sd_bus_get_property(bus, DEST, object, UNIT, "InvocationID", NULL, &reply, "ay") < 0 ||
+        sd_bus_message_read_array(reply, 'y', &bytes, &size) <= 0 || size != 16) goto done;
+    for (int i = 0; i < 16; ++i) snprintf(observed + i * 2, 3, "%02x", ((const unsigned char *)bytes)[i]);
+    if (strcmp(observed, invocation)) goto done;
+    sd_bus_message_unref(reply); reply = NULL;
+  }
+  if (sd_bus_call_method(bus, DEST, object, UNIT, "Stop", NULL, NULL, "s", "replace") >= 0) result = 0;
+done:
+  if (referenced) sd_bus_call_method(bus, DEST, MANAGER, DEST ".Manager", "UnrefUnit", NULL, NULL, "s", unit);
+  sd_bus_message_unref(reply); sd_bus_flush_close_unref(bus); free(object);
+  return result;
+}
 static int get_observation(sd_bus *bus, const char *path, struct observation *out) {
   char loaded[32]; sd_bus_message *message = NULL;
   const void *id = NULL; size_t size = 0;
@@ -266,12 +303,16 @@ done:
   return result;
 }
 #else
+int shikigami_workspace_stop(const char *unit, const char *fingerprint, const char *boot, const char *invocation) {
+  (void)unit; (void)fingerprint; (void)boot; (void)invocation; return 78;
+}
 int shikigami_workspace_collect(const char *directory, const char *unit, const char *fingerprint, int limit, int seconds) {
   (void)directory; (void)unit; (void)fingerprint; (void)limit; (void)seconds; return 78;
 }
 #endif
 #ifdef SHIKIGAMI_COLLECTOR_STANDALONE
 int main(int argc, char **argv) {
+  if (argc == 6 && !strcmp(argv[1], "--stop")) return shikigami_workspace_stop(argv[2], argv[3], argv[4], argv[5]);
   if (argc == 2 && !strcmp(argv[1], "--profile")) {
     puts(shikigami_workspace_systemd_profile()); return 0;
   }

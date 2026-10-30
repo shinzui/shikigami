@@ -15,6 +15,7 @@ module Shikigami.Workspace.Systemd
     startCollector,
     systemdBootIdentity,
     collectorActive,
+    stopProcess,
   )
 where
 
@@ -59,6 +60,21 @@ data SystemdProfile = SystemdProfile
 instance Show SystemdProfile where show _ = "SystemdProfile <protected>"
 
 foreign import ccall unsafe "shikigami_workspace_systemd_profile" profileBytes :: IO CString
+
+foreign import ccall safe "shikigami_workspace_stop" stopUnit :: CString -> CString -> CString -> CString -> IO CInt
+
+-- Root controls may stop previously admitted work without reviving its actor's
+-- authority. A successful stop request supplies no completion or fencing proof.
+stopProcess :: ProcessRecord -> IO (Either SystemdError ())
+stopProcess record = guarded record do
+  if record.unit /= processUnit record.operationId record.fingerprint || not (digestText record.fingerprint) || record.phase `notElem` [ProcessLaunchRequested, ProcessRunning, ProcessUnresolved]
+    then pure (Left SystemdRefused)
+    else withCString (Text.unpack record.unit) \unit ->
+      withCString (Text.unpack record.fingerprint) \fingerprint ->
+        withCString (Text.unpack (fromMaybe "" record.bootId)) \boot ->
+          withCString (Text.unpack (fromMaybe "" record.invocationId)) \invocation -> do
+            result <- stopUnit unit fingerprint boot invocation
+            pure (if result == 0 then Right () else Left SystemdUncertain)
 
 systemdProperties :: IO [Text]
 systemdProperties = do
