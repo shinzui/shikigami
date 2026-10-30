@@ -10,6 +10,7 @@ module Shikigami.Workspace.GitObjects
     storeCommit,
     readHead,
     publishCommit,
+    verifyPublishedCommit,
     changedPaths,
     objectDiff,
   )
@@ -30,6 +31,7 @@ import Shikigami.Execution.Identity (OperationId)
 import Shikigami.Prelude (FromJSON, Generic, ToJSON, toJSON, (&), (.~))
 import Shikigami.Workspace.ContainedFile (checkPrivateDirectory)
 import Shikigami.Workspace.Git (runWorkspaceGitInput)
+import Shikigami.Workspace.GitTypes (GitCandidate (..), validGitCandidate)
 import Shikigami.Workspace.Instructions (validWorkspacePath)
 import Shikigami.Workspace.Types (WorkspaceError (..))
 
@@ -43,7 +45,7 @@ data GitAuthor = GitAuthor {name :: !Text.Text, email :: !Text.Text}
 
 storeBlob :: FilePath -> Bytes.ByteString -> IO (Either WorkspaceError Text.Text)
 storeBlob metadata content
-  | Bytes.length content > 262144 = pure refused
+  | Bytes.length content > 16777216 = pure refused
   | otherwise = objectId <$> git metadata 65 [] ["hash-object", "--no-filters", "-w", "--stdin"] content
 
 -- Each call builds one directory; a caller builds children first. mktree
@@ -114,6 +116,25 @@ publishCommit metadata parent result
             observed <- readHead metadata
             pure (if observed == Right result then Right () else refused)
           _ -> pure refused
+
+-- Factual observation only: this can never advance HEAD. A retained prepared
+-- plan is insufficient; the exact result, its one parent and tree must agree.
+verifyPublishedCommit :: FilePath -> GitCandidate -> IO (Either WorkspaceError Bool)
+verifyPublishedCommit metadata candidate
+  | not (validGitCandidate candidate) = pure refused
+  | otherwise = do
+      current <- readHead metadata
+      case current of
+        Left err -> pure (Left err)
+        Right headId | headId /= candidate.result -> pure (Right False)
+        Right _ -> do
+          ancestry <- git metadata 132 [] ["rev-list", "--parents", "-n", "1", Text.unpack candidate.result] ""
+          tree <- objectId <$> git metadata 65 [] ["rev-parse", "--verify", Text.unpack candidate.result <> "^{tree}"] ""
+          pure do
+            actual <- ancestry
+            object <- tree
+            unless (actual == Encoding.encodeUtf8 (candidate.result <> " " <> candidate.parent <> "\n") && object == candidate.tree) refused
+            pure True
 
 changedPaths :: FilePath -> Text.Text -> Text.Text -> IO (Either WorkspaceError [Text.Text])
 changedPaths metadata left right

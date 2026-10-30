@@ -10,6 +10,7 @@ module Shikigami.Workspace.ContainedFile
     withContainedFile,
     withWorkspaceLock,
     readContainedFile,
+    readContainedGitBlob,
     containedTargetIdentity,
     replaceContainedFile,
     replaceContainedFileOwned,
@@ -75,8 +76,16 @@ withWorkspaceLock metadata use = withCString metadata \name ->
     if fd < 0 then pure (Left FileBusy) else use
 
 readContainedFile :: Int -> ContainedFile -> IO (Either FileError (Maybe Bytes.ByteString))
-readContainedFile limit (ContainedFile pointer)
-  | limit < 0 || limit > 1048576 = pure (Left FileTooLarge)
+readContainedFile = readWithBound 1048576
+
+-- Git must preserve unchanged binary/source blobs larger than an edit tool's
+-- content limit. This separate entry point does not enlarge model file reads.
+readContainedGitBlob :: Int -> ContainedFile -> IO (Either FileError (Maybe Bytes.ByteString))
+readContainedGitBlob = readWithBound 16777216
+
+readWithBound :: Int -> Int -> ContainedFile -> IO (Either FileError (Maybe Bytes.ByteString))
+readWithBound ceilingBytes limit (ContainedFile pointer)
+  | limit < 0 || limit > ceilingBytes = pure (Left FileTooLarge)
   | otherwise = allocaBytes (limit + 1) \buffer -> do
       size <- readTarget pointer buffer (fromIntegral limit)
       case size of

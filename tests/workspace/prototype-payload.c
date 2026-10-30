@@ -100,6 +100,18 @@ int main(int argc, char **argv) {
   if (!input || !fgets(mode, sizeof(mode), input)) return 65;
   fclose(input);
   mode[strcspn(mode, "\n")] = 0;
+  /* Upgrade validation must leave the captured tree unchanged. Process recovery
+   * modes below deliberately retain control markers for the separate matrix. */
+  if (!strcmp(mode, "complete")) {
+    input = fopen("/workspace/src/dependency.txt", "r");
+    char dependency[32] = {0};
+    if (!input || !fgets(dependency, sizeof(dependency), input)) return 73;
+    int extra = fgetc(input);
+    fclose(input);
+    if (strcmp(dependency, "new dependency\n") || extra != EOF) return 74;
+    puts("validated upgrade");
+    return 0;
+  }
   stamp("begin");
   if (write_marker("/workspace/src/launch-count", "1", 1)) return 66;
   stamp("count-saved");

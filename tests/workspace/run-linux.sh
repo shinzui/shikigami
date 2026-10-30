@@ -4,7 +4,7 @@
 set -eEuo pipefail
 mode=${1:-}
 runtime=${2:-}
-[[ $# == 2 && ( "$mode" == --prototype || "$mode" == --provision ) && "$runtime" == /nix/store/* ]] || { echo 'Usage: run-linux.sh --prototype|--provision RUNTIME'; exit 64; }
+[[ $# == 2 && ( "$mode" == --prototype || "$mode" == --provision || "$mode" == --git ) && "$runtime" == /nix/store/* ]] || { echo 'Usage: run-linux.sh --prototype|--provision|--git RUNTIME'; exit 64; }
 [[ $(uname -s) == Linux && $(id -u) == 0 && -f /run/shikigami-workspace-prototype.disposable ]] || { echo 'REFUSED: a marked disposable Linux guest running as root is required'; exit 78; }
 [[ $(ps -p 1 -o comm=) == systemd && $(stat -fc %T /sys/fs/cgroup) == cgroup2fs ]]
 sudo -n true
@@ -23,12 +23,14 @@ config="$prefix/config.json"
 pg_bindir=$(/usr/bin/pg_config --bindir)
 pg_started=false
 cases=(duplicate worker-restart supervisor-restart cancellation completion-recovery denials capture-loss authority-denial)
+if [[ "$mode" == --git ]]; then cases+=(git-upgrade git-recovery git-denial); fi
 cleanup() {
   status=$?
   trap - EXIT ERR
   systemctl stop "$socket" "$service" "$authority" "$oauth" >/dev/null 2>&1 || true
   for case_name in "${cases[@]}"; do
     systemctl stop "$task-$case_name.service" >/dev/null 2>&1 || true
+    systemctl stop "$task-$case_name-git.service" >/dev/null 2>&1 || true
     file="$prefix/status-$case_name.json"
     if [[ -f "$file" ]]; then
       for key in '.process.unit' '.capture'; do
@@ -159,6 +161,15 @@ prepare() {
   fi
   "$prototype" prepare "$config" "$prefix" "$1" "$2" >"$prefix/prepare-$1.log" 2>&1
 }
+prepare_upgrade() {
+  if [[ -f /run/shikigami-workspace-prototype.clock-steps ]]; then
+    /usr/bin/timeout 40 "$prefix/root/bin/probe" --await-clock-step >>"$prefix/clock-barrier.log"
+  fi
+  "$prototype" prepare-upgrade "$config" "$prefix" "$1" >"$prefix/prepare-$1.log" 2>&1
+  start_worker "$1"
+  wait_settled "$1"
+  "$prototype" advance-upgrade "$config" "$prefix" "$1" >"$prefix/advance-$1.log" 2>&1
+}
 inspect() { "$prototype" inspect "$config" "$prefix" "$1" >"$prefix/inspect-$1.log" 2>&1; }
 start_worker() {
   systemd-run --quiet --unit="$task-$1.service" -p Type=exec -p Restart=no -p RemainAfterExit=yes -p UMask=0077 -p StandardOutput=null -p "StandardError=file:$prefix/worker-$1.log" -- "$prototype" worker "$config" "$prefix" "$1"
@@ -191,6 +202,19 @@ wait_settled() {
   done
   return 1
 }
+wait_git_settled() {
+  local end=$((SECONDS + 90))
+  while (( SECONDS < end )); do
+    inspect "$1"
+    if jq -e '.state.cursor==4 and .actual.phase=="AttemptCommitted"' "$prefix/status-$1.json" >/dev/null; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+start_git_worker() {
+  systemd-run --quiet --unit="$task-$1-git.service" -p Type=exec -p Restart=no -p RemainAfterExit=yes -p UMask=0077 -p StandardOutput=null -p "StandardError=file:$prefix/git-worker-$1.log" -- "$prototype" "$2" "$config" "$prefix" "$1"
+}
+verify_git() { "$prototype" verify-git "$config" "$prefix" "$1" "$2" >"$prefix/verify-$1.log" 2>&1; }
 verify() { "$prototype" verify "$config" "$prefix" "$1" "$2" >"$prefix/verify-$1.log" 2>&1; }
 release_command() {
   files=$(jq -r .files "$prefix/status-$1.json")
@@ -280,4 +304,35 @@ wait_settled authority-denial
 verify authority-denial refused
 rm "$prefix/deny-authority"
 echo 'PASS denied fresh exact authority records a proven refusal without a repository launch'
-echo 'Workspace Linux prototype passed (10 cases); local Git, handoff and full IR-11 qualification remain open.'
+if [[ "$mode" != --git ]]; then
+  echo 'Workspace Linux prototype passed (10 cases); local Git, handoff and full IR-11 qualification remain open.'
+  exit 0
+fi
+prepare_upgrade git-upgrade
+start_git_worker git-upgrade worker
+wait_git_settled git-upgrade
+"$prototype" worker "$config" "$prefix" git-upgrade
+verify_git git-upgrade applied
+echo 'PASS accepted native edit and validation produce one exact local commit, including after duplicate delivery'
+prepare_upgrade git-recovery
+# Direct Git execution needs no intake RPC. Leave the independent factual scan
+# offline until publication has happened and the committing worker is dead.
+systemctl stop "$socket" "$service"
+start_git_worker git-recovery worker-git-crash
+for _ in {1..300}; do [[ -f "$prefix/git-published-git-recovery" ]] && break; sleep 0.1; done
+[[ -f "$prefix/git-published-git-recovery" ]]
+systemctl kill --kill-whom=main --signal=KILL "$task-git-recovery-git.service"
+"$prototype" freeze "$config" "$prefix" git-recovery
+: >"$prefix/deny-authority"
+systemctl start "$socket" "$service"
+wait_git_settled git-recovery
+verify_git git-recovery applied
+rm "$prefix/deny-authority"
+echo 'PASS independent Git receipt recovery settles the original actual after worker SIGKILL, ownership freeze and fresh-authority denial'
+prepare_upgrade git-denial
+start_git_worker git-denial worker-git-deny
+wait_git_settled git-denial
+verify_git git-denial refused
+rm "$prefix/deny-authority"
+echo 'PASS fresh publication denial after tree capture refuses the retained candidate without changing HEAD'
+echo 'Workspace Linux process and local Git prototype passed (13 cases); production workflow, handoff and full IR-11 qualification remain open.'

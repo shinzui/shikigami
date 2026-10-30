@@ -79,8 +79,10 @@ tests =
           [GitEntry "../escape" "100644" blob, GitEntry ".Git" "100644" blob, GitEntry "dir/file" "100644" blob, GitEntry "name\n" "100644" blob, GitEntry "é" "100644" blob, GitEntry "link" "120000" blob, GitEntry "missing" "100644" (Text.replicate 40 "0")]
         storeTree metadata [GitEntry "A" "100644" blob, GitEntry "a" "100644" blob] >>= assertLeft
         storeTree metadata [GitEntry "wrong-type" "040000" blob] >>= assertLeft,
-      testCase "oversized blobs and diffs return a bounded refusal" $ fixture \_ metadata parent -> do
-        storeBlob metadata (Bytes.replicate 262145 120) >>= assertLeft
+      testCase "oversized blobs and diffs return a bounded refusal" $ fixture \root metadata parent -> do
+        storeBlob metadata (Bytes.replicate 16777217 120) >>= assertLeft
+        large <- right =<< storeBlob metadata (Bytes.replicate 1048577 120)
+        git root ["--git-dir=" <> metadata, "cat-file", "-s", Text.unpack large] >>= (@?= "1048577\n")
         blob <- right =<< storeBlob metadata (Bytes.replicate 262144 120)
         tree <- right =<< storeTree metadata [GitEntry "dependency.txt" "100644" blob]
         objectDiff metadata parent tree >>= assertLeft,

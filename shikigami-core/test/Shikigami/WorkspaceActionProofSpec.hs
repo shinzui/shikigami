@@ -249,6 +249,26 @@ tests =
         workspaceGitAction provisionBinding provisionAdmission gitDispatch profile (gitRecord & #phase .~ Git.GitUnresolved) @?= Left FileEffectRefused
         workspaceGitAction provisionBinding provisionAdmission gitDispatch profile (gitRecord & #attemptId .~ AttemptId "unmatched") @?= Left FileEffectRefused
         gitAction provisionAdmission gitDispatch profile (gitRecord & #candidate .~ Just (candidate & #paths .~ ["outside-policy"])) @?= Left FileEffectRefused
+        let observation a d p kind input target = workspaceGitObservationAction provisionBinding a d p kind input target
+        statusAction <- right (observation provisionAdmission gitDispatch profile "status" command.profile "device:files")
+        let statusRequest = commitRequest & #action .~ statusAction
+            statusGrant = commitGrant & #object .~ ObjectRef (ObjectType (Kikan.actionObjectType statusAction)) (Kikan.actionObjectId statusAction)
+        statusMinted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed statusGrant
+        statusProof <- right (Kikan.mkDecisionProof (decodeUtf8 statusMinted.token))
+        let statusIssued = Kikan.IssuedActionProof statusProof statusMinted.expiresAt [] checkedAt
+        _ <- right =<< verifyIssuedAction verifier now statusRequest statusIssued
+        changedObservations <-
+          mapM
+            right
+            [ observation provisionAdmission gitDispatch profile "diff" command.profile "device:files",
+              observation provisionAdmission gitDispatch profile "status" ("sha256:" <> Text.replicate 64 "b") "device:files",
+              observation provisionAdmission gitDispatch profile "status" command.profile "device:other-files",
+              observation (provisionAdmission & #assignmentId .~ "other-assignment") gitDispatch profile "status" command.profile "device:files",
+              observation provisionAdmission (gitDispatch & #generation .~ 2) profile "status" command.profile "device:files",
+              observation provisionAdmission gitDispatch changedProfile "status" command.profile "device:files"
+            ]
+        mapM_ (\action -> verifyIssuedAction verifier now (statusRequest & #action .~ action) statusIssued >>= \answer -> assertBool "Git observation proof binds kind, input, anchor, assignment, actual claim and profile" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) changedObservations
+        observation provisionAdmission gitDispatch profile "commit" command.profile "device:files" @?= Left FileEffectRefused
     ]
 
 right :: (Show e) => Either e a -> IO a

@@ -210,9 +210,24 @@ only verified publication can establish completion. File and Git operations
 share the same unsettled-effect barrier, with typed receipt kinds preserving
 historical file encodings. Factual Git settlement after an owner freeze retains
 the original claim; only the existing execution owner may acknowledge its actual
-attempt and release accounting. These registration/object primitives remain
-uninstalled until the accepted Git adapter, independent publisher and coupled
-recovery fixture qualify that boundary.
+attempt and release accounting.
+
+The exact accepted Git adapter checks the protected snapshot, accepted tool
+input, original actual claim, ready retained Unix profile and process barrier
+under the shared workspace lock. It obtains fresh whole-tree authority before
+capture and fresh candidate-bound authority before consuming publication.
+Changed paths separately require the frozen write scope; status and diff
+require whole-tree read scope. Capture preserves bounded binary blobs without
+enlarging the ordinary model file-read limit. A missing publication receipt
+permits observation of the retained result, never another HEAD update.
+
+The independent supervisor scans Git registrations and publishes factual
+applied/refused results through the existing original-attempt receipt owner,
+without replay reads or current launch authority. A live actual claim remains
+with its executor until expiry; superseded receipts settle their own pending
+accounting without replacing accepted progress. Prepared-only and missing or
+conflicting publication evidence remain conservative. Production installation
+and native coupled qualification remain separate plan-96 gates.
 
 ## Alternatives rejected
 

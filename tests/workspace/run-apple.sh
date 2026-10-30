@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 mode=${1:---prototype}
-[[ "$mode" == --prototype || "$mode" == --provision ]] || { echo 'Usage: run-apple.sh --prototype|--provision [RUNTIME]'; exit 64; }
+[[ "$mode" == --prototype || "$mode" == --provision || "$mode" == --git ]] || { echo 'Usage: run-apple.sh --prototype|--provision|--git [RUNTIME]'; exit 64; }
 taskdir=$(mktemp -d /tmp/shikigami-workspace-run.XXXXXX)
 chmod 700 "$taskdir"
 if [[ $# -ge 2 ]]; then runtime=$2; else
@@ -32,8 +32,8 @@ cleanup() {
         cd "$1"
         files=()
         for name in provision.log diagnostics.log process-debug.log clock-events.log clock-service.log clock-barrier.log http-status.log authority.log oauth.log supervisor.log migrations.log nix-tool.log nix-guard.log pg-init.log pg-start.log; do [[ ! -f "$name" ]] || files+=("$name"); done
-        for case_name in duplicate worker-restart supervisor-restart cancellation completion-recovery denials capture-loss authority-denial; do
-          for kind in prepare worker inspect verify; do name="$kind-$case_name.log"; [[ ! -f "$name" ]] || files+=("$name"); done
+        for case_name in duplicate worker-restart supervisor-restart cancellation completion-recovery denials capture-loss authority-denial git-upgrade git-recovery git-denial; do
+          for kind in prepare worker inspect verify advance git-worker; do name="$kind-$case_name.log"; [[ ! -f "$name" ]] || files+=("$name"); done
           name="status-$case_name.json"; [[ ! -f "$name" ]] || files+=("$name")
           if [[ -f "$name" ]]; then
             workspace=$(jq -r .files "$name")

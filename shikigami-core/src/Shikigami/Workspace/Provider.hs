@@ -170,3 +170,12 @@ workspaceGitAction binding admission dispatch profile record = do
       digest = Text.replace ":" "-" (versionedDigest "shikigami.workspace-git-action/1" coordinates)
       revision = "git1-" <> Text.replace ":" "-" (workspaceBindingDigest binding)
   either (const (Left FileEffectRefused)) (Right . InvokeCapabilityTool) (mkCapabilityToolTarget "shikigami.workspace" revision ("commit-" <> digest))
+
+workspaceGitObservationAction :: WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> ProcessProfile -> Text -> Text -> Text -> Either FileEffectError AgentAction
+workspaceGitObservationAction binding admission dispatch profile kind inputDigest target = do
+  unless (admission.filePolicy == Just supervisedFilePolicy && admission.workspace == binding.workspace && admission.bindingDigest == workspaceBindingDigest binding && admission.runId == binding.request.runId && admission.rootId == binding.request.rootId && admission.owner == binding.request.owner && admission.epoch == binding.request.epoch && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base) (Left FileEffectRefused)
+  unless (validProcessProfile profile && profile.bindingDigest == workspaceBindingDigest binding && profile.instructionDigest == bundleDigest admission.instructions && processPolicyIdentity profile.policy == binding.policyRevision && "" `elem` profile.policy.readPaths && kind `elem` ["status", "diff"] && digestText inputDigest && bounded target && Text.length target <= 128 && dispatch.generation > 0 && bounded dispatch.owner) (Left FileEffectRefused)
+  let coordinates = Aeson.object ["binding" Aeson..= workspaceBindingDigest binding, "instructions" Aeson..= bundleDigest admission.instructions, "filePolicy" Aeson..= admission.filePolicy, "assignment" Aeson..= admission.assignmentId, "owner" Aeson..= admission.owner, "epoch" Aeson..= admission.epoch, "profile" Aeson..= profile, "operation" Aeson..= dispatch.operation, "attempt" Aeson..= dispatch.attemptId, "claimOwner" Aeson..= dispatch.owner, "generation" Aeson..= dispatch.generation, "kind" Aeson..= kind, "input" Aeson..= inputDigest, "target" Aeson..= target]
+      digest = Text.replace ":" "-" (versionedDigest "shikigami.workspace-git-observation/1" coordinates)
+      revision = "git1-" <> Text.replace ":" "-" (workspaceBindingDigest binding)
+  either (const (Left FileEffectRefused)) (Right . InvokeCapabilityTool) (mkCapabilityToolTarget "shikigami.workspace" revision (kind <> "-" <> digest))

@@ -1,4 +1,4 @@
-module Shikigami.WorkspaceFileProviderSpec (tests, withEffectAdapter, withEffectAdapterForTools, executorForAdapter) where
+module Shikigami.WorkspaceFileProviderSpec (tests, withEffectAdapter, withEffectAdapterForTools, withEffectAdapterPolicyInput, executorForAdapter) where
 
 import Baikai.Options (emptyOptions)
 import Baikai.StopReason (StopReason (ToolUse))
@@ -290,7 +290,10 @@ withEffectAdapterForTools :: Int -> (WorkspaceAdmission -> WorkspaceAdmission) -
 withEffectAdapterForTools = withEffectAdapterPolicy Nothing
 
 withEffectAdapterPolicy :: Maybe ProcessPolicy -> Int -> (WorkspaceAdmission -> WorkspaceAdmission) -> (FileRuntime -> DurableAdapter) -> Text.Text -> Text.Text -> Maybe Aeson.Value -> DatabaseFixture -> (AppEnv -> WorkspaceBinding -> ExecutionSnapshot -> Execution.ReplayAccess -> Attempt.JobReference -> FileRuntime -> Aeson.Value -> IO a) -> IO a
-withEffectAdapterPolicy processPolicy toolCount qualify install wire logical supplied fixture use = Fixture.withFixture fixture \env source root _ -> do
+withEffectAdapterPolicy processPolicy toolCount qualify install wire logical supplied = withEffectAdapterPolicyInput processPolicy toolCount qualify install wire logical (const supplied)
+
+withEffectAdapterPolicyInput :: Maybe ProcessPolicy -> Int -> (WorkspaceAdmission -> WorkspaceAdmission) -> (FileRuntime -> DurableAdapter) -> Text.Text -> Text.Text -> (WorkspaceBinding -> Maybe Aeson.Value) -> DatabaseFixture -> (AppEnv -> WorkspaceBinding -> ExecutionSnapshot -> Execution.ReplayAccess -> Attempt.JobReference -> FileRuntime -> Aeson.Value -> IO a) -> IO a
+withEffectAdapterPolicyInput processPolicy toolCount qualify install wire logical supplied fixture use = Fixture.withFixture fixture \env source root _ -> do
   createDirectory (source </> "src")
   renameFile (source </> "dependency.txt") (source </> "src/dependency.txt")
   writeFile (source </> "AGENTS.md") "PRIVATE_ROOT_POLICY: validate before commit"
@@ -306,9 +309,9 @@ withEffectAdapterPolicy processPolicy toolCount qualify install wire logical sup
       rootId = ExecutionRootId "file-root"
       request = WorkspaceRequest "file-run" Nothing rootId identity identity 0
       runtime = FileRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ _ _ -> pure (Right ()))
-      input = maybe (if logical == "read" then Aeson.object ["path" Aeson..= ("src/dependency.txt" :: Text.Text)] else Aeson.toJSON (Replacement "src/dependency.txt" (Just (contentDigest "old dependency\n")) "PRIVATE_REPLACEMENT\n")) id supplied
       assignment = "file-execution"
   (binding, _) <- right =<< run env (runTransaction (Store.reserveWorkspaceTx root request repository))
+  let input = maybe (if logical == "read" then Aeson.object ["path" Aeson..= ("src/dependency.txt" :: Text.Text)] else Aeson.toJSON (Replacement "src/dependency.txt" (Just (contentDigest "old dependency\n")) "PRIVATE_REPLACEMENT\n")) id (supplied binding)
   allocateWorkspace root binding Reserved >>= (@?= Right ())
   run env (runTransaction (Store.markWorkspaceReadyTx binding)) >>= (@?= Right ())
   admission <- qualify <$> (right =<< loadWorkspaceAdmission binding assignment 65536)

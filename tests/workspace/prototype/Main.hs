@@ -2,8 +2,9 @@
 -- credentials, repositories and identities below belong to a disposable guest.
 module Main (main) where
 
-import Accepted (Prepared (..), executePrepared, prepareAccepted)
+import Accepted (Prepared (..), advanceUpgrade, executeGitWithBackend, executePrepared, prepareAccepted, prepareUpgrade)
 import Auth.Biscuit (toPublic)
+import Control.Concurrent (threadDelay)
 import Control.Exception (IOException, SomeException, catch, fromException, throwIO)
 import Control.Monad (unless, void)
 import Data.Aeson qualified as Aeson
@@ -45,13 +46,18 @@ import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.Store qualified as Execution
-import Shikigami.Execution.Transcript (ExecutionSnapshot (..), ExecutionState (..))
+import Shikigami.Execution.Transcript (ExecutionSnapshot (..), ExecutionState (..), operationIdFor)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
+import Shikigami.Workspace.ContainedFile (withWorkspaceLock)
 import Shikigami.Workspace.Git (runWorkspaceGit)
+import Shikigami.Workspace.GitObjects qualified as GitObjects
+import Shikigami.Workspace.GitProvider
+import Shikigami.Workspace.GitStore qualified as Git
+import Shikigami.Workspace.GitTypes
 import Shikigami.Workspace.InstructionLoader (loadWorkspaceAdmission)
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Process
@@ -109,7 +115,24 @@ main = catch dispatch \(failure :: SomeException) -> do
               runSettings (setHost "127.0.0.1" (setPort number defaultSettings)) authority
         ["native-provision", config, spec] -> nativeProvision config spec
         ["prepare", config, prefix, name, mode] -> prepareCase config prefix name (Text.pack mode)
+        ["prepare-upgrade", config, prefix, name] -> prepareCase config prefix name "upgrade"
+        ["advance-upgrade", config, prefix, name] -> withCase config prefix name \env _ current _ item -> do
+          prepared <- advanceUpgrade env current item.prepared
+          Lazy.writeFile (caseFile prefix name) (Aeson.encode (PreparedCase item.binding prepared))
         ["worker", config, prefix, name] -> withCase config prefix name \env authorizer current client item -> executePrepared env authorizer current client item.prepared
+        ["worker-git-crash", config, prefix, name] -> withCase config prefix name \env authorizer current client item -> do
+          let hook = Bytes.writeFile (prefix </> ("git-published-" <> name)) "1" >> let wait = threadDelay 1000000 >> wait in wait
+          executeGitWithBackend (nativeGitBackend & #afterPublication .~ hook) env authorizer current client item.prepared
+        ["worker-git-deny", config, prefix, name] -> withCase config prefix name \env authorizer current client item -> do
+          let capture binding profile target admit = do
+                result <- nativeGitBackend.capture binding profile target admit
+                case result of Right _ -> Bytes.writeFile (prefix </> "deny-authority") "1"; Left _ -> pure ()
+                pure result
+          executeGitWithBackend (nativeGitBackend & #capture .~ capture) env authorizer current client item.prepared
+        ["freeze", config, prefix, name] -> withCase config prefix name \env _ _ _ item -> do
+          requireRight =<< withWorkspaceLock (workspaceMetadata item.binding.storageRoot item.binding) do
+            requireRight =<< transact env (Workspaces.freezeWorkspaceTx item.binding item.binding.request.owner item.binding.request.epoch)
+            pure (Right ())
         ["duplicate", config, prefix, name] -> withCase config prefix name \env _ _ client item -> do
           Just actual <- stored env (Execution.inspectExecutionAttempt item.prepared.reference.attemptId)
           owner <- maybe (fail "actual claim missing") pure actual.owner
@@ -123,6 +146,7 @@ main = catch dispatch \(failure :: SomeException) -> do
           root <- stored env (Roots.inspectRoot item.binding.request.rootId)
           stored env (Roots.setRootControl item.binding.request.rootId root.revision True Nothing)
         ["verify", config, prefix, name, expected] -> withCase config prefix name \env _ _ _ item -> verifyCase env prefix name expected item
+        ["verify-git", config, prefix, name, expected] -> withCase config prefix name \env _ _ _ item -> verifyGitCase env expected item
         ["--help"] -> putStrLn "Disposable workspace Linux fixture: authority DIRECTORY PORT | native-provision CONFIG SPEC"
         _ -> fail "unsupported fixture invocation"
 
@@ -153,8 +177,9 @@ nativeProvision configFile specFile = do
   Bytes.writeFile (source </> "AGENTS.md") "Fixture policy: validate the exact resulting tree.\n"
   Bytes.writeFile (source </> "src/dependency.txt") "old dependency\n"
   Bytes.writeFile (source </> "src/mode") "complete\n"
+  Bytes.writeFile (source </> "src/large-fixture.bin") (Bytes.replicate 1048577 120)
   void (git ["init", source])
-  void (git ["-C", source, "add", "--", "AGENTS.md", "src/dependency.txt", "src/mode"])
+  void (git ["-C", source, "add", "--", "AGENTS.md", "src/dependency.txt", "src/mode", "src/large-fixture.bin"])
   void (git ["-C", source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "fixture base"])
   base <- Text.strip . Encoding.decodeUtf8 <$> git ["-C", source, "rev-parse", "HEAD"]
   properties <- Systemd.systemdPropertiesIdentity
@@ -251,7 +276,7 @@ prepareCase :: FilePath -> FilePath -> String -> Text.Text -> IO ()
 prepareCase config prefix name mode = do
   checkPrefix prefix
   checkName name
-  unless (mode `elem` ["complete", "slow", "orphan", "denials"]) (fail "fixture mode refused")
+  unless (mode `elem` ["complete", "slow", "orphan", "denials", "upgrade"]) (fail "fixture mode refused")
   initial <- requireRight . Aeson.eitherDecodeStrict @ReadyProfile =<< Bytes.readFile (prefix </> "native-ready.json")
   withRuntime config \env authorizer current client -> do
     let owner = initial.binding.request.owner
@@ -268,7 +293,7 @@ prepareCase config prefix name mode = do
     void (requireRight =<< transact env (Roots.enrollRootTx request.rootId (Resources.Envelope (Map.fromList [(dimension, Resources.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now))))
     -- This fresh boundary uses the same configured C13 verifier as the daemon.
     profile <- requireRight =<< provisionWorkspaceProfile (ProvisionRuntime env authorizer (currentIdentity owner) nativeProvisionBackend) binding admission policy (IdentityRange 64000 64031)
-    prepared <- prepareAccepted env authorizer current client binding admission mode
+    prepared <- if mode == "upgrade" then prepareUpgrade env authorizer current client binding admission else prepareAccepted env authorizer current client binding admission mode
     let path = workspaceFiles binding.storageRoot binding </> "src/mode"
     actual <- readProcess "/usr/bin/stat" ["-c", "%u", path] ""
     unless (Text.strip (Text.pack actual) == Text.pack (show profile.userId)) (fail "native edit lost workspace ownership")
@@ -296,10 +321,11 @@ inspectCase env prefix name item = do
   metadata <- stored env (Execution.inspectExecution item.prepared.snapshot.executionId)
   actual <- stored env (Execution.inspectExecutionAttempt item.prepared.reference.attemptId)
   process <- transact env (Processes.inspectProcessTx item.prepared.reference.operationId)
+  git <- transact env (Git.inspectGitTx item.prepared.reference.operationId)
   let state = (\(value, _, _) -> value) <$> metadata
       operationDirectory record = workspaceMetadata item.binding.storageRoot item.binding </> Text.unpack ("process-" <> Text.drop 7 (versionedDigest "shikigami.workspace-process-directory/1" (Aeson.toJSON (record.operationId, record.fingerprint))))
       capture record = "shikigami-capture-" <> Text.drop (Text.length ("shikigami-workspace-" :: Text.Text)) record.unit
-      body = Aeson.object ["state" Aeson..= state, "actual" Aeson..= actual, "process" Aeson..= process, "files" Aeson..= workspaceFiles item.binding.storageRoot item.binding, "directory" Aeson..= (operationDirectory <$> process), "capture" Aeson..= (capture <$> process)]
+      body = Aeson.object ["state" Aeson..= state, "actual" Aeson..= actual, "process" Aeson..= process, "git" Aeson..= git, "files" Aeson..= workspaceFiles item.binding.storageRoot item.binding, "directory" Aeson..= (operationDirectory <$> process), "capture" Aeson..= (capture <$> process)]
   -- Private fixture control data; never print paths, protected bodies or argv.
   Lazy.writeFile (prefix </> ("status-" <> name <> ".json")) (Aeson.encode body)
 
@@ -326,6 +352,33 @@ verifyCase env _prefix _name expected item = do
   source <- requireRight =<< runWorkspaceGit item.binding.storageRoot 1024 ["-C", item.binding.source, "status", "--porcelain"]
   unless (Bytes.null source) (fail "source repository changed")
   putStrLn "PASS original accepted operation retains one launch and conservative receipt accounting"
+
+verifyGitCase :: AppEnv -> String -> PreparedCase -> IO ()
+verifyGitCase env expected item = do
+  Just record <- transact env (Git.inspectGitTx item.prepared.reference.operationId)
+  Just actual <- stored env (Execution.inspectExecutionAttempt item.prepared.reference.attemptId)
+  Just (state, _, _) <- stored env (Execution.inspectExecution item.prepared.snapshot.executionId)
+  root <- stored env (Roots.inspectRoot item.binding.request.rootId)
+  Just validation <- transact env (Processes.inspectProcessTx (operationIdFor item.prepared.snapshot.executionId 2))
+  unless (maybe False processSucceeded validation.receipt && validation.instructionDigest == record.instructionDigest) (fail "upgrade validation evidence missing")
+  unless (record.attemptId == actual.request.attemptId && record.generation == actual.generation && actual.phase == Attempt.AttemptCommitted && state.cursor == 4 && root.active == 0 && root.unknown == 0) (fail "original Git actual did not settle")
+  let metadata = workspaceMetadata item.binding.storageRoot item.binding
+  headId <- requireRight =<< GitObjects.readHead metadata
+  case expected of
+    "applied" -> do
+      candidate <- maybe (fail "commit candidate missing") pure record.candidate
+      unless (record.phase == GitApplied && headId == candidate.result && candidate.parent == item.binding.base && candidate.paths == ["src/dependency.txt"]) (fail "unexpected upgrade commit")
+      published <- requireRight =<< GitObjects.verifyPublishedCommit metadata candidate
+      unless published (fail "commit object evidence mismatched")
+      count <- requireRight =<< runWorkspaceGit item.binding.storageRoot 128 ["--git-dir=" <> metadata, "rev-list", "--count", Text.unpack item.binding.base <> "..HEAD"]
+      unless (count == "1\n") (fail "duplicate local commit")
+      large <- requireRight =<< runWorkspaceGit item.binding.storageRoot 128 ["--git-dir=" <> metadata, "cat-file", "-s", Text.unpack candidate.result <> ":src/large-fixture.bin"]
+      unless (large == "1048577\n") (fail "unchanged large blob was not preserved")
+    "refused" -> unless (record.phase == GitRefused && record.candidate /= Nothing && headId == item.binding.base) (fail "publication denial changed HEAD")
+    _ -> fail "unsupported Git expectation"
+  source <- requireRight =<< runWorkspaceGit item.binding.storageRoot 1024 ["-C", item.binding.source, "status", "--porcelain"]
+  unless (Bytes.null source) (fail "source repository changed")
+  putStrLn "PASS validated dependency upgrade retains its exact local commit and original actual receipt"
 
 stored :: AppEnv -> Eff AppEffects (Either e a) -> IO a
 stored env action = requireRight =<< (requireRight =<< runAppIO env action)

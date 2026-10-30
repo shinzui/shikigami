@@ -1,7 +1,7 @@
 -- Actual accepted execution/claim plumbing for the disposable Linux fixture.
 -- Only the model response is deterministic; files, accounts, RPC and systemd
 -- use their production interpreters.
-module Accepted (Prepared (..), prepareAccepted, executePrepared) where
+module Accepted (Prepared (..), prepareAccepted, prepareUpgrade, advanceUpgrade, executePrepared, executeGitWithBackend) where
 
 import Baikai.Options (emptyOptions)
 import Baikai.StopReason (StopReason (ToolUse))
@@ -45,6 +45,8 @@ import Shikigami.Prelude ((&), (.~))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Store.ExecutionSelection qualified as Calls
 import Shikigami.Workspace.FileProvider
+import Shikigami.Workspace.GitProvider
+import Shikigami.Workspace.GitTypes (GitCommitRequest (..))
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.ProcessProvider
 import Shikigami.Workspace.Provider (Replacement (..), contentDigest)
@@ -55,27 +57,35 @@ data Prepared = Prepared {snapshot :: !ExecutionSnapshot, reference :: !Attempt.
   deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
 
 prepareAccepted :: AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> WorkspaceBinding -> WorkspaceAdmission -> Text.Text -> IO Prepared
-prepareAccepted env authorizer current client binding admission mode = do
+prepareAccepted = preparePlan False
+
+prepareUpgrade :: AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> WorkspaceBinding -> WorkspaceAdmission -> IO Prepared
+prepareUpgrade env authorizer current client binding admission = preparePlan True env authorizer current client binding admission "complete"
+
+preparePlan :: Bool -> AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> WorkspaceBinding -> WorkspaceAdmission -> Text.Text -> IO Prepared
+preparePlan upgrade env authorizer current client binding admission mode = do
   now <- getCurrentTime
   session <- genSessionId
   selection <- right (resolveExecutionSelection admission.assignmentId (must (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just admission.rootId) now)
   let runtime = fileRuntime env authorizer current
       providers = registry runtime client
-      descriptors = [supervisedWorkspaceEditDescriptor, (workspaceExecAdapter client).descriptor]
+      descriptors = [supervisedWorkspaceEditDescriptor, (workspaceExecAdapter client).descriptor] <> [workspaceGitDescriptor | upgrade]
   catalog <- right (mkCapabilityCatalog descriptors)
   capabilities <- right (resolveGovernedCapabilityOverlays (durableAdapterInstalled providers) catalog (\_ _ -> Right ()) (ResolutionSubject (Just "fixture") Durable (Skill "fixture") Nothing) (map (.capability) descriptors))
   let initial = ExecutionSnapshot 1 (executionIdFor admission.assignmentId) binding.request.runId (AgentName "fixture") admission.owner session selection Nothing (SkillInstructions "fixture" "system" "body") (ReplayContext 2 (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "fixture edit and validation"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
   menu <- right =<< Tools.describeExecutionTools Log.silentLogger authorizer providers native initial
   let edit = only (filter (\tool -> tool.name == "overlay__workspace-edit__replace") menu.toolBindings)
       validate = only (filter (\tool -> tool.name == "overlay__workspace-exec__validate") menu.toolBindings)
-      selected = [edit, validate]
+      commit = only (filter (\tool -> tool.name == "overlay__workspace-git__commit") menu.toolBindings)
+      selected = [edit, validate] <> [commit | upgrade]
       filterTool (Aeson.Object fields) = KeyMap.lookup "name" fields `elem` map (Just . Aeson.String . (.name)) selected
       filterTool _ = False
       offered = case menu.offeredTools of Aeson.Array values -> Aeson.Array (Vector.filter filterTool values); value -> value
       snapshot = initial & #offeredTools .~ offered & #toolBindings .~ selected
-      editInput = Aeson.toJSON (Replacement "src/mode" (Just (contentDigest "complete\n")) (mode <> "\n"))
+      editInput = Aeson.toJSON (if upgrade then Replacement "src/dependency.txt" (Just (contentDigest "old dependency\n")) "new dependency\n" else Replacement "src/mode" (Just (contentDigest "complete\n")) (mode <> "\n"))
       validateInput = Aeson.object ["rule" Aeson..= ("validate" :: Text.Text)]
-      assistant = ReplayAssistant 1 [ToolBlock (ToolInvocation "edit-mode" edit.name editInput), ToolBlock (ToolInvocation "validate-mode" validate.name validateInput)] ToolUse Nothing Nothing (Aeson.object []) Nothing
+      commitInput = Aeson.toJSON (GitCommitRequest binding.base "chore(deps): upgrade fixture dependency")
+      assistant = ReplayAssistant 1 ([ToolBlock (ToolInvocation "edit-mode" edit.name editInput), ToolBlock (ToolInvocation "validate-mode" validate.name validateInput)] <> [ToolBlock (ToolInvocation "commit-upgrade" commit.name commitInput) | upgrade]) ToolUse Nothing Nothing (Aeson.object []) Nothing
       model = OperationSpec (operationIdFor snapshot.executionId 0) ModelTurn RepeatableObservation "model" (policyDigest snapshot) "scope" Nothing
   void (right =<< run env Catalog.registerProjectionCatalog)
   void (right =<< run env (Execution.admitExecution snapshot))
@@ -97,6 +107,23 @@ prepareAccepted env authorizer current client binding admission mode = do
     only [value] = value
     only _ = error "fixture exact tool binding missing"
 
+advanceUpgrade :: AppEnv -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> Prepared -> IO Prepared
+advanceUpgrade env current prepared = do
+  let snapshot = prepared.snapshot
+  access <- right =<< run env (Execution.authorizeReplay snapshot.executionId snapshot.identity (current snapshot))
+  (_, state) <- right =<< run env (Execution.loadExecution access)
+  case state.next of
+    NeedTool response 2 | state.cursor == 3 -> do
+      outcome <- right =<< run env (Execution.readReplayPayload @OperationOutcome access "operation-outcome" response)
+      case outcome of
+        ModelReturned assistant _ -> case drop 2 (toolInvocations assistant) of
+          [invocation] -> case filter (\binding -> binding.name == invocation.name && binding == gitBinding "commit") snapshot.toolBindings of
+            [binding] -> submit env snapshot access (ToolOperationInput response 2 invocation binding)
+            _ -> fail "exact Git binding missing"
+          _ -> fail "retained commit invocation missing"
+        _ -> fail "retained model response missing"
+    _ -> fail "validated upgrade continuation missing"
+
 submit :: AppEnv -> ExecutionSnapshot -> Execution.ReplayAccess -> ToolOperationInput -> IO Prepared
 submit env snapshot access input = do
   (_, state) <- right =<< run env (Execution.loadExecution access)
@@ -114,8 +141,13 @@ submit env snapshot access input = do
 
 executePrepared :: AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> Prepared -> IO ()
 executePrepared env authorizer current client prepared = do
+  executeGitWithBackend nativeGitBackend env authorizer current client prepared
+
+executeGitWithBackend :: GitBackend -> AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> Prepared -> IO ()
+executeGitWithBackend backend env authorizer current client prepared = do
   let file = fileRuntime env authorizer current
-      runtime = Executor.ExecutionRuntime env (\_ -> current prepared.snapshot) current (\_ -> error "fixture does not dispatch a model") (Tools.withExecutionTools Log.silentLogger authorizer (registry file client) native) 5
+      providers = must (installDurableAdapters [supervisedWorkspaceEditAdapter file, workspaceExecAdapter client, workspaceGitAdapterWithBackend backend file] emptyCapabilityProviderRegistry)
+      runtime = Executor.ExecutionRuntime env (\_ -> current prepared.snapshot) current (\_ -> error "fixture does not dispatch a model") (Tools.withExecutionTools Log.silentLogger authorizer providers native) 5
   result <- Executor.executeAcceptedAttempt runtime prepared.snapshot.identity prepared.reference
   unless (result == Right Executor.ExecutorDone) (fail "fixture execution did not finish its delivery")
 
@@ -123,7 +155,7 @@ fileRuntime :: AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Te
 fileRuntime env authorizer current = FileRuntime env authorizer current current (\_ _ _ _ _ -> pure (Right ()))
 
 registry :: FileRuntime -> ProcessClient -> CapabilityProviderRegistry
-registry file client = must (installDurableAdapters [supervisedWorkspaceEditAdapter file, workspaceExecAdapter client] emptyCapabilityProviderRegistry)
+registry file client = must (installDurableAdapters [supervisedWorkspaceEditAdapter file, workspaceExecAdapter client, workspaceGitAdapter file] emptyCapabilityProviderRegistry)
 
 native :: Tools.NativeToolFactory
 native = Tools.NativeToolFactory (\_ -> pure (Right [])) (\_ _ _ -> pure (Right []))

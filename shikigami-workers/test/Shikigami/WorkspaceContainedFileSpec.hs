@@ -37,6 +37,13 @@ tests =
         if aliases then withContainedFile root "FILE" (readContainedFile 10) >>= (@?= Left FilePathRefused) else pure ()
         withContainedFile root "created" (\file -> replaceContainedFile metadata file Nothing "created") >>= (@?= Right ())
         Bytes.readFile (root </> "created") >>= (@?= "created"),
+      testCase "Git capture preserves larger blobs without enlarging ordinary file reads" $ withFixture \root _ _ -> do
+        let bytes = Bytes.replicate 1048577 120
+        Bytes.writeFile (root </> "large") bytes
+        withContainedFile root "large" (readContainedFile 1048576) >>= (@?= Left FileTooLarge)
+        withContainedFile root "large" (readContainedGitBlob 16777216) >>= (@?= Right (Just bytes))
+        withContainedFile root "large" (readContainedGitBlob 1024) >>= (@?= Left FileTooLarge)
+        withContainedFile root "large" (readContainedGitBlob 16777217) >>= (@?= Left FileTooLarge),
       testCase "rejects traversal, Git metadata, symlinks and hardlinks" $ withFixture \root _ outside -> do
         Bytes.writeFile (outside </> "secret") "PRIVATE_OUTSIDE"
         createFileLink (outside </> "secret") (root </> "link")

@@ -63,7 +63,7 @@ captureGitTree binding profile expectedTarget admitPath = catch bounded (\(_ :: 
                           pure ((\object -> CapturedTree expectedTarget object (map fst entries)) <$> tree)
     readEntry (Left err) _ = pure (Left err)
     readEntry (Right (total, previous)) (path, executable) = do
-      captured <- withContainedFile (workspaceFiles binding.storageRoot binding) path (readContainedFile 262144)
+      captured <- withContainedFile (workspaceFiles binding.storageRoot binding) path (readContainedGitBlob (min 16777216 (67108864 - total)))
       case captured of
         Right (Just bytes) | total + Bytes.length bytes <= 67108864 -> do
           blob <- storeBlob (workspaceMetadata binding.storageRoot binding) bytes
