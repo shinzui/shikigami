@@ -58,7 +58,7 @@ Make execution admission checks that can run before inline writes return typed r
 
 
 - [x] M1 (2026-10-30): All 50 ExecutionTranscript PostgreSQL cases pass, including typed refusal, tentative-append rebuild rollback, accepted convergence and late refusal after observed cursor/accounting writes. `docs/evidence/keiro-0.22/guarded-outcome-m1.txt` records the native results.
-- [ ] M2: All applicable execution persistence paths use the accepted protocol, preserving concurrent retry, accounting, permission and claim behavior.
+- [x] M2 (2026-10-30): All lifecycle catalog persistence paths use the typed protocol; all 379 core PostgreSQL cases pass. Retained write-dependent refusals and read boundaries are enumerated in `docs/evidence/keiro-0.22/guarded-execution-protocol.md`.
 - [ ] M3: Every 0.21/0.22 DSL capability and existing consumer adapter has an evidence-backed disposition, generated conformance passes, and the single first-release contract passes same-build replay qualification.
 
 
@@ -81,6 +81,13 @@ refusal and proves complete rollback.
 
 The released guarded runner calls its precondition after tentative append and catalog admission but before inline delivery. It has no post-inline typed-refusal callback. The existing `recordOutcomeAndAdvanceWith` hook runs after payload/cursor writes and accounting, so its rollback path is not superseded by this API.
 
+
+M2 extends the native protocol to every lifecycle catalog write. Read-only
+preparation uses the released ExceptT transformer; inline delivery rereads under
+retained locks rather than storing callback values. The pending-attempt assertion
+after retirement remains late because it depends on tentative membership changes.
+Reservations, settlements, queue callbacks and protected read errors retain their
+original rollback boundaries. All 379 core PostgreSQL cases pass.
 
 ## Decision Log
 

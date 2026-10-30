@@ -130,3 +130,12 @@ ExecutionLifecycle's domain and validated stream are explicit core exports for
 typed command integration. A finite-graph assertion proves every current live
 edge emits events. An unexpected silent edge is classified as a bounded refusal;
 no successful no-op or accepted receipt is fabricated.
+
+
+The same typed admission protocol now covers every execution lifecycle catalog
+write. SQL-only preparation rereads under retained locks during inline delivery;
+it uses no mutable callback cells. Reservation/settlement owners, queue acceptance,
+the pending-membership assertion after tentative retirement, payload-integrity
+checks and final hooks retain exception-triggered rollback. Protected read access
+and decoding remain separate boundaries. The full core PostgreSQL suite passes
+379 cases, including retry races, uncertain recovery, accounting and claim fences.

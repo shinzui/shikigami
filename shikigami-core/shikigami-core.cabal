@@ -354,6 +354,7 @@ library
     streamly-core,
     text >=2.1,
     time >=1.12,
+    transformers >=0.6 && <0.7,
     uuid,
     vector >=0.13,
     yaml >=0.11,
