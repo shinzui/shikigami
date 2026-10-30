@@ -5,7 +5,7 @@ set -eEuo pipefail
 export LANG=C.UTF-8 LC_ALL=C.UTF-8
 mode=${1:-}
 runtime=${2:-}
-[[ $# == 2 && ( "$mode" == --prototype || "$mode" == --provision || "$mode" == --git || "$mode" == --workflow || "$mode" == --workflow-only ) && "$runtime" == /nix/store/* ]] || { echo 'Usage: run-linux.sh --prototype|--provision|--git|--workflow|--workflow-only RUNTIME'; exit 64; }
+[[ $# == 2 && ( "$mode" == --prototype || "$mode" == --provision || "$mode" == --git || "$mode" == --workflow || "$mode" == --workflow-only || "$mode" == --workspace-gates || "$mode" == --qualify ) && "$runtime" == /nix/store/* ]] || { echo 'Usage: run-linux.sh --prototype|--provision|--git|--workflow|--workflow-only|--workspace-gates|--qualify RUNTIME'; exit 64; }
 [[ $(uname -s) == Linux && $(id -u) == 0 && -f /run/shikigami-workspace-prototype.disposable ]] || { echo 'REFUSED: a marked disposable Linux guest running as root is required'; exit 78; }
 [[ $(ps -p 1 -o comm=) == systemd && $(stat -fc %T /sys/fs/cgroup) == cgroup2fs ]]
 sudo -n true
@@ -24,11 +24,21 @@ config="$prefix/config.json"
 pg_bindir=$(/usr/bin/pg_config --bindir)
 pg_started=false
 cases=(duplicate worker-restart supervisor-restart cancellation completion-recovery denials capture-loss authority-denial)
-if [[ "$mode" == --git || "$mode" == --workflow ]]; then cases+=(git-upgrade git-recovery git-denial); fi
+if [[ "$mode" == --git || "$mode" == --workflow || "$mode" == --workspace-gates || "$mode" == --qualify ]]; then cases+=(git-upgrade git-recovery git-denial); fi
 cleanup() {
   status=$?
   trap - EXIT ERR
   systemctl stop "$socket" "$service" "$authority" "$oauth" >/dev/null 2>&1 || true
+  systemctl stop "$task-continuing.service" >/dev/null 2>&1 || true
+  if [[ -f "$prefix/continuing-status.json" ]]; then
+    for key in '.process.unit' '.capture'; do
+      unit=$(jq -r "$key // empty" "$prefix/continuing-status.json")
+      if [[ "$unit" =~ ^shikigami-(workspace|capture)-[0-9a-f]{64}\.service$ ]]; then
+        systemctl kill --kill-whom=main --signal=CONT "$unit" >/dev/null 2>&1 || true
+        systemctl stop "$unit" >/dev/null 2>&1 || true
+      fi
+    done
+  fi
   for case_name in "${cases[@]}"; do
     systemctl stop "$task-$case_name.service" >/dev/null 2>&1 || true
     systemctl stop "$task-$case_name-git.service" >/dev/null 2>&1 || true
@@ -119,7 +129,7 @@ import json,sys
 from pathlib import Path
 prefix,connection,port,runtime,guard,digest,oauth_port=sys.argv[1:]
 p=Path(prefix)
-(p/'directory.json').write_text(json.dumps([{'principal_id':'agent_01h000000000000000triage','handle':'fixture','lifecycle':'active','display_name':'Workspace fixture'}]))
+(p/'directory.json').write_text(json.dumps([{'principal_id':'agent_01h000000000000000'+name,'handle':name,'lifecycle':'active','display_name':'Workspace fixture'} for name in ['triage','coordinator','successor']]))
 config={'database':{'connection_string':connection},'directory':{'mode':'file','file':{'path':str(p/'directory.json')},'refresh_interval_seconds':1},'workspace':{'supervisor':{'socketPath':str(p/'rpc/supervisor.sock'),'users':[0],'workers':4,'timeoutSeconds':5}},'authorization':{'actions':{'mode':'kikan','kikan_en':{'base_url':f'http://127.0.0.1:{oauth_port}'},'shomei':{'base_url':f'http://127.0.0.1:{oauth_port}','client_id':'fixture'},'en':{'issuer_public_keys':(p/'issuer-public.txt').read_text(),'schema_hashes':'workspace-fixture-schema'},'caller_id':'workspace-fixture'}},'credentials':{'authorization':{'actions':{'shomei':{'client_secret':'fixture-secret'}}}}}
 (p/'config.json').write_text(json.dumps(config))
 (p/'native-spec.json').write_text(json.dumps({'format':1,'directory':prefix,'image':{'rootDirectory':str(p/'root'),'rootIdentity':'sha256:'+digest,'environmentExecutable':'/bin/env','deadlineExecutable':guard+'/bin/shikigami-workspace-deadline','collectorExecutable':runtime+'/bin/shikigami-workspace-collector'}}))
@@ -316,7 +326,7 @@ wait_settled authority-denial
 verify authority-denial refused
 rm "$prefix/deny-authority"
 echo 'PASS denied fresh exact authority records a proven refusal without a repository launch'
-if [[ "$mode" != --git && "$mode" != --workflow ]]; then
+if [[ "$mode" != --git && "$mode" != --workflow && "$mode" != --workspace-gates && "$mode" != --qualify ]]; then
   echo 'Workspace Linux prototype passed (10 cases); local Git, handoff and full IR-11 qualification remain open.'
   exit 0
 fi
@@ -351,7 +361,7 @@ echo 'Workspace Linux process and local Git prototype passed (13 cases); product
 
 fi
 
-if [[ "$mode" == --workflow || "$mode" == --workflow-only ]]; then
+if [[ "$mode" == --workflow || "$mode" == --workflow-only || "$mode" == --workspace-gates || "$mode" == --qualify ]]; then
   rm -f "$prefix/deny-authority"
   "$prototype" workflow "$config" "$prefix" admit >"$prefix/workflow-admit.log" 2>&1
   "$prototype" workflow "$config" "$prefix" edit >"$prefix/workflow-edit.log" 2>&1
@@ -365,5 +375,54 @@ if [[ "$mode" == --workflow || "$mode" == --workflow-only ]]; then
     echo 'Focused configured durable workflow qualification passed (3 cases including native provisioning); the process/Git matrix is separate.'
   else
     echo 'Workspace configured durable workflow qualification passed (14 cases); handoff and full IR-11 qualification remain open.'
+  fi
+fi
+
+if [[ "$mode" == --workspace-gates || "$mode" == --qualify ]]; then
+  "$prototype" integration "$config" "$prefix" >"$prefix/integration.log" 2>&1
+  cat "$prefix/integration.log"
+  "$prototype" continuing "$config" "$prefix" followup >"$prefix/continuing-followup.log" 2>&1
+  cat "$prefix/continuing-followup.log"
+  "$prototype" continuing "$config" "$prefix" prepare >"$prefix/continuing-prepare.log" 2>&1
+  if [[ -f /run/shikigami-workspace-prototype.clock-steps ]]; then
+    /usr/bin/timeout 40 "$prefix/root/bin/probe" --await-clock-step >>"$prefix/clock-barrier.log"
+  fi
+  systemd-run --quiet --unit="$task-continuing.service" -p Type=exec -p Restart=no -p RemainAfterExit=yes -p UMask=0077 -p StandardOutput=null -p "StandardError=file:$prefix/continuing-worker.log" -- "$prototype" continuing "$config" "$prefix" worker
+  continuing_inspect() { "$prototype" continuing "$config" "$prefix" inspect; }
+  for _ in {1..200}; do
+    continuing_inspect
+    files=$(jq -r .files "$prefix/continuing-status.json")
+    [[ -f "$files/src/orphan" ]] && break
+    sleep 0.1
+  done
+  [[ -f "$files/src/orphan" ]]
+  capture=$(jq -r .capture "$prefix/continuing-status.json")
+  [[ "$capture" =~ ^shikigami-capture-[0-9a-f]{64}\.service$ ]]
+  systemctl kill --kill-whom=main --signal=STOP "$capture"
+  "$prototype" continuing "$config" "$prefix" freeze >"$prefix/continuing-freeze.log" 2>&1
+  cat "$prefix/continuing-freeze.log"
+  listener=$(stat -c '%d:%i' "$prefix/rpc/supervisor.sock")
+  systemctl kill --kill-whom=main --signal=KILL "$task-continuing.service" || true
+  systemctl kill --kill-whom=main --signal=KILL "$service"
+  touch "$prefix/deny-authority"
+  systemctl kill --kill-whom=main --signal=CONT "$capture"
+  systemctl start "$service"
+  [[ $(stat -c '%d:%i' "$prefix/rpc/supervisor.sock") == "$listener" ]]
+  settled=false
+  for _ in {1..200}; do
+    continuing_inspect
+    if jq -e '.process.phase=="ProcessSettled" and (.actual.phase=="AttemptCommitted" or .actual.lateReceipt!=null)' "$prefix/continuing-status.json" >/dev/null; then settled=true; break; fi
+    sleep 0.2
+  done
+  "$settled"
+  "$prototype" continuing "$config" "$prefix" settled >"$prefix/continuing-settled.log" 2>&1
+  cat "$prefix/continuing-settled.log"
+  rm "$prefix/deny-authority"
+  "$prototype" continuing "$config" "$prefix" late >"$prefix/continuing-late.log" 2>&1
+  cat "$prefix/continuing-late.log"
+  echo 'Workspace-owned native gates passed (21 cases). Real objective ownership and accepted successor writes remain unqualified.'
+  if [[ "$mode" == --qualify ]]; then
+    echo 'REFUSED full qualification: the real IR-13 ownership provider is not installed; no substitute receipt is permitted.'
+    exit 78
   fi
 fi

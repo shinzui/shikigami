@@ -231,6 +231,16 @@ Successor follow-ups also wait for preceding admitted executions and receipts
 to become terminal. The native integration/followup/fence fixture is being
 built; these host results do not qualify Linux owned writes or joint handoff.
 
+
+Native qualification scaffolding now adds `--workspace-gates` for the fourteen
+previous cases plus exact integration success/conflict/combined-only failure,
+same-owner accepted writes and terminal cleanup, and native transfer
+freeze/restart/settlement/late-owner refusal. This is a candidate, not passing
+evidence yet. `--qualify` runs those gates and then explicitly refuses the
+unavailable real-objective/successor-write gate. It cannot return success by
+substituting a fixture ownership receipt. Production adapter selection remains
+unchanged. The native controller builds on Darwin; runtime execution is next.
+
 ## Surprises & Discoveries
 
 2026-10-30 successor design: retain the original allocation and process profile

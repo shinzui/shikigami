@@ -1,7 +1,7 @@
 -- Actual accepted execution/claim plumbing for the disposable Linux fixture.
 -- Only the model response is deterministic; files, accounts, RPC and systemd
 -- use their production interpreters.
-module Accepted (Prepared (..), prepareAccepted, prepareUpgrade, advanceUpgrade, executePrepared, executeGitWithBackend) where
+module Accepted (Prepared (..), prepareAccepted, prepareUpgrade, advanceUpgrade, executePrepared, executeGitWithBackend, prepareTools, continueTools, advanceTools) where
 
 import Baikai.Options (emptyOptions)
 import Baikai.StopReason (StopReason (ToolUse))
@@ -146,7 +146,7 @@ executePrepared env authorizer current client prepared = do
 executeGitWithBackend :: GitBackend -> AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> Prepared -> IO ()
 executeGitWithBackend backend env authorizer current client prepared = do
   let file = fileRuntime env authorizer current
-      providers = must (installDurableAdapters [supervisedWorkspaceEditAdapter file, workspaceExecAdapter client, workspaceGitAdapterWithBackend backend file] emptyCapabilityProviderRegistry)
+      providers = must (installDurableAdapters [supervisedWorkspaceEditAdapter file, workspaceExecAdapter client, workspaceGitAdapterWithBackend backend file, transferredWorkspaceEditAdapter file, transferredWorkspaceExecAdapter client, transferredWorkspaceGitAdapterWithBackend backend file, workspaceIntegrationAdapterWithBackend backend file] emptyCapabilityProviderRegistry)
       runtime = Executor.ExecutionRuntime env (\_ -> current prepared.snapshot) current (\_ -> error "fixture does not dispatch a model") (Tools.withExecutionTools Log.silentLogger authorizer providers native) 5
   result <- Executor.executeAcceptedAttempt runtime prepared.snapshot.identity prepared.reference
   unless (result == Right Executor.ExecutorDone) (fail "fixture execution did not finish its delivery")
@@ -171,3 +171,67 @@ right = either (const (fail "accepted fixture boundary refused")) pure
 
 must :: Either e a -> a
 must = either (const (error "fixture definition refused")) id
+
+-- Transfer-aware qualification uses real protected model/tool inputs and actual
+-- claims. This helper never invents session/objective ownership authority.
+prepareTools :: AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> WorkspaceAdmission -> [(Text.Text, Aeson.Value)] -> IO Prepared
+prepareTools env authorizer current client admission calls = do
+  now <- getCurrentTime
+  session <- genSessionId
+  selection <- right (resolveExecutionSelection admission.assignmentId (must (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just admission.rootId) now)
+  let file = fileRuntime env authorizer current
+      adapters = [transferredWorkspaceEditAdapter file, transferredWorkspaceExecAdapter client, transferredWorkspaceGitAdapter file, workspaceIntegrationAdapter file]
+      providers = must (installDurableAdapters adapters emptyCapabilityProviderRegistry)
+      descriptors = map (.descriptor) adapters
+  catalog <- right (mkCapabilityCatalog descriptors)
+  capabilities <- right (resolveGovernedCapabilityOverlays (durableAdapterInstalled providers) catalog (\_ _ -> Right ()) (ResolutionSubject (Just "fixture") Durable (Skill "fixture") Nothing) (map (.capability) descriptors))
+  let initial = ExecutionSnapshot 1 (executionIdFor admission.assignmentId) admission.runId (AgentName "fixture") admission.owner session selection Nothing (SkillInstructions "fixture" "system" "body") (ReplayContext 2 (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "qualified workspace operation"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
+  menu <- right =<< Tools.describeExecutionTools Log.silentLogger authorizer providers native initial
+  let snapshot = initial & #offeredTools .~ menu.offeredTools & #toolBindings .~ menu.toolBindings
+  void (right =<< run env Catalog.registerProjectionCatalog)
+  void (right =<< run env (Execution.admitExecution snapshot))
+  appendTools env current snapshot calls
+
+continueTools :: AppEnv -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> Prepared -> [(Text.Text, Aeson.Value)] -> IO Prepared
+continueTools env current prepared = appendTools env current prepared.snapshot
+
+appendTools :: AppEnv -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ExecutionSnapshot -> [(Text.Text, Aeson.Value)] -> IO Prepared
+appendTools env current snapshot calls = do
+  unless (not (null calls)) (fail "empty accepted fixture tools")
+  access <- right =<< run env (Execution.authorizeReplay snapshot.executionId snapshot.identity (current snapshot))
+  (_, state) <- right =<< run env (Execution.loadExecution access)
+  unless (state.next == NeedModel) (fail "fixture did not reach model boundary")
+  let invocations = [ToolInvocation ("fixture-call-" <> Text.pack (show index)) name input | (index, (name, input)) <- zip [0 :: Int ..] calls]
+      assistant = ReplayAssistant 1 (map ToolBlock invocations) ToolUse Nothing Nothing (Aeson.object []) Nothing
+      model = OperationSpec (operationIdFor snapshot.executionId state.cursor) ModelTurn RepeatableObservation "model" (policyDigest snapshot) "fixture-model" Nothing
+  (_, operation) <- right =<< run env (Execution.acceptOperation access state.revision model (Aeson.object []))
+  now <- getCurrentTime
+  let OperationId key = operation.specification.operationId
+      request = Resources.AttemptRequest (AttemptId ("model:" <> key)) operation.specification.operationId (Map.fromList [(Resources.ActiveWork, 1), (Resources.ModelAttempts, 1), (Resources.Tokens, 10), (Resources.CostMicroUsd, 0)]) Resources.EnforcedCeiling
+  reserved <- right =<< run env (Calls.reserveSelectionCall snapshot.selection (Calls.CallLimits Nothing Nothing Nothing Nothing Nothing) request "fixture-model" now)
+  call <- case reserved of Calls.NewCall value -> pure value; _ -> fail "expected new fixture call"
+  let outcome = ModelReturned assistant Nothing
+  response <- right (Execution.outcomeReference outcome)
+  (_, accepted) <- right =<< run env (Execution.loadExecution access)
+  void (right =<< run env (Execution.recordOutcomeAndAdvance access accepted.revision operation.specification.operationId outcome (NeedTool response 0) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.fromList [(Resources.Tokens, 1), (Resources.CostMicroUsd, 0)]) [] Nothing Nothing Nothing))))
+  nextTool env access snapshot response 0 (head invocations)
+
+advanceTools :: AppEnv -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> Prepared -> IO (Maybe Prepared)
+advanceTools env current prepared = do
+  access <- right =<< run env (Execution.authorizeReplay prepared.snapshot.executionId prepared.snapshot.identity (current prepared.snapshot))
+  (_, state) <- right =<< run env (Execution.loadExecution access)
+  case state.next of
+    NeedModel -> pure Nothing
+    NeedTool response position -> do
+      outcome <- right =<< run env (Execution.readReplayPayload @OperationOutcome access "operation-outcome" response)
+      case outcome of
+        ModelReturned assistant _ -> case take 1 (drop position (toolInvocations assistant)) of
+          [invocation] -> Just <$> nextTool env access prepared.snapshot response position invocation
+          _ -> fail "retained invocation missing"
+        _ -> fail "retained fixture model missing"
+    _ -> fail "fixture tool did not settle"
+
+nextTool :: AppEnv -> Execution.ReplayAccess -> ExecutionSnapshot -> PayloadRef -> Int -> ToolInvocation -> IO Prepared
+nextTool env access snapshot response position invocation = case filter ((== invocation.name) . (.name)) snapshot.toolBindings of
+  [binding] -> submit env snapshot access (ToolOperationInput response position invocation binding)
+  _ -> fail "exact retained fixture tool missing"

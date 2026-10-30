@@ -4,6 +4,7 @@ module Main (main) where
 
 import Accepted (Prepared (..), advanceUpgrade, executeGitWithBackend, executePrepared, prepareAccepted, prepareUpgrade)
 import Auth.Biscuit (toPublic)
+import Continuing (continuingCase)
 import Control.Concurrent (threadDelay)
 import Control.Exception (IOException, SomeException, catch, fromException, throwIO)
 import Control.Monad (unless, void)
@@ -36,6 +37,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Network.HTTP.Types (status200, status403, status404)
 import Network.Wai (Application, pathInfo, requestHeaders, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (defaultSettings, runSettings, setHost, setPort)
+import Qualification (integrationCase)
 import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), identityText, mkAgentPrincipal)
@@ -114,6 +116,8 @@ main = catch dispatch \(failure :: SomeException) -> do
               checkPrefix prefix
               authority <- authorityApplication prefix
               runSettings (setHost "127.0.0.1" (setPort number defaultSettings)) authority
+        ["continuing", config, prefix, stage] -> checkPrefix prefix >> continuingCase config prefix stage
+        ["integration", config, prefix] -> checkPrefix prefix >> integrationCase config prefix
         ["workflow", config, prefix, stage] -> checkPrefix prefix >> workflowCase config prefix stage
         ["native-provision", config, spec] -> nativeProvision config spec
         ["prepare", config, prefix, name, mode] -> prepareCase config prefix name (Text.pack mode)
@@ -179,9 +183,10 @@ nativeProvision configFile specFile = do
   Bytes.writeFile (source </> "AGENTS.md") "Fixture policy: validate the exact resulting tree.\n"
   Bytes.writeFile (source </> "src/dependency.txt") "old dependency\n"
   Bytes.writeFile (source </> "src/mode") "complete\n"
+  mapM_ (\name -> Bytes.writeFile (source </> ("src/integration-" <> name)) "0\n") ["a", "b", "c"]
   Bytes.writeFile (source </> "src/large-fixture.bin") (Bytes.replicate 1048577 120)
   void (git ["init", source])
-  void (git ["-C", source, "add", "--", "AGENTS.md", "src/dependency.txt", "src/mode", "src/large-fixture.bin"])
+  void (git ["-C", source, "add", "--", "AGENTS.md", "src/dependency.txt", "src/mode", "src/large-fixture.bin", "src/integration-a", "src/integration-b", "src/integration-c"])
   void (git ["-C", source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "fixture base"])
   base <- Text.strip . Encoding.decodeUtf8 <$> git ["-C", source, "rev-parse", "HEAD"]
   properties <- Systemd.systemdPropertiesIdentity
@@ -237,7 +242,7 @@ authorityApplication prefix = do
         body <- strictRequestBody request
         case Aeson.eitherDecode body of
           Right (accepted :: Kikan.AuthorizeActionRequest)
-            | Kikan.agentPrincipalText accepted.principal == "agent_01h000000000000000triage",
+            | Kikan.agentPrincipalText accepted.principal `elem` ["agent_01h000000000000000triage", "agent_01h000000000000000coordinator", "agent_01h000000000000000successor"],
               Kikan.InvokeCapabilityTool _ <- accepted.action -> do
                 now <- getCurrentTime
                 let expiry = addUTCTime 30 now

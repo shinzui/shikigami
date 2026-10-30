@@ -109,6 +109,13 @@ int main(int argc, char **argv) {
     int extra = fgetc(input);
     fclose(input);
     if (strcmp(dependency, "new dependency\n") || extra != EOF) return 74;
+    int flags[2] = {0, 0};
+    const char *paths[2] = {"/workspace/src/integration-a", "/workspace/src/integration-b"};
+    for (int n = 0; n < 2; ++n) {
+      input = fopen(paths[n], "r");
+      if (input) { flags[n] = fgetc(input) == '1'; fclose(input); }
+    }
+    if (flags[0] && flags[1]) return 77;
     puts("validated upgrade");
     return 0;
   }

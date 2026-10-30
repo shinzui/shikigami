@@ -7,7 +7,9 @@ synopsis: Disposable governed workspace Linux qualification
 executable shikigami-workspace-prototype
   other-modules:
     Accepted
+    Continuing
     Durable
+    Qualification
 
   main-is: Main.hs
   hs-source-dirs: .
