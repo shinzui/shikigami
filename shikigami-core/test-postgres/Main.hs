@@ -24,6 +24,7 @@ import Shikigami.WorkerSessionHandoffSpec qualified as WorkerSessionHandoffSpec
 import Shikigami.WorkerSessionSpec qualified as WorkerSessionSpec
 import Shikigami.WorkerSessionStoreSpec qualified as WorkerSessionStoreSpec
 import Shikigami.WorkflowVersioningSpec qualified as WorkflowVersioningSpec
+import Shikigami.WorkspaceTransferSpec qualified as WorkspaceTransferSpec
 import Test.Tasty (defaultMain, testGroup)
 
 main :: IO ()
@@ -42,6 +43,7 @@ main = withShikigamiMigratedSuite \databaseFixture ->
           WorkerSessionStoreSpec.tests databaseFixture,
           WorkerSessionSpec.tests databaseFixture,
           WorkerSessionHandoffSpec.tests databaseFixture,
+          WorkspaceTransferSpec.tests databaseFixture,
           WorkerSessionCapabilitySpec.tests databaseFixture,
           DirectoryStoreSpec.tests databaseFixture,
           FlowLifecycleSpec.tests databaseFixture,

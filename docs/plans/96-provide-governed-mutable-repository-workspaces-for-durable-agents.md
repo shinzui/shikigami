@@ -167,6 +167,17 @@ successor/handoff/integration remain outstanding.
 
 ## Surprises & Discoveries
 
+2026-10-30 successor design: retain the original allocation and process profile
+unchanged. A separate successor admission binds the established handoff to the
+session store's actual child mapping, exact run/assignment, owner and epoch. New
+transfer-aware adapter revisions will require `ascii-exact-transfer-v1`; old
+adapters must refuse it before IO. Conditional owner control advances only after
+the session has retained its matching fence and separate objective receipt. The
+store contract and five PostgreSQL cases are implemented. The full candidate
+passes 533 core, 358 PostgreSQL and five migration tests, schema isolation and
+`git diff --check`; no transfer-aware adapter or concrete handoff provider is
+installed yet.
+
 
 The baseline build fails before solving dependencies because `kikan-en-contract` and `kikan-en-client` are absent from the checkout referenced by `cabal.project`. The registered producer checkout has only one worktree. A clean fast-forward to the verified upstream master commit `16704290d527d413568bfa40c983f5c3604c35c8` restored both packages and the baseline core build. FRIC-14 is resolved.
 
@@ -195,6 +206,14 @@ The baseline build fails before solving dependencies because `kikan-en-contract`
 2026-10-30 handoff orientation: the delivered C13 builders and accepted adapters bind run, owner and epoch to the original immutable allocation (`workspaceFileActionFor`, `workspaceProcessAction`, `GitProvider.loadAccepted` and the process profile digest). Updating `workspace_controls` alone therefore cannot admit a successor, and changing the original binding would invalidate retained receipts. Milestone 5 must provide an explicit successor-admission contract alongside that immutable allocation, deriving session/assignment identity from retained session child mappings rather than model payloads. Historical snapshots and providers must retain their refusal behavior. File recovery also currently runs through an authorized current attempt in `FileProvider.withAccess`; unlike process/Git publication, it has no independent factual scanner after owner freeze. A prepared file receipt must remain unresolved until a factual owner can prove its original effect; do not fabricate settlement or let a replacement write satisfy that old receipt. These are remaining implementation obligations for the accepted handoff criterion, not reasons to weaken it.
 
 ## Decision Log
+
+2026-10-30: Keep successor authority separate from immutable allocation and old
+effect receipts. Derive session/assignment coordinates from retained child rows,
+never trigger payloads. Transfer-aware adapters require a distinct filesystem
+profile and exact revisions, preserving all historical adapter refusals. A
+workspace-side fence requires every retained effect/process settled, and the
+session's separately owned objective acknowledgement precedes successor
+admission. This supplies no synthetic IR-13 production receipt.
 
 
 2026-10-28: Own IR-11 in a standalone plan. Plan 48's portable one-off command has different lifecycle and package constraints; plan 84 consumes workspace fences but does not implement them. This plan supplies the actual durable provider while retaining those ownership boundaries.

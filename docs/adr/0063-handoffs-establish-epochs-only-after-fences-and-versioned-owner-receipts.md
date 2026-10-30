@@ -78,6 +78,16 @@ whole cgroup. These checks do not qualify an independent supervisor, output
 collector, restart reconciliation or handoff receipt. See
 [the root probe](../../tests/workspace/probe-root-apple.sh).
 
+The workspace-side store (2026-10-30) retains transfer intents and fence proofs
+separately from immutable allocation. Session and assignment coordinates come
+from authoritative child mappings. A distinct successor admission binds the
+actual new child to an already established session owner and its retained fence
+and objective receipt. Only that conditional admission advances workspace
+control; allocation and original effect receipts remain unchanged. Historical
+writers must refuse the new filesystem profile before IO. The store contract is
+implemented; concrete process fencing, transfer-aware adapters and native
+successor writes remain plan-96 qualification gates.
+
 ## Alternatives rejected
 
 Transferring on lease expiry would permit simultaneous writers. Cancelling a

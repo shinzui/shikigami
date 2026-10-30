@@ -13,6 +13,7 @@ module Shikigami.Workspace.Instructions
     validWorkspacePath,
     nativeFilePolicy,
     supervisedFilePolicy,
+    transferableFilePolicy,
     WorkspaceAdmission (..),
     InstructionError (..),
   )
@@ -128,5 +129,10 @@ nativeFilePolicy = "ascii-exact-v1"
 -- Historical file-only writers must reject this profile before any file IO.
 supervisedFilePolicy :: Text
 supervisedFilePolicy = "ascii-exact-process-v1"
+
+-- Accepted only by the explicit transfer-aware adapter revisions. Historical
+-- writers refuse this spelling before filesystem or process IO.
+transferableFilePolicy :: Text
+transferableFilePolicy = "ascii-exact-transfer-v1"
 
 instance Show WorkspaceAdmission where show _ = "WorkspaceAdmission <protected>"

@@ -1,6 +1,6 @@
 -- | Reserve before filesystem effects. Matching duplicate requests converge;
 -- reservation metadata remains immutable after the workspace becomes ready.
-module Shikigami.Workspace.Store (reserveWorkspaceTx, inspectWorkspaceTx, markWorkspaceReadyTx, checkWorkspaceOwnerTx, checkWorkspaceOperationTx, reserveWorkspaceEffectTx, recordWorkspaceReceiptTx, freezeWorkspaceTx, registerFileTx, inspectRegisteredFileTx, inspectFilePageTx) where
+module Shikigami.Workspace.Store (reserveWorkspaceTx, inspectWorkspaceTx, markWorkspaceReadyTx, checkWorkspaceOwnerTx, checkWorkspaceOperationTx, reserveWorkspaceEffectTx, recordWorkspaceReceiptTx, freezeWorkspaceTx, registerFileTx, inspectRegisteredFileTx, inspectFilePageTx, WorkspaceControl (..), inspectWorkspaceControlTx) where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4)
 import Data.Aeson qualified as Aeson
@@ -163,8 +163,15 @@ freezeWorkspaceTx binding owner epoch = do
     Right () -> Tx.statement binding.workspace.resource freezeControl >> pure (Right ())
 
 data WorkspaceControl = WorkspaceControl {owner :: !AgentIdentity, epoch :: !Integer, frozen :: !Bool}
-  deriving stock (Generic)
+  deriving stock (Eq, Show, Generic)
   deriving anyclass (FromJSON)
+
+-- The IO owner holds the workspace OS lock across conditional control and IO.
+-- This locked metadata read is also used to reconcile an existing freeze.
+inspectWorkspaceControlTx :: WorkspaceBinding -> Transaction (Maybe WorkspaceControl)
+inspectWorkspaceControlTx binding = do
+  actual <- inspectWorkspaceTx binding.workspace
+  if actual == Just (binding, Ready) then Tx.statement binding.workspace.resource lockControl else pure Nothing
 
 insertControl :: Statement (Text, AgentIdentity, Integer) ()
 insertControl = preparable "INSERT INTO shikigami.workspace_controls(resource,owner,epoch) VALUES($1,$2,$3) ON CONFLICT DO NOTHING" (contrazip3 (E.param (E.nonNullable E.text)) jsonParam (fromInteger >$< E.param (E.nonNullable E.int8))) D.noResult
