@@ -239,7 +239,11 @@ freeze/restart/settlement/late-owner refusal. This is a candidate, not passing
 evidence yet. `--qualify` runs those gates and then explicitly refuses the
 unavailable real-objective/successor-write gate. It cannot return success by
 substituting a fixture ownership receipt. Production adapter selection remains
-unchanged. The native controller builds on Darwin; runtime execution is next.
+unchanged. The native controller builds on Darwin; runtime execution is next. The fixture
+uses the configured host registry for actual effects and includes an accepted
+late old-owner file edit, lifecycle/authority revocation during factual
+recovery, and retained journal/log privacy checks. FRIC-29 records another
+frozen-cohort rebuild delay.
 
 ## Surprises & Discoveries
 

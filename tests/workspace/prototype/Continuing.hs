@@ -59,13 +59,13 @@ continuingCase config prefix stage = withQualification config prefix \q -> case 
     (session, actor, runId, root) <- openNativeSession q "handoff"
     admission <- loadAssignment q root runId q.initial.binding.request.owner
     first <- prepareTools q.env q.authorizer q.current q.client admission [edit "src/dependency.txt" "old dependency\n" "new dependency\n", edit "src/mode" "complete\n" "orphan\n", validate]
-    executePrepared q.env q.authorizer q.current q.client first
+    executeConfigured q first
     Just second <- advanceTools q.env q.current first
-    executePrepared q.env q.authorizer q.current q.client second
+    executeConfigured q second
     Just process <- advanceTools q.env q.current second
     Just (binding, _) <- run q.env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
     Lazy.writeFile (prefix </> "continuing.json") (Aeson.encode (Continuing binding admission process session actor))
-  "worker" -> withCase q \item -> executePrepared q.env q.authorizer q.current q.client item.prepared
+  "worker" -> withCase q \item -> executeConfigured q item.prepared
   "inspect" -> withCase q \item -> do
     process <- run q.env (runTransaction (Processes.inspectProcessTx item.prepared.reference.operationId))
     actual <- right =<< run q.env (Execution.inspectExecutionAttempt item.prepared.reference.attemptId)
@@ -106,7 +106,16 @@ continuingCase config prefix stage = withQualification config prefix \q -> case 
     refused =<< provider.admitWrite item.binding.workspace item.session item.admission.owner item.admission.epoch (OperationId "late-old-owner-write")
     intent <- right . Aeson.eitherDecodeStrict @TransferIntent =<< Bytes.readFile (prefix </> "continuing-intent.json")
     refused =<< provider.admitWrite item.binding.workspace item.session intent.newOwner intent.newEpoch (OperationId "unestablished-owner-write")
-    putStrLn "PASS fresh authority cannot admit the frozen old owner or an unestablished successor"
+    late <- continueTools q.env q.current item.prepared [edit "src/dependency.txt" "new dependency\n" "LATE_OLD_OWNER_WRITE\n"]
+    executeConfigured q late
+    access <- right =<< run q.env (Execution.authorizeReplay late.snapshot.executionId late.snapshot.identity (q.current late.snapshot))
+    Just operation <- right =<< run q.env (Execution.inspectOperation late.reference.operationId)
+    result <- maybe (fail "late old-owner outcome absent") pure operation.outcome
+    outcome <- right =<< run q.env (Execution.readReplayPayload @OperationOutcome access "operation-outcome" result)
+    unless (case outcome of ToolReturned _ True -> True; RichToolReturned output -> output.failed; _ -> False) (fail "late old-owner accepted edit succeeded")
+    retained <- Bytes.readFile (workspaceFiles item.binding.storageRoot item.binding </> "src/dependency.txt")
+    unless (retained == "new dependency\n") (fail "late old-owner edit changed accepted bytes")
+    putStrLn "PASS a real accepted late old-owner edit and unestablished successor admission both refuse under fresh authority"
   _ -> fail "unsupported continuing fixture stage"
   where
     withCase _ use = (right . Aeson.eitherDecodeStrict @Continuing =<< Bytes.readFile (prefix </> "continuing.json")) >>= use

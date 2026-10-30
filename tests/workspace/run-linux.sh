@@ -405,6 +405,14 @@ if [[ "$mode" == --workspace-gates || "$mode" == --qualify ]]; then
   systemctl kill --kill-whom=main --signal=KILL "$task-continuing.service" || true
   systemctl kill --kill-whom=main --signal=KILL "$service"
   touch "$prefix/deny-authority"
+  python3 - "$prefix/directory.json" paused <<'LIFECYCLE'
+import json,sys
+from pathlib import Path
+path=Path(sys.argv[1]); rows=json.loads(path.read_text())
+for row in rows:
+    if row['principal_id']=='agent_01h000000000000000triage': row['lifecycle']=sys.argv[2]
+staged=path.with_suffix('.next'); staged.write_text(json.dumps(rows)); staged.replace(path)
+LIFECYCLE
   systemctl kill --kill-whom=main --signal=CONT "$capture"
   systemctl start "$service"
   [[ $(stat -c '%d:%i' "$prefix/rpc/supervisor.sock") == "$listener" ]]
@@ -418,9 +426,31 @@ if [[ "$mode" == --workspace-gates || "$mode" == --qualify ]]; then
   "$prototype" continuing "$config" "$prefix" settled >"$prefix/continuing-settled.log" 2>&1
   cat "$prefix/continuing-settled.log"
   rm "$prefix/deny-authority"
+  python3 - "$prefix/directory.json" <<'LIFECYCLE'
+import json,sys
+from pathlib import Path
+path=Path(sys.argv[1]); rows=json.loads(path.read_text())
+for row in rows: row['lifecycle']='active'
+staged=path.with_suffix('.next'); staged.write_text(json.dumps(rows)); staged.replace(path)
+LIFECYCLE
+  sleep 2
   "$prototype" continuing "$config" "$prefix" late >"$prefix/continuing-late.log" 2>&1
   cat "$prefix/continuing-late.log"
-  echo 'Workspace-owned native gates passed (21 cases). Real objective ownership and accepted successor writes remain unqualified.'
+  /usr/bin/psql "$connection" -Atc "SELECT to_jsonb(e) FROM shikigami.executions e UNION ALL SELECT to_jsonb(o) FROM shikigami.execution_transcript_operations o UNION ALL SELECT result FROM keiro.keiro_workflow_steps" >"$prefix/public-metadata.jsonl"
+  python3 - "$prefix" <<'PRIVACY'
+from pathlib import Path
+import sys
+root=Path(sys.argv[1])
+markers=[b'fixture-host-secret',b'fixture-sibling-secret',b'workspace-fixture-token',b'fixture-secret',b'new dependency',b'Fixture policy: validate the exact resulting tree.']
+files=[root/'public-metadata.jsonl',*root.glob('*.log')]
+assert (root/'public-metadata.jsonl').stat().st_size > 0
+for path in files:
+    body=path.read_bytes()
+    assert not any(marker in body for marker in markers), 'public fixture metadata/log privacy check failed'
+print('PASS retained workflow/operation metadata and public logs exclude fixture contents, credentials and bearer authority')
+PRIVACY
+  echo 'Workspace-owned native gates passed (22 cases). Real objective ownership and accepted successor writes remain unqualified.'
+
   if [[ "$mode" == --qualify ]]; then
     echo 'REFUSED full qualification: the real IR-13 ownership provider is not installed; no substitute receipt is permitted.'
     exit 78

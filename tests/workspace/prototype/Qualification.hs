@@ -1,7 +1,7 @@
 -- Native accepted-adapter qualification. Production configured policy and host
 -- select every allocation/profile; this fixture supplies deterministic model
 -- replies and no objective ownership receipts.
-module Qualification (Qualification (..), Ready (..), withQualification, loadAssignment, runTools, resultValue, run, right, integrationCase) where
+module Qualification (Qualification (..), Ready (..), withQualification, loadAssignment, runTools, executeConfigured, resultValue, run, right, integrationCase) where
 
 import Accepted
 import Baikai.Options (emptyOptions)
@@ -30,6 +30,7 @@ import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnost
 import Shikigami.Behavior.Skill (SkillDir (..))
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
+import Shikigami.Capability.Provider (CapabilityRuntime (..))
 import Shikigami.Decision.ModelCatalog (modelCatalog)
 import Shikigami.Directory (DirectoryRuntime (..), identityLifecycleAdmission, startDirectory)
 import Shikigami.Execution.Attempt (JobReference (..))
@@ -114,7 +115,7 @@ runTools q first = loop first []
       when (operation.specification.name == "overlay__workspace-exec__validate") do
         clock <- doesFileExist "/run/shikigami-workspace-prototype.clock-steps"
         when clock (void (readProcess "/usr/bin/timeout" ["40", q.prefix </> "root/bin/probe", "--await-clock-step"] ""))
-      executePrepared q.env q.authorizer q.current q.client prepared
+      executeConfigured q prepared
       output <- resultValue q prepared
       next <- advanceTools q.env q.current prepared
       case next of Nothing -> pure (prepared, reverse (output : previous)); Just value -> loop value (output : previous)
@@ -197,3 +198,6 @@ run env action = right =<< runAppIO env action
 
 right :: Either e a -> IO a
 right = either (const (fail "qualification boundary refused")) pure
+
+executeConfigured :: Qualification -> Prepared -> IO ()
+executeConfigured q = executeWithProviders q.host.capabilities.providers q.env q.authorizer q.current

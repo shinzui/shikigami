@@ -1,7 +1,7 @@
 -- Actual accepted execution/claim plumbing for the disposable Linux fixture.
 -- Only the model response is deterministic; files, accounts, RPC and systemd
 -- use their production interpreters.
-module Accepted (Prepared (..), prepareAccepted, prepareUpgrade, advanceUpgrade, executePrepared, executeGitWithBackend, prepareTools, continueTools, advanceTools) where
+module Accepted (Prepared (..), prepareAccepted, prepareUpgrade, advanceUpgrade, executePrepared, executeGitWithBackend, prepareTools, continueTools, advanceTools, executeWithProviders) where
 
 import Baikai.Options (emptyOptions)
 import Baikai.StopReason (StopReason (ToolUse))
@@ -235,3 +235,9 @@ nextTool :: AppEnv -> Execution.ReplayAccess -> ExecutionSnapshot -> PayloadRef 
 nextTool env access snapshot response position invocation = case filter ((== invocation.name) . (.name)) snapshot.toolBindings of
   [binding] -> submit env snapshot access (ToolOperationInput response position invocation binding)
   _ -> fail "exact retained fixture tool missing"
+
+executeWithProviders :: CapabilityProviderRegistry -> AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> Prepared -> IO ()
+executeWithProviders providers env authorizer current prepared = do
+  let runtime = Executor.ExecutionRuntime env (\_ -> current prepared.snapshot) current (\_ -> error "fixture does not dispatch a model") (Tools.withExecutionTools Log.silentLogger authorizer providers native) 5
+  result <- Executor.executeAcceptedAttempt runtime prepared.snapshot.identity prepared.reference
+  unless (result == Right Executor.ExecutorDone) (fail "configured fixture delivery did not finish")
