@@ -1,6 +1,7 @@
 -- Hand-owned canonical histories and commands for every checked lifecycle cell.
 module Shikigami.ExecutionLifecycle.BehaviorHoles (behaviorWitnesses) where
 
+import Shikigami.Execution.Transcript (ExecutionId (..))
 import Shikigami.ExecutionLifecycle.Generated.BehaviorContract
 import Shikigami.ExecutionLifecycle.Generated.Domain
 import Shikigami.Prelude
@@ -50,40 +51,40 @@ historyFor requirement =
 
 commandFor :: Text -> Int -> Integer -> ExecutionLifecycleCommand
 commandFor name r remaining = case name of
-  "AdmitExecution" -> AdmitExecution (AdmitExecutionData "fixture-execution" "fixture-snapshot")
-  "AdvanceExecution" -> AdvanceExecution (AdvanceExecutionData "fixture-execution" r (r + 1))
-  "ParkExecution" -> ParkExecution (ParkExecutionData "fixture-execution" r (r + 1))
-  "ResumeExecution" -> ResumeExecution (ResumeExecutionData "fixture-execution" r (r + 1))
-  "MarkExecutionUnresolved" -> MarkExecutionUnresolved (MarkExecutionUnresolvedData "fixture-execution" r (r + 1))
-  "ReconcileExecution" -> ReconcileExecution (ReconcileExecutionData "fixture-execution" r (r + 1))
-  "FinishExecution" -> FinishExecution (FinishExecutionData "fixture-execution" r (r + 1))
-  "FailExecution" -> FailExecution (FailExecutionData "fixture-execution" r (r + 1))
-  "CancelExecution" -> CancelExecution (CancelExecutionData "fixture-execution" r (r + 1))
-  "RetryExecution" -> RetryExecution (RetryExecutionData "fixture-execution" r (r + 1))
-  "SettleExecutionReceipt" -> SettleExecutionReceipt (SettleExecutionReceiptData "fixture-execution" r (r + 1) remaining)
-  "FinishExecutionPendingReceipts" -> FinishExecutionPendingReceipts (FinishExecutionPendingReceiptsData "fixture-execution" r (r + 1))
-  "FailExecutionPendingReceipts" -> FailExecutionPendingReceipts (FailExecutionPendingReceiptsData "fixture-execution" r (r + 1))
-  "CancelExecutionPendingReceipts" -> CancelExecutionPendingReceipts (CancelExecutionPendingReceiptsData "fixture-execution" r (r + 1))
+  "AdmitExecution" -> AdmitExecution (AdmitExecutionData (ExecutionId "fixture-execution") "fixture-snapshot")
+  "AdvanceExecution" -> AdvanceExecution (AdvanceExecutionData (ExecutionId "fixture-execution") r (r + 1))
+  "ParkExecution" -> ParkExecution (ParkExecutionData (ExecutionId "fixture-execution") r (r + 1))
+  "ResumeExecution" -> ResumeExecution (ResumeExecutionData (ExecutionId "fixture-execution") r (r + 1))
+  "MarkExecutionUnresolved" -> MarkExecutionUnresolved (MarkExecutionUnresolvedData (ExecutionId "fixture-execution") r (r + 1))
+  "ReconcileExecution" -> ReconcileExecution (ReconcileExecutionData (ExecutionId "fixture-execution") r (r + 1))
+  "FinishExecution" -> FinishExecution (FinishExecutionData (ExecutionId "fixture-execution") r (r + 1))
+  "FailExecution" -> FailExecution (FailExecutionData (ExecutionId "fixture-execution") r (r + 1))
+  "CancelExecution" -> CancelExecution (CancelExecutionData (ExecutionId "fixture-execution") r (r + 1))
+  "RetryExecution" -> RetryExecution (RetryExecutionData (ExecutionId "fixture-execution") r (r + 1))
+  "SettleExecutionReceipt" -> SettleExecutionReceipt (SettleExecutionReceiptData (ExecutionId "fixture-execution") r (r + 1) remaining)
+  "FinishExecutionPendingReceipts" -> FinishExecutionPendingReceipts (FinishExecutionPendingReceiptsData (ExecutionId "fixture-execution") r (r + 1))
+  "FailExecutionPendingReceipts" -> FailExecutionPendingReceipts (FailExecutionPendingReceiptsData (ExecutionId "fixture-execution") r (r + 1))
+  "CancelExecutionPendingReceipts" -> CancelExecutionPendingReceipts (CancelExecutionPendingReceiptsData (ExecutionId "fixture-execution") r (r + 1))
   _ -> error "unknown checked execution command"
 
 eventFor :: Text -> Int -> Integer -> Bool -> ExecutionLifecycleEvent
 eventFor name r remaining closed = case name of
   "AdmitExecution" -> admitted
-  "AdvanceExecution" -> ExecutionAdvanced (ExecutionAdvancedData "fixture-execution" r (r + 1))
-  "ParkExecution" -> ExecutionParked (ExecutionParkedData "fixture-execution" r (r + 1))
-  "ResumeExecution" -> ExecutionResumed (ExecutionResumedData "fixture-execution" r (r + 1))
-  "MarkExecutionUnresolved" -> ExecutionBecameUnresolved (ExecutionBecameUnresolvedData "fixture-execution" r (r + 1))
-  "ReconcileExecution" -> ExecutionReconciled (ExecutionReconciledData "fixture-execution" r (r + 1))
-  "FinishExecution" -> ExecutionFinished (ExecutionFinishedData "fixture-execution" r (r + 1))
-  "FailExecution" -> ExecutionFailed (ExecutionFailedData "fixture-execution" r (r + 1))
-  "CancelExecution" -> ExecutionCancelled (ExecutionCancelledData "fixture-execution" r (r + 1))
-  "RetryExecution" -> ExecutionRetried (ExecutionRetriedData "fixture-execution" r (r + 1))
-  "SettleExecutionReceipt" | closed -> ExecutionReceiptsClosed (ExecutionReceiptsClosedData "fixture-execution" r (r + 1) remaining)
-  "SettleExecutionReceipt" -> ExecutionReceiptSettled (ExecutionReceiptSettledData "fixture-execution" r (r + 1) remaining)
-  "FinishExecutionPendingReceipts" -> ExecutionFinishedPendingReceipts (ExecutionFinishedPendingReceiptsData "fixture-execution" r (r + 1))
-  "FailExecutionPendingReceipts" -> ExecutionFailedPendingReceipts (ExecutionFailedPendingReceiptsData "fixture-execution" r (r + 1))
-  "CancelExecutionPendingReceipts" -> ExecutionCancelledPendingReceipts (ExecutionCancelledPendingReceiptsData "fixture-execution" r (r + 1))
+  "AdvanceExecution" -> ExecutionAdvanced (ExecutionAdvancedData (ExecutionId "fixture-execution") r (r + 1))
+  "ParkExecution" -> ExecutionParked (ExecutionParkedData (ExecutionId "fixture-execution") r (r + 1))
+  "ResumeExecution" -> ExecutionResumed (ExecutionResumedData (ExecutionId "fixture-execution") r (r + 1))
+  "MarkExecutionUnresolved" -> ExecutionBecameUnresolved (ExecutionBecameUnresolvedData (ExecutionId "fixture-execution") r (r + 1))
+  "ReconcileExecution" -> ExecutionReconciled (ExecutionReconciledData (ExecutionId "fixture-execution") r (r + 1))
+  "FinishExecution" -> ExecutionFinished (ExecutionFinishedData (ExecutionId "fixture-execution") r (r + 1))
+  "FailExecution" -> ExecutionFailed (ExecutionFailedData (ExecutionId "fixture-execution") r (r + 1))
+  "CancelExecution" -> ExecutionCancelled (ExecutionCancelledData (ExecutionId "fixture-execution") r (r + 1))
+  "RetryExecution" -> ExecutionRetried (ExecutionRetriedData (ExecutionId "fixture-execution") r (r + 1))
+  "SettleExecutionReceipt" | closed -> ExecutionReceiptsClosed (ExecutionReceiptsClosedData (ExecutionId "fixture-execution") r (r + 1) remaining)
+  "SettleExecutionReceipt" -> ExecutionReceiptSettled (ExecutionReceiptSettledData (ExecutionId "fixture-execution") r (r + 1) remaining)
+  "FinishExecutionPendingReceipts" -> ExecutionFinishedPendingReceipts (ExecutionFinishedPendingReceiptsData (ExecutionId "fixture-execution") r (r + 1))
+  "FailExecutionPendingReceipts" -> ExecutionFailedPendingReceipts (ExecutionFailedPendingReceiptsData (ExecutionId "fixture-execution") r (r + 1))
+  "CancelExecutionPendingReceipts" -> ExecutionCancelledPendingReceipts (ExecutionCancelledPendingReceiptsData (ExecutionId "fixture-execution") r (r + 1))
   _ -> error "unknown checked execution event"
 
 admitted :: ExecutionLifecycleEvent
-admitted = ExecutionAdmitted (ExecutionAdmittedData "fixture-execution" "fixture-snapshot")
+admitted = ExecutionAdmitted (ExecutionAdmittedData (ExecutionId "fixture-execution") "fixture-snapshot")

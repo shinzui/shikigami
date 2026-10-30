@@ -22,6 +22,7 @@ import Data.Text.Encoding qualified as Text
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID
 import Data.Vector qualified as Vector
+import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (SessionId)
 import Shikigami.Agent.Approval (ReviewRequestId)
@@ -480,3 +481,6 @@ toolInvocations assistant = [call | ToolBlock call <- assistant.blocks]
 
 assistantText :: ReplayAssistant -> Text
 assistantText assistant = Text.concat [text | TextBlock text <- assistant.blocks]
+
+instance CanonicalTypeName ExecutionId where
+  canonicalTypeName _ = "shikigami.ExecutionId.v1"

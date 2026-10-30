@@ -6,124 +6,126 @@ import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Keiki.Core (RegFile (..))
+import Shikigami.DomainBindings qualified as DomainBindings
+import Shikigami.WorkerSession.Types (WorkerSessionId)
 import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)
 
 data WorkerSessionLifecycleVertex = WorkerSessionLifecycleMissing | WorkerSessionLifecycleIdle | WorkerSessionLifecycleActive | WorkerSessionLifecycleParked | WorkerSessionLifecycleUnresolved | WorkerSessionLifecycleTransferring | WorkerSessionLifecycleFailed | WorkerSessionLifecycleCancelled
   deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
 
 data AdmitWorkerSessionData = AdmitWorkerSessionData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , bindingDigest :: !Text
   }
   deriving stock (Generic, Eq, Show)
 
 data AcceptSessionMessageData = AcceptSessionMessageData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data StartSessionAssignmentData = StartSessionAssignmentData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ParkSessionAssignmentData = ParkSessionAssignmentData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ResumeSessionAssignmentData = ResumeSessionAssignmentData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data RecordSessionResultData = RecordSessionResultData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data MarkSessionUnresolvedData = MarkSessionUnresolvedData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ReconcileSessionAssignmentData = ReconcileSessionAssignmentData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data RequestSessionTransferData = RequestSessionTransferData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ReconcileSessionTransferData = ReconcileSessionTransferData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data EstablishSessionOwnerData = EstablishSessionOwnerData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data SubscribeSessionEventsData = SubscribeSessionEventsData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ObserveWorkerSessionData = ObserveWorkerSessionData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data PrepareSessionCheckpointData = PrepareSessionCheckpointData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ConsumeSessionEventsData = ConsumeSessionEventsData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data FailWorkerSessionData = FailWorkerSessionData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data CancelWorkerSessionData = CancelWorkerSessionData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
@@ -149,118 +151,118 @@ data WorkerSessionLifecycleCommand = AdmitWorkerSession !AdmitWorkerSessionData
   deriving stock (Generic, Eq, Show)
 
 data WorkerSessionAdmittedData = WorkerSessionAdmittedData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , bindingDigest :: !Text
   }
   deriving stock (Generic, Eq, Show)
 
 data SessionMessageAcceptedData = SessionMessageAcceptedData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data SessionAssignmentStartedData = SessionAssignmentStartedData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data SessionAssignmentParkedData = SessionAssignmentParkedData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data SessionAssignmentResumedData = SessionAssignmentResumedData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data SessionResultRecordedData = SessionResultRecordedData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data SessionBecameUnresolvedData = SessionBecameUnresolvedData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data SessionAssignmentReconciledData = SessionAssignmentReconciledData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data SessionTransferRequestedData = SessionTransferRequestedData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data SessionTransferReconciledData = SessionTransferReconciledData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data SessionOwnerEstablishedData = SessionOwnerEstablishedData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data SessionEventsSubscribedData = SessionEventsSubscribedData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data WorkerSessionObservedData = WorkerSessionObservedData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data SessionCheckpointPreparedData = SessionCheckpointPreparedData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data SessionEventsConsumedData = SessionEventsConsumedData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data WorkerSessionFailedData = WorkerSessionFailedData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data WorkerSessionCancelledData = WorkerSessionCancelledData
-  { sessionId :: !Text
+  { sessionId :: !WorkerSessionId
   , expected :: !Int
   , revision :: !Int
   }
@@ -286,14 +288,14 @@ data WorkerSessionLifecycleEvent = WorkerSessionAdmitted !WorkerSessionAdmittedD
   deriving stock (Generic, Eq, Show)
 
 type WorkerSessionLifecycleRegs =
-  '[ '("sessionId", Text)
+  '[ '("sessionId", WorkerSessionId)
    , '("bindingDigest", Text)
    , '("revision", Int)
    ]
 
 initialWorkerSessionLifecycleRegs :: RegFile WorkerSessionLifecycleRegs
 initialWorkerSessionLifecycleRegs =
-  RCons (Proxy @"sessionId") "" $
+  RCons (Proxy @"sessionId") DomainBindings.initialWorkerSessionIdentity $
   RCons (Proxy @"bindingDigest") "" $
   RCons (Proxy @"revision") 0 RNil
 

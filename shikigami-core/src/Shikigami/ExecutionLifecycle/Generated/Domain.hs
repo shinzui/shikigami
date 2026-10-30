@@ -6,82 +6,84 @@ import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Keiki.Core (RegFile (..))
+import Shikigami.DomainBindings qualified as DomainBindings
+import Shikigami.Execution.Transcript (ExecutionId)
 import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)
 
 data ExecutionLifecycleVertex = ExecutionLifecycleMissing | ExecutionLifecycleActive | ExecutionLifecycleParked | ExecutionLifecycleUnresolved | ExecutionLifecycleSucceededPendingReceipts | ExecutionLifecycleFailedPendingReceipts | ExecutionLifecycleCancelledPendingReceipts | ExecutionLifecycleSucceeded | ExecutionLifecycleFailed | ExecutionLifecycleCancelled
   deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
 
 data AdmitExecutionData = AdmitExecutionData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , snapshotDigest :: !Text
   }
   deriving stock (Generic, Eq, Show)
 
 data AdvanceExecutionData = AdvanceExecutionData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ParkExecutionData = ParkExecutionData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ResumeExecutionData = ResumeExecutionData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data MarkExecutionUnresolvedData = MarkExecutionUnresolvedData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ReconcileExecutionData = ReconcileExecutionData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data FinishExecutionData = FinishExecutionData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data FailExecutionData = FailExecutionData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data CancelExecutionData = CancelExecutionData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data RetryExecutionData = RetryExecutionData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data SettleExecutionReceiptData = SettleExecutionReceiptData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   , remaining :: !Integer
@@ -89,21 +91,21 @@ data SettleExecutionReceiptData = SettleExecutionReceiptData
   deriving stock (Generic, Eq, Show)
 
 data FinishExecutionPendingReceiptsData = FinishExecutionPendingReceiptsData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data FailExecutionPendingReceiptsData = FailExecutionPendingReceiptsData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data CancelExecutionPendingReceiptsData = CancelExecutionPendingReceiptsData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
@@ -126,76 +128,76 @@ data ExecutionLifecycleCommand = AdmitExecution !AdmitExecutionData
   deriving stock (Generic, Eq, Show)
 
 data ExecutionAdmittedData = ExecutionAdmittedData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , snapshotDigest :: !Text
   }
   deriving stock (Generic, Eq, Show)
 
 data ExecutionAdvancedData = ExecutionAdvancedData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ExecutionParkedData = ExecutionParkedData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ExecutionResumedData = ExecutionResumedData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ExecutionBecameUnresolvedData = ExecutionBecameUnresolvedData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ExecutionReconciledData = ExecutionReconciledData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ExecutionFinishedData = ExecutionFinishedData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ExecutionFailedData = ExecutionFailedData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ExecutionCancelledData = ExecutionCancelledData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ExecutionRetriedData = ExecutionRetriedData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ExecutionReceiptSettledData = ExecutionReceiptSettledData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   , remaining :: !Integer
@@ -203,7 +205,7 @@ data ExecutionReceiptSettledData = ExecutionReceiptSettledData
   deriving stock (Generic, Eq, Show)
 
 data ExecutionReceiptsClosedData = ExecutionReceiptsClosedData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   , remaining :: !Integer
@@ -211,21 +213,21 @@ data ExecutionReceiptsClosedData = ExecutionReceiptsClosedData
   deriving stock (Generic, Eq, Show)
 
 data ExecutionFinishedPendingReceiptsData = ExecutionFinishedPendingReceiptsData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ExecutionFailedPendingReceiptsData = ExecutionFailedPendingReceiptsData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
   deriving stock (Generic, Eq, Show)
 
 data ExecutionCancelledPendingReceiptsData = ExecutionCancelledPendingReceiptsData
-  { executionId :: !Text
+  { executionId :: !ExecutionId
   , expected :: !Int
   , revision :: !Int
   }
@@ -249,7 +251,7 @@ data ExecutionLifecycleEvent = ExecutionAdmitted !ExecutionAdmittedData
   deriving stock (Generic, Eq, Show)
 
 type ExecutionLifecycleRegs =
-  '[ '("executionId", Text)
+  '[ '("executionId", ExecutionId)
    , '("snapshotDigest", Text)
    , '("revision", Int)
    , '("pendingReceipts", Integer)
@@ -257,7 +259,7 @@ type ExecutionLifecycleRegs =
 
 initialExecutionLifecycleRegs :: RegFile ExecutionLifecycleRegs
 initialExecutionLifecycleRegs =
-  RCons (Proxy @"executionId") "" $
+  RCons (Proxy @"executionId") DomainBindings.initialExecutionIdentity $
   RCons (Proxy @"snapshotDigest") "" $
   RCons (Proxy @"revision") 0 $
   RCons (Proxy @"pendingReceipts") 0 RNil

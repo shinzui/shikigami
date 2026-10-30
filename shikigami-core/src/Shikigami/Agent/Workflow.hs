@@ -72,7 +72,6 @@ import Keiro.Workflow
 import Keiro.Workflow qualified as Workflow
 import Keiro.Workflow.Child (WorkflowChildFailed (..))
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
-import Keiro.Workflow.Types (PatchId (..))
 import Kioku.Api.Types (Confidence (MediumConfidence), MemoryRecord, MemoryType (MemoryPattern))
 import Kioku.App (AppEffects, AppEnv (..))
 import Kioku.Id (MemoryId, SessionId, genMemoryId, genSessionId, idText)
@@ -302,11 +301,7 @@ agentRunWorkflow ::
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 agentRunWorkflow deps mJob = do
   job <- runStep deps ingestJobStepName (ingestJob mJob)
-  resourcesEnabled <- Workflow.patch (PatchId "shikigami-execution-resources-v1")
-  admission <-
-    if resourcesEnabled
-      then runStep deps (StepName "validate-execution-root") (validateExecutionRoot job)
-      else pure (Right ())
+  admission <- runStep deps (StepName "validate-execution-root") (validateExecutionRoot job)
   case admission of
     Left refusal -> pure (Left (PermanentAgentRunFailure (Text.pack (show refusal))))
     Right () -> runAdmittedAgent deps job
@@ -356,7 +351,6 @@ runResolvedAgent ::
   AgentDecl ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 runResolvedAgent deps job decl = do
-  workspaceEnabled <- Workflow.patch (PatchId "shikigami-governed-workspaces-v1")
   profileResolution <- runStep deps (StepName "resolve-profile") (liftIO (resolveRequiredProfile deps decl))
   case profileResolution of
     Left refusal -> pure (Left (PermanentAgentRunFailure (renderProfileResolutionError refusal)))
@@ -364,8 +358,8 @@ runResolvedAgent deps job decl = do
       capabilityResolution <-
         runStep
           deps
-          (StepName (if workspaceEnabled && requestsWorkspace decl then "resolve-governed-capability-overlays" else "resolve-capability-overlays"))
-          (pure (if workspaceEnabled && requestsWorkspace decl then resolveGovernedCapabilitiesForRun deps.capabilities decl resolvedProfile else resolveCapabilitiesForRun deps.capabilities decl resolvedProfile))
+          (StepName (if requestsWorkspace decl then "resolve-governed-capability-overlays" else "resolve-capability-overlays"))
+          (pure (if requestsWorkspace decl then resolveGovernedCapabilitiesForRun deps.capabilities decl resolvedProfile else resolveCapabilitiesForRun deps.capabilities decl resolvedProfile))
       case capabilityResolution of
         Left refusal ->
           pure
@@ -420,19 +414,14 @@ runProfiledAgent ::
   ResolvedCapabilitySet ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 runProfiledAgent deps job decl resolvedProfile resolvedOverlays = do
-  durable <- Workflow.patch (PatchId "shikigami-durable-execution-v1")
-  enabled <- Workflow.patch (PatchId "shikigami-execution-selection-v1")
-  selected <-
-    if enabled
-      then runStep deps (StepName "resolve-execution-selection") do
-        now <- liftIO getCurrentTime
-        pure (resolveRunSelection deps job decl resolvedProfile now)
-      else pure (Right Nothing)
+  selected <- runStep deps (StepName "resolve-execution-selection") do
+    now <- liftIO getCurrentTime
+    pure (resolveRunSelection deps job decl resolvedProfile now)
   case selected of
     Left refusal -> pure (Left (PermanentAgentRunFailure (selectionRefusalDetail deps job decl resolvedProfile Nothing refusal)))
-    Right Nothing -> runWith ((.behaviorEnv) deps) (if enabled then job & #executionPermissions .~ inheritedPermissions decl job else job)
+    Right Nothing -> runWith ((.behaviorEnv) deps) (job & #executionPermissions .~ inheritedPermissions decl job)
     Right (Just selection)
-      | durable && durableSkill decl ->
+      | durableSkill decl ->
           let permissions = case selection.source of
                 Selection.DeclaredAlias -> Just selection.permittedAliases
                 Selection.ProcessDefault -> inheritedPermissions decl job
@@ -654,13 +643,11 @@ runSessionedAgent deps activeBehaviorEnv durableSelection resolvedProfile resolv
 -- owners and step labels below.
 runDurableSkillStep :: AgentRunDeps -> Maybe ResolvedProfile -> ResolvedCapabilitySet -> RunJob -> AgentDecl -> SessionId -> [MemoryRecord] -> Selection.ExecutionSelection -> Text -> Eff (Workflow : AppEffects) (Either Text Value)
 runDurableSkillStep deps profile overlays job decl sid prior selection path = do
-  workspaceEnabled <- Workflow.patch (PatchId "shikigami-governed-workspaces-v1")
-  coordinationEnabled <- Workflow.patch (PatchId "shikigami-worker-coordination-v1")
   let runtime = executionRuntime deps
       coordinating = case decl.behavior of CoordinatingSkill {} -> True; _ -> False
-      factory = if coordinationEnabled then executionTools deps else ExecutionTools.staticNativeTools deps.behaviorEnv.tools
+      factory = executionTools deps
       describe snapshot
-        | coordinating && (not coordinationEnabled || isNothing deps.coordination) = pure (Left (Execution.ExecutionPolicyRefused "coordinating Skill authority is unavailable"))
+        | coordinating && isNothing deps.coordination = pure (Left (Execution.ExecutionPolicyRefused "coordinating Skill authority is unavailable"))
         | otherwise = do
             menu <- ExecutionTools.describeExecutionTools deps.logger deps.actionAuthorizer deps.capabilities.providers factory snapshot
             pure do
@@ -681,7 +668,7 @@ runDurableSkillStep deps profile overlays job decl sid prior selection path = do
             input = pure (Right (ExecutionStart.SkillInput (BehaviorInput job.triggerPayload prior) []))
           }
   admitted <-
-    if workspaceEnabled && requestsWorkspace decl
+    if requestsWorkspace decl
       then
         runStep
           deps
@@ -1028,17 +1015,12 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
   case Flow.lookupFlow flowName of
     Nothing -> pure (Left ("unknown flow " <> flowName))
     Just flow@Flow.FlowDef {Flow.run} -> do
-      decisionsEnabled <- Workflow.patch (PatchId "shikigami-flow-decisions-v1")
-      coordinationEnabled <- Workflow.patch (PatchId "shikigami-worker-coordination-v1")
       (_, childWorkflowId) <- currentWorkflow
       let coordinator = WorkerCapability.CoordinatorRun childWorkflowId.unWorkflowId job.identity sid job.executionRootId job.executionPermissions
-      coordinationPolicy <-
-        if coordinationEnabled
-          then step (StepName "worker-coordination-policy") (liftIO (FlowWorkers.resolveCoordinationPolicy deps.coordination deps.actionAuthorizer coordinator))
-          else pure (Right Nothing)
+      coordinationPolicy <- step (StepName "worker-coordination-policy") (liftIO (FlowWorkers.resolveCoordinationPolicy deps.coordination deps.actionAuthorizer coordinator))
       let attentionInterpreter = PracticeReviewAttention.runPracticeReviewAttentionAtomic practiceReviewAttentionEnv
           decisionInterpreter action
-            | null flow.decisionSlots || not decisionsEnabled = FlowDecision.runDecisionDisabled action
+            | null flow.decisionSlots = FlowDecision.runDecisionDisabled action
             | Just pool <- (.deliveryPool) deps =
                 FlowDecision.runDecision
                   FlowDecision.DecisionEnv
@@ -1061,7 +1043,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
               . FlowCapability.runMemory memoryEnv
               . FlowCapability.runSink sinkEnv
               . FlowDelegate.runDelegate delegateEnv
-              . FlowWorkers.runWorkers (if coordinationEnabled then deps.coordination else Nothing) deps.actionAuthorizer coordinator coordinationPolicy
+              . FlowWorkers.runWorkers deps.coordination deps.actionAuthorizer coordinator coordinationPolicy
               . FlowRouting.runRouting routingEnv
               . decisionInterpreter
               . acknowledgementInterpreter
@@ -1072,7 +1054,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
               . attentionInterpreter
               $ run ((.triggerPayload) job)
           )
-      when (decisionsEnabled && not (null flow.decisionSlots)) do
+      when (not (null flow.decisionSlots)) do
         forM_ ((.deliveryPool) deps) \pool -> do
           finalized <- liftIO (DecisionEvidence.finalizeDecisionReport (DecisionEvidence.postgresDecisionEvidenceStore pool) (runCorrelationId (jobIdempotencyKey job)))
           either (EffException.throwIO . DecisionAbort) (const (pure ())) finalized

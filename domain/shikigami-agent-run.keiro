@@ -9,41 +9,29 @@ workflow AgentRun
   id from input via runJobWorkflowId
   body
     step ingest-job -> RunJob
-    patch shikigami-execution-resources-v1 {
-      step validate-execution-root -> ResourceAdmission
-    }
+    step validate-execution-root -> ResourceAdmission
     step lookup-agent -> AgentDecl
     step resolve-profile -> ProfileResolution
     step resolve-capability-overlays -> CapabilityOverlayResolution
-    patch shikigami-governed-workspaces-v1 {
-      step resolve-governed-capability-overlays -> CapabilityOverlayResolution
-      step admit-workspace-skill-execution -> ExecutionAdmissionResult
-    }
-    patch shikigami-execution-selection-v1 {
-      step resolve-execution-selection -> ExecutionSelectionResolution
-    }
+    step resolve-governed-capability-overlays -> CapabilityOverlayResolution
+    step admit-workspace-skill-execution -> ExecutionAdmissionResult
+    step resolve-execution-selection -> ExecutionSelectionResolution
     step resolve-approval-policy -> ApprovalPolicySnapshot
     step open-session -> SessionId
     step recall -> RecalledLearnings
-    patch shikigami-durable-execution-v1 {
-      step admit-skill-execution -> ExecutionAdmissionResult
-      child execution id input via executionWorkflowId -> ExecutionDriverResult
-    }
+    step admit-skill-execution -> ExecutionAdmissionResult
+    child execution id input via executionWorkflowId -> ExecutionDriverResult
     step run-behavior-v2 -> BehaviorOutput
     step classify -> RiskVerdict
     child approval id input via approvalWorkflowId -> ApprovalWorkflowResult
-    patch shikigami-flow-decisions-v1 {
-      step decision-policy -> DecisionPolicyResolution
-      step decision-prepare-triage -> PreparedDecisionResolution
-      step decision-result-triage -> DecisionOutcome
-      step decision-catalog-investigate -> CandidateCatalog
-      step decision-prepare-investigate -> PreparedDecisionResolution
-      step decision-result-investigate -> DecisionOutcome
-    }
+    step decision-policy -> DecisionPolicyResolution
+    step decision-prepare-triage -> PreparedDecisionResolution
+    step decision-result-triage -> DecisionOutcome
+    step decision-catalog-investigate -> CandidateCatalog
+    step decision-prepare-investigate -> PreparedDecisionResolution
+    step decision-result-investigate -> DecisionOutcome
     step route-catalog-architecture-practice -> CandidateCatalog
-    patch shikigami-worker-coordination-v1 {
-      step worker-coordination-policy -> CoordinationPolicyResolution
-    }
+    step worker-coordination-policy -> CoordinationPolicyResolution
     step route-decision-architecture-practice -> RouteDecision
     step recall-risk-history -> RecalledLearnings
     step remember-acknowledged -> RecordedLearning

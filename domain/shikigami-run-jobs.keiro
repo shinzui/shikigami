@@ -2,6 +2,33 @@ language keiro-dsl 6
 context shikigami
 layout collocated
 
+mapped structural enum RunTriggerKind {
+  haskell package=shikigami-core module=Shikigami.Agent.RunJob type=TriggerKind
+  binding = "Shikigami.RunJobs.Bindings.triggerKindBinding"
+  binding-version = "1"
+  canonical-type = "shikigami.TriggerKind.v1"
+  fixtures = "Shikigami.RunJobs.Bindings.triggerKindCases"
+  wire string {
+    TriggeredBySchedule as "TriggeredBySchedule"
+    TriggeredByStream as "TriggeredByStream"
+    TriggeredByEvent as "TriggeredByEvent"
+    TriggeredByDelegation as "TriggeredByDelegation"
+  }
+}
+
+mapped structural enum RunRouteKind {
+  haskell package=shikigami-core module=Shikigami.Agent.RunJob type=RunRouteKind
+  binding = "Shikigami.RunJobs.Bindings.routeKindBinding"
+  binding-version = "1"
+  canonical-type = "shikigami.RunRouteKind.v1"
+  fixtures = "Shikigami.RunJobs.Bindings.routeKindCases"
+  wire string {
+    AgentWorkflowRoute as "AgentWorkflowRoute"
+    ConversationWorkflowRoute as "ConversationWorkflowRoute"
+    ExecutionOperationRoute as "ExecutionOperationRoute"
+  }
+}
+
 workqueue run_jobs {
   queue logical = "shikigami_run_jobs"
   derive physical = "shikigami_run_jobs"
@@ -10,7 +37,7 @@ workqueue run_jobs {
   payload RunJobMessage {
     agentName -> "agentName" : Text required
     identity -> "identity" : Json required
-    triggerKind -> "triggerKind" : Text required
+    triggerKind -> "triggerKind" : RunTriggerKind required
     occurredAt -> "occurredAt" : Time required
     triggerPayload -> "triggerPayload" : Json required
     idempotencyKey -> "idempotencyKey" : Text required
@@ -19,7 +46,7 @@ workqueue run_jobs {
     delegationDepth -> "delegationDepth" : Optional Int required
     lineage -> "lineage" : List Text required
     delegationBudgetId -> "delegationBudgetId" : Optional Text required
-    routeKind -> "routeKind" : Text required
+    routeKind -> "routeKind" : RunRouteKind required
   }
   retry maxRetries = 5 delay = 60s dlq = on
   disposition {

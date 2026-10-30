@@ -1,0 +1,8 @@
+pure: All 539 tests passed (5.43s)
+postgres: All 373 tests passed (104.90s)
+domain: 13 passing assertions
+conformance: 159 passing assertions
+worker-queue: All 13 tests passed (4.13s)
+diagrams: 6 passed
+second scaffold: exit 0; zero changed files
+strict diff against 88d4b3e: exit 1; breaking findings retained

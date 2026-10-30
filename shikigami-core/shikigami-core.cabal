@@ -90,6 +90,7 @@ library
     Shikigami.Decision.StubProvider
     Shikigami.Directory
     Shikigami.Directory.Store
+    Shikigami.DomainDiagrams
     Shikigami.Execution.Admission
     Shikigami.Execution.Attempt
     Shikigami.Execution.Catalog
@@ -247,6 +248,7 @@ library
     Shikigami.ContinuingWorker.Generated.WorkflowRuntime
     Shikigami.DanwaConversation.Generated.WorkflowFacts
     Shikigami.DanwaConversation.Generated.WorkflowRuntime
+    Shikigami.DomainBindings
     Shikigami.ExecutionLifecycle.BehaviorHoles
     Shikigami.ExecutionLifecycle.Generated.BehaviorContract
     Shikigami.ExecutionLifecycle.Generated.Codec
@@ -258,10 +260,15 @@ library
     Shikigami.ExecutionLookup.Generated.ReadModelTable
     Shikigami.ExecutionLookup.ReadModelHoles
     Shikigami.Generated.BehaviorSourceMap
+    Shikigami.Generated.NominalProjections
     Shikigami.Generated.Nominals
     Shikigami.Generated.Nominals.Internal
     Shikigami.Generated.ProjectionCatalog
     Shikigami.Generated.ReplayAudit
+    Shikigami.Generated.Structural.Shape.RunRouteKind
+    Shikigami.Generated.Structural.Shape.RunTriggerKind
+    Shikigami.Generated.StructuralConformance
+    Shikigami.Generated.StructuralProjections
     Shikigami.Objective.Authority
     Shikigami.ProjectionCatalog.ProjectionCatalogHoles
     Shikigami.RunEvidence.BehaviorHoles
@@ -278,6 +285,7 @@ library
     Shikigami.RunEvidenceLookup.Generated.ReadModelHarness
     Shikigami.RunEvidenceLookup.Generated.ReadModelTable
     Shikigami.RunEvidenceLookup.ReadModelHoles
+    Shikigami.RunJobs.Bindings
     Shikigami.RunJobs.Generated.Queue
     Shikigami.RunJobs.Generated.QueueCodec
     Shikigami.RunJobs.Generated.QueuePolicy

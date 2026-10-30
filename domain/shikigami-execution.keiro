@@ -2,6 +2,15 @@ language keiro-dsl 6
 context shikigami
 layout collocated
 
+mapped nominal ExecutionIdentity : Text {
+  haskell package=shikigami-core module=Shikigami.Execution.Transcript type=ExecutionId
+  binding = "Shikigami.DomainBindings.executionIdentityBinding"
+  binding-version = "1"
+  canonical-type = "shikigami.ExecutionId.v1"
+  fixtures = "Shikigami.DomainBindings.executionIdentityCases"
+  initial = "Shikigami.DomainBindings.initialExecutionIdentity"
+}
+
 target execution_rows {
   schema = "shikigami"
   table = "executions"
@@ -49,31 +58,31 @@ readmodel execution_lookup {
 
 aggregate ExecutionLifecycle
   regs
-    executionId Text = ""
+    executionId ExecutionIdentity = initial
     snapshotDigest Text = ""
     revision Int = 0
     pendingReceipts Integer = 0
   states Missing Active Parked Unresolved SucceededPendingReceipts FailedPendingReceipts CancelledPendingReceipts Succeeded! Failed! Cancelled!
 
-  command AdmitExecution { executionId:Text snapshotDigest:Text }
-  command AdvanceExecution { executionId:Text expected:Int revision:Int }
-  command ParkExecution { executionId:Text expected:Int revision:Int }
-  command ResumeExecution { executionId:Text expected:Int revision:Int }
-  command MarkExecutionUnresolved { executionId:Text expected:Int revision:Int }
-  command ReconcileExecution { executionId:Text expected:Int revision:Int }
-  command FinishExecution { executionId:Text expected:Int revision:Int }
-  command FailExecution { executionId:Text expected:Int revision:Int }
-  command CancelExecution { executionId:Text expected:Int revision:Int }
+  command AdmitExecution { executionId:ExecutionIdentity snapshotDigest:Text }
+  command AdvanceExecution { executionId:ExecutionIdentity expected:Int revision:Int }
+  command ParkExecution { executionId:ExecutionIdentity expected:Int revision:Int }
+  command ResumeExecution { executionId:ExecutionIdentity expected:Int revision:Int }
+  command MarkExecutionUnresolved { executionId:ExecutionIdentity expected:Int revision:Int }
+  command ReconcileExecution { executionId:ExecutionIdentity expected:Int revision:Int }
+  command FinishExecution { executionId:ExecutionIdentity expected:Int revision:Int }
+  command FailExecution { executionId:ExecutionIdentity expected:Int revision:Int }
+  command CancelExecution { executionId:ExecutionIdentity expected:Int revision:Int }
 
-  command RetryExecution { executionId:Text expected:Int revision:Int }
+  command RetryExecution { executionId:ExecutionIdentity expected:Int revision:Int }
 
-  command SettleExecutionReceipt { executionId:Text expected:Int revision:Int remaining:Integer }
+  command SettleExecutionReceipt { executionId:ExecutionIdentity expected:Int revision:Int remaining:Integer }
 
-  command FinishExecutionPendingReceipts { executionId:Text expected:Int revision:Int }
+  command FinishExecutionPendingReceipts { executionId:ExecutionIdentity expected:Int revision:Int }
 
-  command FailExecutionPendingReceipts { executionId:Text expected:Int revision:Int }
+  command FailExecutionPendingReceipts { executionId:ExecutionIdentity expected:Int revision:Int }
 
-  command CancelExecutionPendingReceipts { executionId:Text expected:Int revision:Int }
+  command CancelExecutionPendingReceipts { executionId:ExecutionIdentity expected:Int revision:Int }
 
   event ExecutionAdmitted = fields(AdmitExecution)
   event ExecutionAdvanced = fields(AdvanceExecution)

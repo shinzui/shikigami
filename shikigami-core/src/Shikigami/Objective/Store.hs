@@ -172,7 +172,7 @@ create access operation origin request verifyOrigin = guarded do
       verified <- liftIO verifyOrigin
       either (throwIO . Abort) pure verified
       either (throwIO . Abort) pure (validateSnapshot initial)
-      result <- persist identifier (G.CreateObjective (G.CreateObjectiveData identifier.value)) do
+      result <- persist identifier (G.CreateObjective (G.CreateObjectiveData identifier)) do
         -- Locks serialize identical creation, including creator-scoped retries.
         void (Tx.statement creator lockKey)
         old <- Tx.statement (creator, (operationKey operation)) selectOrigin
@@ -221,7 +221,7 @@ execute access identifier expected operation mutation = guarded do
             Right (Left outcome) -> pure outcome
             Right (Right before) -> do
               let nextRevision = before.revision + 1
-                  command = G.ApplyObjectiveTransition (G.ApplyObjectiveTransitionData identifier.value (fromInteger before.revision) (fromInteger nextRevision) fingerprint)
+                  command = G.ApplyObjectiveTransition (G.ApplyObjectiveTransitionData identifier (fromInteger before.revision) (fromInteger nextRevision) fingerprint)
               applied <- persist identifier command do
                 current <- locked identifier
                 checkAccess access current

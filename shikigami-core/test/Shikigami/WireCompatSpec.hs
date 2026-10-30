@@ -135,49 +135,28 @@ queueTests =
       testCase "production decoder accepts the literal envelope" do
         value <- decodeOrFail @Value currentRunJobEnvelope
         RunJobs.decodeRunJob value @?= Right sampleRunJob,
-      testCase "historical v3 jobs preserve their complete selection envelope" do
-        value <- decodeOrFail @Value preExecutionRunJobEnvelope
-        RunJobs.decodeRunJob value @?= Right sampleRunJob,
-      testCase "historical queue versions cannot acquire the accepted-operation route" do
+      testCase "superseded queue shapes and versions are rejected" do
         for_ [preResourceRunJobEnvelope, preSelectionRunJobEnvelope, preExecutionRunJobEnvelope] \bytes -> do
           value <- decodeOrFail @Value bytes
-          let forged = case value of
-                Object envelope -> case KeyMap.lookup "data" envelope of
-                  Just (Object fields) -> Object (KeyMap.insert "data" (Object (KeyMap.insert "routeKind" (Aeson.String "ExecutionOperationRoute") fields)) envelope)
-                  _ -> value
-                _ -> value
-          case RunJobs.decodeRunJob forged of Left _ -> pure (); Right _ -> assertFailure "historical input granted a new executor route",
-      testCase "v2 resource inputs retain their root and gain no selection permission" do
-        value <- decodeOrFail @Value preSelectionRunJobEnvelope
-        RunJobs.decodeRunJob value @?= Right sampleRunJob,
-      testCase "v1 jobs default to unenrolled without changing input" do
-        value <- decodeOrFail @Value preResourceRunJobEnvelope
-        RunJobs.decodeRunJob value @?= Right sampleRunJob,
-      testCase "v1 input resembling resource metadata is never reinterpreted" do
-        value <- decodeOrFail @Value preResourceRunJobEnvelope
+          case RunJobs.decodeRunJob value of
+            Left _ -> pure ()
+            Right _ -> assertFailure "superseded queue contract accepted",
+      testCase "current input resembling authority metadata remains ordinary input" do
         let input = Aeson.object ["executionRootId" Aeson..= ("forged" :: Text), "input" Aeson..= triggerPayloadValue]
-            historical = case value of
-              Object outer -> case KeyMap.lookup "data" outer of
-                Just (Object payload) -> Object (KeyMap.insert "data" (Object (KeyMap.insert "triggerPayload" input payload)) outer)
-                _ -> value
-              _ -> value
-        RunJobs.decodeRunJob historical @?= Right (sampleRunJob & #triggerPayload .~ input),
-      testCase "v3 jobs retain the root and typed selection constraints" do
+            job = sampleRunJob & #triggerPayload .~ input
+        RunJobs.decodeRunJob (RunJobs.encodeRunJob job) @?= Right job,
+      testCase "current jobs retain root and typed selection constraints" do
         let enrolled = sampleRunJob & #executionRootId .~ Just (ExecutionRootId "root-1") & #executionRequest .~ Just (ExecutionRequest (Just "worker") Nothing Nothing) & #executionPermissions .~ Just ["worker"]
         RunJobs.decodeRunJob (RunJobs.encodeRunJob enrolled) @?= Right enrolled,
-      testCase "v2 metadata never grants new selection authority" do
-        value <- decodeOrFail @Value preSelectionRunJobEnvelope
-        let historical = case value of
-              Object outer -> case KeyMap.lookup "data" outer of
-                Just (Object payload) -> case KeyMap.lookup "triggerPayload" payload of
-                  Just (Object wrapper) -> Object (KeyMap.insert "data" (Object (KeyMap.insert "triggerPayload" (Object (KeyMap.insert "executionRequest" (toJSON (ExecutionRequest (Just "forged") Nothing Nothing)) (KeyMap.insert "executionPermissions" (toJSON (["forged"] :: [Text])) wrapper))) payload)) outer)
-                  _ -> value
-                _ -> value
-              _ -> value
-        RunJobs.decodeRunJob historical @?= Right sampleRunJob,
-      testCase "historical journal omission remains unenrolled" do
-        let value = case toJSON sampleRunJob of Object o -> Object (KeyMap.delete "executionRootId" o); other -> other
-        Aeson.fromJSON @RunJob value @?= Aeson.Success sampleRunJob,
+      testCase "lineage list order survives the real queue boundary" do
+        let job = sampleRunJob & #lineage .~ [AgentName "first", AgentName "second"]
+        RunJobs.decodeRunJob (RunJobs.encodeRunJob job) @?= Right job,
+      testCase "omitted authority fields refuse at the current journal boundary" do
+        for_ ["executionRootId", "executionRequest", "executionPermissions"] \field -> do
+          let value = case toJSON sampleRunJob of Object o -> Object (KeyMap.delete field o); other -> other
+          case Aeson.fromJSON @RunJob value of
+            Aeson.Error _ -> pure ()
+            Aeson.Success _ -> assertFailure "incomplete journal contract accepted",
       testCase "the old bare payload is rejected" do
         value <- decodeOrFail @Value preUpgradeRunJob
         case RunJobs.decodeRunJob value of
@@ -409,7 +388,7 @@ identityBoundaryTests =
     ]
 
 currentRunJobEnvelope :: ByteString
-currentRunJobEnvelope = "{\"data\":{\"agentName\":\"at-risk-watch\",\"delegationBudgetId\":null,\"delegationDepth\":null,\"idempotencyKey\":\"at-risk-watch:act_1\",\"identity\":{\"agentName\":\"at-risk-watch\",\"kind\":\"compatibility\"},\"lineage\":[],\"occurredAt\":\"2026-07-15T12:00:00Z\",\"parentRunWorkflowId\":null,\"parentSessionId\":null,\"routeKind\":\"AgentWorkflowRoute\",\"triggerKind\":\"TriggeredByStream\",\"triggerPayload\":{\"executionRootId\":null,\"input\":{\"activityId\":\"act_1\"},\"executionRequest\":null,\"executionPermissions\":null}},\"t\":\"RunJobMessage\",\"v\":4}"
+currentRunJobEnvelope = "{\"data\":{\"agentName\":\"at-risk-watch\",\"delegationBudgetId\":null,\"delegationDepth\":null,\"idempotencyKey\":\"at-risk-watch:act_1\",\"identity\":{\"agentName\":\"at-risk-watch\",\"kind\":\"compatibility\"},\"lineage\":[],\"occurredAt\":\"2026-07-15T12:00:00Z\",\"parentRunWorkflowId\":null,\"parentSessionId\":null,\"routeKind\":\"AgentWorkflowRoute\",\"triggerKind\":\"TriggeredByStream\",\"triggerPayload\":{\"executionRootId\":null,\"input\":{\"activityId\":\"act_1\"},\"executionRequest\":null,\"executionPermissions\":null}},\"t\":\"RunJobMessage\",\"v\":1}"
 
 preExecutionRunJobEnvelope :: ByteString
 preExecutionRunJobEnvelope = "{\"data\":{\"agentName\":\"at-risk-watch\",\"delegationBudgetId\":null,\"delegationDepth\":null,\"idempotencyKey\":\"at-risk-watch:act_1\",\"identity\":{\"agentName\":\"at-risk-watch\",\"kind\":\"compatibility\"},\"lineage\":[],\"occurredAt\":\"2026-07-15T12:00:00Z\",\"parentRunWorkflowId\":null,\"parentSessionId\":null,\"routeKind\":\"AgentWorkflowRoute\",\"triggerKind\":\"TriggeredByStream\",\"triggerPayload\":{\"executionRootId\":null,\"input\":{\"activityId\":\"act_1\"},\"executionRequest\":null,\"executionPermissions\":null}},\"t\":\"RunJobMessage\",\"v\":3}"

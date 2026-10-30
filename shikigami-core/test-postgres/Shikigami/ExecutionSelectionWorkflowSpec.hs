@@ -25,7 +25,7 @@ import Data.Time (UTCTime, addUTCTime, getCurrentTime)
 import Data.UUID qualified as UUID
 import Effectful (Eff)
 import Keiro.Outbox (listOutbox)
-import Keiro.Workflow (PatchId (..), StepName (..), WorkflowId (..), WorkflowOutcome (..), WorkflowRunOptions (..), loadStepIndex, runWorkflowWith)
+import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
 import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), lookupAwakeable, registerAwakeableTx)
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
@@ -324,48 +324,6 @@ tests fixture =
           case outcome of
             Right (Completed (Left _)) -> pure ()
             other -> assertFailure (show other),
-      testCase "a legacy pending workflow retains selection across changed catalog and default" $
-        withRuntime fixture \app store base -> withHttp \bindings observed -> do
-          let catalog = mustRight (modelCatalog bindings)
-              declaration = workerDecl
-              request = Fixture.routerJob "selection-pinned"
-          hooks <- crashBeforeBehavior
-          let original = (workflowDeps app store base catalog declaration) {Agent.hooks = hooks}
-          first <- try @SomeException (runLegacyAgentRunWorkflow original request)
-          assertBool "crash before first model call" (either (const True) (const False) first)
-          observed >>= (@?= [])
-          let replacement = mustRight (modelCatalog [])
-              retained = mustRight (retainModelBindings replacement bindings)
-              changed = base & #model . #modelId .~ "changed-process-default"
-          result <- Agent.runAgentRunWorkflow (workflowDeps app store changed retained declaration) request
-          assertCompleted result
-          bodies <- observed
-          length bodies @?= 1
-          lookupField "model" (head bodies) @?= Just (Model.modelId (bindingModel (head bindings)))
-          index <- run app (loadStepIndex Agent.agentRunWorkflowName (runJobWorkflowId request) 0)
-          assertBool "selection admission journaled" (Map.member "resolve-execution-selection" index),
-      testCase "an old in-flight Skill keeps the real process-default branch on resume" $
-        withRuntime fixture \app store base -> withHttp \bindings observed -> do
-          hooks <- crashBeforeBehavior
-          let request = Fixture.routerJob "selection-old-branch"
-              dependencies = (workflowDeps app store base (mustRight (modelCatalog bindings)) workerDecl) {Agent.hooks = hooks}
-              options = shikigamiWorkflowRunOptions app
-              oldOptions = options & #activePatches .~ Set.delete (PatchId "shikigami-execution-selection-v1") options.activePatches
-          first <- try @SomeException (run app (runWorkflowWith oldOptions Agent.agentRunWorkflowName (runJobWorkflowId request) (Agent.agentRunWorkflow dependencies (Just request))))
-          assertBool "old branch suspended before model IO" (either (const True) (const False) first)
-          assertCompleted =<< Agent.runAgentRunWorkflow (workflowDeps app store base (mustRight (modelCatalog [])) workerDecl) request
-          observed >>= (@?= [])
-          index <- run app (loadStepIndex Agent.agentRunWorkflowName (runJobWorkflowId request) 0)
-          assertBool "no selection admission in the old population" (not (Map.member "resolve-execution-selection" index)),
-      testCase "a legacy pending workflow refuses unavailable immutable binding" $
-        withRuntime fixture \app store base -> withHttp \bindings observed -> do
-          hooks <- crashBeforeBehavior
-          let request = Fixture.routerJob "selection-unavailable"
-              original = (workflowDeps app store base (mustRight (modelCatalog bindings)) workerDecl) {Agent.hooks = hooks}
-          _ <- try @SomeException (runLegacyAgentRunWorkflow original request)
-          result <- Agent.runAgentRunWorkflow (workflowDeps app store base (mustRight (modelCatalog [])) workerDecl) request
-          assertBool "named refusal" ("PinnedBindingUnavailable" `Text.isInfixOf` Text.pack (show result))
-          observed >>= (@?= []),
       testCase "forbidden user alias leaves provider request count unchanged" $
         withRuntime fixture \app store base -> withHttp \bindings observed -> do
           let request = Fixture.routerJob "selection-forbidden" & #executionRequest .~ Just (ExecutionRequest (Just "forbidden") Nothing Nothing)
@@ -538,11 +496,3 @@ expectRight = either (assertFailure . show) pure
 
 mustRight :: (Show e) => Either e a -> a
 mustRight = either (error . show) id
-
--- Preserve the selection-only population's original coarse-step crash surface.
--- New Skill parents are qualified above with the deployment's full patch set.
-runLegacyAgentRunWorkflow :: Agent.AgentRunDeps -> RunJob -> IO (Either StoreError (WorkflowOutcome (Either Agent.AgentRunFailure AgentRunResult)))
-runLegacyAgentRunWorkflow dependencies request =
-  let app = dependencies.appEnv
-      options = shikigamiWorkflowRunOptions app
-   in runAppIO app (runWorkflowWith (options & #activePatches .~ Set.delete (PatchId "shikigami-durable-execution-v1") options.activePatches) Agent.agentRunWorkflowName (runJobWorkflowId request) (Agent.agentRunWorkflow dependencies (Just request)))

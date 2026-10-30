@@ -57,8 +57,8 @@ tests databaseFixture =
       testCase "in-flight workflow survives a simulated deploy under a patch guard" (inFlightSurvivesDeploy databaseFixture),
       testCase "failed workflows resurrect through the public owner" (failedWorkflowResurrects databaseFixture),
       testCase "approval review identity has a frozen public vector" approvalReviewIdentityIsStable,
-      testCase "the current baseline activates the declared decision and resource patches" do
-        assertEqual "active application patches" (Set.fromList [PatchId "shikigami-durable-execution-v1", PatchId "shikigami-flow-decisions-v1", PatchId "shikigami-execution-resources-v1", PatchId "shikigami-execution-selection-v1", PatchId "shikigami-conversation-execution-selection-v1", PatchId "shikigami-conversation-durable-execution-v1", PatchId "shikigami-worker-coordination-v1", PatchId "shikigami-governed-workspaces-v1"]) shikigamiActivePatches
+      testCase "the first-release baseline has no obsolete application patches" do
+        assertEqual "active application patches" Set.empty shikigamiActivePatches
     ]
 
 -- ── Test A: the patch primitive, end to end ─────────────────────────────────

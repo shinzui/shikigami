@@ -192,6 +192,9 @@ new-migration name="":
 # a finding about this specification, not a reason to pre-commit to ignoring
 # it. --fail-on-opaque raises CoverageOpaqueGateExceeded as an error if a new
 # opaque boundary appears on a persisted root.
+domain-diagrams:
+    cabal test shikigami-core-diagrams-test --test-options=--write-atlas
+
 keiro-check:
     #!/usr/bin/env bash
     set -euo pipefail

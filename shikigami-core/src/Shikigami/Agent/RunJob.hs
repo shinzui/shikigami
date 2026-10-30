@@ -13,6 +13,7 @@ import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID
+import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
 import Kioku.Id (SessionId)
 import Shikigami.Agent.Delegate.Context (DelegationBudgetId)
@@ -103,9 +104,9 @@ instance FromJSON RunJob where
     parentRunWorkflowId <- value Aeson..: "parentRunWorkflowId" >>= traverse (either (fail . show) pure . mkWorkflowId)
     delegationDepth <- value Aeson..: "delegationDepth"
     lineage <- value Aeson..: "lineage"
-    executionRequest <- value Aeson..:? "executionRequest"
-    executionPermissions <- value Aeson..:? "executionPermissions"
-    executionRootId <- value Aeson..:? "executionRootId"
+    executionRequest <- value Aeson..: "executionRequest"
+    executionPermissions <- value Aeson..: "executionPermissions"
+    executionRootId <- value Aeson..: "executionRootId"
     delegationBudgetId <- value Aeson..: "delegationBudgetId"
     routeKind <- value Aeson..: "routeKind"
     pure RunJob {agentName, identity, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, executionRootId, executionRequest, executionPermissions, routeKind}
@@ -118,3 +119,9 @@ runJobWorkflowId job =
   case mkWorkflowId (runKeyText job.idempotencyKey) of
     Right workflowId -> workflowId
     Left _ -> WorkflowId (UUID.toText (UUID.generateNamed UUID.namespaceURL (nameBytes ("shikigami.agent-run:" <> runKeyText job.idempotencyKey))))
+
+instance CanonicalTypeName TriggerKind where
+  canonicalTypeName _ = "shikigami.TriggerKind.v1"
+
+instance CanonicalTypeName RunRouteKind where
+  canonicalTypeName _ = "shikigami.RunRouteKind.v1"

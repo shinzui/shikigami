@@ -12,8 +12,11 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as T
+import Keiro.Codec.Nominal (nominalFromRepresentation, nominalToRepresentation)
 import Keiro.Codec (Codec (..), EventType (..))
 
+
+import Shikigami.DomainBindings qualified as DomainBindings
 
 
 
@@ -52,76 +55,76 @@ encodeExecutionLifecycleEvent = \case
   ExecutionAdmitted payload ->
     object
       [ "kind" .= ("ExecutionAdmitted" :: Text)
-      , "executionId" .= payload.executionId
+      , "executionId" .= nominalToRepresentation DomainBindings.executionIdentityBinding payload.executionId
       , "snapshotDigest" .= payload.snapshotDigest
       ]
   ExecutionAdvanced payload ->
     object
       [ "kind" .= ("ExecutionAdvanced" :: Text)
-      , "executionId" .= payload.executionId
+      , "executionId" .= nominalToRepresentation DomainBindings.executionIdentityBinding payload.executionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   ExecutionParked payload ->
     object
       [ "kind" .= ("ExecutionParked" :: Text)
-      , "executionId" .= payload.executionId
+      , "executionId" .= nominalToRepresentation DomainBindings.executionIdentityBinding payload.executionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   ExecutionResumed payload ->
     object
       [ "kind" .= ("ExecutionResumed" :: Text)
-      , "executionId" .= payload.executionId
+      , "executionId" .= nominalToRepresentation DomainBindings.executionIdentityBinding payload.executionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   ExecutionBecameUnresolved payload ->
     object
       [ "kind" .= ("ExecutionBecameUnresolved" :: Text)
-      , "executionId" .= payload.executionId
+      , "executionId" .= nominalToRepresentation DomainBindings.executionIdentityBinding payload.executionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   ExecutionReconciled payload ->
     object
       [ "kind" .= ("ExecutionReconciled" :: Text)
-      , "executionId" .= payload.executionId
+      , "executionId" .= nominalToRepresentation DomainBindings.executionIdentityBinding payload.executionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   ExecutionFinished payload ->
     object
       [ "kind" .= ("ExecutionFinished" :: Text)
-      , "executionId" .= payload.executionId
+      , "executionId" .= nominalToRepresentation DomainBindings.executionIdentityBinding payload.executionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   ExecutionFailed payload ->
     object
       [ "kind" .= ("ExecutionFailed" :: Text)
-      , "executionId" .= payload.executionId
+      , "executionId" .= nominalToRepresentation DomainBindings.executionIdentityBinding payload.executionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   ExecutionCancelled payload ->
     object
       [ "kind" .= ("ExecutionCancelled" :: Text)
-      , "executionId" .= payload.executionId
+      , "executionId" .= nominalToRepresentation DomainBindings.executionIdentityBinding payload.executionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   ExecutionRetried payload ->
     object
       [ "kind" .= ("ExecutionRetried" :: Text)
-      , "executionId" .= payload.executionId
+      , "executionId" .= nominalToRepresentation DomainBindings.executionIdentityBinding payload.executionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   ExecutionReceiptSettled payload ->
     object
       [ "kind" .= ("ExecutionReceiptSettled" :: Text)
-      , "executionId" .= payload.executionId
+      , "executionId" .= nominalToRepresentation DomainBindings.executionIdentityBinding payload.executionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       , "remaining" .= payload.remaining
@@ -129,7 +132,7 @@ encodeExecutionLifecycleEvent = \case
   ExecutionReceiptsClosed payload ->
     object
       [ "kind" .= ("ExecutionReceiptsClosed" :: Text)
-      , "executionId" .= payload.executionId
+      , "executionId" .= nominalToRepresentation DomainBindings.executionIdentityBinding payload.executionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       , "remaining" .= payload.remaining
@@ -137,21 +140,21 @@ encodeExecutionLifecycleEvent = \case
   ExecutionFinishedPendingReceipts payload ->
     object
       [ "kind" .= ("ExecutionFinishedPendingReceipts" :: Text)
-      , "executionId" .= payload.executionId
+      , "executionId" .= nominalToRepresentation DomainBindings.executionIdentityBinding payload.executionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   ExecutionFailedPendingReceipts payload ->
     object
       [ "kind" .= ("ExecutionFailedPendingReceipts" :: Text)
-      , "executionId" .= payload.executionId
+      , "executionId" .= nominalToRepresentation DomainBindings.executionIdentityBinding payload.executionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   ExecutionCancelledPendingReceipts payload ->
     object
       [ "kind" .= ("ExecutionCancelledPendingReceipts" :: Text)
-      , "executionId" .= payload.executionId
+      , "executionId" .= nominalToRepresentation DomainBindings.executionIdentityBinding payload.executionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
@@ -164,76 +167,76 @@ parseExecutionLifecycleEvent (EventType tag) = mapLeftText . parseEither (withOb
         "ExecutionAdmitted" ->
           ExecutionAdmitted
             <$> ( ExecutionAdmittedData
-                    <$> o .: "executionId"
+                    <$> (nominalFromRepresentation DomainBindings.executionIdentityBinding <$> o .: "executionId")
                     <*> o .: "snapshotDigest"
                 )
         "ExecutionAdvanced" ->
           ExecutionAdvanced
             <$> ( ExecutionAdvancedData
-                    <$> o .: "executionId"
+                    <$> (nominalFromRepresentation DomainBindings.executionIdentityBinding <$> o .: "executionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "ExecutionParked" ->
           ExecutionParked
             <$> ( ExecutionParkedData
-                    <$> o .: "executionId"
+                    <$> (nominalFromRepresentation DomainBindings.executionIdentityBinding <$> o .: "executionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "ExecutionResumed" ->
           ExecutionResumed
             <$> ( ExecutionResumedData
-                    <$> o .: "executionId"
+                    <$> (nominalFromRepresentation DomainBindings.executionIdentityBinding <$> o .: "executionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "ExecutionBecameUnresolved" ->
           ExecutionBecameUnresolved
             <$> ( ExecutionBecameUnresolvedData
-                    <$> o .: "executionId"
+                    <$> (nominalFromRepresentation DomainBindings.executionIdentityBinding <$> o .: "executionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "ExecutionReconciled" ->
           ExecutionReconciled
             <$> ( ExecutionReconciledData
-                    <$> o .: "executionId"
+                    <$> (nominalFromRepresentation DomainBindings.executionIdentityBinding <$> o .: "executionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "ExecutionFinished" ->
           ExecutionFinished
             <$> ( ExecutionFinishedData
-                    <$> o .: "executionId"
+                    <$> (nominalFromRepresentation DomainBindings.executionIdentityBinding <$> o .: "executionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "ExecutionFailed" ->
           ExecutionFailed
             <$> ( ExecutionFailedData
-                    <$> o .: "executionId"
+                    <$> (nominalFromRepresentation DomainBindings.executionIdentityBinding <$> o .: "executionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "ExecutionCancelled" ->
           ExecutionCancelled
             <$> ( ExecutionCancelledData
-                    <$> o .: "executionId"
+                    <$> (nominalFromRepresentation DomainBindings.executionIdentityBinding <$> o .: "executionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "ExecutionRetried" ->
           ExecutionRetried
             <$> ( ExecutionRetriedData
-                    <$> o .: "executionId"
+                    <$> (nominalFromRepresentation DomainBindings.executionIdentityBinding <$> o .: "executionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "ExecutionReceiptSettled" ->
           ExecutionReceiptSettled
             <$> ( ExecutionReceiptSettledData
-                    <$> o .: "executionId"
+                    <$> (nominalFromRepresentation DomainBindings.executionIdentityBinding <$> o .: "executionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                     <*> o .: "remaining"
@@ -241,7 +244,7 @@ parseExecutionLifecycleEvent (EventType tag) = mapLeftText . parseEither (withOb
         "ExecutionReceiptsClosed" ->
           ExecutionReceiptsClosed
             <$> ( ExecutionReceiptsClosedData
-                    <$> o .: "executionId"
+                    <$> (nominalFromRepresentation DomainBindings.executionIdentityBinding <$> o .: "executionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                     <*> o .: "remaining"
@@ -249,21 +252,21 @@ parseExecutionLifecycleEvent (EventType tag) = mapLeftText . parseEither (withOb
         "ExecutionFinishedPendingReceipts" ->
           ExecutionFinishedPendingReceipts
             <$> ( ExecutionFinishedPendingReceiptsData
-                    <$> o .: "executionId"
+                    <$> (nominalFromRepresentation DomainBindings.executionIdentityBinding <$> o .: "executionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "ExecutionFailedPendingReceipts" ->
           ExecutionFailedPendingReceipts
             <$> ( ExecutionFailedPendingReceiptsData
-                    <$> o .: "executionId"
+                    <$> (nominalFromRepresentation DomainBindings.executionIdentityBinding <$> o .: "executionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "ExecutionCancelledPendingReceipts" ->
           ExecutionCancelledPendingReceipts
             <$> ( ExecutionCancelledPendingReceiptsData
-                    <$> o .: "executionId"
+                    <$> (nominalFromRepresentation DomainBindings.executionIdentityBinding <$> o .: "executionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )

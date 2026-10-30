@@ -162,3 +162,26 @@ migration, workflow shape, queue envelope, event codec, or identifier admission,
 ordinary rollback to the qualified 0.17 binaries remains valid until a later change
 writes a new contract. Deployments starting before 0.17 must first follow the guarded
 timer cutover in `docs/operations/keiro-0.17-rollout.md`.
+
+
+## Keiro 0.22 current domain amendment — 2026-10-30
+
+Plan93 adopts total nominal bindings for existing execution, worker-session and
+objective technical identities on generated command/event/register paths. They
+remain technical Text identities, not newly asserted TypeID domains. Trigger and
+route enums now use total checked structural queue bindings with exhaustive shapes;
+the previous primitive Text adapters are removed. Existing refined names/digests
+and opaque upstream identities retain admission in application codecs. A rejecting
+smart constructor is not treated as a total binding.
+
+Each of the three nominal consumer folds changes independently; RunEvidence is
+unchanged. All four aggregate streams still disable snapshots (`Never`, no state
+codec), so no cache-fallback claim is made. Same-build replay and independent
+current wire fixtures pass. Data-only queue enums require no artificial lifecycle
+guard or global equality fold segment. Scalar write-lifts and public contract
+lists have no current consumer; ordered queue lineage is already an executed list.
+
+The complete current RunJobs wrapper remains for FRIC-9's unsupported optional
+queue field lowering. It contains no obsolete historical readers. ADR-27 covers
+the intentional first-release codec/workflow reset; post-deployment changes must
+preserve real durable consumers and use the normal evolution gates.

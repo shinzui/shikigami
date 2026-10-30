@@ -131,17 +131,17 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- ExecutionLifecycleActive x ParkExecution: live transition
+  [ -- ExecutionLifecycleUnresolved x CancelExecutionPendingReceipts: live transition
     BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-018b5122b5c0b08c"
+      { key = BehaviorKey "behavior-v1-0505750d3875d100"
       , kind = LiveTransition
       , evidence = GeneratedAuthoritative
       , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleActive
-      , commandName = "ParkExecution"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 1))
-      , target = Just ExecutionLifecycleParked
-      , eventKinds = ["ExecutionParked"]
+      , source = ExecutionLifecycleUnresolved
+      , commandName = "CancelExecutionPendingReceipts"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 7))
+      , target = Just ExecutionLifecycleCancelledPendingReceipts
+      , eventKinds = ["ExecutionCancelledPendingReceipts"]
       }
   , -- ExecutionLifecycleSucceededPendingReceipts x FailExecutionPendingReceipts: required rejection
     BehaviorRequirement
@@ -166,6 +166,18 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
+      }
+  , -- ExecutionLifecycleSucceededPendingReceipts x SettleExecutionReceipt: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-067916d52163b0f7"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleSucceededPendingReceipts
+      , commandName = "SettleExecutionReceipt"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleSucceededPendingReceipts 0))
+      , target = Just ExecutionLifecycleSucceededPendingReceipts
+      , eventKinds = ["ExecutionReceiptSettled"]
       }
   , -- ExecutionLifecycleCancelled x FinishExecution: required rejection
     BehaviorRequirement
@@ -203,6 +215,18 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
+  , -- ExecutionLifecycleCancelledPendingReceipts x SettleExecutionReceipt: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-11467ad15254936b"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleCancelledPendingReceipts
+      , commandName = "SettleExecutionReceipt"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleCancelledPendingReceipts 0))
+      , target = Just ExecutionLifecycleCancelledPendingReceipts
+      , eventKinds = ["ExecutionReceiptSettled"]
+      }
   , -- ExecutionLifecycleFailedPendingReceipts x FinishExecution: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-115748eab3613591"
@@ -226,30 +250,6 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
-      }
-  , -- ExecutionLifecycleActive x MarkExecutionUnresolved: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-12f47d9d04811f05"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleActive
-      , commandName = "MarkExecutionUnresolved"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 2))
-      , target = Just ExecutionLifecycleUnresolved
-      , eventKinds = ["ExecutionBecameUnresolved"]
-      }
-  , -- ExecutionLifecycleParked x CancelExecutionPendingReceipts: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-15f62a8e8b6db447"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleParked
-      , commandName = "CancelExecutionPendingReceipts"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleParked 5))
-      , target = Just ExecutionLifecycleCancelledPendingReceipts
-      , eventKinds = ["ExecutionCancelledPendingReceipts"]
       }
   , -- ExecutionLifecycleUnresolved x FinishExecutionPendingReceipts: required rejection
     BehaviorRequirement
@@ -275,54 +275,6 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
-  , -- ExecutionLifecycleUnresolved x MarkExecutionUnresolved: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-17a2351316f155d6"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleUnresolved
-      , commandName = "MarkExecutionUnresolved"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 0))
-      , target = Just ExecutionLifecycleUnresolved
-      , eventKinds = ["ExecutionBecameUnresolved"]
-      }
-  , -- ExecutionLifecycleParked x FailExecutionPendingReceipts: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-1b1ead4e12b246b7"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleParked
-      , commandName = "FailExecutionPendingReceipts"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleParked 4))
-      , target = Just ExecutionLifecycleFailedPendingReceipts
-      , eventKinds = ["ExecutionFailedPendingReceipts"]
-      }
-  , -- ExecutionLifecycleFailedPendingReceipts x SettleExecutionReceipt: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-1d70bb55421d4d90"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleFailedPendingReceipts
-      , commandName = "SettleExecutionReceipt"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleFailedPendingReceipts 1))
-      , target = Just ExecutionLifecycleFailed
-      , eventKinds = ["ExecutionReceiptsClosed"]
-      }
-  , -- ExecutionLifecycleSucceededPendingReceipts x SettleExecutionReceipt: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-1d7b4f8bb863d16a"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleSucceededPendingReceipts
-      , commandName = "SettleExecutionReceipt"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleSucceededPendingReceipts 1))
-      , target = Just ExecutionLifecycleSucceeded
-      , eventKinds = ["ExecutionReceiptsClosed"]
-      }
   , -- ExecutionLifecycleSucceeded x AdvanceExecution: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-1f0be78923d30882"
@@ -334,6 +286,30 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
+      }
+  , -- ExecutionLifecycleParked x FailExecutionPendingReceipts: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-1fafda04c5086c68"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleParked
+      , commandName = "FailExecutionPendingReceipts"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleParked 4))
+      , target = Just ExecutionLifecycleFailedPendingReceipts
+      , eventKinds = ["ExecutionFailedPendingReceipts"]
+      }
+  , -- ExecutionLifecycleFailedPendingReceipts x SettleExecutionReceipt: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-1fb0bb32d8c74e17"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleFailedPendingReceipts
+      , commandName = "SettleExecutionReceipt"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleFailedPendingReceipts 0))
+      , target = Just ExecutionLifecycleFailedPendingReceipts
+      , eventKinds = ["ExecutionReceiptSettled"]
       }
   , -- ExecutionLifecycleFailed x RetryExecution: required rejection
     BehaviorRequirement
@@ -347,18 +323,6 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
-  , -- ExecutionLifecycleUnresolved x ReconcileExecution: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-21aeaf7957966b5f"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleUnresolved
-      , commandName = "ReconcileExecution"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 1))
-      , target = Just ExecutionLifecycleActive
-      , eventKinds = ["ExecutionReconciled"]
-      }
   , -- ExecutionLifecycleActive x ReconcileExecution: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-2313906d854e46db"
@@ -371,17 +335,17 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
-  , -- ExecutionLifecycleUnresolved x CancelExecutionPendingReceipts: live transition
+  , -- ExecutionLifecycleActive x FailExecution: live transition
     BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-26063d52fae12bf1"
+      { key = BehaviorKey "behavior-v1-263f3a1501caf04f"
       , kind = LiveTransition
       , evidence = GeneratedAuthoritative
       , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleUnresolved
-      , commandName = "CancelExecutionPendingReceipts"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 7))
-      , target = Just ExecutionLifecycleCancelledPendingReceipts
-      , eventKinds = ["ExecutionCancelledPendingReceipts"]
+      , source = ExecutionLifecycleActive
+      , commandName = "FailExecution"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 4))
+      , target = Just ExecutionLifecycleFailed
+      , eventKinds = ["ExecutionFailed"]
       }
   , -- ExecutionLifecycleMissing x CancelExecution: required rejection
     BehaviorRequirement
@@ -394,18 +358,6 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
-      }
-  , -- ExecutionLifecycleParked x CancelExecution: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-2a2e0e2b5d2d730d"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleParked
-      , commandName = "CancelExecution"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleParked 2))
-      , target = Just ExecutionLifecycleCancelled
-      , eventKinds = ["ExecutionCancelled"]
       }
   , -- ExecutionLifecycleCancelled x FailExecution: required rejection
     BehaviorRequirement
@@ -430,6 +382,18 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
+      }
+  , -- ExecutionLifecycleUnresolved x SettleExecutionReceipt: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-3836885f8757d055"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleUnresolved
+      , commandName = "SettleExecutionReceipt"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 5))
+      , target = Just ExecutionLifecycleUnresolved
+      , eventKinds = ["ExecutionReceiptSettled"]
       }
   , -- ExecutionLifecycleActive x ResumeExecution: required rejection
     BehaviorRequirement
@@ -466,6 +430,18 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
+      }
+  , -- ExecutionLifecycleUnresolved x RetryExecution: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-3bcfdee7a4c4def9"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleUnresolved
+      , commandName = "RetryExecution"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 4))
+      , target = Just ExecutionLifecycleActive
+      , eventKinds = ["ExecutionRetried"]
       }
   , -- ExecutionLifecycleSucceededPendingReceipts x AdvanceExecution: required rejection
     BehaviorRequirement
@@ -611,18 +587,6 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
-  , -- ExecutionLifecycleSucceededPendingReceipts x SettleExecutionReceipt: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-48f3e1622a28c122"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleSucceededPendingReceipts
-      , commandName = "SettleExecutionReceipt"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleSucceededPendingReceipts 0))
-      , target = Just ExecutionLifecycleSucceededPendingReceipts
-      , eventKinds = ["ExecutionReceiptSettled"]
-      }
   , -- ExecutionLifecycleFailed x AdmitExecution: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-492a8998c210c7e9"
@@ -647,6 +611,18 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
+  , -- ExecutionLifecycleActive x FinishExecution: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-4e5e44feb03eadcc"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleActive
+      , commandName = "FinishExecution"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 3))
+      , target = Just ExecutionLifecycleSucceeded
+      , eventKinds = ["ExecutionFinished"]
+      }
   , -- ExecutionLifecycleMissing x FailExecutionPendingReceipts: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-4fe3f970fae45ced"
@@ -670,18 +646,6 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
-      }
-  , -- ExecutionLifecycleUnresolved x FailExecutionPendingReceipts: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-56240642378e9cd9"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleUnresolved
-      , commandName = "FailExecutionPendingReceipts"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 6))
-      , target = Just ExecutionLifecycleFailedPendingReceipts
-      , eventKinds = ["ExecutionFailedPendingReceipts"]
       }
   , -- ExecutionLifecycleFailed x FinishExecutionPendingReceipts: required rejection
     BehaviorRequirement
@@ -719,18 +683,6 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
-  , -- ExecutionLifecycleActive x FailExecutionPendingReceipts: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-5c32447b647be2a4"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleActive
-      , commandName = "FailExecutionPendingReceipts"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 8))
-      , target = Just ExecutionLifecycleFailedPendingReceipts
-      , eventKinds = ["ExecutionFailedPendingReceipts"]
-      }
   , -- ExecutionLifecycleCancelled x SettleExecutionReceipt: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-5fc5adb6823a09bd"
@@ -743,17 +695,17 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
-  , -- ExecutionLifecycleFailedPendingReceipts x SettleExecutionReceipt: live transition
+  , -- ExecutionLifecycleUnresolved x MarkExecutionUnresolved: live transition
     BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-6021fc9e68d48eb0"
+      { key = BehaviorKey "behavior-v1-5ff5f17b795d1215"
       , kind = LiveTransition
       , evidence = GeneratedAuthoritative
       , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleFailedPendingReceipts
-      , commandName = "SettleExecutionReceipt"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleFailedPendingReceipts 0))
-      , target = Just ExecutionLifecycleFailedPendingReceipts
-      , eventKinds = ["ExecutionReceiptSettled"]
+      , source = ExecutionLifecycleUnresolved
+      , commandName = "MarkExecutionUnresolved"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 0))
+      , target = Just ExecutionLifecycleUnresolved
+      , eventKinds = ["ExecutionBecameUnresolved"]
       }
   , -- ExecutionLifecycleCancelledPendingReceipts x RetryExecution: required rejection
     BehaviorRequirement
@@ -791,16 +743,16 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
-  , -- ExecutionLifecycleCancelledPendingReceipts x SettleExecutionReceipt: live transition
+  , -- ExecutionLifecycleActive x SettleExecutionReceipt: live transition
     BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-6b06b8ee7301e0ae"
+      { key = BehaviorKey "behavior-v1-6a1413a45be3c17d"
       , kind = LiveTransition
       , evidence = GeneratedAuthoritative
       , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleCancelledPendingReceipts
+      , source = ExecutionLifecycleActive
       , commandName = "SettleExecutionReceipt"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleCancelledPendingReceipts 0))
-      , target = Just ExecutionLifecycleCancelledPendingReceipts
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 6))
+      , target = Just ExecutionLifecycleActive
       , eventKinds = ["ExecutionReceiptSettled"]
       }
   , -- ExecutionLifecycleFailedPendingReceipts x FailExecution: required rejection
@@ -850,18 +802,6 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
-      }
-  , -- ExecutionLifecycleMissing x AdmitExecution: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-70e2c8f17a5b1e91"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardTotal
-      , source = ExecutionLifecycleMissing
-      , commandName = "AdmitExecution"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleMissing 0))
-      , target = Just ExecutionLifecycleActive
-      , eventKinds = ["ExecutionAdmitted"]
       }
   , -- ExecutionLifecycleFailed x FailExecutionPendingReceipts: required rejection
     BehaviorRequirement
@@ -935,6 +875,54 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
+  , -- ExecutionLifecycleUnresolved x FailExecutionPendingReceipts: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-80b8f9a23f4bd8fe"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleUnresolved
+      , commandName = "FailExecutionPendingReceipts"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 6))
+      , target = Just ExecutionLifecycleFailedPendingReceipts
+      , eventKinds = ["ExecutionFailedPendingReceipts"]
+      }
+  , -- ExecutionLifecycleParked x FailExecution: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-84227477c0e35bc4"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleParked
+      , commandName = "FailExecution"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleParked 1))
+      , target = Just ExecutionLifecycleFailed
+      , eventKinds = ["ExecutionFailed"]
+      }
+  , -- ExecutionLifecycleUnresolved x CancelExecution: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-8471343692faad74"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleUnresolved
+      , commandName = "CancelExecution"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 3))
+      , target = Just ExecutionLifecycleCancelled
+      , eventKinds = ["ExecutionCancelled"]
+      }
+  , -- ExecutionLifecycleActive x AdvanceExecution: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-857f577ec23c563b"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleActive
+      , commandName = "AdvanceExecution"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 0))
+      , target = Just ExecutionLifecycleActive
+      , eventKinds = ["ExecutionAdvanced"]
+      }
   , -- ExecutionLifecycleSucceededPendingReceipts x ParkExecution: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-8622de8085bc1996"
@@ -958,6 +946,18 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
+      }
+  , -- ExecutionLifecycleSucceededPendingReceipts x SettleExecutionReceipt: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-8b6e6e6c6541bbc5"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleSucceededPendingReceipts
+      , commandName = "SettleExecutionReceipt"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleSucceededPendingReceipts 1))
+      , target = Just ExecutionLifecycleSucceeded
+      , eventKinds = ["ExecutionReceiptsClosed"]
       }
   , -- ExecutionLifecycleMissing x RetryExecution: required rejection
     BehaviorRequirement
@@ -1091,6 +1091,18 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
+  , -- ExecutionLifecycleParked x CancelExecutionPendingReceipts: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-9ab8b723de2e33ba"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleParked
+      , commandName = "CancelExecutionPendingReceipts"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleParked 5))
+      , target = Just ExecutionLifecycleCancelledPendingReceipts
+      , eventKinds = ["ExecutionCancelledPendingReceipts"]
+      }
   , -- ExecutionLifecycleSucceededPendingReceipts x RetryExecution: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-9e05e7d3bda354e8"
@@ -1115,17 +1127,17 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
-  , -- ExecutionLifecycleCancelledPendingReceipts x SettleExecutionReceipt: live transition
+  , -- ExecutionLifecycleActive x ParkExecution: live transition
     BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-a0994ce336f8fd02"
+      { key = BehaviorKey "behavior-v1-a08159e7aaaa4e5f"
       , kind = LiveTransition
       , evidence = GeneratedAuthoritative
       , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleCancelledPendingReceipts
-      , commandName = "SettleExecutionReceipt"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleCancelledPendingReceipts 1))
-      , target = Just ExecutionLifecycleCancelled
-      , eventKinds = ["ExecutionReceiptsClosed"]
+      , source = ExecutionLifecycleActive
+      , commandName = "ParkExecution"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 1))
+      , target = Just ExecutionLifecycleParked
+      , eventKinds = ["ExecutionParked"]
       }
   , -- ExecutionLifecycleFailedPendingReceipts x MarkExecutionUnresolved: required rejection
     BehaviorRequirement
@@ -1138,6 +1150,30 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
+      }
+  , -- ExecutionLifecycleParked x CancelExecution: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-a67750655fa5dfa2"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleParked
+      , commandName = "CancelExecution"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleParked 2))
+      , target = Just ExecutionLifecycleCancelled
+      , eventKinds = ["ExecutionCancelled"]
+      }
+  , -- ExecutionLifecycleParked x ResumeExecution: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-a6bbb2ca70bfcf23"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleParked
+      , commandName = "ResumeExecution"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleParked 0))
+      , target = Just ExecutionLifecycleActive
+      , eventKinds = ["ExecutionResumed"]
       }
   , -- ExecutionLifecycleCancelledPendingReceipts x CancelExecution: required rejection
     BehaviorRequirement
@@ -1163,18 +1199,6 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
-  , -- ExecutionLifecycleActive x CancelExecutionPendingReceipts: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-ab0cc35c425b7b30"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleActive
-      , commandName = "CancelExecutionPendingReceipts"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 9))
-      , target = Just ExecutionLifecycleCancelledPendingReceipts
-      , eventKinds = ["ExecutionCancelledPendingReceipts"]
-      }
   , -- ExecutionLifecycleSucceededPendingReceipts x AdmitExecution: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-ac3f80fde575a02d"
@@ -1198,18 +1222,6 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
-      }
-  , -- ExecutionLifecycleUnresolved x RetryExecution: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-aee3c266870856c8"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleUnresolved
-      , commandName = "RetryExecution"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 4))
-      , target = Just ExecutionLifecycleActive
-      , eventKinds = ["ExecutionRetried"]
       }
   , -- ExecutionLifecycleCancelledPendingReceipts x CancelExecutionPendingReceipts: required rejection
     BehaviorRequirement
@@ -1379,6 +1391,18 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
+  , -- ExecutionLifecycleMissing x AdmitExecution: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-bfa672266b9b45fc"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardTotal
+      , source = ExecutionLifecycleMissing
+      , commandName = "AdmitExecution"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleMissing 0))
+      , target = Just ExecutionLifecycleActive
+      , eventKinds = ["ExecutionAdmitted"]
+      }
   , -- ExecutionLifecycleFailedPendingReceipts x ParkExecution: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-c1c2b34a2bb659cc"
@@ -1402,6 +1426,18 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
+      }
+  , -- ExecutionLifecycleActive x FailExecutionPendingReceipts: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-c6fbbf6f0f274e5d"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleActive
+      , commandName = "FailExecutionPendingReceipts"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 8))
+      , target = Just ExecutionLifecycleFailedPendingReceipts
+      , eventKinds = ["ExecutionFailedPendingReceipts"]
       }
   , -- ExecutionLifecycleFailedPendingReceipts x FailExecutionPendingReceipts: required rejection
     BehaviorRequirement
@@ -1439,17 +1475,17 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
-  , -- ExecutionLifecycleActive x FailExecution: live transition
+  , -- ExecutionLifecycleActive x MarkExecutionUnresolved: live transition
     BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-ce201ad2b78fa328"
+      { key = BehaviorKey "behavior-v1-d128d77c627a4588"
       , kind = LiveTransition
       , evidence = GeneratedAuthoritative
       , guardCoverage = GuardUnknown
       , source = ExecutionLifecycleActive
-      , commandName = "FailExecution"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 4))
-      , target = Just ExecutionLifecycleFailed
-      , eventKinds = ["ExecutionFailed"]
+      , commandName = "MarkExecutionUnresolved"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 2))
+      , target = Just ExecutionLifecycleUnresolved
+      , eventKinds = ["ExecutionBecameUnresolved"]
       }
   , -- ExecutionLifecycleParked x AdvanceExecution: required rejection
     BehaviorRequirement
@@ -1463,17 +1499,17 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
-  , -- ExecutionLifecycleActive x FinishExecutionPendingReceipts: live transition
+  , -- ExecutionLifecycleParked x SettleExecutionReceipt: live transition
     BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-d2963506d8cab533"
+      { key = BehaviorKey "behavior-v1-d25e699a188e9d55"
       , kind = LiveTransition
       , evidence = GeneratedAuthoritative
       , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleActive
-      , commandName = "FinishExecutionPendingReceipts"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 7))
-      , target = Just ExecutionLifecycleSucceededPendingReceipts
-      , eventKinds = ["ExecutionFinishedPendingReceipts"]
+      , source = ExecutionLifecycleParked
+      , commandName = "SettleExecutionReceipt"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleParked 3))
+      , target = Just ExecutionLifecycleParked
+      , eventKinds = ["ExecutionReceiptSettled"]
       }
   , -- ExecutionLifecycleSucceeded x CancelExecution: required rejection
     BehaviorRequirement
@@ -1498,18 +1534,6 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
-      }
-  , -- ExecutionLifecycleUnresolved x CancelExecution: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-d609cbb4e9e50863"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleUnresolved
-      , commandName = "CancelExecution"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 3))
-      , target = Just ExecutionLifecycleCancelled
-      , eventKinds = ["ExecutionCancelled"]
       }
   , -- ExecutionLifecycleFailedPendingReceipts x AdmitExecution: required rejection
     BehaviorRequirement
@@ -1559,18 +1583,6 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
-  , -- ExecutionLifecycleParked x FailExecution: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-deefed5b4d41c43d"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleParked
-      , commandName = "FailExecution"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleParked 1))
-      , target = Just ExecutionLifecycleFailed
-      , eventKinds = ["ExecutionFailed"]
-      }
   , -- ExecutionLifecycleSucceededPendingReceipts x FinishExecutionPendingReceipts: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-df1ce883c49c0f2f"
@@ -1619,17 +1631,29 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
-  , -- ExecutionLifecycleUnresolved x SettleExecutionReceipt: live transition
+  , -- ExecutionLifecycleCancelledPendingReceipts x SettleExecutionReceipt: live transition
     BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-e4b7e484bfe276c0"
+      { key = BehaviorKey "behavior-v1-e4a62f0b1723b325"
       , kind = LiveTransition
       , evidence = GeneratedAuthoritative
       , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleUnresolved
+      , source = ExecutionLifecycleCancelledPendingReceipts
       , commandName = "SettleExecutionReceipt"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 5))
-      , target = Just ExecutionLifecycleUnresolved
-      , eventKinds = ["ExecutionReceiptSettled"]
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleCancelledPendingReceipts 1))
+      , target = Just ExecutionLifecycleCancelled
+      , eventKinds = ["ExecutionReceiptsClosed"]
+      }
+  , -- ExecutionLifecycleActive x CancelExecution: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-e806b1c753ce3b45"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleActive
+      , commandName = "CancelExecution"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 5))
+      , target = Just ExecutionLifecycleCancelled
+      , eventKinds = ["ExecutionCancelled"]
       }
   , -- ExecutionLifecycleSucceeded x AdmitExecution: required rejection
     BehaviorRequirement
@@ -1643,54 +1667,6 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
-  , -- ExecutionLifecycleActive x CancelExecution: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-e9c4479fc3b5982c"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleActive
-      , commandName = "CancelExecution"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 5))
-      , target = Just ExecutionLifecycleCancelled
-      , eventKinds = ["ExecutionCancelled"]
-      }
-  , -- ExecutionLifecycleParked x ResumeExecution: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-e9d86ffa296244ae"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleParked
-      , commandName = "ResumeExecution"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleParked 0))
-      , target = Just ExecutionLifecycleActive
-      , eventKinds = ["ExecutionResumed"]
-      }
-  , -- ExecutionLifecycleActive x AdvanceExecution: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-ea3b4bcbbe2edd66"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleActive
-      , commandName = "AdvanceExecution"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 0))
-      , target = Just ExecutionLifecycleActive
-      , eventKinds = ["ExecutionAdvanced"]
-      }
-  , -- ExecutionLifecycleParked x SettleExecutionReceipt: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-eb840e43a5444214"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleParked
-      , commandName = "SettleExecutionReceipt"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleParked 3))
-      , target = Just ExecutionLifecycleParked
-      , eventKinds = ["ExecutionReceiptSettled"]
-      }
   , -- ExecutionLifecycleCancelled x CancelExecutionPendingReceipts: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-ec60c1e1593b5a5e"
@@ -1702,6 +1678,18 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
+      }
+  , -- ExecutionLifecycleActive x FinishExecutionPendingReceipts: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-edada0ceb29e6d6e"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleActive
+      , commandName = "FinishExecutionPendingReceipts"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 7))
+      , target = Just ExecutionLifecycleSucceededPendingReceipts
+      , eventKinds = ["ExecutionFinishedPendingReceipts"]
       }
   , -- ExecutionLifecycleFailedPendingReceipts x RetryExecution: required rejection
     BehaviorRequirement
@@ -1739,29 +1727,17 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
-  , -- ExecutionLifecycleActive x FinishExecution: live transition
+  , -- ExecutionLifecycleUnresolved x ReconcileExecution: live transition
     BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-f34794db0df7ed8b"
+      { key = BehaviorKey "behavior-v1-f25176aabbe9c424"
       , kind = LiveTransition
       , evidence = GeneratedAuthoritative
       , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleActive
-      , commandName = "FinishExecution"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 3))
-      , target = Just ExecutionLifecycleSucceeded
-      , eventKinds = ["ExecutionFinished"]
-      }
-  , -- ExecutionLifecycleActive x SettleExecutionReceipt: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-f372091c6f6c7b16"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleActive
-      , commandName = "SettleExecutionReceipt"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 6))
+      , source = ExecutionLifecycleUnresolved
+      , commandName = "ReconcileExecution"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 1))
       , target = Just ExecutionLifecycleActive
-      , eventKinds = ["ExecutionReceiptSettled"]
+      , eventKinds = ["ExecutionReconciled"]
       }
   , -- ExecutionLifecycleUnresolved x ParkExecution: required rejection
     BehaviorRequirement
@@ -1775,17 +1751,17 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
-  , -- ExecutionLifecycleUnresolved x FailExecution: live transition
+  , -- ExecutionLifecycleActive x CancelExecutionPendingReceipts: live transition
     BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-f6961e6acf49db13"
+      { key = BehaviorKey "behavior-v1-f79086e349f3960f"
       , kind = LiveTransition
       , evidence = GeneratedAuthoritative
       , guardCoverage = GuardUnknown
-      , source = ExecutionLifecycleUnresolved
-      , commandName = "FailExecution"
-      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 2))
-      , target = Just ExecutionLifecycleFailed
-      , eventKinds = ["ExecutionFailed"]
+      , source = ExecutionLifecycleActive
+      , commandName = "CancelExecutionPendingReceipts"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleActive 9))
+      , target = Just ExecutionLifecycleCancelledPendingReceipts
+      , eventKinds = ["ExecutionCancelledPendingReceipts"]
       }
   , -- ExecutionLifecycleSucceeded x SettleExecutionReceipt: required rejection
     BehaviorRequirement
@@ -1823,6 +1799,18 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
+  , -- ExecutionLifecycleFailedPendingReceipts x SettleExecutionReceipt: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-fbe850da2e42b6c9"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleFailedPendingReceipts
+      , commandName = "SettleExecutionReceipt"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleFailedPendingReceipts 1))
+      , target = Just ExecutionLifecycleFailed
+      , eventKinds = ["ExecutionReceiptsClosed"]
+      }
   , -- ExecutionLifecycleFailed x AdvanceExecution: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-fcd4397bd4f9c1fc"
@@ -1834,6 +1822,18 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
+      }
+  , -- ExecutionLifecycleUnresolved x FailExecution: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-fcdeb54176b970ee"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ExecutionLifecycleUnresolved
+      , commandName = "FailExecution"
+      , expectedEdge = (Just (K.EdgeRef ExecutionLifecycleUnresolved 2))
+      , target = Just ExecutionLifecycleFailed
+      , eventKinds = ["ExecutionFailed"]
       }
   , -- ExecutionLifecycleFailedPendingReceipts x CancelExecution: required rejection
     BehaviorRequirement

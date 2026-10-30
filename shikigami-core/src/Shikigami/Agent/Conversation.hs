@@ -42,7 +42,6 @@ import Keiro.Projection (InlineProjection (InlineProjection, apply))
 import Keiro.Timer (TimerId (..), TimerRequest (..), TimerRow (..), cancelTimer, scheduleTimerOnceTx)
 import Keiro.Workflow
   ( JournalAppendOutcome (..),
-    PatchId (..),
     StepName (..),
     Workflow,
     WorkflowError (..),
@@ -58,7 +57,6 @@ import Keiro.Workflow
     currentWorkflow,
     deterministicJournalId,
     loadStepIndex,
-    patch,
     prepareJournalAppend,
     restoreSeed,
     runWorkflowWith,
@@ -825,23 +823,21 @@ processRotatingTurn ::
   Maybe ExecutionContext ->
   Eff (Workflow : AppEffects) (Either Text ConversationTurnResult)
 processRotatingTurn env recordedIdentity decl msg executionContext = do
-  durable <- patch (PatchId "shikigami-conversation-durable-execution-v1")
-  enabled <- patch (PatchId "shikigami-conversation-execution-selection-v1")
   admitted <-
-    if durable && not (null decl.capabilityOverlays)
+    if not (null decl.capabilityOverlays)
       then pure (Left "capability overlay mismatch: conversations do not admit overlays")
-      else if enabled then admitConversationExecution env recordedIdentity decl msg executionContext durable else pure (Right (LegacyConversation env.behaviorEnv))
+      else admitConversationExecution env recordedIdentity decl msg executionContext
   case admitted of
     Left refusal -> pure (Left refusal)
     Right selected -> processSelectedTurn env selected recordedIdentity decl msg
 
 -- Process-local resources stay out of both selection journals and snapshots.
 data ConversationExecution
-  = LegacyConversation !BehaviorEnv
+  = InlineConversation !BehaviorEnv
   | DurableConversation !(Maybe ResolvedProfile) !Selection.ExecutionSelection
 
-admitConversationExecution :: ConversationEnv -> ResolvedAgentIdentity -> AgentDecl -> AddressedMessage -> Maybe ExecutionContext -> Bool -> Eff (Workflow : AppEffects) (Either Text ConversationExecution)
-admitConversationExecution env recordedIdentity decl msg executionContext durable = do
+admitConversationExecution :: ConversationEnv -> ResolvedAgentIdentity -> AgentDecl -> AddressedMessage -> Maybe ExecutionContext -> Eff (Workflow : AppEffects) (Either Text ConversationExecution)
+admitConversationExecution env recordedIdentity decl msg executionContext = do
   profileResolution <- step (StepName "resolve-conversation-profile") $ liftIO case decl.sanctionedProfile of
     Nothing -> pure (Right Nothing)
     Just Agent.ProfileRequirement {profileId, version} -> fmap Just <$> env.resolveRunProfile (ProfileId profileId) (ProfileVersion <$> version)
@@ -863,8 +859,8 @@ admitConversationExecution env recordedIdentity decl msg executionContext durabl
             _ -> Right Nothing
       case selected of
         Left refusal -> pure (Left (Text.pack (show refusal)))
-        Right Nothing -> pure (Right (LegacyConversation env.behaviorEnv))
-        Right (Just selection) | durable && null decl.delegates && isNothing decl.routing -> pure (Right (DurableConversation profile selection))
+        Right Nothing -> pure (Right (InlineConversation env.behaviorEnv))
+        Right (Just selection) | null decl.delegates && isNothing decl.routing -> pure (Right (DurableConversation profile selection))
         Right (Just selection) -> do
           result <-
             liftIO
@@ -880,7 +876,7 @@ admitConversationExecution env recordedIdentity decl msg executionContext durabl
                     }
                   selection
               )
-          pure (either (Left . Text.pack . show) (Right . LegacyConversation) result)
+          pure (either (Left . Text.pack . show) (Right . InlineConversation) result)
 
 processSelectedTurn :: ConversationEnv -> ConversationExecution -> ResolvedAgentIdentity -> AgentDecl -> AddressedMessage -> Eff (Workflow : AppEffects) (Either Text ConversationTurnResult)
 processSelectedTurn env selectedBehavior recordedIdentity decl msg@AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId, content = msgContent} = do
@@ -894,7 +890,7 @@ processSelectedTurn env selectedBehavior recordedIdentity decl msg@AddressedMess
     DurableConversation profile selection -> case decl.behavior of
       Agent.Skill {path} -> runConversationSkillStep env recordedIdentity decl msg sid userTurn profile selection path
       _ -> pure (Left "durable conversation execution requires a Skill")
-    LegacyConversation active ->
+    InlineConversation active ->
       step (StepName "run-behavior-v2") do
         prior <- liftIO (loadTurns env sid)
         liftIO (runBehaviorAttempt (conversationRunTimeout env) active decl (triggerOnly (behaviorPayload msg prior)))

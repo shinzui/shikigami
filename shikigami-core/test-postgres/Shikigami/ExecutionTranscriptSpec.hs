@@ -37,6 +37,7 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Tx
 import Keiki.Core qualified as K
+import Keiro.Codec (Codec (..), EventType (..))
 import Keiro.Command (DomainCommandHandler (..), SilentDomainDecision (SilentRejected), defaultRunCommandOptions)
 import Keiro.EventStream (EventStream (..))
 import Keiro.Projection (DomainProjectionCommandOutcome (DomainProjectionCommandFenced), GuardedCatalogOutcome (..), runDomainCommandWithCatalogProjectionsGuarded)
@@ -786,6 +787,12 @@ tests fixture =
           state.revision @?= 1
           state.cursor @?= 0
           length operations @?= 1,
+      testCase "bound execution identity preserves its private event JSON" do
+        let event = Lifecycle.ExecutionAdvanced (Lifecycle.ExecutionAdvancedData (ExecutionId "fixture-execution") 1 2)
+            expected = object ["kind" .= ("ExecutionAdvanced" :: Text), "executionId" .= ("fixture-execution" :: Text), "expected" .= (1 :: Int), "revision" .= (2 :: Int)]
+            codec = executionLifecycleEventStreamDef.eventCodec
+        codec.encode event @?= expected
+        codec.decode (EventType "ExecutionAdvanced") expected @?= Right event,
       testCase "every lifecycle live edge emits events and has no silent acceptance" do
         let graph = executionLifecycleEventStreamDef.transducer
             states = [minBound .. maxBound] :: [Lifecycle.ExecutionLifecycleVertex]
@@ -800,7 +807,7 @@ tests fixture =
           payloads <- payloadCount env snapshot.executionId
           let (catalog, projections) = ExecutionCatalog.withLiveExecution (\_ _ -> error "refused command reached inline writes")
               handler = DomainCommandHandler {eventStream = executionLifecycleEventStream, classifySilent = \_ -> SilentRejected ExecutionCommandRefused}
-              command = Lifecycle.AdvanceExecution (Lifecycle.AdvanceExecutionData snapshot.executionId.value 1 2)
+              command = Lifecycle.AdvanceExecution (Lifecycle.AdvanceExecutionData snapshot.executionId 1 2)
               target = Stream.entityStream executionLifecycleCategory snapshot.executionId.value
           typed <- run env (runDomainCommandWithCatalogProjectionsGuarded defaultRunCommandOptions handler target command catalog projections (const (pure (Left OperationConflict))))
           case typed of

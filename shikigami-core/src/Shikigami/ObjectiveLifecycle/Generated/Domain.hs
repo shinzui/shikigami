@@ -6,18 +6,20 @@ import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Keiki.Core (RegFile (..))
+import Shikigami.DomainBindings qualified as DomainBindings
+import Shikigami.Objective.Types (ObjectiveId)
 import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)
 
 data ObjectiveLifecycleVertex = ObjectiveLifecycleMissing | ObjectiveLifecyclePresent
   deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
 
 data CreateObjectiveData = CreateObjectiveData
-  { objectiveId :: !Text
+  { objectiveId :: !ObjectiveId
   }
   deriving stock (Generic, Eq, Show)
 
 data ApplyObjectiveTransitionData = ApplyObjectiveTransitionData
-  { objectiveId :: !Text
+  { objectiveId :: !ObjectiveId
   , expected :: !Int
   , revision :: !Int
   , fingerprint :: !Text
@@ -29,12 +31,12 @@ data ObjectiveLifecycleCommand = CreateObjective !CreateObjectiveData
   deriving stock (Generic, Eq, Show)
 
 data ObjectiveCreatedData = ObjectiveCreatedData
-  { objectiveId :: !Text
+  { objectiveId :: !ObjectiveId
   }
   deriving stock (Generic, Eq, Show)
 
 data ObjectiveTransitionAppliedData = ObjectiveTransitionAppliedData
-  { objectiveId :: !Text
+  { objectiveId :: !ObjectiveId
   , expected :: !Int
   , revision :: !Int
   , fingerprint :: !Text
@@ -46,13 +48,13 @@ data ObjectiveLifecycleEvent = ObjectiveCreated !ObjectiveCreatedData
   deriving stock (Generic, Eq, Show)
 
 type ObjectiveLifecycleRegs =
-  '[ '("objectiveId", Text)
+  '[ '("objectiveId", ObjectiveId)
    , '("revision", Int)
    ]
 
 initialObjectiveLifecycleRegs :: RegFile ObjectiveLifecycleRegs
 initialObjectiveLifecycleRegs =
-  RCons (Proxy @"objectiveId") "" $
+  RCons (Proxy @"objectiveId") DomainBindings.initialObjectiveIdentity $
   RCons (Proxy @"revision") 0 RNil
 
 $(deriveAggregateCtorsAll ''ObjectiveLifecycleCommand ''ObjectiveLifecycleRegs)

@@ -181,7 +181,7 @@ tests databaseFixture =
             assertEqual "fresh journal writes the v2 behavior label" (Right True) (Map.member "run-behavior-v2" <$> freshIndex)
             assertEqual "fresh journal never writes the legacy label" (Right False) (Map.member "run-behavior" <$> freshIndex)
             assertEqual "fresh journal resolves even the empty overlay set" (Right True) (Map.member "resolve-capability-overlays" <$> freshIndex),
-      testCase "a legacy Skill overlay is acquired after recall and released before later lifecycle work" do
+      testCase "a Skill overlay admission lease is released before driver and later lifecycle work" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             events <- newIORef ([] :: [Text])
@@ -212,11 +212,6 @@ tests databaseFixture =
                     }
                 runJob = capabilityJob "overlay-lifecycle" "overlay-lifecycle:run"
 
-            result <- runLegacyAgentRunWorkflow deps runJob
-            assertBool ("authorized overlay run completes: " <> show result) (isCompleted result)
-            observed <- readIORef events
-            assertCapabilityEventOrder observed ["after:recall", "acquire:v1", "model", "release:v1", "after:run-behavior-v2", "before:record", "before:complete"]
-            assertEqual "the lease is gone when the workflow returns" False =<< readIORef active
             -- The fresh population freezes a menu lease, releases it, and
             -- reacquires only tools actually requested by an unfinished call.
             writeIORef events []
@@ -234,41 +229,6 @@ tests databaseFixture =
             assertCapabilityEventOrder observedNew ["after:recall", "acquire:v1", "release:v1", "after:admit-skill-execution", "model", "before:record", "before:complete"]
             assertEqual "a no-tool response needs only its admission lease" 1 (length (filter (== "acquire:v1") observedNew))
             assertEqual "the new run leaves no provider lease" False =<< readIORef active,
-      testCase "a legacy retry reacquires the journaled revision while a second legacy run selects the new catalog revision" do
-        (withShikigamiFreshDatabase databaseFixture) \connStr ->
-          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
-            events <- newIORef ([] :: [Text])
-            active <- newIORef False
-            tracer <- noopTracer
-            behaviorEnv <- newBehaviorEnv
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
-                declaration = capabilityDecl "overlay-revision" (Skill {path = "../agents/skills/triage-note"}) [workspaceReadId] (Just overlayIdentity) []
-                firstJob = capabilityJob "overlay-revision" "overlay-revision:resume-v1"
-                freshJob = capabilityJob "overlay-revision" "overlay-revision:fresh-v2"
-                unavailableV1 = capabilityRuntime [workspaceReadV1] [] allowCapability
-                v1Provider = trackingCapabilityProvider events active "v1" workspaceReadV1 (Right ())
-                v2Provider = trackingCapabilityProvider events active "v2" workspaceReadV2 (Right ())
-                replacementRuntime = capabilityRuntime [workspaceReadV2] [v1Provider, v2Provider] allowCapability
-                firstDeps = (testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [declaration]) {capabilities = unavailableV1}
-                resumedDeps = (testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [declaration]) {capabilities = replacementRuntime}
-
-            firstAttempt <- try @TransientBehaviorFailure (runLegacyAgentRunWorkflow firstDeps firstJob)
-            case firstAttempt of
-              Left _ -> pure ()
-              Right outcome -> assertFailure ("missing v1 provider should be transient, got " <> show outcome)
-            afterFailure <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (runJobWorkflowId firstJob) 0)
-            assertEqual "v1 resolution is durable before acquisition" (Right True) (Map.member "resolve-capability-overlays" <$> afterFailure)
-            assertEqual "the failed attempt writes no behavior result" (Right False) (Map.member "run-behavior-v2" <$> afterFailure)
-            loadCapabilityResolution appEnv firstJob >>= assertEqual "the journal pins v1" (Right (CapabilityOverlay.mkResolvedCapabilitySet [workspaceReadV1]))
-
-            resumed <- runAgentRunWorkflow resumedDeps firstJob
-            assertBool ("restoring v1 lets the same run finish: " <> show resumed) (isCompleted resumed)
-            loadCapabilityResolution appEnv firstJob >>= assertEqual "catalog replacement cannot move the resumed run" (Right (CapabilityOverlay.mkResolvedCapabilitySet [workspaceReadV1]))
-
-            fresh <- runLegacyAgentRunWorkflow resumedDeps freshJob
-            assertBool ("a fresh run selects v2: " <> show fresh) (isCompleted fresh)
-            loadCapabilityResolution appEnv freshJob >>= assertEqual "the fresh journal pins v2" (Right (CapabilityOverlay.mkResolvedCapabilitySet [workspaceReadV2]))
-            readIORef events >>= assertEqual "only the exact pinned provider is acquired per run" ["acquire:v1", "release:v1", "acquire:v2", "release:v2"],
       testCase "capability resolution refusals are permanent before open-session" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
@@ -306,29 +266,6 @@ tests databaseFixture =
               assertEqual (Text.unpack label <> " journals the resolution refusal") (Right True) (Map.member "resolve-capability-overlays" <$> stepIndex)
               assertEqual (Text.unpack label <> " never opens a session") (Right False) (Map.member "open-session" <$> stepIndex)
             assertEqual "no permanent refusal reaches provider acquisition" [] =<< readIORef events,
-      testCase "a legacy release failure is transient and leaves the behavior result unjournaled" do
-        (withShikigamiFreshDatabase databaseFixture) \connStr ->
-          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
-            events <- newIORef ([] :: [Text])
-            active <- newIORef False
-            tracer <- noopTracer
-            behaviorEnv <- newBehaviorEnv
-            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing}
-                declaration = capabilityDecl "overlay-release" (Skill {path = "../agents/skills/triage-note"}) [workspaceReadId] (Just overlayIdentity) []
-                provider = trackingCapabilityProvider events active "v1" workspaceReadV1 (Left (CapabilityProvider.CapabilityReleaseError "release failed"))
-                runtime = capabilityRuntime [workspaceReadV1] [provider] allowCapability
-                deps = (testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [declaration]) {capabilities = runtime}
-                runJob = capabilityJob "overlay-release" "overlay-release:transient"
-
-            attempted <- try @TransientBehaviorFailure (runLegacyAgentRunWorkflow deps runJob)
-            case attempted of
-              Left _ -> pure ()
-              Right outcome -> assertFailure ("release failure should escape transiently, got " <> show outcome)
-            assertEqual "release was still attempted" ["acquire:v1", "release:v1"] =<< readIORef events
-            assertEqual "the failed release leaves no live lease" False =<< readIORef active
-            stepIndex <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (runJobWorkflowId runJob) 0)
-            assertEqual "resolution remains journaled" (Right True) (Map.member "resolve-capability-overlays" <$> stepIndex)
-            assertEqual "behavior result remains retryable" (Right False) (Map.member "run-behavior-v2" <$> stepIndex),
       testCase "transient v2 failure leaves no value and a later advance succeeds" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
@@ -2629,14 +2566,10 @@ expectedLifecycleSteps :: Set.Set Text
 expectedLifecycleSteps =
   Set.fromList
     [ "ingest-job",
-      "patch:shikigami-execution-resources-v1",
       "validate-execution-root",
       "lookup-agent",
       "resolve-profile",
       "resolve-capability-overlays",
-      "patch:shikigami-execution-selection-v1",
-      "patch:shikigami-governed-workspaces-v1",
-      "patch:shikigami-durable-execution-v1",
       "resolve-execution-selection",
       "resolve-approval-policy",
       "open-session",
@@ -3503,12 +3436,3 @@ expectedSupervisorOutput =
             "finding" .= ("The code path should spawn child workflows before awaiting their results." :: Text)
           ]
     ]
-
--- These fixtures qualify the retained coarse Skill branch's whole-behavior
--- lease/retry semantics. Record a real old patch set, then let ordinary service
--- runs replay that population. New driver integration has separate fixtures.
-runLegacyAgentRunWorkflow :: AgentRunDeps -> RunJob -> IO (Either StoreError (WorkflowOutcome (Either AgentRunFailure AgentRunResult)))
-runLegacyAgentRunWorkflow deps job =
-  let app = deps.appEnv
-      options = shikigamiWorkflowRunOptions app
-   in runAppIO app (runWorkflowWith (options & #activePatches .~ Set.delete (PatchId "shikigami-durable-execution-v1") options.activePatches) agentRunWorkflowName (runJobWorkflowId job) (agentRunWorkflow deps (Just job)))

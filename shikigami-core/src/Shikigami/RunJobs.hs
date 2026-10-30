@@ -29,7 +29,7 @@ import Shikigami.Agent.Delegate.Context (DelegationBudgetId (..))
 import Shikigami.Agent.Delegate.Depth (depthInt)
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Run.Key (runKeyText)
-import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
+import Shikigami.Agent.RunJob (RunJob (..))
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Execution.Request (ExecutionRequest)
 import Shikigami.RunJobs.Generated.Queue (queuePhysical, queueTable)
@@ -51,38 +51,23 @@ runJob =
 runJobCodec :: JobCodec RunJob
 runJobCodec = keiroJobCodec domainCodec
 
--- The generated queue owns its closed structural fields. Version 3 of the
--- application codec extends the v2 resource wrapper with typed selection
--- requests and permissions. Version 4 admits the explicit accepted-operation
--- route; v1-v3 cannot acquire that route through historical input. Upcasters never interpret historical input as new
--- authority. Journal values remain unwrapped and default missing fields.
+-- The generated queue owns the closed structural fields. The complete first-
+-- release application payload adds current execution authority and input fields.
+-- No historical codec or upcaster is admitted before the first deployment.
 domainCodec :: Codec RunJob
 domainCodec =
   Codec
     { eventTypes = Codec.runJobsPayloadCodec.eventTypes,
       eventType = \job -> Codec.runJobsPayloadCodec.eventType (toMessage job),
-      schemaVersion = 4,
+      schemaVersion = 1,
       encode = Queue.encodeRunJobMessage . toMessage,
       decode = \_ value -> do
         message <- Queue.parseRunJobMessage value
-        (root, request, permissions, input) <- parseValue (Aeson.withObject "RunInputV3" (\o -> (,,,) <$> o Aeson..: "executionRootId" <*> o Aeson..: "executionRequest" <*> o Aeson..: "executionPermissions" <*> o Aeson..: "input")) message.triggerPayload
+        (root, request, permissions, input) <- parseValue (Aeson.withObject "RunInput" (\o -> (,,,) <$> o Aeson..: "executionRootId" <*> o Aeson..: "executionRequest" <*> o Aeson..: "executionPermissions" <*> o Aeson..: "input")) message.triggerPayload
         let domain = Queue.encodeRunJobMessage message
         parseValue (Aeson.withObject "RunJob" (\o -> Aeson.parseJSON (Aeson.Object (KeyMap.insert "executionRootId" (toJSON (root :: Maybe ExecutionRootId)) (KeyMap.insert "executionRequest" (toJSON (request :: Maybe ExecutionRequest)) (KeyMap.insert "executionPermissions" (toJSON (permissions :: Maybe [Text])) (KeyMap.insert "triggerPayload" input o))))))) domain,
-      upcasters = [(1, \_ -> upcast), (2, \_ -> upcastSelection), (3, \_ -> upcastExecutionRoute)]
+      upcasters = []
     }
-  where
-    upcast value = do
-      message <- Queue.parseRunJobMessage value
-      parseValue (Aeson.withObject "RunJobMessage" (\o -> pure (Aeson.Object (KeyMap.insert "triggerPayload" (Aeson.object ["executionRootId" Aeson..= Aeson.Null, "input" Aeson..= message.triggerPayload]) o)))) (Queue.encodeRunJobMessage message)
-    upcastExecutionRoute value = do
-      message <- Queue.parseRunJobMessage value
-      if message.routeKind `elem` ["AgentWorkflowRoute", "ConversationWorkflowRoute"]
-        then Right value
-        else Left "historical run input cannot request an execution operation"
-    upcastSelection value = do
-      message <- Queue.parseRunJobMessage value
-      input <- parseValue (Aeson.withObject "RunInputV2" (\o -> pure (Aeson.Object (KeyMap.insert "executionRequest" Aeson.Null (KeyMap.insert "executionPermissions" Aeson.Null o))))) message.triggerPayload
-      parseValue (Aeson.withObject "RunJobMessage" (\o -> pure (Aeson.Object (KeyMap.insert "triggerPayload" input o)))) (Queue.encodeRunJobMessage message)
 
 encodeRunJob :: RunJob -> Value
 encodeRunJob = runJobCodec.encodeJob
@@ -95,7 +80,7 @@ toMessage job =
   Queue.RunJobMessage
     { agentName = agentNameText job.agentName,
       identity = toJSON job.identity,
-      triggerKind = triggerText job.triggerKind,
+      triggerKind = job.triggerKind,
       occurredAt = job.occurredAt,
       triggerPayload = Aeson.object ["executionRootId" Aeson..= job.executionRootId, "executionRequest" Aeson..= job.executionRequest, "executionPermissions" Aeson..= job.executionPermissions, "input" Aeson..= job.triggerPayload],
       idempotencyKey = runKeyText job.idempotencyKey,
@@ -104,21 +89,8 @@ toMessage job =
       delegationDepth = depthInt <$> job.delegationDepth,
       lineage = agentNameText <$> job.lineage,
       delegationBudgetId = budgetText <$> job.delegationBudgetId,
-      routeKind = routeText job.routeKind
+      routeKind = job.routeKind
     }
-
-triggerText :: TriggerKind -> Text
-triggerText = \case
-  TriggeredBySchedule -> "TriggeredBySchedule"
-  TriggeredByStream -> "TriggeredByStream"
-  TriggeredByEvent -> "TriggeredByEvent"
-  TriggeredByDelegation -> "TriggeredByDelegation"
-
-routeText :: RunRouteKind -> Text
-routeText = \case
-  AgentWorkflowRoute -> "AgentWorkflowRoute"
-  ConversationWorkflowRoute -> "ConversationWorkflowRoute"
-  ExecutionOperationRoute -> "ExecutionOperationRoute"
 
 budgetText :: DelegationBudgetId -> Text
 budgetText (DelegationBudgetId value) = value

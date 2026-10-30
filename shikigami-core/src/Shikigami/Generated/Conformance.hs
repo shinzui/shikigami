@@ -4,6 +4,7 @@ module Shikigami.Generated.Conformance
   , serviceConformanceFacts
   ) where
 
+import Shikigami.Generated.StructuralConformance qualified as StructuralConformance
 import Shikigami.ExecutionLifecycle.Generated.Harness qualified as ExecutionLifecycle
 import Shikigami.ObjectiveLifecycle.Generated.Harness qualified as ObjectiveLifecycle
 import Shikigami.RunEvidence.Generated.Harness qualified as RunEvidence
@@ -21,7 +22,8 @@ import Shikigami.ExecutionDriver.Generated.WorkflowFacts qualified as ExecutionD
 runServiceConformanceChecks :: IO [(String, Bool)]
 runServiceConformanceChecks =
   pure (
-    [("aggregate/ExecutionLifecycle/" <> fact, passed) | (fact, passed) <- ExecutionLifecycle.harnessAssertions]
+    [("structural/" <> fact, passed) | (fact, passed) <- StructuralConformance.structuralConformanceAssertions]
+    <> [("aggregate/ExecutionLifecycle/" <> fact, passed) | (fact, passed) <- ExecutionLifecycle.harnessAssertions]
     <> [("aggregate/ObjectiveLifecycle/" <> fact, passed) | (fact, passed) <- ObjectiveLifecycle.harnessAssertions]
     <> [("aggregate/RunEvidence/" <> fact, passed) | (fact, passed) <- RunEvidence.harnessAssertions]
     <> [("aggregate/WorkerSessionLifecycle/" <> fact, passed) | (fact, passed) <- WorkerSessionLifecycle.harnessAssertions]
@@ -33,7 +35,10 @@ runServiceConformanceChecks =
 
 serviceConformanceFacts :: [(String, String)]
 serviceConformanceFacts =
-    [("workflow/AgentRun/" <> fact, value) | (fact, value) <- AgentRun.workflowFactValues]
+    [ ("mapped-surface/workqueue-payload/workqueue:run_jobs/RunRouteKind/workqueue run_jobs payload .routeKind : RunRouteKind", "consumer-build:workqueue:run_jobs,workqueue-history:run_jobs")
+    , ("mapped-surface/workqueue-payload/workqueue:run_jobs/RunTriggerKind/workqueue run_jobs payload .triggerKind : RunTriggerKind", "consumer-build:workqueue:run_jobs,workqueue-history:run_jobs")
+    ]
+    <> [("workflow/AgentRun/" <> fact, value) | (fact, value) <- AgentRun.workflowFactValues]
     <> [("workflow/Approval/" <> fact, value) | (fact, value) <- Approval.workflowFactValues]
     <> [("workflow/ContinuingWorker/" <> fact, value) | (fact, value) <- ContinuingWorker.workflowFactValues]
     <> [("workflow/DanwaConversation/" <> fact, value) | (fact, value) <- DanwaConversation.workflowFactValues]

@@ -208,9 +208,32 @@
       "sourcePath": "runtime-patterns/keiki/build-time-validation.md",
       "sourceSha256": "925dc9fb20ca6ec23f0d13d394b9b52ad03bfdf17d0765464251fa3681ae40ca",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "default-and-unconditional-checks",
+          "disposition": "existing",
+          "rationale": "All four generated validated event streams retain default validation; current whole-service conformance executes their validation and forward/replay checks."
+        },
+        {
+          "id": "projection-and-constructor-evidence",
+          "disposition": "implemented",
+          "rationale": "Generated nominal witnesses retain complete Text domains; structural queue enums have exhaustive shape fixtures. No hand-built projection or constructor literal exists."
+        },
+        {
+          "id": "solver-taxonomy-and-audit",
+          "disposition": "existing",
+          "rationale": "Behavior reports preserve unverified identity guards. No consumer wraps unknown/opaque solver results as proof. No opaque collection/arithmetic guard exists; no opt-in opaque result is claimed."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-checked-composition",
@@ -218,9 +241,27 @@
       "sourcePath": "runtime-patterns/keiki/checked-composition.md",
       "sourceSha256": "a61a01a4a4ebb212fac745e732c6b9a1592fd1d088e4db65fdc02b7bda1a31bc",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "existing",
+      "clauses": [
+        {
+          "id": "actual-pipeline-census",
+          "disposition": "not-applicable",
+          "rationale": "No hand-owned sequential, alternative or feedback Keiki pipeline exists. Each persisted aggregate has its own validated stream; the at-risk machine is diagram-only."
+        },
+        {
+          "id": "no-opaque-boundary-certification",
+          "disposition": "existing",
+          "rationale": "No application compose/composeChecked or non-invertible map adapter claims a structural composition proof. Current source census is recorded in current-domain-contracts.md."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-collections-and-opaque-guards",
@@ -228,9 +269,27 @@
       "sourcePath": "runtime-patterns/keiki/collections-and-opaque-guards.md",
       "sourceSha256": "805979d67731f2f60fffbdbe0610e672a08b75116a955756eaed97abf66d7ac5",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "existing",
+      "clauses": [
+        {
+          "id": "scalar-authority",
+          "disposition": "existing",
+          "rationale": "Lifecycle revision and pending-receipt counters stay scalar; membership and rich payload integrity are checked in protected SQL transactions."
+        },
+        {
+          "id": "no-content-closure",
+          "disposition": "not-applicable",
+          "rationale": "No collection register/content guard or TApp membership closure exists in the four generated aggregate transducers. Queue lineage is ordered data, not a guard."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-constructor-evidence",
@@ -238,9 +297,27 @@
       "sourcePath": "runtime-patterns/keiki/constructor-evidence.md",
       "sourceSha256": "01a2a72d9343439673f3ebcd34561607089edaf5896f0dc578f376b683225a24",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "existing",
+      "clauses": [
+        {
+          "id": "trusted-producers",
+          "disposition": "existing",
+          "rationale": "Generated aggregate constructors use released derivation; the hand-owned at-risk nullary command descriptors use mkInCtorVia and Generic."
+        },
+        {
+          "id": "manual-and-relabel-census",
+          "disposition": "not-applicable",
+          "rationale": "No unavailable/deprecated constructor producer, manual record construction, relabel adapter or composed input/wire boundary exists in hand-owned application machines."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-diagnosing-rejected-commands",
@@ -248,9 +325,27 @@
       "sourcePath": "runtime-patterns/keiki/diagnosing-rejected-commands.md",
       "sourceSha256": "981123b69624c44bfdbd6791f852a12e81697e6d862dfa82dacebf10c87bfa64",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "structured-command-boundary",
+          "disposition": "implemented",
+          "rationale": "Execution persistence retains outer event rejection and operational failures separately from typed precondition refusal. The native graph test rejects an unexpected silent edge; no ambiguity can become accepted work."
+        },
+        {
+          "id": "replay-and-attribution",
+          "disposition": "existing",
+          "rationale": "Generated BehaviorContract executes detailed selected-edge attribution. Failed replay never returns partially hydrated state or a fabricated receipt; current PostgreSQL histories and service witnesses pass."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-diagram-docs",
@@ -258,9 +353,32 @@
       "sourcePath": "runtime-patterns/keiki/diagram-docs.md",
       "sourceSha256": "3a277c433b03bd91f4ec82117acdcbf8c67a3b353502fc5b5cdf8a2b290f76e3",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "complete-readable-atlas",
+          "disposition": "implemented",
+          "rationale": "DomainDiagrams renders all four persisted aggregates plus the sole hand-owned Keiki machine with toMermaid defaults; no transducer orchestrator is omitted."
+        },
+        {
+          "id": "edge-inspectors-and-regeneration",
+          "disposition": "implemented",
+          "rationale": "just domain-diagrams writes source-derived atlas and detailed inspectors with pretty guards and output fields. Six diagram tests validate readable syntax and exact checked-in bytes."
+        },
+        {
+          "id": "diagram-only-exception",
+          "disposition": "existing",
+          "rationale": "AtRiskCustomer explicitly documents its non-event-source epsilon exception; persisted aggregates never disable that check. OpenTelemetry has a static workflow diagram, not a Keiki machine."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-event-schema-evolution",
@@ -268,9 +386,32 @@
       "sourcePath": "runtime-patterns/keiki/event-schema-evolution.md",
       "sourceSha256": "684de93cfd68c84a253b7e78987c1282309015114749b605672c67fb01a97712",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "one-version-authority",
+          "disposition": "implemented",
+          "rationale": "RunJobs has one complete current version-1 envelope with no obsolete upcasters. Four aggregate codecs remain generated with their explicit wire policy."
+        },
+        {
+          "id": "old-history-evolution",
+          "disposition": "not-applicable",
+          "rationale": "ADR-27 four-fact unused-service reset has no historical consumer. Strict breaking reports are retained. No old defaults, retired events or upcaster chains are invented for an empty population."
+        },
+        {
+          "id": "current-strictness",
+          "disposition": "implemented",
+          "rationale": "WireCompatSpec rejects obsolete envelopes and omitted current required nullable fields; current positive bytes, execution metadata and ordered lineage round-trip."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-exact-projection-domains",
@@ -278,9 +419,27 @@
       "sourcePath": "runtime-patterns/keiki/exact-projection-domains.md",
       "sourceSha256": "49af92c49cfa777b710e1f8ee811e03ea5c2ba585e102ee958223119de54c1d6",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "complete-image-and-inverse",
+          "disposition": "implemented",
+          "rationale": "Three nominal Text isomorphisms are total wrappers/unwrappers, with declared initial and canonical identity. Queue enum shapes are exhaustive total structural bindings."
+        },
+        {
+          "id": "proof-strength",
+          "disposition": "existing",
+          "rationale": "No one-way application witness is called exact, no empty finite image is supplied, and unverified behavior guards stay unverified. There is no aggregate enum guard requiring a finite equality proof."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-json-event-codecs",
@@ -288,9 +447,27 @@
       "sourcePath": "runtime-patterns/keiki/json-event-codecs.md",
       "sourceSha256": "32bb655ff67dbe351999af00be7d145b1c62a067e29beb688a1a76215d52d74e",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "generated-private-authority",
+          "disposition": "existing",
+          "rationale": "All four aggregate codecs are scaffolded and service conformance crosses their encode/decode boundary; no duplicate hand-written private-event codec remains."
+        },
+        {
+          "id": "wire-golden-and-version",
+          "disposition": "implemented",
+          "rationale": "Independent execution-event JSON golden retains string identity after nominal adoption. Queue current schema and negative admission vectors are tested; public HTTP/Danwa codecs remain distinct."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-operator-conflicts",
@@ -298,9 +475,22 @@
       "sourcePath": "runtime-patterns/keiki/operator-conflicts.md",
       "sourceSha256": "fd39428c9e67bdcd599b44fe6c282f9690cc77dffccb4560d89816762ee8eb68",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "existing",
+      "clauses": [
+        {
+          "id": "explicit-import-discipline",
+          "disposition": "existing",
+          "rationale": "AtRiskCustomer uses qualified builder verbs and no shared lens-prelude operators. Generated comparisons are generator-owned; no ambiguous hand-owned import or fixity workaround exists."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-overview",
@@ -308,9 +498,27 @@
       "sourcePath": "runtime-patterns/keiki/overview.md",
       "sourceSha256": "8039fee257c2ca8c67ee1035c6fb993fd095cd6ea4a37e5d8b8daecf38c38db1",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "complete-machine-and-guide-census",
+          "disposition": "implemented",
+          "rationale": "Ten workspace members and four aggregate streams are inventoried. All focused Keiki topics have clause dispositions in this inventory, with current validation/replay/diagram evidence."
+        },
+        {
+          "id": "historical-release-notes",
+          "disposition": "not-applicable",
+          "rationale": "The service did not consume the removed 0.1 Decider API or old renderer/constructor APIs. Current released generator output compiles; no historical upgrade consumer or old snapshot cache is present."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-structured-replay-and-hydration",
@@ -318,9 +526,37 @@
       "sourcePath": "runtime-patterns/keiki/structured-replay-and-hydration.md",
       "sourceSha256": "3bb4026912411f4b733590c0778ae540a52a5962a5ff7a5e9c4a1c41612d7761",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "existing",
+      "clauses": [
+        {
+          "id": "structured-errors-no-partial-state",
+          "disposition": "existing",
+          "rationale": "Production hydration stays in released Keiro runners; current corruption and guard/receipt recovery tests preserve failure boundaries. No Maybe fallback or custom partial fold is added."
+        },
+        {
+          "id": "forward-and-complete-replay",
+          "disposition": "existing",
+          "rationale": "Every aggregate BehaviorContract crosses its codec and checks history-backed transitions and register equality; native same-build workflow restart coverage passes."
+        },
+        {
+          "id": "paged-multi-event-attribution",
+          "disposition": "not-applicable",
+          "rationale": "Current aggregate transitions emit one event each; no application paged replay owns InFlight or a multi-event chain. Detailed attribution is exercised by generated behavior witnesses, not retained on hot paths."
+        },
+        {
+          "id": "historical-replay-only-edges",
+          "disposition": "not-applicable",
+          "rationale": "No deployed retired event population exists under ADR-27. No replay-only twin is fabricated; future deployed guard tightening must preserve real history."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-transducer-best-practices",
@@ -328,9 +564,37 @@
       "sourcePath": "runtime-patterns/keiki/transducer-best-practices.md",
       "sourceSha256": "12e0adb14ba140e02290f8b916ad967fd517c65e7c219686d92534bfeead9616",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "generated-builder-and-recovery",
+          "disposition": "existing",
+          "rationale": "Current four aggregates are generated-owned, with explicit guards/writes and fields(Command) events. No application delta-plus-omega runner or whole-transducer hole exists."
+        },
+        {
+          "id": "small-registers-and-input-boundary",
+          "disposition": "implemented",
+          "rationale": "Three application identity newtypes replace primitive command/event/register fields. Rich protected payloads remain SQL rows, not register caches; external parsing stays at ingress."
+        },
+        {
+          "id": "validation-natural-and-literals",
+          "disposition": "existing",
+          "rationale": "Current generated scalar guards constrain decrements and revisions; default validation remains enabled. No secret literal, opaque arithmetic or collection-content guard is introduced."
+        },
+        {
+          "id": "independent-behavior-replay-diagrams",
+          "disposition": "implemented",
+          "rationale": "All four behavior contracts, native histories, queue wire vectors and source-derived atlas/inspectors pass. No orchestrator transducer or hosted process manager exists to compose."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-typed-field-projections",
@@ -338,9 +602,27 @@
       "sourcePath": "runtime-patterns/keiki/typed-field-projections.md",
       "sourceSha256": "34b3f88fa9267116fe12d5298eaa5c688d3ebfd631512a2d50ca22b63d87d541",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "generated-direct-base-witnesses",
+          "disposition": "implemented",
+          "rationale": "Three nominal identities use released generated projections; no application getter or nested/projection-in-output workaround exists."
+        },
+        {
+          "id": "whole-value-copy-and-proof-taxonomy",
+          "disposition": "existing",
+          "rationale": "Commands/events/registers retain their complete domain value. Current one-way guard obligations stay unverified; queue structural enums have exhaustive shape/key laws, but no enum guard is claimed."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-upgrading-to-keiki-0-2",
@@ -348,9 +630,27 @@
       "sourcePath": "runtime-patterns/keiki/upgrading-to-keiki-0-2.md",
       "sourceSha256": "83f52a8645245e4eca688bdd3861d44b6e891b632dd6e348d1ebe9b5c033f250",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "existing",
+      "clauses": [
+        {
+          "id": "historical-migration",
+          "disposition": "not-applicable",
+          "rationale": "No Keiki 0.1 source, deprecated Decider facade, old builder/codec construction or live 0.1 snapshot exists. This child consumes released current generated APIs."
+        },
+        {
+          "id": "current-safety-gates",
+          "disposition": "existing",
+          "rationale": "Current default validation, structured replay and conservative proof taxonomy are qualified through service conformance; aggregate stateCodec is Nothing, so no old hash is admitted."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-aggregate-expressions",
@@ -358,9 +658,37 @@
       "sourcePath": "runtime-patterns/keiro/aggregate-expressions.md",
       "sourceSha256": "493a3036288d0c7917b703e4300e17023cca3fd268fd928db49cdeb87dc95abb",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "authoritative-transition-ownership",
+          "disposition": "existing",
+          "rationale": "Every current transition declares scalar guard/write behavior in the DSL; no hand-owned edge override or obsolete identity-copy hook exists."
+        },
+        {
+          "id": "mapped-initial-and-write-lift",
+          "disposition": "implemented",
+          "rationale": "Nominal identity register initials use declared consumer symbols. No existing mapped clear/scalar construction transition exists; no total lift is pretended over protected SQL payloads."
+        },
+        {
+          "id": "enum-equality-consumer",
+          "disposition": "not-applicable",
+          "rationale": "Queue trigger/route enums are data-only. Aggregate phases are vertices; no enum-valued guard or native equality adapter exists to replace. Their addition leaves unrelated folds unchanged."
+        },
+        {
+          "id": "scalar-types-and-field-names",
+          "disposition": "existing",
+          "rationale": "Current scalar revisions/counts and qualified command/register roots compile under strict Language 6. No aliases, Time arithmetic, Int arithmetic or eventless state-changing transition is introduced."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-behavior-conformance",
@@ -368,9 +696,32 @@
       "sourcePath": "runtime-patterns/keiro/behavior-conformance.md",
       "sourceSha256": "8ec3b1cb2e33ee514f4032ad69a4de32ef672575ce9f35a1ebfd74496e765212",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "complete-executed-obligations",
+          "disposition": "existing",
+          "rationale": "The generated whole-service target runs all four BehaviorContracts; required witnesses are filled and missing/pending/duplicate/stale/failed buckets empty."
+        },
+        {
+          "id": "honest-proof-strength",
+          "disposition": "existing",
+          "rationale": "Unverified identity guards stay unverified. No blanket fail-on-unverified pressure relabels them; generated total guards and structural/nominal laws execute separately."
+        },
+        {
+          "id": "history-backed-harness-repair",
+          "disposition": "implemented",
+          "rationale": "Re-scaffolded 0.22 BehaviorContracts expose behaviorObligationReport/coverageReportFor and retain all real application witnesses. Full 159-assertion service conformance passes."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-brownfield-adoption",
@@ -388,9 +739,37 @@
       "sourcePath": "runtime-patterns/keiro/command-cycle-and-errors.md",
       "sourceSha256": "4d9853214fa3a6cf87db78e0b30132bbdbde0f3e4ed3c522fd22b05907043eac",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "typed-decision-and-refusal",
+          "disposition": "implemented",
+          "rationale": "Guarded lifecycle commands preserve tentative-append rollback and no receipt/position on refused work. Current native graph has no silent edge; fallback silently refuses rather than accepting an empty append."
+        },
+        {
+          "id": "structured-command-failure",
+          "disposition": "existing",
+          "rationale": "CommandRejected remains EventRejected and store/retry exhaustion are operational failures. All remaining command defects return an error, never accepted business work. Late owner/hook errors retain exception rollback."
+        },
+        {
+          "id": "request-idempotency-and-atomicity",
+          "disposition": "existing",
+          "rationale": "Native concurrent identical requests, conflicting inputs, stale claims, lost responses and post-write fault injection retain protected lifecycle/accounting/receipt invariants. Rich payloads remain inside one accepted transaction."
+        },
+        {
+          "id": "durable-caller-and-ops-policy",
+          "disposition": "existing",
+          "rationale": "Delivery retry/ack and dead-letter controls remain separate plan94/106 obligations; this row qualifies only execution persistence, not worker or operator policy."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-dead-timer-resume",
@@ -408,9 +787,37 @@
       "sourcePath": "runtime-patterns/keiro/dsl-adoption.md",
       "sourceSha256": "4797f36c3ad444b9c9b1c9197d3eb30d5d48b00c622cc15a3cb52ad66ca386ea",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "workspace-and-firewall",
+          "disposition": "existing",
+          "rationale": "One ten-member versioned collocated workspace is the authority; generated files were changed solely by scaffolding. All components compile with complete generated module inventory."
+        },
+        {
+          "id": "current-domain-surfaces",
+          "disposition": "implemented",
+          "rationale": "Queue structural enums and three nominal identity consumers remove real adapters. Current opaque refined/upstream codecs remain where conversion rejects; no false total binding is substituted."
+        },
+        {
+          "id": "retained-holes-and-limitations",
+          "disposition": "existing",
+          "rationale": "FRIC-9 current required-nullable queue wrapper remains because released top-level optional fields are unsupported. Rich live-only SQL payloads, external HTTP and Danwa protocols remain distinct executed owners."
+        },
+        {
+          "id": "full-cli-loop",
+          "disposition": "implemented",
+          "rationale": "Strict check, bindings, coverage, inspection, scaffold idempotence, exact breaking diff/replay and all service witnesses pass or retain the intended breaking exit. API AST tooling is absent."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-dsl-semantic-locality",
@@ -418,9 +825,32 @@
       "sourcePath": "runtime-patterns/keiro/dsl-semantic-locality.md",
       "sourceSha256": "fdc6c658ec9a9f56b74ba75d8ef3b950b7ccf83b7cb14b13f9a89e1bd3b955de",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "complete-generated-baseline",
+          "disposition": "implemented",
+          "rationale": "Complete Cabal fragment reconciles StructuralConformance and BehaviorSourceMap. Filled application holes/bindings survive regeneration; second scaffold changes zero files."
+        },
+        {
+          "id": "semantic-versus-artifact-impact",
+          "disposition": "implemented",
+          "rationale": "Strict reports retain both projections and declaration-specific fold comparison. Three nominal consumers change their folds while unrelated RunEvidence is stable."
+        },
+        {
+          "id": "source-only-tooling",
+          "disposition": "not-applicable",
+          "rationale": "No hand-written planner/source-index implementation or behavior-key location cache exists. Released CLI owns provenance and stable key mapping."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-durable-workflows",
@@ -448,9 +878,32 @@
       "sourcePath": "runtime-patterns/keiro/generated-haskell-editions.md",
       "sourceSha256": "bbf434362c0f0f9cfad4c2d9c950b69bd7b5031a1644675360817e93786d6fd0",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "current-edition-consumers",
+          "disposition": "existing",
+          "rationale": "Current idiomatic-v2 ledger remains authoritative; default concise record APIs and full component compilation pass. No migration backup is deleted or ledger edited to bypass a gate."
+        },
+        {
+          "id": "complete-022-regeneration",
+          "disposition": "implemented",
+          "rationale": "All aggregate contracts, harnesses, nominal/structural modules and Cabal inventory are regenerated with pinned DSL0.22. Hand-owned expectation changes were semantically reviewed before updating."
+        },
+        {
+          "id": "old-edition-interruption",
+          "disposition": "not-applicable",
+          "rationale": "This candidate does not change edition or move sidecar names, so no edition apply/rollback occurs. Ordinary idempotence proves only current output, not historical backup contents."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-gotchas",
@@ -468,9 +921,32 @@
       "sourcePath": "runtime-patterns/keiro/identifier-domains.md",
       "sourceSha256": "496c4dd97d47e111417424d17ef686e630346d58dfe5228407ada25adc5b2fd1",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "declared-typeid-admission",
+          "disposition": "existing",
+          "rationale": "RunEvidenceId retains generated abstract TypeID-v7 admission. Current domain parser and malformed-ID tests remain active; no raw internal replay constructor is introduced."
+        },
+        {
+          "id": "technical-identity-bindings",
+          "disposition": "implemented",
+          "rationale": "Execution/worker-session/objective technical coordinates now preserve actual newtypes via nominal Text isomorphisms. They are not prefix-bearing TypeID domains; generation/SQL identity is unchanged."
+        },
+        {
+          "id": "v5-public-and-keyed-consumers",
+          "disposition": "not-applicable",
+          "rationale": "No new v5-or-v7 domain, declared public contract ID/list or ID-keyed map consumer exists. Upstream workflow IDs remain opaque technical identities; no historical domain widening is claimed."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-language-versions",
@@ -478,9 +954,32 @@
       "sourcePath": "runtime-patterns/keiro/language-versions.md",
       "sourceSha256": "be4b21069269819a98ba62cde0c06eb9447c9c9511b48150ca2820697432dc50",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "exact-language-six",
+          "disposition": "existing",
+          "rationale": "All ten sources explicitly select Language6. CI enforces exact version, declared provenance and truthful candidate metadata rather than stable=true."
+        },
+        {
+          "id": "checked-cli-and-current-ast",
+          "disposition": "existing",
+          "rationale": "Application uses pinned CLI and no Keiro.Dsl library imports, AST constructors, ordinal storage or source-index planner. Released tool owns added cases and abstract checked construction."
+        },
+        {
+          "id": "strict-breaking-baseline",
+          "disposition": "implemented",
+          "rationale": "Scaffold and strict diff preserve deliberate patch-removal findings against88d4b3e, emitting both JSON reports before exit1. No language downgrade or compatibility graph forgery occurs."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-mapped-consumer-surfaces",
@@ -488,9 +987,37 @@
       "sourcePath": "runtime-patterns/keiro/mapped-consumer-surfaces.md",
       "sourceSha256": "2f336cb0eeda951dd3cce00f5bea93e72b8fd31a3f2f2de8e2f91cbf4dfe2df1",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "one-codec-per-surface",
+          "disposition": "implemented",
+          "rationale": "Queue structural enum binding and aggregate nominal bindings are actual runtime consumers; the independent event golden and current queue vectors test both boundaries."
+        },
+        {
+          "id": "refined-and-absent-mappings",
+          "disposition": "existing",
+          "rationale": "Rejecting names/digests and upstream types remain explicit opaque codecs. No date/set/unrestricted-byte/keyed-map or scalar-write-lift consumer exists; no placeholder declaration counts as adoption."
+        },
+        {
+          "id": "declaration-specific-consequences",
+          "disposition": "implemented",
+          "rationale": "Three affected aggregate folds move and RunEvidence stays stable; snapshots are disabled. Same-build histories and current first-release codec pass; no old population or drain is invented underADR27."
+        },
+        {
+          "id": "queue-api-limitation",
+          "disposition": "existing",
+          "rationale": "FRIC-9 still requires the small current input/authority wrapper. Obsolete v1-v3 readers/v4 contract were removed; complete currentv1 producer and consumer are tested together."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-nominal-bindings",
@@ -498,9 +1025,32 @@
       "sourcePath": "runtime-patterns/keiro/nominal-bindings.md",
       "sourceSha256": "d0a626921ec52c02e3cc9437ee2b451c6ade265aec6a3625563cc1278269d9e8",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "total-existing-domain-isomorphisms",
+          "disposition": "implemented",
+          "rationale": "DomainBindings wraps/unwraps Text for existing ExecutionId, WorkerSessionId and ObjectiveId with canonical identity, deterministic edge fixtures and declared empty initials."
+        },
+        {
+          "id": "actual-guards-and-wire",
+          "disposition": "implemented",
+          "rationale": "Generated commands, events and registers carry those types. Stores no longer unpack/repack primitive identity for generated commands; independent string wire golden and whole-service laws pass."
+        },
+        {
+          "id": "refinement-and-history-limits",
+          "disposition": "existing",
+          "rationale": "Rejecting smart constructors remain opaque rather than fake nominal. No historical decoder tightening is claimed; the first-release reset retains exact directional reports and per-fold evidence."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-operations-console",
@@ -529,8 +1079,35 @@
       "sourceSha256": "8299b079ec1353cdabd4e23be3688d6648ae509def66730e00bfd83be17f6431",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "minimal-guarded-authority",
+          "disposition": "implemented",
+          "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+          "rationale": "Native guard/precondition, concurrent receipts, rebuild fence and post-inline exception rollback qualified by plan93M1/M2."
+        },
+        {
+          "id": "delivery-and-freshness",
+          "disposition": "pending",
+          "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+          "rationale": "Remaining runtime delivery/retry review belongs to the delivery child."
+        },
+        {
+          "id": "administrative-catalog-lifecycle",
+          "disposition": "pending",
+          "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md",
+          "rationale": "Online generation/external-read/repair operations belong to the administrative owner; plan93 does not claim those gates."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/guarded-execution-protocol.md",
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-read-models-and-projections",
@@ -558,9 +1135,32 @@
       "sourcePath": "runtime-patterns/keiro/service-workspaces.md",
       "sourceSha256": "06e0b8c699cce5d9191c3251bcec5ae51b9bfa43430b6348601455675c2cc074",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "single-versioned-authority",
+          "disposition": "existing",
+          "rationale": "Ten complete same-context members have explicit single owners under one workspace. Current flat domain filenames are retained; manifest identity/layout/runtime package are unchanged."
+        },
+        {
+          "id": "composed-deterministic-operations",
+          "disposition": "implemented",
+          "rationale": "All checks, scaffold, diff and conformance operate on the manifest. Second scaffold reports no changed bytes and preserves filled bindings; all current generated modules compile."
+        },
+        {
+          "id": "historical-layout-adoption",
+          "disposition": "not-applicable",
+          "rationale": "No bare-service conversion, independent same-context scaffold, name-migration apply or ownership move is performed in this candidate. The existing current ledger remains authoritative."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/evidence/keiro-0.22/current-domain-check.json",
+        "docs/evidence/keiro-0.22/current-domain-coverage.json",
+        "docs/evidence/keiro-0.22/current-fold-identities.json"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-stream-scoped-repair",

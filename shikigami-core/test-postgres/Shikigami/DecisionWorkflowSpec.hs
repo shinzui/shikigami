@@ -287,17 +287,6 @@ tests fixture =
           observed >>= (@?= ["stub-triage"])
           children <- runAppIO app (lookupChildrenOfParent (runJobWorkflowId request).unWorkflowId "shikigami.agent-run")
           fmap length children @?= Right 0,
-      testCase "a pre-change patch snapshot cannot enter new decision steps" $
-        withRuntime fixture \app store behavior -> do
-          (handler, observed) <- scriptedProvider Investigate returned
-          let runtime = deps app store behavior handler (Decision.defaultDecisionServices catalog)
-              request = job "decision-old-patch"
-              oldOptions = (shikigamiWorkflowRunOptions app) {activePatches = Set.empty}
-          outcome <- runAppIO app (runWorkflowWith oldOptions Agent.agentRunWorkflowName (runJobWorkflowId request) (Agent.agentRunWorkflow runtime (Just request)))
-          assertBool "new capability is unavailable in old branch" (case outcome of Right (Completed (Left _)) -> True; _ -> False)
-          observed >>= (@?= [])
-          index <- expectRight =<< runAppIO app (loadStepIndex Agent.agentRunWorkflowName (runJobWorkflowId request) 0)
-          assertBool "no live policy lookup" (not (Map.member "decision-policy" index)),
       testCase "every compiled slot maps to its exact declared prepare and result labels" do
         atRoot <- doesFileExist "domain/shikigami-agent-run.keiro"
         declared <- TextIO.readFile (if atRoot then "domain/shikigami-agent-run.keiro" else "../domain/shikigami-agent-run.keiro")

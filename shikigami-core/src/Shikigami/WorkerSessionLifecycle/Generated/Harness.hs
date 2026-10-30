@@ -5,8 +5,12 @@ module Shikigami.WorkerSessionLifecycle.Generated.Harness (harnessAssertions) wh
 import Shikigami.WorkerSessionLifecycle.Generated.Domain
 import Shikigami.WorkerSessionLifecycle.Generated.Codec (encodeWorkerSessionLifecycleEvent, parseWorkerSessionLifecycleEvent, workerSessionLifecycleCodec)
 import Shikigami.WorkerSessionLifecycle.Generated.Transducer (workerSessionLifecycleTransducer)
-import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, (!))
+import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, fieldWitnessAgrees, (!))
 import Keiro.Codec (eventType)
+import Data.List.NonEmpty qualified as NonEmpty
+import Keiro.Codec.Nominal (nominalDomainRoundTrip, nominalFixtureCases, nominalFixtureDomain, nominalRepresentationRoundTrip, nominalToRepresentation)
+import Shikigami.Generated.NominalProjections qualified as NominalProjections
+import Shikigami.DomainBindings qualified as DomainBindings
 
 -- | (label, passed). A driver runs these and exits non-zero on any False,
 -- naming the failing assertion. Filling a hole wrongly turns a specific
@@ -34,65 +38,66 @@ harnessAssertions =
   , ("golden round-trip: WorkerSessionCancelled", roundTrips sampleEventWorkerSessionCancelled)
   , ("accepts AdmitWorkerSession from WorkerSessionLifecycleMissing", acceptAdmitWorkerSession)
   ]
+  ++ nominalConformanceAssertions
   ++ forwardReplayAdmitWorkerSession
 
 roundTrips :: WorkerSessionLifecycleEvent -> Bool
 roundTrips e = parseWorkerSessionLifecycleEvent (eventType workerSessionLifecycleCodec e) (encodeWorkerSessionLifecycleEvent e) == Right e
 
 sampleEventWorkerSessionAdmitted :: WorkerSessionLifecycleEvent
-sampleEventWorkerSessionAdmitted = WorkerSessionAdmitted (WorkerSessionAdmittedData "sample-sessionId" "sample-bindingDigest")
+sampleEventWorkerSessionAdmitted = WorkerSessionAdmitted (WorkerSessionAdmittedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.workerSessionIdentityCases))) "sample-bindingDigest")
 
 sampleEventSessionMessageAccepted :: WorkerSessionLifecycleEvent
-sampleEventSessionMessageAccepted = SessionMessageAccepted (SessionMessageAcceptedData "sample-sessionId" 0 0)
+sampleEventSessionMessageAccepted = SessionMessageAccepted (SessionMessageAcceptedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.workerSessionIdentityCases))) 0 0)
 
 sampleEventSessionAssignmentStarted :: WorkerSessionLifecycleEvent
-sampleEventSessionAssignmentStarted = SessionAssignmentStarted (SessionAssignmentStartedData "sample-sessionId" 0 0)
+sampleEventSessionAssignmentStarted = SessionAssignmentStarted (SessionAssignmentStartedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.workerSessionIdentityCases))) 0 0)
 
 sampleEventSessionAssignmentParked :: WorkerSessionLifecycleEvent
-sampleEventSessionAssignmentParked = SessionAssignmentParked (SessionAssignmentParkedData "sample-sessionId" 0 0)
+sampleEventSessionAssignmentParked = SessionAssignmentParked (SessionAssignmentParkedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.workerSessionIdentityCases))) 0 0)
 
 sampleEventSessionAssignmentResumed :: WorkerSessionLifecycleEvent
-sampleEventSessionAssignmentResumed = SessionAssignmentResumed (SessionAssignmentResumedData "sample-sessionId" 0 0)
+sampleEventSessionAssignmentResumed = SessionAssignmentResumed (SessionAssignmentResumedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.workerSessionIdentityCases))) 0 0)
 
 sampleEventSessionResultRecorded :: WorkerSessionLifecycleEvent
-sampleEventSessionResultRecorded = SessionResultRecorded (SessionResultRecordedData "sample-sessionId" 0 0)
+sampleEventSessionResultRecorded = SessionResultRecorded (SessionResultRecordedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.workerSessionIdentityCases))) 0 0)
 
 sampleEventSessionBecameUnresolved :: WorkerSessionLifecycleEvent
-sampleEventSessionBecameUnresolved = SessionBecameUnresolved (SessionBecameUnresolvedData "sample-sessionId" 0 0)
+sampleEventSessionBecameUnresolved = SessionBecameUnresolved (SessionBecameUnresolvedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.workerSessionIdentityCases))) 0 0)
 
 sampleEventSessionAssignmentReconciled :: WorkerSessionLifecycleEvent
-sampleEventSessionAssignmentReconciled = SessionAssignmentReconciled (SessionAssignmentReconciledData "sample-sessionId" 0 0)
+sampleEventSessionAssignmentReconciled = SessionAssignmentReconciled (SessionAssignmentReconciledData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.workerSessionIdentityCases))) 0 0)
 
 sampleEventSessionTransferRequested :: WorkerSessionLifecycleEvent
-sampleEventSessionTransferRequested = SessionTransferRequested (SessionTransferRequestedData "sample-sessionId" 0 0)
+sampleEventSessionTransferRequested = SessionTransferRequested (SessionTransferRequestedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.workerSessionIdentityCases))) 0 0)
 
 sampleEventSessionTransferReconciled :: WorkerSessionLifecycleEvent
-sampleEventSessionTransferReconciled = SessionTransferReconciled (SessionTransferReconciledData "sample-sessionId" 0 0)
+sampleEventSessionTransferReconciled = SessionTransferReconciled (SessionTransferReconciledData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.workerSessionIdentityCases))) 0 0)
 
 sampleEventSessionOwnerEstablished :: WorkerSessionLifecycleEvent
-sampleEventSessionOwnerEstablished = SessionOwnerEstablished (SessionOwnerEstablishedData "sample-sessionId" 0 0)
+sampleEventSessionOwnerEstablished = SessionOwnerEstablished (SessionOwnerEstablishedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.workerSessionIdentityCases))) 0 0)
 
 sampleEventSessionEventsSubscribed :: WorkerSessionLifecycleEvent
-sampleEventSessionEventsSubscribed = SessionEventsSubscribed (SessionEventsSubscribedData "sample-sessionId" 0 0)
+sampleEventSessionEventsSubscribed = SessionEventsSubscribed (SessionEventsSubscribedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.workerSessionIdentityCases))) 0 0)
 
 sampleEventWorkerSessionObserved :: WorkerSessionLifecycleEvent
-sampleEventWorkerSessionObserved = WorkerSessionObserved (WorkerSessionObservedData "sample-sessionId" 0 0)
+sampleEventWorkerSessionObserved = WorkerSessionObserved (WorkerSessionObservedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.workerSessionIdentityCases))) 0 0)
 
 sampleEventSessionCheckpointPrepared :: WorkerSessionLifecycleEvent
-sampleEventSessionCheckpointPrepared = SessionCheckpointPrepared (SessionCheckpointPreparedData "sample-sessionId" 0 0)
+sampleEventSessionCheckpointPrepared = SessionCheckpointPrepared (SessionCheckpointPreparedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.workerSessionIdentityCases))) 0 0)
 
 sampleEventSessionEventsConsumed :: WorkerSessionLifecycleEvent
-sampleEventSessionEventsConsumed = SessionEventsConsumed (SessionEventsConsumedData "sample-sessionId" 0 0)
+sampleEventSessionEventsConsumed = SessionEventsConsumed (SessionEventsConsumedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.workerSessionIdentityCases))) 0 0)
 
 sampleEventWorkerSessionFailed :: WorkerSessionLifecycleEvent
-sampleEventWorkerSessionFailed = WorkerSessionFailed (WorkerSessionFailedData "sample-sessionId" 0 0)
+sampleEventWorkerSessionFailed = WorkerSessionFailed (WorkerSessionFailedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.workerSessionIdentityCases))) 0 0)
 
 sampleEventWorkerSessionCancelled :: WorkerSessionLifecycleEvent
-sampleEventWorkerSessionCancelled = WorkerSessionCancelled (WorkerSessionCancelledData "sample-sessionId" 0 0)
+sampleEventWorkerSessionCancelled = WorkerSessionCancelled (WorkerSessionCancelledData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.workerSessionIdentityCases))) 0 0)
 
 acceptAdmitWorkerSession :: Bool
 acceptAdmitWorkerSession =
-  case step workerSessionLifecycleTransducer (WorkerSessionLifecycleMissing, initialWorkerSessionLifecycleRegs) (AdmitWorkerSession (AdmitWorkerSessionData "sample-sessionId" "sample-bindingDigest")) of
+  case step workerSessionLifecycleTransducer (WorkerSessionLifecycleMissing, initialWorkerSessionLifecycleRegs) (AdmitWorkerSession (AdmitWorkerSessionData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.workerSessionIdentityCases))) "sample-bindingDigest")) of
     Just (v, _, _) -> v == WorkerSessionLifecycleIdle
     Nothing -> False
 
@@ -100,7 +105,7 @@ acceptAdmitWorkerSession =
 -- replay the emitted chain, and compare the final vertex and every register.
 forwardReplayAdmitWorkerSession :: [(String, Bool)]
 forwardReplayAdmitWorkerSession =
-  case step workerSessionLifecycleTransducer (WorkerSessionLifecycleMissing, initialWorkerSessionLifecycleRegs) (AdmitWorkerSession (AdmitWorkerSessionData "sample-sessionId" "sample-bindingDigest")) of
+  case step workerSessionLifecycleTransducer (WorkerSessionLifecycleMissing, initialWorkerSessionLifecycleRegs) (AdmitWorkerSession (AdmitWorkerSessionData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.workerSessionIdentityCases))) "sample-bindingDigest")) of
     Nothing -> [(prefix <> "forward step accepted", False)]
     Just (forwardVertex, forwardRegs, emitted) ->
       case mapM (\event -> parseWorkerSessionLifecycleEvent (eventType workerSessionLifecycleCodec event) (encodeWorkerSessionLifecycleEvent event)) emitted of
@@ -116,3 +121,10 @@ forwardReplayAdmitWorkerSession =
               ]
   where
     prefix = "forward/replay equality: AdmitWorkerSession from WorkerSessionLifecycleMissing -- "
+
+nominalConformanceAssertions :: [(String, Bool)]
+nominalConformanceAssertions =
+  [ ("nominal domain law: WorkerSessionIdentity", all (\fixture -> nominalDomainRoundTrip DomainBindings.workerSessionIdentityBinding (nominalFixtureDomain fixture)) (NonEmpty.toList (nominalFixtureCases DomainBindings.workerSessionIdentityCases)))
+  , ("nominal representation law: WorkerSessionIdentity", all (\fixture -> let domainValue = nominalFixtureDomain fixture in nominalRepresentationRoundTrip DomainBindings.workerSessionIdentityBinding (nominalToRepresentation DomainBindings.workerSessionIdentityBinding domainValue)) (NonEmpty.toList (nominalFixtureCases DomainBindings.workerSessionIdentityCases)))
+  , ("nominal projection agreement: WorkerSessionIdentity", all (\fixture -> fieldWitnessAgrees NominalProjections.workerSessionIdentityWitness (nominalToRepresentation DomainBindings.workerSessionIdentityBinding) (nominalFixtureDomain fixture)) (NonEmpty.toList (nominalFixtureCases DomainBindings.workerSessionIdentityCases)))
+  ]

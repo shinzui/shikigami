@@ -162,7 +162,7 @@ openSessionWithLimit maximumSessions admission = guarded do
   case existing of
     Just _ -> pure (matching existing)
     Nothing -> do
-      result <- persist session (Generated.AdmitWorkerSession (Generated.AdmitWorkerSessionData session.value ref.digest)) do
+      result <- persist session (Generated.AdmitWorkerSession (Generated.AdmitWorkerSessionData session ref.digest)) do
         validateRoot True root
         void (Tx.statement (versionedDigest "shikigami.worker-session-scope-lock/1" (toJSON (admission.scope.parent, admission.context.identity))) lockScope)
         existingScope <- Tx.statement (admission.scope.parent, toJSON admission.context.identity) selectScopeBinding
@@ -765,7 +765,7 @@ prepareNotification access@(SessionAccess session _ _) = do
         forM_ notifications \(after, notify) -> when (state.eventCursor > after) notify
     )
 
-mutate :: (SessionEffects es, ToJSON a, FromJSON a) => SessionAccess -> Integer -> Integer -> OperationId -> Text -> Aeson.Value -> Bool -> (Text -> Int -> Generated.WorkerSessionLifecycleCommand) -> (SessionState -> SessionBinding -> SessionAdmission -> Transaction (a, SessionState)) -> Eff es (Either SessionError (Admission, a))
+mutate :: (SessionEffects es, ToJSON a, FromJSON a) => SessionAccess -> Integer -> Integer -> OperationId -> Text -> Aeson.Value -> Bool -> (WorkerSessionId -> Int -> Generated.WorkerSessionLifecycleCommand) -> (SessionState -> SessionBinding -> SessionAdmission -> Transaction (a, SessionState)) -> Eff es (Either SessionError (Admission, a))
 mutate access@(SessionAccess session actor _) expected epoch operation kind input fresh command action = do
   requireKey operation
   (_, binding) <- metadata (Tx.statement session.value selectSession) >>= maybe (throwIO (SessionAbort SessionMissing)) pure
@@ -780,7 +780,7 @@ mutate access@(SessionAccess session actor _) expected epoch operation kind inpu
     Just _ -> pure (decodeStored old)
     Nothing -> do
       notification <- if kind `elem` ["observe", "subscribe"] then pure Nothing else Just <$> prepareNotification access
-      result <- persist session (command session.value (fromInteger expected)) do
+      result <- persist session (command session (fromInteger expected)) do
         validateRoot fresh binding.rootId
         (state, actualBinding) <- getSession session
         checkAccess access state actualBinding

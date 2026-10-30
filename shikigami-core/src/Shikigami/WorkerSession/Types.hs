@@ -8,6 +8,7 @@ import Data.List (nub)
 import Data.Text qualified as Text
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID
+import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Keiro.Workflow.Types (mkWorkflowId)
 import Shikigami.Agent.Decl (AgentDecl (..))
@@ -299,3 +300,6 @@ validateAdmission admission = do
 validateInstruction :: Instruction -> Either SessionError ()
 validateInstruction instruction =
   unless (instruction.format == 1 && not (Text.null (Text.strip instruction.text)) && all (>= 0) [instruction.objectiveRevision, instruction.assignmentRevision, instruction.criteriaRevision]) (Left (SessionInputRefused "invalid instruction or objective/assignment revision"))
+
+instance CanonicalTypeName WorkerSessionId where
+  canonicalTypeName _ = "shikigami.WorkerSessionId.v1"

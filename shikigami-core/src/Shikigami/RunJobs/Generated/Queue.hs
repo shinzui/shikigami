@@ -3,15 +3,24 @@ module Shikigami.RunJobs.Generated.Queue
   ( RunJobMessage (..)
   , encodeRunJobMessage
   , parseRunJobMessage
+  , encodeRunRouteKindMapped
+  , decodeRunRouteKindMapped
+  , encodeRunTriggerKindMapped
+  , decodeRunTriggerKindMapped
   , queuePhysical, queueDlq, queueTable
 
   ) where
 
-import Data.Aeson (Value (..), object, parseJSON, toJSON, withObject, (.=))
+import Data.Aeson (Value (..), object, parseJSON, toJSON, withObject, withText, (.=))
 import Data.Aeson.Types (Parser, JSONPathElement (..), (<?>), explicitParseField, parseEither)
 import Data.Time (UTCTime)
 import Data.Text (Text)
 import qualified Data.Text as T
+import Keiro.Codec.Structural (bindingFromShape, bindingToShape)
+import Shikigami.Agent.RunJob (RunRouteKind, TriggerKind)
+import Shikigami.Generated.Structural.Shape.RunRouteKind qualified as ShapeRunRouteKind
+import Shikigami.Generated.Structural.Shape.RunTriggerKind qualified as RunTriggerKind
+import Shikigami.RunJobs.Bindings qualified as Bindings
 
 queuePhysical, queueDlq, queueTable :: Text
 queuePhysical = "shikigami_run_jobs"
@@ -21,7 +30,7 @@ queueTable = "pgmq.q_shikigami_run_jobs"
 data RunJobMessage = RunJobMessage
   { agentName :: !Text
   , identity :: !Value
-  , triggerKind :: !Text
+  , triggerKind :: !TriggerKind
   , occurredAt :: !UTCTime
   , triggerPayload :: !Value
   , idempotencyKey :: !Text
@@ -30,16 +39,62 @@ data RunJobMessage = RunJobMessage
   , delegationDepth :: !(Maybe Int)
   , lineage :: ![Text]
   , delegationBudgetId :: !(Maybe Text)
-  , routeKind :: !Text
+  , routeKind :: !RunRouteKind
   }
   deriving stock (Eq, Show)
+
+encodeRunRouteKindMapped :: RunRouteKind -> Value
+encodeRunRouteKindMapped = encodeRunRouteKindShape . bindingToShape Bindings.routeKindBinding
+
+parseRunRouteKindMapped :: Value -> Parser RunRouteKind
+parseRunRouteKindMapped value = bindingFromShape Bindings.routeKindBinding <$> parseRunRouteKindShape value
+
+decodeRunRouteKindMapped :: Value -> Either Text RunRouteKind
+decodeRunRouteKindMapped = mapLeftText . parseEither parseRunRouteKindMapped
+
+encodeRunRouteKindShape :: ShapeRunRouteKind.RunRouteKindShape -> Value
+encodeRunRouteKindShape = \case
+  ShapeRunRouteKind.AgentWorkflowRoute -> String "AgentWorkflowRoute"
+  ShapeRunRouteKind.ConversationWorkflowRoute -> String "ConversationWorkflowRoute"
+  ShapeRunRouteKind.ExecutionOperationRoute -> String "ExecutionOperationRoute"
+
+parseRunRouteKindShape :: Value -> Parser ShapeRunRouteKind.RunRouteKindShape
+parseRunRouteKindShape = withText "RunRouteKindShape" $ \tag -> case tag of
+  "AgentWorkflowRoute" -> pure ShapeRunRouteKind.AgentWorkflowRoute
+  "ConversationWorkflowRoute" -> pure ShapeRunRouteKind.ConversationWorkflowRoute
+  "ExecutionOperationRoute" -> pure ShapeRunRouteKind.ExecutionOperationRoute
+  unknownTag -> fail ("unknown RunRouteKind wire value " <> show unknownTag <> "; expected one of: AgentWorkflowRoute, ConversationWorkflowRoute, ExecutionOperationRoute")
+
+encodeRunTriggerKindMapped :: TriggerKind -> Value
+encodeRunTriggerKindMapped = encodeRunTriggerKindShape . bindingToShape Bindings.triggerKindBinding
+
+parseRunTriggerKindMapped :: Value -> Parser TriggerKind
+parseRunTriggerKindMapped value = bindingFromShape Bindings.triggerKindBinding <$> parseRunTriggerKindShape value
+
+decodeRunTriggerKindMapped :: Value -> Either Text TriggerKind
+decodeRunTriggerKindMapped = mapLeftText . parseEither parseRunTriggerKindMapped
+
+encodeRunTriggerKindShape :: RunTriggerKind.RunTriggerKindShape -> Value
+encodeRunTriggerKindShape = \case
+  RunTriggerKind.TriggeredBySchedule -> String "TriggeredBySchedule"
+  RunTriggerKind.TriggeredByStream -> String "TriggeredByStream"
+  RunTriggerKind.TriggeredByEvent -> String "TriggeredByEvent"
+  RunTriggerKind.TriggeredByDelegation -> String "TriggeredByDelegation"
+
+parseRunTriggerKindShape :: Value -> Parser RunTriggerKind.RunTriggerKindShape
+parseRunTriggerKindShape = withText "RunTriggerKindShape" $ \tag -> case tag of
+  "TriggeredBySchedule" -> pure RunTriggerKind.TriggeredBySchedule
+  "TriggeredByStream" -> pure RunTriggerKind.TriggeredByStream
+  "TriggeredByEvent" -> pure RunTriggerKind.TriggeredByEvent
+  "TriggeredByDelegation" -> pure RunTriggerKind.TriggeredByDelegation
+  unknownTag -> fail ("unknown RunTriggerKind wire value " <> show unknownTag <> "; expected one of: TriggeredBySchedule, TriggeredByStream, TriggeredByEvent, TriggeredByDelegation")
 
 encodeRunJobMessage :: RunJobMessage -> Value
 encodeRunJobMessage payload =
   object
     [ "agentName" .= toJSON (payload.agentName)
     , "identity" .= payload.identity
-    , "triggerKind" .= toJSON (payload.triggerKind)
+    , "triggerKind" .= encodeRunTriggerKindMapped payload.triggerKind
     , "occurredAt" .= toJSON (payload.occurredAt)
     , "triggerPayload" .= payload.triggerPayload
     , "idempotencyKey" .= toJSON (payload.idempotencyKey)
@@ -48,13 +103,13 @@ encodeRunJobMessage payload =
     , "delegationDepth" .= maybe Null (\item0 -> toJSON (item0)) (payload.delegationDepth)
     , "lineage" .= toJSON (map (\item0 -> toJSON (item0)) (payload.lineage))
     , "delegationBudgetId" .= maybe Null (\item0 -> toJSON (item0)) (payload.delegationBudgetId)
-    , "routeKind" .= toJSON (payload.routeKind)
+    , "routeKind" .= encodeRunRouteKindMapped payload.routeKind
     ]
 
 parseRunJobMessage :: Value -> Either Text RunJobMessage
 parseRunJobMessage = mapLeftText . parseEither (withObject "RunJobMessage" go)
   where
-    go objectValue = RunJobMessage <$> explicitParseField (parseJSON) objectValue "agentName" <*> explicitParseField (pure) objectValue "identity" <*> explicitParseField (parseJSON) objectValue "triggerKind" <*> explicitParseField (parseJSON) objectValue "occurredAt" <*> explicitParseField (pure) objectValue "triggerPayload" <*> explicitParseField (parseJSON) objectValue "idempotencyKey" <*> explicitParseField (\value0 -> case value0 of Null -> pure Nothing; other0 -> Just <$> (parseJSON) other0) objectValue "parentSessionId" <*> explicitParseField (\value0 -> case value0 of Null -> pure Nothing; other0 -> Just <$> (parseJSON) other0) objectValue "parentRunWorkflowId" <*> explicitParseField (\value0 -> case value0 of Null -> pure Nothing; other0 -> Just <$> (parseJSON) other0) objectValue "delegationDepth" <*> explicitParseField (\value0 -> do items0 <- (parseJSON value0 :: Parser [Value]); traverse (\(index0, item0) -> (parseJSON) item0 <?> Index index0) (zip [0..] items0)) objectValue "lineage" <*> explicitParseField (\value0 -> case value0 of Null -> pure Nothing; other0 -> Just <$> (parseJSON) other0) objectValue "delegationBudgetId" <*> explicitParseField (parseJSON) objectValue "routeKind"
+    go objectValue = RunJobMessage <$> explicitParseField (parseJSON) objectValue "agentName" <*> explicitParseField (pure) objectValue "identity" <*> explicitParseField (parseRunTriggerKindMapped) objectValue "triggerKind" <*> explicitParseField (parseJSON) objectValue "occurredAt" <*> explicitParseField (pure) objectValue "triggerPayload" <*> explicitParseField (parseJSON) objectValue "idempotencyKey" <*> explicitParseField (\value0 -> case value0 of Null -> pure Nothing; other0 -> Just <$> (parseJSON) other0) objectValue "parentSessionId" <*> explicitParseField (\value0 -> case value0 of Null -> pure Nothing; other0 -> Just <$> (parseJSON) other0) objectValue "parentRunWorkflowId" <*> explicitParseField (\value0 -> case value0 of Null -> pure Nothing; other0 -> Just <$> (parseJSON) other0) objectValue "delegationDepth" <*> explicitParseField (\value0 -> do items0 <- (parseJSON value0 :: Parser [Value]); traverse (\(index0, item0) -> (parseJSON) item0 <?> Index index0) (zip [0..] items0)) objectValue "lineage" <*> explicitParseField (\value0 -> case value0 of Null -> pure Nothing; other0 -> Just <$> (parseJSON) other0) objectValue "delegationBudgetId" <*> explicitParseField (parseRunRouteKindMapped) objectValue "routeKind"
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right

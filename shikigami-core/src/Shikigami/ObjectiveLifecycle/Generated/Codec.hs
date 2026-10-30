@@ -12,8 +12,11 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as T
+import Keiro.Codec.Nominal (nominalFromRepresentation, nominalToRepresentation)
 import Keiro.Codec (Codec (..), EventType (..))
 
+
+import Shikigami.DomainBindings qualified as DomainBindings
 
 
 
@@ -39,12 +42,12 @@ encodeObjectiveLifecycleEvent = \case
   ObjectiveCreated payload ->
     object
       [ "kind" .= ("ObjectiveCreated" :: Text)
-      , "objectiveId" .= payload.objectiveId
+      , "objectiveId" .= nominalToRepresentation DomainBindings.objectiveIdentityBinding payload.objectiveId
       ]
   ObjectiveTransitionApplied payload ->
     object
       [ "kind" .= ("ObjectiveTransitionApplied" :: Text)
-      , "objectiveId" .= payload.objectiveId
+      , "objectiveId" .= nominalToRepresentation DomainBindings.objectiveIdentityBinding payload.objectiveId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       , "fingerprint" .= payload.fingerprint
@@ -58,12 +61,12 @@ parseObjectiveLifecycleEvent (EventType tag) = mapLeftText . parseEither (withOb
         "ObjectiveCreated" ->
           ObjectiveCreated
             <$> ( ObjectiveCreatedData
-                    <$> o .: "objectiveId"
+                    <$> (nominalFromRepresentation DomainBindings.objectiveIdentityBinding <$> o .: "objectiveId")
                 )
         "ObjectiveTransitionApplied" ->
           ObjectiveTransitionApplied
             <$> ( ObjectiveTransitionAppliedData
-                    <$> o .: "objectiveId"
+                    <$> (nominalFromRepresentation DomainBindings.objectiveIdentityBinding <$> o .: "objectiveId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                     <*> o .: "fingerprint"

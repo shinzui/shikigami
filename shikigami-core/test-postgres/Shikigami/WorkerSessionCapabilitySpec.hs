@@ -174,37 +174,6 @@ tests fixture =
           _ <- expectRight =<< run env (Store.acceptMessage access 1 0 (OperationId "after-gc") (Session.Instruction 1 Session.FollowUp "retained" 1 1 1 Nothing))
           Just (state, _) <- expectRight =<< run env (Store.inspectSession session)
           state.eventCursor @?= 1,
-      testCase "an in-flight agent Flow keeps the old coordination branch across deploy" $
-        withCapabilityFixture fixture \env admission host _ authorizer _ _ -> do
-          performGC
-          behavior <- newBehaviorEnv
-          lookups <- newIORef (0 :: Int)
-          let authority = CoordinationAuthority (\_ -> modifyIORef' lookups (+ 1) >> pure (Right Nothing)) (\_ _ -> pure (Left "not admitted"))
-              selected = CoordinationHost host.services authority
-              declaration = Fixture.routerDecl & #behavior .~ Flow "at-risk-customer" & #delegates .~ [] & #routing .~ Nothing & #sinks .~ []
-              dependencies =
-                Fixture.routerDeps env behavior (Routing.RoutingRuntime (\_ -> fail "unexpected routing") (\_ _ _ -> fail "unexpected routing")) [declaration]
-                  & #coordination
-                  .~ Just selected
-                  & #actionAuthorizer
-                  .~ authorizer
-              job key = Fixture.routerJob key & #executionRootId .~ admission.context.executionRootId & #triggerPayload .~ Aeson.object ["text" Aeson..= ("customer leaving" :: Text)]
-              options = shikigamiWorkflowRunOptions env
-              oldOptions = options & #activePatches %~ Set.delete (PatchId "shikigami-worker-coordination-v1")
-              drive opts input = run env (runWorkflowWith opts Agent.agentRunWorkflowName (runJobWorkflowId input) (Agent.agentRunWorkflow dependencies (Just input)))
-          drive oldOptions (job "old-coordination") >>= (@?= Suspended)
-          performGC
-          drive options (job "old-coordination") >>= (@?= Suspended)
-          performGC
-          readIORef lookups >>= (@?= 0)
-          old <- run env (loadStepIndex Agent.agentRunWorkflowName (runJobWorkflowId (job "old-coordination")) 0)
-          Map.lookup "worker-coordination-policy" old @?= Nothing
-          attempted <- try @SomeException (drive options (job "new-coordination"))
-          performGC
-          case attempted of Left err -> assertFailure (show err); Right outcome -> outcome @?= Suspended
-          readIORef lookups >>= (@?= 1)
-          fresh <- run env (loadStepIndex Agent.agentRunWorkflowName (runJobWorkflowId (job "new-coordination")) 0)
-          assertBool "new branch records its bounded policy" (Map.member "worker-coordination-policy" fresh),
       testCase "coordinating Skills require admitted scope and retain a worker tool instead of running a fixed supervisor" $
         withCapabilityFixture fixture \env admission host scope authorizer _ _ -> do
           behavior <- newBehaviorEnv

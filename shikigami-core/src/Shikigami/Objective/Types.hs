@@ -6,6 +6,7 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.List (nub)
 import Data.Text qualified as Text
+import Keiki.Shape (CanonicalTypeName (..))
 import Shikigami.Agent.Principal (AgentIdentity, identityText, mkAgentPrincipal)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Prelude
@@ -237,3 +238,6 @@ validPrincipal = \case
   VerifiedCaller value -> validKey value
   LocalOperator value -> validKey value
   RecordedAgent identity -> either (const False) validKey (identityText identity)
+
+instance CanonicalTypeName ObjectiveId where
+  canonicalTypeName _ = "shikigami.ObjectiveId.v1"

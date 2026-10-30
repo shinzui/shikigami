@@ -119,3 +119,16 @@ See [Plan 65](../plans/65-migrate-shikigami-to-the-keiro-0-15-cohort-and-the-idi
 ## Reaffirmed first-release scope — 2026-10-30
 
 The user explicitly confirmed Shikigami is still unused and requested exhaustive adoption under MasterPlan 16. Its prior old-build/retained-history requirements are withdrawn. The same decision above applies to current queue codecs, workflow branches and unreleased schema composition; same-build restart/replay, authority and privacy remain mandatory. Record the accepted source baseline and deliberate differ findings, but do not require an old successful build or preserved obsolete readers before refactoring. No developer database deletion is authorized. This is renewed evidence for the existing exception, not a waiver after first deployment.
+
+
+## Current baseline evidence — 2026-10-30
+
+Plan93 applies the reaffirmed exception against source `88d4b3e`: RunJobs has one
+complete current schema-version-1 envelope, AgentRun and DanwaConversation have no
+obsolete active patch selections, and current producers/consumers move together.
+Real runtime alternatives and the synthetic future-patching tests remain. The
+strict differ reports the deliberate breaks, including `WorkflowPatchRemoved`;
+its complete diff/replay reports are under `docs/evidence/keiro-0.22/`. The check
+was not weakened and no developer database was deleted. Current native same-build
+recovery passes. This baseline becomes durable at first deployment; the historical
+patch inventory is documentation, not permission to resurrect or reset journals.

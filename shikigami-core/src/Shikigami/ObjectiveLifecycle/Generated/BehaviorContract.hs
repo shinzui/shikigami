@@ -131,7 +131,19 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- ObjectiveLifecyclePresent x CreateObjective: required rejection
+  [ -- ObjectiveLifecycleMissing x CreateObjective: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-1ce7f8d93df9e812"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardTotal
+      , source = ObjectiveLifecycleMissing
+      , commandName = "CreateObjective"
+      , expectedEdge = (Just (K.EdgeRef ObjectiveLifecycleMissing 0))
+      , target = Just ObjectiveLifecyclePresent
+      , eventKinds = ["ObjectiveCreated"]
+      }
+  , -- ObjectiveLifecyclePresent x CreateObjective: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-55b9a98f94eedf32"
       , kind = RequiredRejection
@@ -155,21 +167,9 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
-  , -- ObjectiveLifecycleMissing x CreateObjective: live transition
-    BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-b7511e4d2adf3dda"
-      , kind = LiveTransition
-      , evidence = GeneratedAuthoritative
-      , guardCoverage = GuardTotal
-      , source = ObjectiveLifecycleMissing
-      , commandName = "CreateObjective"
-      , expectedEdge = (Just (K.EdgeRef ObjectiveLifecycleMissing 0))
-      , target = Just ObjectiveLifecyclePresent
-      , eventKinds = ["ObjectiveCreated"]
-      }
   , -- ObjectiveLifecyclePresent x ApplyObjectiveTransition: live transition
     BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-f6a1954905ff5242"
+      { key = BehaviorKey "behavior-v1-e525daa23e3f754a"
       , kind = LiveTransition
       , evidence = GeneratedAuthoritative
       , guardCoverage = GuardUnknown

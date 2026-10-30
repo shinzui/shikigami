@@ -173,7 +173,7 @@ admitExecution snapshot
             state = ExecutionState 1 execution 0 Active 0 NeedModel ref Nothing Nothing 0 0 Nothing Nothing 0
         result <- persistChecked
           execution
-          (Generated.AdmitExecution (Generated.AdmitExecutionData execution.value ref.digest))
+          (Generated.AdmitExecution (Generated.AdmitExecutionData execution ref.digest))
           ( do
               checkedLockRoot binding.rootId
               checkedAdmissionRoot binding.rootId
@@ -361,7 +361,7 @@ parkOperationPermission access@(ReplayAccess execution _ _) expected operationId
         (_, binding) <- readMetadata (getExecution execution)
         result <- persistChecked
           execution
-          (Generated.ParkExecution (Generated.ParkExecutionData execution.value (fromInteger expected) (fromInteger (expected + 1))))
+          (Generated.ParkExecution (Generated.ParkExecutionData execution (fromInteger expected) (fromInteger (expected + 1))))
           ( do
               checkedLockRoot binding.rootId
               checkedAdmissionRoot binding.rootId
@@ -401,7 +401,7 @@ resolveOperationPermission access@(ReplayAccess execution _ _) expected operatio
       (_, binding) <- readMetadata (getExecution execution)
       result <- persistChecked
         execution
-        (Generated.ResumeExecution (Generated.ResumeExecutionData execution.value (fromInteger expected) (fromInteger (expected + 1))))
+        (Generated.ResumeExecution (Generated.ResumeExecutionData execution (fromInteger expected) (fromInteger (expected + 1))))
         ( do
             checkedLockRoot binding.rootId
             (state, actualBinding) <- checkedExecution execution
@@ -482,7 +482,7 @@ submitAttempt retired access@(ReplayAccess execution _ _) expected submission en
     Nothing -> do
       result <- persistChecked
         execution
-        (if isJust retired then Generated.RetryExecution (Generated.RetryExecutionData execution.value (fromInteger expected) (fromInteger (expected + 1))) else advance execution expected)
+        (if isJust retired then Generated.RetryExecution (Generated.RetryExecutionData execution (fromInteger expected) (fromInteger (expected + 1))) else advance execution expected)
         ( do
             checkedLockRoot binding.rootId
             checkedAdmissionRoot binding.rootId
@@ -568,7 +568,7 @@ refreshExecutionWake access@(ReplayAccess execution _ _) expected wake = catchEx
   if state.wake == Just ref
     then pure (Right AlreadyAccepted)
     else do
-      let command = if state.phase == Unresolved then Generated.MarkExecutionUnresolved (Generated.MarkExecutionUnresolvedData execution.value (fromInteger expected) (fromInteger (expected + 1))) else advance execution expected
+      let command = if state.phase == Unresolved then Generated.MarkExecutionUnresolved (Generated.MarkExecutionUnresolvedData execution (fromInteger expected) (fromInteger (expected + 1))) else advance execution expected
       result <- persistChecked
         execution
         command
@@ -604,7 +604,7 @@ stopExecution identity execution expected cancelled reason = catchExecutionWith 
   if stored.phase `elem` [Failed, Cancelled] && stored.failure == Just reason
     then pure (Right AlreadyAccepted)
     else do
-      let command = if stored.pendingReceipts > 0 then (if cancelled then Generated.CancelExecutionPendingReceipts (Generated.CancelExecutionPendingReceiptsData execution.value (fromInteger expected) (fromInteger (expected + 1))) else Generated.FailExecutionPendingReceipts (Generated.FailExecutionPendingReceiptsData execution.value (fromInteger expected) (fromInteger (expected + 1)))) else if cancelled then Generated.CancelExecution (Generated.CancelExecutionData execution.value (fromInteger expected) (fromInteger (expected + 1))) else Generated.FailExecution (Generated.FailExecutionData execution.value (fromInteger expected) (fromInteger (expected + 1)))
+      let command = if stored.pendingReceipts > 0 then (if cancelled then Generated.CancelExecutionPendingReceipts (Generated.CancelExecutionPendingReceiptsData execution (fromInteger expected) (fromInteger (expected + 1))) else Generated.FailExecutionPendingReceipts (Generated.FailExecutionPendingReceiptsData execution (fromInteger expected) (fromInteger (expected + 1)))) else if cancelled then Generated.CancelExecution (Generated.CancelExecutionData execution (fromInteger expected) (fromInteger (expected + 1))) else Generated.FailExecution (Generated.FailExecutionData execution (fromInteger expected) (fromInteger (expected + 1)))
       result <- persistChecked
         execution
         command
@@ -915,7 +915,7 @@ recordLateExecutionReceipt access@(ReplayAccess execution _ _) expected claim re
           (_, binding) <- readMetadata (getExecution execution)
           result <- persistChecked
             execution
-            (Generated.MarkExecutionUnresolved (Generated.MarkExecutionUnresolvedData execution.value (fromInteger expected) (fromInteger (expected + 1))))
+            (Generated.MarkExecutionUnresolved (Generated.MarkExecutionUnresolvedData execution (fromInteger expected) (fromInteger (expected + 1))))
             ( do
                 checkedLockRoot binding.rootId
                 (state, actualBinding) <- checkedExecution execution
@@ -978,7 +978,7 @@ recordSupersededReceipt access@(ReplayAccess execution _ _) expected claim recei
     Nothing -> do
       result <- persistChecked
         execution
-        (Generated.SettleExecutionReceipt (Generated.SettleExecutionReceiptData execution.value (fromInteger expected) (fromInteger (expected + 1)) (stored.pendingReceipts - 1)))
+        (Generated.SettleExecutionReceipt (Generated.SettleExecutionReceiptData execution (fromInteger expected) (fromInteger (expected + 1)) (stored.pendingReceipts - 1)))
         ( do
             checkedLockRoot binding.rootId
             (state, actualBinding) <- checkedExecution execution
@@ -1030,7 +1030,7 @@ reconcileExecutionAttempt access@(ReplayAccess execution _ _) expected attemptId
       (_, binding) <- readMetadata (getExecution execution)
       result <- persistChecked
         execution
-        (Generated.ReconcileExecution (Generated.ReconcileExecutionData execution.value (fromInteger expected) (fromInteger (expected + 1))))
+        (Generated.ReconcileExecution (Generated.ReconcileExecutionData execution (fromInteger expected) (fromInteger (expected + 1))))
         ( do
             checkedLockRoot binding.rootId
             (state, actualBinding) <- checkedExecution execution
@@ -1105,7 +1105,7 @@ recordOutcomeAndAdvanceWith access@(ReplayAccess execution _ _) expected operati
             Nothing -> pure (Left ExecutionMissing)
             Just (_, binding) -> do
               let unresolved = case outcome of OperationUnresolved {} -> True; _ -> False
-                  command = if unresolved then Generated.MarkExecutionUnresolved (Generated.MarkExecutionUnresolvedData execution.value (fromInteger expected) (fromInteger (expected + 1))) else advance execution expected
+                  command = if unresolved then Generated.MarkExecutionUnresolved (Generated.MarkExecutionUnresolvedData execution (fromInteger expected) (fromInteger (expected + 1))) else advance execution expected
               let precondition = outcomePrecondition access expected operation outcome accounting binding
               result <- persistGuarded execution command precondition do
                 -- The precondition retains root/execution/operation row locks.
@@ -1168,7 +1168,7 @@ finishExecution access@(ReplayAccess execution _ _) expected result = catchExecu
       Just (state, _) | state.phase == Succeeded && state.result == Just ref -> pure (Right AlreadyAccepted)
       Nothing -> pure (Left ExecutionMissing)
       Just (stored, binding) -> do
-        let command = if stored.pendingReceipts > 0 then Generated.FinishExecutionPendingReceipts (Generated.FinishExecutionPendingReceiptsData execution.value (fromInteger expected) (fromInteger (expected + 1))) else Generated.FinishExecution (Generated.FinishExecutionData execution.value (fromInteger expected) (fromInteger (expected + 1)))
+        let command = if stored.pendingReceipts > 0 then Generated.FinishExecutionPendingReceipts (Generated.FinishExecutionPendingReceiptsData execution (fromInteger expected) (fromInteger (expected + 1))) else Generated.FinishExecution (Generated.FinishExecutionData execution (fromInteger expected) (fromInteger (expected + 1)))
         committed <- persistChecked
           execution
           command
@@ -1212,7 +1212,7 @@ validateOperation specification = do
   unless (maybe True (\n -> n >= 0 && n < 256) specification.responsePosition) (Left OperationConflict)
 
 advance :: ExecutionId -> Integer -> Generated.ExecutionLifecycleCommand
-advance execution expected = Generated.AdvanceExecution (Generated.AdvanceExecutionData execution.value (fromInteger expected) (fromInteger (expected + 1)))
+advance execution expected = Generated.AdvanceExecution (Generated.AdvanceExecutionData execution (fromInteger expected) (fromInteger (expected + 1)))
 
 getExecution :: ExecutionId -> Transaction (ExecutionState, ExecutionBinding)
 getExecution execution = Tx.statement execution.value lockExecution >>= maybe (abort ExecutionMissing) pure

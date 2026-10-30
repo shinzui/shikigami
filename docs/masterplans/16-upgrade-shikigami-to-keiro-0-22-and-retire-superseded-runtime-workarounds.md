@@ -60,7 +60,7 @@ Consulted decisions: [ADR-27](../adr/0027-the-first-release-establishes-one-clea
 | # | Workstream | Path | Hard Deps | Soft Deps | Status |
 |---|---|---|---|---|---|
 | EP-1 | Released cohort and fresh schema | [92](../plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md) | None | None | Complete |
-| EP-2 | Guarded commands and complete domain adoption | [93](../plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md) | EP-1 | None | In Progress |
+| EP-2 | Guarded commands and complete domain adoption | [93](../plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md) | EP-1 | None | Complete |
 | EP-3 | Native delivery and workflow recovery | [94](../plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md) | EP-1 | EP-2 | Not Started |
 | EP-4 | Administrative CLI, HTTP and live inspection | [106](../plans/106-expose-bounded-administrative-inspection-and-live-feeds.md) | EP-1 | EP-3 | Not Started |
 | EP-5 | Haskell and service architecture practices | [107](../plans/107-adopt-current-haskell-and-service-architecture-practices.md) | EP-1 | None | Not Started |
@@ -82,11 +82,13 @@ EP-6 owns final source/release inventory validation, exact-candidate evidence, f
 
 ## Progress
 
-2026-10-30: EP-1 is Complete. The released cohort and immutable Kikan source
-build all workspace/test components; strict checking, deterministic generation,
-122 conformance checks, 11 native migration cases, nine source/composition cases,
-377 core PostgreSQL cases and 248 worker cases pass. EP-2 is In Progress, beginning the representative guarded outcome transaction; EP-3 through EP-5 are also dependency-ready. The final frozen closure,
-Linux runtime and integrated inspection/recovery gates remain unqualified.
+2026-10-30: EP-1 and EP-2 are Complete. Released cohort/fresh schema and native
+guarded command adoption are accepted. The current domain candidate passes 539 pure,
+373 PostgreSQL, 159 service-conformance, 13 queue and six diagram checks. Obsolete
+queue readers and nine production patch selections are retired under ADR-27 with
+strict breaking reports. Plans94/106 retain explicit delivery/operations clauses
+from the shared catalog guide. EP-3 is next; the final closure, Linux role runtime,
+HTTP/live inspection and whole-corpus final gate remain outstanding.
 
 ## Surprises & Discoveries
 

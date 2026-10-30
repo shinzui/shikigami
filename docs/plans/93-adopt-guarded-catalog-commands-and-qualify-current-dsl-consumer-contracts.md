@@ -59,7 +59,7 @@ Make execution admission checks that can run before inline writes return typed r
 
 - [x] M1 (2026-10-30): All 50 ExecutionTranscript PostgreSQL cases pass, including typed refusal, tentative-append rebuild rollback, accepted convergence and late refusal after observed cursor/accounting writes. `docs/evidence/keiro-0.22/guarded-outcome-m1.txt` records the native results.
 - [x] M2 (2026-10-30): All lifecycle catalog persistence paths use the typed protocol; all 379 core PostgreSQL cases pass. Retained write-dependent refusals and read boundaries are enumerated in `docs/evidence/keiro-0.22/guarded-execution-protocol.md`.
-- [ ] M3: Every 0.21/0.22 DSL capability and existing consumer adapter has an evidence-backed disposition, generated conformance passes, and the single first-release contract passes same-build replay qualification.
+- [x] M3 (2026-10-30): Current DSL consumers, total nominal/structural bindings, one complete queue codec and consolidated workflow bodies are qualified. All 539 pure, 373 PostgreSQL, 159 generated-service, 13 queue and six diagram checks pass. Strict reset reports and declaration-specific fold evidence are retained. Remaining delivery/administrative clauses are explicitly owned by plans 94/106 rather than certified here.
 
 
 ## Surprises & Discoveries
@@ -91,6 +91,20 @@ original rollback boundaries. All 379 core PostgreSQL cases pass.
 
 ## Decision Log
 
+2026-10-30 M3 acceptance: the source inventory's projection-catalog document spans
+three children. Plan93 owns the native guarded authority clauses; delivery/freshness
+is pending plan94, and administrative generation/external-read/repair qualification
+is pending plan106. Keep those clause owners/statuses explicit. REL-10 HTTP prefix
+composition is likewise owned by106. This is an ownership correction, not a removed
+guide/release denominator. All other plan93 guide topics have concrete dispositions.
+
+
+2026-10-30 M3 baseline: `88d4b3e` is the accepted pre-reset source. The user's
+same-day unused-service confirmation and ADR-27 apply: there are no users,
+deployed journals/queued payloads to preserve or external wire consumers. No
+developer database is deleted. Consolidate current workflows and the queue codec;
+retain exact breaking differ diagnostics and same-build recovery tests.
+
 
 2026-10-28 review revision: Narrow typed-refusal adoption to checks before inline delivery. Preserve the existing post-write hook and exception rollback for late/owner failures because the released guarded runner has no post-inline refusal callback; test both paths before expanding adoption.
 
@@ -102,7 +116,25 @@ original rollback boundaries. All 379 core PostgreSQL cases pass.
 ## Outcomes & Retrospective
 
 
-To be filled during implementation.
+All three milestones are accepted. Expected admission refusals now use the native
+typed catalog precondition; write-dependent checks retain tested whole-transaction
+exception rollback. Current producers and consumers share one first-release queue
+contract. Three aggregate identity bindings and two queue enum bindings execute on
+production paths. Nine obsolete workflow patch selections and old queue readers
+are removed without deleting a database or weakening the differ.
+
+[Current domain evidence](../evidence/keiro-0.22/current-domain-contracts.md)
+records independent wire fixtures, same-build replay, fold/snapshot decisions,
+retained refined boundaries and absent capability consumers. The atlas/inspectors
+are regenerated from all current Keiki machines and checked for drift. Inventory
+rows now carry clause dispositions. The projection-catalog guide intentionally
+retains pending delivery and operations clauses owned by plans 94 and 106;
+completion of this child does not certify those capabilities. REL-10's provisional
+owner is corrected to plan106 because it concerns composed HTTP inspection.
+
+ADR-27/37 are updated with this accepted reset and its expiry at deployment.
+No new friction met the recording threshold; FRIC-9 remains the documented released
+queue limitation and was rechecked rather than used to preserve obsolete readers.
 
 
 ## Context and Orientation

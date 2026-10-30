@@ -181,8 +181,8 @@ and no release or deployment that froze the old shape.
 
 For a declared workflow-body reset, run `keiro-check`, `keiro-inspect`,
 `keiro-scaffold`, generated conformance, replay tests, and the full suite. Also
-run `keiro-diff` against the pre-reset revision and record its expected
-`WorkflowBodyChanged` finding. That one finding is accepted as evidence of the
+run `keiro-diff` against the pre-reset revision and record its exact breaking findings (including `WorkflowBodyChanged` or
+`WorkflowPatchRemoved`, as applicable). That one finding is accepted as evidence of the
 deliberate baseline reset; it is not hidden behind an undeclared label, a fake
 patch, or a weakened gate. Subsequent work compares against the new baseline.
 
@@ -424,7 +424,16 @@ themselves replay-stable (a ticket id read out of a journaled verdict, say) are
 permissible but discouraged; prefer a static token.
 
 
-## What Shikigami journals today
+## Historical pre-release journal inventory
+
+The patch narratives in this section describe the superseded pre-release
+baseline. Plan 93 removes those patch calls and declarations under ADR-27.
+Current workflows execute the selected behavior directly; `shikigamiActivePatches`
+is empty. Genuine runtime alternatives (non-Skill inline behavior, configured
+capabilities and generation rotation) remain. This historical explanation does
+not require retaining readers or false branches for the unused old population.
+The checked workspace, generated facts and same-build tests define the current
+step inventory. Future deployed changes follow the normative rules above.
 
 The checked specification and generated facts are the maintained inventory of
 static labels. Read them together with the body and capability interpreters for

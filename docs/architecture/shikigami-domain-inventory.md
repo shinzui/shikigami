@@ -1,20 +1,13 @@
 # Shikigami domain inventory
 
-This census was refreshed on 2026-09-21 for
-[plan 72](../plans/72-adopt-keiro-0-18-and-current-runtime-patterns.md), from the
-plan 65 baseline at revision `65b8a1b44faa540fef163d5de33ee1c79eea7de4`.
-It describes executed ownership and the reasons other surfaces remain hand-owned. A declaration
-counts only when its generated contract is used by production code (ADR 0001).
-Execution and continuing-worker ownership were refreshed on 2026-10-28 under
-[plan 83](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md)
-and [plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md).
-The workspace contains nine explicitly declared Language 6 members: agent-run,
-approval, conversation, execution-driver, execution, RunEvidence, run-jobs,
-worker-session and continuing-worker. The aggregate members also declare their
-catalogs and query models.
-Keiro 0.18 is a released package family, while its language registry truthfully
-labels Language 6 as the opt-in `Candidate CandidateLanguage` contract; Language 5
-remains its stable published compatibility contract.
+This census was refreshed on 2026-10-30 under
+[MasterPlan 16](../masterplans/16-upgrade-shikigami-to-keiro-0-22-and-retire-superseded-runtime-workarounds.md)
+and [plan 93](../plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md).
+A declaration counts only when production executes its generated contract (ADR-1).
+The workspace has ten explicit Language 6 members: agent-run, approval,
+conversation, execution-driver, execution, RunEvidence, run-jobs, worker-session,
+continuing-worker and objective. Four aggregates own catalogs and query models.
+Keiro/DSL 0.22 is released; Language 6 remains the opt-in candidate language.
 
 ## Workflows and identities
 
@@ -22,7 +15,7 @@ Paths in this section are relative to `shikigami-core/src/`.
 
 | Surface | Declaration and execution owner | Observable proof |
 |---|---|---|
-| `shikigami.agent-run` | `domain/shikigami-agent-run.keiro`; `Shikigami/Agent/Workflow.hs`; generated AgentRun runtime | Job idempotency key identifies the run. WorkflowVersioningSpec, ApprovalWorkflowSpec, BehaviorRetrySpec and memory/router replay suites exercise it. The durable-execution patch preserves coarse Skill journals while new leaf Skills await execution children. |
+| `shikigami.agent-run` | `domain/shikigami-agent-run.keiro`; `Shikigami/Agent/Workflow.hs`; generated AgentRun runtime | Job idempotency key identifies the run. WorkflowVersioningSpec, ApprovalWorkflowSpec, BehaviorRetrySpec and memory/router replay suites exercise it. Current leaf Skills await execution children directly; no obsolete patch branch remains. |
 | `shikigami.approval` | `domain/shikigami-approval.keiro`; `Shikigami/Agent/Approval/Workflow.hs`; generated Approval runtime | ApprovalWorkflowSpec covers a durable child with `ingest-approval`, `notify`, and `decision`. Publication and resolution use the allocated opaque AwakeableId, distinct from the review-request key. |
 | `shikigami.danwa-conversation` | `domain/shikigami-conversation.keiro`; `Shikigami/Agent/Conversation.hs`; generated DanwaConversation runtime | Conversation tests cover restoreSeed, one turn per continueAsNew generation, timeout and wake tokens. The baseline uses only the rotating workflow and static labels. |
 | Delegated runs | `Shikigami/Agent/Delegate.hs` and `Shikigami/Agent/Delegate/Context.hs` | Deterministic UUIDv5 child identities and reservation ledger are technical deduplication identities. Preserve their derivation; do not relabel them TypeID-v7. |
@@ -38,25 +31,35 @@ delegation context carries nominal lineage and depth. Evidence uses generated
 RunEvidenceId, RunKey and distinct nonnegative duration/concurrency types. Existing
 attestation versions, digests and locators keep their owning nominal types.
 
-Language 6 nominal leaves are intentionally absent from the run-job declaration.
-`AgentName`, `RunKey`, and `DelegationDepth` are refined values whose parsers reject
-members of their underlying Text or integer representation, so they are not total
-consumer nominal isomorphisms. `SessionId` and `WorkflowId` are upstream opaque
-identities, and `RunKey` is a composite retry identity rather than a TypeID-v7 domain.
-`TriggerKind` and `RunRouteKind` keep their established Aeson constructor spellings;
-changing them to the DSL enum wire-word grammar would change durable queue bytes.
-The generated queue decoder feeds the real `RunJob` decoder before execution, and
-`WireCompatSpec` proves rejection of invalid refined IDs, depths, lineage, session and
-workflow IDs, plus unknown enum strings. This is executable boundary validation rather
-than an unchecked opaque root.
+The queue's `TriggerKind` and `RunRouteKind` fields use total structural enum
+bindings to the existing consumer types. Generated codecs admit exactly their
+finite spellings, and generated conformance covers every constructor and owner/key
+law. Hand-written string adapters are removed. `AgentName`, `RunKey` and
+`DelegationDepth` remain refined application values; their rejecting parsers are
+not total isomorphisms over Text/Int. Upstream `SessionId`/`WorkflowId` are opaque
+identities. Queue decoding still reaches these real parsers before execution.
 
-Keiro 0.18 adds checked mappings for bare containers, calendar days, text sets and
-base16 bytes, plus UUIDv5-or-v7 identifier admission. None matches a current declared
-Shikigami surface: the queue adapter already validates richer application values, and
-the specification has no mapped consumer declaration. `RunEvidenceId` remains a
-TypeID-v7 domain through `typeIdV7Domain`; deterministic UUIDv5 workflow and
-deduplication identities are technical identities outside that declared domain. Their
-admission and durable bytes are unchanged by the release upgrade.
+Execution, worker-session and objective aggregate identities now use nominal
+Text bindings to the existing `ExecutionId`, `WorkerSessionId` and `ObjectiveId`
+types. Their total bindings preserve technical identity text, including the empty
+initial sentinel; application admission still enforces real authority and key
+constraints. They are not declared TypeID-v7 values. The three affected aggregates
+have declaration-specific fold changes; RunEvidence's fingerprint is unchanged.
+All four current aggregate event streams explicitly use `snapshotPolicy = Never`
+and no state codec, so this change does not claim cache fallback qualification
+for a snapshot consumer that does not exist. Same-build event/journal replay,
+protected-payload corruption and current producer/consumer fixtures remain gates.
+
+`RunEvidenceId` retains the generated TypeID-v7 contract. UUIDv5 workflow and
+retry identities stay technical identities outside that domain. The actual queue
+already executes ordered scalar lists for lineage; its boundary tests preserve
+order and reject invalid refined values. There is no date, text-set or unrestricted
+byte consumer in a declared payload. Prefixed fixed-length digests are not the
+unrestricted base16-byte policy. No current aggregate guard compares an enum field:
+control phases are vertices, while the two structural enums are queue data. No
+unused enum guard is invented. Mapped identity registers copy complete typed
+command values; there is no scalar-to-mapped write or transition resetting them
+to an initial value that would justify an unused write-lift.
 
 `Shikigami.Workflow.Registry` in core composes all five families: agent runs,
 approval children, conversations, execution drivers and continuing workers. The
@@ -95,6 +98,15 @@ Conversation session commands use Kioku's stream and inline projections. The ser
 migration boundary reconciles Kioku read models through its public API. Shikigami must
 not redeclare that upstream aggregate or those targets as its own.
 
+## Objective ownership
+
+`domain/shikigami-objective.keiro` owns ObjectiveLifecycle and its current catalog.
+`Objective/Store.hs` commits lifecycle append and protected objective state,
+assignment, payload, receipt, origin, association, scope and cursor targets together.
+The preserve/live-only boundary does not reconstruct private evidence from events.
+Objective authority, atomicity, workflow and contract suites qualify the owner;
+tracker/product integrations remain with their owning MasterPlans 17 and 18.
+
 ## Continuing session ownership
 
 `domain/shikigami-worker-session.keiro` owns WorkerSessionLifecycle. The live
@@ -107,7 +119,8 @@ with a replacement root.
 
 `WorkerSession/Capability.hs` is the shared closed command owner for
 `Flow/Workers.hs`, dedicated admitted Skill tools and operator control. The
-`shikigami-worker-coordination-v1` patch preserves old Flow and Skill journals.
+current baseline resolves the coordination policy directly for Flows and Skills;
+there is no obsolete coordination patch branch.
 `CoordinatingSkill` selects durable admitted coordination explicitly; fixed
 supervisors retain their prior behavior. Model-supplied roots, grants and
 operation coordinates are refused. New messages narrow original delegation
@@ -124,20 +137,18 @@ process fencing or authoritative task updates. See ADRs 0061–0063 and
 
 `shikigami-core/src/Shikigami/Agent/RunJob.hs` owns the complete journal input.
 `domain/shikigami-run-jobs.keiro` owns the twelve-field generated `RunJobMessage`
-envelope and queue policy. The application input stored inside it now writes
-version 4, retaining historical v1/v2/v3 readers for resource enrollment,
-execution selection and accepted-operation references. `Shikigami.RunJobs` adapts the nominal domain value to
-that envelope and validates identity and route on decoding. `Trigger/Enqueue.hs`
-uses it for direct and transactional producers; the worker uses the same generated
-codec, queue provisioning and retry policy. CLI, schedule, Kafka inbox, delegation
-and conversation routing all select an explicit route.
+envelope and queue policy. One complete version-1 application codec carries
+current resource enrollment, selection, permissions and accepted-operation routes.
+Historical upcasters and journal omission defaults are removed under ADR-27.
+`Shikigami.RunJobs` binds the current domain value to the generated envelope;
+`Trigger/Enqueue.hs` and the worker share the codec, provisioning and retry policy.
+CLI, schedule, Kafka inbox, delegation and conversation routes remain explicit.
 
-The reviewed unused pre-v1 reset removed bare queue decoding, missing-field defaults,
-and inferred routing. `WireCompatSpec` pins a complete literal envelope and rejects
-the former bare payload. Worker tests exercise actual enqueue and dispatch; scheduler
-and inbox tests decode through the production facade. The Haskell worker registration
-is the executable binding for this queue; Language 6 did not change its physical name,
-envelope bytes, retry policy or `Unordered` delivery semantics.
+`WireCompatSpec` pins the complete current envelope, rejects superseded wrappers
+and versions, requires authority keys in current journal values, and checks that
+input resembling metadata remains ordinary input. Worker tests use actual enqueue
+and dispatch. The physical queue name, retry policy and Unordered delivery remain
+the production declaration's values.
 
 ## External intake and sink delivery
 
@@ -198,7 +209,7 @@ with the project-pinned tool. Check requires `--min-language 6`, `--deny-warning
 and coverage reports, and `--fail-on-opaque`. Behavior obligations are nonzero and must
 execute; the former zero-obligation claim is obsolete. After committing reviewed generation,
 ordinary scaffold must change no bytes. `just keiro-gate <baseline>` remains strict.
-The executed report in `docs/evidence/plan-65/behavior-conformance.json` has 56 filled
+The historical plan-65 report in `docs/evidence/plan-65/behavior-conformance.json` had 56 filled
 obligations, 50 verified and six unverified, with every failure/coverage-gap set empty.
 The six command/register identity-equality guards have passing witnesses but are not
 proved total by the released DSL. The core facade additionally requires every generated
