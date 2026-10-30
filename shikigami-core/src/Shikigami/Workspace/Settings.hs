@@ -3,8 +3,10 @@
 module Shikigami.Workspace.Settings where
 
 import Data.Aeson qualified as Aeson
+import Data.ByteString qualified as Bytes
 import Data.List (nub, sort)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Encoding
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Prelude
 import Shikigami.Workspace.Catalog
@@ -77,3 +79,15 @@ pathAdmitted prefixes target = any (\prefix -> Text.null prefix || target == pre
 -- their reviewed instruction identities are checked separately.
 workspacePolicyIdentity :: WorkspaceRepository -> Text
 workspacePolicyIdentity entry = "policy1-" <> Text.drop 7 (versionedDigest "shikigami.workspace-operator-policy/1" (Aeson.object ["revision" Aeson..= entry.policyRevision, "readPaths" Aeson..= sort entry.readPaths, "writePaths" Aeson..= sort entry.writePaths]))
+
+-- The daemon selects commands from retained profiles. This configuration only
+-- identifies its manager-owned socket and bounds authenticated RPC intake.
+data WorkspaceSupervisorSettings = WorkspaceSupervisorSettings
+  {socketPath :: !FilePath, users :: ![Integer], workers :: !Int, timeoutSeconds :: !Int}
+  deriving stock (Eq, Generic)
+
+instance FromJSON WorkspaceSupervisorSettings where
+  parseJSON value = do
+    settings <- Aeson.genericParseJSON strictOptions value
+    unless (isAbsolute settings.socketPath && settings.socketPath /= "/" && normalise settings.socketPath == settings.socketPath && '\0' `notElem` settings.socketPath && ".." `notElem` splitDirectories settings.socketPath && Bytes.length (Encoding.encodeUtf8 (Text.pack settings.socketPath)) <= 100 && not (null settings.users) && length settings.users <= 32 && length (nub settings.users) == length settings.users && all (\uid -> uid >= 0 && uid <= 4294967295) settings.users && settings.workers >= 1 && settings.workers <= 16 && settings.timeoutSeconds >= 1 && settings.timeoutSeconds <= 120) (fail "invalid workspace supervisor configuration")
+    pure settings

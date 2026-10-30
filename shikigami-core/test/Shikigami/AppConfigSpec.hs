@@ -61,7 +61,7 @@ import Shikigami.PracticeReview.Capability (renderAttentionRecipientMap)
 import Shikigami.Sink.Auth (TokenSource (..), credentialToken, matchesBearerHeader, staticTokenSource)
 import Shikigami.Sink.Permission (SinkKind (..))
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
-import Shikigami.Workspace.Settings (WorkspaceSettings (..))
+import Shikigami.Workspace.Settings (WorkspaceSettings (..), WorkspaceSupervisorSettings (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -158,6 +158,7 @@ surfaceTests =
                 "sinks.kizashi.default_recipient",
                 "sinks.rei.base_url",
                 "worker.run_timeout_seconds",
+                "workspace.supervisor",
                 "workspaces"
               ],
       -- Forcing the validated binding list here is the point: an invalid edit
@@ -200,6 +201,7 @@ surfaceTests =
               ("SHIKIGAMI_BEHAVIOR_DECISION_MODELS", "behavior.decisionModels"),
               ("SHIKIGAMI_BEHAVIOR_HARNESS", "behavior.harness"),
               ("SHIKIGAMI_WORKSPACES", "workspaces"),
+              ("SHIKIGAMI_WORKSPACE_SUPERVISOR", "workspace.supervisor"),
               ("SHIKIGAMI_BEHAVIOR_MODEL", "behavior.model"),
               ("SHIKIGAMI_BEHAVIOR_PROVIDER", "behavior.provider"),
               ("SHIKIGAMI_CONVERSATION_IDLE_TIMEOUT_SECONDS", "conversation.idle_timeout_seconds"),
@@ -300,7 +302,23 @@ precedenceTests :: TestTree
 precedenceTests =
   testGroup
     "precedence"
-    [ testCase "reviewed workspace configuration resolves from the environment and hides local paths" do
+    [ testCase "workspace supervisor configuration bounds peers and hides its private socket" do
+        let settings = "{\"socketPath\":\"/run/shikigami/private.sock\",\"users\":[1000],\"workers\":2,\"timeoutSeconds\":5}"
+        config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_WORKSPACE_SUPERVISOR", settings), ("PG_CONNECTION_STRING", "postgresql:///fixture")]
+        case config.workspaceSupervisorSettings of
+          Just selected -> do
+            selected.socketPath @?= "/run/shikigami/private.sock"
+            selected.users @?= [1000]
+          Nothing -> assertFailure "supervisor configuration absent"
+        missingRequirements WorkspaceSupervisorRole config @?= []
+        fmap renderKey (missingRequirements WorkspaceSupervisorRole defaultAppConfig) @?= ["database.connection_string", "workspace.supervisor"]
+        let report = runWith (diagnosticOptions ExplainJson) [] [("SHIKIGAMI_WORKSPACE_SUPERVISOR", settings)]
+        report.exitCode @?= 0
+        assertBool "private socket omitted from diagnostics" (not ("private.sock" `Text.isInfixOf` (report.standardOutput <> report.standardError)))
+        mapM_
+          (\invalid -> assertBool "invalid supervisor setting refuses" ((runWith (diagnosticOptions CheckConfig) [] [("SHIKIGAMI_WORKSPACE_SUPERVISOR", invalid)]).exitCode /= 0))
+          [Text.replace "[1000]" "[]" settings, Text.replace "[1000]" "[-1]" settings, Text.replace "[1000]" "[1000,1000]" settings, Text.replace "\"workers\":2" "\"workers\":17" settings, Text.replace "\"timeoutSeconds\":5" "\"timeoutSeconds\":121" settings, Text.replace "/run/shikigami/private.sock" "relative.sock" settings, Text.replace "\"workers\":2" "\"command\":\"/bin/sh\",\"workers\":2" settings],
+      testCase "reviewed workspace configuration resolves from the environment and hides local paths" do
         let supplied = "{\"storageRoot\":\"/private/workspaces\",\"repositories\":[{\"identity\":\"mori://fixture/repo\",\"source\":\"/private/approved-source\",\"revisions\":[{\"base\":\"" <> Text.replicate 40 "a" <> "\",\"instructionDigest\":\"sha256:" <> Text.replicate 64 "b" <> "\"}],\"defaultRevision\":\"" <> Text.replicate 40 "a" <> "\",\"policyRevision\":\"reviewed-1\",\"readPaths\":[\"\"],\"writePaths\":[\"src\"]}],\"grants\":[{\"agent\":\"worker\",\"principal\":\"agent_fixture\",\"repository\":\"mori://fixture/repo\"}]}"
         config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_WORKSPACES", supplied)]
         case config.workspaceSettings of
@@ -624,7 +642,7 @@ requirementTests =
       testCase "roles with no listener of their own get no probe port" $
         mapM_
           (\role -> fmap portNumber (defaultHealthPort role) @?= Nothing)
-          [ServerRole, AdminRole, RunBehaviorRole, AgentRunRole, MigrateRole],
+          [ServerRole, AdminRole, RunBehaviorRole, AgentRunRole, MigrateRole, WorkspaceSupervisorRole],
       testCase "an unset health.port leaves each role on its own default" $
         fmap portNumber (healthPortFor WorkerRole defaultAppConfig) @?= Just 8091,
       testCase "a configured health.port overrides the role default" do

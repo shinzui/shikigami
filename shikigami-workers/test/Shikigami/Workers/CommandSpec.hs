@@ -65,19 +65,21 @@ tests =
       -- The one-off roles moved to shikigami-agent; see
       -- "Shikigami.Agent.CommandSpec". Their absence here is the assertion that
       -- they did not stay behind and quietly keep linking Kafka and PGMQ.
-      testCase "the four worker roles are named exactly once each" $
+      testCase "the worker roles are named exactly once each" $
         fmap (.binaryName) workerRoles
           @?= [ "shikigami-worker",
                 "shikigami-scheduler",
                 "shikigami-consume-stream",
-                "shikigami-consume-events"
+                "shikigami-consume-events",
+                "shikigami-workspace-supervisor"
               ],
       testCase "each binary is wired to the role whose requirements it must meet" $
         fmap (.role) workerRoles
           @?= [ WorkerRole,
                 SchedulerRole,
                 StreamConsumerRole,
-                EventConsumerRole
+                EventConsumerRole,
+                WorkspaceSupervisorRole
               ],
       testCase "every worker executable offers the same configuration and diagnostic options" $
         mapM_ (`assertHasAll` configurationFlags) workerRoles,

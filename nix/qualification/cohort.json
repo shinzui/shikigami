@@ -3888,6 +3888,7 @@
         "exe:shikigami-scheduler",
         "exe:shikigami-worker",
         "exe:shikigami-workspace-collector",
+        "exe:shikigami-workspace-supervisor",
         "lib"
       ],
       "flags": {},

@@ -60,6 +60,7 @@ library
     Shikigami.Workspace.Collector
     Shikigami.Workspace.ConfiguredHost
     Shikigami.Workspace.ContainedFile
+    Shikigami.Workspace.Daemon
     Shikigami.Workspace.FileProvider
     Shikigami.Workspace.Git
     Shikigami.Workspace.Host
@@ -121,6 +122,15 @@ library
     uuid,
     wai,
     warp,
+
+executable shikigami-workspace-supervisor
+  import: common
+  main-is: Main.hs
+  hs-source-dirs: app/workspace-supervisor
+  ghc-options: -threaded
+  build-depends:
+    base,
+    shikigami-workers,
 
 executable shikigami-workspace-collector
   import: common

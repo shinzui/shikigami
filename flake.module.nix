@@ -86,6 +86,7 @@
       packages.shikigami-consume-events = role "shikigami-consume-events";
       packages.shikigami-agent-launch = role "shikigami-agent-launch";
       packages.shikigami-workspace-collector = role "shikigami-workspace-collector";
+      packages.shikigami-workspace-supervisor = role "shikigami-workspace-supervisor";
       packages.shikigami-workspace-deadline = import ./nix/workspace-deadline.nix { inherit pkgs; };
       packages.shikigami-runtime = runtime;
 

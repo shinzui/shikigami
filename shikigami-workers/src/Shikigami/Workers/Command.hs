@@ -32,7 +32,7 @@
 --
 -- Every parser has the same result type, which is exactly why a dropped or
 -- misrouted flag is invisible to the type checker; 'workerRoles' exists so a
--- test can drive all four parsers without listing them a second time.
+-- test can drive every parser without listing it a second time.
 module Shikigami.Workers.Command
   ( -- * Roles
     RoleInfo (..),
@@ -41,6 +41,7 @@ module Shikigami.Workers.Command
 
     -- * The individual roles
     workerRoleInfo,
+    workspaceSupervisorRoleInfo,
     schedulerRoleInfo,
     consumeStreamRoleInfo,
     consumeEventsRoleInfo,
@@ -72,6 +73,7 @@ import Shikigami.App.Role (RoleInfo (..), runRole)
 import Shikigami.Workers.Command.Scheduler (runSchedulerCmd)
 import Shikigami.Workers.Command.Worker (runResumeCmd, runWorkerCmd)
 import Shikigami.Workers.Subscription (runConsumeEvents, runConsumeStream)
+import Shikigami.Workspace.Daemon (runWorkspaceSupervisor)
 
 -- | Every worker executable, in the order they are documented.
 --
@@ -82,7 +84,8 @@ workerRoles =
   [ workerRoleInfo,
     schedulerRoleInfo,
     consumeStreamRoleInfo,
-    consumeEventsRoleInfo
+    consumeEventsRoleInfo,
+    workspaceSupervisorRoleInfo
   ]
 
 -- ── The roles ───────────────────────────────────────────────────────────────
@@ -278,3 +281,11 @@ workerAction =
     positiveInt = eitherReader \raw -> case reads raw of
       [(value, "")] | value > 0 -> Right value
       _ -> Left "expected a positive integer"
+
+-- Socket activation and factual receipt recovery have an independent lifetime.
+workspaceSupervisorRoleInfo :: RoleInfo
+workspaceSupervisorRoleInfo =
+  RoleInfo
+    "shikigami-workspace-supervisor"
+    WorkspaceSupervisorRole
+    (withConfigOptions "shikigami-workspace-supervisor" "Supervise governed workspace processes and recover original receipts" (pure runWorkspaceSupervisor) (pure []))

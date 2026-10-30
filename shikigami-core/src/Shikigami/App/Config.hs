@@ -115,6 +115,7 @@ module Shikigami.App.Config
     behaviorDecisionModelsKey,
     behaviorHarnessKey,
     workspacesKey,
+    workspaceSupervisorKey,
     anthropicApiKeyKey,
     openaiApiKeyKey,
     actionAuthorizationModeKey,
@@ -159,7 +160,7 @@ import Data.Bifunctor (first)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Char (isAlphaNum, isSpace)
 import Data.Map.Strict qualified as Map
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -199,7 +200,7 @@ import Shikigami.PracticeReview.Capability
   )
 import Shikigami.Sink.Permission (SinkKind)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
-import Shikigami.Workspace.Settings (WorkspaceSettings)
+import Shikigami.Workspace.Settings (WorkspaceSettings, WorkspaceSupervisorSettings)
 
 -- ── Value types ─────────────────────────────────────────────────────────────
 
@@ -488,7 +489,8 @@ data AppConfig = AppConfig
     decisionModelCatalog :: !(Either DecisionFailure Decision.ModelCatalog),
     harness :: !Harness.HarnessPolicy,
     actionAuthorization :: !ActionAuthorizationConfig,
-    workspaceSettings :: !(Maybe WorkspaceSettings)
+    workspaceSettings :: !(Maybe WorkspaceSettings),
+    workspaceSupervisorSettings :: !(Maybe WorkspaceSupervisorSettings)
   }
   deriving stock (Generic, Eq)
 
@@ -546,6 +548,7 @@ appConfig =
     <*> withDefault harnessSetting (constant "default-harness" "Bound Skill execution policy" Harness.defaultHarnessPolicy)
     <*> actionAuthorizationConfig
     <*> optional (secretSetting workspacesKey "Approved workspace repositories, reviewed instruction digests, path restrictions and exact agent/principal grants" jsonDecoder)
+    <*> optional (secretSetting workspaceSupervisorKey "Private systemd socket and bounded peer-checked workspace supervisor intake" jsonDecoder)
 
 -- | Which provider runs a Skill behavior, and what the real branch needs.
 --
@@ -1393,6 +1396,9 @@ behaviorHarnessKey = stableKey "behavior.harness"
 workspacesKey :: Key
 workspacesKey = stableKey "workspaces"
 
+workspaceSupervisorKey :: Key
+workspaceSupervisorKey = stableKey "workspace.supervisor"
+
 behaviorDecisionModelsKey :: Key
 behaviorDecisionModelsKey = stableKey "behavior.decisionModels"
 
@@ -1513,6 +1519,7 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_BEHAVIOR_DECISION_MODELS") behaviorDecisionModelsKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_HARNESS") behaviorHarnessKey,
           binding (EnvName "SHIKIGAMI_WORKSPACES") workspacesKey,
+          binding (EnvName "SHIKIGAMI_WORKSPACE_SUPERVISOR") workspaceSupervisorKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_MODEL") behaviorModelKey,
           binding (EnvName "ANTHROPIC_API_KEY") anthropicApiKeyKey,
           binding (EnvName "OPENAI_API_KEY") openaiApiKeyKey,
@@ -1559,6 +1566,7 @@ data Role
   = ServerRole
   | AdminRole
   | WorkerRole
+  | WorkspaceSupervisorRole
   | SchedulerRole
   | StreamConsumerRole
   | EventConsumerRole
@@ -1573,6 +1581,7 @@ roleBinary = \case
   ServerRole -> "shikigami-server"
   AdminRole -> "shikigami"
   WorkerRole -> "shikigami-worker"
+  WorkspaceSupervisorRole -> "shikigami-workspace-supervisor"
   SchedulerRole -> "shikigami-scheduler"
   StreamConsumerRole -> "shikigami-consume-stream"
   EventConsumerRole -> "shikigami-consume-events"
@@ -1592,6 +1601,7 @@ roleBinary = \case
 defaultHealthPort :: Role -> Maybe Port
 defaultHealthPort = \case
   WorkerRole -> Just (Port 8091)
+  WorkspaceSupervisorRole -> Nothing
   SchedulerRole -> Just (Port 8092)
   StreamConsumerRole -> Just (Port 8093)
   EventConsumerRole -> Just (Port 8094)
@@ -1630,6 +1640,7 @@ roleRequiredKeys :: Role -> [Key]
 roleRequiredKeys = \case
   ServerRole -> [databaseConnectionStringKey]
   WorkerRole -> [databaseConnectionStringKey]
+  WorkspaceSupervisorRole -> [databaseConnectionStringKey, workspaceSupervisorKey]
   SchedulerRole -> [databaseConnectionStringKey]
   StreamConsumerRole -> [databaseConnectionStringKey]
   EventConsumerRole -> [databaseConnectionStringKey]
@@ -1652,6 +1663,7 @@ missingRequirements role config =
   where
     satisfied key
       | key == databaseConnectionStringKey = maybe False (not . Text.null . revealSecretText) ((.databaseUrl) config)
+      | key == workspaceSupervisorKey = isJust config.workspaceSupervisorSettings
       | otherwise = True
 
 -- | Inbound authentication; credentials retain SecretText's opaque rendering.
