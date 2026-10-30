@@ -14,6 +14,8 @@ import Shikigami.Attestation.Resolve qualified as Profile
 import Shikigami.Directory (DirectoryRuntime (..), identityLifecycleAdmission, startDirectory)
 import Shikigami.Execution.SelectionRuntime (currentExecutionAuthority)
 import Shikigami.Execution.Transcript (ExecutionSnapshot (..))
+import Shikigami.Inspection.Runtime (withInspectionRuntime)
+import Shikigami.Inspection.Store (withObservedStore)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.Prelude
@@ -45,19 +47,20 @@ runWorkspaceSupervisor config = do
     verifyShikigamiMigrations connection
     withRunTelemetry "shikigami.workspace-supervisor" \tracer metrics _ -> do
       let connections = runtimeConnectionSettings logger metrics connection
-      StoreConnection.withStore connections \store -> do
+      withObservedStore tracer connections \store storeMetrics -> do
         registerRuntimeCatalog store
-        authorizer <- buildConfiguredActionAuthorizer logger config >>= either (const (refuse "workspace.supervisor.authorization_invalid")) pure
-        directory <- startDirectory logger config.directorySettings >>= either (const (refuse "workspace.supervisor.directory_invalid")) pure
-        let appEnv = AppEnv {connectionSettings = connections, tracer, metrics, store = Just store}
-            resolveProfile profile version = do
-              now <- getCurrentTime
-              Profile.resolveProfile (Profile.postgresProfileStore (StoreConnection.pool store)) now profile version
-            active snapshot = currentExecutionAuthority (identityLifecycleAdmission directory.handle snapshot.identity) snapshot.sanctionedProfile resolveProfile
-            runtime = SupervisorRuntime appEnv authorizer (identityLifecycleAdmission directory.handle) active (retainedProcessRule appEnv) systemdSupervisorBackend
-            service = void (serveSupervisor (RpcPolicy settings.users settings.workers settings.timeoutSeconds) socket runtime)
-        Log.logInfo logger "workspace.supervisor.started" []
-        case directory.refresher of
-          Nothing -> service
-          Just refresh -> void (race service refresh)
-        refuse "workspace.supervisor.stopped"
+        withInspectionRuntime config.inspection logger connections store storeMetrics [] \_ -> do
+          authorizer <- buildConfiguredActionAuthorizer logger config >>= either (const (refuse "workspace.supervisor.authorization_invalid")) pure
+          directory <- startDirectory logger config.directorySettings >>= either (const (refuse "workspace.supervisor.directory_invalid")) pure
+          let appEnv = AppEnv {connectionSettings = connections, tracer, metrics, store = Just store}
+              resolveProfile profile version = do
+                now <- getCurrentTime
+                Profile.resolveProfile (Profile.postgresProfileStore (StoreConnection.pool store)) now profile version
+              active snapshot = currentExecutionAuthority (identityLifecycleAdmission directory.handle snapshot.identity) snapshot.sanctionedProfile resolveProfile
+              runtime = SupervisorRuntime appEnv authorizer (identityLifecycleAdmission directory.handle) active (retainedProcessRule appEnv) systemdSupervisorBackend
+              service = void (serveSupervisor (RpcPolicy settings.users settings.workers settings.timeoutSeconds) socket runtime)
+          Log.logInfo logger "workspace.supervisor.started" []
+          case directory.refresher of
+            Nothing -> service
+            Just refresh -> void (race service refresh)
+          refuse "workspace.supervisor.stopped"

@@ -1,12 +1,12 @@
 # Keiro 0.22 adoption audit
 
-Updated 2026-10-30. This ledger records partial implementation acceptance. Plans92,93 and94 are complete; selected inspection, Haskell corpus and final qualification remain pending. [MasterPlan 16](../masterplans/16-upgrade-shikigami-to-keiro-0-22-and-retire-superseded-runtime-workarounds.md) and its six children own implementation.
+Updated 2026-10-30. This ledger records partial implementation acceptance. Plans92,93,94 and106 are complete; the Haskell corpus and final qualification remain pending. [MasterPlan 16](../masterplans/16-upgrade-shikigami-to-keiro-0-22-and-retire-superseded-runtime-workarounds.md) and its six children own implementation.
 
 ## Scope and source denominator
 
 The user confirmed Shikigami is unused. ADR-27 permits a clean current baseline: obsolete queue readers, workflow patch false branches and pre-release schema assumptions may be refactored. Old-build/populated-upgrade compatibility is withdrawn. Same-build replay, authority, accounting, current manifest loading and protected payload constraints remain.
 
-[Source inventory](keiro-0.22-coverage.json) freezes 124 canonical documents: 94 from `mori://shinzui/keiro-runtime-patterns` at 62531b00b415785be61584a3c44b569fdfb35c4e and 30 from `mori://shinzui/haskell-jitsurei` at cce10bd4d22c30b52a5d18b1be8ae16755f5435c. Paths, hashes and owners are explicit; unregistered documents are separately listed for inspection, not silently omitted. Each applicable clause needs implementation and evidence. Accepted rows carry current evidence; shared inspection/final-qualification clauses retain explicit pending owners.
+[Source inventory](keiro-0.22-coverage.json) freezes 124 canonical documents: 94 from `mori://shinzui/keiro-runtime-patterns` at 62531b00b415785be61584a3c44b569fdfb35c4e and 30 from `mori://shinzui/haskell-jitsurei` at cce10bd4d22c30b52a5d18b1be8ae16755f5435c. Paths, hashes and owners are explicit; unregistered documents are separately listed for inspection, not silently omitted. Each applicable clause needs implementation and evidence. Accepted rows carry current evidence; shared final-qualification clauses retain explicit pending owners. Native inspection evidence is recorded in `docs/evidence/keiro-0.22/native-inspection-runtime.md`; it does not certify final deployment artifacts.
 
 [Release inventory](keiro-0.22-release-coverage.json) freezes 93 changelog bullets from the released Keiro source and DSL changelog across 0.19–0.22. Source paths are relative to `mori://shinzui/keiro` at b28201f2063fa4f6dcb724cbf474959107e36b74; artifact-level file URIs are pending. Plan 92 reconciles published descriptors and errata, assigns each item to an implementation owner and records any explicit denominator revision. Plan 95 rejects incomplete closure. Registry and remote tag rechecks still show 0.22.0.0 on 2026-10-30.
 

@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-10-30
+* **Update**: FRIC-34 accepted: Accepted the narrow kiroku-cli TLS exception after compiled listener qualification.
+* **Addition**: FRIC-34 records detour interface friction with mori://shinzui/kiroku/packages/kiroku-cli: Kiroku metrics 0.4 pulls a CLI with a stale TLS upper bound
 * **Update**: FRIC-33 accepted: Baseline and current strict validation outputs compare byte-for-byte equal; retain the inherited eight diagnostics as a known qualification limit.
 * **Addition**: FRIC-33 records detour process friction with mori://shinzui/shikigami: Strict request-bundle validation has inherited recommended-field failures
 * **Update**: FRIC-32 resolved: Resolve the formatter/generator conflict through explicit ownership exclusions, verified with nix fmt on a generated module and the package definition.

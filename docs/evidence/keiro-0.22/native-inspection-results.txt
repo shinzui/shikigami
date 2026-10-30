@@ -1,0 +1,13 @@
+2026-10-30: plan106 candidate after7534071; native macOS ARM64/GHC9.12.4/PostgreSQL18.
+All serving/package components: cabal build all --enable-tests -j2 passed.
+Focused server inspection:25 cases passed (16.42s); includes3 native CLI,9 HTTP and13 socket cases.
+Focused worker inspection:2 cases passed; actual Master, active socket return/cancellation, exactly-once cleanup and admitted ACK.
+Final regression command: cabal test shikigami-core-test shikigami-server-test shikigami-workers-test --test-options=--num-threads=1 -j2
+All 541 tests passed (5.86s)
+All 93 tests passed (18.96s)
+All 260 tests passed (162.74s)
+No required database tests skipped. Final worker inspection includes concurrent real database HTTP reads while an admitted delivery progresses.
+Deliberate oversized native metrics frame prints ResultTooLarge and returns connection admission as expected.
+Mori descriptor: mori show --json passed.
+Friction bundle:34 concepts validated with strict profile enforcement; FRIC-34 accepted.
+Strict just keiro-gate 7534071: passed; all10 members declared at Language6, no warnings/opaque boundary, idempotent generation, neutral DSL diff/replay and159 conformance assertions.

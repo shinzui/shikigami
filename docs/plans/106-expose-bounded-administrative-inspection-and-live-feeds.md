@@ -28,20 +28,24 @@ Provide safe native CLI inspection plus authenticated administrative HTTP and bo
 ## Progress
 
 - [x] (2026-10-30) M1: All four generated aggregate descriptors have explicit safe display encoders; native CLI type/list/show/snapshot and bounded workflow/timer/projection reads pass, with typed cursor/limit and corrupt-history refusal evidence. The complete server suite passes 71 cases. See [M1 evidence](../evidence/keiro-0.22/native-inspection-cli.md).
-- [ ] M2: Administrative HTTP surfaces use dedicated capacity, explicit authorization and native mutation policy.
-- [ ] M3: Live feeds pass overflow, slow-client, schema, cancellation and joined-shutdown tests.
+- [x] (2026-10-30) M2: Optional serving component mounts native HTTP surfaces with dedicated finite capacity, secret Settei configuration, independent read/write authority, native preview/confirmation/Origin/schema policy and explicit payload/erasure restrictions. See [runtime evidence](../evidence/keiro-0.22/native-inspection-runtime.md) and [operator guide](../operations/inspection.md).
+- [x] (2026-10-30) M3: Actual CLI/HTTP/socket fixtures pass25 inspection cases and2 worker-owner cases, including real nonreading TCP backpressure, deterministic native overflow/retirement, fresh schema checks, reconnect, shared read admission and active-client joined shutdown on return/cancellation. Native delivery progresses while database inspection polls remain active. Final frozen/Linux qualification belongs to95.
 
 ## Surprises & Discoveries
 
 The October 28 scope assumed a deployed population and an older domain census. The current census has four aggregates. Keiro 0.22 publicly exports the invocation/global option records, so the old database-URL environment adapter is unnecessary: the resolved Settei value now goes directly into the native invocation.
 
+The original shared-host placement in the main core library violated its existing package dependency budget. A separately compiled public optional component keeps the serving boundary explicit without adding an eighth package. Kiroku metrics0.4 exposes no per-send byte/deadline setting; the released public stream/handshake adapter supplies those host bounds while the native protocol and sampler remain intact. See FRIC-34 for the separate transitive CLI TLS descriptor mismatch.
+
 ## Decision Log
+
+2026-10-30: Host shared transports in optional `shikigami-core:inspection`; enforce the main library/agent dependency budget. Select explicit Kiroku providers, metric snapshots only, poll-only PGMQ and native basic Shibuya metrics. Separate writer authority from display authority; no erasure/resume/foreground timer/manager hook is fabricated. Preserve finite public read/send budgets and original per-surface protocols.
 
 2026-10-30: Apply the user's first-release policy and exhaustive current-guide adoption. Replace old-history qualification with fresh provisioning and same-build recovery. Preserve real transaction, authority and privacy invariants.
 
 ## Outcomes & Retrospective
 
-Not implemented. Record outcomes, remaining profile limitations and triaged friction at completion.
+All four aggregates have safe native displays. The actual serving roles now own optional authenticated HTTP/live inspection with finite capacity and joined lifetimes; the one-off agent remains light. Raw protected history is outside browser read authority, Shibuya control remains disabled, and permanent stream deletion requires absent application erasure authority. Collector/tracing/Keiro passthroughs compose before store acquisition. Source/release clauses have concrete selected-surface evidence. Final candidate freezing, Linux artifacts and integrated recovery/load remain plan95 obligations. FRIC-34 is accepted: a package-scoped TLS upper-bound exception retains the Store0.12-compatible released cohort after source inspection, compilation and real listener qualification.
 
 ## Context and Orientation
 

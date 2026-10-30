@@ -91,32 +91,23 @@ import Data.UUID.V4 qualified as UUID.V4
 import Keiro.Ops
   ( AppHooks (..),
     OpsInvocation (..),
-    emptyAppHooks,
     opsCommandTree,
     runOpsInvocation,
   )
-import Keiro.Ops.Embed (OpsAuditConfig (..))
 import Keiro.Ops.Env (GlobalOptions (..))
-import Keiro.Projection.Catalog.Operations (projectionCatalogOperations)
 import Options.Applicative (Parser, infoParser)
 import Settei.Optparse (cliOverride, cliSources)
 import Settei.Source (Source)
 import Shikigami.App.Config (AppConfig, databaseConnectionStringKey, revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
-import Shikigami.Inspection.Aggregates (aggregateCatalog)
+import Shikigami.Inspection.Catalog (inspectionHooks)
 import Shikigami.Log qualified as Log
-import Shikigami.RunEvidence.Catalog qualified as Evidence
 import System.Environment (getArgs)
 import System.Exit (ExitCode (ExitFailure, ExitSuccess), exitWith)
 
 -- | Mount only application hooks whose public effects match the runtime.
 shikigamiOpsHooks :: AppHooks
-shikigamiOpsHooks =
-  emptyAppHooks
-    { replayAudit = Just (OpsAuditConfig Evidence.auditTargets),
-      projectionCatalog = Just (projectionCatalogOperations Evidence.validatedProjectionCatalog),
-      aggregates = Just aggregateCatalog
-    }
+shikigamiOpsHooks = inspectionHooks
 
 -- | The mounted tree's parser, lifted out of the 'ParserInfo' @keiro-ops@
 -- builds so it can be an alternative inside Shikigami's own dispatcher.

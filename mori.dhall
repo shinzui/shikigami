@@ -21,7 +21,7 @@ in  Schema.Project::{
         , type = Schema.PackageType.Library
         , language = Schema.Language.Haskell
         , path = Some "shikigami-core"
-        , description = Some "Shikigami runtime core (loader, scope helper)"
+        , description = Some "Domain runtime core plus the optional public inspection serving component"
         , dependencies =
           [ Schema.Dependency.WithAugmentation
               { name = "haskell/aeson:aeson"
@@ -116,6 +116,11 @@ in  Schema.Project::{
           , Schema.Dependency.ByName "shinzui/kikan-en:kikan-en-contract"
           , Schema.Dependency.ByName "shinzui/kioku:kioku-api"
           , Schema.Dependency.ByName "shinzui/kioku:kioku-core"
+          , Schema.Dependency.ByName "shinzui/keiro:keiro-ops"
+          , Schema.Dependency.ByName "shinzui/keiro:keiro-ops-http"
+          , Schema.Dependency.ByName "shinzui/kiroku:kiroku-metrics"
+          , Schema.Dependency.ByName "shinzui/kiroku:kiroku-otel"
+          , Schema.Dependency.ByName "shinzui/pgmq-hs:pgmq-inspect"
           , Schema.Dependency.ByName "shinzui/kiroku:kiroku-store"
           , Schema.Dependency.WithAugmentation
               { name = "ekmett/lens:lens"

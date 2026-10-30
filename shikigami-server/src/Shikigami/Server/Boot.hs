@@ -43,11 +43,13 @@ import Shikigami.App.Config (AppConfig (..), HttpAuthSettings (..), Role (Server
 import Shikigami.App.Config.Load (requireDatabaseUrl, runAppConfig)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Health.Handler (mkHealthChecks)
+import Shikigami.Inspection.Store (withObservedStore)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
 import Shikigami.Server.App (exceptionBoundary, shikigamiApplication)
 import Shikigami.Server.Config (ServerConfig (..), serverConfigFrom, serverParserInfo)
+import Shikigami.Server.Inspection (withServerInspection)
 import Shikigami.Server.RequestLog (includeProductionRequest, requestLogMiddleware)
 import Shikigami.Server.Seam (ServerEnv (..))
 import Shikigami.Server.Telemetry (ServerTelemetry (..), boundedTelemetryMiddleware, withServerTelemetry)
@@ -127,7 +129,7 @@ runServer config = do
     meter <- Metric.getMeter telemetry.meterProvider keiroInstrumentationLibrary
     metrics <- newKeiroMetrics meter
     let settings = runtimeConnectionSettings logger (Just metrics) connStr
-    StoreConnection.withStore settings \st -> do
+    withObservedStore serverTracer settings \st storeMetrics -> do
       registerRuntimeCatalog st
       ensureRunQueue (StoreConnection.pool st) >>= either (const (ioError (userError "The run-job queue could not be reconciled."))) pure
       env <- newServerEnv serverTracer st config logger catalog directoryRuntime.handle
@@ -139,11 +141,12 @@ runServer config = do
           "port" Aeson..= (.port) serverConfig,
           "probes" Aeson..= (["/health/live", "/health/ready"] :: [Text.Text])
         ]
-      case directoryRuntime.refresher of
-        Nothing -> Warp.runSettings (warpSettings serverConfig) application
-        Just refresh -> withAsync refresh \thread -> do
-          link thread
-          Warp.runSettings (warpSettings serverConfig) application
+      withServerInspection config logger settings st storeMetrics do
+        case directoryRuntime.refresher of
+          Nothing -> Warp.runSettings (warpSettings serverConfig) application
+          Just refresh -> withAsync refresh \thread -> do
+            link thread
+            Warp.runSettings (warpSettings serverConfig) application
 
 serverApplication :: ServerTelemetry -> ServerEnv -> IO Application
 serverApplication ServerTelemetry {tracerProvider, meterProvider} env = do

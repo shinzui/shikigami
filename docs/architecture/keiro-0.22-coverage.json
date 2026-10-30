@@ -197,9 +197,40 @@
       "sourcePath": "runtime-patterns/inspection/bounded-live-feeds.md",
       "sourceSha256": "9f1ae3e736d793b4bc57838f36727cb261d5e07016bad8529489f91bd1204c91",
       "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "admission-queues-and-encoding",
+          "disposition": "implemented",
+          "rationale": "Native limits bound per-surface connections, retained views, queued frames/bytes and send deadlines; Kiroku public stream adapter adds incoming and encoded outgoing bounds. Actual TCP client that never reads loses admission on deadline. Popped/transient frames are documented separately."
+        },
+        {
+          "id": "canonical-keiro-drivers-and-schema",
+          "disposition": "implemented",
+          "rationale": "withFeedHandle shares workflow/timer/projection first-page drivers and HTTP admission. Real sockets prove shared selection, unchanged prior selection on refusal, all three poll/feed parity, idle zero drivers/wake cursor, schema refresh failure and fresh reconnect."
+        },
+        {
+          "id": "retirement-and-overflow",
+          "disposition": "implemented",
+          "rationale": "Actual host FeedHandle tests hold cleanup and retain a retiring slot, and deterministically overflow a native typed subscriber before resynchronizing to a fresh snapshot. This queue fault is distinguished from real network backpressure."
+        },
+        {
+          "id": "companion-native-protocols",
+          "disposition": "implemented",
+          "rationale": "Kiroku metrics unsubscribe/resubscribe is tested; no durable event tail is selected. PGMQ uses authoritative poll-only native snapshots and reconnect. Shibuya uses the actual Master, native independent sampler/writer, finite selections/bytes/send deadline and retained terminal semantics. No wire protocol is unified."
+        },
+        {
+          "id": "joined-close-and-background-failure",
+          "disposition": "implemented",
+          "rationale": "Accepted clients join before feed/PGMQ and pool release. Real active Keiro/Kiroku/PGMQ clients close on host return; active Shibuya client closes on normal return and parent cancellation before consumer ownership returns. Listener death propagates through race; goodbye is best effort."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/inspection-hosting-and-browser-access",
@@ -207,9 +238,45 @@
       "sourcePath": "runtime-patterns/inspection/hosting-and-browser-access.md",
       "sourceSha256": "cc6575a8ecffa31c436bf66071d1d7916d6ca4de3aa12162e7c9c355b45b76b0",
       "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "allocation-routing-and-ownership",
+          "disposition": "implemented",
+          "rationale": "The optional inspection component brackets the dedicated pool, PGMQ coordinator, native feed handle and tracked listener outside composeSurfaces. Original encoded paths/queries reach native routing. Actual Shibuya metrics are mounted by the owning consumer."
+        },
+        {
+          "id": "finite-capacity-and-whole-response-bounds",
+          "disposition": "implemented",
+          "rationale": "Validated secret Settei settings impose separate inspection connections/admission, connect/acquisition/statement/lock limits and read/encoding/delivery deadlines and byte caps. Actual listener tests cover capacity, cancellation, result size and native schema refusal."
+        },
+        {
+          "id": "bounded-public-read-policy",
+          "disposition": "implemented",
+          "rationale": "Aggregate/wf/timer/projection/shard metadata and actual companion providers use public operations. Raw bodies are outside browser display authority; Kiroku capabilities disable browse/dead-letter/events rather than publishing payloads. Opaque cursors and numeric IDs are preserved. Trusted local native CLI retains operator reads."
+        },
+        {
+          "id": "authority-origin-and-confirmation",
+          "disposition": "implemented",
+          "rationale": "Exactly one constant-time bearer credential is required. Distinct writer authority plus explicit enablement precedes native confirmation/Origin/schema policy. Shibuya control is false; HTTP hard-delete requires absent governed erasure authority and is refused. Actual tests cover duplicate credentials/Origins, foreign Origin, JSON media/confirmation and native mutation."
+        },
+        {
+          "id": "uncertain-outcome-and-operator-evidence",
+          "disposition": "implemented",
+          "rationale": "Structured audit records invocation and HTTP status, not invented semantic success. The runbook requires exact-target preview, incident/operator/binary/database evidence and reconciliation after a deadline; no automatic retry exists. Native DLQ preview/confirmed 30-second lease is tested against readCount and visibility."
+        },
+        {
+          "id": "shared-database-limits",
+          "disposition": "implemented",
+          "rationale": "Native worker delivery progresses while real HTTP database polls remain active; a held native feed read exhausts inspection admission while an independent journal write succeeds. These are bounded fixture observations, not database CPU/I/O or blackhole isolation. Final artifact/load qualification remains plan95."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/inspection-overview",
@@ -217,9 +284,20 @@
       "sourcePath": "runtime-patterns/inspection/overview.md",
       "sourceSha256": "e735022e602009225130549b3ba7bd7269d6052b4a8cbebf93ffda818e4178e7",
       "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "released-native-surfaces",
+          "disposition": "implemented",
+          "rationale": "All four native surfaces use the released selected cohort, with allocated lifetimes and separate authority, browser and protocol policies. The index adds no independent mechanism."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-build-time-validation",
@@ -815,7 +893,7 @@
       "sourcePath": "runtime-patterns/keiro/dead-timer-resume.md",
       "sourceSha256": "6c5bd95b60deacc4c1b338e0fee234d741503ba4bfef00f59a7d7f53faa89f4f",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "ordinary-and-guarded-recovery",
@@ -834,14 +912,18 @@
         },
         {
           "id": "selected-inspection-owner",
-          "disposition": "pending",
-          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "disposition": "implemented",
+          "rationale": "Actual CLI/HTTP/live hosts use dedicated bounded capacity, safe metadata display authority, default-disabled confirmed/audited native mutations and actual process owners. Resource-aware resume/foreground timer/manager hooks remain absent; protected histories and governed erasure are not granted by read/mutation credentials. Native fault/lease/cancellation evidence and the operator runbook define the selected surface.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         }
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -1042,8 +1124,8 @@
         },
         {
           "id": "selected-inspection-owner",
-          "disposition": "pending",
-          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "disposition": "implemented",
+          "rationale": "Actual CLI/HTTP/live hosts use dedicated bounded capacity, safe metadata display authority, default-disabled confirmed/audited native mutations and actual process owners. Resource-aware resume/foreground timer/manager hooks remain absent; protected histories and governed erasure are not granted by read/mutation credentials. Native fault/lease/cancellation evidence and the operator runbook define the selected surface.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         },
         {
@@ -1055,7 +1137,11 @@
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -1201,9 +1287,50 @@
       "sourcePath": "runtime-patterns/keiro/operations-console.md",
       "sourceSha256": "54c038d410e36fa1b06af6c9f3b5a09fea74ec26e9534adf1d5d8d8473149259",
       "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "same-cohort-schema-preview-and-output",
+          "disposition": "implemented",
+          "rationale": "The actual built shikigami ops embeds the released parser/runner, schema checks, native typed results/exit codes and preview/force policy. HTTP uses the same public command authority with per-request schema verification and JSON confirmation; drift is refused."
+        },
+        {
+          "id": "application-hooks-and-catalogs",
+          "disposition": "implemented",
+          "rationale": "Start from emptyAppHooks; shared inspectionHooks installs generated audit targets, the single validated projection catalog and all four safe aggregate descriptors. Workflow resume, timer fire and process-manager hooks remain absent because no authority/compiled reaction is mounted. Help omits absent hook-dependent execution."
+        },
+        {
+          "id": "bounded-read-contracts",
+          "disposition": "implemented",
+          "rationale": "Native CLI covers aggregate type/list/show/snapshot, wf first page, pending timers, projection status and shard inventory; opaque invalid/cross-catalog cursors, invalid size, missing aggregate and corrupt hydration return typed refusals. HTTP shares safe display encoders and native first-page feeds. No inspection query is added to worker command hot paths."
+        },
+        {
+          "id": "catalog-and-live-only-authority",
+          "disposition": "implemented",
+          "rationale": "Administrative catalog is derived from mounted declarations, not a second target map. Live-only rich payloads have no replay adapter; a confirmed HTTP stream repair returns native command_failed rather than reconstructing absent data. Current catalog has no generation fleet or external-read contracts, so no synthetic adoption/drop qualification is claimed."
+        },
+        {
+          "id": "subsystem-owned-mutations-and-retention",
+          "disposition": "implemented",
+          "rationale": "Native workflow/timer/inbox/outbox/DLQ/snapshot/stream/shard semantics remain with released public APIs. Actual inbox preview/confirm and DLQ lease tests prove host authority plumbing. No blanket dead-letter/retry/erasure automation is added. Governed hard-delete is refused over HTTP; trusted local CLI operators must retain native preconditions and application erasure evidence. GC ages must respect replay/audit windows, never table size."
+        },
+        {
+          "id": "no-positional-or-reaction-provenance",
+          "disposition": "not-applicable",
+          "rationale": "No actual manager inspector exists. Default command options retain NoInspectionProvenance; no legacy positional capture or fabricated reaction provenance is enabled. All four streams use Never/no state codec, so snapshot coverage/truncation is not enabled."
+        },
+        {
+          "id": "operator-evidence-and-managed-schema",
+          "disposition": "implemented",
+          "rationale": "Host audits bounded metadata and invocation/status without secrets; runbook requires preview/typed outcome/operator/incident/binary/target evidence. Native schema verifier retains managed-object/privilege rules and no drift override is enabled by HTTP. Actual arbitrary schema drift is refused."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-overview",
@@ -1240,7 +1367,7 @@
       "sourcePath": "runtime-patterns/keiro/projection-catalogs.md",
       "sourceSha256": "8299b079ec1353cdabd4e23be3688d6648ae509def66730e00bfd83be17f6431",
       "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "minimal-guarded-authority",
@@ -1256,9 +1383,9 @@
         },
         {
           "id": "administrative-catalog-lifecycle",
-          "disposition": "pending",
+          "disposition": "implemented",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md",
-          "rationale": "Online generation/external-read/repair operations belong to the administrative owner; plan93 does not claim those gates."
+          "rationale": "One mounted validated catalog derives native administrative operations; confirmed live-only stream repair refuses absent replay authority. No schema-generation fleet/external-read consumer is configured; no destructive payload reset is introduced."
         }
       ],
       "evidence": [
@@ -1268,7 +1395,11 @@
         "docs/architecture/shikigami-domain-inventory.md",
         "docs/evidence/keiro-0.22/current-domain-check.json",
         "docs/evidence/keiro-0.22/current-domain-coverage.json",
-        "docs/evidence/keiro-0.22/current-fold-identities.json"
+        "docs/evidence/keiro-0.22/current-fold-identities.json",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -1301,8 +1432,8 @@
         },
         {
           "id": "selected-inspection-owner",
-          "disposition": "pending",
-          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "disposition": "implemented",
+          "rationale": "Actual CLI/HTTP/live hosts use dedicated bounded capacity, safe metadata display authority, default-disabled confirmed/audited native mutations and actual process owners. Resource-aware resume/foreground timer/manager hooks remain absent; protected histories and governed erasure are not granted by read/mutation credentials. Native fault/lease/cancellation evidence and the operator runbook define the selected surface.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         },
         {
@@ -1314,7 +1445,11 @@
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -1323,7 +1458,7 @@
       "sourcePath": "runtime-patterns/keiro/runtime-assembly.md",
       "sourceSha256": "fc3aa14b9238f42428a1669fb1aa0659878654635a83a98a37ed19181aedd6f3",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "one-store-and-startup-order",
@@ -1342,14 +1477,18 @@
         },
         {
           "id": "selected-inspection-owner",
-          "disposition": "pending",
-          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "disposition": "implemented",
+          "rationale": "Actual CLI/HTTP/live hosts use dedicated bounded capacity, safe metadata display authority, default-disabled confirmed/audited native mutations and actual process owners. Resource-aware resume/foreground timer/manager hooks remain absent; protected histories and governed erasure are not granted by read/mutation credentials. Native fault/lease/cancellation evidence and the operator runbook define the selected surface.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         }
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -1416,7 +1555,7 @@
       "sourcePath": "runtime-patterns/keiro/telemetry.md",
       "sourceSha256": "e8d7686effdb6516f5e230135f2222ef95e4ed5e7d2c70c42c10b89776a55651",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "process-command-and-connection-instruments",
@@ -1435,14 +1574,18 @@
         },
         {
           "id": "collector-provider-and-trace-hook-composition",
-          "disposition": "pending",
-          "rationale": "Plan106 owns selected Kiroku/Shibuya inspection collectors/providers, callback composition before acquisition and explicit W3C enrichment/lifecycle tracing where wired. Existing command spans/bridge do not certify that pending assembly.",
+          "disposition": "implemented",
+          "rationale": "withObservedStore installs collector, lifecycle tracing, Keiro event bridge/passthrough and W3C enrichment before acquisition. Real exporter checks assert catchup span, exactly one terminal counter, preserved metadata and valid context on a native append.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         }
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -1528,7 +1671,7 @@
       "sourcePath": "runtime-patterns/kiroku/append-and-read.md",
       "sourceSha256": "43563cfbcf0b0c9415784c88436b648df0602a626602dc14854028c1a05fb6ba",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "public-concurrency-and-cursor-contracts",
@@ -1542,14 +1685,18 @@
         },
         {
           "id": "selected-inspection-owner",
-          "disposition": "pending",
-          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "disposition": "implemented",
+          "rationale": "Actual CLI/HTTP/live hosts use dedicated bounded capacity, safe metadata display authority, default-disabled confirmed/audited native mutations and actual process owners. Resource-aware resume/foreground timer/manager hooks remain absent; protected histories and governed erasure are not granted by read/mutation credentials. Native fault/lease/cancellation evidence and the operator runbook define the selected surface.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         }
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -1558,7 +1705,7 @@
       "sourcePath": "runtime-patterns/kiroku/checkpoint-inventory.md",
       "sourceSha256": "b528cc4dcab7a530ab96793fec1b6f34221380a018e19f786fbf8e57c82ca09b",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "actual-subscription-census",
@@ -1567,14 +1714,18 @@
         },
         {
           "id": "durable-observation-surface",
-          "disposition": "pending",
-          "rationale": "Plan106 supplies the selected public durable checkpoint provider, preserving one snapshot and every member without private table reads or manufactured missing rows.",
+          "disposition": "implemented",
+          "rationale": "The explicit public storeCheckpointInventory provider uses the actual store with inspection-only pool, serialized polls and whole-read/encoding budgets. Empty live registry is not substituted for durable member inventory; no private checkpoint SQL exists.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         }
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -1612,7 +1763,7 @@
       "sourcePath": "runtime-patterns/kiroku/history-retention.md",
       "sourceSha256": "cdf24db037f9b8fd3c9a51fcc76a0484bf3ca4b64515fef1a715ab6451054e45",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "no-application-long-replay",
@@ -1626,14 +1777,18 @@
         },
         {
           "id": "selected-inspection-owner",
-          "disposition": "pending",
-          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "disposition": "implemented",
+          "rationale": "Actual CLI/HTTP/live hosts use dedicated bounded capacity, safe metadata display authority, default-disabled confirmed/audited native mutations and actual process owners. Resource-aware resume/foreground timer/manager hooks remain absent; protected histories and governed erasure are not granted by read/mutation credentials. Native fault/lease/cancellation evidence and the operator runbook define the selected surface.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         }
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -1642,9 +1797,35 @@
       "sourcePath": "runtime-patterns/kiroku/inspection.md",
       "sourceSha256": "8f1e75f1b84ea8bfdeb531d2cfb36537078b998651b8cd7ac4029b07f63c1929",
       "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "provider-discovery-and-scope",
+          "disposition": "implemented",
+          "rationale": "Explicit defaultServerProviders select native metrics, live subscriptions and durable checkpoint inventory. Capabilities truthfully disable raw browse/dead-letter/event channels. Same-process collector and actual store are reused; checkpoint polls serialize and remain deadline/byte bounded."
+        },
+        {
+          "id": "durable-public-pages-and-lossless-identities",
+          "disposition": "implemented",
+          "rationale": "Trusted native CLI retains released bounded public store reads and error/cursor contracts. No application custom Store interpreter or direct Subscriber record exists. Browser raw history is intentionally outside the explicit display grant; no replacement private SQL, synthetic cursor or JS numeric conversion is introduced. Runbook preserves opaque filters, prefixes, nulls and signed-int64 values."
+        },
+        {
+          "id": "metrics-resynchronization",
+          "disposition": "existing",
+          "rationale": "Real socket unsubscribe stops periodic snapshots; resubscribe produces a new full snapshot without duplicate sampler. Event tails and their replay/overflow protocol are not selected because protected event bodies are not authorized for browser display."
+        },
+        {
+          "id": "browser-and-bounds",
+          "disposition": "implemented",
+          "rationale": "Explicit native origins are validated, bearer authority is independent, and actual listener admission/frame/deadline/cancellation tests pass. Native health/metrics envelopes remain unchanged; dependency diagnostics are sanitized and failures do not become empty successful data."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-lifecycle-and-deletion",
@@ -1652,7 +1833,7 @@
       "sourcePath": "runtime-patterns/kiroku/lifecycle-and-deletion.md",
       "sourceSha256": "9277816f1f73f40d6292a557aec7805d55fad436fe2ab06c26705d45cc991044",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "supported-workflow-retention",
@@ -1666,14 +1847,18 @@
         },
         {
           "id": "selected-inspection-owner",
-          "disposition": "pending",
-          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "disposition": "implemented",
+          "rationale": "Actual CLI/HTTP/live hosts use dedicated bounded capacity, safe metadata display authority, default-disabled confirmed/audited native mutations and actual process owners. Resource-aware resume/foreground timer/manager hooks remain absent; protected histories and governed erasure are not granted by read/mutation credentials. Native fault/lease/cancellation evidence and the operator runbook define the selected surface.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         }
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -1682,7 +1867,7 @@
       "sourcePath": "runtime-patterns/kiroku/observability.md",
       "sourceSha256": "877468cbfad251fc7ade87fc9ea82e9111958b6c5fac6397b0198a105f7e2b8d",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "existing-bridge-and-startup-order",
@@ -1691,8 +1876,8 @@
         },
         {
           "id": "selected-collectors-providers-and-enrichment",
-          "disposition": "pending",
-          "rationale": "Plan106 owns selected Kiroku collector/OTel composition before acquisition, process versus durable providers, dedicated authenticated HTTP/live hosting and payload-free capabilities.",
+          "disposition": "implemented",
+          "rationale": "All serving roots compose collector/OTel/passthrough before store acquisition and expose actual process providers; traced native append and exported span/counter are tested. Optional hosting component keeps one-off agent light.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         },
         {
@@ -1703,7 +1888,11 @@
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -1712,7 +1901,7 @@
       "sourcePath": "runtime-patterns/kiroku/operational-invariants.md",
       "sourceSha256": "592b0ffc92e780a9cf6de0903fc8a2ded9018f83f060fc710c3277b77853a019",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "published-fresh-schema",
@@ -1736,14 +1925,18 @@
         },
         {
           "id": "selected-inspection-owner",
-          "disposition": "pending",
-          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "disposition": "implemented",
+          "rationale": "Actual CLI/HTTP/live hosts use dedicated bounded capacity, safe metadata display authority, default-disabled confirmed/audited native mutations and actual process owners. Resource-aware resume/foreground timer/manager hooks remain absent; protected histories and governed erasure are not granted by read/mutation credentials. Native fault/lease/cancellation evidence and the operator runbook define the selected surface.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         }
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -1752,7 +1945,7 @@
       "sourcePath": "runtime-patterns/kiroku/overview.md",
       "sourceSha256": "353d857c3d7f04d50a608af547d4df1b5dc6b8d6b964bab9fc7450c399daaaeb",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "navigation-and-cross-owner-contracts",
@@ -1771,14 +1964,18 @@
         },
         {
           "id": "selected-inspection-owner",
-          "disposition": "pending",
-          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "disposition": "implemented",
+          "rationale": "Actual CLI/HTTP/live hosts use dedicated bounded capacity, safe metadata display authority, default-disabled confirmed/audited native mutations and actual process owners. Resource-aware resume/foreground timer/manager hooks remain absent; protected histories and governed erasure are not granted by read/mutation credentials. Native fault/lease/cancellation evidence and the operator runbook define the selected surface.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         }
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -1787,7 +1984,7 @@
       "sourcePath": "runtime-patterns/kiroku/subscriptions.md",
       "sourceSha256": "0177b04a5df60a9e5472aa689474a355a552b66a94f9cdf89ed80933b1e70e67",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "actual-subscription-census",
@@ -1801,14 +1998,18 @@
         },
         {
           "id": "selected-inspection-owner",
-          "disposition": "pending",
-          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "disposition": "implemented",
+          "rationale": "Actual CLI/HTTP/live hosts use dedicated bounded capacity, safe metadata display authority, default-disabled confirmed/audited native mutations and actual process owners. Resource-aware resume/foreground timer/manager hooks remain absent; protected histories and governed erasure are not granted by read/mutation credentials. Native fault/lease/cancellation evidence and the operator runbook define the selected surface.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         }
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -1879,8 +2080,8 @@
         },
         {
           "id": "selected-inspection-owner",
-          "disposition": "pending",
-          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "disposition": "implemented",
+          "rationale": "Actual CLI/HTTP/live hosts use dedicated bounded capacity, safe metadata display authority, default-disabled confirmed/audited native mutations and actual process owners. Resource-aware resume/foreground timer/manager hooks remain absent; protected histories and governed erasure are not granted by read/mutation credentials. Native fault/lease/cancellation evidence and the operator runbook define the selected surface.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         },
         {
@@ -1892,7 +2093,11 @@
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -1901,7 +2106,7 @@
       "sourcePath": "runtime-patterns/messaging/inbox.md",
       "sourceSha256": "2f301e453c858168c37e7e591485d5f3860040246123f8025d87edb1b447ca13",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "atomic-table-backed-intake",
@@ -1915,14 +2120,18 @@
         },
         {
           "id": "retention-and-operator-disposition",
-          "disposition": "pending",
-          "rationale": "Inbox inspection/repair/retention controls and retained replay policy are reviewed by the selected administrative owner; no deleted inbox row is promised permanent deduplication.",
+          "disposition": "implemented",
+          "rationale": "Native inbox backlog and preview/confirmed GC are behind separate writer authority. Runbook requires replay/audit retention horizons and records mark-failed as an operator disposition, not retry. No permanent deduplication is promised after retained evidence is removed.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         }
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -1984,7 +2193,7 @@
       "sourcePath": "runtime-patterns/messaging/outbox.md",
       "sourceSha256": "393695c90cd4ef08ac5a1d482c0589ec0a5c83ff8b791a574fe9a3dc10fe99ee",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "actual-http-sink-outbox",
@@ -1998,14 +2207,18 @@
         },
         {
           "id": "maintenance-and-retention-owner",
-          "disposition": "pending",
-          "rationale": "Selected administrative outbox/backlog/maintenance/retention controls and authorization are reviewed in106. Workflow journal GC does not claim to collect sink receipts or rejected/dead audit evidence.",
+          "disposition": "implemented",
+          "rationale": "Native outbox backlog and maintenance remain in released console/confirmed HTTP authority; no new publication retry policy or rejected/dead evidence collector is introduced. Runbook preserves original retry, rejected disposition and audit-retention preconditions.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         }
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -2082,8 +2295,8 @@
         },
         {
           "id": "selected-inspection-owner",
-          "disposition": "pending",
-          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "disposition": "implemented",
+          "rationale": "Actual CLI/HTTP/live hosts use dedicated bounded capacity, safe metadata display authority, default-disabled confirmed/audited native mutations and actual process owners. Resource-aware resume/foreground timer/manager hooks remain absent; protected histories and governed erasure are not granted by read/mutation credentials. Native fault/lease/cancellation evidence and the operator runbook define the selected surface.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         },
         {
@@ -2095,7 +2308,11 @@
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -2104,7 +2321,7 @@
       "sourcePath": "runtime-patterns/messaging/pgmq-jobs.md",
       "sourceSha256": "09641aeea037e5271d799523a04383c2d2e3bc43bf54901b8c1564acd2c3bfc8",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "typed-current-contract-and-order",
@@ -2128,14 +2345,18 @@
         },
         {
           "id": "selected-inspection-owner",
-          "disposition": "pending",
-          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "disposition": "implemented",
+          "rationale": "Actual CLI/HTTP/live hosts use dedicated bounded capacity, safe metadata display authority, default-disabled confirmed/audited native mutations and actual process owners. Resource-aware resume/foreground timer/manager hooks remain absent; protected histories and governed erasure are not granted by read/mutation credentials. Native fault/lease/cancellation evidence and the operator runbook define the selected surface.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         }
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -2144,7 +2365,7 @@
       "sourcePath": "runtime-patterns/messaging/pgmq-queue-reconciliation.md",
       "sourceSha256": "88051e26b9ea31307aaae576c8f6ec2509463897d3647512291f09356026856b",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "published-fresh-schema",
@@ -2163,14 +2384,18 @@
         },
         {
           "id": "selected-inspection-owner",
-          "disposition": "pending",
-          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "disposition": "implemented",
+          "rationale": "Actual CLI/HTTP/live hosts use dedicated bounded capacity, safe metadata display authority, default-disabled confirmed/audited native mutations and actual process owners. Resource-aware resume/foreground timer/manager hooks remain absent; protected histories and governed erasure are not granted by read/mutation credentials. Native fault/lease/cancellation evidence and the operator runbook define the selected surface.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         }
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -2179,7 +2404,7 @@
       "sourcePath": "runtime-patterns/messaging/process-managers.md",
       "sourceSha256": "73e498fc03bdc0825b8c558d19ee54b18e72018e8acf59fb0f8d86ed229f62ed",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "imperative-workflow-choice",
@@ -2198,14 +2423,18 @@
         },
         {
           "id": "selected-inspection-owner",
-          "disposition": "pending",
-          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "disposition": "implemented",
+          "rationale": "Actual CLI/HTTP/live hosts use dedicated bounded capacity, safe metadata display authority, default-disabled confirmed/audited native mutations and actual process owners. Resource-aware resume/foreground timer/manager hooks remain absent; protected histories and governed erasure are not granted by read/mutation credentials. Native fault/lease/cancellation evidence and the operator runbook define the selected surface.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         }
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {
@@ -2214,9 +2443,35 @@
       "sourcePath": "runtime-patterns/messaging/shibuya-inspection.md",
       "sourceSha256": "d04ba6d93239c27ab2715fa54f7f85734a114f330b85b1eee1a64d9db4a0d20a",
       "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "actual-master-and-retained-lifecycle",
+          "disposition": "implemented",
+          "rationale": "Worker/Kafka consumers expose their own native Master within the single ConsumerApp lifetime; server has no invented deployment-wide worker state. Existing native lifecycle readiness remains separate from HTTP status and retained terminal failure. The test checks actual admitted processor identity through HTTP and socket."
+        },
+        {
+          "id": "validated-limits-and-browser-policy",
+          "disposition": "implemented",
+          "rationale": "Config starts from defaultConfig with bounded connection/selection/frame/byte/send/refresh settings and exact explicit origins. Dependency timeout remains the finite native default. Control stays disabled; Keiro mutation enablement grants no pause authority."
+        },
+        {
+          "id": "workload-progress-and-basic-detail",
+          "disposition": "implemented",
+          "rationale": "Job stuck threshold is runTimeout+30; stream threshold is the actual consumer stale threshold60. Paused/in-flight progress is handled by native lifecycle health. HTTP tests verify optional latency/oldest-in-flight/partition progress is absent under basic metrics, never manufactured as zero."
+        },
+        {
+          "id": "socket-resync-and-cancellation",
+          "disposition": "implemented",
+          "rationale": "Native snapshot/update/terminal/overflow protocol is retained without a custom decoder. Runbook defines replacement snapshots and additive kinds. Actual Shibuya client remains connected during normal close and parent cancellation; handler ACK and adapter cleanup occur once. Native delivery progresses under simultaneous real database inspection."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-shibuya-processing",
@@ -2224,7 +2479,7 @@
       "sourcePath": "runtime-patterns/messaging/shibuya-processing.md",
       "sourceSha256": "a99fa9329b9ce3092cc02c6ddf5bd0ef21d8080a76919367ed374bde4b0c0b82",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "default-based-admission-and-finalization",
@@ -2248,14 +2503,18 @@
         },
         {
           "id": "selected-inspection-owner",
-          "disposition": "pending",
-          "rationale": "Selected CLI/HTTP/live inspection, authorized administrative controls and provider lifetime are owned by plan106; native runtime acceptance does not certify them.",
+          "disposition": "implemented",
+          "rationale": "Actual CLI/HTTP/live hosts use dedicated bounded capacity, safe metadata display authority, default-disabled confirmed/audited native mutations and actual process owners. Resource-aware resume/foreground timer/manager hooks remain absent; protected histories and governed erasure are not granted by read/mutation credentials. Native fault/lease/cancellation evidence and the operator runbook define the selected surface.",
           "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md"
         }
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/native-inspection-cli.md",
+        "docs/evidence/keiro-0.22/native-inspection-runtime.md",
+        "docs/evidence/keiro-0.22/native-inspection-results.txt",
+        "docs/operations/inspection.md"
       ]
     },
     {

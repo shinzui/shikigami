@@ -5,7 +5,7 @@ module Shikigami.Workers.Subscription
 where
 
 import Data.Aeson qualified as Aeson
-import Kiroku.Store.Connection (KirokuStore (..), withStore)
+import Kiroku.Store.Connection (KirokuStore (..))
 import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
 import Shikigami.App (AppEnv (..))
 import Shikigami.App.Config (AppConfig, Role (EventConsumerRole, StreamConsumerRole))
@@ -23,6 +23,7 @@ import Shikigami.Health.Worker
     serveProbesWith,
     supervisedLoopVerdict,
   )
+import Shikigami.Inspection.Store (withObservedStore)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
@@ -31,6 +32,7 @@ import Shikigami.Trigger.Consumer (EventHit (..), OnSupervisor, StreamConfig (..
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors, IncludeAgentActors))
 import Shikigami.Workers.Config (directoryLoopRegistration, persistAgentLoadReport, startProcessDirectory)
+import Shikigami.Workers.Inspection (consumerInspection)
 import Shikigami.Workers.Supervision (superviseLoops)
 
 -- | Run the @activity.v1@ stream consumer; for each declared stream agent that
@@ -51,7 +53,7 @@ runConsumeStream config = do
   verifyShikigamiMigrations connStr
   withRunTelemetry "shikigami.consume-stream" \tr keiroMetrics shikigamiMetrics -> do
     let settings = runtimeConnectionSettings logger keiroMetrics connStr
-    withStore settings $ \st -> do
+    withObservedStore tr settings $ \st storeMetrics -> do
       registerRuntimeCatalog st
       let manifestDirectory = (.agentsDirectory) config
           storePool = pool st
@@ -80,7 +82,8 @@ runConsumeStream config = do
               { broker = broker,
                 topic = topic,
                 consumerGroupId = (.kafkaStreamGroup) config,
-                deadLetterQueue = (.kafkaDeadLetterQueue) config
+                deadLetterQueue = (.kafkaDeadLetterQueue) config,
+                inspection = consumerInspection (loopStaleAfter ConsumerLoop) config.inspection logger settings st storeMetrics
               }
           onHit StreamHit {agentName} = do
             let matched = ["agent" Aeson..= agentName, "topic" Aeson..= topic]
@@ -115,7 +118,7 @@ runConsumeEvents config = do
   verifyShikigamiMigrations connStr
   withRunTelemetry "shikigami.consume-events" \tr keiroMetrics shikigamiMetrics -> do
     let settings = runtimeConnectionSettings logger keiroMetrics connStr
-    withStore settings $ \st -> do
+    withObservedStore tr settings $ \st storeMetrics -> do
       registerRuntimeCatalog st
       let manifestDirectory = (.agentsDirectory) config
           storePool = pool st
@@ -144,7 +147,8 @@ runConsumeEvents config = do
               { broker = broker,
                 topic = topic,
                 consumerGroupId = (.kafkaEventsGroup) config,
-                deadLetterQueue = (.kafkaDeadLetterQueue) config
+                deadLetterQueue = (.kafkaDeadLetterQueue) config,
+                inspection = consumerInspection (loopStaleAfter ConsumerLoop) config.inspection logger settings st storeMetrics
               }
           onHit EventHit {agentName, eventType, integrationMessageId} = do
             let matched =

@@ -45,6 +45,8 @@ module Shikigami.App.Config
   ( -- * The resolved configuration
     AppConfig (..),
     HttpAuthSettings (..),
+    InspectionSettings (..),
+    inspectionKey,
     httpAuthModeKey,
     httpAuthTokenKey,
     httpAuthCallerKey,
@@ -192,6 +194,7 @@ import Shikigami.Decision.Contract (DecisionFailure, ModelAlias (..))
 import Shikigami.Decision.ModelCatalog qualified as Decision
 import Shikigami.Directory (DirectorySettings (..))
 import Shikigami.Execution.Policy.Types qualified as Harness
+import Shikigami.Inspection.Settings (InspectionSettings (..))
 import Shikigami.Objective.Types (ObjectiveSettings, defaultObjectiveSettings)
 import Shikigami.PracticeReview.Capability
   ( AttentionRecipientMap,
@@ -394,6 +397,7 @@ data AppConfig = AppConfig
     -- default so existing deployments retain their pre-directory behavior.
     directorySettings :: !DirectorySettings,
     httpAuth :: !HttpAuthSettings,
+    inspection :: !(Maybe InspectionSettings),
     -- | Root-run-wide maximum number of distinct descendant workflows when an
     -- agent declaration does not choose its own limit.
     delegationBudget :: !DelegationBudget,
@@ -513,6 +517,7 @@ appConfig =
     <*> withDefault agentsStrictSetting (constant "lenient-agents" "Report a manifest that fails to load, but start anyway" False)
     <*> directorySettingsConfig
     <*> httpAuthConfig
+    <*> optional (secretSetting inspectionKey "Isolated administrative listener, distinct read/write credentials and bounded inspection profile" jsonDecoder)
     <*> withDefault delegationBudgetSetting (constant "delegation-budget" "Bound the complete descendant tree of a root run" defaultDelegationBudget)
     <*> withDefault schedulerCatchUpSetting (constant "skip-missed" "Waking late arms the next future tick instead of replaying every missed minute" SkipMissed)
     <*> withDefault kafkaBrokerSetting (constant "kafka-broker" "Use the development shell's local broker" "127.0.0.1:9092")
@@ -1495,6 +1500,7 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_HTTP_AUTH_MODE") httpAuthModeKey,
           binding (EnvName "SHIKIGAMI_HTTP_AUTH_CALLER") httpAuthCallerKey,
           binding (EnvName "SHIKIGAMI_API_TOKEN") httpAuthTokenKey,
+          binding (EnvName "SHIKIGAMI_INSPECTION") inspectionKey,
           binding (EnvName "SHIKIGAMI_HTTP_HOST") httpHostKey,
           binding (EnvName "SHIKIGAMI_HTTP_PORT") httpPortKey,
           binding (EnvName "SHIKIGAMI_HTTP_REQUEST_MAX_BYTES") httpRequestMaxBytesKey,
@@ -1686,6 +1692,9 @@ httpAuthModeKey, httpAuthTokenKey, httpAuthCallerKey :: Key
 httpAuthModeKey = stableKey "http.auth.mode"
 httpAuthTokenKey = stableKey "http.auth.token"
 httpAuthCallerKey = stableKey "http.auth.caller"
+
+inspectionKey :: Key
+inspectionKey = stableKey "inspection"
 
 httpAuthModeSetting :: Setting Bool
 httpAuthModeSetting =

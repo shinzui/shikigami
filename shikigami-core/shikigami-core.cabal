@@ -132,6 +132,7 @@ library
     Shikigami.Health.Ping
     Shikigami.Id.Name
     Shikigami.Inspection.Aggregates
+    Shikigami.Inspection.Settings
     Shikigami.Integration.Danwa
     Shikigami.Log
     Shikigami.Log.Correlation
@@ -347,6 +348,7 @@ library
     lens >=5.2,
     memory >=0.18 && <0.19,
     mmzk-typeid,
+    network-uri,
     optparse-applicative >=0.19 && <0.20,
     pgmq-hasql,
     relay-pagination,
@@ -368,6 +370,44 @@ library
     uuid,
     vector >=0.13,
     yaml >=0.11,
+
+-- Optional serving infrastructure: the domain library and one-off commands do
+-- not link this component. Both serving packages use exactly this one host.
+library inspection
+  import: common
+  visibility: public
+  hs-source-dirs: inspection
+  exposed-modules:
+    Shikigami.Inspection.Catalog
+    Shikigami.Inspection.Runtime
+    Shikigami.Inspection.Store
+
+  build-depends:
+    aeson,
+    async,
+    base,
+    bytestring,
+    containers,
+    hasql,
+    hasql-pool,
+    hs-opentelemetry-api,
+    http-types,
+    keiro,
+    keiro-ops ==0.22.0.0,
+    keiro-ops-http ==0.22.0.0,
+    kiroku-metrics ==0.4.0.0,
+    kiroku-otel ==0.3.0.0,
+    kiroku-store,
+    memory,
+    pgmq-inspect ==0.7.0.0,
+    postgresql-connection-string,
+    shikigami-core,
+    stm,
+    text,
+    uuid,
+    wai,
+    wai-websockets,
+    websockets,
 
 test-suite shikigami-core-test
   import: common

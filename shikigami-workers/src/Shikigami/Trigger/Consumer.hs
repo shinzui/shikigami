@@ -94,15 +94,16 @@ import Shikigami.Telemetry.Metrics (ShikigamiMetrics, recordConsumerRecord)
 import Shikigami.Trigger.Enqueue (enqueueRunJobTx, envelopeOccurredAt, runJobFromEnvelopeWithIdentity)
 import Shikigami.Trigger.Stream (IncludeAgentActors, matchesStreamWith)
 import Shikigami.Workers.ConsumerApp (consumerAppConfig, withConsumerApp)
+import Shikigami.Workers.Inspection (ConsumerInspection, withConsumerInspection)
 
 -- | Connection and durable poison-record target for one Kafka subscription.
 data StreamConfig = StreamConfig
   { broker :: !Text,
     topic :: !Text,
     consumerGroupId :: !Text,
-    deadLetterQueue :: !QueueName
+    deadLetterQueue :: !QueueName,
+    inspection :: !ConsumerInspection
   }
-  deriving stock (Eq, Show)
 
 data StreamHit = StreamHit
   { agentName :: !Text,
@@ -182,7 +183,7 @@ runSubscription ::
   StreamConfig ->
   (KafkaInboundRecord -> IO RecordDisposition) ->
   IO ()
-runSubscription logger onSupervisor prefix metrics AppEnv {tracer} StreamConfig {broker = streamBroker, topic = streamTopic, consumerGroupId = streamGroup} processRecord =
+runSubscription logger onSupervisor prefix metrics AppEnv {tracer} StreamConfig {broker = streamBroker, topic = streamTopic, consumerGroupId = streamGroup, inspection} processRecord =
   permanentFailureCode `seq` reconnect 1
   where
     reconnect backoffSeconds = do
@@ -219,7 +220,7 @@ runSubscription logger onSupervisor prefix metrics AppEnv {tracer} StreamConfig 
                       concurrency = Serial
                     }
             appResult <-
-              ( withConsumerApp consumerAppConfig [(Shibuya.ProcessorId streamTopic, processor)] \app -> do
+              ( withConsumerApp consumerAppConfig [(Shibuya.ProcessorId streamTopic, processor)] \app -> withConsumerInspection inspection (Shibuya.getAppMaster app) do
                   liftIO (onSupervisor (Just (Shibuya.getAppMaster app, Shibuya.ProcessorId streamTopic)))
                   Shibuya.waitApp app
                   liftIO (readIORef programmingFailure)

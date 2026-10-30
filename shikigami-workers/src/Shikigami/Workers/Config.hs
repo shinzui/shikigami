@@ -67,6 +67,7 @@ import Shikigami.Sink.Http (SinkHttp)
 import Shikigami.Telemetry.Metrics (ShikigamiMetrics)
 import Shikigami.Trigger.Schedule (CatchUpPolicy, CronSchedule, parseCron)
 import Shikigami.Trigger.Scheduler qualified as Scheduler
+import Shikigami.Workers.Inspection (ConsumerInspection)
 import Shikigami.Workspace.Admission (WorkspaceHost (..))
 import System.Exit (exitFailure)
 
@@ -91,6 +92,7 @@ persistAgentLoadReport logger pool directory report =
 data WorkerEnv = WorkerEnv
   { pool :: !Pool,
     appEnv :: !AppEnv,
+    inspection :: !ConsumerInspection,
     agents :: ![AgentDecl],
     -- | The exact completed startup report, retained because routing catalogs
     -- must include disabled declarations and the bounded failure count rather

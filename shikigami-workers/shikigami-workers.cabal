@@ -53,6 +53,7 @@ library
     Shikigami.Workers.Command.Worker
     Shikigami.Workers.Config
     Shikigami.Workers.ConsumerApp
+    Shikigami.Workers.Inspection
     Shikigami.Workers.Registry
     Shikigami.Workers.Shutdown
     Shikigami.Workers.Subscription
@@ -104,11 +105,13 @@ library
     hw-kafka-client,
     kafka-effectful,
     keiro,
+    keiro-ops-http,
     keiro-pgmq,
     kikan-en-client,
     kikan-en-contract,
     kioku-api,
     kioku-core,
+    kiroku-metrics,
     kiroku-store,
     lens >=5.2,
     network,
@@ -125,6 +128,7 @@ library
     shibuya-kafka-adapter,
     shibuya-metrics >=0.12.0.0 && <0.13,
     shikigami-core,
+    shikigami-core:inspection,
     shikigami-migrations,
     shikumi-tools,
     text >=2.1,
@@ -224,6 +228,7 @@ test-suite shikigami-workers-test
     Shikigami.TimerRecoverySpec
     Shikigami.Workers.CommandSpec
     Shikigami.Workers.ConsumerAppSpec
+    Shikigami.Workers.InspectionSpec
     Shikigami.Workers.SupervisionSpec
     Shikigami.WorkspaceContainedFileSpec
     Shikigami.WorkspaceFileProviderSpec
@@ -261,11 +266,14 @@ test-suite shikigami-workers-test
     hasql-transaction,
     hs-opentelemetry-exporter-in-memory,
     hs-opentelemetry-sdk,
+    http-client,
+    http-types,
     hw-kafka-client,
     keiro,
     keiro-pgmq,
     kioku-api,
     kioku-core,
+    kiroku-metrics,
     kiroku-store,
     lens,
     network,
@@ -277,6 +285,7 @@ test-suite shikigami-workers-test
     settei-env,
     shibuya-core,
     shikigami-core,
+    shikigami-core:inspection,
     shikigami-migrations:test-support,
     shikigami-workers,
     shikumi-tools,
@@ -288,3 +297,4 @@ test-suite shikigami-workers-test
     uuid,
     vector,
     wai,
+    websockets,

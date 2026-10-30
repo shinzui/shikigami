@@ -28,6 +28,7 @@ import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Flow (flowDeclarationErrors)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TelemetryLoop, TimerLoop), loopStaleAfter, newHeartbeatsWithStaleness, serveProbesWith)
+import Shikigami.Inspection.Store (withObservedStore)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.Prelude (Text)
@@ -37,6 +38,7 @@ import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, SinkHttpError, credential
 import Shikigami.Sink.Permission (sinkKindText)
 import Shikigami.Telemetry (withRunTelemetry)
 import Shikigami.Workers.Config (WorkerEnv (..), directoryLoopRegistration, persistAgentLoadReport, schedulerSchedules, startProcessDirectory)
+import Shikigami.Workers.Inspection (consumerInspection)
 import Shikigami.Workers.Registry (runWorkers)
 import Shikigami.Workspace.ConfiguredHost (configuredWorkspaceHost)
 import System.Exit qualified as Exit
@@ -77,7 +79,7 @@ runWorkerCmdWith resumeBudget config = do
   withRunTelemetry "shikigami.worker" \tr keiroMetrics shikigamiMetrics -> do
     behEnv <- newBehaviorEnvFor logger ((.behaviorProvider) config) (Just (otelSink tr))
     let settings = runtimeConnectionSettings logger keiroMetrics connStr
-    StoreConnection.withStore settings $ \st -> do
+    withObservedStore tr settings $ \st storeMetrics -> do
       registerRuntimeCatalog st
       let manifestDirectory = (.agentsDirectory) config
           storePool = StoreConnection.pool st
@@ -166,6 +168,7 @@ runWorkerCmdWith resumeBudget config = do
             WorkerEnv
               { pool = storePool,
                 appEnv,
+                inspection = consumerInspection (config.runTimeout + 30) config.inspection logger settings st storeMetrics,
                 agents,
                 agentReport = report,
                 behaviorEnv = behEnv,

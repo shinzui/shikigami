@@ -12,6 +12,8 @@ import Shikigami.AgentRun.HandlerSpec qualified as RunHandlerSpec
 import Shikigami.App.Config (defaultAppConfig)
 import Shikigami.Caller.VerifierSpec qualified as VerifierSpec
 import Shikigami.Directory (disabledDirectoryHandle)
+import Shikigami.InspectionHttpSpec qualified as InspectionHttpSpec
+import Shikigami.InspectionSocketSpec qualified as InspectionSocketSpec
 import Shikigami.InspectionSpec qualified as InspectionSpec
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
@@ -34,6 +36,8 @@ main = withShikigamiMigratedSuite \databaseFixture ->
         "shikigami-server"
         [ probeContractTests "health probes" mkTestApplication,
           InspectionSpec.tests databaseFixture,
+          InspectionHttpSpec.tests databaseFixture,
+          InspectionSocketSpec.tests databaseFixture,
           AgentsSpec.tests databaseFixture,
           HandlerSpec.tests,
           RunHandlerSpec.tests databaseFixture,

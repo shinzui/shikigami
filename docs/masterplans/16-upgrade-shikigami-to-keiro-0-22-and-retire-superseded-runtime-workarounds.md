@@ -62,7 +62,7 @@ Consulted decisions: [ADR-27](../adr/0027-the-first-release-establishes-one-clea
 | EP-1 | Released cohort and fresh schema | [92](../plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md) | None | None | Complete |
 | EP-2 | Guarded commands and complete domain adoption | [93](../plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md) | EP-1 | None | Complete |
 | EP-3 | Native delivery and workflow recovery | [94](../plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md) | EP-1 | EP-2 | Complete |
-| EP-4 | Administrative CLI, HTTP and live inspection | [106](../plans/106-expose-bounded-administrative-inspection-and-live-feeds.md) | EP-1 | EP-3 | In Progress |
+| EP-4 | Administrative CLI, HTTP and live inspection | [106](../plans/106-expose-bounded-administrative-inspection-and-live-feeds.md) | EP-1 | EP-3 | Complete |
 | EP-5 | Haskell and service architecture practices | [107](../plans/107-adopt-current-haskell-and-service-architecture-practices.md) | EP-1 | None | Not Started |
 | EP-6 | Integrated first-release qualification | [95](../plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md) | EP-1, EP-2, EP-3, EP-4, EP-5 | None | Not Started |
 
@@ -82,13 +82,13 @@ EP-6 owns final source/release inventory validation, exact-candidate evidence, f
 
 ## Progress
 
-2026-10-30: EP-1, EP-2 and EP-3 are Complete. The released schema/cohort, current
-domain contract and native delivery/recovery are accepted. Latest candidate passes
-539 pure,375 PostgreSQL and258 worker tests, including ten consumer policy/lifecycle
-cases and two store/options cases. The five-family registry and generation-specific
-wakes are covered. Shared source-guide clauses retain explicit pending owners for
-106's selected inspection/provider work and95's final artifact/Linux/load evidence.
-EP-4 is next; EP-5 and the final whole-corpus gate remain outstanding.
+2026-10-30: EP-1 through EP-4 are Complete. The released cohort/current domain,
+native delivery/recovery and actual administrative CLI/HTTP/live inspection are
+accepted. Latest core/server/worker suites pass541/93/260 cases; strict generation,
+neutral evolution diff and159 conformance assertions pass. Inspection owns separate
+finite capacity, explicit display/mutation authority and actual process lifetimes.
+EP-5's46 assigned Haskell/architecture/configuration guides and EP-6's exact frozen
+artifacts, Linux/runtime integration and final inventory gate remain outstanding.
 
 ## Surprises & Discoveries
 
@@ -107,7 +107,8 @@ The previous plan hardcoded six workspace members/two aggregates; the current wo
 
 ## Outcomes & Retrospective
 
-EP-1 is accepted; five children and the integrated first-release gate remain.
+Four children are accepted; Haskell/service practices and integrated first-release
+qualification remain.
 No final release or deployment is certified.
 
 ## Revision Notes

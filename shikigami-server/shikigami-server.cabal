@@ -52,6 +52,7 @@ library
     Shikigami.Server.Command.Validate
     Shikigami.Server.Command.Workers
     Shikigami.Server.Config
+    Shikigami.Server.Inspection
     Shikigami.Server.RequestLog
     Shikigami.Server.Seam
     Shikigami.Server.Telemetry
@@ -85,6 +86,7 @@ library
     keiro-ops ==0.22.0.0,
     kioku-api,
     kioku-core,
+    kiroku-metrics,
     kiroku-store,
     lens >=5.2,
     mmzk-typeid,
@@ -100,6 +102,7 @@ library
     settei-optparse-applicative ==0.2.0.0,
     shikigami-api,
     shikigami-core,
+    shikigami-core:inspection,
     shikigami-migrations,
     text >=2.1,
     time >=1.12,
@@ -144,6 +147,8 @@ test-suite shikigami-server-test
     Shikigami.Agent.HandlerSpec
     Shikigami.AgentRun.HandlerSpec
     Shikigami.Caller.VerifierSpec
+    Shikigami.InspectionHttpSpec
+    Shikigami.InspectionSocketSpec
     Shikigami.InspectionSpec
     Shikigami.Server.AgentsSpec
     Shikigami.Server.CommandSpec
@@ -164,10 +169,12 @@ test-suite shikigami-server-test
   build-tool-depends: shikigami-server:shikigami
   build-depends:
     aeson,
+    async,
     base,
     bytestring,
     containers,
     directory,
+    effectful,
     generic-lens,
     hasql,
     hasql-pool,
@@ -180,9 +187,13 @@ test-suite shikigami-server-test
     http-types,
     keiro,
     keiro-ops,
+    keiro-ops-http,
     keiro-pgmq,
+    kiroku-metrics,
+    kiroku-otel,
     kiroku-store,
     lens,
+    network,
     openapi-hs,
     optparse-applicative,
     pgmq-hasql,
@@ -198,8 +209,10 @@ test-suite shikigami-server-test
     settei-optparse-applicative,
     shikigami-api,
     shikigami-core,
+    shikigami-core:inspection,
     shikigami-migrations:test-support,
     shikigami-server,
+    stm,
     tasty,
     tasty-hunit,
     text,
@@ -208,3 +221,4 @@ test-suite shikigami-server-test
     vector,
     wai,
     warp,
+    websockets,

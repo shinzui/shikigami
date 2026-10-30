@@ -196,12 +196,16 @@ constraints:
   keiro-core ==0.22.0.0,
   keiro-migrations ==0.22.0.0,
   keiro-ops ==0.22.0.0,
+  keiro-ops-http ==0.22.0.0,
   keiro-pgmq ==0.22.0.0,
   keiro-test-support ==0.22.0.0,
   kioku-api ==0.12.0.0,
   kioku-core ==0.12.0.0,
   kioku-migrations ==0.12.0.0,
   kiroku-store ==0.12.0.0,
+  kiroku-metrics ==0.4.0.0,
+  kiroku-otel ==0.3.0.0,
+  kiroku-cli ==0.2.0.11,
   kiroku-store-migrations ==0.7.2.0,
   language-c ==0.10.2,
   lens ==5.3.6,
@@ -245,6 +249,7 @@ constraints:
   pgmq-core ==0.7.0.0,
   pgmq-effectful ==0.7.0.0,
   pgmq-hasql ==0.7.0.0,
+  pgmq-inspect ==0.7.0.0,
   postgresql-binary ==0.15.0.1,
   postgresql-connection-string ==0.1.0.6,
   postgresql-libpq ==0.11.0.0,
@@ -422,8 +427,11 @@ package postgresql-libpq
 -- The third-party claude package still caps http-client-tls below 0.4, which
 -- the selected Crypton 1.1 / TLS 2.x cohort requires; its used API is
 -- compatible. Remove after a Hackage revision or release widens the bound.
+-- kiroku-metrics 0.4.0.0 uses kiroku-cli 0.2.0.11. Its sole TLS API
+-- use is the unchanged tlsManagerSettings; the Store 0.13 CLI cannot replace it.
 allow-newer:
-  claude:http-client-tls
+  claude:http-client-tls,
+  kiroku-cli:http-client-tls
 
 -- Unpublished public action boundary, pinned to verified upstream HEAD.
 -- mori://shinzui/kikan-en/repos/kikan-en

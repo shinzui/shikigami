@@ -1,0 +1,47 @@
+[
+  {
+    "package": "keiro-ops-http",
+    "version": "0.22.0.0",
+    "latest": "0.22.0.0",
+    "sha256": "e492336a9120a5425e525f61adfa37e8c7c5ba7d8331b1d0fcdc86441c5d8df4",
+    "source": "https://hackage.haskell.org/package/keiro-ops-http-0.22.0.0/keiro-ops-http.cabal",
+    "upstreamTag": "keiro-ops-http-0.22.0.0",
+    "upstreamRevision": "de8302381884cf4d2a292e97c24986e1506a841e"
+  },
+  {
+    "package": "kiroku-metrics",
+    "version": "0.4.0.0",
+    "latest": "0.4.0.1",
+    "sha256": "c5a5606a49d3b2a8d7c4477aecbc56254f9fa4badede8c798db4a564bd5f5673",
+    "source": "https://hackage.haskell.org/package/kiroku-metrics-0.4.0.0/kiroku-metrics.cabal",
+    "upstreamTag": "kiroku-metrics-v0.4.0.0",
+    "upstreamRevision": "c19cb32ef187350317be20c919c8e70aa2ff0eeb"
+  },
+  {
+    "package": "pgmq-inspect",
+    "version": "0.7.0.0",
+    "latest": "0.7.0.0",
+    "sha256": "266e703b0d56bb124dca62579b9d8f86faa7a9f54892693251ee936524d67e5e",
+    "source": "https://hackage.haskell.org/package/pgmq-inspect-0.7.0.0/pgmq-inspect.cabal",
+    "upstreamTag": "v0.7.0.0",
+    "upstreamRevision": "790f58c7579681ec380a6b3b52897144228f294c"
+  },
+  {
+    "package": "kiroku-otel",
+    "version": "0.3.0.0",
+    "latest": "0.3.0.1",
+    "sha256": "0124024c85e1fa1158ee2b22d8fee92b53b4ac35667c5bec8e95db6856bfb5b4",
+    "source": "https://hackage.haskell.org/package/kiroku-otel-0.3.0.0/kiroku-otel.cabal",
+    "upstreamTag": "kiroku-otel-v0.3.0.0",
+    "upstreamRevision": "316b300d28fd4423e4d10ed44b679543369b849f"
+  },
+  {
+    "package": "kiroku-cli",
+    "version": "0.2.0.11",
+    "latest": "0.3.0.0",
+    "sha256": "9d8324d492d15e479c80267bc2e14e14e3db63304cfd65fd0bf5b3da1d9091a7",
+    "source": "https://hackage.haskell.org/package/kiroku-cli-0.2.0.11/kiroku-cli.cabal",
+    "upstreamTag": "kiroku-cli-v0.2.0.11",
+    "upstreamRevision": "ca775b304afdcd194e692da8ee82a7bacdbf3142"
+  }
+]

@@ -43,6 +43,7 @@ import Shikigami.Telemetry.Sampler (runTelemetrySampler)
 import Shikigami.Trigger.Timer (runTimerWorker)
 import Shikigami.Workers.Config (WorkerEnv (..), envDirectoryRefresher, envHeartbeats, envLogger)
 import Shikigami.Workers.ConsumerApp (withConsumerAppAcquisition)
+import Shikigami.Workers.Inspection (withConsumerInspection)
 import Shikigami.Workers.Supervision (LoopExited (LoopExited), superviseLoops)
 
 -- | Start every worker loop and run until the process is stopped.
@@ -106,7 +107,7 @@ runQueueWorker env = do
             1
             [jobProcessorWithContext tuning runJob (handleRunJob env)]
         )
-        \app -> do
+        \app -> withConsumerInspection env.inspection (getAppMaster app) do
           -- This loop reports its liveness through shibuya rather than beating,
           -- because shibuya already tracks what the processor actually did. The
           -- master is available only once the supervisor is running, which is why

@@ -85,6 +85,24 @@ test suites in any package may depend on the public `shikigami-migrations:test-s
 sublibrary; production libraries may not.
 
 
+## Optional administrative serving component
+
+Plan 106 and [ADR-71](../adr/0071-first-release-inspection-is-an-isolated-administrative-runtime.md)
+add the public `shikigami-core:inspection` sublibrary. It compiles the shared
+administrative catalog, observed-store acquisition and authenticated HTTP/feed
+host from `shikigami-core/inspection/`. It depends on the domain's main library;
+the domain main library does not depend on it. Only the server and workers opt
+in. This preserves all seven package arrows and keeps the one-off agent main
+library free of listeners, inspection providers, exporters and queue interpreters.
+The worker still supplies its actual Shibuya master and owns its lifetime; no
+public Servant routes or second consumer enter this component.
+
+Pure aggregate display descriptions and the Settei inspection settings remain
+in the domain main library. Browser authority excludes raw workflow journals,
+event bodies and queue messages; the local trusted administrative console retains
+the owning native operations. The architecture tests enforce this optional
+component boundary in addition to the existing main-library dependency budgets.
+
 ## What may not appear in `shikigami-core`
 
 `shikigami-core` is the domain. Its **library** stanza must not depend on:

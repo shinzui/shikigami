@@ -143,6 +143,7 @@ surfaceTests =
                 "http.port",
                 "http.request_max_bytes",
                 "http.response_max_bytes",
+                "inspection",
                 "kafka.activity.topic",
                 "kafka.broker",
                 "kafka.dead_letter.queue",
@@ -216,6 +217,7 @@ surfaceTests =
               ("SHIKIGAMI_DIRECTORY_REFRESH_INTERVAL_SECONDS", "directory.refresh_interval_seconds"),
               ("SHIKIGAMI_HEALTH_PORT", "health.port"),
               ("SHIKIGAMI_HTTP_AUTH_MODE", "http.auth.mode"),
+              ("SHIKIGAMI_INSPECTION", "inspection"),
               ("SHIKIGAMI_HTTP_AUTH_CALLER", "http.auth.caller"),
               ("SHIKIGAMI_API_TOKEN", "http.auth.token"),
               ("SHIKIGAMI_HTTP_HOST", "http.host"),
@@ -307,7 +309,22 @@ precedenceTests :: TestTree
 precedenceTests =
   testGroup
     "precedence"
-    [ testCase "workspace supervisor configuration bounds peers and hides its private socket" do
+    [ testCase "inspection resolves through Settei and redacts the complete credential profile" do
+        let token = "inspection-private-012345678901234567890123456789"
+            supplied = "{\"readToken\":\"" <> token <> "\"}"
+        config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_INSPECTION", supplied)]
+        case config.inspection of
+          Just selected -> do
+            selected.host @?= "127.0.0.1"
+            selected.port @?= 9092
+            selected.mutationsEnabled @?= False
+            selected.maxConcurrentReads @?= 4
+          Nothing -> assertFailure "inspection profile absent"
+        let report = runWith (diagnosticOptions ExplainJson) [] [("SHIKIGAMI_INSPECTION", supplied)]
+        report.exitCode @?= 0
+        assertBool "credential is absent from diagnostics" (not (token `Text.isInfixOf` (report.standardOutput <> report.standardError)))
+        (runWith (diagnosticOptions CheckConfig) [] [("SHIKIGAMI_INSPECTION", "{\"readToken\":\"short\"}")]).exitCode @?= 4,
+      testCase "workspace supervisor configuration bounds peers and hides its private socket" do
         let settings = "{\"socketPath\":\"/run/shikigami/private.sock\",\"users\":[1000],\"workers\":2,\"timeoutSeconds\":5}"
         config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_WORKSPACE_SUPERVISOR", settings), ("PG_CONNECTION_STRING", "postgresql:///fixture")]
         case config.workspaceSupervisorSettings of

@@ -77,7 +77,10 @@ lightPackages = ["shikigami-core", "shikigami-agent"]
 forbiddenInLightPackages :: [(Text, Text)]
 forbiddenInLightPackages =
   [ ("wai", "an HTTP application interface belongs to shikigami-server"),
-    ("warp", "an HTTP server belongs to shikigami-server"),
+    ("warp", "an HTTP server belongs to the optional serving component"),
+    ("keiro-ops-http", "inspection transport belongs to the optional serving component"),
+    ("kiroku-metrics", "inspection collectors and providers belong to the optional serving component"),
+    ("pgmq-inspect", "inspection transport belongs to the optional serving component"),
     ("servant-server", "HTTP route execution belongs to shikigami-server"),
     ("hs-opentelemetry-sdk", "a tracer provider belongs at an executable boundary"),
     ("hs-opentelemetry-exporter-otlp", "an exporter belongs at an executable boundary"),
@@ -130,6 +133,20 @@ tests =
                 forbiddenInLightPackages
           )
           lightPackages,
+      testCase "inspection is optional serving infrastructure and never a light library dependency" do
+        stanzas <- allStanzas
+        mapM_
+          ( \package -> do
+              deps <- productionLibraryDeps package stanzas
+              assertBool "light library must not acquire inspection" ("shikigami-core:inspection" `notElem` deps)
+          )
+          lightPackages
+        case lookup "shikigami-core" stanzas of
+          Nothing -> assertFailure "core package missing"
+          Just components -> case filter (\component -> component.stanzaKind == "library" && component.stanzaName == "inspection") components of
+            [component] -> mapM_ (\dependency -> assertBool "inspection component has an explicit dependency budget" (dependency `elem` component.stanzaDeps)) ["shikigami-core", "keiro-ops-http", "kiroku-metrics", "pgmq-inspect"]
+            _ -> assertFailure "exactly one named inspection library is required"
+        mapM_ (\package -> productionLibraryDeps package stanzas >>= \deps -> assertBool "serving role uses the shared component" ("shikigami-core:inspection" `elem` deps)) ["shikigami-server", "shikigami-workers"],
       testCase "core links the neutral tool registry without a provider adapter" do
         stanzas <- allStanzas
         deps <- productionLibraryDeps "shikigami-core" stanzas
