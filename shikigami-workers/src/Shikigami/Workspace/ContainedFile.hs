@@ -16,11 +16,14 @@ module Shikigami.Workspace.ContainedFile
     ensurePrivateDirectory,
     checkPrivateDirectory,
     provisionContainedRoot,
+    listContainedFiles,
   )
 where
 
 import Control.Exception (bracket)
 import Data.ByteString qualified as Bytes
+import Data.List (inits, sort)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
@@ -56,6 +59,8 @@ foreign import ccall safe "shikigami_ws_lock" lockWorkspace :: CString -> IO CIn
 foreign import ccall unsafe "shikigami_ws_unlock" unlockWorkspace :: CInt -> IO ()
 
 foreign import ccall safe "shikigami_ws_provision" provisionRoot :: Ptr () -> CInt -> CInt -> IO CInt
+
+foreign import ccall safe "shikigami_ws_manifest" manifestRoot :: Ptr () -> CInt -> CString -> CInt -> IO CInt
 
 withContainedFile :: FilePath -> Text -> (ContainedFile -> IO (Either FileError a)) -> IO (Either FileError a)
 withContainedFile root path use
@@ -131,3 +136,31 @@ provisionContainedRoot uid apply (ContainedFile target)
         -3 -> Left FileContentConflict
         -5 -> Left FileTooLarge
         _ -> Left FileUnavailable
+
+-- Protected capture metadata only; contents are read through separately pinned
+-- contained targets. The caller holds the workspace lock and process barrier
+-- across both enumeration and reads. Empty directories have no Git identity.
+listContainedFiles :: Int -> ContainedFile -> IO (Either FileError [(Text, Bool)])
+listContainedFiles uid (ContainedFile target)
+  | uid < 1000 || uid > 2147483647 = pure (Left FilePathRefused)
+  | otherwise = allocaBytes 1048576 \buffer -> do
+      size <- manifestRoot target (fromIntegral uid) buffer 1048576
+      case size of
+        -3 -> pure (Left FileContentConflict)
+        -5 -> pure (Left FileTooLarge)
+        n | n < 0 -> pure (Left FileUnavailable)
+        n -> do
+          bytes <- Bytes.packCStringLen (buffer, fromIntegral n)
+          pure do
+            text <- either (const (Left FilePathRefused)) Right (Encoding.decodeUtf8' bytes)
+            records <- if Text.null text then Right [] else if Text.isSuffixOf "\0" text then Right (init (Text.splitOn "\0" text)) else Left FilePathRefused
+            entries <- traverse parse records
+            let paths = map fst entries
+                prefixes = Set.fromList [Text.intercalate "/" prefix | path <- paths, prefix <- drop 1 (inits (Text.splitOn "/" path))]
+            if length paths /= Set.size (Set.fromList paths) || Set.size prefixes /= Set.size (Set.map Text.toCaseFold prefixes)
+              then Left FilePathRefused
+              else Right (sort entries)
+  where
+    parse record = case Text.splitOn "\t" record of
+      [mode, path] | mode `elem` ["100644", "100755"] && validWorkspacePath path && Text.all (< '\DEL') path -> Right (path, mode == "100755")
+      _ -> Left FilePathRefused

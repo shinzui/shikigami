@@ -14,6 +14,7 @@ struct ws_target;
 struct ws_target *shikigami_ws_open(const char *, const char *);
 void shikigami_ws_close(struct ws_target *);
 int shikigami_ws_provision(struct ws_target *, int, int);
+int shikigami_ws_manifest(struct ws_target *, int, char *, int);
 int shikigami_ws_replace_owned(struct ws_target *, const char *, const char *, const unsigned char *, int, const unsigned char *, int, int);
 static void require(int yes, const char *message) {
   if (!yes) { fprintf(stderr,"FAIL %s (%d)\n",message,errno); exit(1); }
@@ -48,6 +49,7 @@ int main(int argc,char **argv) {
   if (argc==2 && !strcmp(argv[1],"--profile")) { puts(SHIKIGAMI_WORKSPACE_SYSTEMD_PROFILE); return 0; }
   if (argc==2 && !strcmp(argv[1],"--unsupported")) {
     require(shikigami_ws_provision(NULL,62001,1)==-78,"unprivileged provisioning refused");
+    require(shikigami_ws_manifest(NULL,62001,NULL,0)==-78,"unprivileged enumeration refused");
     puts("PASS an unprivileged process cannot provision an identity or directory"); return 0;
   }
   require(argc==2 && getuid()==0,"root guest fixture");
@@ -72,6 +74,33 @@ int main(int argc,char **argv) {
   require(!shikigami_ws_replace_owned(publication,metadata,"replace-owned",(const unsigned char *)"fixture",7,(const unsigned char *)"fixture",7,62001),"owned executable replacement");
   shikigami_ws_close(publication); owned(root,"sub/script",62001,0700);
   puts("PASS new and replaced files retain reserved ownership and executable intent without accepting another identity");
+  struct ws_target *manifest=shikigami_ws_open(root,".shikigami-profile-target");
+  require(manifest!=NULL,"manifest anchor");
+  char listing[4096];
+  int size=shikigami_ws_manifest(manifest,62001,listing,sizeof(listing));
+  require(size>0,"native manifest");
+  int regular=0, executable=0;
+  for (int at=0; at<size; at+=(int)strlen(listing+at)+1) {
+    if (!strcmp(listing+at,"100644\tfile") || !strcmp(listing+at,"100644\tpublished")) ++regular;
+    else if (!strcmp(listing+at,"100755\tsub/script")) ++executable;
+    else require(0,"unexpected manifest entry");
+  }
+  require(regular==2 && executable==1,"complete exact manifest");
+  puts("PASS descriptor-relative Git enumeration preserves nested paths and executable intent");
+  require(shikigami_ws_manifest(manifest,62001,listing,5)==-5,"bounded manifest refuses truncation");
+  require(shikigami_ws_manifest(manifest,62002,listing,sizeof(listing))<0,"manifest rejects another identity");
+  puts("PASS incomplete manifest capture and another reserved identity refuse");
+  file(prefix,"manifest-outside",0600); path(target,prefix,"manifest-outside");
+  path(other,root,"evil"); require(!symlink(target,other),"manifest symlink");
+  require(shikigami_ws_manifest(manifest,62001,listing,sizeof(listing))<0,"manifest refuses symlink");
+  require(!unlink(other) && !mkfifo(other,0600),"manifest FIFO");
+  require(shikigami_ws_manifest(manifest,62001,listing,sizeof(listing))<0,"manifest refuses FIFO");
+  require(!unlink(other),"remove fixture FIFO"); path(target,root,"published");
+  require(!link(target,other),"manifest hard link");
+  require(shikigami_ws_manifest(manifest,62001,listing,sizeof(listing))<0,"manifest refuses hard link");
+  require(!unlink(other),"remove fixture hard link");
+  shikigami_ws_close(manifest);
+  puts("PASS Git enumeration rejects symlinks, FIFOs and hard links without reading outside content");
   tree(root,prefix,"symlink"); file(prefix,"outside",0644);
   path(other,root,"link"); path(target,prefix,"outside");
   require(!symlink(target,other),"fixture symlink");

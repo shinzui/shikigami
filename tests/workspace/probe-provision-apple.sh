@@ -53,5 +53,5 @@ echo 'PASS an unprivileged process cannot provision an identity or directory'
 run_service shikigami-provision-write /bin/busybox sh -c 'test "$(cat /workspace/file)" = fixture && test "$(cat /workspace/published)" = fixture && printf writable >/workspace/published && printf updated >/workspace/file && printf created >/workspace/new && printf scratch >/scratch/new'
 [[ $(cat "$prefix/fixtures/good/file") == updated && $(cat "$prefix/fixtures/good/new") == created && $(stat -c %u "$prefix/fixtures/good/new") == 62001 ]]
 echo 'PASS the reserved unprivileged service identity reads and writes the provisioned tree and scratch under the production profile'
-echo 'Native provisioning substrate passed (11 cases); full account/admission/restart qualification remains separate.'
+echo 'Native provisioning and Git enumeration substrate passed (14 cases); full account/admission/restart qualification remains separate.'
 GUEST

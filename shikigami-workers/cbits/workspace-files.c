@@ -292,8 +292,77 @@ int shikigami_ws_provision(struct ws_target *target, int uid, int apply) {
   result = provision_node(target->parent, root.st_dev, (uid_t)uid, 1, &remaining, 0);
   return result ? result : (same_provision_parent(target) ? 0 : -3);
 }
+/* Protected Git capture enumerates pinned regular files only. No directory
+ * entry can cause a device open or traversal through a symlink. Callers retain
+ * the same workspace lock and settled-process barrier while reading contents. */
+static int manifest_node(int fd, dev_t device, uid_t uid, int depth,
+                         int *remaining, const char *prefix,
+                         char *out, int capacity, int *used) {
+  struct stat state;
+  if (--*remaining < 0 || depth > 128) return -5;
+  if (fstat(fd, &state) || state.st_dev != device || state.st_uid != uid ||
+      state.st_gid != uid || (!S_ISDIR(state.st_mode) &&
+      (!S_ISREG(state.st_mode) || state.st_nlink != 1))) return -1;
+  if (S_ISREG(state.st_mode)) {
+    int size = snprintf(out + *used, capacity - *used, "%s\t%s",
+      state.st_mode & 0111 ? "100755" : "100644", prefix);
+    if (size < 0 || size >= capacity - *used) return -5;
+    *used += size + 1;
+    return 0;
+  }
+  int copy = dup(fd);
+  if (copy < 0) return -1;
+  DIR *entries = fdopendir(copy);
+  if (!entries) { close(copy); return -1; }
+  rewinddir(entries);
+  struct dirent *entry;
+  int result = 0;
+  errno = 0;
+  while ((entry = readdir(entries))) {
+    if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) continue;
+    if (!component(entry->d_name) || strchr(entry->d_name, '\\')) { result = -1; break; }
+    for (const unsigned char *p = (const unsigned char *)entry->d_name; *p; ++p)
+      if (*p < 32 || *p >= 127) { result = -1; break; }
+    if (result) break;
+    char path[4097];
+    int size = snprintf(path, sizeof(path), "%s%s%s", prefix, *prefix ? "/" : "", entry->d_name);
+    if (size < 0 || (size_t)size >= sizeof(path)) { result = -5; break; }
+    int pinned = openat(fd, entry->d_name, O_PATH | O_NOFOLLOW | O_CLOEXEC);
+    struct stat child;
+    if (pinned < 0) { result = -1; break; }
+    if (fstat(pinned, &child) || (!S_ISREG(child.st_mode) && !S_ISDIR(child.st_mode))) {
+      close(pinned); result = -1; break;
+    }
+    char location[64];
+    snprintf(location, sizeof(location), "/proc/self/fd/%d", pinned);
+    int opened = open(location, O_RDONLY | O_NONBLOCK | O_CLOEXEC | (S_ISDIR(child.st_mode) ? O_DIRECTORY : 0));
+    close(pinned);
+    if (opened < 0) { result = -1; break; }
+    result = manifest_node(opened, device, uid, depth + 1, remaining, path, out, capacity, used);
+    close(opened);
+    if (result) break;
+    errno = 0;
+  }
+  if (!result && errno) result = -1;
+  closedir(entries);
+  return result;
+}
+int shikigami_ws_manifest(struct ws_target *target, int uid, char *out, int capacity) {
+  if (geteuid() != 0 || getuid() != 0) return -78;
+  if (!target || uid < 1000 || !out || capacity < 1 || capacity > 1048576) return -1;
+  if (!same_provision_parent(target)) return -3;
+  struct stat root;
+  if (fstat(target->parent, &root)) return -1;
+  int remaining = 100000, used = 0;
+  int result = manifest_node(target->parent, root.st_dev, (uid_t)uid, 0, &remaining, "", out, capacity, &used);
+  if (result) return result;
+  return same_provision_parent(target) ? used : -3;
+}
 #else
 int shikigami_ws_provision(struct ws_target *target, int uid, int apply) {
   (void)target; (void)uid; (void)apply; return -78;
+}
+int shikigami_ws_manifest(struct ws_target *target, int uid, char *out, int capacity) {
+  (void)target; (void)uid; (void)out; (void)capacity; return -78;
 }
 #endif
