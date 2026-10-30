@@ -11,6 +11,11 @@ It is written for someone who has never used keiro. Every term is defined where
 it first appears.
 
 
+## Current first-release baseline exception
+
+On 2026-10-30 the user reconfirmed that Shikigami is unused. [ADR-27](adr/0027-the-first-release-establishes-one-clean-durable-baseline.md) applies to [MasterPlan 16](masterplans/16-upgrade-shikigami-to-keiro-0-22-and-retire-superseded-runtime-workarounds.md): consolidate unreleased workflow shapes and remove obsolete patch false branches instead of protecting nonexistent instances. Record exact breaking diagnostics and establish the reviewed current baseline. Same-build replay and all authority/effect boundaries still apply. The rules below govern subsequent evolution and become unconditional at first release/deployment; this exception does not authorize database deletion.
+
+
 ## What a durable workflow is, and why editing one is not like editing ordinary code
 
 Shikigami runs each agent run and each Danwa conversation as a **durable

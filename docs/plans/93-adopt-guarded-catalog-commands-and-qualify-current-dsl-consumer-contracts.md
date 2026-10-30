@@ -22,6 +22,11 @@ provenance:
       at: 2026-10-28T13:33:35Z
       mode: "update"
       note: "Limit typed refusals to pre-inline checks and retain tested post-write exception rollback."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-30T19:46:17Z
+      mode: "update"
+      note: "Expand unused-service adoption to six children, current domain census, HTTP/live inspection, Haskell corpus and first-release qualification."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -49,7 +54,7 @@ Make execution admission checks that can run before inline writes return typed r
 
 - [ ] M1: An accepted outcome, typed precondition refusal, retained late-write refusal and active rebuild fence prove atomicity with real PostgreSQL transactions.
 - [ ] M2: All applicable execution persistence paths use the accepted protocol, preserving concurrent retry, accounting, permission and claim behavior.
-- [ ] M3: Every 0.21/0.22 DSL capability and existing consumer adapter has an evidence-backed disposition, generated conformance passes, and any adopted mapping passes historical replay qualification.
+- [ ] M3: Every 0.21/0.22 DSL capability and existing consumer adapter has an evidence-backed disposition, generated conformance passes, and the single first-release contract passes same-build replay qualification.
 
 
 ## Surprises & Discoveries
@@ -65,7 +70,7 @@ The released guarded runner calls its precondition after tentative append and ca
 
 2026-10-28: Adopt the released typed catalog precondition for expected execution admission refusals that can be decided before inline delivery. Keep rich payload writes in the live inline projection and preserve their atomicity. Do not call an asynchronous view command authority or make encode-only provider payloads replayable.
 
-2026-10-28: Structural enum equality and mapped construction are adopted only where an actual consumer needs them. Existing queue enum spellings and v1/v2/v3 readers are durable contracts; replacing them solely to use new syntax is outside this upgrade's compatibility promise.
+2026-10-30: Supersede the old compatibility constraint. Adopt checked enum/construction/list support wherever it improves actual domain modeling; remove obsolete queue readers and patch branches under ADR-27. Current source producers and consumers move together. No unused declaration counts as adoption.
 
 
 ## Outcomes & Retrospective
@@ -75,6 +80,12 @@ To be filled during implementation.
 
 
 ## Context and Orientation
+
+Shikigami has seven packages: core domain/runtime, API contracts, HTTP server, workers, client/CLI, migrations and the lightweight agent runner. The last is the deliberate ADR-3 exception to the six-package pattern. Work from this repository root and locate dependencies through Mori before using their APIs. Never traverse `/nix/store`. Current objective work under MasterPlan 17 edits configuration, generated catalogs, migrations and core tests; preserve and reconcile that work rather than reverting it. The workspace currently has ten members, including ExecutionDriver, WorkerSession, ContinuingWorker and Objective. Recount from `domain/shikigami.keiro-workspace` at implementation; neither six members nor two aggregates is a valid fixed inventory.
+
+On 2026-10-30 the user confirmed Shikigami is unused. [ADR-27](../adr/0027-the-first-release-establishes-one-clean-durable-baseline.md) and [ADR-37](../adr/0037-adopt-the-released-keiro-contracts-before-v1.md) apply: establish one current first-release contract, remove obsolete compatibility branches/readers, and allow deliberate schema/wire changes. Do not require old binaries, old populated databases or cross-build replay as acceptance. This does not authorize deleting a developer database or weakening external authorization, accounting, protected payloads or same-build replay. Record exact breaking DSL findings and establish the accepted baseline without suppressing the differ. `docs/workflow-versioning.md` still governs durable bodies after that baseline.
+
+The frozen guide inventory is `docs/architecture/keiro-0.22-coverage.json`: canonical resource, producer revision, relative source path, SHA-256, child owner, pending disposition and evidence. The readable audit is `docs/architecture/keiro-0.22-pattern-audit.md`. Pending rows are planned work, not compliance claims. Every applicable clause requires an implemented behavior or justified existing implementation and current evidence. Strict unprefixed fields, explicit deriving strategies and isolated generic-lens orphan imports apply to all touched Haskell and examples.
 
 
 Hard prerequisite: `docs/plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md` must be Complete. It supplies the real released 0.22 interfaces, generated naming changes and passing migration fixtures. This child owns semantic command/DSL adoption after that baseline. `docs/plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md` separately owns the evolving execution driver; reconcile its working-tree changes before editing shared persistence.
@@ -111,12 +122,13 @@ Remove exception use only at the admission checks actually migrated to the typed
 
 Expand race tests to equal retries, conflicting immutable inputs, root cancellation, stale claim generation, permission expiry, injected failure after tentative work and rebuild-fence refusal. Update ADR 0053 with the supported typed refusal protocol and lock/atomicity constraints when accepted.
 
-### M3 — Current DSL capabilities on real consumers
+### M3 — One complete current domain contract
 
-Review candidate Language 6 scalar-list public contracts, mapped-register initial/write-lift, and exact structural enum equality against every real queue, query, event and register consumer. The current ExecutionLifecycle is primitive Text/Int and has no mapped structural enum. RunEvidence's six identity-equality guards are nominal ID/Text comparisons; structural enum support alone does not make them total. Queue route/trigger enums intentionally preserve application Aeson spelling. Do not rename those bytes or widen RunEvidenceId admission to claim feature adoption.
+Audit every workspace member and live domain consumer, including newly added WorkerSession, ContinuingWorker, ExecutionDriver and Objective. Replace primitive Text/Int domain choices with checked nominal/structural types where their meaning warrants it. Adopt total mapped initial/write-lift, ordered scalar-list contracts and exact structural enum equality on actual guards. Remove custom equality/transition adapters when the generated implementation owns the same behavior. Preserve refined admission and authorization even when wire spelling changes; a new enum does not automatically prove unrelated identity guards exhaustive.
 
-For any demonstrated matching consumer, replace the old adapter with the checked generated binding, preserve one codec authority, and run binding round trips, finite fixture/owner/key laws, event-history and register-layout comparison, fold/snapshot identity and replay checks before removing the old code. Construction lifts must be pure, total and versioned. Where no consumer matches, record the exact type/surface and reason rather than adding unused declarations. Preserve create-once witness bodies and require service conformance to execute all obligations. Update `docs/architecture/shikigami-domain-inventory.md` for the six-member workspace and actual evidence/execution ownership.
+Use ADR-27's confirmed first-release freedom to replace RunJobs' v1/v2/v3 upcasters and its v4 wrapper with one intentional current codec. Move all current producers/consumers together and remove now-dead branches. Audit Agent and Flow patch branches and consolidate those serving only unreleased histories. Keep genuinely different runtime paths and future evolution mechanisms. Review exact breaking diagnostics, current fixture bytes, finite owner/key laws, construction totality, snapshot/state-codec and declaration-specific fold evidence. Do not globally bump every fold because one enum guard changes. Test same-build crash/replay and corrupt/stale snapshot fallback before deleting superseded logic.
 
+Keep external protocols hand-owned where they are genuinely different: an HTTP sink is not a Kafka publisher; rich protected payloads absent from event history cannot become replayable by declaration. Reassess each retained hole and workaround against released support, including missing optional queue fields: that upstream limitation may justify a current application codec, but never obsolete historical readers. Update `docs/architecture/shikigami-domain-inventory.md` from the actual workspace. Run independent positive/negative command histories and generated behavior witnesses against the application implementation.
 
 ## Concrete Steps
 
@@ -142,16 +154,18 @@ Run the direct pinned scaffold and `just keiro-diff` against the explicit pre-ch
 
 Run the full core PostgreSQL suite serially because shared ephemeral connection budgets have previously failed under parallel suites. Strengthen existing `shikigami-core/test-postgres/Shikigami/ExecutionTranscriptSpec.hs` and `ExecutionSelectionWorkflowSpec.hs`, using separate connections for real concurrency. An accepted outcome, lifecycle append, call settlement and cursor advance are one fact. A typed precondition refusal, a fenced group, a post-write final-hook refusal and a stale claim each leave every participant unchanged. Assert the typed runner outcome only for the precondition case; assert the preserved application error through `CheckFailed` for the late case after verifying payload, cursor and accounting were tentatively written. A committed response loss followed by the same request converges; a changed request under the same identity refuses. Classifiers do not turn corrupt replay or ambiguity into business rejection. Read-side protection remains intact.
 
-Generated service conformance must pass with all required witnesses, including the updated behavior obligation reports from 0.21. A mapping adoption requires independent wire, fold, snapshot and replay evidence; no application mapper is removed based solely on successful compilation. The audit has a concrete disposition for each new DSL feature and every retained workaround. Missing optional queue fields remain a justified upstream limitation recorded in FRIC-9.
+Generated service conformance must pass with all required witnesses, including the updated behavior obligation reports from 0.21 and declaration-specific enum evidence from 0.22. A mapping adoption requires independent wire, fold, snapshot and replay evidence; no application mapper is removed based solely on successful compilation. The audit has a concrete disposition for each new DSL feature and every retained workaround. Review FRIC-9 against the current release; it may justify a current hand-owned field codec, not historical version readers.
 
 
 ## Idempotence and Recovery
 
-
-Preserve literal historical event/queue fixtures and snapshot/journal readers. Refactor internal transaction plumbing first without changing stored event or workflow shapes. If semantics require a persisted change, add versioned codecs/upcasters or a real patch branch and rerun the declared evolution gate; do not erase old results. No destructive rebuild is needed for live-only execution/evidence payloads. Revert an unaccepted code change against its captured candidate, preserving unrelated execution work. After any new contract is written, rollback requires its explicit reader/schema compatibility evidence.
-
+Use fresh isolated databases. Keep current accepted fixtures and same-build replay, but do not retain historical readers or add upcasters/patch false branches for nonexistent deployments. Record intentional breaks and establish a new reviewed baseline under ADR-27; keep the differ strict. No destructive rebuild can recover live-only execution/evidence payloads. Preserve concurrent work and transaction-level safety during refactoring.
 
 ## Interfaces and Dependencies
 
 
-The released guarded runner consumes `DomainCommandHandler`, a typed target stream, one validated catalog and the matching projection set. It returns outer `CommandError` or `GuardedCatalogOutcome`; only accepted domain work supplies committed metadata. Application `ExecutionError`, `PersistenceFailure`, operation fingerprints and transaction-level resource/selection hooks remain the public owner boundaries. This child owns their adapter, not a new root ledger or accounting protocol. `docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md` shares catalog/display integration; it may proceed after plan 92 and should consume these result meanings. `docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md` requires this entire child Complete.
+The released guarded runner consumes `DomainCommandHandler`, a typed target stream, one validated catalog and the matching projection set. It returns outer `CommandError` or `GuardedCatalogOutcome`; only accepted domain work supplies committed metadata. Application `ExecutionError`, `PersistenceFailure`, operation fingerprints and transaction-level resource/selection hooks remain the public owner boundaries. This child owns their adapter, not a new root ledger or accounting protocol. `docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md` consumes runtime result meanings; `docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md` owns catalog/display integration. Both may proceed after plan 92. `docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md` requires this entire child Complete.
+
+## Revision Notes
+
+2026-10-30: Retain reviewed pre-inline versus late-write rollback semantics; broaden domain adoption and replace historical compatibility with the user-authorized clean first-release baseline. Inspection is owned by docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md.

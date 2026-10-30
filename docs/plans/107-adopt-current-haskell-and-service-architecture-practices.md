@@ -1,0 +1,84 @@
+---
+id: 107
+slug: adopt-current-haskell-and-service-architecture-practices
+title: "Adopt current Haskell and service architecture practices"
+kind: exec-plan
+created_at: 2026-10-30T19:39:42Z
+intention: "intention_01m61agcfzek98hqzkb0kxcfmg"
+master_plan: "docs/masterplans/16-upgrade-shikigami-to-keiro-0-22-and-retire-superseded-runtime-workarounds.md"
+provenance:
+  created_by:
+    model: "gpt-6-astra"
+    harness: "codex-cli"
+    at: 2026-10-30T19:39:42Z
+---
+
+# Adopt current Haskell and service architecture practices
+
+## Purpose / Big Picture
+
+Review and fix every applicable Haskell and service-architecture guideline across the seven packages, with behavioral evidence for public API and CLI contracts.
+
+## Progress
+
+- [ ] M1: Core/package/record/error/resource conventions have an explicit complete applicability review and fixes.
+- [ ] M2: Public HTTP, CLI, configuration and telemetry behaviors satisfy applicable current guide clauses.
+
+## Surprises & Discoveries
+
+The October 28 scope assumed a deployed population and an older domain census. The user and current tree invalidate those assumptions; no implementation acceptance is claimed.
+
+## Decision Log
+
+2026-10-30: Apply the user's first-release policy and exhaustive current-guide adoption. Replace old-history qualification with fresh provisioning and same-build recovery. Preserve real transaction, authority and privacy invariants.
+
+## Outcomes & Retrospective
+
+Not implemented. Record outcomes, remaining profile limitations and triaged friction at completion.
+
+## Context and Orientation
+
+Shikigami has seven packages: core domain/runtime, API contracts, HTTP server, workers, client/CLI, migrations and the lightweight agent runner. The last is the deliberate ADR-3 exception to the six-package pattern. Work from this repository root and locate dependencies through Mori before using their APIs. Never traverse `/nix/store`. Current objective work under MasterPlan 17 edits configuration, generated catalogs, migrations and core tests; preserve and reconcile that work rather than reverting it. The workspace currently has ten members, including ExecutionDriver, WorkerSession, ContinuingWorker and Objective. Recount from `domain/shikigami.keiro-workspace` at implementation; neither six members nor two aggregates is a valid fixed inventory.
+
+On 2026-10-30 the user confirmed Shikigami is unused. [ADR-27](../adr/0027-the-first-release-establishes-one-clean-durable-baseline.md) and [ADR-37](../adr/0037-adopt-the-released-keiro-contracts-before-v1.md) apply: establish one current first-release contract, remove obsolete compatibility branches/readers, and allow deliberate schema/wire changes. Do not require old binaries, old populated databases or cross-build replay as acceptance. This does not authorize deleting a developer database or weakening external authorization, accounting, protected payloads or same-build replay. Record exact breaking DSL findings and establish the accepted baseline without suppressing the differ. `docs/workflow-versioning.md` still governs durable bodies after that baseline.
+
+The frozen guide inventory is `docs/architecture/keiro-0.22-coverage.json`: canonical resource, producer revision, relative source path, SHA-256, child owner, pending disposition and evidence. The readable audit is `docs/architecture/keiro-0.22-pattern-audit.md`. Pending rows are planned work, not compliance claims. Every applicable clause requires an implemented behavior or justified existing implementation and current evidence. Strict unprefixed fields, explicit deriving strategies and isolated generic-lens orphan imports apply to all touched Haskell and examples.
+
+The source inventory includes all 30 canonical Haskell Jitsurei documents, not merely records. `shikigami-core/src/Shikigami/Prelude.hs` already explicitly avoids exporting Data.Generics.Labels; preserve that boundary. `shikigami-core/test/Shikigami/PackageArchitectureSpec.hs` guards package arrows. `Shikigami.App.Config` and `.Load`, role configuration, API/client packages, `Shikigami.Server.Boot`, telemetry and command modules are the entry points. [ADR-3](../adr/0003-a-seventh-package-keeps-one-off-agent-runs-light.md) justifies the seventh package; [ADR-32](../adr/0032-the-migration-cli-keeps-a-dedicated-configuration-boundary.md) keeps migration config separate; [ADR-47](../adr/0047-public-api-authentication-is-a-verifier-at-the-vertical-mount.md) preserves authentication at vertical mounts.
+
+## Plan of Work
+
+M1 reads every assigned frozen guide and records its applicable clauses, implementation site, deviation/fix and test/evidence. Cover GHC2024 and baseline extensions in every component, strict unprefixed records, explicit deriving, postpositive qualified imports, custom Prelude package imports and orphan propagation, multiline SQL, domain newtypes/identity admission, concept verticals, cross-cutting exceptions and generated compilation/test layout. Correct actual violations instead of exempting whole directories. Generated code stays generator-owned and outside formatter rewriting; fix generator selection or consumer declarations rather than hand-edit output. Coordinate domain edits with plan 93 and runtime exceptions with plan 94. Preserve cancellation through typed error mapping and bracket resource lifetimes; do not mechanically replace transaction rollback exceptions with business Either values.
+
+M2 reviews all API and CLI clauses against actual consumers: typed Servant routes, pagination, RFC9457 errors, generated OpenAPI, request logging/redaction, OpenTelemetry, health/readiness, Hurl tests, shell completion/help/options, stdin, aliases, version/Git identity and agent-assistance discovery. Applicable improvements must be implemented; no matching consumer may be excluded solely to save refactoring. A purely optional UI convenience needs a concrete product decision, not a false compliance claim. Preserve public authority boundaries while changing unreleased internal types. Settei source precedence, validation and secrets remain consistent across roles and no ambient fallback silently overrides configuration.
+
+Add focused architecture/style checks under `tools/` where a stable invariant is mechanically enforceable, with mutation/self-tests that reject real regressions. Structural scans are not proof of JSON, API or cancellation behavior. Run actual CLI stdin/help/version and authenticated HTTP/error cases with source-owned fixtures. Update guide rows and narrow ADR exceptions; do not copy a source's example API bounds without verifying its current released dependency through Mori and registries.
+
+## Concrete Steps
+
+Run from the repository root in the declared development shell. Use disposable task-owned databases and the existing source-owned fixtures. These are implementation commands, not evidence of tests already run:
+
+```bash
+mori registry docs shinzui/haskell-jitsurei
+nix develop --no-write-lock-file -c cabal test shikigami-core-test shikigami-api-test shikigami-client-test shikigami-server-test shikigami-agent-test shikigami-workers-test
+nix develop --no-write-lock-file -c just hurl
+git diff --check
+```
+
+Record actual cases and concise output under `docs/evidence/keiro-0.22/`. Database tests that skip are not accepted. Before claiming Linux is unavailable, inspect `container --help`, `container list --all` and `tests/workspace/build-apple.sh`; use native ARM64 Apple containers, retaining the documented remote-builder fallback only when needed. Do not claim runtime containment from compilation alone.
+
+## Validation and Acceptance
+
+Every Haskell/architecture source is reviewed clause-by-clause with a supported final disposition, and changed behavior has focused regression evidence. All seven package boundaries remain intentional; record-field/deriving scans cover touched source and prose. Existing Prelude compliance is verified rather than rewritten. CLI and HTTP scenarios pass against actual fixtures; record exact setup and test names.
+
+## Idempotence and Recovery
+
+Repeat generation against an isolated coherent candidate so concurrent uncommitted work cannot masquerade as generated drift. Preserve create-once holes. Recreate only task-owned disposable fixtures after failure; never clear shared journals, leases or bindings to obtain a passing test. Record the source/dirty diff and current input artifacts for reproducibility, without requiring a successful old build before refactoring. A released-schema rollback is not promised. Future post-release evolution resumes the ordinary versioning rules. Record friction through `agents/skills/exec-plan/FRICTION.md`, promote durable decisions through the local plain-Markdown ADR convention, and scan touched code and prose for stale prefixed fields.
+
+## Interfaces and Dependencies
+
+Requires plan 92 Complete for a compilable target. Plans 93/94/106 own semantic domain/runtime/inspection changes; this child owns residual language, package, public API/CLI and configuration fixes. Coordinate shared App.Config and Cabal edits sequentially. Plan 95 requires completion and all final source dispositions.
+
+## Revision Notes
+
+2026-10-30: Expanded MasterPlan 16 under the user's unused-service confirmation; replaced compatibility-driven scope with current-contract adoption and explicit behavioral evidence. Previous provenance entries and review verdicts remain historical and do not certify this revision.

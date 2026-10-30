@@ -1,0 +1,1394 @@
+{
+  "schemaVersion": 1,
+  "scope": "Planning inventory; no compliance accepted",
+  "sources": [
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-cross-cutting-modules",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/architecture/cross-cutting-modules.md",
+      "sourceSha256": "6a936a9b2a3b8d9290a8bda356eec6b0a7070d79c8e6672393f2b0ac3ec079ee",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-design",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/architecture/domain-design.md",
+      "sourceSha256": "3e61b6bdc477e738d5e35deb859732938226dd7a91779833a6d949ad935ee37e",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/architecture/domain-newtypes-and-typeids.md",
+      "sourceSha256": "c9bb6e61d42c1345f23529b211f66d7485200aa2bfda41ef9966e8a13970a844",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-extended-node-verticals",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/architecture/extended-node-verticals.md",
+      "sourceSha256": "54b34375d360715285f28d8d2ff55eb284623e9dbf424a107fff2f7dfea63d00",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-generated-compilation-contract",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/architecture/generated-compilation-contract.md",
+      "sourceSha256": "aed922d9a97d6ffafb2e58520c3032d693f960fe1a3aa65c1a4f3b64846e12b1",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-overview",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/architecture/overview.md",
+      "sourceSha256": "0c25f883f9f48a0b3a8f584bf4ded711aebbd2aa159fbb733f4c74e3ec9df537",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-service-packages",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/architecture/service-packages.md",
+      "sourceSha256": "5ccf5a048546225fd461b13149180b7f02e49bebc9c397c23be6175ff1bc846e",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-spec-and-scaffolding",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/architecture/spec-and-scaffolding.md",
+      "sourceSha256": "2aea9cf9c3af59442db57450a2ed1a245cd0759c9988b06579cc764a061b1923",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-test-layout",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/architecture/test-layout.md",
+      "sourceSha256": "81e5074a4615dc7d53edeb8d0e022171d4f9df1ce879ff028825b6e244134945",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-vertical-slice-modules",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/architecture/vertical-slice-modules.md",
+      "sourceSha256": "99e522b56c91b9f13bedf47362da6ffb6a3d2dddbaea539a4d14cffeaca3f2c7",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-worked-example-conversation",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/architecture/worked-example-conversation.md",
+      "sourceSha256": "9948e7d70dc89b4cbb2cdf03405dd68d49692d15a2e7ced6cb3714354700a4f1",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/config-kubernetes-deployment",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/config/kubernetes-deployment.md",
+      "sourceSha256": "012ea54764534424459de64bf5ebcacd96e96ed1e0f131f41c613c3879118f2a",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/config-overview",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/config/overview.md",
+      "sourceSha256": "6ce12ea5fa9f0690f5b2325420ba3ef8786998ae7a8fc2845cebb5f2ff6e7796",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/config-settei-cli-standard",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/config/settei-cli-standard.md",
+      "sourceSha256": "26dcad18fd4194a8389cd6b483a9375c31a2978f80b253fac3e431d2fd331d96",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/config-settei-gotchas",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/config/settei-gotchas.md",
+      "sourceSha256": "85e6dfd9d3d46da87a4152cc15288a3443c34d4311b06efe1894684dbc0cc4fc",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/config-settei-service-standard",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/config/settei-service-standard.md",
+      "sourceSha256": "6232a6ea9fe5e8900aa18144628a0e38f664e7e395df397168a242e337cff41e",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/runtime-patterns-getting-started",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/getting-started.md",
+      "sourceSha256": "0d844636458a5f29ed771ed52d1190bae1aa0365cf55ca29845addb76302c0fc",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/inspection-bounded-live-feeds",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/inspection/bounded-live-feeds.md",
+      "sourceSha256": "9f1ae3e736d793b4bc57838f36727cb261d5e07016bad8529489f91bd1204c91",
+      "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/inspection-hosting-and-browser-access",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/inspection/hosting-and-browser-access.md",
+      "sourceSha256": "cc6575a8ecffa31c436bf66071d1d7916d6ca4de3aa12162e7c9c355b45b76b0",
+      "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/inspection-overview",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/inspection/overview.md",
+      "sourceSha256": "e735022e602009225130549b3ba7bd7269d6052b4a8cbebf93ffda818e4178e7",
+      "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-build-time-validation",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiki/build-time-validation.md",
+      "sourceSha256": "925dc9fb20ca6ec23f0d13d394b9b52ad03bfdf17d0765464251fa3681ae40ca",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-checked-composition",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiki/checked-composition.md",
+      "sourceSha256": "a61a01a4a4ebb212fac745e732c6b9a1592fd1d088e4db65fdc02b7bda1a31bc",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-collections-and-opaque-guards",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiki/collections-and-opaque-guards.md",
+      "sourceSha256": "805979d67731f2f60fffbdbe0610e672a08b75116a955756eaed97abf66d7ac5",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-constructor-evidence",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiki/constructor-evidence.md",
+      "sourceSha256": "01a2a72d9343439673f3ebcd34561607089edaf5896f0dc578f376b683225a24",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-diagnosing-rejected-commands",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiki/diagnosing-rejected-commands.md",
+      "sourceSha256": "981123b69624c44bfdbd6791f852a12e81697e6d862dfa82dacebf10c87bfa64",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-diagram-docs",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiki/diagram-docs.md",
+      "sourceSha256": "3a277c433b03bd91f4ec82117acdcbf8c67a3b353502fc5b5cdf8a2b290f76e3",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-event-schema-evolution",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiki/event-schema-evolution.md",
+      "sourceSha256": "684de93cfd68c84a253b7e78987c1282309015114749b605672c67fb01a97712",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-exact-projection-domains",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiki/exact-projection-domains.md",
+      "sourceSha256": "49af92c49cfa777b710e1f8ee811e03ea5c2ba585e102ee958223119de54c1d6",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-json-event-codecs",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiki/json-event-codecs.md",
+      "sourceSha256": "32bb655ff67dbe351999af00be7d145b1c62a067e29beb688a1a76215d52d74e",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-operator-conflicts",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiki/operator-conflicts.md",
+      "sourceSha256": "fd39428c9e67bdcd599b44fe6c282f9690cc77dffccb4560d89816762ee8eb68",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-overview",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiki/overview.md",
+      "sourceSha256": "8039fee257c2ca8c67ee1035c6fb993fd095cd6ea4a37e5d8b8daecf38c38db1",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-structured-replay-and-hydration",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiki/structured-replay-and-hydration.md",
+      "sourceSha256": "3bb4026912411f4b733590c0778ae540a52a5962a5ff7a5e9c4a1c41612d7761",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-transducer-best-practices",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiki/transducer-best-practices.md",
+      "sourceSha256": "12e0adb14ba140e02290f8b916ad967fd517c65e7c219686d92534bfeead9616",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-typed-field-projections",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiki/typed-field-projections.md",
+      "sourceSha256": "34b3f88fa9267116fe12d5298eaa5c688d3ebfd631512a2d50ca22b63d87d541",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiki-upgrading-to-keiki-0-2",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiki/upgrading-to-keiki-0-2.md",
+      "sourceSha256": "83f52a8645245e4eca688bdd3861d44b6e891b632dd6e348d1ebe9b5c033f250",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-aggregate-expressions",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/aggregate-expressions.md",
+      "sourceSha256": "493a3036288d0c7917b703e4300e17023cca3fd268fd928db49cdeb87dc95abb",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-behavior-conformance",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/behavior-conformance.md",
+      "sourceSha256": "8ec3b1cb2e33ee514f4032ad69a4de32ef672575ce9f35a1ebfd74496e765212",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-brownfield-adoption",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/brownfield-adoption.md",
+      "sourceSha256": "b436f6a145aa2b0ef3f0baa47779756a0c554d902ceddfe9f1209ae40f757c35",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-command-cycle-and-errors",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/command-cycle-and-errors.md",
+      "sourceSha256": "4d9853214fa3a6cf87db78e0b30132bbdbde0f3e4ed3c522fd22b05907043eac",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-dead-timer-resume",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/dead-timer-resume.md",
+      "sourceSha256": "6c5bd95b60deacc4c1b338e0fee234d741503ba4bfef00f59a7d7f53faa89f4f",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-dsl-adoption",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/dsl-adoption.md",
+      "sourceSha256": "4797f36c3ad444b9c9b1c9197d3eb30d5d48b00c622cc15a3cb52ad66ca386ea",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-dsl-semantic-locality",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/dsl-semantic-locality.md",
+      "sourceSha256": "fdc6c658ec9a9f56b74ba75d8ef3b950b7ccf83b7cb14b13f9a89e1bd3b955de",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-durable-workflows",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/durable-workflows.md",
+      "sourceSha256": "c6c71d7c49cc42e6df786e0d57f63c6ce241c1e6d4d9a4a3ec7c0390f5d42343",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-evolution-and-rollout",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/evolution-and-rollout.md",
+      "sourceSha256": "ed7ffeb46935aedcdf51a50efa164ee953900a139fb2bbf6f8dd38bfba41f333",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-generated-haskell-editions",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/generated-haskell-editions.md",
+      "sourceSha256": "bbf434362c0f0f9cfad4c2d9c950b69bd7b5031a1644675360817e93786d6fd0",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-gotchas",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/gotchas.md",
+      "sourceSha256": "9f64b810a81cd39bf4dabfb2afaa824bef5ee2b4a4d6237c594bcaed2855f657",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-identifier-domains",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/identifier-domains.md",
+      "sourceSha256": "496c4dd97d47e111417424d17ef686e630346d58dfe5228407ada25adc5b2fd1",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-language-versions",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/language-versions.md",
+      "sourceSha256": "be4b21069269819a98ba62cde0c06eb9447c9c9511b48150ca2820697432dc50",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-mapped-consumer-surfaces",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/mapped-consumer-surfaces.md",
+      "sourceSha256": "2f336cb0eeda951dd3cce00f5bea93e72b8fd31a3f2f2de8e2f91cbf4dfe2df1",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-nominal-bindings",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/nominal-bindings.md",
+      "sourceSha256": "d0a626921ec52c02e3cc9437ee2b451c6ade265aec6a3625563cc1278269d9e8",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-operations-console",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/operations-console.md",
+      "sourceSha256": "54c038d410e36fa1b06af6c9f3b5a09fea74ec26e9534adf1d5d8d8473149259",
+      "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-overview",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/overview.md",
+      "sourceSha256": "bab70af015f70b8944e120b4614b5a3ce9c9bc54820b6d88fa305529af560f0d",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-projection-catalogs",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/projection-catalogs.md",
+      "sourceSha256": "8299b079ec1353cdabd4e23be3688d6648ae509def66730e00bfd83be17f6431",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-read-models-and-projections",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/read-models-and-projections.md",
+      "sourceSha256": "9214ceb29496c2cfe683730ff8a1bb8c7f904bcc1f06c5b442e0490b268f1309",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-runtime-assembly",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/runtime-assembly.md",
+      "sourceSha256": "fc3aa14b9238f42428a1669fb1aa0659878654635a83a98a37ed19181aedd6f3",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-service-workspaces",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/service-workspaces.md",
+      "sourceSha256": "06e0b8c699cce5d9191c3251bcec5ae51b9bfa43430b6348601455675c2cc074",
+      "owner": "docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-stream-scoped-repair",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/stream-scoped-repair.md",
+      "sourceSha256": "fbbe7a77b28828609d69f64ea80a4daa89fb7d176084e61841c88f079dbe7d4f",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-telemetry",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/telemetry.md",
+      "sourceSha256": "e8d7686effdb6516f5e230135f2222ef95e4ed5e7d2c70c42c10b89776a55651",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-two-schema-arrangement",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/two-schema-arrangement.md",
+      "sourceSha256": "58f8b1dffe9ec0c0539141efe0818c24e79de2415d6ad7410a2860e1eebb73f3",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-typeid-prefix-naming",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/typeid-prefix-naming.md",
+      "sourceSha256": "32a432d7d1dcc95913e8f3331b82d4440197928f6371c395c626cc942c7708ff",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/keiro-workflow-reliability",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/keiro/workflow-reliability.md",
+      "sourceSha256": "471d050f8f27c4f607ff96547cf015d6f5ce8f2fb21a1dd8312adb7c94e41243",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-append-and-read",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/kiroku/append-and-read.md",
+      "sourceSha256": "43563cfbcf0b0c9415784c88436b648df0602a626602dc14854028c1a05fb6ba",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-checkpoint-inventory",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/kiroku/checkpoint-inventory.md",
+      "sourceSha256": "b528cc4dcab7a530ab96793fec1b6f34221380a018e19f786fbf8e57c82ca09b",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-connection-settings",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/kiroku/connection-settings.md",
+      "sourceSha256": "346a02fdb3e84c137d96cfbe06e1081021529d33fa6f2bd6103d68361227b139",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-history-retention",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/kiroku/history-retention.md",
+      "sourceSha256": "cdf24db037f9b8fd3c9a51fcc76a0484bf3ca4b64515fef1a715ab6451054e45",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-inspection",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/kiroku/inspection.md",
+      "sourceSha256": "8f1e75f1b84ea8bfdeb531d2cfb36537078b998651b8cd7ac4029b07f63c1929",
+      "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-lifecycle-and-deletion",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/kiroku/lifecycle-and-deletion.md",
+      "sourceSha256": "9277816f1f73f40d6292a557aec7805d55fad436fe2ab06c26705d45cc991044",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-observability",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/kiroku/observability.md",
+      "sourceSha256": "877468cbfad251fc7ade87fc9ea82e9111958b6c5fac6397b0198a105f7e2b8d",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-operational-invariants",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/kiroku/operational-invariants.md",
+      "sourceSha256": "592b0ffc92e780a9cf6de0903fc8a2ded9018f83f060fc710c3277b77853a019",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-overview",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/kiroku/overview.md",
+      "sourceSha256": "353d857c3d7f04d50a608af547d4df1b5dc6b8d6b964bab9fc7450c399daaaeb",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-subscriptions",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/kiroku/subscriptions.md",
+      "sourceSha256": "0177b04a5df60a9e5472aa689474a355a552b66a94f9cdf89ed80933b1e70e67",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/kiroku-transactions-and-projections",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/kiroku/transactions-and-projections.md",
+      "sourceSha256": "dddbe88a15c12f74bf3239416c28dd3891b4da733fa9d7041725cb1fc11aa994",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-glossary",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/messaging/glossary.md",
+      "sourceSha256": "9ba03cdeb99b15bbb30261907f86e5d8938adca247603272ba4b01fc1dd8ea0b",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-gotchas",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/messaging/gotchas.md",
+      "sourceSha256": "14f3a206af5c8a042eb3664f61c511479c02cf46ded18df723e571844bc63d16",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-inbox",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/messaging/inbox.md",
+      "sourceSha256": "2f301e453c858168c37e7e591485d5f3860040246123f8025d87edb1b447ca13",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-integration-events",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/messaging/integration-events.md",
+      "sourceSha256": "cf11b98f6e39f1c04c816e13b2f594518adf339382ece6c3bf6090d8ff4f2e72",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-kiroku-subscriptions",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/messaging/kiroku-subscriptions.md",
+      "sourceSha256": "6be062904ed9fc1610ac24669592e51dfbdf7561931c750e98f6bea37e9c0717",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-outbox",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/messaging/outbox.md",
+      "sourceSha256": "393695c90cd4ef08ac5a1d482c0589ec0a5c83ff8b791a574fe9a3dc10fe99ee",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-overview",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/messaging/overview.md",
+      "sourceSha256": "c4487e9ccdac7aab757ce42afe6228b7c4284e524bda460f6f9ab1d6e50e9e0c",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-pgmq-connection-faults",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/messaging/pgmq-connection-faults.md",
+      "sourceSha256": "10c30939a69cba30c476dd5ec864d3f9640b89b533a1da278a2948b93d0f4697",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-pgmq-dead-letter-administration",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/messaging/pgmq-dead-letter-administration.md",
+      "sourceSha256": "3712e3b33d5089dfbce27a2b2c109707cb8380a9c3b5ef01e3f7b7168a5589bf",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-pgmq-jobs",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/messaging/pgmq-jobs.md",
+      "sourceSha256": "09641aeea037e5271d799523a04383c2d2e3bc43bf54901b8c1564acd2c3bfc8",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-pgmq-queue-reconciliation",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/messaging/pgmq-queue-reconciliation.md",
+      "sourceSha256": "88051e26b9ea31307aaae576c8f6ec2509463897d3647512291f09356026856b",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-process-managers",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/messaging/process-managers.md",
+      "sourceSha256": "73e498fc03bdc0825b8c558d19ee54b18e72018e8acf59fb0f8d86ed229f62ed",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-shibuya-inspection",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/messaging/shibuya-inspection.md",
+      "sourceSha256": "d04ba6d93239c27ab2715fa54f7f85734a114f330b85b1eee1a64d9db4a0d20a",
+      "owner": "docs/plans/106-expose-bounded-administrative-inspection-and-live-feeds.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-shibuya-processing",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/messaging/shibuya-processing.md",
+      "sourceSha256": "a99fa9329b9ce3092cc02c6ddf5bd0ef21d8080a76919367ed374bde4b0c0b82",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-transport-selection",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/messaging/transport-selection.md",
+      "sourceSha256": "365b337de081eea79106768358dfb946f5549f98ae9b699377dcbfa10df7675d",
+      "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/migrations-authoring",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/migrations/authoring.md",
+      "sourceSha256": "23aab5aa42e6cb59fc4be00dac765220027d774b450d389f3e89f5cac75baeec",
+      "owner": "docs/plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/migrations-codd-transition",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/migrations/codd-transition.md",
+      "sourceSha256": "d4d15966fd5d852b757d990d5cc9fd1faa8742236f3a7c6fb17497357c184770",
+      "owner": "docs/plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/migrations-operations",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/migrations/operations.md",
+      "sourceSha256": "aa357c8224c1c7a48e8d63188bd0a7245cd650b2a4702005c454599be1ff9792",
+      "owner": "docs/plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/migrations-overview",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/migrations/overview.md",
+      "sourceSha256": "569aeada1e912b3b4dde913c0774c7ac6d5bec06acbe543c7ee74c634336a314",
+      "owner": "docs/plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/migrations-pg-migrate-model",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/migrations/pg-migrate-model.md",
+      "sourceSha256": "87f990d92e4d35f7e55dc9c76ab9788ddf7de3bd2c22f9dd112f1980402c81f0",
+      "owner": "docs/plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/migrations-service-package",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/migrations/service-package.md",
+      "sourceSha256": "caacf90153f887cb9c5f29328c8fd54ce4fcc0531c0a177f52d65ecfa53f81db",
+      "owner": "docs/plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/keiro-runtime-patterns/docs/migrations-testing",
+      "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
+      "sourcePath": "runtime-patterns/migrations/testing.md",
+      "sourceSha256": "db807caba392bb7f681b801ad78b0986c0a90c8538f11d3b3928b80544ab7eed",
+      "owner": "docs/plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/api-health-endpoints",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/api/health-endpoints.md",
+      "sourceSha256": "5dcb1356deb0df5a7ee27222dedaeadfa22415dc244bf4a7eae2a7b32f997c2d",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/api-hurl-integration-testing",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/api/hurl-integration-testing.md",
+      "sourceSha256": "bbaa98a419dc1996574512c770c47d4f6d2d3d0269bb53d4f45316cdb277dfd0",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/api-openapi-from-types",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/api/openapi-from-types.md",
+      "sourceSha256": "6670d908100e8fc5225e78af1e5fc02ab14d65acfa2bbeef517e73902e23a4e2",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/api-opentelemetry-integration",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/api/opentelemetry-integration.md",
+      "sourceSha256": "46dd8ca63ee768fec72da57a983455e9d788da37d769e1a329117bbc27d894e9",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/api-overview",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/api/overview.md",
+      "sourceSha256": "5c9a2f722ea5993758419f5ed2c5029798c6aa66e42debadcedad27a067692b4",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/api-relay-pagination",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/api/relay-pagination.md",
+      "sourceSha256": "2453bce79e63f237d5fa4cde9c29f5e524a79477a5e2054f21bc4ef55f1f43de",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/api-request-logging",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/api/request-logging.md",
+      "sourceSha256": "2306702a4c5eacce8f2bdcecc6f82610b6ba1c3e400aa80399990d18f79ac7bb",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/api-rfc9457-problem-details",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/api/rfc9457-problem-details.md",
+      "sourceSha256": "714369bfbbb62045f58bac945db9dae003aa0441ead183fe9320620ccb031292",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/api-servant-routes",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/api/servant-routes.md",
+      "sourceSha256": "6649b60e402f385b2237cfa2fa9e2097059e3665d63a87cc03edd49d365fe88f",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/cli-agent-assist-commands",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/cli/agents/agent-assist-commands.md",
+      "sourceSha256": "f13d600e1762852380abe4ab430f22dfe9d027d5b8e2fb5f9d37eb9aa5065010",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/cli-per-command-agent-config",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/cli/agents/per-command-agent-config.md",
+      "sourceSha256": "db1e6bd56fd444611b89450776d54622c19c9cef0c3ef2750aa128320b28a8ab",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/cli-skill-and-agent-registry",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/cli/agents/skill-and-agent-registry.md",
+      "sourceSha256": "92d02a065f324a0d3d156e0947c8a782e83a2e12d015197467e0055748878e38",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/cli-command-aliases-kdl",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/cli/command-aliases-kdl.md",
+      "sourceSha256": "280bcc96b5de3e631b5a9b9d7d95d00fcc308c1ea25f59c10c9ba60065c5e701",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/cli-command-aliases",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/cli/command-aliases.md",
+      "sourceSha256": "4bdaaae293b9198ebff3dc98da90e523c9a073d3c19fb68cd03c92e9c968a4c3",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/cli-copy-to-clipboard",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/cli/copy-to-clipboard.md",
+      "sourceSha256": "183228ec9decb14b36665e20ce7a3e97efa6be29093040f555a6bf1bee7586d5",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/cli-fzf-integration",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/cli/fzf-integration.md",
+      "sourceSha256": "f0b58f8362e0035984ae29d2da483da01a9a3dc35a26ea5493d65b613e613230",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/cli-help-topics",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/cli/help-topics.md",
+      "sourceSha256": "982e6f3f61e5fff69db47be0784a3cd797283f9cc7dae5db96124b25957d08e2",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/cli-help-width",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/cli/help-width.md",
+      "sourceSha256": "5f367d510d24ccc5ced78a8c748d07d5fe307396eb9121698c2bdf57e0962caf",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/cli-option-groups",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/cli/option-groups.md",
+      "sourceSha256": "96d5d6b91a38a9f18dd7e171319f3a66707985220deea561cd609d6d17d23aba",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/cli-overview",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/cli/overview.md",
+      "sourceSha256": "4b3839933204b72ddec1ee376c7c347da6646a222b9e3f22fe5b7b5499753455",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/cli-shell-completions",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/cli/shell-completions.md",
+      "sourceSha256": "060580e2ba3e3bff61174b7791eaae4603b0e3495b78abedf2d6f5272f093259",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/cli-stdin-integration",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/cli/stdin-integration.md",
+      "sourceSha256": "f3ffb85711375c99cccdde97972610a622d07b73e1c75c4cd06e788932f00e42",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/cli-version-git-sha",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/cli/version-with-git-sha.md",
+      "sourceSha256": "c9e6c873f3bcc0b1487400ba8559d5cfc9438668c1b7d73924e0dd520a800fd0",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/core-custom-prelude",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/core/custom-prelude.md",
+      "sourceSha256": "0310ce0e98f122f96c3a6ce1b6214ec0bfce6549d418f1ebe082bcfee78d6930",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/core-multiline-strings",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/core/multiline-strings.md",
+      "sourceSha256": "849c9a4ae02f125130983619053df0931296119d3203170af2d6543560c21a9a",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/core-overview",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/core/overview.md",
+      "sourceSha256": "79ce4f15691fbf601f0f208c655f8f74a6d970197df77f0d1b562ff3f2dedfaa",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/core-record-patterns",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/core/record-patterns.md",
+      "sourceSha256": "9f72001e0083fff8c4661cab1aed488abd502c148168df2f201d4c628ed0148f",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/core-standards",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/core/standards.md",
+      "sourceSha256": "df87f26c1953ad519087ef89a34c2d21538f9fdfa74e5a2f6287799171afdc9a",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/patterns-getting-started",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/getting-started.md",
+      "sourceSha256": "1271c4faed544e6440bbfaa5404396dd7ecbefc17a8a662afe755eb883b224a2",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    },
+    {
+      "source": "mori://shinzui/haskell-jitsurei/docs/governance-review-policy",
+      "sourceRevision": "cce10bd4d22c30b52a5d18b1be8ae16755f5435c",
+      "sourcePath": "patterns/governance/review-policy.md",
+      "sourceSha256": "645b333683a5d1a59786498ac1b2e440921357feb24efd0c84c53eeef00d4f09",
+      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
+      "status": "pending",
+      "clauses": [],
+      "evidence": []
+    }
+  ],
+  "unregisteredDocuments": [
+    {
+      "project": "mori://shinzui/keiro-runtime-patterns",
+      "sourcePath": "runtime-patterns/architecture/index.md",
+      "reason": "Reserved index/navigation document."
+    },
+    {
+      "project": "mori://shinzui/keiro-runtime-patterns",
+      "sourcePath": "runtime-patterns/architecture/log.md",
+      "reason": "Reserved producer change log; review changes when refreshing the source inventory."
+    },
+    {
+      "project": "mori://shinzui/keiro-runtime-patterns",
+      "sourcePath": "runtime-patterns/config/index.md",
+      "reason": "Reserved index/navigation document."
+    },
+    {
+      "project": "mori://shinzui/keiro-runtime-patterns",
+      "sourcePath": "runtime-patterns/config/log.md",
+      "reason": "Reserved producer change log; review changes when refreshing the source inventory."
+    },
+    {
+      "project": "mori://shinzui/keiro-runtime-patterns",
+      "sourcePath": "runtime-patterns/index.md",
+      "reason": "Reserved index/navigation document."
+    },
+    {
+      "project": "mori://shinzui/keiro-runtime-patterns",
+      "sourcePath": "runtime-patterns/inspection/index.md",
+      "reason": "Reserved index/navigation document."
+    },
+    {
+      "project": "mori://shinzui/keiro-runtime-patterns",
+      "sourcePath": "runtime-patterns/inspection/log.md",
+      "reason": "Reserved producer change log; review changes when refreshing the source inventory."
+    },
+    {
+      "project": "mori://shinzui/keiro-runtime-patterns",
+      "sourcePath": "runtime-patterns/keiki/index.md",
+      "reason": "Reserved index/navigation document."
+    },
+    {
+      "project": "mori://shinzui/keiro-runtime-patterns",
+      "sourcePath": "runtime-patterns/keiki/log.md",
+      "reason": "Reserved producer change log; review changes when refreshing the source inventory."
+    },
+    {
+      "project": "mori://shinzui/keiro-runtime-patterns",
+      "sourcePath": "runtime-patterns/keiro/index.md",
+      "reason": "Reserved index/navigation document."
+    },
+    {
+      "project": "mori://shinzui/keiro-runtime-patterns",
+      "sourcePath": "runtime-patterns/keiro/log.md",
+      "reason": "Reserved producer change log; review changes when refreshing the source inventory."
+    },
+    {
+      "project": "mori://shinzui/keiro-runtime-patterns",
+      "sourcePath": "runtime-patterns/kiroku/index.md",
+      "reason": "Reserved index/navigation document."
+    },
+    {
+      "project": "mori://shinzui/keiro-runtime-patterns",
+      "sourcePath": "runtime-patterns/kiroku/log.md",
+      "reason": "Reserved producer change log; review changes when refreshing the source inventory."
+    },
+    {
+      "project": "mori://shinzui/keiro-runtime-patterns",
+      "sourcePath": "runtime-patterns/log.md",
+      "reason": "Reserved producer change log; review changes when refreshing the source inventory."
+    },
+    {
+      "project": "mori://shinzui/keiro-runtime-patterns",
+      "sourcePath": "runtime-patterns/messaging/index.md",
+      "reason": "Reserved index/navigation document."
+    },
+    {
+      "project": "mori://shinzui/keiro-runtime-patterns",
+      "sourcePath": "runtime-patterns/messaging/log.md",
+      "reason": "Reserved producer change log; review changes when refreshing the source inventory."
+    },
+    {
+      "project": "mori://shinzui/keiro-runtime-patterns",
+      "sourcePath": "runtime-patterns/migrations/index.md",
+      "reason": "Reserved index/navigation document."
+    },
+    {
+      "project": "mori://shinzui/keiro-runtime-patterns",
+      "sourcePath": "runtime-patterns/migrations/log.md",
+      "reason": "Reserved producer change log; review changes when refreshing the source inventory."
+    },
+    {
+      "project": "mori://shinzui/haskell-jitsurei",
+      "sourcePath": "patterns/api/index.md",
+      "reason": "Reserved index/navigation document."
+    },
+    {
+      "project": "mori://shinzui/haskell-jitsurei",
+      "sourcePath": "patterns/api/log.md",
+      "reason": "Reserved producer change log; review changes when refreshing the source inventory."
+    },
+    {
+      "project": "mori://shinzui/haskell-jitsurei",
+      "sourcePath": "patterns/cli/agents/index.md",
+      "reason": "Reserved index/navigation document."
+    },
+    {
+      "project": "mori://shinzui/haskell-jitsurei",
+      "sourcePath": "patterns/cli/index.md",
+      "reason": "Reserved index/navigation document."
+    },
+    {
+      "project": "mori://shinzui/haskell-jitsurei",
+      "sourcePath": "patterns/cli/log.md",
+      "reason": "Reserved producer change log; review changes when refreshing the source inventory."
+    },
+    {
+      "project": "mori://shinzui/haskell-jitsurei",
+      "sourcePath": "patterns/core/index.md",
+      "reason": "Reserved index/navigation document."
+    },
+    {
+      "project": "mori://shinzui/haskell-jitsurei",
+      "sourcePath": "patterns/core/log.md",
+      "reason": "Reserved producer change log; review changes when refreshing the source inventory."
+    },
+    {
+      "project": "mori://shinzui/haskell-jitsurei",
+      "sourcePath": "patterns/governance/index.md",
+      "reason": "Reserved index/navigation document."
+    },
+    {
+      "project": "mori://shinzui/haskell-jitsurei",
+      "sourcePath": "patterns/governance/log.md",
+      "reason": "Reserved producer change log; review changes when refreshing the source inventory."
+    },
+    {
+      "project": "mori://shinzui/haskell-jitsurei",
+      "sourcePath": "patterns/index.md",
+      "reason": "Reserved index/navigation document."
+    },
+    {
+      "project": "mori://shinzui/haskell-jitsurei",
+      "sourcePath": "patterns/log.md",
+      "reason": "Reserved producer change log; review changes when refreshing the source inventory."
+    }
+  ],
+  "inventorySha256": "1420d682f59a432aef5def99aa05c831c7c364c5410a98f4317cfc22f391f4d0"
+}

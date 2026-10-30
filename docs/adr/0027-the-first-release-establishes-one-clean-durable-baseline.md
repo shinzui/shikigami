@@ -114,3 +114,8 @@ new, separately approved migration strategy covers real durable state.
 Plan 65 rechecked the four unused-state facts before its workflow and queue/identity resets. Commits f1118af and f43b0ca retain exact accepted diagnostics under docs/evidence/plan-65. No developer database was reset. Subsequent ordinary gates pass against the new committed baseline, with no weakened flags.
 
 See [Plan 65](../plans/65-migrate-shikigami-to-the-keiro-0-15-cohort-and-the-idiomatic-v2-record-model.md) and [ADR 0038](0038-runtime-startup-and-maintenance-share-validated-owners.md).
+
+
+## Reaffirmed first-release scope — 2026-10-30
+
+The user explicitly confirmed Shikigami is still unused and requested exhaustive adoption under MasterPlan 16. Its prior old-build/retained-history requirements are withdrawn. The same decision above applies to current queue codecs, workflow branches and unreleased schema composition; same-build restart/replay, authority and privacy remain mandatory. Record the accepted source baseline and deliberate differ findings, but do not require an old successful build or preserved obsolete readers before refactoring. No developer database deletion is authorized. This is renewed evidence for the existing exception, not a waiver after first deployment.

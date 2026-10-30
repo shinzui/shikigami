@@ -17,6 +17,11 @@ provenance:
       at: 2026-10-28T13:21:22Z
       mode: "update"
       note: "Complete source-grounded draft and link the requested Mina intention"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-30T19:46:17Z
+      mode: "update"
+      note: "Expand unused-service adoption to six children, current domain census, HTTP/live inspection, Haskell corpus and first-release qualification."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -27,115 +32,72 @@ provenance:
 
 # Adopt current runtime lifecycle patterns and bounded operator inspection
 
-This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
-Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
-If durable project context changes, update or create ADRs in docs/adr/ in the same change.
-Record friction met while implementing in the friction-log bundle as it occurs (see FRICTION.md).
-
-
 ## Purpose / Big Picture
 
-
-Keep workflow, queue and trigger progress correct under the released lifecycle changes and expose useful bounded upstream inspection through the existing operator CLI. Operators can inspect the two real application aggregates and new workflow/timer/projection status surfaces without reading protected replay bodies or adding work to ordinary command paths.
-
+Make actual queue, trigger, subscription and workflow paths correct under the new delivery and resource-lifetime semantics. Inspection hosting is now owned by plan 106.
 
 ## Progress
 
-
-- [ ] M1: Runtime startup, delivery admission, supervision and recovery follow the new cohort's lifecycle contracts with regression evidence.
-- [ ] M2: The embedded operator CLI mounts safe application aggregate inspection and preserves bounded reads, schema verification, mutation previews and typed errors.
-
+- [ ] M1: Startup, delivery admission, finalization and shutdown have native failure-path evidence.
+- [ ] M2: Every registered workflow and custom wake path passes same-build restart, cancellation and ownership-loss recovery.
 
 ## Surprises & Discoveries
 
-
-None yet.
-
+The October 28 scope assumed a deployed population and an older domain census. The user and current tree invalidate those assumptions; no implementation acceptance is claimed.
 
 ## Decision Log
 
-
-2026-10-28: Mount application-owned aggregate inspection through the existing `keiro-ops` CLI. Do not introduce an operational HTTP/WebSocket listener or fabricate process-manager descriptors for ordinary workflow families. Keep optional libraries unlinked unless an actual consumer exists.
-
+2026-10-30: Apply the user's first-release policy and exhaustive current-guide adoption. Replace old-history qualification with fresh provisioning and same-build recovery. Preserve real transaction, authority and privacy invariants.
 
 ## Outcomes & Retrospective
 
-
-To be filled during implementation.
-
+Not implemented. Record outcomes, remaining profile limitations and triaged friction at completion.
 
 ## Context and Orientation
 
+Shikigami has seven packages: core domain/runtime, API contracts, HTTP server, workers, client/CLI, migrations and the lightweight agent runner. The last is the deliberate ADR-3 exception to the six-package pattern. Work from this repository root and locate dependencies through Mori before using their APIs. Never traverse `/nix/store`. Current objective work under MasterPlan 17 edits configuration, generated catalogs, migrations and core tests; preserve and reconcile that work rather than reverting it. The workspace currently has ten members, including ExecutionDriver, WorkerSession, ContinuingWorker and Objective. Recount from `domain/shikigami.keiro-workspace` at implementation; neither six members nor two aggregates is a valid fixed inventory.
 
-Hard prerequisite: `docs/plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md` is Complete. It already makes mandatory constructors and matches compile under the released cohort. This child verifies their behavior and adopts useful public inspection. `docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md` is a soft dependency and integration peer; share catalog ownership and error meanings without blocking on its implementation.
+On 2026-10-30 the user confirmed Shikigami is unused. [ADR-27](../adr/0027-the-first-release-establishes-one-clean-durable-baseline.md) and [ADR-37](../adr/0037-adopt-the-released-keiro-contracts-before-v1.md) apply: establish one current first-release contract, remove obsolete compatibility branches/readers, and allow deliberate schema/wire changes. Do not require old binaries, old populated databases or cross-build replay as acceptance. This does not authorize deleting a developer database or weakening external authorization, accounting, protected payloads or same-build replay. Record exact breaking DSL findings and establish the accepted baseline without suppressing the differ. `docs/workflow-versioning.md` still governs durable bodies after that baseline.
 
-`shikigami-core/src/Shikigami/Runtime.hs` registers the shared catalog before serving and installs telemetry callbacks when constructing connection settings. `shikigami-core/src/Shikigami/Workflow/Registry.hs` combines agent runs, approvals and conversations without erasing Kioku resource effects. `shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs` owns resource-aware recovery. `shikigami-workers/src/Shikigami/Trigger/Scheduler.hs` and `Trigger/Timer.hs` own the shared timer pass. `shikigami-workers/src/Shikigami/Trigger/Consumer.hs` owns Kafka trigger delivery and currently directly constructs Shibuya AppConfig; `Agent/RunJob/Worker.hs` consumes the generated queue. `shikigami-workers/src/Shikigami/Health/Worker.hs` observes processor lifecycle. These boundaries must survive new deliveryStatus, Paused, finalizer failure and startup-refusal semantics.
+The frozen guide inventory is `docs/architecture/keiro-0.22-coverage.json`: canonical resource, producer revision, relative source path, SHA-256, child owner, pending disposition and evidence. The readable audit is `docs/architecture/keiro-0.22-pattern-audit.md`. Pending rows are planned work, not compliance claims. Every applicable clause requires an implemented behavior or justified existing implementation and current evidence. Strict unprefixed fields, explicit deriving strategies and isolated generic-lens orphan imports apply to all touched Haskell and examples.
 
-`shikigami-server/src/Shikigami/Server/Command/Ops.hs` embeds the upstream command tree via `emptyAppHooks`, currently mounting replay audit and the shared projection catalog. Resume and timer-drain hooks are deliberately absent because their effect rows do not carry the resource-aware runtime. New `AppHooks.aggregates` and `.processManagers` permit optional application catalogs; new workflow pages/status classes and timer/projection/shard inspection arrive through the upstream tree. This service has RunEvidence and ExecutionLifecycle aggregates, not declared reactive process managers. `Keiro.Inspection.Aggregate` exports explicit aggregate descriptors, `SomeAggregateInspector`, `aggregateInspector`, and `aggregateInspectors`. Resolve the published source with Mori before constructing them. The module is at project-relative `keiro/src/Keiro/Inspection/Aggregate.hs` in `mori://shinzui/keiro` (artifact-level source URI pending).
-
-Consult [ADR 0038](../adr/0038-runtime-startup-and-maintenance-share-validated-owners.md) for startup/recovery/retention and [ADR 0053](../adr/0053-execution-lifecycle-and-protected-replay-share-an-atomic-boundary.md) for protected replay. [ADR 0012](../adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md) and `docs/workflow-versioning.md` govern any workflow edit. Upstream `mori://shinzui/keiro/okf/adrs/concepts/ADR-28` requires operator wrappers over public owning APIs; `mori://shinzui/keiro/okf/adrs/concepts/ADR-54` requires explicit safe aggregate displays and the shared hydration algorithm. Applicable standards include `mori://shinzui/keiro-runtime-patterns/docs/keiro-runtime-assembly`, `mori://shinzui/keiro-runtime-patterns/docs/keiro-workflow-reliability`, `mori://shinzui/keiro-runtime-patterns/docs/messaging-shibuya-processing` and `mori://shinzui/keiro-runtime-patterns/docs/inspection-hosting-and-browser-access`.
-
+`Shikigami.Runtime`, `Shikigami.Workflow.Registry`, worker `Agent/Workflow/Resume.hs`, `Trigger/Consumer.hs`, `Trigger/Timer.hs`, `Trigger/Scheduler.hs`, `Workers/Subscription.hs`, `Agent/RunJob/Worker.hs` and `Health/Worker.hs` own runtime assembly. Trigger.Consumer directly constructs Shibuya AppConfig and exposes a process-local supervisor. `Execution.Store`, `Execution.Timer` and the workflow await paths own generation-specific wakes. [ADR-38](../adr/0038-runtime-startup-and-maintenance-share-validated-owners.md) defines startup, retention and resource-aware resume; [ADR-54](../adr/0054-execution-attempts-own-dispatch-fences-and-generation-wakes.md) defines dispatch and generation authority. The filename retains its historical inspection wording to preserve links; plan 106 exclusively owns that work now.
 
 ## Plan of Work
 
+M1 validates migration handshake before intake, telemetry before store acquisition, validated event streams/catalog before queries and workers, and bracketed shutdown. Preserve each source's projection set as execution, evidence, worker-session and objective owners are composed. Use defaultAppConfig with the existing StopAllOnFailure, serial strict ordering and inbox bounds. Distinguish Paused from failed and drained. Exercise deliveryStatus admission so superseded deliveries invoke neither handler nor finalizer, and permanent finalizer failure reaches supervision. Native adapters own acknowledgement/finalization; do not duplicate their counters or retry ownership. Deterministic configuration failure must not reconnect forever.
 
-### M1 — Verify lifecycle owners and delivery semantics
+For each real subscription, validate capacities, missing-checkpoint policy, target identity, startup/decode failure, retry budget and checkpoint-after-success. Use namespace targets only when the intended input domain actually spans that namespace; exact category consumers keep their scope. Record stopped-owner resize/rebind constraints. Retain PGMQ polling after 0007 removes partitioned-queue notifications. Test visibility extension, duplicate deliveries, poison/exhausted jobs, original_queue DLQ metadata and native redrive authorization. Kafka offsets advance only after the service's durable disposition; test unavailable persistence rather than logging acceptance. HTTP sink outbox delivery retains its own receipt and uncertainty semantics.
 
-Compare actual startup ordering to the current runtime assembly standard: read-only migration handshake, telemetry, bracketed store, event-stream/catalog validation and registration, then intake. The shared catalog now includes ExecutionLifecycle; test that both generated sources are validated and preserved by live factories. Keep one resource-aware workflow registry, one timer dispatcher and the deliberate workflow GC policy. Inspect upstream exports before assuming previously absent resume-success callbacks or ops resume effect support now exist. Retain justified adapters if public effect requirements still do not match.
+M2 recenses the workflow registry and tests every real family, including execution drivers and continuing workers, rather than the old fixed three. Reuse Kioku resource-aware resume without casts/private APIs; remove adapters only when current released APIs genuinely replace their capability. Prove one generation-specific wake before extending fixtures: accepted wake and exact await name, rotation/cancellation races, stale owner/claim refusal, terminal instances not revived, durable resolution/abandonment, and no duplicate external dispatch on replay. Keep allocated opaque IDs and authoritative receipts within the new same-build baseline. Preserve late outcomes as reconciliation evidence and unknown effects as unresolved; expiry is not proof an external process stopped. Maintain one timer dispatcher and explicit workflow GC/idempotency horizon, distinct from protected payload and application retention.
 
-Verify Shibuya default-based AppConfig preserves StopAllOnFailure, serial strict ordering and inbox bounds while retaining basic metrics. Handle Paused truthfully in health; a paused worker is neither failed nor proof its in-flight work drained. For application/custom test adapters, use current deliveryStatus and prove a superseded delivery invokes neither the handler nor finalizer. The released Kafka/PGMQ adapters own their acknowledgement and finalization semantics; do not wrap them with a duplicate decrement/retry protocol. Surface permanent finalizer failure as supervision failure and ensure a reconnect loop cannot repeatedly restart a deterministic definition/startup error.
-
-Review any actual Kiroku subscriptions for validated capacities, explicit missing-checkpoint policy and typed startup/decode failures. Do not introduce namespace targets or shard resizing unless this service needs them. Document stopped-owner requirements for resize as an operator constraint if exposed through ops; never mutate checkpoint/lease tables privately. Keep PGMQ polling even when notifications exist: partitioned queues no longer emit insert notifications. Requalify queue visibility timeout, retry/dead-letter semantics, cancellation and changed DLQ `original_queue` fields against real worker behavior.
-
-Audit custom execution wakes in `Shikigami.Execution.Store`, `Execution.Timer` and workflow await code after reconciling plan 83: durable logical row, exact awaited name, generation-race recheck, instance-row updates on resolution/abandonment, and no delivery after terminal refusal. Preserve allocated opaque awakeable IDs and historical step results. Fix deviations within existing recovery acceptance; do not add a second wake registry. Any workflow body adjustment gets a real declared patch and old/fresh deployment simulation.
-
-M1 is accepted when startup refuses incompatible schema, all three workflow families resume, ordinary/superseded deliveries behave correctly, finalizer failure reaches supervision, timer recovery fences stale owners, and new custom wakes cannot revive cancelled/rotated work.
-
-### M2 — Useful, bounded operator inspection
-
-Add a small hand-owned `Shikigami.Inspection.Aggregates` module in core with two explicit descriptors using generated validated streams/categories. Supply narrow display encoders for lifecycle state, identity and revision metadata. Never delegate display to a rich replay snapshot codec or inspect protected provider data, credentials, tool arguments or model histories. Preserve the physical category/stream mapping and reject duplicate descriptor names. Register its modules in Cabal and mount the resulting catalog through `shikigamiOpsHooks.aggregates`.
-
-Use the released ops parser to surface aggregate type/list/show commands and its workflow inspect, timer pages, projection status and shard status commands. Verify exact syntax from pinned `--help`; document runnable examples with a fixture-owned aggregate/workflow identity. New process-manager discovery remains empty/unmounted unless a real compiled manager exists. Preserve typed `InspectionFailed` instead of rendering failed reads as empty lists. Preserve upstream opaque cursor ordering/filter/version binding, bounded bytes and deadlines; do not recreate SQL or decode/rebuild cursors.
-
-Keep existing audit/catalog hooks, Settei database selection and redacted invocation logging. Recheck whether the new release adds a supported configured-connection entry point before retaining the process-local environment adapter; remove it only if the released API actually replaces it. Preserve preview/force behavior, especially `pgmq dlq read`, which now leases rows for 30 seconds and requires explicit mutation authorization. Aggregate inspection is read-only and must not run workflow resumption or seed verification, create a periodic task, or enable legacy process-manager provenance on ordinary command options.
-
-Extend the existing operator and health tests plus a PostgreSQL fixture for both aggregate descriptors. Update ADR 0038 or a focused local ADR for durable inspection display boundaries when accepted. Classify optional HTTP, composed browser mounts and feeds explicitly in the audit; no new listener is needed to complete this child.
-
+Workflow shape cleanup is coordinated with plan 93. No fake historical patch branch is required, but same-build restart still cannot repeat committed model/tool/accounting work. Hand plan 106 a bracketed process-local metrics provider owned by the real Shibuya AppHandle; inspection must not allocate a second runtime.
 
 ## Concrete Steps
 
-
-From the repository root:
+Run from the repository root in the declared development shell. Use disposable task-owned databases and the existing source-owned fixtures. These are implementation commands, not evidence of tests already run:
 
 ```bash
-mori registry show shinzui/keiro --full
-mori registry docs shinzui/keiro-runtime-patterns
-nix develop --no-write-lock-file -c cabal run shikigami -- ops --help
-nix develop --no-write-lock-file -c cabal run shikigami -- ops wf --help
-nix develop --no-write-lock-file -c cabal test shikigami-workers-test shikigami-server-test
+nix develop --no-write-lock-file -c cabal test shikigami-workers-test shikigami-core-test
 nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test --test-options=-j1
 nix develop --no-write-lock-file -c cabal test keiro-shikigami-conformance
-git diff --check
+nix develop --no-write-lock-file -c just keiro-check
 ```
 
-Use the pinned parser help to add exact aggregate/timer/projection inspection examples to `docs/operations/keiro-0.22-rollout.md` during implementation. Database commands run only against a disposable fixture's supplied configuration. Store concise runtime and inspection evidence under `docs/evidence/keiro-0.22/`; never retain protected payload bodies.
-
+Record actual cases and concise output under `docs/evidence/keiro-0.22/`. Database tests that skip are not accepted. Before claiming Linux is unavailable, inspect `container --help`, `container list --all` and `tests/workspace/build-apple.sh`; use native ARM64 Apple containers, retaining the documented remote-builder fallback only when needed. Do not claim runtime containment from compilation alone.
 
 ## Validation and Acceptance
 
-
-The existing `shikigami-workers/test/Shikigami/Workers/SupervisionSpec.hs`, `Health/WorkerSpec.hs`, `TimerRecoverySpec.hs`, `Agent/RunJob/WorkerSpec.hs` and core PostgreSQL workflow/selection tests are the main regression paths. Add focused lifecycle cases only where new behavior is not already covered. A paused or superseded processor must not be reported as successful work. A schema mismatch refuses before listeners/intake; all supported workflow families retain progress under restart and timer recovery.
-
-Server command tests preserve redaction, explicit database precedence, catalog hooks and mutation-preview exit semantics. An inspection fixture shows the folded state/version of both real aggregates, proves protected replay bodies are absent, returns a typed error for an invalid target/cursor, and pages without draining hidden extra pages to fill results. Reading inspection must not alter event counts, checkpoints, claim ownership or command options. A large or sparse query stays within the chosen finite operational budget. HTTP/feeds remain an explicit non-selected capability rather than an untested claim of adoption.
-
+Regression cases cover ordinary and superseded delivery, poison/no checkpoint advance, finalizer failure, deterministic startup refusal, cancellation and joined cleanup. Every current workflow family resumes from its own new-build suspended state; stale wakes/claims cannot resurrect work or settle twice. Record actual test names and owner/source inventory. Dead-timer recovery uses supported claims and rejects stale tokens.
 
 ## Idempotence and Recovery
 
-
-Default-based assembly and read-only inspection are repeatable. Preserve workflow labels, retained result decoders, queue identities and allocated awakeable IDs. If a patch is necessary, retain the genuine pre-change branch until its population is empty; the upgrade does not renew the old pre-v1 reset exception. Keep failed startup cleanup bracketed and do not retry deterministic refusals forever. A deadline after an operator mutation can leave an uncertain committed result; retain target identity and reconcile with public reads instead of blindly repeating. No production mutation, destructive replay or new listener is authorized by this child.
-
+Repeat generation against an isolated coherent candidate so concurrent uncommitted work cannot masquerade as generated drift. Preserve create-once holes. Recreate only task-owned disposable fixtures after failure; never clear shared journals, leases or bindings to obtain a passing test. Record the source/dirty diff and current input artifacts for reproducibility, without requiring a successful old build before refactoring. A released-schema rollback is not promised. Future post-release evolution resumes the ordinary versioning rules. Record friction through `agents/skills/exec-plan/FRICTION.md`, promote durable decisions through the local plain-Markdown ADR convention, and scan touched code and prose for stale prefixed fields.
 
 ## Interfaces and Dependencies
 
+Requires plan 92 Complete. Plan 93 is a soft dependency and integration peer for command result meanings and workflow baseline; coordinate edits to Execution.Store with its owner. Own runtime lifecycle and the process-local metrics lifetime consumed by plan 106. Plan 95 requires this child Complete.
 
-This child defines the application aggregate inspector catalog and its safe display contract. It consumes the generated streams/catalog from the completed dependency child and shares them with `docs/plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md`. Keiro owns hydration, cursors, schema checks and ops parsing; Shikigami owns which application state is mounted, configuration, redaction and resource-aware progress workers. Do not cast away Kioku effects to fill an incompatible upstream hook. `docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md` requires this entire child Complete and performs final cross-build and package qualification.
+## Revision Notes
+
+2026-10-30: Expanded MasterPlan 16 under the user's unused-service confirmation; replaced compatibility-driven scope with current-contract adoption and explicit behavioral evidence. Previous provenance entries and review verdicts remain historical and do not certify this revision.

@@ -21,6 +21,11 @@ provenance:
       at: 2026-10-28T13:33:35Z
       mode: "update"
       note: "Apply review: require pre-edit baseline handoff and preserve late-write rollback outside typed preconditions."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-30T19:46:17Z
+      mode: "update"
+      note: "Expand unused-service adoption to six children, current domain census, HTTP/live inspection, Haskell corpus and first-release qualification."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -29,99 +34,63 @@ provenance:
       note: "Capture the old source and solve before EP-1 edits; resolve EP-2 late-refusal callback semantics."
 ---
 
-# Upgrade Shikigami to Keiro 0.22 and retire superseded runtime workarounds
-
-This MasterPlan is a living document. The sections Progress, Surprises & Discoveries,
-Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
-If durable project context changes, update or create ADRs in docs/adr/ in the same change.
-
+# Upgrade Shikigami to Keiro 0.22 and adopt current runtime and Haskell practices
 
 ## Vision & Scope
 
+Run one released Keiro 0.22 cohort with current generated domain contracts, correct durable delivery/recovery, useful administrative CLI/HTTP/live inspection and complete current-guide evidence. The user confirmed on 2026-10-30 that Shikigami is unused and refactoring is cheap. Apply ADR-27: establish the intended first-release schema, codecs and workflow baseline; remove obsolete readers and patch branches rather than adding historical compatibility. Do not require an old successful build, populated upgrade or cross-build replay. Fresh provisioning and same-build crash/restart, accounting, authorization and protected evidence remain mandatory.
 
-Upgrade Shikigami's selected Keiro 0.18 runtime to the latest released Keiro family, verified on 2026-10-28 as 0.22.0.0. After completion, deployed roles use one reproducible released dependency cohort, existing histories and queued jobs remain readable, execution admission refusals use supported atomic catalog preconditions while late-write failures retain proven transaction rollback, and operators can inspect application aggregates through bounded upstream APIs. The initiative also closes an evidence-backed audit against `mori://shinzui/keiro-runtime-patterns` at revision `62531b00b415785be61584a3c44b569fdfb35c4e`.
+This refresh expands the existing MasterPlan 16 and preserves intention `intention_01m61agcfzek98hqzkb0kxcfmg`; unrelated completed EP-16 is unchanged. All applicable features across the 0.18→0.22 gap must receive evidence-backed adoption. A non-applicable disposition needs a specific absent consumer or genuine upstream capability limitation, never refactoring cost or obsolete bytes. Do not fabricate a process manager from a workflow or a Kafka publisher from an HTTP sink.
 
-The initial findings and feature dispositions are in [the audit](../architecture/keiro-0.22-pattern-audit.md). Hackage reports all eight Keiro packages at 0.22.0.0; their peeled upstream tags share commit `b28201f2063fa4f6dcb724cbf474959107e36b74` in `mori://shinzui/keiro`. Seven existing packages must advance together. The eighth, `mori://shinzui/keiro/packages/keiro-ops-http`, remains optional because no operational HTTP listener is selected by this initiative. Recheck release evidence at implementation start; a newer major requires an explicit plan revision rather than silently changing this qualified target.
-
-Include the necessary Kioku, Kiroku, Shibuya, PGMQ and pg-migrate compatibility work; generated Haskell and conformance changes; removal of superseded workarounds; runtime lifecycle checks; immutable deployment packaging; migration rehearsal; and retained-history qualification. Adopt applicable features on executed paths. Record capability-specific reasons for retaining application code where upstream still cannot replace it. This creates plans and an initial source audit; it does not implement the upgrade or certify deployment readiness.
-
-General agent orchestration remains owned by [MasterPlan 14](14-deliver-adaptive-autonomous-objectives-with-durable-workers.md), particularly its in-progress [plan 83](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md). Preserve its accepted execution contracts and current work. Do not add a dashboard, operational HTTP/WebSocket listener, new process manager, namespace subscription, destructive projection rebuild, queue drain, or production deployment merely to demonstrate a new upstream feature.
-
+Hackage and remote tags were rechecked on 2026-10-30: 0.22.0.0 is the latest listed Keiro release and tag keiro-0.22.0.0 peels to b28201f2063fa4f6dcb724cbf474959107e36b74. Verify companion releases before pinning; latest compatible cohort does not mean latest independent major of every library. Source owner is `mori://shinzui/keiro`. Kotei's analogous initiative is `mori://shinzui/kotei/masterplans/21-migrate-kotei-to-keiro-0-22-and-adopt-current-runtime-practices`; it supplies no Shikigami implementation evidence.
 
 ## Decomposition Strategy
 
+Expand four children into six independent behaviors. Preserve plans 92–95 and their provenance, but separate inspection hosting and Haskell/service refactoring from lifecycle and final qualification. This keeps significant implementation out of an audit-only final plan and gives host/resource boundaries a single owner.
 
-Use four behavior-oriented children. EP-1 produces a compilable released cohort and a demonstrated migration path. EP-2 replaces execution refusal plumbing with the released guarded command protocol and qualifies DSL consumers without inventing schema migrations. EP-3 integrates lifecycle semantics and bounded application inspection. EP-4 owns the final cross-build compatibility proof, deployment artifacts, audit closure and operator runbook. Combining them would obscure the difference between successful dependency resolution, correct atomic refusal, useful runtime integration and safe deployment.
-
-Relevant local decisions consulted are [ADR 0001](../adr/0001-declare-only-what-the-runtime-executes.md), which permits declarations only on executed paths; [ADR 0012](../adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md), which requires real patch guards for released workflow changes; [ADR 0037](../adr/0037-adopt-the-released-keiro-contracts-before-v1.md), which requires released dependency evidence and honest adoption; [ADR 0038](../adr/0038-runtime-startup-and-maintenance-share-validated-owners.md), which preserves startup, timer, registry and retention owners; [ADR 0039](../adr/0039-deployment-roles-share-a-frozen-cabal-source-closure.md), which requires one immutable deployment closure; and [ADR 0053](../adr/0053-execution-lifecycle-and-protected-replay-share-an-atomic-boundary.md), which requires atomic execution history, payload, accounting and progress. The pre-v1 exception in ADR 0037 is historical evidence, not current authorization to discard data.
-
-Cross-repository decisions consulted are `mori://shinzui/keiro/okf/adrs/concepts/ADR-28` (operator commands wrap their owning public library) and `mori://shinzui/keiro/okf/adrs/concepts/ADR-54` (explicit aggregate inspection reuses hydration without charging command paths). Canonical handles were discovered through Mori. Implementation must promote durable changes to the corresponding local ADRs; this planning proposal does not mark a new architecture decision accepted.
-
+Consulted decisions: [ADR-27](../adr/0027-the-first-release-establishes-one-clean-durable-baseline.md) and [ADR-37](../adr/0037-adopt-the-released-keiro-contracts-before-v1.md) permit clean adoption; [ADR-38](../adr/0038-runtime-startup-and-maintenance-share-validated-owners.md) keeps migration/startup/recovery ownership; [ADR-39](../adr/0039-deployment-roles-share-a-frozen-cabal-source-closure.md) requires one frozen closure; [ADR-53](../adr/0053-execution-lifecycle-and-protected-replay-share-an-atomic-boundary.md) and [ADR-54](../adr/0054-execution-attempts-own-dispatch-fences-and-generation-wakes.md) preserve atomic outcomes and dispatch fences. [ADR-71](../adr/0071-first-release-inspection-is-an-isolated-administrative-runtime.md) records the new inspection boundary. ADR-1's declare-only-executed rule and ADR-3's seventh-package exception remain. Cross-repository ADR-28 and ADR-54 were resolved with Mori and read: `mori://shinzui/keiro/okf/adrs/concepts/ADR-28` and `mori://shinzui/keiro/okf/adrs/concepts/ADR-54`.
 
 ## Exec-Plan Registry
 
-
-| # | Title | Path | Hard Deps | Soft Deps | Status |
-|---|-------|------|-----------|-----------|--------|
-| EP-1 | Released cohort and composed migration | [Plan 92](../plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md) | None | None | Not Started |
-| EP-2 | Guarded commands and DSL consumer contracts | [Plan 93](../plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md) | EP-1 | None | Not Started |
-| EP-3 | Runtime lifecycle and operator inspection | [Plan 94](../plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md) | EP-1 | EP-2 | Not Started |
-| EP-4 | Audit closure and rollout qualification | [Plan 95](../plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md) | EP-2, EP-3 | None | Not Started |
-
-Status values are Not Started, In Progress, Complete and Cancelled. All hard dependencies above name whole children.
-
+| # | Workstream | Path | Hard Deps | Soft Deps | Status |
+|---|---|---|---|---|---|
+| EP-1 | Released cohort and fresh schema | [92](../plans/92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md) | None | None | Not Started |
+| EP-2 | Guarded commands and complete domain adoption | [93](../plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md) | EP-1 | None | Not Started |
+| EP-3 | Native delivery and workflow recovery | [94](../plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md) | EP-1 | EP-2 | Not Started |
+| EP-4 | Administrative CLI, HTTP and live inspection | [106](../plans/106-expose-bounded-administrative-inspection-and-live-feeds.md) | EP-1 | EP-3 | Not Started |
+| EP-5 | Haskell and service architecture practices | [107](../plans/107-adopt-current-haskell-and-service-architecture-practices.md) | EP-1 | None | Not Started |
+| EP-6 | Integrated first-release qualification | [95](../plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md) | EP-1, EP-2, EP-3, EP-4, EP-5 | None | Not Started |
 
 ## Dependency Graph
 
+Default order is 92, 93, 94, 106, 107, 95. All hard dependencies name whole completed children. The released build/schema enables each implementation stream. Plans 93, 94, 106 and 107 can proceed independently after 92 with coordinated edits: soft dependencies provide stable domain/metrics context without inventing a prerequisite on the entire ongoing product initiative. Plan 95 requires every implemented surface to qualify one final candidate.
 
-Execute EP-1, EP-2, EP-3 and EP-4 in registry order by default. EP-1 must be Complete before EP-2 or EP-3 begins: both require the actual 0.22 public interfaces, regenerated consumers and accepted migration fixture. EP-2 and EP-3 are otherwise independently implementable; EP-3 benefits from EP-2's error mapping but has no hard dependency on it. Their integration dependency is the shared validated catalog and its safe operator display. EP-4 requires both complete because its old/new proof and packaged binaries must exercise the final runtime rather than an intermediate adaptation.
-
-Do not require all of MasterPlan 14 to finish before this upgrade. Before any EP-1 upgrade edit, capture and verify the accepted execution source (including required dirty/untracked contents), old solve and successful old build. EP-1 owns the immutable handoff indexed by `docs/evidence/keiro-0.22/baseline.md`; EP-4 consumes it. Preserve the working tree during capture and retain the artifacts through final acceptance. During EP-2 implementation, serialize edits to execution persistence with plan 83's owner. Resume qualification against the reconciled candidate if those contracts move; never resolve concurrent work by dropping its claims, accounting, continuation or wake behavior.
-
+MasterPlans 14, 17 and 18 own evolving execution, objective and tracker capabilities. This upgrade does not replace those product semantics. Capture a coherent current source identity and reconcile their accepted interfaces before touching shared files; no requirement to preserve old successful binaries remains. Refresh evidence when concurrent changes alter the candidate. Never drop objective/worker/session projections to restore the old census.
 
 ## Integration Points
 
+EP-1 owns dependency descriptors, source provenance, index-state, mandatory compiling generation and composed schema. It provides plan 106's inspection dependencies as one compatible cohort. EP-2 owns subsequent DSL/domain semantics, current codec baseline and generated artifacts, plus guarded command refusal mapping. Preserve the reviewed distinction: the typed guard is pre-inline; post-write hook/accounting failure still requires exception-triggered whole-transaction rollback. Early proof covers accepted outcome, typed refusal, late refusal after tentative writes and rebuild fencing before broad conversion.
 
-**Cohort and generated baseline — EP-1 owns.** `cabal.project`, all package descriptors, `mori.dhall`, initial regenerated files and build-time DSL pin define the released interface consumed by EP-2/EP-3. EP-1 first preserves the pre-edit source/build handoff, with content digests, old project inputs, successful solve and retained migration/runtime artifacts for EP-4. A revision and dirty-path inventory alone do not satisfy this gate. EP-1 then performs only mandatory source adaptations and generation; EP-2 owns subsequent DSL semantic changes. EP-4 owns final `nix/qualification/cohort.json`, `metadata.tar.gz` and role validation. Match the compiled closure to the final Cabal solve rather than retaining the old deployment closure.
+EP-3 owns Shikigami.Runtime, workflow registry, subscription/queue/trigger lifecycle and wake recovery. EP-4 consumes actual worker-local AppHandle metrics, owns shared safe inspector descriptors, host configuration, dedicated inspection pools and listener/feed shutdown. Its first producer/consumer check is one real ExecutionLifecycle state through CLI and HTTP; then expand to the actual aggregate census. Neither child creates a second registry/fold or changes rich-payload authority. EP-5 owns residual Haskell/API/CLI/configuration fixes and package/style gates; coordinate shared Cabal/App.Config edits with the relevant owner instead of doing simultaneous incompatible rewrites.
 
-**Migration composition — EP-1 owns; EP-4 rehearses final artifacts.** `shikigami-migrations/src/Shikigami/Migrations.hs`, its SQL manifest and startup verification include all upstream prerequisites. Shikigami currently vendors PGMQ SQL under its own historical migration, so upstream PGMQ migration 0007 needs an explicit ledger/schema bridge, not blind composition of a second baseline. Preserve applied names and checksums. EP-1 must prove old-schema upgrade and repeat application before downstream work expands.
-
-**Catalog command boundary — EP-2 owns.** `Shikigami.Execution.Store`, `Shikigami.Execution.Catalog`, generated `ExecutionLifecycle`, and existing resource/selection transaction hooks must agree on accepted versus rolled-back work. Its early producer/consumer proof is one execution outcome with accounting and cursor advancement, a typed pre-inline refusal, a late-hook refusal after tentative writes, and a rebuild fence from another connection. Keiro's guarded callback runs before inline delivery; EP-2 retains exception rollback for post-write hooks and write-time owner failures, with exact application errors and no fabricated `PreconditionRefused`. Expand across execution paths only after that proof. Preserve the RunEvidence projection set when capturing execution handlers and vice versa.
-
-**Runtime and inspection — EP-3 owns.** `Shikigami.Runtime`, the shared workflow registry, worker assembly/health, and `Shikigami.Server.Command.Ops` consume the accepted cohort. EP-3 defines a small application-owned aggregate inspector catalog using generated event streams, with safe display encoders. It must not expose protected replay payloads or fabricate process-manager catalogs from ordinary workflows. EP-2 consumes this visibility without introducing a second registry. Mandatory compiling adaptations made by EP-1 are extended here, not redefined.
-
-**Audit and compatibility — EP-4 owns; each child contributes evidence.** `docs/architecture/keiro-0.22-pattern-audit.md` is the shared finding ledger. Each child closes its own rows with actual evidence; EP-4 checks the full current pattern inventory and all feature dispositions. The final proof spans retained workflow journals, event history, snapshots, queue v1/v2/v3 readers and any newer execution input present at handoff, rich live-only rows, and migration handshakes. Every workflow body change follows `docs/workflow-versioning.md`; no child may disable a gate or claim generated-file churn proves persisted compatibility.
-
-Durable ADR subjects are the supported relational-refusal boundary, the scope of synchronous command authority versus live-only data retention, PGMQ migration ownership, inspection display/authorization boundaries, and the final writer cutover/rollback limits. Amend existing decisions where they already own these subjects.
-
+EP-6 owns final source/release inventory validation, exact-candidate evidence, frozen Nix closure and first-deployment runbook. Every child supplies clause-level findings and evidence in the audit. Shared source inventory rows name exactly one accountable child; a cross-cutting source may link several contributors. EP-2 owns source/fold/snapshot reset decisions; EP-1 owns migration composition; EP-4 owns administrative exposure; EP-6 distills final durable decisions into the plain-Markdown ADR corpus.
 
 ## Progress
 
-
-2026-10-28: Research and initial source audit are complete; four child ExecPlans are created and Not Started. The current working tree selects Keiro 0.18 and contains ongoing execution work. No dependency, runtime or migration implementation was changed in this planning session. Review corrections now require pre-edit baseline capture and separate typed/late-refusal proofs. Final integration gates remain the stopped-writer migration rehearsal, typed-refusal atomicity proof, retained-history comparison and matching Nix role closure.
-
+2026-10-30: Expanded planning is complete; all six children remain Not Started. EP-1 is eligible. The previous October 28 review applies to the old scope, not this revision. Final gates are fresh provisioning, useful runtime work, same-build restart/replay, native refusal atomicity, bounded inspection under failure and complete source/release dispositions for one exported candidate.
 
 ## Surprises & Discoveries
 
-
-The latest standalone Kiroku Store is 0.13.0.0, but released Keiro 0.22 and Kioku 0.12 require the 0.12 line. “Latest Keiro” therefore means the latest compatible released cohort rather than taking the latest version of every dependency. The initial audit records this distinction and the temporary PostgreSQL fixture relaxation whose replacement is now published.
-
+The previous plan hardcoded six workspace members/two aggregates; the current workspace has ten members including new objective work. RunJobs is currently schema version 4 with three historical upcasters; they are cleanup candidates under the unused-service confirmation. Trigger.Consumer directly constructs Shibuya AppConfig. Ops already uses emptyAppHooks and the native tree; Kotei's duplicated-parser finding does not apply here. Rich evidence is not reconstructible from lifecycle events, so first-release freedom does not license destructive replay of those live-only targets.
 
 ## Decision Log
 
-
-2026-10-28 review revision: Resolve review findings by making the pre-edit old source/solve/build capture an EP-1 handoff required by EP-4, and limiting EP-2 typed refusals to the released pre-inline callback. Retain and separately test existing late-write exception rollback. Child count, hard dependencies and implementation status are unchanged; these are qualification/scope corrections preserving the existing atomicity contract.
-
-2026-10-28: Created and linked the user-requested Mina intention across this MasterPlan and all children.
-
-2026-10-28: Separate release/migration qualification, command semantics, runtime inspection and final integration because each has a different observable acceptance boundary. Preserve whole-child hard dependencies on the accepted cohort.
-
-2026-10-28: Select applicable 0.22 inspection through the existing embedded operator CLI. Operational HTTP and live feeds remain explicitly optional until a hosting requirement exists; their absence does not imply a runtime defect.
-
-2026-10-28: Treat every workaround individually. Remove the obsolete PostgreSQL fixture bound relaxation; replace eligible pre-inline execution admission refusals with supported typed preconditions and retain justified late-write rollback; retain historical queue readers and rich-payload adapters where upstream still lacks the required contract. Structural enum equality is a capability to apply only to a demonstrated consumer, not a reason to widen or rename existing queue enums.
-
+2026-10-30: Supersede October 28's retained-history/old-build requirement and CLI-only exclusion under the user's explicit unused-service confirmation. Preserve the earlier review's late-write rollback correction. Add dedicated inspection and Haskell/service implementation children, preserving existing plan identities and intention. Every applicable guide/release capability must be implemented or verified; exclusions need a real product/capability reason.
 
 ## Outcomes & Retrospective
 
+Implementation pending. No release, deployment or runtime compliance is certified by these plans.
 
-To be filled during implementation and final qualification.
+## Revision Notes
+
+2026-10-30: Replaced compatibility-driven scope with a clean first-release baseline; expanded four children to six, refreshed the domain census, added Haskell and complete release inventories, and selected administrative HTTP/live feeds. Existing provenance is preserved.
