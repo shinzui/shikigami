@@ -2,9 +2,10 @@
 # Destructive fixture work is confined to a disposable guest explicitly marked
 # by its provisioner. This runner never enables production process admission.
 set -eEuo pipefail
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
 mode=${1:-}
 runtime=${2:-}
-[[ $# == 2 && ( "$mode" == --prototype || "$mode" == --provision || "$mode" == --git || "$mode" == --workflow ) && "$runtime" == /nix/store/* ]] || { echo 'Usage: run-linux.sh --prototype|--provision|--git|--workflow RUNTIME'; exit 64; }
+[[ $# == 2 && ( "$mode" == --prototype || "$mode" == --provision || "$mode" == --git || "$mode" == --workflow || "$mode" == --workflow-only ) && "$runtime" == /nix/store/* ]] || { echo 'Usage: run-linux.sh --prototype|--provision|--git|--workflow|--workflow-only RUNTIME'; exit 64; }
 [[ $(uname -s) == Linux && $(id -u) == 0 && -f /run/shikigami-workspace-prototype.disposable ]] || { echo 'REFUSED: a marked disposable Linux guest running as root is required'; exit 78; }
 [[ $(ps -p 1 -o comm=) == systemd && $(stat -fc %T /sys/fs/cgroup) == cgroup2fs ]]
 sudo -n true
@@ -224,10 +225,21 @@ fd=os.open(sys.argv[1],os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
 os.close(fd)
 RELEASE
 }
+# A payload's readiness marker can precede release of the supervisor's
+# admission lock. Repeat only the same original coordinates after a bounded
+# unresolved response; this never prepares or launches a replacement attempt.
+duplicate_original() {
+  for turn in {1..3}; do
+    if "$prototype" duplicate "$config" "$prefix" "$1" >"$prefix/duplicate-$1.log" 2>&1; then return 0; fi
+    sleep 0.25
+  done
+  return 1
+}
+if [[ "$mode" != --workflow-only ]]; then
 prepare duplicate slow
 start_worker duplicate
 wait_ready duplicate
-"$prototype" duplicate "$config" "$prefix" duplicate
+duplicate_original duplicate
 release_command duplicate
 wait_settled duplicate
 "$prototype" worker "$config" "$prefix" duplicate
@@ -337,7 +349,9 @@ rm "$prefix/deny-authority"
 echo 'PASS fresh publication denial after tree capture refuses the retained candidate without changing HEAD'
 echo 'Workspace Linux process and local Git prototype passed (13 cases); production workflow, handoff and full IR-11 qualification remain open.'
 
-if [[ "$mode" == --workflow ]]; then
+fi
+
+if [[ "$mode" == --workflow || "$mode" == --workflow-only ]]; then
   rm -f "$prefix/deny-authority"
   "$prototype" workflow "$config" "$prefix" admit >"$prefix/workflow-admit.log" 2>&1
   "$prototype" workflow "$config" "$prefix" edit >"$prefix/workflow-edit.log" 2>&1
@@ -347,5 +361,9 @@ if [[ "$mode" == --workflow ]]; then
   "$prototype" workflow "$config" "$prefix" run >"$prefix/workflow-run.log" 2>&1
   "$prototype" workflow "$config" "$prefix" verify >"$prefix/workflow-verify.log" 2>&1
   echo 'PASS configured durable parent/child upgrades, validates and commits once across worker restart and parent redelivery'
-  echo 'Workspace configured durable workflow qualification passed (14 cases); handoff and full IR-11 qualification remain open.'
+  if [[ "$mode" == --workflow-only ]]; then
+    echo 'Focused configured durable workflow qualification passed (3 cases including native provisioning); the process/Git matrix is separate.'
+  else
+    echo 'Workspace configured durable workflow qualification passed (14 cases); handoff and full IR-11 qualification remain open.'
+  fi
 fi

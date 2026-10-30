@@ -677,4 +677,5 @@ rules and commit conventions. Whole-tree Git capture needs complete read access;
 every changed path needs write admission. A successful validation is a retained
 normal exit with code zero. Neither a timeout nor requested cancellation proves
 success. See [workspace operations](workspaces.md) for native qualification and
-receipt recovery. The normal parent/child workflow gate remains pending.
+receipt recovery. The full native parent/child workflow gate passes fourteen cases; handoff and
+integrated-revision qualification remain open in Plan 96.

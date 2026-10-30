@@ -69,7 +69,7 @@ authorization refusal, and non-`Skill` behavior are permanent typed refusals. Ge
 admits only observation tools. A one-off invocation may admit a mutation only when its explicit
 local policy authorizes it; the operation class remains visible rather than being weakened.
 
-[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) amendment (2026-10-29; file adapter and patched worker admission implemented; process and handoff gates pending): a separate governed resolution path
+[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) amendment (2026-10-30; file/process/Git adapters and patched worker admission qualified; handoff gates pending): a separate governed resolution path
 may admit workspace mutation descriptors only through an operator-installed durable adapter
 keyed by exact capability, revision and descriptor digest. `installDurableAdapters`
 validates immutable logical tool schemas and explicit recovery contracts independently
@@ -95,8 +95,11 @@ accepted-executor process/Git gate passed on 2026-10-30. Explicit
 registry for historical protected snapshots. Every configured repository must
 have a complete reviewed process policy and matching path restrictions.
 Native support, reviewed instructions and ready reserved Unix identity are
-required before model admission. The normal durable-workflow fixture is an
-additional integration gate; handoff remains independently qualified. Generic
+required before model admission. The normal durable-workflow fixture passes all fourteen native cases.
+Already admitted file-only snapshots can resume after supervised installation
+only while their original reviewed base and exact path-policy identity remain
+approved; they do not provision or gain the process profile. Handoff remains
+an independent unfinished gate. Generic
 observation providers, including `workspace.read`, retain their semantics.
 
 The first concrete one-off provider is the immutable `workspace.read` revision `1` descriptor

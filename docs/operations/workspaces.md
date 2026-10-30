@@ -20,10 +20,12 @@ instructions; a later assignment must admit the new approved base.
 The independent Linux supervisor, process-aware file adapter and local Git
 adapter have passed the native accepted-executor qualification. An explicit
 `workspaces.process` configuration installs them into the configured worker;
-omitting it retains file revision 1. The complete normal-workflow qualification,
-handoff, integration and terminal cleanup remain delivery gates in
+omitting it retains file revision 1. The normal parent/child workflow passes
+the full fourteen-case native gate.
+Handoff, integration and final IR-11 qualification remain delivery gates in
 [plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md).
-Do not infer production enablement from a passing prototype.
+Enablement requires the explicit reviewed process configuration and a qualified
+image and containment profile.
 
 The prototype uses systemd system services and writable cgroup v2, an immutable
 execution root, separate reserved Unix identities, a private network and PID
@@ -44,11 +46,14 @@ bash tests/workspace/run-apple.sh --workflow
 The first command checks ten process/provisioning cases. The second includes
 those cases plus accepted dependency edit, validation and local commit,
 duplicate commit delivery, recovery after the committing worker is killed, and
-fresh publication denial. It expects thirteen named cases overall. `--workflow` additionally runs the
+fresh publication denial. It expects thirteen named cases overall.
+`--workflow` additionally runs the
 normal agent parent and execution child, restarts the worker after its accepted
 edit, and verifies one terminal result with exact commit and validation evidence.
-It expects fourteen named cases; this new gate is pending qualification. The runner
-builds its controller through the configured Nix builder, copies its closure
+It passes fourteen named cases. The focused `--workflow-only` mode runs three
+cases (native provisioning plus the normal workflow) for iteration; retain the
+combined `--workflow` gate for complete process/Git/workflow qualification.
+The runner builds its controller through the configured Nix builder, copies its closure
 through Nix, creates a task-specific container and temporary SSH credentials,
 and removes its container and credentials on exit. It prints the private
 evidence directory. The fixture sources and runtime are copied without host
@@ -59,6 +64,10 @@ The fixture observes a clock change before admitting a short command and holds
 restart cases until their intended boundary is established. It leaves clock
 change protection enabled. Passing these short cases does not qualify commands
 that must run across a guest clock change.
+
+The trusted fixture controller uses `C.UTF-8` to load UTF-8 Dhall and Skill
+files. Production workers also need a UTF-8 locale for those inputs. Repository
+commands retain the separately cleared environment from their admitted rule.
 
 ## Local Git contracts
 

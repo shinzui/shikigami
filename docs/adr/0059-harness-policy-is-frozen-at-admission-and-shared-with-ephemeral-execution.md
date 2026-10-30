@@ -26,7 +26,7 @@ Overrides can add restrictions and lower ceilings, retain more recent context,
 and strengthen output requirements. They grant no model, tool or external action.
 The old coarse workflow branch retains its existing semantics and labels.
 
-[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) amendment (2026-10-29; file admission and worker enablement implemented; process gates pending): repository instructions are also
+[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) amendment (2026-10-30; file/process/Git worker admission qualified; handoff gates pending): repository instructions are also
 accepted assignment input. Freeze a bounded bundle of `AGENTS.md` text, path scopes and
 content identities from the admitted base in protected storage, and include its scope-labelled
 contents in fixed model context before the first request. Context compaction must preserve
@@ -64,7 +64,11 @@ provisioning the exact Unix profile. Its complete image, compiled properties,
 command rules and path restrictions determine the workspace policy revision.
 A current human label cannot reinterpret that revision. Unsupported native
 hosts refuse before allocation; no model request precedes profile readiness.
-The normal durable parent/child integration remains a separate plan-96 gate.
+The normal durable parent/child integration passes the fourteen-case native
+gate. Existing file-only snapshots retain their exact approved path-policy
+identity and adapter when the supervised host is installed; no native profile
+provisioning occurs on that retained path. Handoff remains a separate plan-96
+gate.
 
 The database-free command explicitly selects ephemeral recording. It uses the
 same pure context selection, summary preparation, tool admission and output

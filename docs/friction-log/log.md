@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-10-30
+* **Update**: FRIC-28 resolved: Qualify UTF-8 controller setup without changing the repository payload environment.
+* **Addition**: FRIC-28 records detour environment friction with mori://shinzui/shikigami: Linux fixture locale rejects the UTF-8 declaration schema
 * **Update**: FRIC-27 resolved: Qualify the guest manager/local-filesystem startup retry before package and fixture IO.
 * **Addition**: FRIC-27 records detour environment friction with mori://shinzui/shikigami: Apple fixture reaches systemctl before the guest manager is ready
 * **Addition**: FRIC-26 records slowdown tooling friction with mori://shinzui/shikigami: Normal workflow qualification waits for a complete runtime rebuild
