@@ -257,7 +257,7 @@ triggerActivity =
       Activity.occurredAt = "2026-07-31T09:00:00Z",
       Activity.source = "shinzui/rei",
       Activity.actor = Activity.Actor {Activity.kind = "human", Activity.id = "person:mai", Activity.session = Nothing},
-      Activity.subject = Activity.Subject {Activity.subjectType = "intention", Activity.subjectId = "int_42"},
+      Activity.subject = Activity.Subject {Activity.kind = "intention", Activity.subjectId = "int_42"},
       Activity.verb = "intention.stalled",
       Activity.payload = sampleOutput,
       Activity.contextRefs = [],

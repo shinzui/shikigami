@@ -9,7 +9,7 @@ module Shikigami.Agent.RunJob
   )
 where
 
-import Data.Aeson (Value)
+import Data.Aeson (Value, (.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID
@@ -24,7 +24,7 @@ import Shikigami.Agent.Run.Key (RunKey, runKeyText)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Execution.Request (ExecutionRequest)
 import Shikigami.Id.Name (nameBytes)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 
 -- | Which trigger class produced the job.
 data TriggerKind = TriggeredBySchedule | TriggeredByStream | TriggeredByEvent | TriggeredByDelegation
@@ -72,43 +72,43 @@ data RunJob = RunJob
 instance ToJSON RunJob where
   toJSON job =
     Aeson.object
-      [ "agentName" Aeson..= job.agentName,
-        "identity" Aeson..= job.identity,
-        "triggerKind" Aeson..= job.triggerKind,
-        "occurredAt" Aeson..= job.occurredAt,
-        "triggerPayload" Aeson..= job.triggerPayload,
-        "idempotencyKey" Aeson..= job.idempotencyKey,
-        "parentSessionId" Aeson..= job.parentSessionId,
-        "parentRunWorkflowId" Aeson..= fmap (.unWorkflowId) job.parentRunWorkflowId,
-        "delegationDepth" Aeson..= job.delegationDepth,
-        "lineage" Aeson..= job.lineage,
-        "executionRequest" Aeson..= job.executionRequest,
-        "executionPermissions" Aeson..= job.executionPermissions,
-        "executionRootId" Aeson..= job.executionRootId,
-        "delegationBudgetId" Aeson..= job.delegationBudgetId,
-        "routeKind" Aeson..= job.routeKind
+      [ "agentName" .= job.agentName,
+        "identity" .= job.identity,
+        "triggerKind" .= job.triggerKind,
+        "occurredAt" .= job.occurredAt,
+        "triggerPayload" .= job.triggerPayload,
+        "idempotencyKey" .= job.idempotencyKey,
+        "parentSessionId" .= job.parentSessionId,
+        "parentRunWorkflowId" .= fmap (.unWorkflowId) job.parentRunWorkflowId,
+        "delegationDepth" .= job.delegationDepth,
+        "lineage" .= job.lineage,
+        "executionRequest" .= job.executionRequest,
+        "executionPermissions" .= job.executionPermissions,
+        "executionRootId" .= job.executionRootId,
+        "delegationBudgetId" .= job.delegationBudgetId,
+        "routeKind" .= job.routeKind
       ]
 
 instance FromJSON RunJob where
   parseJSON = Aeson.withObject "RunJob" \value -> do
-    agentName <- value Aeson..: "agentName"
-    identity <- value Aeson..: "identity"
+    agentName <- value .: "agentName"
+    identity <- value .: "identity"
     case identity of
       UnresolvedLegacyIdentity -> fail "run job requires an admitted identity"
       _ -> pure ()
-    triggerKind <- value Aeson..: "triggerKind"
-    occurredAt <- value Aeson..: "occurredAt"
-    triggerPayload <- value Aeson..: "triggerPayload"
-    idempotencyKey <- value Aeson..: "idempotencyKey"
-    parentSessionId <- value Aeson..: "parentSessionId"
-    parentRunWorkflowId <- value Aeson..: "parentRunWorkflowId" >>= traverse (either (fail . show) pure . mkWorkflowId)
-    delegationDepth <- value Aeson..: "delegationDepth"
-    lineage <- value Aeson..: "lineage"
-    executionRequest <- value Aeson..: "executionRequest"
-    executionPermissions <- value Aeson..: "executionPermissions"
-    executionRootId <- value Aeson..: "executionRootId"
-    delegationBudgetId <- value Aeson..: "delegationBudgetId"
-    routeKind <- value Aeson..: "routeKind"
+    triggerKind <- value .: "triggerKind"
+    occurredAt <- value .: "occurredAt"
+    triggerPayload <- value .: "triggerPayload"
+    idempotencyKey <- value .: "idempotencyKey"
+    parentSessionId <- value .: "parentSessionId"
+    parentRunWorkflowId <- value .: "parentRunWorkflowId" >>= traverse (either (fail . show) pure . mkWorkflowId)
+    delegationDepth <- value .: "delegationDepth"
+    lineage <- value .: "lineage"
+    executionRequest <- value .: "executionRequest"
+    executionPermissions <- value .: "executionPermissions"
+    executionRootId <- value .: "executionRootId"
+    delegationBudgetId <- value .: "delegationBudgetId"
+    routeKind <- value .: "routeKind"
     pure RunJob {agentName, identity, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, executionRootId, executionRequest, executionPermissions, routeKind}
 
 -- | Preserve valid natural workflow keys. Keys containing Keiro journal

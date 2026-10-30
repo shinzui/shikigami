@@ -16,6 +16,7 @@ module Shikigami.WorkerSession.Workflow
 where
 
 import Control.Exception (fromException)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
@@ -43,7 +44,7 @@ import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Execution.SelectionRuntime qualified as Selection
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript (executionIdFor)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.WorkerSession.Checkpoint (CheckpointProvider (..), ObjectiveVersion (..))
 import Shikigami.WorkerSession.Identity
 import Shikigami.WorkerSession.Store qualified as Store
@@ -53,12 +54,12 @@ data SessionRuntime = SessionRuntime
   { appEnv :: !AppEnv,
     agents :: ![AgentDecl],
     directory :: !DirectoryHandle,
-    authorize :: AgentIdentity -> IO (Either Text ()),
+    authorize :: !(AgentIdentity -> IO (Either Text ())),
     checkpoints :: !(Maybe CheckpointProvider)
   }
   deriving stock (Generic)
 
-newtype WorkerSessionStart = WorkerSessionStart {sessionId :: WorkerSessionId}
+newtype WorkerSessionStart = WorkerSessionStart {sessionId :: (WorkerSessionId)}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -66,7 +67,7 @@ newtype WorkerSessionSeed = WorkerSessionSeed {start :: Maybe WorkerSessionStart
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data WorkerSessionClosed = WorkerSessionClosed {sessionId :: WorkerSessionId, phase :: SessionPhase}
+data WorkerSessionClosed = WorkerSessionClosed {sessionId :: !(WorkerSessionId), phase :: !(SessionPhase)}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -152,20 +153,20 @@ sessionWorkflow runtime initial = do
             (existing, Nothing) -> existing
             (Just existing, Just additional) -> Just (filter (`elem` existing) additional)
           context = admission.context & #executionPermissions .~ permissions
-      spawned <- trySync (delegateAssignment state.owner instruction.selection runtime.agents runtime.directory admission.delegator context (assignmentDelegationKey message.assignmentId) (agentNameText (fromMaybe admission.worker state.worker)) (Aeson.object ["instruction" Aeson..= instruction.text, "assignmentId" Aeson..= message.assignmentId, "objective" Aeson..= admission.objective, "retainedFindings" Aeson..= findings]))
+      spawned <- trySync (delegateAssignment state.owner instruction.selection runtime.agents runtime.directory admission.delegator context (assignmentDelegationKey message.assignmentId) (agentNameText (fromMaybe admission.worker state.worker)) (Aeson.object ["instruction" .= instruction.text, "assignmentId" .= message.assignmentId, "objective" .= admission.objective, "retainedFindings" .= findings]))
       case spawned of
         Right (Delegated handle) -> finish accepted message access handle
         Left err
           | isJust (fromException @DelegationError err) ->
-              retainResult accepted message childId AssignmentFailed (Aeson.object ["failure" Aeson..= ("governed delegation refused before input admission" :: Text)])
+              retainResult accepted message childId AssignmentFailed (Aeson.object ["failure" .= ("governed delegation refused before input admission" :: Text)])
         Left err -> throwIO err
     finish accepted message _ handle = do
       completed <- trySync (awaitChild handle :: Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult))
       let (disposition, output) = case completed of
             Right (Right result) -> (AssignmentSucceeded, result.behaviorOutput)
-            Right (Left _) -> (AssignmentFailed, Aeson.object ["failure" Aeson..= ("agent run refused" :: Text)])
-            Left err | isJust (fromException @WorkflowChildCancelled err) -> (AssignmentCancelled, Aeson.object ["failure" Aeson..= ("child cancelled" :: Text)])
-            Left err | isJust (fromException @WorkflowChildFailed err) -> (AssignmentFailed, Aeson.object ["failure" Aeson..= ("child failed" :: Text)])
+            Right (Left _) -> (AssignmentFailed, Aeson.object ["failure" .= ("agent run refused" :: Text)])
+            Left err | isJust (fromException @WorkflowChildCancelled err) -> (AssignmentCancelled, Aeson.object ["failure" .= ("child cancelled" :: Text)])
+            Left err | isJust (fromException @WorkflowChildFailed err) -> (AssignmentFailed, Aeson.object ["failure" .= ("child failed" :: Text)])
             Left _ -> (AssignmentFailed, Aeson.Null)
       case completed of
         Left err | isNothing (fromException @WorkflowChildCancelled err) && isNothing (fromException @WorkflowChildFailed err) -> throwIO err

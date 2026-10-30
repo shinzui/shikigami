@@ -14,7 +14,7 @@ module Shikigami.Flow
   )
 where
 
-import Data.Aeson (Value)
+import Data.Aeson (Value, (.=))
 import Data.Aeson qualified as Aeson
 import Data.List (find)
 import Data.List.NonEmpty qualified as NonEmpty
@@ -114,7 +114,7 @@ data FlowDef = FlowDef
     lifecycle :: !LifecycleDiagram,
     decisionSlots :: ![DecisionSlot],
     requiresDefaultModel :: !Bool,
-    run :: forall es. (FlowEffects es) => Value -> Eff es Value
+    run :: !(forall es. (FlowEffects es) => Value -> Eff es Value)
   }
 
 instance Show FlowDef where
@@ -213,8 +213,8 @@ architecturePracticeRouterFlow payload = do
       results <- traverse Delegate.awaitOne children
       pure
         ( Aeson.object
-            [ "decision" Aeson..= decision,
-              "results" Aeson..= NonEmpty.toList results
+            [ "decision" .= decision,
+              "results" .= NonEmpty.toList results
             ]
         )
     NoMatch _ -> pure (semanticResult decision)
@@ -229,8 +229,8 @@ architecturePracticeRouterFlow payload = do
 
     semanticResult decision =
       Aeson.object
-        [ "decision" Aeson..= decision,
-          "results" Aeson..= ([] :: [Value])
+        [ "decision" .= decision,
+          "results" .= ([] :: [Value])
         ]
 
 -- | The name of every registered flow.

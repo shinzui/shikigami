@@ -8,6 +8,7 @@ where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad (forM_, forever)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -65,17 +66,17 @@ runSchedulerCmd config = do
         -- other dropping the agent in silence.
         scheduleMap <- schedulerSchedules logger ((.agentsStrict) config) agents
         let schedules = Map.toList scheduleMap
-        Log.logInfo logger "scheduler.agents.loaded" ["count" Aeson..= length schedules]
+        Log.logInfo logger "scheduler.agents.loaded" ["count" .= length schedules]
         -- The other startup path that used to rely on the per-send createQueue
         -- inside enqueueRunJob. A timer that fires into a queue that does not exist
         -- is a run that never happens.
         queueResult <- ensureRunQueue storePool
         case queueResult of
           Left err -> do
-            Log.logError logger "scheduler.queue.failed" ["error" Aeson..= Text.pack (show err)]
+            Log.logError logger "scheduler.queue.failed" ["error" .= Text.pack (show err)]
             exitFailure
           Right () ->
-            Log.logInfo logger "scheduler.queue.reconciled" ["queue" Aeson..= ("shikigami_run_jobs" :: Text)]
+            Log.logInfo logger "scheduler.queue.reconciled" ["queue" .= ("shikigami_run_jobs" :: Text)]
         registry <-
           newHeartbeatsWithStaleness
             ( (SchedulerLoop, loopStaleAfter SchedulerLoop)
@@ -98,7 +99,7 @@ runSchedulerCmd config = do
               now <- getCurrentTime
               result <- runStore appEnv (runSchedulerTimerWorker appEnv env now)
               case result of
-                Left err -> Log.logError logger "scheduler.timer.failed" ["error" Aeson..= Text.pack (show err)]
+                Left err -> Log.logError logger "scheduler.timer.failed" ["error" .= Text.pack (show err)]
                 Right _ -> pure ()
               -- Beat on every pass, failed included: a store error is a dependency
               -- being unavailable, not this loop being wedged.
@@ -123,7 +124,7 @@ armAll logger appEnv schedules =
         Log.logError
           logger
           "scheduler.agent.arm_failed"
-          ["agent" Aeson..= agentName, "error" Aeson..= Text.pack (show err)]
+          ["agent" .= agentName, "error" .= Text.pack (show err)]
       Right () -> pure ()
 
 runStore :: AppEnv -> Eff AppEffects a -> IO (Either StoreError a)

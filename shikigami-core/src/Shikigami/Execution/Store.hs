@@ -53,6 +53,7 @@ import Control.Exception (Exception, fromException, throw)
 import Control.Monad (foldM, join)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (ExceptT (..), except, runExceptT, throwE)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy qualified as Lazy
@@ -93,14 +94,14 @@ import Shikigami.Execution.Policy (ContextView (..), ModelOperationInput (..), v
 import Shikigami.Execution.Policy.Types (HarnessPolicy (..), RecoveryClass (..), ToolInvoiceCost (..))
 import Shikigami.Execution.Resources (Admission (..))
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Selection (ExecutionSelection (..))
+import Shikigami.Execution.SelectionStore qualified as Calls
 import Shikigami.Execution.Transcript
 import Shikigami.ExecutionLifecycle.Generated.Domain qualified as Generated
 import Shikigami.ExecutionLifecycle.Generated.EventStream (executionLifecycleCategory, executionLifecycleEventStream)
 import Shikigami.ExecutionLookup.Generated.ReadModel (executionLookupReadModel)
-import Shikigami.Prelude
-import Shikigami.Store.ExecutionResources qualified as Roots
-import Shikigami.Store.ExecutionSelection qualified as Calls
+import Shikigami.Prelude hiding ((.=))
 
 type ExecutionReadEffects es = (IOE :> es, Store :> es, Error StoreError :> es)
 
@@ -243,24 +244,24 @@ inspectExecutionPage execution after limit
         resources <- traverse (\root -> Roots.inspectRootTx root >>= either (abort . ResourceAdmissionRefused . Text.pack . show) pure) binding.rootId
         pure
           ( Aeson.object
-              [ "schema" Aeson..= ("shikigami.execution-inspection/1" :: Text),
-                "executionId" Aeson..= execution,
-                "phase" Aeson..= state.phase,
-                "revision" Aeson..= state.revision,
-                "cursor" Aeson..= state.cursor,
-                "next" Aeson..= state.next,
-                "modelTurns" Aeson..= state.modelTurns,
-                "repairs" Aeson..= state.repairs,
-                "pendingReceipts" Aeson..= state.pendingReceipts,
-                "result" Aeson..= state.result,
-                "failure" Aeson..= state.failure,
-                "snapshot" Aeson..= state.snapshot,
-                "binding" Aeson..= binding,
-                "resources" Aeson..= resources,
-                "activeOperation" Aeson..= join active,
-                "operations" Aeson..= operations,
-                "nextAfter" Aeson..= (if length selected > limit then (.position) <$> listToMaybe (reverse (take limit selected)) else Nothing),
-                "limit" Aeson..= limit
+              [ "schema" .= ("shikigami.execution-inspection/1" :: Text),
+                "executionId" .= execution,
+                "phase" .= state.phase,
+                "revision" .= state.revision,
+                "cursor" .= state.cursor,
+                "next" .= state.next,
+                "modelTurns" .= state.modelTurns,
+                "repairs" .= state.repairs,
+                "pendingReceipts" .= state.pendingReceipts,
+                "result" .= state.result,
+                "failure" .= state.failure,
+                "snapshot" .= state.snapshot,
+                "binding" .= binding,
+                "resources" .= resources,
+                "activeOperation" .= join active,
+                "operations" .= operations,
+                "nextAfter" .= (if length selected > limit then (.position) <$> listToMaybe (reverse (take limit selected)) else Nothing),
+                "limit" .= limit
               ]
           )
   where
@@ -271,7 +272,7 @@ inspectExecutionPage execution after limit
       let safeAttempt attempt = case toJSON attempt of
             Aeson.Object fields -> Aeson.Object (KeyMap.delete "wake" fields)
             value -> value
-      pure (Aeson.object ["operation" Aeson..= operation, "attemptCount" Aeson..= total, "unresolvedAttempts" Aeson..= unknown, "attempts" Aeson..= map safeAttempt attempts, "attemptsTruncated" Aeson..= (total > fromIntegral (length attempts))])
+      pure (Aeson.object ["operation" .= operation, "attemptCount" .= total, "unresolvedAttempts" .= unknown, "attempts" .= map safeAttempt attempts, "attemptsTruncated" .= (total > fromIntegral (length attempts))])
 
 inspectOperation :: (ExecutionReadEffects es) => OperationId -> Eff es (Either ExecutionError (Maybe Operation))
 inspectOperation operation = protected (Tx.statement (operationKey operation) selectOperation)

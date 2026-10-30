@@ -42,13 +42,7 @@ import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByDelegation))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
-import Shikigami.Directory (DirectoryHandle)
-import Shikigami.Directory qualified as Directory
-import Shikigami.Execution.Request (ExecutionRequest)
-import Shikigami.Id.Name (nameBytes)
-import Shikigami.Prelude
-import Shikigami.Router.Catalog (CandidateAvailability (..), CandidateCatalog (..), CandidateEntry (..), ExclusionReason)
-import Shikigami.Store.DelegationBudget
+import Shikigami.Delegation.BudgetStore
   ( BatchReservationResult (..),
     BudgetReservationError (..),
     ReservationResult (..),
@@ -57,6 +51,12 @@ import Shikigami.Store.DelegationBudget
     reserveDelegationSlots,
     reserveEnrolledDelegationSlots,
   )
+import Shikigami.Directory (DirectoryHandle)
+import Shikigami.Directory qualified as Directory
+import Shikigami.Execution.Request (ExecutionRequest)
+import Shikigami.Id.Name (nameBytes)
+import Shikigami.Prelude
+import Shikigami.Router.Catalog (CandidateAvailability (..), CandidateCatalog (..), CandidateEntry (..), ExclusionReason)
 
 -- | A pending delegated child run. The phantom @a@ is the value expected from
 -- the child's behavior output.

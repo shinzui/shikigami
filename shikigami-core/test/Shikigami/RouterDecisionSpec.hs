@@ -2,6 +2,7 @@ module Shikigami.RouterDecisionSpec (tests) where
 
 import Data.Aeson (eitherDecode, encode, object, (.=))
 import Data.Generics.Labels ()
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Shikigami.Agent.Decl
   ( AmbiguousPolicy (ReturnAmbiguous),
@@ -73,7 +74,7 @@ tests =
               RouteDecision
                 { version = 2,
                   catalogVersion = CatalogVersion "stale",
-                  outcome = Matched (badSelection NonEmpty.:| [badSelection])
+                  outcome = Matched (badSelection :| [badSelection])
                 }
         case validateRouteDecision (policy & #maxSelections .~ 1) catalog decision of
           Right _ -> assertFailure "expected invalid decision"
@@ -86,7 +87,7 @@ tests =
             assertBool "fan-out is checked" (TooManySelections 2 1 `elem` found),
       testCase "validates advisory ambiguous alternatives but never turns them into matched" do
         let alternative = selection {agent = "missing-reviewer"}
-            decision = RouteDecision 1 testCatalogVersion (Ambiguous (alternative NonEmpty.:| []) "unclear")
+            decision = RouteDecision 1 testCatalogVersion (Ambiguous (alternative :| []) "unclear")
         case validateRouteDecision policy catalog decision of
           Right _ -> assertFailure "expected undeclared alternative refusal"
           Left errors -> assertBool "alternative is checked" (UndeclaredSelection "missing-reviewer" `elem` NonEmpty.toList errors),
@@ -98,7 +99,7 @@ tests =
     ]
 
 matchedDecision :: RouteDecision
-matchedDecision = RouteDecision 1 testCatalogVersion (Matched (selection NonEmpty.:| []))
+matchedDecision = RouteDecision 1 testCatalogVersion (Matched (selection :| []))
 
 selection :: RouteSelection
 selection =

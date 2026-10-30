@@ -5,6 +5,7 @@
 module Shikigami.Workspace.Integration (Artifact (..), Request (..), schema, validRequest, mergeManifests, planIntegration) where
 
 import Control.Exception (Exception, catch, throwIO)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
@@ -14,7 +15,7 @@ import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
 import Shikigami.Execution.Identity (OperationId (..))
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Workspace.Allocation (workspaceMetadata)
 import Shikigami.Workspace.GitObjects qualified as Objects
 import Shikigami.Workspace.GitTypes
@@ -38,10 +39,10 @@ instance Show Request where show _ = "IntegrationRequest <protected>"
 instance FromJSON Request where parseJSON = Aeson.genericParseJSON Aeson.defaultOptions {Aeson.rejectUnknownFields = True}
 
 schema :: Aeson.Value
-schema = Aeson.object ["type" Aeson..= ("object" :: Text), "properties" Aeson..= Aeson.object ["expectedParent" Aeson..= objectId, "artifacts" Aeson..= Aeson.object ["type" Aeson..= ("array" :: Text), "minItems" Aeson..= (2 :: Int), "maxItems" Aeson..= (8 :: Int), "items" Aeson..= Aeson.object ["type" Aeson..= ("object" :: Text), "properties" Aeson..= Aeson.object ["operationId" Aeson..= string, "bindingDigest" Aeson..= string, "base" Aeson..= objectId, "revision" Aeson..= objectId], "required" Aeson..= ["operationId", "bindingDigest", "base", "revision" :: Text], "additionalProperties" Aeson..= False]]], "required" Aeson..= ["expectedParent", "artifacts" :: Text], "additionalProperties" Aeson..= False]
+schema = Aeson.object ["type" .= ("object" :: Text), "properties" .= Aeson.object ["expectedParent" .= objectId, "artifacts" .= Aeson.object ["type" .= ("array" :: Text), "minItems" .= (2 :: Int), "maxItems" .= (8 :: Int), "items" .= Aeson.object ["type" .= ("object" :: Text), "properties" .= Aeson.object ["operationId" .= string, "bindingDigest" .= string, "base" .= objectId, "revision" .= objectId], "required" .= ["operationId", "bindingDigest", "base", "revision" :: Text], "additionalProperties" .= False]]], "required" .= ["expectedParent", "artifacts" :: Text], "additionalProperties" .= False]
   where
-    string = Aeson.object ["type" Aeson..= ("string" :: Text), "maxLength" Aeson..= (256 :: Int)]
-    objectId = Aeson.object ["type" Aeson..= ("string" :: Text), "pattern" Aeson..= ("^[a-f0-9]{40}([a-f0-9]{24})?$" :: Text)]
+    string = Aeson.object ["type" .= ("string" :: Text), "maxLength" .= (256 :: Int)]
+    objectId = Aeson.object ["type" .= ("string" :: Text), "pattern" .= ("^[a-f0-9]{40}([a-f0-9]{24})?$" :: Text)]
 
 validRequest :: Request -> Bool
 validRequest request = validGitObject request.expectedParent && length request.artifacts >= 2 && length request.artifacts <= 8 && length (nub (map (.operationId) request.artifacts)) == length request.artifacts && all valid request.artifacts
@@ -95,7 +96,7 @@ planIntegration binding request sources admit = catch (Right <$> plan) (\(Integr
         entries <- need =<< Objects.readFlatTree sourceMetadata tree
         pure (sourceMetadata, entries)
       case mergeManifests base target (map snd workers) of
-        Left conflicts -> pure (evidence ["conflicts" Aeson..= take 256 conflicts, "replacements" Aeson..= ([] :: [Replacement])])
+        Left conflicts -> pure (evidence ["conflicts" .= take 256 conflicts, "replacements" .= ([] :: [Replacement])])
         Right combined -> do
           let previous = Map.fromList [(entry.name, entry) | entry <- target]
               next = Map.fromList [(entry.name, entry) | entry <- combined]
@@ -117,11 +118,11 @@ planIntegration binding request sources admit = catch (Right <$> plan) (\(Integr
               contentDigest <$> either (const refuse) pure (Encoding.decodeUtf8' old)
             pure (Replacement path expected content, bytes, incoming.objectId)
           -- Bound the complete proposal before importing even immutable blobs.
-          let proposal tree = evidence ["conflicts" Aeson..= ([] :: [Text]), "tree" Aeson..= tree, "paths" Aeson..= changed, "replacements" Aeson..= map (\(replacement, _, _) -> replacement) replacements]
+          let proposal tree = evidence ["conflicts" .= ([] :: [Text]), "tree" .= tree, "paths" .= changed, "replacements" .= map (\(replacement, _, _) -> replacement) replacements]
           unless (Lazy.length (Aeson.encode (proposal (Text.replicate 64 "0"))) <= 32768) refuse
           forM_ replacements \(_, bytes, expected) -> do
             stored <- need =<< Objects.storeBlob metadata bytes
             unless (stored == expected) refuse
           tree <- need =<< Objects.storeFlatTree metadata combined
           pure (proposal tree)
-    evidence fields = Aeson.object (["repository" Aeson..= binding.repository, "base" Aeson..= binding.base, "expectedParent" Aeson..= request.expectedParent, "artifacts" Aeson..= request.artifacts] <> fields)
+    evidence fields = Aeson.object (["repository" .= binding.repository, "base" .= binding.base, "expectedParent" .= request.expectedParent, "artifacts" .= request.artifacts] <> fields)

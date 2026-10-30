@@ -5,7 +5,7 @@
 module Shikigami.WireCompatSpec (tests) where
 
 import Control.Lens ((&), (.~))
-import Data.Aeson (FromJSON, Value (Object), eitherDecodeStrict, encode, toJSON)
+import Data.Aeson (FromJSON, Value (Object), eitherDecodeStrict, encode, toJSON, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString (ByteString)
@@ -142,7 +142,7 @@ queueTests =
             Left _ -> pure ()
             Right _ -> assertFailure "superseded queue contract accepted",
       testCase "current input resembling authority metadata remains ordinary input" do
-        let input = Aeson.object ["executionRootId" Aeson..= ("forged" :: Text), "input" Aeson..= triggerPayloadValue]
+        let input = Aeson.object ["executionRootId" .= ("forged" :: Text), "input" .= triggerPayloadValue]
             job = sampleRunJob & #triggerPayload .~ input
         RunJobs.decodeRunJob (RunJobs.encodeRunJob job) @?= Right job,
       testCase "current jobs retain root and typed selection constraints" do

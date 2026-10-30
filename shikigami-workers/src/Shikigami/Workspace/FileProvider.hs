@@ -21,6 +21,7 @@ module Shikigami.Workspace.FileProvider
 where
 
 import Control.Exception (Exception, IOException, catch, throwIO)
+import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as AesonKeyMap
 import Data.Aeson.Types (parseEither)
@@ -46,7 +47,7 @@ import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Workspace.Allocation (workspaceFiles, workspaceMetadata)
 import Shikigami.Workspace.ContainedFile
 import Shikigami.Workspace.Instructions
@@ -151,14 +152,14 @@ readDescription = "Read a contained UTF-8 file at an exact relative ASCII path a
 replaceDescription = "Compare-and-replace a UTF-8 file at an exact relative ASCII path (256 KiB maximum); creation requires an existing directory."
 
 readSchema, replaceSchema :: Aeson.Value
-readSchema = Aeson.object ["type" Aeson..= ("object" :: Text), "properties" Aeson..= Aeson.object ["path" Aeson..= pathSchema], "required" Aeson..= ["path" :: Text], "additionalProperties" Aeson..= False]
-replaceSchema = Aeson.object ["type" Aeson..= ("object" :: Text), "properties" Aeson..= Aeson.object ["path" Aeson..= pathSchema, "expected" Aeson..= Aeson.object ["type" Aeson..= ["string", "null" :: Text]], "content" Aeson..= stringSchema], "required" Aeson..= ["path", "expected", "content" :: Text], "additionalProperties" Aeson..= False]
+readSchema = Aeson.object ["type" .= ("object" :: Text), "properties" .= Aeson.object ["path" .= pathSchema], "required" .= ["path" :: Text], "additionalProperties" .= False]
+replaceSchema = Aeson.object ["type" .= ("object" :: Text), "properties" .= Aeson.object ["path" .= pathSchema, "expected" .= Aeson.object ["type" .= ["string", "null" :: Text]], "content" .= stringSchema], "required" .= ["path", "expected", "content" :: Text], "additionalProperties" .= False]
 
 pathSchema :: Aeson.Value
-pathSchema = Aeson.object ["type" Aeson..= ("string" :: Text), "pattern" Aeson..= ("^[ -~]+$" :: Text), "maxLength" Aeson..= (4096 :: Int)]
+pathSchema = Aeson.object ["type" .= ("string" :: Text), "pattern" .= ("^[ -~]+$" :: Text), "maxLength" .= (4096 :: Int)]
 
 stringSchema :: Aeson.Value
-stringSchema = Aeson.object ["type" Aeson..= ("string" :: Text)]
+stringSchema = Aeson.object ["type" .= ("string" :: Text)]
 
 -- Load the authoritative snapshot, accepted arguments and actual attempt. A
 -- prepared tool closure is not permission to substitute caller coordinates.
@@ -265,7 +266,7 @@ readWorkspaceFile :: FileRuntime -> ExecutionSnapshot -> DispatchContext -> Aeso
 readWorkspaceFile = readFileFor FileOnly
 
 readFileFor :: FileMode -> FileRuntime -> ExecutionSnapshot -> DispatchContext -> Aeson.Value -> IO (Either FileEffectError Aeson.Value)
-readFileFor mode runtime snapshot dispatch input = case parseEither (Aeson.withObject "read" (\fields -> if length fields /= 1 then fail "unsupported read" else fields Aeson..: "path")) input of
+readFileFor mode runtime snapshot dispatch input = case parseEither (Aeson.withObject "read" (\fields -> if length fields /= 1 then fail "unsupported read" else fields .: "path")) input of
   Left _ -> pure (Left FileEffectRefused)
   Right path -> withAccess mode runtime snapshot dispatch "read" input \binding admission profile check _prepare _complete ->
     flattenFile
@@ -286,7 +287,7 @@ readFileFor mode runtime snapshot dispatch input = case parseEither (Aeson.withO
                       pure do
                         actual <- mapFile bytes >>= maybe (Left FileEffectConflict) Right
                         text <- either (const (Left FileEffectRefused)) Right (Encoding.decodeUtf8' actual)
-                        pure (Aeson.object ["path" Aeson..= path, "content" Aeson..= text, "hash" Aeson..= contentDigest text])
+                        pure (Aeson.object ["path" .= path, "content" .= text, "hash" .= contentDigest text])
         )
 
 replaceWorkspaceFile :: FileRuntime -> ExecutionSnapshot -> DispatchContext -> Aeson.Value -> IO (Either FileEffectError Aeson.Value)

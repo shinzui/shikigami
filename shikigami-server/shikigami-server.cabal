@@ -18,6 +18,7 @@ common common
 
   ghc-options:
     -Wall
+    -Werror=missing-fields
     -Wcompat
     -Widentities
     -Wincomplete-record-updates
@@ -200,6 +201,7 @@ test-suite shikigami-server-test
     process,
     relay-pagination,
     relay-pagination-conformance,
+    relay-pagination-servant,
     servant,
     servant-health,
     servant-health:testkit,

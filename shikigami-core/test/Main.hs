@@ -168,7 +168,7 @@ envelopeWith actorKind verbV sourceV subjType =
       occurredAt = "2026-06-20T07:00:00Z",
       source = sourceV,
       actor = Actor {kind = actorKind, id = "someone", session = Nothing},
-      subject = Subject {subjectType = subjType, subjectId = "i-1"},
+      subject = Subject {kind = subjType, subjectId = "i-1"},
       verb = verbV,
       payload = object [],
       contextRefs = [],

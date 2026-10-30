@@ -14,7 +14,7 @@ where
 import Baikai.Evidence (commitmentDigest)
 import Contravariant.Extras (contrazip3)
 import Control.Exception qualified as Exception
-import Data.Aeson (Value (..))
+import Data.Aeson (Value (..), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
 import Data.ByteString qualified as ByteString
@@ -73,7 +73,7 @@ import Shikigami.PracticeReview.Capability
     PracticeReviewAttention (RequestPracticeReviewAttention),
     lookupAttentionRecipient,
   )
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Repository (RepoRef (..), RepositoryId (..), relativePathText, revisionText)
 import Shikigami.Sink (GrantSource, SinkOutcome (Enqueued), SinkResult (..))
 import Shikigami.Sink.Intent
@@ -98,7 +98,7 @@ data PracticeReviewAttentionEnv = PracticeReviewAttentionEnv
   }
 
 data AttentionProjection = AttentionProjection
-  { attentionKey :: !AttentionKey,
+  { key :: !AttentionKey,
     schemaVersion :: !Int,
     targetProject :: !Text,
     practiceKey :: !Text,
@@ -124,7 +124,7 @@ resolveAttentionRecipient recipients PracticeReviewVerdict {recommendedOwner} =
 
 deriveAttentionKey :: AttentionRecipientMap -> ValidatedPracticeReviewVerdict -> Either Text AttentionKey
 deriveAttentionKey recipients validated = do
-  AttentionProjection {attentionKey = key} <- attentionProjection recipients (validatedVerdictValue validated)
+  AttentionProjection {key = key} <- attentionProjection recipients (validatedVerdictValue validated)
   pure key
 
 attentionProjection :: AttentionRecipientMap -> PracticeReviewVerdict -> Either Text AttentionProjection
@@ -136,15 +136,15 @@ attentionProjection recipients verdict@PracticeReviewVerdict {reviewId = ReviewI
   targetProject <- targetProjectOf verdict
   let semanticProjection =
         Aeson.object
-          [ "schemaVersion" Aeson..= (1 :: Int),
-            "targetProject" Aeson..= targetProject,
-            "practiceKey" Aeson..= Text.toCaseFold (Text.strip practiceKey),
-            "classification" Aeson..= enumText classification,
-            "ownerRole" Aeson..= ownerRole,
-            "recipient" Aeson..= recipient,
-            "recommendedAction" Aeson..= normalizeWords recommendedAction,
-            "materialClaims" Aeson..= materialClaimProjection verdict,
-            "citedEvidence" Aeson..= citedEvidenceProjection verdict
+          [ "schemaVersion" .= (1 :: Int),
+            "targetProject" .= targetProject,
+            "practiceKey" .= Text.toCaseFold (Text.strip practiceKey),
+            "classification" .= enumText classification,
+            "ownerRole" .= ownerRole,
+            "recipient" .= recipient,
+            "recommendedAction" .= normalizeWords recommendedAction,
+            "materialClaims" .= materialClaimProjection verdict,
+            "citedEvidence" .= citedEvidenceProjection verdict
           ]
       claimEvidenceDigest = commitmentDigest semanticProjection
       attentionKey =
@@ -157,7 +157,7 @@ attentionProjection recipients verdict@PracticeReviewVerdict {reviewId = ReviewI
           )
   pure
     AttentionProjection
-      { attentionKey,
+      { key = attentionKey,
         schemaVersion = 1,
         targetProject,
         practiceKey = Text.toCaseFold (Text.strip practiceKey),
@@ -180,10 +180,10 @@ targetProjectOf PracticeReviewVerdict {targetEvidence, applicability} =
 materialClaimProjection :: PracticeReviewVerdict -> [Value]
 materialClaimProjection PracticeReviewVerdict {claims} =
   [ Aeson.object
-      [ "claimId" Aeson..= claimId,
-        "kind" Aeson..= kind,
-        "statement" Aeson..= normalizeWords statement,
-        "evidenceIds" Aeson..= sortOn id evidenceIds
+      [ "claimId" .= claimId,
+        "kind" .= kind,
+        "statement" .= normalizeWords statement,
+        "evidenceIds" .= sortOn id evidenceIds
       ]
   | PracticeReviewClaim {claimId = ClaimId claimId, kind, statement, material = True, evidenceIds = rawEvidenceIds} <- sortOn claimKey claims,
     let evidenceIds = [value | EvidenceId value <- rawEvidenceIds]
@@ -194,10 +194,10 @@ materialClaimProjection PracticeReviewVerdict {claims} =
 citedEvidenceProjection :: PracticeReviewVerdict -> [Value]
 citedEvidenceProjection PracticeReviewVerdict {targetEvidence, referenceEvidence, upstreamEvidence, claims} =
   [ Aeson.object
-      [ "repository" Aeson..= repository,
-        "revision" Aeson..= revisionText revision,
-        "path" Aeson..= relativePathText path,
-        "contentHash" Aeson..= contentHash
+      [ "repository" .= repository,
+        "revision" .= revisionText revision,
+        "path" .= relativePathText path,
+        "contentHash" .= contentHash
       ]
   | EvidenceItem
       { evidenceId,
@@ -236,7 +236,7 @@ reserveAttention PracticeReviewAttentionEnv {agent, identity, runId, occurredAt,
   generation <- currentRunGeneration
   now <- liftIO getCurrentTime
   let stepName = StepName "practice-review-attention"
-      AttentionProjection {attentionKey = AttentionKey key, reviewId = projectionReviewId} = projection
+      AttentionProjection {key = AttentionKey key, reviewId = projectionReviewId} = projection
       messageId = "practice-review-attention:" <> key
       output = attentionOutput projection
       sink = attentionSink projection
@@ -300,13 +300,13 @@ reserveAttention PracticeReviewAttentionEnv {agent, identity, runId, occurredAt,
     firstText = either (Left . Text.pack) Right
 
 attentionOutput :: AttentionProjection -> Value
-attentionOutput AttentionProjection {attentionKey = AttentionKey attentionKey, reviewId, intent} =
+attentionOutput AttentionProjection {key = AttentionKey attentionKey, reviewId, intent} =
   Aeson.object
-    [ "subject_id" Aeson..= ("practice-review/" <> reviewId),
-      "review_id" Aeson..= reviewId,
-      "attention_key" Aeson..= attentionKey,
-      "intent" Aeson..= intent,
-      "activity_ref" Aeson..= ("activity://practice-review/" <> reviewId)
+    [ "subject_id" .= ("practice-review/" <> reviewId),
+      "review_id" .= reviewId,
+      "attention_key" .= attentionKey,
+      "intent" .= intent,
+      "activity_ref" .= ("activity://practice-review/" <> reviewId)
     ]
 
 attentionSink :: AttentionProjection -> Agent.Sink
@@ -349,7 +349,7 @@ insertAttentionStatement =
 
 attentionProjectionParams :: Encoders.Params AttentionProjection
 attentionProjectionParams =
-  (view (#attentionKey . #value) >$< textParam)
+  (view (#key . #value) >$< textParam)
     <> (fromIntegral . view #schemaVersion >$< intParam)
     <> (view #targetProject >$< textParam)
     <> (view #practiceKey >$< textParam)

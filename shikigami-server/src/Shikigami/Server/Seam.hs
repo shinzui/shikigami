@@ -36,7 +36,7 @@ import Servant.Health (ProbeCheck)
 import Servant.Server (Handler, ServerError (..))
 import Shikigami.Agent.Catalog (AgentCatalog)
 import Shikigami.Agent.Name (AgentName)
-import Shikigami.AgentRun.Status (RunStatusView)
+import Shikigami.AgentRun.Status (RunStatusFailure, RunStatusView)
 import Shikigami.Api.Problem (ProblemCode, problem, problemStatus, problemTitle)
 import Shikigami.App.Config (AppConfig)
 import Shikigami.Directory (DirectoryHandle)
@@ -56,7 +56,7 @@ data ServerEnv = ServerEnv
     tracer :: !Tracer,
     liveness :: !ProbeCheck,
     pool :: !Pool,
-    readRunStatus :: !(AgentName -> Text -> IO (Either Text (Maybe RunStatusView))),
+    readRunStatus :: !(AgentName -> Text -> IO (Either RunStatusFailure (Maybe RunStatusView))),
     logger :: !Log.Logger,
     catalog :: !AgentCatalog,
     directory :: !DirectoryHandle,

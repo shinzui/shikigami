@@ -26,6 +26,7 @@ import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async qualified as Async
 import Control.Exception qualified as Exception
 import Control.Monad (forever)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (Pair)
 import Data.Generics.Labels ()
@@ -56,7 +57,7 @@ import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Request (ExecutionContext (..))
 import Shikigami.Integration.Danwa (AddressedMessage)
 import Shikigami.Log qualified as Log
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunJobs (runJob)
 import Shikigami.Telemetry.Metrics qualified as Metrics
 import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, conversationEnv, envDirectory, envLogger, envMetrics)
@@ -76,7 +77,7 @@ recordRunJobOutcome _ _ RunJob {routeKind = ExecutionOperationRoute} _ = pure ()
 recordRunJobOutcome logger pool job outcome = case outcome of
   Dead reason ->
     recordDeadLetter pool job.idempotencyKey reason >>= \case
-      Left _ -> Log.logError logger "worker.job.disposition_failed" ["run_id" Aeson..= (runJobWorkflowId job).unWorkflowId]
+      Left _ -> Log.logError logger "worker.job.disposition_failed" ["run_id" .= (runJobWorkflowId job).unWorkflowId]
       Right _ -> pure ()
   _ -> pure ()
 
@@ -92,9 +93,9 @@ handleRunJobBody env context job
               job
               Log.Info
               "worker.job.lifecycle_skipped"
-              [ "principal_id" Aeson..= (.principalId) runSkip,
-                "route" Aeson..= (.detail) runSkip,
-                "reason" Aeson..= (.reason) runSkip
+              [ "principal_id" .= (.principalId) runSkip,
+                "route" .= (.detail) runSkip,
+                "reason" .= (.reason) runSkip
               ]
           pure Done
         DrainAuditFailed problem -> do
@@ -104,8 +105,8 @@ handleRunJobBody env context job
               job
               Log.Error
               "worker.job.lifecycle_skip_failed"
-              [ "error" Aeson..= problem,
-                "reason" Aeson..= ("skip_audit_failed" :: Text)
+              [ "error" .= problem,
+                "reason" .= ("skip_audit_failed" :: Text)
               ]
           pure (fromMaybe RetryDefault (drainAdmissionOutcome (DrainAuditFailed problem)))
         DrainAllowed admittedJob -> do
@@ -122,8 +123,8 @@ handleRunJobBody env context job
                   admittedJob
                   Log.Error
                   "worker.job.retried"
-                  [ "error" Aeson..= detail,
-                    "reason" Aeson..= ("transient_behavior_failure" :: Text)
+                  [ "error" .= detail,
+                    "reason" .= ("transient_behavior_failure" :: Text)
                   ]
               pure (transientBehaviorJobOutcome failure)
             Right outcome -> pure outcome
@@ -264,8 +265,8 @@ dispatchRunJob env job = do
         job
         Log.Error
         "worker.job.dead_lettered"
-        [ "error" Aeson..= detail,
-          "reason" Aeson..= ("invalid_route_payload" :: Text)
+        [ "error" .= detail,
+          "reason" .= ("invalid_route_payload" :: Text)
         ]
       pure (routeErrorJobOutcome detail)
 
@@ -289,8 +290,8 @@ runConversationAgent env job addressed =
         job
         Log.Error
         "worker.conversation.dead_lettered"
-        [ "error" Aeson..= detail,
-          "reason" Aeson..= ("unknown_agent" :: Text)
+        [ "error" .= detail,
+          "reason" .= ("unknown_agent" :: Text)
         ]
       pure (deadOutcome "unknown_agent" detail)
     Just decl -> do
@@ -308,8 +309,8 @@ runConversationAgent env job addressed =
             job
             Log.Error
             "worker.conversation.retried"
-            [ "error" Aeson..= err,
-              "reason" Aeson..= ("transient_conversation_failure" :: Text)
+            [ "error" .= err,
+              "reason" .= ("transient_conversation_failure" :: Text)
             ]
           pure ()
         Left (Conversation.ConversationPermanentFailure err) -> do
@@ -320,8 +321,8 @@ runConversationAgent env job addressed =
             job
             Log.Error
             "worker.conversation.dead_lettered"
-            [ "error" Aeson..= err,
-              "reason" Aeson..= ("permanent_conversation_failure" :: Text)
+            [ "error" .= err,
+              "reason" .= ("permanent_conversation_failure" :: Text)
             ]
           pure ()
         Left (Conversation.ConversationTerminalFailure err) -> do
@@ -332,8 +333,8 @@ runConversationAgent env job addressed =
             job
             Log.Error
             "worker.conversation.dead_lettered"
-            [ "error" Aeson..= err,
-              "reason" Aeson..= ("terminal_conversation_failure" :: Text)
+            [ "error" .= err,
+              "reason" .= ("terminal_conversation_failure" :: Text)
             ]
           pure ()
         -- Info, not error. A message arriving while the agent is still answering
@@ -351,8 +352,8 @@ runConversationAgent env job addressed =
               job
               Log.Info
               "worker.conversation.redelivered"
-              [ "detail" Aeson..= detail,
-                "reason" Aeson..= ("conversation_busy" :: Text)
+              [ "detail" .= detail,
+                "reason" .= ("conversation_busy" :: Text)
               ]
         Right Conversation.ConversationAccepted -> jobLog env job Log.Info "worker.conversation.accepted" []
         Right (Conversation.ConversationCompleted _) -> do
@@ -381,8 +382,8 @@ runOneAgent env job =
               job
               Log.Error
               "worker.job.retried"
-              [ "error" Aeson..= Text.pack (show err),
-                "reason" Aeson..= ("store_error" :: Text)
+              [ "error" .= Text.pack (show err),
+                "reason" .= ("store_error" :: Text)
               ]
             pure ()
           Right (Completed (Right _result)) -> do
@@ -398,8 +399,8 @@ runOneAgent env job =
               job
               Log.Error
               "worker.job.dead_lettered"
-              [ "error" Aeson..= err,
-                "reason" Aeson..= ("permanent_workflow_failure" :: Text)
+              [ "error" .= err,
+                "reason" .= ("permanent_workflow_failure" :: Text)
               ]
             pure ()
           Right Suspended -> do
@@ -413,7 +414,7 @@ runOneAgent env job =
               job
               Log.Warn
               "worker.job.dead_lettered"
-              ["reason" Aeson..= ("workflow_cancelled" :: Text)]
+              ["reason" .= ("workflow_cancelled" :: Text)]
             pure ()
           Right Failed -> do
             runMetric Metrics.recordRunFailed env job
@@ -423,7 +424,7 @@ runOneAgent env job =
               job
               Log.Error
               "worker.job.dead_lettered"
-              ["reason" Aeson..= ("workflow_failed" :: Text)]
+              ["reason" .= ("workflow_failed" :: Text)]
             pure ()
           Right ContinuedAsNew -> do
             jobLog env job Log.Info "worker.job.continued_as_new" []
@@ -475,9 +476,9 @@ jobLog env job level event fields =
     (envLogger env)
     level
     event
-    ( [ "agent" Aeson..= (agentNameText ((.agentName) job)),
-        Log.runIdKey Aeson..= (runJobWorkflowId job).unWorkflowId,
-        "trigger_kind" Aeson..= triggerKindText ((.triggerKind) job)
+    ( [ "agent" .= (agentNameText ((.agentName) job)),
+        Log.runIdKey .= (runJobWorkflowId job).unWorkflowId,
+        "trigger_kind" .= triggerKindText ((.triggerKind) job)
       ]
         <> fields
     )

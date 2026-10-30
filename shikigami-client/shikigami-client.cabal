@@ -18,6 +18,7 @@ common common
 
   ghc-options:
     -Wall
+    -Werror=missing-fields
     -Wcompat
     -Widentities
     -Wincomplete-record-updates
@@ -31,13 +32,20 @@ library
   exposed-modules:
     Shikigami.Client
     Shikigami.Client.Command
+    Shikigami.Client.Config
+    Shikigami.Client.Payload
+    Shikigami.Client.Version
 
+  other-modules: Paths_shikigami_client
+  autogen-modules: Paths_shikigami_client
   build-depends:
     aeson,
     base >=4.21 && <5,
     bytestring,
+    githash,
     http-client >=0.7,
     http-client-tls >=0.3,
+    network-uri,
     optparse-applicative >=0.18,
     relay-pagination,
     relay-pagination-servant,
@@ -45,6 +53,10 @@ library
     servant-client >=0.20 && <0.21,
     servant-client-core >=0.20 && <0.21,
     servant-health >=0.1 && <0.2,
+    settei ==0.2.0.0,
+    settei-env ==0.2.0.0,
+    settei-optparse-applicative ==0.2.0.0,
+    settei-yaml ==0.2.0.0,
     shikigami-api,
     text >=2.1,
 
@@ -67,6 +79,7 @@ test-suite shikigami-client-test
   type: exitcode-stdio-1.0
   main-is: Main.hs
   hs-source-dirs: test
+  other-modules: Shikigami.Client.ConfigSpec
   ghc-options:
     -threaded
     -rtsopts
@@ -75,6 +88,10 @@ test-suite shikigami-client-test
   build-depends:
     base,
     optparse-applicative,
+    settei,
+    settei-env,
+    settei-optparse-applicative,
     shikigami-client,
     tasty,
     tasty-hunit,
+    text,

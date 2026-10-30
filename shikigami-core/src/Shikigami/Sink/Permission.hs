@@ -38,7 +38,7 @@ data SinkKind
   deriving anyclass (ToJSON, FromJSON)
 
 -- | A permission denial carrying its reason.
-newtype Denied = Denied {deniedReason :: Text}
+newtype Denied = Denied {reason :: Text}
   deriving stock (Eq, Show)
 
 -- | Read a sink kind back from the label 'sinkKindText' renders. Used by the

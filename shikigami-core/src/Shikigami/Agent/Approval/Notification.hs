@@ -5,6 +5,7 @@ module Shikigami.Agent.Approval.Notification
   )
 where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Text (encodeToLazyText)
 import Data.Bifunctor (first)
@@ -25,7 +26,7 @@ import Shikigami.Agent.Approval.Workflow
   )
 import Shikigami.Agent.Decl (Priority (High), SignalType (AgentRequest))
 import Shikigami.Log qualified as Log
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Sink.Config (DanwaConfig, KizashiConfig (..))
 import Shikigami.Sink.Danwa (DanwaError (..), postText, renderDanwaError)
 import Shikigami.Sink.Http (SinkHttp (..), httpFailureIsPermanent)
@@ -42,9 +43,9 @@ approvalNotifier logger SinkHttp {danwa = danwaClient, kizashi = kizashiHttp} da
         Log.logInfo
           logger
           "approval.request.parked"
-          [ "review_request_id" Aeson..= reviewRequestIdText reviewId,
-            "session_id" Aeson..= idText session,
-            "channel" Aeson..= renderChannel ((.channel) request)
+          [ "review_request_id" .= reviewRequestIdText reviewId,
+            "session_id" .= idText session,
+            "channel" .= renderChannel ((.channel) request)
           ],
       postAsk = \reviewId awakeableId deadline request -> do
         let message = renderApprovalMessage reviewId awakeableId deadline request

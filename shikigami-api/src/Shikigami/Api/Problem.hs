@@ -1,7 +1,8 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE UndecidableInstances #-}
 
--- | The one error body the public HTTP API ever returns.
+-- | The application error body. Native Relay pagination errors retain the
+-- public RelayPageError protocol declared in the route and OpenAPI contract.
 --
 -- \"RFC 9457 problem details\" is an IETF standard for describing an HTTP error
 -- as a small JSON object instead of an ad-hoc string. It is served under its own
@@ -10,8 +11,7 @@
 -- the body.
 --
 -- This module owns that shape for Shikigami. There is exactly one codec and one
--- schema; no handler, middleware, or error formatter may invent a second error
--- body. The wire keys are exactly @type@, @title@, @status@, @detail@, @code@,
+-- schema; application handlers, middleware and formatters use this contract. The wire keys are exactly @type@, @title@, @status@, @detail@, @code@,
 -- and @retryable@ — nothing more, because every additional key becomes a
 -- compatibility obligation, and nothing fewer, because clients branch on
 -- @code@ and @retryable@.
@@ -62,12 +62,10 @@ import Shikigami.Prelude
 
 -- | The RFC 9457 body.
 --
--- The first field is spelled 'problemType' rather than @type@ only because
--- @type@ is a Haskell keyword; 'problemJsonOptions' maps it back to the @type@
--- wire key, and that mapping is the sole reason this record deviates from the
--- repository's unprefixed-field rule.
+-- The URI field uses an unprefixed name because @type@ is a Haskell keyword.
+-- 'problemJsonOptions' maps it to the RFC's exact @type@ wire key and schema.
 data ProblemDetails = ProblemDetails
-  { problemType :: !Text,
+  { typeUri :: !Text,
     title :: !Text,
     status :: !Int,
     detail :: !Text,
@@ -82,7 +80,7 @@ problemJsonOptions :: Options
 problemJsonOptions =
   defaultOptions
     { fieldLabelModifier = \field -> case field of
-        "problemType" -> "type"
+        "typeUri" -> "type"
         other -> other
     }
 
@@ -200,7 +198,7 @@ problemRetryable = \case
   InvalidHeader -> False
   Unauthorized -> False
   RateLimited -> True
-  Internal -> True
+  Internal -> False
   Unavailable -> True
 
 -- | Build the body for a code, supplying only the per-occurrence @detail@.
@@ -210,7 +208,7 @@ problemRetryable = \case
 problem :: ProblemCode -> Text -> ProblemDetails
 problem problemCode problemDetail =
   ProblemDetails
-    { problemType = "about:blank",
+    { typeUri = "about:blank",
       title = problemTitle problemCode,
       status = problemStatus problemCode,
       detail = problemDetail,

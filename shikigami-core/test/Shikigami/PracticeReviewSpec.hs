@@ -10,6 +10,7 @@ import Data.List.NonEmpty qualified as NonEmpty
 import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Vector ((!?), (//))
 import Data.Vector qualified as Vector
 import Shikigami.PracticeReview
   ( PracticeKey (..),
@@ -233,7 +234,7 @@ materializeInvalid triggerBase verdictBase resolutionBase InvalidFixture {base, 
 
 selectArrayValue :: String -> Maybe Int -> Value -> Either String Value
 selectArrayValue label (Just itemIndex) (Array values) =
-  maybe (Left (label <> " fixture index is out of range")) Right (values Vector.!? itemIndex)
+  maybe (Left (label <> " fixture index is out of range")) Right (values !? itemIndex)
 selectArrayValue label Nothing _ = Left (label <> " invalid fixture requires an at index")
 selectArrayValue label _ _ = Left (label <> " base is not an array")
 
@@ -275,9 +276,9 @@ alterPointer (segment : rest) modify (Object object) = do
   pure (Object (KeyMap.insert key updated object))
 alterPointer (segment : rest) modify (Array values) = do
   itemIndex <- parseArrayIndex segment
-  child <- maybe (Left "array pointer index is out of range") Right (values Vector.!? itemIndex)
+  child <- maybe (Left "array pointer index is out of range") Right (values !? itemIndex)
   updated <- alterPointer rest modify child
-  pure (Array (values Vector.// [(itemIndex, updated)]))
+  pure (Array (values // [(itemIndex, updated)]))
 alterPointer _ _ _ = Left "pointer traversed through a scalar JSON value"
 
 parseArrayIndex :: Text -> Either String Int

@@ -12,8 +12,8 @@ import Shikigami.App.Config (AppConfig, revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Execution.Identity (ExecutionRootId (..))
 import Shikigami.Execution.Resources
+import Shikigami.Execution.ResourcesStore (inspectRoot)
 import Shikigami.Migrations (verifyShikigamiMigrations)
-import Shikigami.Store.ExecutionResources (inspectRoot)
 import System.Exit (die)
 
 runResourcesInspect :: Text -> Bool -> AppConfig -> IO ()

@@ -2,6 +2,7 @@ module Shikigami.WorkspaceTransferSpec (tests) where
 
 import Baikai.Options (emptyOptions)
 import Control.Concurrent.Async (withAsync)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Data.IORef
@@ -30,15 +31,15 @@ import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity (AttemptId (..), ExecutionRootId (..), OperationId (..))
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Selection
 import Shikigami.Execution.SelectionRuntime qualified as Selection
 import Shikigami.Execution.Start (SkillAssignment (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
-import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
 import Shikigami.WorkerSession.Store qualified as Sessions
 import Shikigami.WorkerSession.Transfer
@@ -87,7 +88,7 @@ tests fixture =
           (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest original.instructions) policy (IdentityRange 62000 62001)))
           run env (runTransaction (readyProcessProfileTx binding profile)) >>= (@?= Right ())
           let runtime = FileRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ _ _ -> pure (Right ()))
-              input = Aeson.object ["path" Aeson..= ("dependency.txt" :: Text)]
+              input = Aeson.object ["path" .= ("dependency.txt" :: Text)]
           token <- UUID4.nextRandom
           execution <- FileFixture.withAcceptedWorkspaceTool 1 transferredWorkspaceEditAdapter (AgentName "worker") "overlay__workspace-edit__read" token env original runtime input \snapshot access reference -> do
             Executor.executeAcceptedAttempt (FileFixture.executorForAdapter transferredWorkspaceEditAdapter runtime) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
@@ -179,7 +180,7 @@ tests fixture =
           admission.filePolicy @?= Just transferableFilePolicy
           host.load assignment >>= (@?= Right admission)
           token <- UUID4.nextRandom
-          FileFixture.withAcceptedWorkspaceTool 1 transferredWorkspaceEditAdapter intent.newWorker "overlay__workspace-edit__read" token env admission fileRuntime (Aeson.object ["path" Aeson..= ("dependency.txt" :: Text)]) \snapshot access reference -> do
+          FileFixture.withAcceptedWorkspaceTool 1 transferredWorkspaceEditAdapter intent.newWorker "overlay__workspace-edit__read" token env admission fileRuntime (Aeson.object ["path" .= ("dependency.txt" :: Text)]) \snapshot access reference -> do
             Executor.executeAcceptedAttempt (FileFixture.executorForAdapter transferredWorkspaceEditAdapter fileRuntime) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
             (_, state) <- right =<< run env (Execution.loadExecution access)
             state.cursor @?= 2
@@ -206,7 +207,7 @@ tests fixture =
             _ <- right =<< run env (Execution.stopExecution snapshot.identity snapshot.executionId state.revision False (ExecutionPolicyRefused "fixture terminal"))
             nextAdmission <- right =<< host.load nextAssignment
             nextToken <- UUID4.nextRandom
-            FileFixture.withAcceptedWorkspaceTool 1 transferredWorkspaceEditAdapter intent.newWorker "overlay__workspace-edit__read" nextToken env nextAdmission fileRuntime (Aeson.object ["path" Aeson..= ("dependency.txt" :: Text)]) \nextSnapshot nextAccess nextReference -> do
+            FileFixture.withAcceptedWorkspaceTool 1 transferredWorkspaceEditAdapter intent.newWorker "overlay__workspace-edit__read" nextToken env nextAdmission fileRuntime (Aeson.object ["path" .= ("dependency.txt" :: Text)]) \nextSnapshot nextAccess nextReference -> do
               Executor.executeAcceptedAttempt (FileFixture.executorForAdapter transferredWorkspaceEditAdapter fileRuntime) nextSnapshot.identity nextReference >>= (@?= Right Executor.ExecutorDone)
               (_, nextState) <- right =<< run env (Execution.loadExecution nextAccess)
               _ <- right =<< run env (Execution.stopExecution nextSnapshot.identity nextSnapshot.executionId nextState.revision False (ExecutionPolicyRefused "fixture terminal"))

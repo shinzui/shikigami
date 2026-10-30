@@ -38,13 +38,13 @@ import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.Selection
+import Shikigami.Execution.SelectionStore qualified as Calls
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Tools qualified as Tools
 import Shikigami.Execution.Transcript
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
-import Shikigami.Store.ExecutionSelection qualified as Calls
 import Shikigami.Workspace.FileProvider
 import Shikigami.Workspace.GitProvider
 import Shikigami.Workspace.GitTypes (GitCommitRequest (..))

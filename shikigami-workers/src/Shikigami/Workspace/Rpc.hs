@@ -19,6 +19,7 @@ where
 import Control.Concurrent.Async (replicateConcurrently_)
 import Control.Exception (IOException, bracket, catch, mask_)
 import Control.Monad (forever)
+import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key (Key)
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -31,7 +32,7 @@ import Network.Socket qualified as Socket
 import Network.Socket.ByteString qualified as SocketBytes
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Execution.Identity (AttemptId (..), OperationId (..))
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.WorkerSession.Transfer
 import Shikigami.WorkerSession.Types (WorkerSessionId)
 import Shikigami.Workspace.Process
@@ -75,41 +76,41 @@ data RpcPolicy = RpcPolicy {users :: ![Integer], workers :: !Int, timeoutSeconds
 
 instance ToJSON RpcRequest where
   toJSON request = case request of
-    RpcLaunch value -> Aeson.object ["format" Aeson..= (1 :: Int), "action" Aeson..= ("launch" :: Text), "request" Aeson..= value]
-    RpcObserve value -> Aeson.object ["format" Aeson..= (1 :: Int), "action" Aeson..= ("observe" :: Text), "operationId" Aeson..= value]
-    RpcFence value -> Aeson.object ["format" Aeson..= (2 :: Int), "action" Aeson..= ("fence" :: Text), "intent" Aeson..= value]
-    RpcAdmitWrite workspace session owner epoch operation -> Aeson.object ["format" Aeson..= (2 :: Int), "action" Aeson..= ("admitWrite" :: Text), "workspace" Aeson..= workspace, "sessionId" Aeson..= session, "owner" Aeson..= owner, "epoch" Aeson..= epoch, "operationId" Aeson..= operation]
+    RpcLaunch value -> Aeson.object ["format" .= (1 :: Int), "action" .= ("launch" :: Text), "request" .= value]
+    RpcObserve value -> Aeson.object ["format" .= (1 :: Int), "action" .= ("observe" :: Text), "operationId" .= value]
+    RpcFence value -> Aeson.object ["format" .= (2 :: Int), "action" .= ("fence" :: Text), "intent" .= value]
+    RpcAdmitWrite workspace session owner epoch operation -> Aeson.object ["format" .= (2 :: Int), "action" .= ("admitWrite" :: Text), "workspace" .= workspace, "sessionId" .= session, "owner" .= owner, "epoch" .= epoch, "operationId" .= operation]
 
 instance FromJSON RpcRequest where
   parseJSON = Aeson.withObject "workspace request" \fields -> do
-    format <- fields Aeson..: "format"
-    action <- fields Aeson..: "action"
+    format <- fields .: "format"
+    action <- fields .: "action"
     case (format :: Int, action :: Text) of
-      (1, "launch") | keys fields ["format", "action", "request"] -> RpcLaunch <$> fields Aeson..: "request"
+      (1, "launch") | keys fields ["format", "action", "request"] -> RpcLaunch <$> fields .: "request"
       (1, "observe") | keys fields ["format", "action", "operationId"] -> do
-        operation <- fields Aeson..: "operationId"
+        operation <- fields .: "operationId"
         let OperationId value = operation
         unless (bounded value) (fail "invalid operation")
         pure (RpcObserve operation)
-      (2, "fence") | keys fields ["format", "action", "intent"] -> RpcFence <$> fields Aeson..: "intent"
-      (2, "admitWrite") | keys fields ["format", "action", "workspace", "sessionId", "owner", "epoch", "operationId"] -> RpcAdmitWrite <$> fields Aeson..: "workspace" <*> fields Aeson..: "sessionId" <*> fields Aeson..: "owner" <*> fields Aeson..: "epoch" <*> fields Aeson..: "operationId"
+      (2, "fence") | keys fields ["format", "action", "intent"] -> RpcFence <$> fields .: "intent"
+      (2, "admitWrite") | keys fields ["format", "action", "workspace", "sessionId", "owner", "epoch", "operationId"] -> RpcAdmitWrite <$> fields .: "workspace" <*> fields .: "sessionId" <*> fields .: "owner" <*> fields .: "epoch" <*> fields .: "operationId"
       _ -> fail "unsupported request"
 
 instance ToJSON RpcReply where
   toJSON reply = case reply of
-    RpcFailure err -> Aeson.object ["format" Aeson..= (1 :: Int), "error" Aeson..= err]
-    RpcView value -> Aeson.object ["format" Aeson..= (1 :: Int), "view" Aeson..= value]
-    RpcFenceResult value -> Aeson.object ["format" Aeson..= (2 :: Int), "fence" Aeson..= value]
-    RpcWriteResult value -> Aeson.object ["format" Aeson..= (2 :: Int), "admitted" Aeson..= value]
+    RpcFailure err -> Aeson.object ["format" .= (1 :: Int), "error" .= err]
+    RpcView value -> Aeson.object ["format" .= (1 :: Int), "view" .= value]
+    RpcFenceResult value -> Aeson.object ["format" .= (2 :: Int), "fence" .= value]
+    RpcWriteResult value -> Aeson.object ["format" .= (2 :: Int), "admitted" .= value]
 
 instance FromJSON RpcReply where
   parseJSON = Aeson.withObject "workspace reply" \fields -> do
-    format <- fields Aeson..: "format"
+    format <- fields .: "format"
     case (format :: Int) of
-      1 | keys fields ["format", "error"] -> RpcFailure <$> fields Aeson..: "error"
-      1 | keys fields ["format", "view"] -> RpcView <$> fields Aeson..: "view"
-      2 | keys fields ["format", "fence"] -> RpcFenceResult <$> fields Aeson..: "fence"
-      2 | keys fields ["format", "admitted"] -> RpcWriteResult <$> fields Aeson..: "admitted"
+      1 | keys fields ["format", "error"] -> RpcFailure <$> fields .: "error"
+      1 | keys fields ["format", "view"] -> RpcView <$> fields .: "view"
+      2 | keys fields ["format", "fence"] -> RpcFenceResult <$> fields .: "fence"
+      2 | keys fields ["format", "admitted"] -> RpcWriteResult <$> fields .: "admitted"
       _ -> fail "unsupported reply"
 
 keys :: Aeson.Object -> [Key] -> Bool

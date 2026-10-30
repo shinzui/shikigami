@@ -48,6 +48,7 @@ import Shikigami.Execution.Foreground (driveExecutionForeground)
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
@@ -60,7 +61,6 @@ import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config
 import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
-import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Workspace.Admission (WorkspaceHost (..))
 import Shikigami.Workspace.Allocation

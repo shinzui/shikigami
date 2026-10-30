@@ -4,8 +4,9 @@ module Shikigami.Agent.RunFailure
   )
 where
 
+import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 
 -- | Why an agent run completed without a result. This value is the durable
 -- left-hand side of an agent-run workflow result, including delegated runs.
@@ -22,11 +23,11 @@ agentRunFailureDetail = \case
 instance ToJSON AgentRunFailure where
   toJSON (PermanentAgentRunFailure detail) =
     Aeson.object
-      ["tag" Aeson..= ("PermanentAgentRunFailure" :: Text), "contents" Aeson..= detail]
+      ["tag" .= ("PermanentAgentRunFailure" :: Text), "contents" .= detail]
 
 instance FromJSON AgentRunFailure where
   parseJSON = Aeson.withObject "AgentRunFailure" \value -> do
-    tag <- value Aeson..: "tag"
+    tag <- value .: "tag"
     if tag == ("PermanentAgentRunFailure" :: Text)
-      then PermanentAgentRunFailure <$> value Aeson..: "contents"
+      then PermanentAgentRunFailure <$> value .: "contents"
       else fail "unknown agent-run failure"

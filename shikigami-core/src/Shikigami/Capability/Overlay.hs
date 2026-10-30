@@ -24,12 +24,13 @@ module Shikigami.Capability.Overlay
   )
 where
 
+import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.List (sortOn)
 import Data.Text qualified as Text
 import Dhall (Decoder (..), FromDhall (..))
 import Dhall qualified
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 
 newtype CapabilityId = CapabilityId Text
   deriving stock (Eq, Ord, Show, Generic)
@@ -148,15 +149,15 @@ data CapabilityToolDescriptor = CapabilityToolDescriptor
 instance ToJSON CapabilityToolDescriptor where
   toJSON CapabilityToolDescriptor {name, operationClass} =
     Aeson.object
-      [ "name" Aeson..= name,
-        "operationClass" Aeson..= operationClass
+      [ "name" .= name,
+        "operationClass" .= operationClass
       ]
 
 instance FromJSON CapabilityToolDescriptor where
   parseJSON = Aeson.withObject "CapabilityToolDescriptor" \value ->
     CapabilityToolDescriptor
-      <$> value Aeson..: "name"
-      <*> value Aeson..: "operationClass"
+      <$> value .: "name"
+      <*> value .: "operationClass"
 
 data CapabilityDescriptor = CapabilityDescriptor
   { capability :: !CapabilityId,
@@ -168,17 +169,17 @@ data CapabilityDescriptor = CapabilityDescriptor
 instance ToJSON CapabilityDescriptor where
   toJSON CapabilityDescriptor {capability, revision, tools} =
     Aeson.object
-      [ "capability" Aeson..= capability,
-        "revision" Aeson..= revision,
-        "tools" Aeson..= tools
+      [ "capability" .= capability,
+        "revision" .= revision,
+        "tools" .= tools
       ]
 
 instance FromJSON CapabilityDescriptor where
   parseJSON = Aeson.withObject "CapabilityDescriptor" \value ->
     CapabilityDescriptor
-      <$> value Aeson..: "capability"
-      <*> value Aeson..: "revision"
-      <*> value Aeson..: "tools"
+      <$> value .: "capability"
+      <*> value .: "revision"
+      <*> value .: "tools"
 
 -- | A resolved capability is the complete public descriptor selected by the
 -- operator catalog, not a live provider or lease.

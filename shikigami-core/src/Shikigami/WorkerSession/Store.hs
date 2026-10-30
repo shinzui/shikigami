@@ -45,6 +45,7 @@ where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
 import Control.Exception (Exception, fromException, throw)
+import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
 import Data.ByteString.Lazy qualified as Lazy
@@ -80,9 +81,9 @@ import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId (..))
 import Shikigami.Execution.Resources (Admission (..))
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Transcript (ExecutionId, PayloadRef (..))
-import Shikigami.Prelude
-import Shikigami.Store.ExecutionResources qualified as Roots
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.WorkerSession.Catalog (withLiveSession)
 import Shikigami.WorkerSession.Checkpoint
 import Shikigami.WorkerSession.Identity (assignmentChildWorkflowId, sessionWorkflowId, sessionWorkflowName)
@@ -109,7 +110,7 @@ require :: Either SessionError a -> Transaction a
 require = either abort pure
 
 body :: (ToJSON a) => Text -> a -> Aeson.Value
-body kind value = Aeson.object ["format" Aeson..= (1 :: Int), "kind" Aeson..= kind, "content" Aeson..= value]
+body kind value = Aeson.object ["format" .= (1 :: Int), "kind" .= kind, "content" .= value]
 
 payloadReference :: Aeson.Value -> Either SessionError PayloadRef
 payloadReference value = do
@@ -134,10 +135,10 @@ readPayload session kind ref = do
       actual <- require (payloadReference value)
       unless (actual == ref && digest == ref.digest && bytes == ref.bytes) (abort SessionBindingConflict)
       let decoded = do
-            version <- fields Aeson..: "format"
-            actualKind <- fields Aeson..: "kind"
+            version <- fields .: "format"
+            actualKind <- fields .: "kind"
             unless (version == (1 :: Int) && actualKind == kind) (fail "unsupported session payload")
-            fields Aeson..: "content"
+            fields .: "content"
       case parseEither (const decoded) value of
         Right result -> pure result
         Left _ -> abort (SessionInputRefused "session payload is unreadable")
@@ -189,7 +190,7 @@ openSessionWithLimit maximumSessions admission = guarded do
 ensureSessionDriver :: (SessionReadEffects es) => SessionAccess -> Eff es (Either SessionError ())
 ensureSessionDriver access@(SessionAccess session _ _) = guarded do
   now <- liftIO getCurrentTime
-  let input = Aeson.object ["sessionId" Aeson..= session]
+  let input = Aeson.object ["sessionId" .= session]
   append <- prepareJournalAppend sessionWorkflowName (sessionWorkflowId session) 0 (StepRecorded "ingest-session" input now)
   protected do
     (state, binding) <- getSession session

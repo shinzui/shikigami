@@ -3,6 +3,7 @@ module Shikigami.Agent.Command.AgentRun
   )
 where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.List (isInfixOf, isSuffixOf)
 import Data.Text (Text)
@@ -181,7 +182,7 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
         Right (Completed (Left failure)) -> dieAgentRun (AgentWorkflow.agentRunFailureDetail failure)
         Right (Completed (Right result)) -> renderRunResult decl result
         Right Suspended -> do
-          Log.logInfo logger "execution.durable.accepted" ["workflowId" Aeson..= (runJobWorkflowId job).unWorkflowId]
+          Log.logInfo logger "execution.durable.accepted" ["workflowId" .= (runJobWorkflowId job).unWorkflowId]
           putStrLn "Agent run accepted; a durable wake is pending."
         Right Cancelled -> dieAgentRun "workflow was cancelled"
         Right Failed -> dieAgentRun "workflow journal carries a terminal failure"

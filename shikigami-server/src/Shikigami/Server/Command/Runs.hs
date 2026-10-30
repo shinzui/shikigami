@@ -97,10 +97,10 @@ import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Behavior.Run (BehaviorEnv (..))
 import Shikigami.Decision.ModelCatalog (modelDescriptor, pinnedBinding)
 import Shikigami.Execution.Selection (ExecutionSelection (..), ExecutionSelectionFailure, SelectionSource (..), defaultBinding)
+import Shikigami.Execution.SelectionStore qualified as SelectionStore
 import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Migrations (verifyShikigamiMigrations)
-import Shikigami.Store.ExecutionSelection qualified as SelectionStore
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
@@ -143,7 +143,7 @@ runRunsShow wfName wfId asJson config = do
               Right (Just request) -> do
                 result <- Status.deriveRunStatus store (AgentName request.agentName) wfId
                 case result of
-                  Left _ -> die "run lifecycle store is unavailable"
+                  Left failure -> die (Status.runStatusFailureText failure)
                   Right status -> LazyChar8.putStrLn (Aeson.encode (withLifecycle status (object ["workflow" .= Aeson.Null, "session" .= Aeson.Null])))
         | otherwise -> die ("no workflow instance named " <> wfName <> " with id " <> wfId)
       Right (Just (row, link))
@@ -160,7 +160,7 @@ runRunsShow wfName wfId asJson config = do
               Just name | wfName == "shikigami.agent-run" -> Status.deriveRunStatus store name wfId
               _ -> pure (Right Nothing)
             case finalLifecycle of
-              Left _ -> die "run lifecycle store is unavailable"
+              Left failure -> die (Status.runStatusFailureText failure)
               Right status -> do
                 execution <- either (const (die "execution inspection store is unavailable")) (executionInspection config store) steps
                 LazyChar8.putStrLn (Aeson.encode (withExecution execution (withLifecycle status (runJson row link))))

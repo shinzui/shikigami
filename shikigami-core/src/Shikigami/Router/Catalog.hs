@@ -8,7 +8,7 @@ module Shikigami.Router.Catalog
   )
 where
 
-import Data.Aeson (withObject, withText, (.:))
+import Data.Aeson (withObject, withText, (.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -34,7 +34,7 @@ import Shikigami.Directory
   )
 import Shikigami.Directory qualified as Directory
 import Shikigami.Id.Name (nameBytes)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Router.Declaration (ValidatedRouterDeclaration (..))
 
 -- | A stable identifier for every model-visible input in a candidate catalog.
@@ -77,11 +77,11 @@ data CandidateAvailability
   deriving stock (Generic, Eq, Show)
 
 instance ToJSON CandidateAvailability where
-  toJSON Available = Aeson.object ["status" Aeson..= ("available" :: Text)]
+  toJSON Available = Aeson.object ["status" .= ("available" :: Text)]
   toJSON (Excluded reason) =
     Aeson.object
-      [ "status" Aeson..= ("excluded" :: Text),
-        "reason" Aeson..= reason
+      [ "status" .= ("excluded" :: Text),
+        "reason" .= reason
       ]
 
 instance FromJSON CandidateAvailability where

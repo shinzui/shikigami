@@ -41,10 +41,10 @@ import Shikigami.Execution.Resources (Admission (..))
 import Shikigami.Execution.Runner qualified as Runner
 import Shikigami.Execution.SelectionRuntime
 import Shikigami.Execution.SelectionRuntime qualified as SelectionRuntime
+import Shikigami.Execution.SelectionStore qualified as Calls
 import Shikigami.Execution.Store qualified as Store
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude
-import Shikigami.Store.ExecutionSelection qualified as Calls
 import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (runLLMWith)
 import Shikumi.Tool (SomeTool, renderToolError, runErasedOutput, someToolName, someToolSchema)

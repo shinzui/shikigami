@@ -107,6 +107,7 @@ import Shikigami.Execution.Driver (ExecutionDriverResult (..))
 import Shikigami.Execution.Identity (ExecutionRootId (..))
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Resources
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.ExecutionSelectionWorkflowSpec qualified as ExecutionFixture
@@ -129,7 +130,6 @@ import Shikigami.Sink (GrantSource (DbGrants, StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.GrantStore (checkGrant, reconcileGrantPrincipal, revokeGrant, upsertGrant)
 import Shikigami.Sink.Permission (SinkKind (..))
-import Shikigami.Store.ExecutionResources qualified as Resources
 import Shikigami.Trigger.Enqueue qualified as Enqueue
 import Shikigami.Workflow.Registry qualified as Registry
 import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions, shikigamiWorkflowRunOptions, terminalWorkflowRetention)

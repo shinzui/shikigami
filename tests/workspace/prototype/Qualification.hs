@@ -39,6 +39,7 @@ import Shikigami.Execution.Attempt (JobReference (..))
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Execution.Selection
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
@@ -46,7 +47,6 @@ import Shikigami.Execution.Start (SkillAssignment (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
 import Shikigami.Log qualified as Log
-import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.Workspace.Admission (WorkspaceHost (..))
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.ConfiguredHost

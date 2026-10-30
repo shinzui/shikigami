@@ -13,11 +13,11 @@ import Shikigami.Capability.Overlay (CapabilityDescriptor (..))
 import Shikigami.Capability.Provider
 import Shikigami.Execution.Policy.Types (HarnessPolicy (..))
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Start (SkillAssignment (..))
 import Shikigami.Execution.Transcript (ExecutionError (..))
 import Shikigami.Prelude
-import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.Workspace.Admission (WorkspaceHost (..))
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog (ResolvedRepository, repositoryBase, repositoryIdentity, repositoryPolicyRevision, repositorySource)

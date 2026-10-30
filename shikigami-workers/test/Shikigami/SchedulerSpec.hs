@@ -1,6 +1,7 @@
 module Shikigami.SchedulerSpec (tests) where
 
 import Control.Exception (bracket, try)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as ByteString.Char8
@@ -241,7 +242,7 @@ tests databaseFixture =
                 env = testSchedulerEnv (StoreConnection.pool kirokuStore) Map.empty SkipMissed logger
                 row =
                   (staleScheduleRow staleDue)
-                    { payload = Aeson.object ["kind" Aeson..= ("shikigami.not-a-timer-kind" :: Text)]
+                    { payload = Aeson.object ["kind" .= ("shikigami.not-a-timer-kind" :: Text)]
                     }
 
             fired <- runAppIO appEnv (shikigamiTimerFallback env aDayLater row)
@@ -290,8 +291,8 @@ tests databaseFixture =
                   (staleScheduleRow staleDue)
                     { payload =
                         Aeson.object
-                          [ "kind" Aeson..= Approval.approvalTimeoutKind,
-                            "awakeableId" Aeson..= ("awk_absent" :: Text)
+                          [ "kind" .= Approval.approvalTimeoutKind,
+                            "awakeableId" .= ("awk_absent" :: Text)
                           ]
                     }
 

@@ -12,9 +12,8 @@
 -- endpoints, rather than by a chain of @:\<|\>@ operators. Each field's type
 -- mentions @mode@, a placeholder that Servant fills in differently depending on
 -- what is being derived: handlers on the server, functions on the client, an
--- API description for documentation. Naming the endpoints also removes the
--- classic Servant hazard where two endpoints of the same type are wired to each
--- other's handlers and still compile.
+-- API description for documentation. Naming removes positional wiring errors; same-typed handlers still require
+-- dispatch tests because a named transposition also compiles.
 --
 -- Adding a vertical means adding one field here whose type is
 -- @mode :- \"segment\" :\> NamedRoutes SomeApi@, and defining @SomeApi@ in that
@@ -29,7 +28,8 @@ module Shikigami.Api
   )
 where
 
-import Servant.API (NamedRoutes, (:>))
+import Data.Aeson (Value)
+import Servant.API (Get, JSON, NamedRoutes, (:>))
 import Servant.API.Generic ((:-))
 import Shikigami.Agent.Api (AgentApi)
 import Shikigami.Caller.Api (Authenticated)
@@ -43,7 +43,9 @@ import Shikigami.Prelude
 -- rewritten.
 data ShikigamiApi mode = ShikigamiApi
   { health :: mode :- "health" :> NamedRoutes HealthApi,
-    agents :: mode :- Authenticated :> "agents" :> NamedRoutes AgentApi
+    agents :: mode :- Authenticated :> "agents" :> NamedRoutes AgentApi,
+    -- Pure build metadata; the named single-status exemption has no dependency.
+    openapi :: mode :- "openapi" :> Get '[JSON] Value
   }
   deriving stock (Generic)
 

@@ -1,0 +1,24 @@
+ExecPlan 107 interim public API/CLI acceptance (2026-10-30)
+All 37 tests passed (0.78s)
+All 94 tests passed (10.39s)
+Success /Users/shinzui/Keikaku/bokuno/shikigami/shikigami-api/test/hurl/health.hurl (2 request(s) in 0 ms)
+Success /Users/shinzui/Keikaku/bokuno/shikigami/shikigami-api/test/hurl/problems.hurl (2 request(s) in 0 ms)
+Success /Users/shinzui/Keikaku/bokuno/shikigami/shikigami-api/test/hurl/openapi.hurl (1 request(s) in 2 ms)
+Success /Users/shinzui/Keikaku/bokuno/shikigami/shikigami-api/test/hurl/agents.hurl (8 request(s) in 2 ms)
+Executed requests: 13 (4333.3/s)
+Succeeded files:   4 (100.0%)
+Failed files:      0 (0.0%)
+Success /Users/shinzui/Keikaku/bokuno/shikigami/shikigami-api/test/hurl/auth.hurl (4 request(s) in 1 ms)
+Success /Users/shinzui/Keikaku/bokuno/shikigami/shikigami-api/test/hurl/agent-runs.hurl (11 request(s) in 5 ms)
+Executed requests: 15 (3000.0/s)
+Succeeded files:   2 (100.0%)
+Failed files:      0 (0.0%)
+Success /Users/shinzui/Keikaku/bokuno/shikigami/shikigami-api/test/hurl/unavailable.hurl (3 request(s) in 1 ms)
+Executed requests: 3 (3000.0/s)
+Succeeded files:   1 (100.0%)
+Failed files:      0 (0.0%)
+CLI contracts: 40 real-process checks passed (no database or vendor).
+Haskell conventions: passed; 8 mutation/lexical baseline tests passed.
+Core pure suite: 541 tests passed after strict-field/operator/codec-preserving edits.
+Client suite: 9 tests passed. API suite: 30 tests passed.
+Final domain review and release qualification remain pending.

@@ -82,6 +82,7 @@ module Shikigami.Log
   )
 where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (Pair)
 import Data.ByteString (ByteString)
@@ -95,7 +96,7 @@ import Shikigami.Log.Correlation
 -- which has an unrelated internal type of the same name. Call sites normally
 -- name a constructor ('Info', 'Warn', …) rather than the type, so this
 -- collision stops here.
-import Shikigami.Prelude hiding (Level)
+import Shikigami.Prelude hiding (Level, (.=))
 import System.IO (BufferMode (LineBuffering), Handle, hSetBuffering, stderr)
 
 -- | How severe a line is. Ordered, so that a logger built with a minimum level
@@ -174,9 +175,9 @@ logEvent logger level event fields
       let line =
             Aeson.object
               ( fields
-                  <> [ "ts" Aeson..= iso8601Show now,
-                       "level" Aeson..= renderLevel level,
-                       "event" Aeson..= event
+                  <> [ "ts" .= iso8601Show now,
+                       "level" .= renderLevel level,
+                       "event" .= event
                      ]
               )
       (.sink) logger (LBS.toStrict (Aeson.encode line) <> "\n")

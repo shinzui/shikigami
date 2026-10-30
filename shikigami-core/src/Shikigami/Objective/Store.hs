@@ -20,6 +20,7 @@ where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip6)
 import Control.Exception (Exception, fromException, throw)
+import Data.Aeson ((.:))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types qualified as Aeson
 import Data.ByteString.Lazy qualified as Lazy
@@ -366,7 +367,7 @@ validateSources objective mutation = do
         Just (actual, payload) -> pure do
           unless (bound && actual == receipt && versionedDigest "shikigami.worker-session-payload/1" payload == receipt.output.digest) (Left ObjectiveInvalidEvidence)
           result <- case payload of
-            Aeson.Object fields -> case Aeson.parseMaybe (\o -> o Aeson..: "content") fields of
+            Aeson.Object fields -> case Aeson.parseMaybe (\o -> o .: "content") fields of
               Just value -> Right (value :: WS.AssignmentResult)
               Nothing -> Left ObjectiveInvalidEvidence
             _ -> Left ObjectiveInvalidEvidence

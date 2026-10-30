@@ -2,6 +2,7 @@
 -- Objective identifiers are consumer references to the separately owned store.
 module Shikigami.WorkerSession.Types where
 
+import Data.Aeson ((.!=), (.:), (.:?))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.List (nub)
@@ -101,7 +102,7 @@ data SessionState = SessionState
 
 instance FromJSON SessionState where
   parseJSON = Aeson.withObject "SessionState" \fields -> do
-    state <- SessionState <$> fields Aeson..: "format" <*> fields Aeson..: "sessionId" <*> fields Aeson..: "revision" <*> fields Aeson..: "phase" <*> fields Aeson..: "owner" <*> fields Aeson..: "epoch" <*> fields Aeson..: "activeAssignment" <*> fields Aeson..: "nextSequence" <*> fields Aeson..: "eventCursor" <*> fields Aeson..: "consumedCursor" <*> fields Aeson..:? "checkpointIntent" <*> fields Aeson..:? "wake" <*> fields Aeson..:? "worker" <*> fields Aeson..:? "handoff" <*> (fields Aeson..:? "listeners" Aeson..!= [])
+    state <- SessionState <$> fields .: "format" <*> fields .: "sessionId" <*> fields .: "revision" <*> fields .: "phase" <*> fields .: "owner" <*> fields .: "epoch" <*> fields .: "activeAssignment" <*> fields .: "nextSequence" <*> fields .: "eventCursor" <*> fields .: "consumedCursor" <*> fields .:? "checkpointIntent" <*> fields .:? "wake" <*> fields .:? "worker" <*> fields .:? "handoff" <*> (fields .:? "listeners" .!= [])
     unless (state.format == 1 && all (>= 0) [state.revision, state.epoch, state.nextSequence, state.eventCursor, state.consumedCursor] && state.consumedCursor <= state.eventCursor && state.eventCursor <= 100000 && state.nextSequence <= 10000 && length state.listeners <= 32) (fail "unsupported worker session state")
     pure state
 
@@ -186,8 +187,8 @@ data MessageReceipt = MessageReceipt
 
 instance FromJSON MessageReceipt where
   parseJSON = Aeson.withObject "MessageReceipt" \fields -> do
-    context <- fields Aeson..:? "context"
-    aliases <- fields Aeson..:? "permittedAliases"
+    context <- fields .:? "context"
+    aliases <- fields .:? "permittedAliases"
     message <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (KeyMap.insert "permittedAliases" (toJSON (aliases :: Maybe [Text])) (KeyMap.insert "context" (toJSON (context :: Maybe PayloadRef)) fields)))
     unless (message.format == 1 && message.sequence >= 0 && message.sequence < 10000 && message.assignmentRevision >= 0 && message.epoch >= 0 && message.assignmentId == assignmentIdFor message.sessionId message.sequence message.operationId) (fail "unsupported assignment receipt identity")
     _ <- traverse (either (fail . show) pure . mkWorkflowId) message.childWorkflowId

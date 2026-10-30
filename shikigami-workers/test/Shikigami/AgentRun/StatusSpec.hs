@@ -1,6 +1,7 @@
 module Shikigami.AgentRun.StatusSpec (tests) where
 
 import Control.Exception qualified as Exception
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Foldable (toList)
 import Data.Generics.Labels ()
@@ -28,7 +29,7 @@ import Shikigami.AgentRun.Status
 import Shikigami.Directory qualified as Directory
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport
-import Shikigami.Prelude hiding (repeated, view)
+import Shikigami.Prelude hiding (repeated, view, (.=))
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Trigger.Enqueue
 import Test.Tasty
@@ -206,4 +207,4 @@ sendDeadLetter :: KirokuStore -> Int64 -> Aeson.Value -> IO Pgmq.MessageId
 sendDeadLetter store originalId reason =
   right =<< Pool.use store.pool (Pgmq.sendMessage (Pgmq.SendMessage RunJobs.runJob.jobQueue.dlqName (Pgmq.MessageBody body) Nothing))
   where
-    body = Aeson.object ["original_message_id" Aeson..= originalId, "original_message" Aeson..= Aeson.Null, "dead_letter_reason" Aeson..= reason]
+    body = Aeson.object ["original_message_id" .= originalId, "original_message" .= Aeson.Null, "dead_letter_reason" .= reason]

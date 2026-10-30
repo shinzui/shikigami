@@ -9,6 +9,7 @@ where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad (forever)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Bifunctor (first)
 import Data.Int (Int64)
@@ -54,7 +55,7 @@ sampleTelemetryOnce env =
       Log.logWarn
         (envLogger env)
         (sampleFailureEvent target)
-        ["error" Aeson..= err]
+        ["error" .= err]
 
     sampleFailureEvent = \case
       QueueSample -> "worker.metrics.queue_sample_failed"

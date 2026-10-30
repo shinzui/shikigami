@@ -16,6 +16,7 @@ module Shikigami.Action.Authorization
   )
 where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -63,9 +64,9 @@ data ActionAuthorizationDecision = ActionAuthorizationDecision
   { authorizedAction :: !AgentAction,
     authorizedResource :: !Text,
     authorizationRequestId :: !Text,
-    authorizationCheckedAt :: !Text,
-    authorizationSchemaHash :: !Text,
-    authorizationExpiresAt :: !Text
+    checkedAt :: !Text,
+    schemaHash :: !Text,
+    expiresAt :: !Text
   }
   deriving stock (Eq, Show)
 
@@ -95,9 +96,9 @@ allowAllActionAuthorizerForTests =
                 { authorizedAction = requestedAction,
                   authorizedResource = canonicalResourceText (actionResource requestedAction),
                   authorizationRequestId = "request_test",
-                  authorizationCheckedAt = "test",
-                  authorizationSchemaHash = "sha256:test",
-                  authorizationExpiresAt = "test"
+                  checkedAt = "test",
+                  schemaHash = "sha256:test",
+                  expiresAt = "test"
                 }
           ),
       kawaSource = "shinzui/shikigami"
@@ -149,9 +150,9 @@ firstAuthorizationError = \case
         { authorizedAction = action,
           authorizedResource = canonicalResourceText resource,
           authorizationRequestId = requestIdText requestId,
-          authorizationCheckedAt = consistencyTokenText checkedAt,
-          authorizationSchemaHash = actionSchemaHashText schemaHash,
-          authorizationExpiresAt = Text.pack (show expiresAt)
+          checkedAt = consistencyTokenText checkedAt,
+          schemaHash = actionSchemaHashText schemaHash,
+          expiresAt = Text.pack (show expiresAt)
         }
 
 problemDetail :: ActionProblem -> Text
@@ -206,19 +207,19 @@ logDecision logger callerId request result =
   Log.logInfo
     logger
     "agent_action.authorization"
-    ( [ "caller" Aeson..= callerId,
-        "principal" Aeson..= maybe ("invalid" :: Text) (\AuthorizeActionRequest {principal} -> agentPrincipalText principal) request,
-        "action" Aeson..= maybe ("invalid" :: Text) (\AuthorizeActionRequest {action} -> actionTag action) request,
-        "resource" Aeson..= maybe ("invalid" :: Text) (\AuthorizeActionRequest {action} -> canonicalResourceText (actionResource action)) request,
-        "request_id" Aeson..= maybe ("unavailable" :: Text) (\AuthorizeActionRequest {requestId} -> requestIdText requestId) request,
-        "decision" Aeson..= decisionLabel result
+    ( [ "caller" .= callerId,
+        "principal" .= maybe ("invalid" :: Text) (\AuthorizeActionRequest {principal} -> agentPrincipalText principal) request,
+        "action" .= maybe ("invalid" :: Text) (\AuthorizeActionRequest {action} -> actionTag action) request,
+        "resource" .= maybe ("invalid" :: Text) (\AuthorizeActionRequest {action} -> canonicalResourceText (actionResource action)) request,
+        "request_id" .= maybe ("unavailable" :: Text) (\AuthorizeActionRequest {requestId} -> requestIdText requestId) request,
+        "decision" .= decisionLabel result
       ]
         <> case result of
           Left _ -> []
-          Right ActionAuthorizationDecision {authorizationCheckedAt, authorizationSchemaHash, authorizationExpiresAt} ->
-            [ "checked_at" Aeson..= authorizationCheckedAt,
-              "schema_hash" Aeson..= authorizationSchemaHash,
-              "expires_at" Aeson..= authorizationExpiresAt
+          Right ActionAuthorizationDecision {checkedAt, schemaHash, expiresAt} ->
+            [ "checked_at" .= checkedAt,
+              "schema_hash" .= schemaHash,
+              "expires_at" .= expiresAt
             ]
     )
   where

@@ -63,7 +63,7 @@ Consulted decisions: [ADR-27](../adr/0027-the-first-release-establishes-one-clea
 | EP-2 | Guarded commands and complete domain adoption | [93](../plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md) | EP-1 | None | Complete |
 | EP-3 | Native delivery and workflow recovery | [94](../plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md) | EP-1 | EP-2 | Complete |
 | EP-4 | Administrative CLI, HTTP and live inspection | [106](../plans/106-expose-bounded-administrative-inspection-and-live-feeds.md) | EP-1 | EP-3 | Complete |
-| EP-5 | Haskell and service architecture practices | [107](../plans/107-adopt-current-haskell-and-service-architecture-practices.md) | EP-1 | None | Not Started |
+| EP-5 | Haskell and service architecture practices | [107](../plans/107-adopt-current-haskell-and-service-architecture-practices.md) | EP-1 | None | In Progress |
 | EP-6 | Integrated first-release qualification | [95](../plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md) | EP-1, EP-2, EP-3, EP-4, EP-5 | None | Not Started |
 
 ## Dependency Graph

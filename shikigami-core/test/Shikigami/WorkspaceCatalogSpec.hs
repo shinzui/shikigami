@@ -1,5 +1,6 @@
 module Shikigami.WorkspaceCatalogSpec (tests) where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Either (isLeft)
 import Data.Text qualified as Text
@@ -59,7 +60,7 @@ tests =
         pathAdmitted [] "src/file.hs" @?= False
         assertBool "retained policy identity binds path restrictions" (workspacePolicyIdentity repository /= workspacePolicyIdentity (repository {writePaths = [""]})),
       testCase "unknown nested operator settings are never silently ignored" $ do
-        let value = Aeson.object ["storageRoot" Aeson..= ("/private/workspaces" :: Text.Text), "repositories" Aeson..= ([] :: [Aeson.Value]), "grants" Aeson..= ([] :: [Aeson.Value]), "allowEverything" Aeson..= True]
+        let value = Aeson.object ["storageRoot" .= ("/private/workspaces" :: Text.Text), "repositories" .= ([] :: [Aeson.Value]), "grants" .= ([] :: [Aeson.Value]), "allowEverything" .= True]
         assertBool "unknown field refuses" (case Aeson.fromJSON @WorkspaceSettings value of Aeson.Error _ -> True; _ -> False)
     ]
   where

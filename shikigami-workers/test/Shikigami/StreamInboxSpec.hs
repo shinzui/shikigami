@@ -1,5 +1,6 @@
 module Shikigami.StreamInboxSpec (tests) where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as ByteString
 import Data.IORef (modifyIORef', newIORef, readIORef)
@@ -347,9 +348,9 @@ sampleActivity =
       occurredAt = "2026-08-19T00:00:00Z",
       source = "shinzui/test",
       actor = Actor {kind = "service", id = "fixture", session = Nothing},
-      subject = Subject {subjectType = "ticket", subjectId = "ticket-1"},
+      subject = Subject {kind = "ticket", subjectId = "ticket-1"},
       verb = "customer.risk_detected",
-      payload = Aeson.object ["risk" Aeson..= ("high" :: Text)],
+      payload = Aeson.object ["risk" .= ("high" :: Text)],
       contextRefs = [],
       idempotencyKey = "act_stream_1"
     }

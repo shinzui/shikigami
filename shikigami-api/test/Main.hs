@@ -87,7 +87,7 @@ problemTests =
               @?= (["code", "detail", "retryable", "status", "title", "type"] :: [String])
           other -> assertBool ("expected a JSON object, got " <> show other) False,
       testCase "type stays about:blank until documentation URIs exist" $
-        (.problemType) (problem Internal "boom") @?= "about:blank",
+        (.typeUri) (problem Internal "boom") @?= "about:blank",
       testCase "title, status and retryable come from the code, not the call site" do
         let a = problem RateLimited "first"
             b = problem RateLimited "second"
@@ -102,12 +102,12 @@ problemTests =
       testCase "every code has a distinct stable title" do
         let titles = fmap problemTitle allCodes
         assertEqual "no duplicate titles" (length allCodes) (length (dedupe titles)),
-      testCase "only 5xx and 429 are advertised as retryable" $
+      testCase "only transient dependency and rate-limit failures are retryable" $
         mapM_
           ( \problemCode ->
               assertEqual
                 ("retryable agrees with status for " <> show problemCode)
-                (problemStatus problemCode >= 500 || problemStatus problemCode == 429)
+                (problemCode `elem` [Unavailable, RateLimited])
                 (problemRetryable problemCode)
           )
           allCodes,

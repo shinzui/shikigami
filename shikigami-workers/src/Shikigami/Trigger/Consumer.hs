@@ -30,7 +30,7 @@ where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception qualified as Exception
-import Data.Aeson (Value)
+import Data.Aeson (Value, (.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as ByteString
@@ -89,7 +89,7 @@ import Shikigami.Directory qualified as Directory
 import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), recordRunSkipTx)
 import Shikigami.Integration.Danwa qualified as Danwa
 import Shikigami.Log qualified as Log
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Telemetry.Metrics (ShikigamiMetrics, recordConsumerRecord)
 import Shikigami.Trigger.Enqueue (enqueueRunJobTx, envelopeOccurredAt, runJobFromEnvelopeWithIdentity)
 import Shikigami.Trigger.Stream (IncludeAgentActors, matchesStreamWith)
@@ -238,8 +238,8 @@ runSubscription logger onSupervisor prefix metrics AppEnv {tracer} StreamConfig 
       Log.logError
         logger
         (prefix <> ".consumer.reconnecting")
-        [ "delay_seconds" Aeson..= seconds,
-          "reason" Aeson..= reason
+        [ "delay_seconds" .= seconds,
+          "reason" .= reason
         ]
       threadDelay (seconds * 1_000_000)
       reconnect next
@@ -413,9 +413,9 @@ resolveOccurredAt logger activity =
       Log.logError
         logger
         "stream.envelope.occurred_at_invalid"
-        [ "activity_id" Aeson..= (activity ^. #activityId),
-          "occurred_at" Aeson..= (activity ^. #occurredAt),
-          "substituted" Aeson..= now
+        [ "activity_id" .= (activity ^. #activityId),
+          "occurred_at" .= (activity ^. #occurredAt),
+          "substituted" .= now
         ]
       pure now
 
@@ -571,8 +571,8 @@ logDisposition logger prefix = \case
   Enqueued -> Log.logDebug logger (prefix <> ".record.enqueued") []
   Duplicate -> Log.logDebug logger (prefix <> ".record.deduped") []
   PermanentlyDeadLettered (DeadLetterId deadLetterId) ->
-    Log.logError logger (prefix <> ".record.dead_lettered") ["dead_letter_id" Aeson..= deadLetterId]
-  TransientFailure err -> Log.logError logger (prefix <> ".record.transient_failure") ["error" Aeson..= err]
+    Log.logError logger (prefix <> ".record.dead_lettered") ["dead_letter_id" .= deadLetterId]
+  TransientFailure err -> Log.logError logger (prefix <> ".record.transient_failure") ["error" .= err]
 
 data PreparedTrigger hit
   = EnqueueTrigger !RunJob !hit
@@ -689,11 +689,11 @@ reportCommitted logger prefix onHit = \case
     Log.logInfo
       logger
       (prefix <> ".trigger.skipped")
-      [ "agent" Aeson..= agentName,
-        "principal_id" Aeson..= principalId,
-        "detail" Aeson..= detail,
-        "reason" Aeson..= reason,
-        Log.runIdKey Aeson..= idempotencyKey
+      [ "agent" .= agentName,
+        "principal_id" .= principalId,
+        "detail" .= detail,
+        "reason" .= reason,
+        Log.runIdKey .= idempotencyKey
       ]
 
 principalIdOf :: AgentDecl -> Maybe Text

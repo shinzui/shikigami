@@ -1,13 +1,15 @@
 -- | Authenticated run acceptance over the shared producer and atomic ledger.
 module Shikigami.AgentRun.Handler (agentRunServer) where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Builder (toLazyByteString)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Network.HTTP.Types.URI (encodePathSegments)
-import Relay.Pagination (PageRequest (..))
+import Relay.Pagination (Direction (..), PageRequest (..))
+import Relay.Pagination.Servant qualified as Relay
 import Servant.Server.Generic (AsServerT)
 import Shikigami.Agent.Catalog qualified as Catalog
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
@@ -20,7 +22,7 @@ import Shikigami.Api.Problem
 import Shikigami.Caller.Api
 import Shikigami.Directory qualified as Directory
 import Shikigami.Log qualified as Log
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Server.Seam
 import Shikigami.Trigger.Enqueue (addressedRunJob)
 
@@ -32,20 +34,21 @@ agentRunServer env caller agent = AgentRunApi {request = requestRun, show = show
       | not (validRunKey runId) = pure (RunMissing missingRun)
       | otherwise =
           liftIO (env.readRunStatus agent runId) >>= \case
-            Left _ -> pure (RunShowUnavailable unavailable)
+            Left Status.RunStatusStoreUnavailable -> pure (RunShowUnavailable unavailable)
+            Left Status.RunStatusHistoryInvalid -> pure (RunShowInternal (problem Internal "The stored run history cannot be interpreted."))
             Right Nothing -> pure (RunMissing missingRun)
             Right (Just view) -> pure (RunFound (statusView view))
     listRuns page
       | isNothing (Catalog.lookupAgent env.catalog agent) = pure (RunListAgentMissing missingAgent)
-      | page.pageSize == 0 = pure (RunPageInvalid invalidPage)
+      | page.pageSize == 0 = pure (RunPageInvalid (invalidPage page))
       | otherwise =
           liftIO (Ledger.listRunRequests env.pool agent page) >>= \case
-            Left (Ledger.InvalidRunCursor _) -> pure (RunPageInvalid invalidPage)
+            Left (Ledger.InvalidRunCursor _) -> pure (RunPageInvalid (invalidPage page))
             Left (Ledger.RunListUnavailable _) -> pure (RunListUnavailable unavailable)
             Right connection -> pure (RunPage (fmap requestView connection))
     missingAgent = problem AgentNotFound "No declared agent has this name."
     missingRun = problem RunNotFound "No run for this agent has this identifier."
-    invalidPage = problem InvalidUrl "Use a positive page size and a cursor issued by this route."
+    invalidPage page = Relay.RelayPageError {Relay.code = if page.pageSize == 0 then "invalid_page_size" else "invalid_cursor", Relay.message = "Use a positive page size and a cursor issued by this route.", Relay.retryable = False, Relay.parameter = Just (if page.pageSize == 0 then (if page.direction == Forward then "first" else "last") else (if page.direction == Forward then "after" else "before"))}
     requestRun body = case Catalog.lookupAgent env.catalog agent of
       Nothing -> pure (RunAgentMissing (problem AgentNotFound "No declared agent has this name."))
       Just decl | not decl.enabled -> pure (RunAgentNotRunnable (problem AgentNotRunnable "The agent is disabled in its declaration."))
@@ -67,7 +70,7 @@ agentRunServer env caller agent = AgentRunApi {request = requestRun, show = show
                   Right (Ledger.Replayed row) -> logOutcome "server.run.replayed" row >> pure (RunReplayed (accepted row, location row))
                   Right (Ledger.Conflicting row) -> logOutcome "server.run.conflict" row >> pure (RunConflict (problem IdempotencyKeyConflict "This key was already accepted with a different payload."))
     unavailable = problem Unavailable "The run store or lifecycle directory is unavailable."
-    logOutcome event row = Log.logInfo env.logger event ["agent" Aeson..= row.agentName, "run_id" Aeson..= row.runId, "caller" Aeson..= caller.callerId]
+    logOutcome event row = Log.logInfo env.logger event ["agent" .= row.agentName, "run_id" .= row.runId, "caller" .= caller.callerId]
     accepted row = AgentRunAccepted row.runId row.agentName row.idempotencyKey "accepted" row.acceptedAt
     location row = Text.decodeUtf8 . LBS.toStrict . toLazyByteString $ encodePathSegments ["agents", row.agentName, "runs", row.runId]
 

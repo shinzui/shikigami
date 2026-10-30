@@ -5,9 +5,9 @@ module Shikigami.Integration.Danwa
   )
 where
 
-import Data.Aeson (withObject, (.:))
+import Data.Aeson (withObject, (.:), (.=))
 import Data.Aeson qualified as Aeson
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 
 -- | Danwa's public message-addressed payload.
 --
@@ -30,15 +30,15 @@ data AddressedMessage = AddressedMessage
 instance ToJSON AddressedMessage where
   toJSON msg =
     Aeson.object
-      [ "conversationId" Aeson..= (.conversationId) msg,
-        "messageId" Aeson..= (.messageId) msg,
-        "parentMessageId" Aeson..= (.parentMessageId) msg,
-        "author" Aeson..= (.author) msg,
-        "content" Aeson..= (.content) msg,
-        "agentParticipantId" Aeson..= (.agentParticipantId) msg,
-        "embellishmentId" Aeson..= (.embellishmentId) msg,
-        "mentionedBy" Aeson..= (.mentionedBy) msg,
-        "occurredAt" Aeson..= (.occurredAt) msg
+      [ "conversationId" .= (.conversationId) msg,
+        "messageId" .= (.messageId) msg,
+        "parentMessageId" .= (.parentMessageId) msg,
+        "author" .= (.author) msg,
+        "content" .= (.content) msg,
+        "agentParticipantId" .= (.agentParticipantId) msg,
+        "embellishmentId" .= (.embellishmentId) msg,
+        "mentionedBy" .= (.mentionedBy) msg,
+        "occurredAt" .= (.occurredAt) msg
       ]
 
 instance FromJSON AddressedMessage where

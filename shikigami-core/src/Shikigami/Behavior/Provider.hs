@@ -65,6 +65,7 @@ import Baikai.Provider.OpenAI.Api qualified as OpenAI
 import Baikai.Provider.OpenAI.Responses qualified as Responses
 import Baikai.Trace (TraceSink)
 import Control.Lens ((&), (.~))
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Data.Set qualified as Set
@@ -134,8 +135,8 @@ newBehaviorEnvFor logger selection traceSink = do
   Log.logInfo
     logger
     "behavior.provider.selected"
-    [ "provider" Aeson..= providerTag selection,
-      "detail" Aeson..= describeProviderSelection selection
+    [ "provider" .= providerTag selection,
+      "detail" .= describeProviderSelection selection
     ]
   runtime <- newRuntime
   registerStubProvider

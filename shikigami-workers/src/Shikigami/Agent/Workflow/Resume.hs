@@ -30,6 +30,7 @@ where
 import Control.Concurrent (threadDelay)
 import Control.Exception (throwIO)
 import Control.Lens ((&), (.~))
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (Pair)
 import Data.Generics.Labels ()
@@ -162,16 +163,16 @@ runResumeLoopWith sleep retry logger runOnce = do
       Log.logError
         logger
         "worker.resume.failed"
-        [ "error" Aeson..= reason,
-          "ran_for_seconds" Aeson..= (realToFrac lasted :: Double),
-          "consecutive_failures" Aeson..= failures
+        [ "error" .= reason,
+          "ran_for_seconds" .= (realToFrac lasted :: Double),
+          "consecutive_failures" .= failures
         ]
       if failures >= (.failureCeiling) retry
         then do
           Log.logError
             logger
             "worker.resume.exhausted"
-            ["consecutive_failures" Aeson..= failures, "ceiling" Aeson..= (.failureCeiling) retry]
+            ["consecutive_failures" .= failures, "ceiling" .= (.failureCeiling) retry]
           throwIO (LoopExited ResumeLoop)
         else do
           sleep (if healthy then (.initialBackoffMicros) retry else backoffMicros)
@@ -204,25 +205,25 @@ drainResumePasses limit pass
 -- | Every released summary field is observable at the bounded boundary.
 resumeSummaryFields :: ResumeSummary -> [Pair]
 resumeSummaryFields summary =
-  [ "discovered" Aeson..= summary.discovered,
-    "advanced" Aeson..= summary.advanced,
-    "resumed" Aeson..= summary.resumed,
-    "completed" Aeson..= summary.completed,
-    "still_suspended" Aeson..= summary.stillSuspended,
-    "unknown_name" Aeson..= summary.unknownName,
-    "failed" Aeson..= summary.failed,
-    "transient_errors" Aeson..= summary.transientErrors,
-    "lease_skipped" Aeson..= summary.leaseSkipped,
-    "paced" Aeson..= summary.paced,
-    "sleep_due" Aeson..= summary.sleepDue,
-    "unregistered_names" Aeson..= summary.unregisteredNames
+  [ "discovered" .= summary.discovered,
+    "advanced" .= summary.advanced,
+    "resumed" .= summary.resumed,
+    "completed" .= summary.completed,
+    "still_suspended" .= summary.stillSuspended,
+    "unknown_name" .= summary.unknownName,
+    "failed" .= summary.failed,
+    "transient_errors" .= summary.transientErrors,
+    "lease_skipped" .= summary.leaseSkipped,
+    "paced" .= summary.paced,
+    "sleep_due" .= summary.sleepDue,
+    "unregistered_names" .= summary.unregisteredNames
   ]
 
 -- The process Logger writes each JSON line under the Handle lock, including
 -- callbacks from concurrent upstream advances. Upstream supplies failures here;
 -- successful continuous-pass summaries are not exposed by its released hook.
 logResumeEvent :: (Show event) => Log.Logger -> event -> IO ()
-logResumeEvent logger event = Log.logWarn logger "worker.resume.event" ["detail" Aeson..= show event]
+logResumeEvent logger event = Log.logWarn logger "worker.resume.event" ["detail" .= show event]
 
 runWorkflowGc :: WorkerEnv -> IO ()
 runWorkflowGc env = do
@@ -232,6 +233,6 @@ runWorkflowGc env = do
       ( runWorkflowGcWorkerWith
           terminalWorkflowRetention
           3_600_000_000
-          (\detail -> Log.logWarn (envLogger env) "worker.workflow_gc.failed" ["detail" Aeson..= detail])
+          (\detail -> Log.logWarn (envLogger env) "worker.workflow_gc.failed" ["detail" .= detail])
       )
   either throwIO (const (throwIO (LoopExited WorkflowGcLoop))) result

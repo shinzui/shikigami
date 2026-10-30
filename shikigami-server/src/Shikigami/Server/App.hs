@@ -29,16 +29,12 @@ module Shikigami.Server.App
 where
 
 import Control.Exception (SomeAsyncException, SomeException, catch, fromException, throwIO)
-import Data.Aeson (decode, encode)
+import Data.Aeson (encode, toJSON)
 import Data.ByteString (ByteString)
-import Data.ByteString.Builder (toLazyByteString)
-import Data.ByteString.Lazy qualified as LBS
 import Data.CaseInsensitive qualified as CI
 import Data.Text.Encoding qualified as TE
 import Network.HTTP.Types (Status (..), hContentLength, hContentType)
-import Network.Wai (Application, Middleware, Response, ResponseReceived, pathInfo, responseHeaders, responseLBS, responseStatus)
-import Network.Wai.Internal (Response (ResponseBuilder))
-import Relay.Pagination.Servant (RelayPageError (..))
+import Network.Wai (Application, Middleware, Response, ResponseReceived, responseHeaders, responseLBS, responseStatus)
 import Servant.Health (healthServer)
 import Servant.Server
   ( Context (EmptyContext, (:.)),
@@ -52,6 +48,7 @@ import Servant.Server
 import Servant.Server.Generic (AsServerT, genericServeTWithContext)
 import Shikigami.Agent.Handler (agentServer)
 import Shikigami.Api (ShikigamiApi (..))
+import Shikigami.Api.OpenApi (shikigamiOpenApi)
 import Shikigami.Api.Problem (ProblemCode (..), problem, problemStatus, problemTitle)
 import Shikigami.App.Config (AppConfig (..))
 import Shikigami.Caller.Verifier (newCallerVerifier)
@@ -65,7 +62,7 @@ import Shikigami.Server.Seam (ServerEnv (..), ServerM, problemServerError, runSe
 -- formatters; and the 405 rewrite wraps the finished application.
 shikigamiApplication :: ServerEnv -> Application
 shikigamiApplication env =
-  relayPageProblem . methodNotAllowedProblem $
+  methodNotAllowedProblem $
     (genericServeTWithContext (runServerM env) (shikigamiServer env) context)
   where
     context = newCallerVerifier env.logger env.appConfig.httpAuth :. problemErrorFormatters :. EmptyContext
@@ -80,7 +77,8 @@ shikigamiServer :: ServerEnv -> ShikigamiApi (AsServerT ServerM)
 shikigamiServer env =
   ShikigamiApi
     { health = healthServer ((.liveness) env) ((.readiness) env),
-      agents = agentServer env
+      agents = agentServer env,
+      openapi = pure (toJSON shikigamiOpenApi)
     }
 
 -- | Render every Servant-generated parse or routing failure as problem details.
@@ -152,18 +150,3 @@ problemResponseWith extraHeaders problemCode problemDetail =
     (Status (problemStatus problemCode) (TE.encodeUtf8 (problemTitle problemCode)))
     ((hContentType, "application/problem+json") : extraHeaders)
     (encode (problem problemCode problemDetail))
-
--- | Relay validation happens before handlers and bypasses Servant formatters.
--- Inspect only bounded 400 bodies on the paginated vertical.
-relayPageProblem :: Middleware
-relayPageProblem app request respond = app request \response ->
-  if statusCode (responseStatus response) /= 400
-    || take 1 (pathInfo request) /= ["agents"]
-    || lookup hContentType (responseHeaders response) == Just "application/problem+json"
-    then respond response
-    else case response of
-      ResponseBuilder _ _ builder ->
-        case decode (LBS.take 8192 (toLazyByteString builder)) :: Maybe RelayPageError of
-          Just _ -> respond (problemResponse InvalidUrl "The pagination parameters are invalid.")
-          Nothing -> respond response
-      _ -> respond response

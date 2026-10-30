@@ -23,12 +23,14 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Data.Text.IO qualified as TextIO
+import Options.Applicative ((<**>))
 import Options.Applicative qualified as Opt
 import Settei
 import Settei.Env
 import Settei.Optparse (cliSources, resolutionDiagnostic, schemaDiagnostic)
 import Shikigami.App.Config (jsonDecoder)
 import Shikigami.App.Config.Load (ConfigOptions (..), captureEnvironment, configOptions, readConfigSources)
+import Shikigami.App.Version (versionOption)
 import System.Directory (canonicalizePath, doesDirectoryExist)
 import System.Exit (ExitCode (..), exitWith)
 import System.FilePath (isAbsolute, normalise)
@@ -52,12 +54,12 @@ data LaunchConfig = LaunchConfig
   }
 
 launchParserInfo :: Opt.ParserInfo LaunchCommand
-launchParserInfo = Opt.info (parser Opt.<**> Opt.helper) (Opt.fullDesc <> Opt.progDesc "Foreground Baikai agent launches" <> Opt.failureCode 2)
+launchParserInfo = Opt.info (parser <**> Opt.helper <**> versionOption "shikigami-agent-launch") (Opt.fullDesc <> Opt.progDesc "Foreground Baikai agent launches" <> Opt.failureCode 2)
   where
     parser =
       Opt.hsubparser
-        ( Opt.command "interactive" (Opt.info (interactive Opt.<**> Opt.helper) (Opt.progDesc "Open an attended terminal session"))
-            <> Opt.command "unattended" (Opt.info ((UnattendedLaunch <$> Agent.agentCliParser) Opt.<**> Opt.helper) (Opt.progDesc "Baikai named jobs: run, show, list"))
+        ( Opt.command "interactive" (Opt.info (interactive <**> Opt.helper) (Opt.progDesc "Open an attended terminal session"))
+            <> Opt.command "unattended" (Opt.info ((UnattendedLaunch <$> Agent.agentCliParser) <**> Opt.helper) (Opt.progDesc "Baikai named jobs: run, show, list"))
         )
     interactive =
       InteractiveLaunch
@@ -233,6 +235,9 @@ runLaunch = do
       result <- Agent.runAgentCli snapshot options
       finish (if result.exitCode == 0 then ExitSuccess else ExitFailure result.exitCode) result.standardOutput result.standardError
     InteractiveLaunch prompt system options -> do
+      case schemaDiagnostic options.diagnosticMode (describe launchConfig) of
+        Just output -> finish ExitSuccess output ""
+        Nothing -> pure ()
       files <- readConfigSources options.configPaths
       environment <- readEnvironmentSource launchBindings
       case launchConfigRun options files environment of

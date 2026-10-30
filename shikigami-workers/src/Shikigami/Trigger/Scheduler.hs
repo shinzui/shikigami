@@ -12,7 +12,7 @@ module Shikigami.Trigger.Scheduler
   )
 where
 
-import Data.Aeson (Value)
+import Data.Aeson (Value, (.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseMaybe)
 import Data.Foldable (for_)
@@ -37,7 +37,7 @@ import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), record
 import Shikigami.Execution.Timer qualified as ExecutionTimer
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Log qualified as Log
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Trigger.Enqueue (enqueueScheduledRun, scheduleRunIdempotencyKey)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..), CronSchedule, nextDue)
 
@@ -79,7 +79,7 @@ parseSchedulePayload value = do
 -- field. Reading it is what lets the dispatch below say which action owns a row
 -- instead of discovering it by trying one action and seeing whether it declined.
 timerPayloadKind :: Value -> Maybe Text
-timerPayloadKind = parseMaybe (Aeson.withObject "timer payload" (Aeson..: "kind"))
+timerPayloadKind = parseMaybe (Aeson.withObject "timer payload" (.: "kind"))
 
 scheduleTimerId :: Text -> UTCTime -> TimerId
 scheduleTimerId agent dueAt =
@@ -144,9 +144,9 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
                 Log.logError
                   ((.logger) env)
                   "scheduler.schedule.enqueue_failed"
-                  [ "agent" Aeson..= agent,
-                    "due_at" Aeson..= dueAt,
-                    "error" Aeson..= Text.pack (show err)
+                  [ "agent" .= agent,
+                    "due_at" .= dueAt,
+                    "error" .= Text.pack (show err)
                   ]
               pure Nothing
             Right _ -> advance
@@ -166,10 +166,10 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
                 Log.logError
                   ((.logger) env)
                   "scheduler.schedule.skip_failed"
-                  [ "agent" Aeson..= agent,
-                    "due_at" Aeson..= dueAt,
-                    "reason" Aeson..= reason,
-                    "error" Aeson..= problem
+                  [ "agent" .= agent,
+                    "due_at" .= dueAt,
+                    "reason" .= reason,
+                    "error" .= problem
                   ]
               pure Nothing
             Right () -> do
@@ -177,10 +177,10 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
                 Log.logInfo
                   ((.logger) env)
                   "scheduler.schedule.skipped"
-                  [ "agent" Aeson..= agent,
-                    "due_at" Aeson..= dueAt,
-                    "principal_id" Aeson..= resolvedPrincipalId,
-                    "reason" Aeson..= reason
+                  [ "agent" .= agent,
+                    "due_at" .= dueAt,
+                    "principal_id" .= resolvedPrincipalId,
+                    "reason" .= reason
                   ]
               advance
 
@@ -220,8 +220,8 @@ shikigamiTimerFallback env now row@TimerRow {payload = timerPayload, timerId = T
         Log.logError
           ((.logger) env)
           "scheduler.timer.unknown_kind"
-          [ "timer_id" Aeson..= show rowTimerId,
-            "timer_kind" Aeson..= other
+          [ "timer_id" .= show rowTimerId,
+            "timer_kind" .= other
           ]
       pure Nothing
 

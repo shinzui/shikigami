@@ -1,6 +1,7 @@
 -- | Bounded operator actions in the existing resource-owning worker binary.
 module Shikigami.Workspace.Maintenance (WorkspaceMaintenance (..), runWorkspaceMaintenance) where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as Bytes
 import Kiroku.Store.Connection (defaultConnectionSettings)
@@ -12,7 +13,7 @@ import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Directory (DirectoryRuntime (..), identityLifecycleAdmission, startDirectory)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Workspace.Cleanup
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Settings (WorkspaceSettings (..))
@@ -37,5 +38,5 @@ runWorkspaceMaintenance actor operation config = do
       runtime = MaintenanceRuntime appEnv settings.storageRoot authorizer (identityLifecycleAdmission directory.handle) (pure ())
   output <- case operation of
     ListWorkspaces cursor -> listWorkspaces runtime principal cursor
-    CleanupWorkspace resource -> fmap (const (Aeson.object ["workspace" Aeson..= WorkspaceRef "shikigami.workspace/1" resource, "cleanup" Aeson..= ("complete" :: Text)])) <$> cleanupWorkspace runtime principal (WorkspaceRef "shikigami.workspace/1" resource)
+    CleanupWorkspace resource -> fmap (const (Aeson.object ["workspace" .= WorkspaceRef "shikigami.workspace/1" resource, "cleanup" .= ("complete" :: Text)])) <$> cleanupWorkspace runtime principal (WorkspaceRef "shikigami.workspace/1" resource)
   either (const refuse) (\value -> Bytes.putStr (Aeson.encode value <> "\n")) output

@@ -11,6 +11,12 @@ provenance:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-10-30T19:39:42Z
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-30T23:09:23Z
+      mode: "implement"
+      note: "Begin clause-level Haskell, architecture, configuration and public API/CLI adoption after accepted native inspection"
 ---
 
 # Adopt current Haskell and service architecture practices
@@ -26,7 +32,7 @@ Review and fix every applicable Haskell and service-architecture guideline acros
 
 ## Surprises & Discoveries
 
-The October 28 scope assumed a deployed population and an older domain census. The user and current tree invalidate those assumptions; no implementation acceptance is claimed.
+The native Relay query formatter owns a public JSON error protocol. Rewriting its response through private WAI constructors concealed that contract and was removed. Static configuration discovery previously read sources before selecting its static diagnostic; a FIFO exposes the resulting block. Both shared and interactive loaders now select static diagnostics before IO. The domain identity review found that ObjectiveId is application-owned and cannot be accepted as an arbitrary-text technical identity. That correction and the complete scalar/newtype review remain open.
 
 ## Decision Log
 
@@ -34,7 +40,7 @@ The October 28 scope assumed a deployed population and an older domain census. T
 
 ## Outcomes & Retrospective
 
-Not implemented. Record outcomes, remaining profile limitations and triaged friction at completion.
+Public API/CLI changes are implemented and the interim acceptance is in [haskell-service-results.txt](../evidence/keiro-0.22/haskell-service-results.txt): 94 server, 37 agent, 9 client and 30 API tests; live Hurl lifecycle; 40 real-process offline CLI checks. The language checker and eight mutation/lexical tests pass. M1 and final source dispositions remain open; this is not completion or packaged Linux qualification.
 
 ## Context and Orientation
 

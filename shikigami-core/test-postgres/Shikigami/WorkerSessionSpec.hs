@@ -1,5 +1,6 @@
 module Shikigami.WorkerSessionSpec (tests) where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Data.IORef
@@ -21,17 +22,17 @@ import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Behavior.Run (newBehaviorEnv)
+import Shikigami.Delegation.BudgetStore (delegationBudgetIdFor, reserveEnrolledDelegationSlots)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Execution.Identity qualified as Identity
 import Shikigami.Execution.Request (ExecutionRequest (..))
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.RouterWorkflowSpec qualified as Fixture
-import Shikigami.Store.DelegationBudget (delegationBudgetIdFor, reserveEnrolledDelegationSlots)
-import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.WorkerSession.Checkpoint qualified as Checkpoint
 import Shikigami.WorkerSession.Identity
 import Shikigami.WorkerSession.Integration qualified as Integration
@@ -66,7 +67,7 @@ tests fixture =
           job.executionPermissions @?= admission.context.executionPermissions
           job.executionRootId @?= admission.context.executionRootId
           callbacks <- newIORef (0 :: Int)
-          completeFixtureChild env child callbacks (Aeson.object ["finding" Aeson..= ("retained-first" :: Text)])
+          completeFixtureChild env child callbacks (Aeson.object ["finding" .= ("retained-first" :: Text)])
           drive Nothing >>= (@?= ContinuedAsNew)
           drive Nothing >>= (@?= Suspended)
           idle <- inspect
@@ -78,12 +79,12 @@ tests fixture =
           assertBool "different assignment children" (started.childWorkflowId /= secondStarted.childWorkflowId)
           context <- expectRight =<< run env (Store.readAssignmentContext access second.assignmentId)
           map (\finding -> finding.receipt.assignmentId) context @?= [first.assignmentId]
-          map (.output) context @?= [Just (Aeson.object ["finding" Aeson..= ("retained-first" :: Text)])]
+          map (.output) context @?= [Just (Aeson.object ["finding" .= ("retained-first" :: Text)])]
           secondChild <- maybe (assertFailure "missing second child" >> fail "missing child") (pure . WorkflowId) secondStarted.childWorkflowId
           secondJob <- childJob env secondChild
           assertBool "the actual child receives retained context" ("retained-first" `isInfixOf` show (Aeson.encode secondJob.triggerPayload))
           drive Nothing >>= (@?= Suspended)
-          completeFixtureChild env secondChild callbacks (Aeson.object ["finding" Aeson..= ("second" :: Text)])
+          completeFixtureChild env secondChild callbacks (Aeson.object ["finding" .= ("second" :: Text)])
           drive Nothing >>= (@?= ContinuedAsNew)
           drive Nothing >>= (@?= Suspended)
           readIORef callbacks >>= (@?= 2)

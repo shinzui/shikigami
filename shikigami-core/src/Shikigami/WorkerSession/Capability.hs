@@ -41,9 +41,9 @@ import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Execution.Request (ExecutionRequest)
 import Shikigami.Execution.Resources (Admission (..), Root (..), checkRoot)
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Transcript (PayloadRef (..))
 import Shikigami.Prelude
-import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.WorkerSession.Checkpoint (CheckpointProvider (..), ObjectiveVersion (..))
 import Shikigami.WorkerSession.Handoff (TransferOutcome, TransferServices (..), requestHandoff, resumeHandoff)
 import Shikigami.WorkerSession.Integration (IntegrationOutcome, integrateEvents)
@@ -94,8 +94,8 @@ instance Show CoordinationScope where show _ = "CoordinationScope <protected>"
 -- The source derives delegation depth, lineage and budget from the accepted
 -- run/session records; prompt text and caller-supplied context are not grants.
 data CoordinationAuthority = CoordinationAuthority
-  { admit :: CoordinatorRun -> IO (Either Text (Maybe CoordinationScope)),
-    reacquire :: CoordinatorRun -> Text -> IO (Either Text CoordinationScope)
+  { admit :: !(CoordinatorRun -> IO (Either Text (Maybe CoordinationScope))),
+    reacquire :: !(CoordinatorRun -> Text -> IO (Either Text CoordinationScope))
   }
 
 data CoordinationHost = CoordinationHost

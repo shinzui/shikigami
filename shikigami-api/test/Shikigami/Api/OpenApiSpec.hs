@@ -29,17 +29,17 @@ import Shikigami.Health.Api (ProbeStatus (..))
 import Shikigami.Prelude
 import System.Directory (doesFileExist)
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (assertFailure, testCase, (@?=))
+import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 tests :: TestTree
 tests =
   testGroup
     "OpenAPI document"
-    [ testCase "bearer security applies to every domain operation and no probe" do
+    [ testCase "bearer security applies to every domain operation and no probe or pure build document" do
         shikigamiOpenApi ^. L.components . L.securitySchemes @?= O.SecurityDefinitions (InsOrdHashMap.singleton "bearer" (O.SecurityScheme (O.SecuritySchemeHttp (O.HttpSchemeBearer Nothing)) Nothing))
         mapM_
           ( \(path, operation) -> do
-              let protected = path `notElem` healthPaths
+              let protected = path `notElem` (healthPaths <> ["/openapi"])
               operation ^. L.security @?= (if protected then [O.SecurityRequirement (InsOrdHashMap.singleton "bearer" [])] else [])
               InsOrdHashMap.member 401 (operation ^. L.responses . L.responses) @?= protected
           )
@@ -59,7 +59,32 @@ tests =
                   <> " bytes"
               ),
       testCase "the document lists every vertical" $
-        sort (documentedPaths shikigamiOpenApi) @?= sort (healthPaths <> agentPaths),
+        sort (documentedPaths shikigamiOpenApi) @?= sort (healthPaths <> agentPaths <> ["/openapi"]),
+      testCase "all application alternatives publish their exact statuses and native error media" $
+        mapM_
+          ( \(path, operation) -> do
+              let identity = operation ^. L.operationId
+                  expected = case identity of
+                    Just "getAgents" -> [200, 400, 401, 503]
+                    Just "getAgentsByAgentName" -> [200, 401, 404, 503]
+                    Just "getAgentsByAgentNameRuns" -> [200, 400, 401, 404, 503]
+                    Just "getAgentsByAgentNameRunsByRunId" -> [200, 401, 404, 500, 503]
+                    Just "postAgentsByAgentNameRuns" -> [200, 202, 400, 401, 404, 409, 413, 503]
+                    _ -> []
+                  responses = operation ^. L.responses . L.responses
+              sort (InsOrdHashMap.keys responses) @?= expected
+              mapM_
+                ( \(status, reference) -> when (status >= 400) $ case reference of
+                    O.Ref _ -> assertFailure "error response is an unexpected unresolved reference"
+                    O.Inline response -> do
+                      let media = if status == 400 && identity `elem` [Just "getAgents", Just "getAgentsByAgentNameRuns"] then "application/json" else "application/problem+json"
+                      assertBool (path <> ": error media mismatch") (InsOrdHashMap.member media (response ^. L.content))
+                )
+                (InsOrdHashMap.toList responses)
+          )
+          (filter (\(path, _) -> path `elem` agentPaths) (documentedOperations shikigamiOpenApi)),
+      testCase "the pure live build document is the named single-status exemption" $
+        mapM_ (\(_, operation) -> sort (InsOrdHashMap.keys (operation ^. L.responses . L.responses)) @?= [200]) (filter (\(path, _) -> path == "/openapi") (documentedOperations shikigamiOpenApi)),
       testCase "every probe route publishes both typed alternatives" $
         mapM_
           ( \(path, operation) -> do
@@ -78,7 +103,7 @@ tests =
         let ids = mapMaybe (\(_, operation) -> operation ^. L.operationId) (documentedOperations shikigamiOpenApi)
         length ids @?= length (documentedOperations shikigamiOpenApi)
         sort ids @?= sort (dedupe ids)
-        sort ids @?= ["getAgents", "getAgentsByAgentName", "getAgentsByAgentNameRuns", "getAgentsByAgentNameRunsByRunId", "getHealthLive", "getHealthReady", "postAgentsByAgentNameRuns"],
+        sort ids @?= ["getAgents", "getAgentsByAgentName", "getAgentsByAgentNameRuns", "getAgentsByAgentNameRunsByRunId", "getHealthLive", "getHealthReady", "getOpenapi", "postAgentsByAgentNameRuns"],
       testCase "operation ids are derived from method and path" do
         operationIdFor "get" "/health/live" @?= ("getHealthLive" :: Text)
         operationIdFor "get" "/agents/{name}" @?= "getAgentsByName"

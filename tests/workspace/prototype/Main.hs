@@ -48,11 +48,11 @@ import Shikigami.Directory (DirectoryRuntime (..), identityLifecycleAdmission, s
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript (ExecutionSnapshot (..), ExecutionState (..), operationIdFor)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude ((&), (.~))
-import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.ContainedFile (withWorkspaceLock)

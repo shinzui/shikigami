@@ -145,7 +145,7 @@ riskSignal intentTemplate priority importance extraContextTags =
     }
 
 activitySubjectType :: ActivityEnvelope -> Text
-activitySubjectType ActivityEnvelope {subject = Subject {subjectType}} = subjectType
+activitySubjectType ActivityEnvelope {subject = Subject {kind = subjectType}} = subjectType
 
 ackRequest :: RiskVerdict -> ActivityEnvelope -> ApprovalRequest
 ackRequest verdict activity =

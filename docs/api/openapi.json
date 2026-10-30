@@ -145,6 +145,9 @@
         ],
         "type": "object"
       },
+      "AnyValue": {
+        "additionalProperties": true
+      },
       "Connection_AgentView": {
         "properties": {
           "edges": {
@@ -288,6 +291,28 @@
         ],
         "type": "object"
       },
+      "RelayPageError": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "parameter": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ],
+        "type": "object"
+      },
       "RunFailureView": {
         "properties": {
           "kind": {
@@ -422,9 +447,14 @@
           },
           "400": {
             "content": {
-              "application/problem+json": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
                 }
               }
             },
@@ -599,9 +629,14 @@
           },
           "400": {
             "content": {
-              "application/problem+json": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
                 }
               }
             },
@@ -711,7 +746,14 @@
             }
           },
           "400": {
-            "description": "Invalid `body`"
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid request body or `body`"
           },
           "401": {
             "content": {
@@ -828,6 +870,16 @@
             },
             "description": "`agentName` or `runId` or Agent not found\n\nRun not found"
           },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Stored history invalid"
+          },
           "503": {
             "content": {
               "application/problem+json": {
@@ -916,6 +968,23 @@
               }
             },
             "description": "Probe failed"
+          }
+        }
+      }
+    },
+    "/openapi": {
+      "get": {
+        "operationId": "getOpenapi",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnyValue"
+                }
+              }
+            },
+            "description": ""
           }
         }
       }

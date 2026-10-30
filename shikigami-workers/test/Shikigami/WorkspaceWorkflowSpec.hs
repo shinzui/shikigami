@@ -6,6 +6,7 @@ import Baikai.Provider.Registry qualified as Provider
 import Baikai.StopReason (StopReason (ToolUse))
 import Baikai.Stream (liftCompleteToStream)
 import Control.Exception (throwIO)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Data.IORef
@@ -41,6 +42,7 @@ import Shikigami.Execution.Foreground (driveExecutionForeground)
 import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
 import Shikigami.Execution.Policy.Types (defaultHarnessPolicy)
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript (ExecutionSnapshot (..), executionIdFor)
@@ -54,7 +56,6 @@ import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config
 import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
-import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.WorkerSession.Store qualified as Sessions
 import Shikigami.WorkerSession.Types qualified as Sessions
@@ -85,7 +86,7 @@ tests fixture =
   testGroup
     "workspace governed parent and child"
     [ testCase "historical cleanup plans retain their encoding without invented ownership" $ do
-        let original = Aeson.object ["bindingDigest" Aeson..= ("sha256:" <> Text.replicate 64 "a"), "filesTarget" Aeson..= ("1:2" :: Text.Text), "scratchTarget" Aeson..= ("1:3" :: Text.Text), "userId" Aeson..= (62000 :: Int)]
+        let original = Aeson.object ["bindingDigest" .= ("sha256:" <> Text.replicate 64 "a"), "filesTarget" .= ("1:2" :: Text.Text), "scratchTarget" .= ("1:3" :: Text.Text), "userId" .= (62000 :: Int)]
         case Aeson.fromJSON original of
           Aeson.Success (plan :: CleanupPlan) -> do
             plan.ownership @?= Nothing

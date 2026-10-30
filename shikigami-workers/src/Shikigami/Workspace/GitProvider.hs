@@ -25,6 +25,7 @@ module Shikigami.Workspace.GitProvider
 where
 
 import Control.Exception (Exception, IOException, catch, throwIO)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
 import Data.ByteString qualified as Bytes
@@ -50,7 +51,7 @@ import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Workspace.Allocation (workspaceFiles, workspaceMetadata)
 import Shikigami.Workspace.ContainedFile
 import Shikigami.Workspace.FileProvider (FileRuntime (..))
@@ -105,8 +106,8 @@ gitDescriptorFor transferable = CapabilityDescriptor (must (mkCapabilityId "work
     must :: (Show e) => Either e a -> a; must = either (error . show) id
 
 gitSchema :: Text -> Aeson.Value
-gitSchema "commit" = Aeson.object ["type" Aeson..= ("object" :: Text), "properties" Aeson..= Aeson.object ["expectedParent" Aeson..= Aeson.object ["type" Aeson..= ("string" :: Text), "pattern" Aeson..= ("^[a-f0-9]{40}([a-f0-9]{24})?$" :: Text)], "message" Aeson..= Aeson.object ["type" Aeson..= ("string" :: Text), "maxLength" Aeson..= (4096 :: Int)]], "required" Aeson..= ["expectedParent", "message" :: Text], "additionalProperties" Aeson..= False]
-gitSchema _ = Aeson.object ["type" Aeson..= ("object" :: Text), "properties" Aeson..= Aeson.object [], "additionalProperties" Aeson..= False]
+gitSchema "commit" = Aeson.object ["type" .= ("object" :: Text), "properties" .= Aeson.object ["expectedParent" .= Aeson.object ["type" .= ("string" :: Text), "pattern" .= ("^[a-f0-9]{40}([a-f0-9]{24})?$" :: Text)], "message" .= Aeson.object ["type" .= ("string" :: Text), "maxLength" .= (4096 :: Int)]], "required" .= ["expectedParent", "message" :: Text], "additionalProperties" .= False]
+gitSchema _ = Aeson.object ["type" .= ("object" :: Text), "properties" .= Aeson.object [], "additionalProperties" .= False]
 
 gitBinding :: Text -> ToolBinding
 gitBinding = gitBindingFor False
@@ -247,14 +248,14 @@ observe backend runtime accepted profile target name = do
   paths <- Objects.changedPaths metadata headId captured.tree >>= either (const (abort FileEffectTooLarge)) pure
   mapM_ (admitPath runtime accepted profile "read") paths
   current runtime accepted
-  let common = ["repository" Aeson..= accepted.binding.repository, "base" Aeson..= accepted.binding.base, "head" Aeson..= headId, "tree" Aeson..= captured.tree, "paths" Aeson..= paths, "instructionDigest" Aeson..= bundleDigest accepted.admission.instructions]
+  let common = ["repository" .= accepted.binding.repository, "base" .= accepted.binding.base, "head" .= headId, "tree" .= captured.tree, "paths" .= paths, "instructionDigest" .= bundleDigest accepted.admission.instructions]
   value <-
     if name == "status"
       then pure (Aeson.object common)
       else do
         bytes <- Objects.objectDiff metadata headId captured.tree >>= either (const (abort FileEffectTooLarge)) pure
         patch <- either (const (abort FileEffectRefused)) pure (Encoding.decodeUtf8' bytes)
-        pure (Aeson.object (common <> ["patch" Aeson..= patch]))
+        pure (Aeson.object (common <> ["patch" .= patch]))
   bounded value
   where
     metadata = workspaceMetadata accepted.binding.storageRoot accepted.binding
@@ -320,7 +321,7 @@ resultValue binding record = case record.phase of
   _ -> abort FileEffectUnresolved
 
 gitEvidence :: WorkspaceBinding -> GitRecord -> Aeson.Value
-gitEvidence binding record = Aeson.object ["repository" Aeson..= binding.repository, "base" Aeson..= binding.base, "bindingDigest" Aeson..= record.bindingDigest, "instructionDigest" Aeson..= record.instructionDigest, "operationId" Aeson..= record.operation.operationId, "attemptId" Aeson..= record.attemptId, "generation" Aeson..= record.generation, "commit" Aeson..= record.candidate]
+gitEvidence binding record = Aeson.object ["repository" .= binding.repository, "base" .= binding.base, "bindingDigest" .= record.bindingDigest, "instructionDigest" .= record.instructionDigest, "operationId" .= record.operation.operationId, "attemptId" .= record.attemptId, "generation" .= record.generation, "commit" .= record.candidate]
 
 bounded :: Aeson.Value -> IO Aeson.Value
 bounded value = if Lazy.length (Aeson.encode value) <= 32768 then pure value else abort FileEffectTooLarge

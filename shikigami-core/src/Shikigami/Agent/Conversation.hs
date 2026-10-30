@@ -20,7 +20,7 @@ where
 
 import Baikai.StopReason (StopReason (Stop))
 import Control.Exception (throwIO)
-import Data.Aeson (Value)
+import Data.Aeson (Value, (.:), (.:?), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (parseMaybe)
@@ -108,6 +108,7 @@ import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Execution.Request (ExecutionContext (..))
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Resources
 import Shikigami.Execution.Selection qualified as Selection
 import Shikigami.Execution.SelectionRuntime qualified as SelectionRuntime
 import Shikigami.Execution.Start qualified as ExecutionStart
@@ -120,11 +121,10 @@ import Shikigami.Log qualified as Log
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
 import Shikigami.Memory.Scope (agentScope)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Sink.Config (DanwaConfig)
 import Shikigami.Sink.GrantStore (GrantSource)
 import Shikigami.Sink.Types (DanwaTarget (..), SinkOutcome (Delivered, Enqueued), SinkResult (..))
-import Shikigami.Store.ExecutionResources qualified as Resources
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Text.Read (readMaybe)
 
@@ -307,12 +307,12 @@ omitExecutionContext _ value = value
 -- any carried generation. ConversationStart and RunJob use strict AgentName.
 instance FromJSON ConversationSeed where
   parseJSON = Aeson.withObject "ConversationSeed" \obj -> do
-    rawName <- obj Aeson..: "agentName"
-    identity <- obj Aeson..: "identity"
-    turnsSoFar <- obj Aeson..: "turnsSoFar"
-    pendingMessage <- obj Aeson..: "pendingMessage"
-    lastMessageId <- obj Aeson..: "lastMessageId"
-    executionContext <- obj Aeson..:? "executionContext"
+    rawName <- obj .: "agentName"
+    identity <- obj .: "identity"
+    turnsSoFar <- obj .: "turnsSoFar"
+    pendingMessage <- obj .: "pendingMessage"
+    lastMessageId <- obj .: "lastMessageId"
+    executionContext <- obj .:? "executionContext"
     let initial = identity == UnresolvedLegacyIdentity && turnsSoFar == 0 && pendingMessage == Nothing && lastMessageId == Nothing && executionContext == Nothing
     if Text.null rawName && not initial
       then fail "a carried conversation seed requires an agent name"
@@ -1123,20 +1123,20 @@ replySinkStepName msgMessageId =
 behaviorPayload :: AddressedMessage -> [TurnRow] -> Value
 behaviorPayload AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId, author = msgAuthor, content = msgContent, agentParticipantId = msgAgentParticipantId} priorTurns =
   Aeson.object
-    [ "conversationId" Aeson..= msgConversationId,
-      "messageId" Aeson..= msgMessageId,
-      "author" Aeson..= msgAuthor,
-      "content" Aeson..= msgContent,
-      "agentParticipantId" Aeson..= msgAgentParticipantId,
-      "turns" Aeson..= fmap turnPayload priorTurns
+    [ "conversationId" .= msgConversationId,
+      "messageId" .= msgMessageId,
+      "author" .= msgAuthor,
+      "content" .= msgContent,
+      "agentParticipantId" .= msgAgentParticipantId,
+      "turns" .= fmap turnPayload priorTurns
     ]
 
 turnPayload :: TurnRow -> Value
 turnPayload TurnRow {turnIndex, role, content} =
   Aeson.object
-    [ "turnIndex" Aeson..= turnIndex,
-      "role" Aeson..= role,
-      "content" Aeson..= content
+    [ "turnIndex" .= turnIndex,
+      "role" .= role,
+      "content" .= content
     ]
 
 -- | Which kioku session this conversation is being recorded into.
@@ -1420,7 +1420,7 @@ prepareConversationReplySinkIntent directoryHandle grantSource recordedIdentity 
     -- recipient or channel-egress metadata.
     Nothing
     Agent.DanwaConversation {Agent.topic = "danwa-conversation"}
-    (Aeson.object ["reply" Aeson..= replyText])
+    (Aeson.object ["reply" .= replyText])
     now
 
 recordTurn :: ConversationEnv -> ResolvedAgentIdentity -> SessionId -> Text -> Int -> Text -> Text -> IO (Either Text ())

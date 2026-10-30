@@ -24,7 +24,10 @@ remain running. Completed instances succeed only when the complete step records
 StepProduced (). Other completed instances fail with behavior_failed. With no
 instance, an explicit dead-letter receipt or drain refusal supplies terminal truth;
 otherwise the accepted resource remains accepted. Store/read-model errors become
-unavailable responses, never failed lifecycle values. Bound summaries to 2000
+unavailable responses, never failed lifecycle values. Malformed known journal
+step values are a non-retryable typed internal failure (HTTP 500), with no stored
+payload exposed. This differs from a recorded behavior failure and from an absent
+completion step. Bound summaries to 2000
 characters and failure reasons with boundedBehaviorDetail.
 
 Reads of non-HTTP runs must verify the agent in ingest-job. Run history is an

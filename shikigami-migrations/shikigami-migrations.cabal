@@ -23,6 +23,8 @@ common common
     OverloadedRecordDot
     OverloadedStrings
 
+  ghc-options: -Werror=missing-fields
+
 library
   import: common
   hs-source-dirs: src
@@ -47,6 +49,11 @@ executable shikigami-migrate
   import: common
   main-is: Main.hs
   hs-source-dirs: app
+  other-modules:
+    Paths_shikigami_migrations
+    Version
+
+  autogen-modules: Paths_shikigami_migrations
   ghc-options:
     -threaded
     -rtsopts
@@ -56,6 +63,7 @@ executable shikigami-migrate
     aeson >=2.2 && <2.3,
     base,
     bytestring,
+    githash,
     hasql >=1.10 && <1.11,
     optparse-applicative >=0.19 && <0.20,
     pg-migrate ^>=1.2.0.0,

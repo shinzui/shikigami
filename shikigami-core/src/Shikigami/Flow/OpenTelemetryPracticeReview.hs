@@ -7,7 +7,7 @@ module Shikigami.Flow.OpenTelemetryPracticeReview
 where
 
 import Control.Exception (Exception, throw)
-import Data.Aeson (Value)
+import Data.Aeson (Value, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -87,7 +87,7 @@ import Shikigami.PracticeReview.Memory
     rememberProvisional,
     resolveReview,
   )
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Repository (RepositoryId (..))
 import Shikigami.Sink.Types (SinkOutcome (Enqueued), SinkResult (..))
 
@@ -211,11 +211,11 @@ reviewTrigger validatedTrigger = do
     _ -> pure Nothing
   pure
     ( Aeson.object
-        [ "kind" Aeson..= ("practice-review" :: Text),
-          "verdict" Aeson..= validatedVerdictValue validatedVerdict,
-          "memoryId" Aeson..= idText memoryId,
-          "history" Aeson..= history,
-          "attention" Aeson..= attention
+        [ "kind" .= ("practice-review" :: Text),
+          "verdict" .= validatedVerdictValue validatedVerdict,
+          "memoryId" .= idText memoryId,
+          "history" .= history,
+          "attention" .= attention
         ]
     )
   where
@@ -240,10 +240,10 @@ resolveAuthorized envelope = do
   history <- emitSignal "resolution-history" resolutionHistorySink (resolutionHistoryPayload verdict resolution)
   pure
     ( Aeson.object
-        [ "kind" Aeson..= ("practice-review-resolution" :: Text),
-          "resolution" Aeson..= resolution,
-          "memoryId" Aeson..= idText memoryId,
-          "history" Aeson..= history
+        [ "kind" .= ("practice-review-resolution" :: Text),
+          "resolution" .= resolution,
+          "memoryId" .= idText memoryId,
+          "history" .= history
         ]
     )
 
@@ -404,27 +404,27 @@ resolutionHistorySink = Agent.KawaDigest {Agent.subjectType = "practice-review",
 reviewHistoryPayload :: PracticeReviewVerdict -> Value
 reviewHistoryPayload verdict@PracticeReviewVerdict {reviewId, targetEvidence, referenceEvidence, upstreamEvidence} =
   Aeson.object
-    [ "subject_id" Aeson..= ("practice-review/" <> reviewIdText reviewId),
-      "verdict" Aeson..= verdict,
-      "context_refs" Aeson..= historyContextRefs reviewId (targetEvidence <> referenceEvidence <> upstreamEvidence)
+    [ "subject_id" .= ("practice-review/" <> reviewIdText reviewId),
+      "verdict" .= verdict,
+      "context_refs" .= historyContextRefs reviewId (targetEvidence <> referenceEvidence <> upstreamEvidence)
     ]
 
 resolutionHistoryPayload :: PracticeReviewVerdict -> PracticeReviewResolution -> Value
 resolutionHistoryPayload PracticeReviewVerdict {targetEvidence, referenceEvidence, upstreamEvidence} resolution@PracticeReviewResolution {reviewId} =
   Aeson.object
-    [ "subject_id" Aeson..= ("practice-review/" <> reviewIdText reviewId),
-      "resolution" Aeson..= resolution,
-      "context_refs" Aeson..= historyContextRefs reviewId (targetEvidence <> referenceEvidence <> upstreamEvidence)
+    [ "subject_id" .= ("practice-review/" <> reviewIdText reviewId),
+      "resolution" .= resolution,
+      "context_refs" .= historyContextRefs reviewId (targetEvidence <> referenceEvidence <> upstreamEvidence)
     ]
 
 historyContextRefs :: ReviewId -> [EvidenceItem] -> [Value]
 historyContextRefs reviewId evidence =
   uniqueOn
     id
-    ( [ Aeson.object ["scheme" Aeson..= ("mori://" :: Text), "ref" Aeson..= repositoryRef repository]
+    ( [ Aeson.object ["scheme" .= ("mori://" :: Text), "ref" .= repositoryRef repository]
       | EvidenceItem {content = ContentReference {project = ProjectRef {repository}}} <- evidence
       ]
-        <> [ Aeson.object ["scheme" Aeson..= ("activity://" :: Text), "ref" Aeson..= ("practice-review/" <> reviewIdText reviewId)]
+        <> [ Aeson.object ["scheme" .= ("activity://" :: Text), "ref" .= ("practice-review/" <> reviewIdText reviewId)]
            ]
     )
 

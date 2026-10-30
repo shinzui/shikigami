@@ -77,6 +77,7 @@ module Shikigami.Health.Worker
 where
 
 import Control.Concurrent.Async (concurrently_)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.IORef (IORef, atomicWriteIORef, newIORef, readIORef)
 import Data.Map.Strict (Map)
@@ -97,7 +98,7 @@ import Shibuya.Core.Metrics (InFlightInfo (..), ProcessorState (Failed, Idle, Pa
 import Shikigami.App.Config (Port, portNumber)
 import Shikigami.Health.Ping (databaseReachable, postgresCheckName)
 import Shikigami.Log qualified as Log
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 
 -- ── The loops ───────────────────────────────────────────────────────────────
 
@@ -420,8 +421,8 @@ runProbeListener logger bindHost bindPort livenessCheck readinessCheck = do
   Log.logInfo
     logger
     "worker.health.listening"
-    [ "host" Aeson..= bindHost,
-      "port" Aeson..= portNumber bindPort
+    [ "host" .= bindHost,
+      "port" .= portNumber bindPort
     ]
   Warp.runSettings settings (probeApplication livenessCheck readinessCheck)
   where
@@ -446,7 +447,7 @@ serveProbesWith :: Log.Logger -> Text -> Maybe Port -> Pool -> Heartbeats -> IO 
 serveProbesWith logger bindHost maybePort pool registry work =
   case maybePort of
     Nothing -> do
-      Log.logWarn logger "worker.health.disabled" ["reason" Aeson..= ("no health.port resolved for this role" :: Text)]
+      Log.logWarn logger "worker.health.disabled" ["reason" .= ("no health.port resolved for this role" :: Text)]
       work
     Just bindPort -> do
       (livenessCheck, readinessCheck) <- mkWorkerHealthChecks pool registry

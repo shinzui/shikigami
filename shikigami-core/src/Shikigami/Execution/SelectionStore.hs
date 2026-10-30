@@ -1,6 +1,6 @@
 -- | Assignment-local actual call facts. Root reservations and these facts
 -- share one transaction; neither store claims to be the execution transcript.
-module Shikigami.Store.ExecutionSelection where
+module Shikigami.Execution.SelectionStore where
 
 import Contravariant.Extras (contrazip2, contrazip5)
 import Data.Aeson qualified as Aeson
@@ -24,9 +24,9 @@ import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Resources
+import Shikigami.Execution.ResourcesStore qualified as Resources
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Prelude
-import Shikigami.Store.ExecutionResources qualified as Resources
 
 data CallLimits = CallLimits
   { calls :: !(Maybe Integer),

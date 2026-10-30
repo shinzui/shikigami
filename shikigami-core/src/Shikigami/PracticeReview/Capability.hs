@@ -39,7 +39,7 @@ import Baikai.Response (flattenAssistantBlocks, flattenAssistantText, responseEr
 import Baikai.ResponseFormat (ResponseFormat (JsonObject))
 import Control.Exception qualified as Exception
 import Control.Monad (foldM)
-import Data.Aeson (Value)
+import Data.Aeson (Value, (.:), (.:?), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Text (encodeToLazyText)
 import Data.Bifunctor (first)
@@ -78,7 +78,7 @@ import Shikigami.PracticeReview.Memory
   ( AdjudicatedPracticeReview (..),
     RecalledPracticeReviews (..),
   )
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 
 -- | Recorded execution metadata that is trusted independently of producer
 -- payload JSON. A delegated review requires both parent values.
@@ -94,21 +94,21 @@ data PracticeReviewExecutionContext = PracticeReviewExecutionContext
 instance ToJSON PracticeReviewExecutionContext where
   toJSON context =
     Aeson.object
-      [ "identity" Aeson..= context.identity,
-        "parentWorkflowId" Aeson..= fmap (.unWorkflowId) context.parentWorkflowId,
-        "parentSessionId" Aeson..= context.parentSessionId,
-        "childWorkflowId" Aeson..= context.childWorkflowId.unWorkflowId,
-        "childSessionId" Aeson..= context.childSessionId
+      [ "identity" .= context.identity,
+        "parentWorkflowId" .= fmap (.unWorkflowId) context.parentWorkflowId,
+        "parentSessionId" .= context.parentSessionId,
+        "childWorkflowId" .= context.childWorkflowId.unWorkflowId,
+        "childSessionId" .= context.childSessionId
       ]
 
 instance FromJSON PracticeReviewExecutionContext where
   parseJSON = Aeson.withObject "PracticeReviewExecutionContext" \value ->
     PracticeReviewExecutionContext
-      <$> value Aeson..: "identity"
-      <*> (value Aeson..:? "parentWorkflowId" >>= traverse parseWorkflowId)
-      <*> value Aeson..:? "parentSessionId"
-      <*> (value Aeson..: "childWorkflowId" >>= parseWorkflowId)
-      <*> value Aeson..: "childSessionId"
+      <$> value .: "identity"
+      <*> (value .:? "parentWorkflowId" >>= traverse parseWorkflowId)
+      <*> value .:? "parentSessionId"
+      <*> (value .: "childWorkflowId" >>= parseWorkflowId)
+      <*> value .: "childSessionId"
     where
       parseWorkflowId = either (fail . show) pure . mkWorkflowId
 
@@ -324,14 +324,14 @@ practiceReviewUserPrompt evidence RecalledPracticeReviews {guiding, doNotRepeat,
   LazyText.toStrict
     ( encodeToLazyText
         ( Aeson.object
-            [ "evidence" Aeson..= evidence,
+            [ "evidence" .= evidence,
               "priorMemory"
-                Aeson..= Aeson.object
-                  [ "guiding" Aeson..= (adjudicatedValue <$> guiding),
-                    "doNotRepeat" Aeson..= (adjudicatedValue <$> doNotRepeat),
-                    "pending" Aeson..= (validatedVerdictValue <$> pending),
-                    "retired" Aeson..= (adjudicatedValue <$> retired),
-                    "diagnostics" Aeson..= diagnostics
+                .= Aeson.object
+                  [ "guiding" .= (adjudicatedValue <$> guiding),
+                    "doNotRepeat" .= (adjudicatedValue <$> doNotRepeat),
+                    "pending" .= (validatedVerdictValue <$> pending),
+                    "retired" .= (adjudicatedValue <$> retired),
+                    "diagnostics" .= diagnostics
                   ]
             ]
         )
@@ -339,8 +339,8 @@ practiceReviewUserPrompt evidence RecalledPracticeReviews {guiding, doNotRepeat,
   where
     adjudicatedValue AdjudicatedPracticeReview {verdict, resolution} =
       Aeson.object
-        [ "verdict" Aeson..= validatedVerdictValue verdict,
-          "resolution" Aeson..= validatedResolutionValue resolution
+        [ "verdict" .= validatedVerdictValue verdict,
+          "resolution" .= validatedResolutionValue resolution
         ]
 
 boundedEvaluatorDetail :: Text -> Text

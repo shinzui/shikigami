@@ -8,7 +8,7 @@
 -- refactor.
 module Shikigami.LogSpec (tests) where
 
-import Data.Aeson (Value (..))
+import Data.Aeson (Value (..), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -62,8 +62,8 @@ lineTests =
     -- one object per line, one line per event, `event` always present.
     testCase "one parseable JSON object per line, carrying the event name" do
       (logger, captured) <- capturingLogger Debug
-      logInfo logger "worker.job.completed" ["agent" Aeson..= ("heartbeat" :: Text)]
-      logWarn logger "sink.result" ["outcome" Aeson..= ("failed" :: Text)]
+      logInfo logger "worker.job.completed" ["agent" .= ("heartbeat" :: Text)]
+      logWarn logger "sink.result" ["outcome" .= ("failed" :: Text)]
       lines' <- captured
       assertEqual "two lines" 2 (length lines')
       objects <- traverse decodeObject lines'
@@ -72,7 +72,7 @@ lineTests =
       map (`lookupText` "agent") objects @?= [Just "heartbeat", Nothing],
     testCase "every line ends with exactly one newline and contains no others" do
       (logger, captured) <- capturingLogger Debug
-      logInfo logger "worker.loop.started" ["detail" Aeson..= ("a\nb" :: Text)]
+      logInfo logger "worker.loop.started" ["detail" .= ("a\nb" :: Text)]
       [line] <- captured
       assertBool "ends with newline" ("\n" `BS.isSuffixOf` line)
       -- An embedded newline in a value must be JSON-escaped, not emitted raw,
@@ -83,9 +83,9 @@ lineTests =
       logInfo
         logger
         "worker.job.started"
-        [ "event" Aeson..= ("attacker.controlled" :: Text),
-          "level" Aeson..= ("debug" :: Text),
-          "ts" Aeson..= ("not a timestamp" :: Text)
+        [ "event" .= ("attacker.controlled" :: Text),
+          "level" .= ("debug" :: Text),
+          "ts" .= ("not a timestamp" :: Text)
         ]
       [line] <- captured
       o <- decodeObject line
@@ -108,7 +108,7 @@ lineTests =
       dir <- getTemporaryDirectory
       (path, handle) <- openTempFile dir "shikigami-log-spec.jsonl"
       logger <- newHandleLogger handle Info
-      logInfo logger "worker.loop.started" ["component" Aeson..= ("worker" :: Text)]
+      logInfo logger "worker.loop.started" ["component" .= ("worker" :: Text)]
       logDebug logger "worker.job.polled" []
       hClose handle
       written <- BS.readFile path

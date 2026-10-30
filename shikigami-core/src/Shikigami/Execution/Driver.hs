@@ -13,6 +13,7 @@ module Shikigami.Execution.Driver
   )
 where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Data.List (find)
@@ -42,13 +43,13 @@ import Shikigami.Execution.Executor (ExecutionRuntime (..), modelContext, runExe
 import Shikigami.Execution.Identity (AttemptId (..))
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Resources (AttemptRequest (..), Envelope (..), Root (..))
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.SelectionRuntime (preparePinnedExecutionCall)
 import Shikigami.Execution.Store qualified as Store
 import Shikigami.Execution.Timer (armObservation)
 import Shikigami.Execution.Transcript
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as Generated
-import Shikigami.Prelude
-import Shikigami.Store.ExecutionResources qualified as Roots
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Trigger.Enqueue (addressedRunJob, enqueueRunJobTx)
 
 newtype ExecutionStart = ExecutionStart {executionId :: ExecutionId}
@@ -109,7 +110,7 @@ executionWorkflow runtime initial = do
         Approval.requestBoundApproval
           permission.reviewRequestId
           session
-          (ApprovalRequest ("Allow tool " <> tool <> "?") (Aeson.object ["executionId" Aeson..= start.executionId, "fingerprint" Aeson..= permission.fingerprint, "scopeDigest" Aeson..= permission.scopeDigest]) ViaDanwa)
+          (ApprovalRequest ("Allow tool " <> tool <> "?") (Aeson.object ["executionId" .= start.executionId, "fingerprint" .= permission.fingerprint, "scopeDigest" .= permission.scopeDigest]) ViaDanwa)
           (max 0 (diffUTCTime permission.expiresAt now))
       _ <- step (StepName "resolve-tool-permission") do
         metadata <- liftIO (runExecutionStore runtime (Store.inspectExecution start.executionId)) >>= require

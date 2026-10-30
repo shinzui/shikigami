@@ -14,7 +14,7 @@ module Shikigami.AgentRun.Ledger
   )
 where
 
-import Data.Aeson (Value, encode, object, withObject, (.:))
+import Data.Aeson (Value, encode, object, withObject, (.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
 import Data.Bifunctor (first)
@@ -46,7 +46,7 @@ import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Run.Key (RunKey (..), runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Behavior.Error (boundedBehaviorDetail)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Trigger.Enqueue (enqueueRunJobTx)
 
@@ -194,7 +194,7 @@ refreshRunDisposition pool request
             { queueName = RunJobs.runJob.jobQueue.dlqName,
               delay = 0,
               batchSize = Just 1,
-              conditional = Just (object ["original_message_id" Aeson..= request.queueMessageId])
+              conditional = Just (object ["original_message_id" .= request.queueMessageId])
             }
           PgmqStatements.readMessage
       case toList entries of

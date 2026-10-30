@@ -60,8 +60,10 @@ import Shikigami.Execution.Policy.Types (RecoveryClass (RepeatableObservation), 
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Execution.Request
 import Shikigami.Execution.Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Selection
 import Shikigami.Execution.SelectionRuntime
+import Shikigami.Execution.SelectionStore qualified as Calls
 import Shikigami.Execution.Store qualified as Durable
 import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as DriverGenerated
@@ -76,8 +78,6 @@ import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Sink.Config (DanwaConfig (..))
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (SinkKind (SDanwaConversation))
-import Shikigami.Store.ExecutionResources qualified as Roots
-import Shikigami.Store.ExecutionSelection qualified as Calls
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Test.Tasty (TestTree, testGroup)

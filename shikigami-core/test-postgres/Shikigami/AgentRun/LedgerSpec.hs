@@ -1,6 +1,7 @@
 module Shikigami.AgentRun.LedgerSpec (tests) where
 
 import Control.Concurrent.Async (replicateConcurrently)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Data.Vector qualified as Vector
@@ -13,7 +14,7 @@ import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.RunJob (RunRouteKind (..))
 import Shikigami.AgentRun.Ledger
 import Shikigami.Migrations.TestSupport
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunJobs (encodeRunJob)
 import Shikigami.Trigger.Enqueue
 import Test.Tasty
@@ -31,7 +32,7 @@ tests fixture =
           accepted <- right =<< acceptRunRequest store.pool job "test-caller"
           row <- case accepted of Accepted row -> pure row; _ -> assertFailure "first request was not accepted"
           acceptRunRequest store.pool job "other-caller" >>= (@?= Right (Replayed row))
-          conflict <- right =<< acceptRunRequest store.pool (job & #triggerPayload .~ Aeson.object ["other" Aeson..= True]) "test-caller"
+          conflict <- right =<< acceptRunRequest store.pool (job & #triggerPayload .~ Aeson.object ["other" .= True]) "test-caller"
           conflict @?= Conflicting row
           lookupRunRequest store.pool (AgentName "heartbeat") row.runId >>= (@?= Right (Just row))
           metrics <- right =<< Pool.use store.pool (Pgmq.queueMetrics runQueueName)

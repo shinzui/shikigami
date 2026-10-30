@@ -80,9 +80,11 @@ import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy (ContextProvenance (..), ModelOperationInput (..), SummaryReference (..))
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Resources qualified as R
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Runner qualified as Runner
 import Shikigami.Execution.Selection
 import Shikigami.Execution.SelectionRuntime (SelectionRuntime (..), selectionTransaction)
+import Shikigami.Execution.SelectionStore qualified as Calls
 import Shikigami.Execution.Start qualified as Start
 import Shikigami.Execution.Store qualified as Store
 import Shikigami.Execution.Timer (armObservation, observationFireAction)
@@ -97,8 +99,6 @@ import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
-import Shikigami.Store.ExecutionResources qualified as Roots
-import Shikigami.Store.ExecutionSelection qualified as Calls
 import Shikigami.Trigger.Enqueue (addressedRunJob, enqueueRunJobTx, ensureRunQueue)
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Reference (WorkspaceRef (..))

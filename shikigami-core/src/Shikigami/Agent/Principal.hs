@@ -21,10 +21,11 @@ module Shikigami.Agent.Principal
   )
 where
 
+import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Text qualified as Text
 import Kioku.Api.Access (PrincipalRef, mkPrincipalRef)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 
 -- | An immutable Meibo agent principal, retaining its canonical rendered form.
 newtype AgentPrincipal = AgentPrincipal {value :: Text}
@@ -51,25 +52,25 @@ instance ToJSON AgentIdentity where
   toJSON = \case
     VerifiedIdentity principal ->
       Aeson.object
-        [ "kind" Aeson..= ("verified" :: Text),
-          "principalId" Aeson..= principalText principal
+        [ "kind" .= ("verified" :: Text),
+          "principalId" .= principalText principal
         ]
     CompatibilityIdentity agentName ->
       Aeson.object
-        [ "kind" Aeson..= ("compatibility" :: Text),
-          "agentName" Aeson..= agentName
+        [ "kind" .= ("compatibility" :: Text),
+          "agentName" .= agentName
         ]
     UnresolvedLegacyIdentity ->
-      Aeson.object ["kind" Aeson..= ("unresolved-legacy" :: Text)]
+      Aeson.object ["kind" .= ("unresolved-legacy" :: Text)]
 
 instance FromJSON AgentIdentity where
   parseJSON = Aeson.withObject "AgentIdentity" \object -> do
-    kind <- object Aeson..: "kind"
+    kind <- object .: "kind"
     case kind :: Text of
       "verified" -> do
-        raw <- object Aeson..: "principalId"
+        raw <- object .: "principalId"
         either (fail . Text.unpack) (pure . VerifiedIdentity) (mkAgentPrincipal raw)
-      "compatibility" -> compatibilityIdentity <$> object Aeson..: "agentName"
+      "compatibility" -> compatibilityIdentity <$> object .: "agentName"
       "unresolved-legacy" -> pure UnresolvedLegacyIdentity
       other -> fail ("unknown agent identity kind: " <> Text.unpack other)
 

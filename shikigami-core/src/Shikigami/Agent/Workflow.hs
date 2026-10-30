@@ -38,7 +38,7 @@ module Shikigami.Agent.Workflow
 where
 
 import Control.Exception (fromException, throwIO)
-import Data.Aeson (Key, Value)
+import Data.Aeson (Key, Value, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -131,6 +131,7 @@ import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Execution.Request (ExecutionPolicy (..), ExecutionRequest (..))
 import Shikigami.Execution.Resources (ResourceError)
+import Shikigami.Execution.ResourcesStore qualified as ExecutionResources
 import Shikigami.Execution.Selection qualified as Selection
 import Shikigami.Execution.SelectionRuntime qualified as SelectionRuntime
 import Shikigami.Execution.Start qualified as ExecutionStart
@@ -154,7 +155,7 @@ import Shikigami.Memory.Scope (agentScope)
 import Shikigami.PracticeReview.Attention qualified as PracticeReviewAttention
 import Shikigami.PracticeReview.Capability qualified as PracticeReview
 import Shikigami.PracticeReview.Memory qualified as PracticeReviewMemory
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Program.DecisionRunner (DecisionAbort (..))
 import Shikigami.Sink (DanwaConfig, DeliveryGuard (..), GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), dispatch, sinkKindOf)
 import Shikigami.Sink.Delivery qualified as Delivery
@@ -173,7 +174,6 @@ import Shikigami.Sink.Intent
     preparedSinkResult,
   )
 import Shikigami.Sink.Permission (SinkKind, sinkKindText)
-import Shikigami.Store.ExecutionResources qualified as ExecutionResources
 import Shikigami.Telemetry.TraceContext qualified as TraceContext
 import Shikigami.WorkerSession.Capability qualified as WorkerCapability
 import Shikigami.WorkerSession.Handoff qualified as WorkerHandoff
@@ -828,7 +828,7 @@ data StepResult a
 instance (ToJSON a) => ToJSON (StepResult a) where
   toJSON = \case
     StepProduced value -> Aeson.toJSON value
-    StepRefused detail -> Aeson.object [stepRefusedKey Aeson..= detail]
+    StepRefused detail -> Aeson.object [stepRefusedKey .= detail]
 
 instance (FromJSON a) => FromJSON (StepResult a) where
   parseJSON value = case value of
@@ -1139,7 +1139,7 @@ syntheticActivityFromJob RunJob {agentName, occurredAt, triggerPayload, idempote
       Activity.occurredAt = Text.pack (iso8601Show occurredAt),
       Activity.source = "shinzui/shikigami",
       Activity.actor = Activity.Actor {Activity.kind = "service", Activity.id = agentNameText agentName, Activity.session = Nothing},
-      Activity.subject = Activity.Subject {Activity.subjectType = "run", Activity.subjectId = runKeyText idempotencyKey},
+      Activity.subject = Activity.Subject {Activity.kind = "run", Activity.subjectId = runKeyText idempotencyKey},
       Activity.verb = "run.triggered",
       Activity.payload = triggerPayload,
       Activity.contextRefs = [],
@@ -1159,8 +1159,8 @@ runDeclaredSupervisor deps decl@AgentDecl {delegates = delegateTargets} currentS
       resultLabel target = fromMaybe target (Text.stripSuffix "-researcher" target)
       childPayload target =
         Aeson.object
-          [ (Aeson..=) "role" (resultLabel target),
-            (Aeson..=) "input" triggerPayload
+          [ (.=) "role" (resultLabel target),
+            (.=) "input" triggerPayload
           ]
   childHandles <-
     traverse
@@ -1169,9 +1169,9 @@ runDeclaredSupervisor deps decl@AgentDecl {delegates = delegateTargets} currentS
   findings <- awaitAllDelegated childHandles
   pure
     ( Aeson.object
-        ( (Aeson..=) "summary" (agentDeclName decl <> " synthesized delegated findings")
+        ( (.=) "summary" (agentDeclName decl <> " synthesized delegated findings")
             : zipWith
-              (\target finding -> (Aeson..=) (Key.fromText (resultLabel target)) (either Aeson.String id finding))
+              (\target finding -> (.=) (Key.fromText (resultLabel target)) (either Aeson.String id finding))
               delegateTargets
               findings
         )
@@ -1244,9 +1244,9 @@ recordFailureLearningBestEffort deps recordedIdentity decl sid err = do
       Log.logError
         (depsLogger deps)
         "agent.memory.best_effort_failed"
-        [ "agent" Aeson..= agentDeclName decl,
-          "write" Aeson..= ("failure_learning" :: Text),
-          "error" Aeson..= detail
+        [ "agent" .= agentDeclName decl,
+          "write" .= ("failure_learning" :: Text),
+          "error" .= detail
         ]
 
 publishSinkIntent :: (IOE :> es) => AgentRunDeps -> OutboxRow -> Eff es PublishOutcome
@@ -1300,7 +1300,7 @@ publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa
                 Log.logWarn
                   intentLogger
                   "sink.trace_context.invalid"
-                  ["outbox_message_id" Aeson..= messageId]
+                  ["outbox_message_id" .= messageId]
               pure result
 
 publishUntracked :: SinkResult -> PublishOutcome
@@ -1331,9 +1331,9 @@ publishTracked logger pool messageId kind intent send = do
       Log.logInfo
         logger
         "sink.delivery.skipped"
-        [ "outbox_message_id" Aeson..= messageId,
-          "sink_kind" Aeson..= sinkKindText kind,
-          "reason" Aeson..= ("proven-delivered" :: Text)
+        [ "outbox_message_id" .= messageId,
+          "sink_kind" .= sinkKindText kind,
+          "reason" .= ("proven-delivered" :: Text)
         ]
       pure PublishSucceeded
     Right _ -> do
@@ -1359,11 +1359,11 @@ publishTracked logger pool messageId kind intent send = do
             Log.logError
               logger
               "sink.delivery.unknown"
-              [ "outbox_message_id" Aeson..= messageId,
-                "sink_kind" Aeson..= sinkKindText kind,
-                "downstream_id" Aeson..= downstreamId,
-                "receipt_error" Aeson..= err,
-                "unknown_write" Aeson..= either id (const ("recorded" :: Text)) unknownResult
+              [ "outbox_message_id" .= messageId,
+                "sink_kind" .= sinkKindText kind,
+                "downstream_id" .= downstreamId,
+                "receipt_error" .= err,
+                "unknown_write" .= either id (const ("recorded" :: Text)) unknownResult
               ]
             -- A retry here would knowingly repeat an acknowledged downstream
             -- effect. Keiro may publish the outbox row; the critical unknown
@@ -1407,9 +1407,9 @@ logReceiptError logger eventName messageId kind err =
   Log.logError
     logger
     eventName
-    [ "outbox_message_id" Aeson..= messageId,
-      "sink_kind" Aeson..= sinkKindText kind,
-      "error" Aeson..= err
+    [ "outbox_message_id" .= messageId,
+      "sink_kind" .= sinkKindText kind,
+      "error" .= err
     ]
 
 deliveryGuard :: Pool -> Text -> SinkKind -> SinkIntent -> DeliveryGuard
@@ -1455,8 +1455,8 @@ reconcilePublishedSinkIntent AgentRunDeps {deliveryPool = Just pool, logger} row
       Log.logError
         logger
         "sink.delivery.reconciliation_decode_failed"
-        [ "outbox_message_id" Aeson..= messageId,
-          "error" Aeson..= Text.pack (show err)
+        [ "outbox_message_id" .= messageId,
+          "error" .= Text.pack (show err)
         ]
     Right intent@SinkIntent {sink} -> do
       let kind = sinkKindOf sink
@@ -1473,8 +1473,8 @@ reconcilePublishedSinkIntent AgentRunDeps {deliveryPool = Just pool, logger} row
               Log.logError
                 logger
                 "sink.delivery.reconciled_unknown"
-                [ "outbox_message_id" Aeson..= messageId,
-                  "sink_kind" Aeson..= sinkKindText kind
+                [ "outbox_message_id" .= messageId,
+                  "sink_kind" .= sinkKindText kind
                 ]
 
 -- | Record the run's learning, if the declared policy asks for one.
@@ -1571,10 +1571,10 @@ logSinkResult logger job result =
     logger
     (levelFor ((.outcome) result))
     "sink.result"
-    ( [ "agent" Aeson..= (agentNameText ((.agentName) job)),
-        Log.runIdKey Aeson..= (runJobWorkflowId job).unWorkflowId,
-        "sink_kind" Aeson..= sinkKindText ((.kind) result),
-        "outcome" Aeson..= outcomeText ((.outcome) result)
+    ( [ "agent" .= (agentNameText ((.agentName) job)),
+        Log.runIdKey .= (runJobWorkflowId job).unWorkflowId,
+        "sink_kind" .= sinkKindText ((.kind) result),
+        "outcome" .= outcomeText ((.outcome) result)
       ]
         <> detailField ((.outcome) result)
     )
@@ -1600,14 +1600,14 @@ logSinkResult logger job result =
     -- a query for failures can read @error@ without also matching the returned
     -- id of a successful delivery.
     detailField = \case
-      Delivered detail -> ["detail" Aeson..= detail]
-      Enqueued detail -> ["detail" Aeson..= detail]
+      Delivered detail -> ["detail" .= detail]
+      Enqueued detail -> ["detail" .= detail]
       Stubbed -> []
-      DeniedOutcome reason -> ["reason" Aeson..= reason]
-      AuthorizationFailed reason -> ["error" Aeson..= reason]
-      SkippedLifecycle reason -> ["reason" Aeson..= reason]
-      Failed err -> ["error" Aeson..= err]
-      PermanentFailure err -> ["error" Aeson..= err]
+      DeniedOutcome reason -> ["reason" .= reason]
+      AuthorizationFailed reason -> ["error" .= reason]
+      SkippedLifecycle reason -> ["reason" .= reason]
+      Failed err -> ["error" .= err]
+      PermanentFailure err -> ["error" .= err]
 
 triggerKindText :: Trigger -> Text
 triggerKindText = \case

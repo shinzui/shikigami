@@ -1,6 +1,6 @@
 -- | Every mutation locks the root before any operation/allocation/attempt.
 -- Transaction-level hooks let an executor commit its outcome and usage together.
-module Shikigami.Store.ExecutionResources
+module Shikigami.Execution.ResourcesStore
   ( enrollRoot,
     reserveOperation,
     reserveOperationsTx,

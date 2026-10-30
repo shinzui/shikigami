@@ -11,6 +11,7 @@ module Shikigami.Agent.Delegate.Context
 where
 
 import Control.Exception (Exception)
+import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
 import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
 import Kioku.Id (SessionId)
@@ -19,7 +20,7 @@ import Shikigami.Agent.Delegate.Depth (DelegationDepth (..), depthInt)
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Execution.Identity (ExecutionRootId)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 
 -- | Identity of the one durable descendant budget shared by a complete
 -- delegation tree. It is encoded as a scalar so additive 'RunJob' fields stay
@@ -46,35 +47,35 @@ data DelegateCtx = DelegateCtx
 instance ToJSON DelegateCtx where
   toJSON context =
     Aeson.object
-      [ "format" Aeson..= (1 :: Int),
-        "depth" Aeson..= context.depth,
-        "identity" Aeson..= context.identity,
-        "sessionId" Aeson..= context.sessionId,
-        "parentSessionId" Aeson..= context.parentSessionId,
-        "parentRunWorkflowId" Aeson..= ((.unWorkflowId) <$> context.parentRunWorkflowId),
-        "lineage" Aeson..= context.lineage,
-        "executionPermissions" Aeson..= context.executionPermissions,
-        "executionRootId" Aeson..= context.executionRootId,
-        "delegationBudgetId" Aeson..= context.delegationBudgetId,
-        "budgetLimit" Aeson..= context.budgetLimit
+      [ "format" .= (1 :: Int),
+        "depth" .= context.depth,
+        "identity" .= context.identity,
+        "sessionId" .= context.sessionId,
+        "parentSessionId" .= context.parentSessionId,
+        "parentRunWorkflowId" .= ((.unWorkflowId) <$> context.parentRunWorkflowId),
+        "lineage" .= context.lineage,
+        "executionPermissions" .= context.executionPermissions,
+        "executionRootId" .= context.executionRootId,
+        "delegationBudgetId" .= context.delegationBudgetId,
+        "budgetLimit" .= context.budgetLimit
       ]
 
 instance FromJSON DelegateCtx where
   parseJSON = Aeson.withObject "DelegateCtx" \fields -> do
-    version <- fields Aeson..: "format"
+    version <- fields .: "format"
     unless (version == (1 :: Int)) (fail "unsupported delegation snapshot version")
-    parent <- fields Aeson..: "parentRunWorkflowId" >>= traverse (either (fail . show) pure . mkWorkflowId)
+    parent <- fields .: "parentRunWorkflowId" >>= traverse (either (fail . show) pure . mkWorkflowId)
     DelegateCtx
-      <$> fields Aeson..: "depth"
-      <*> fields Aeson..: "identity"
-      <*> fields Aeson..: "sessionId"
-      <*> fields Aeson..: "parentSessionId"
+      <$> fields .: "depth"
+      <*> fields .: "identity"
+      <*> fields .: "sessionId"
+      <*> fields .: "parentSessionId"
       <*> pure parent
-      <*> fields Aeson..: "lineage"
-      <*> fields Aeson..: "executionPermissions"
-      <*> fields Aeson..: "executionRootId"
-      <*> fields Aeson..: "delegationBudgetId"
-      <*> fields Aeson..: "budgetLimit"
+      <*> fields .: "lineage"
+      <*> fields .: "executionPermissions"
+      <*> fields .: "executionRootId"
+      <*> fields .: "delegationBudgetId"
+      <*> fields .: "budgetLimit"
 
 -- | Maximum allowed delegation depth. This mirrors Flue's four-level bound:
 -- supervisor -> lead -> worker -> helper.

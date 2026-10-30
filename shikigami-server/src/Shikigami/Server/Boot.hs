@@ -21,6 +21,7 @@ where
 
 import Control.Concurrent.Async (link, withAsync)
 import Control.Lens ((&), (.~))
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
@@ -38,7 +39,7 @@ import Options.Applicative (execParser)
 import Servant.Health (ProbeCheck)
 import Shikigami.Agent.Catalog (AgentCatalog (..), catalogFromReport)
 import Shikigami.Agent.Loader (loadAgentsLoud)
-import Shikigami.AgentRun.Status (deriveRunStatus)
+import Shikigami.AgentRun.Status (RunStatusFailure (..), deriveRunStatus)
 import Shikigami.App.Config (AppConfig (..), HttpAuthSettings (..), Role (ServerRole), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl, runAppConfig)
 import Shikigami.Directory qualified as Directory
@@ -92,7 +93,7 @@ newServerEnvWith tracer config pool logger catalog directory livenessCheck readi
       appConfig = config,
       tracer,
       pool,
-      readRunStatus = \_ _ -> pure (Left "No status store was supplied to this test environment."),
+      readRunStatus = \_ _ -> pure (Left RunStatusStoreUnavailable),
       logger,
       catalog,
       directory,
@@ -115,14 +116,14 @@ runServer :: AppConfig -> IO ()
 runServer config = do
   logger <- Log.newStderrLogger Log.Info
   connStr <- revealSecretText <$> requireDatabaseUrl "shikigami-server" config
-  Log.logInfo logger "server.auth.mode" ["mode" Aeson..= (case config.httpAuth of AuthDisabled -> "disabled"; AuthBearer {} -> "bearer" :: Text.Text)]
+  Log.logInfo logger "server.auth.mode" ["mode" .= (case config.httpAuth of AuthDisabled -> "disabled"; AuthBearer {} -> "bearer" :: Text.Text)]
   case config.httpAuth of
     AuthDisabled | config.httpHost `notElem` ["127.0.0.1", "localhost", "::1"] -> Log.logWarn logger "server.auth.disabled" []
     _ -> pure ()
   verifyShikigamiMigrations connStr
   report <- loadAgentsLoud logger config.agentsDirectory config.agentsStrict (const (pure ()))
   let catalog = catalogFromReport report
-  Log.logInfo logger "server.catalog.loaded" ["loaded" Aeson..= Map.size catalog.declarations, "failed" Aeson..= catalog.failedManifests]
+  Log.logInfo logger "server.catalog.loaded" ["loaded" .= Map.size catalog.declarations, "failed" .= catalog.failedManifests]
   directoryRuntime <- Directory.startDirectory logger config.directorySettings >>= either (ioError . userError . Text.unpack) pure
   let serverConfig = serverConfigFrom config
   withServerTelemetry \telemetry@ServerTelemetry {tracer = serverTracer} -> do
@@ -137,9 +138,9 @@ runServer config = do
       Log.logInfo
         logger
         "server.listening"
-        [ "host" Aeson..= (.host) serverConfig,
-          "port" Aeson..= (.port) serverConfig,
-          "probes" Aeson..= (["/health/live", "/health/ready"] :: [Text.Text])
+        [ "host" .= (.host) serverConfig,
+          "port" .= (.port) serverConfig,
+          "probes" .= (["/health/live", "/health/ready"] :: [Text.Text])
         ]
       withServerInspection config logger settings st storeMetrics do
         case directoryRuntime.refresher of

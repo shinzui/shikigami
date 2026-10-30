@@ -53,8 +53,8 @@ data CheckpointOutcome = CheckpointAccepted !CheckpointReceipt | CheckpointConfl
   deriving anyclass (ToJSON, FromJSON)
 
 data CheckpointProvider = CheckpointProvider
-  { current :: ObjectiveRef -> IO (Either Text ObjectiveVersion),
-    commit :: CheckpointIntent -> IO CheckpointOutcome
+  { current :: !(ObjectiveRef -> IO (Either Text ObjectiveVersion)),
+    commit :: !(CheckpointIntent -> IO CheckpointOutcome)
   }
 
 intentFingerprint :: CheckpointIntent -> Text

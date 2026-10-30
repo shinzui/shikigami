@@ -4,6 +4,7 @@ module Shikigami.Agent.Command.RunBehavior
   )
 where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Text (encodeToLazyText)
 import Data.Text (Text)
@@ -14,6 +15,7 @@ import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Agent.Capability.OneOff (renderOneOffCapabilityError, withOneOffCapabilityOverlays)
 import Shikigami.Agent.Decl (AgentDecl (..), ProfileRequirement (..))
 import Shikigami.Agent.Loader (loadAgent)
+import Shikigami.Agent.Payload (readPayloadArgument)
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
@@ -36,12 +38,13 @@ import System.IO (hPutStrLn, stderr)
 runRunBehavior :: FilePath -> Maybe String -> Maybe FilePath -> AppConfig -> IO ()
 runRunBehavior path mpayload workspace config = do
   logger <- Log.newStderrLogger Log.Info
-  payload <- case mpayload of
+  supplied <- readPayloadArgument mpayload
+  payload <- case supplied of
     Nothing -> pure Aeson.Null
     Just raw -> case Aeson.decodeStrict (TE.encodeUtf8 (Text.pack raw)) of
       Just v -> pure v
       Nothing -> do
-        hPutStrLn stderr ("run-behavior: --payload is not valid JSON: " <> raw)
+        hPutStrLn stderr "run-behavior: payload input is not valid JSON"
         exitFailure
   declE <- loadAgent path
   case declE of
@@ -57,7 +60,7 @@ runRunBehavior path mpayload workspace config = do
           env <- newBehaviorEnvFor logger ((.behaviorProvider) config) Nothing
           -- No recalled memories: recall needs a database and this command opens
           -- none, so the behavior runs on the trigger payload alone.
-          Log.logInfo logger "execution.mode" ["mode" Aeson..= ("ephemeral" :: Text), "resumable" Aeson..= False]
+          Log.logInfo logger "execution.mode" ["mode" .= ("ephemeral" :: Text), "resumable" .= False]
           resultE <-
             withOneOffCapabilityOverlays logger denyAllActionAuthorizer workspace decl env \derivedEnv ->
               runEphemeralBehavior config.runTimeout config.harness derivedEnv decl (triggerOnly payload)
@@ -69,7 +72,7 @@ runRunBehavior path mpayload workspace config = do
               hPutStrLn stderr ("run-behavior: " <> show runErr)
               exitFailure
             Right (Right result) -> do
-              Log.logInfo logger "execution.ephemeral.completed" ["modelCalls" Aeson..= result.modelCalls, "toolCalls" Aeson..= result.toolCalls]
+              Log.logInfo logger "execution.ephemeral.completed" ["modelCalls" .= result.modelCalls, "toolCalls" .= result.toolCalls]
               TLIO.putStrLn (encodeToLazyText result.output)
 
 -- | This command deliberately opens no database, so it cannot honestly run an

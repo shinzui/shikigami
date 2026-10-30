@@ -41,7 +41,7 @@ tests =
     "dispatch"
     [ testCase "the documented path set is the served path set" do
         let documented = sort (InsOrdHashMap.keys (shikigamiOpenApi ^. L.paths))
-            served = sort (["/agents", "/agents/{agentName}", "/agents/{agentName}/runs", "/agents/{agentName}/runs/{runId}"] <> fmap (Text.unpack . TE.decodeUtf8) [liveRawPath, readyRawPath])
+            served = sort (["/openapi", "/agents", "/agents/{agentName}", "/agents/{agentName}/runs", "/agents/{agentName}/runs/{runId}"] <> fmap (Text.unpack . TE.decodeUtf8) [liveRawPath, readyRawPath])
         documented @?= served,
       testCase "every documented path is answered, and an undocumented one is not" do
         let documented = InsOrdHashMap.keys (shikigamiOpenApi ^. L.paths)

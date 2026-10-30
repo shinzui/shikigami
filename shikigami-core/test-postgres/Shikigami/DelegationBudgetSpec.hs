@@ -11,8 +11,7 @@ import Kiroku.Store.Connection (defaultConnectionSettings)
 import Shikigami.Agent.Decl (DelegationBudget, mkDelegationBudget)
 import Shikigami.Agent.Delegate.Context (DelegationBudgetId)
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
-import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
-import Shikigami.Store.DelegationBudget
+import Shikigami.Delegation.BudgetStore
   ( BatchReservationResult (..),
     BudgetReservationError (..),
     ReservationResult (..),
@@ -20,6 +19,7 @@ import Shikigami.Store.DelegationBudget
     reserveDelegationSlot,
     reserveDelegationSlots,
   )
+import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertEqual, assertFailure, testCase)
 

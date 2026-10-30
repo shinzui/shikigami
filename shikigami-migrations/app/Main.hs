@@ -64,6 +64,7 @@ import Options.Applicative
 import Shikigami.Migrations (MigrationPlan, reconcileShikigamiReadModels, shikigamiMigrationPlan, verifyShikigamiSchema)
 import System.Environment (lookupEnv)
 import System.Exit qualified as Exit
+import Version (versionOption)
 
 data Command = Migrate MigrationCommand | VerifySchema
 
@@ -73,7 +74,7 @@ main = do
   parsed <-
     execParser
       ( info
-          ((subparser (command "verify-schema" (info (pure VerifySchema) (progDesc "Verify live framework and application schema objects (PostgreSQL 18)"))) <|> (Migrate <$> migrationCommandParser plan)) <**> helper)
+          ((subparser (command "verify-schema" (info (pure VerifySchema) (progDesc "Verify live framework and application schema objects (PostgreSQL 18)"))) <|> (Migrate <$> migrationCommandParser plan)) <**> helper <**> versionOption)
           (fullDesc <> progDesc "Manage the Shikigami database schema")
       )
   databaseUrl <- case parsed of

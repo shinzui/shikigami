@@ -24,15 +24,15 @@ instance ToJSON Actor where toJSON = genericToJSON activityOptions
 
 instance FromJSON Actor where parseJSON = genericParseJSON activityOptions
 
-data Subject = Subject {subjectType :: !Text, subjectId :: !Text}
+data Subject = Subject {kind :: !Text, subjectId :: !Text}
   deriving stock (Eq, Show, Generic)
 
--- subjectType -> "type", subjectId -> "id" require a custom modifier:
+-- kind -> "type", subjectId -> "id" require a custom modifier:
 subjectOptions :: Options
 subjectOptions =
   defaultOptions
     { fieldLabelModifier = \f -> case f of
-        "subjectType" -> "type"
+        "kind" -> "type"
         "subjectId" -> "id"
         other -> other
     }

@@ -719,7 +719,7 @@ sampleActivity =
       occurredAt = "2026-06-27T00:00:00Z",
       source = "shinzui/shikigami",
       actor = Actor {kind = "service", id = "flow-test", session = Nothing},
-      subject = Subject {subjectType = "ticket", subjectId = "ticket_1"},
+      subject = Subject {kind = "ticket", subjectId = "ticket_1"},
       verb = "customer.risk_detected",
       payload = object [],
       contextRefs = [],

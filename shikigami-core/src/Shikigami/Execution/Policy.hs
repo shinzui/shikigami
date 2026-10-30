@@ -14,6 +14,7 @@ module Shikigami.Execution.Policy
 where
 
 import Baikai.StopReason (StopReason (ErrorReason, ToolUse))
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -27,7 +28,7 @@ import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId)
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Transcript
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 
 -- These gates run before context selection and before any reservation or IO.
 -- Fresh external authorization is still required immediately before dispatch.
@@ -75,7 +76,7 @@ validateTerminalOutput policy assistant = do
     JsonFields fields -> case Aeson.eitherDecodeStrict (Text.encodeUtf8 reply) of
       Right (Aeson.Object value) -> unless (all (\key -> KeyMap.member (Key.fromText key) value) fields) (Left ExecutionOutputInvalid)
       _ -> Left ExecutionOutputInvalid
-  pure (Aeson.object ["reply" Aeson..= reply])
+  pure (Aeson.object ["reply" .= reply])
 
 data ModelOperationInput = ModelOperationInput
   { format :: !Int,

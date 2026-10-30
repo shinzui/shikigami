@@ -98,7 +98,7 @@ activityFor ticket =
       occurredAt = "2026-07-15T12:00:00Z",
       source = "shinzui/shikigami",
       actor = Actor {kind = "human", id = "someone", session = Nothing},
-      subject = Subject {subjectType = "ticket", subjectId = ticket},
+      subject = Subject {kind = "ticket", subjectId = ticket},
       verb = "ticket.updated",
       payload = object [],
       contextRefs = [],

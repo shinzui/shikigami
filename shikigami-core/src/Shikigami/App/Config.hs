@@ -154,6 +154,7 @@ import Baikai.Options qualified as Options
 import Baikai.Speed (Speed (..))
 import Baikai.ThinkingLevel (ThinkingLevel, parseThinkingLevel, renderThinkingLevel)
 import Baikai.Tool (ToolChoice (..))
+import Data.Aeson ((.:), (.:?))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as AesonKey
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -613,13 +614,13 @@ instance Aeson.FromJSON DecisionModelSpec where
   parseJSON = Aeson.withObject "decision model" \o -> do
     let accepted = ["alias", "version", "bindingId", "bindingVersion", "provider", "model", "thinking", "max_tokens", "timeout_ms"]
     if any (`notElem` accepted) (KeyMap.keys o) then fail "unknown decision model setting" else pure ()
-    alias <- o Aeson..: "alias"
-    version <- o Aeson..: "version"
-    bindingId <- o Aeson..: "bindingId"
-    bindingVersion <- o Aeson..: "bindingVersion"
-    vendor <- (o Aeson..: "provider" :: AesonTypes.Parser Text)
-    exact <- o Aeson..: "model"
-    preference <- o Aeson..: "thinking"
+    alias <- o .: "alias"
+    version <- o .: "version"
+    bindingId <- o .: "bindingId"
+    bindingVersion <- o .: "bindingVersion"
+    vendor <- (o .: "provider" :: AesonTypes.Parser Text)
+    exact <- o .: "model"
+    preference <- o .: "thinking"
     thinking <-
       if preference == "default"
         then pure Nothing
@@ -634,8 +635,8 @@ instance Aeson.FromJSON DecisionModelSpec where
           Nothing | vendor == "stub" -> [stubModel {Model.modelId = "stub-triage"}, stubModel {Model.modelId = "stub-investigate"}]
           _ -> []
     model <- maybe (fail "unknown exact catalog model") pure (lookup exact [(modelId m, m) | m <- candidates])
-    maxTokens <- o Aeson..:? "max_tokens"
-    timeoutMs <- o Aeson..:? "timeout_ms"
+    maxTokens <- o .:? "max_tokens"
+    timeoutMs <- o .:? "timeout_ms"
     let options = Options.emptyOptions {Options.thinking = thinking, Options.maxTokens = maxTokens, Options.timeoutMs = timeoutMs}
         validWord text = not (Text.null text) && Text.length text <= 128 && Text.all (\c -> isAlphaNum c || c `elem` ("-_." :: String)) text
     if all validWord [alias, version, bindingId, bindingVersion]

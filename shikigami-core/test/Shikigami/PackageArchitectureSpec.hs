@@ -143,8 +143,8 @@ tests =
           lightPackages
         case lookup "shikigami-core" stanzas of
           Nothing -> assertFailure "core package missing"
-          Just components -> case filter (\component -> component.stanzaKind == "library" && component.stanzaName == "inspection") components of
-            [component] -> mapM_ (\dependency -> assertBool "inspection component has an explicit dependency budget" (dependency `elem` component.stanzaDeps)) ["shikigami-core", "keiro-ops-http", "kiroku-metrics", "pgmq-inspect"]
+          Just components -> case filter (\component -> component.kind == "library" && component.name == "inspection") components of
+            [component] -> mapM_ (\dependency -> assertBool "inspection component has an explicit dependency budget" (dependency `elem` component.dependencies)) ["shikigami-core", "keiro-ops-http", "kiroku-metrics", "pgmq-inspect"]
             _ -> assertFailure "exactly one named inspection library is required"
         mapM_ (\package -> productionLibraryDeps package stanzas >>= \deps -> assertBool "serving role uses the shared component" ("shikigami-core:inspection" `elem` deps)) ["shikigami-server", "shikigami-workers"],
       testCase "core links the neutral tool registry without a provider adapter" do
@@ -179,11 +179,11 @@ tests =
       testCase "every executable links only its own package's library" do
         stanzas <- allStanzas
         let offenders =
-              [ (package, (.stanzaName) stanza, foreign')
+              [ (package, (.name) stanza, foreign')
               | (package, packageStanzas) <- stanzas,
                 stanza <- packageStanzas,
-                (.stanzaKind) stanza == "executable",
-                let siblings = filter (`elem` expectedPackages) (fmap dropSublibrary ((.stanzaDeps) stanza)),
+                (.kind) stanza == "executable",
+                let siblings = filter (`elem` expectedPackages) (fmap dropSublibrary ((.dependencies) stanza)),
                 let foreign' = filter (/= package) siblings,
                 not (null foreign')
               ]
@@ -195,11 +195,11 @@ tests =
       testCase "only test suites depend on the migrations test-support sublibrary" do
         stanzas <- allStanzas
         let offenders =
-              [ (package, (.stanzaKind) stanza, (.stanzaName) stanza)
+              [ (package, (.kind) stanza, (.name) stanza)
               | (package, packageStanzas) <- stanzas,
                 stanza <- packageStanzas,
-                (.stanzaKind) stanza /= "test-suite",
-                "shikigami-migrations:test-support" `elem` (.stanzaDeps) stanza
+                (.kind) stanza /= "test-suite",
+                "shikigami-migrations:test-support" `elem` (.dependencies) stanza
               ]
         assertBool
           ("only test suites may use shikigami-migrations:test-support; found " <> show offenders)
@@ -209,8 +209,8 @@ tests =
         let untested =
               [ package
               | (package, packageStanzas) <- stanzas,
-                any (\s -> (.stanzaKind) s == "library" && Text.null ((.stanzaName) s)) packageStanzas,
-                not (any (\s -> (.stanzaKind) s == "test-suite") packageStanzas)
+                any (\s -> (.kind) s == "library" && Text.null ((.name) s)) packageStanzas,
+                not (any (\s -> (.kind) s == "test-suite") packageStanzas)
               ]
         assertBool ("packages with a library but no test suite: " <> show untested) (null untested)
     ]
@@ -234,9 +234,9 @@ cabalFieldEntries field contents =
 
 -- | One @library@, @executable@, or @test-suite@ block and the packages it needs.
 data Stanza = Stanza
-  { stanzaKind :: !Text,
-    stanzaName :: !Text,
-    stanzaDeps :: ![Text]
+  { kind :: !Text,
+    name :: !Text,
+    dependencies :: ![Text]
   }
   deriving stock (Eq, Show)
 
@@ -260,12 +260,12 @@ productionLibraryDeps package stanzas =
   case lookup package stanzas of
     Nothing -> assertFailure (Text.unpack package <> ": not parsed")
     Just packageStanzas ->
-      case filter (\s -> (.stanzaKind) s == "library" && Text.null ((.stanzaName) s)) packageStanzas of
+      case filter (\s -> (.kind) s == "library" && Text.null ((.name) s)) packageStanzas of
         [] -> assertFailure (Text.unpack package <> ": no library stanza found")
         (libraryStanza : _)
-          | null ((.stanzaDeps) libraryStanza) ->
+          | null ((.dependencies) libraryStanza) ->
               assertFailure (Text.unpack package <> ": library stanza parsed with no dependencies")
-          | otherwise -> pure ((.stanzaDeps) libraryStanza)
+          | otherwise -> pure ((.dependencies) libraryStanza)
 
 -- | @shikigami-migrations:test-support@ names the @shikigami-migrations@ package.
 dropSublibrary :: Text -> Text
@@ -292,7 +292,7 @@ parseStanzas contents = go (Text.lines contents) Nothing []
         Just (kind, name) -> go rest (Just (Stanza kind name [])) (maybe acc (: acc) current)
         Nothing -> case (current, dependencyName line) of
           (Just stanza, Just dependency) ->
-            go rest (Just stanza {stanzaDeps = (.stanzaDeps) stanza <> [dependency]}) acc
+            go rest (Just stanza {dependencies = (.dependencies) stanza <> [dependency]}) acc
           _ -> go rest current acc
 
     stanzaHeader line

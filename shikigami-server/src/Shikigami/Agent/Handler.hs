@@ -6,6 +6,7 @@ import Relay.Pagination (CursorPayload (..), Direction (..), KeyValue (..), Page
 import Relay.Pagination.Hasql.Connection (mkConnection)
 import Relay.Pagination.Hasql.KeyCodec (textKey)
 import Relay.Pagination.Hasql.SortSpec
+import Relay.Pagination.Servant qualified as Relay
 import Servant.Server.Generic (AsServerT)
 import Shikigami.Agent.Api
 import Shikigami.Agent.Catalog qualified as Catalog
@@ -30,11 +31,11 @@ agentServer env caller = AgentApi {list = listAgents, show = showAgent, runs = a
           False -> pure (AgentUnavailable unavailable)
           True -> AgentFound <$> liftIO (agentView env decl)
     listAgents request
-      | request.pageSize == 0 = pure (AgentPageInvalid invalid)
+      | request.pageSize == 0 = pure (AgentPageInvalid (invalid request))
       | otherwise = case traverse (decodeCursor (sortSpecFingerprint agentSort)) request.cursor of
-          Left _ -> pure (AgentPageInvalid invalid)
+          Left _ -> pure (AgentPageInvalid (invalid request))
           Right payload -> case traverse cursorName payload of
-            Nothing -> pure (AgentPageInvalid invalid)
+            Nothing -> pure (AgentPageInvalid (invalid request))
             Just boundary ->
               liftIO (directoryAvailable env) >>= \case
                 False -> pure (AgentPageUnavailable unavailable)
@@ -47,7 +48,7 @@ agentServer env caller = AgentApi {list = listAgents, show = showAgent, runs = a
     within _ Nothing _ = True
     within Forward (Just name) row = row.name > name
     within Backward (Just name) row = row.name < name
-    invalid = problem InvalidUrl "Use a positive page size and a cursor issued by this route."
+    invalid request = Relay.RelayPageError {Relay.code = if request.pageSize == 0 then "invalid_page_size" else "invalid_cursor", Relay.message = "Use a positive page size and a cursor issued by this route.", Relay.retryable = False, Relay.parameter = Just (if request.pageSize == 0 then (if request.direction == Forward then "first" else "last") else (if request.direction == Forward then "after" else "before"))}
     unavailable = problem Unavailable "The lifecycle directory is unavailable."
 
 directoryAvailable :: ServerEnv -> IO Bool

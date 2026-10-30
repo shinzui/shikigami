@@ -6,9 +6,9 @@ import Data.Text qualified as Text
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Resources (AttemptRequest (..))
+import Shikigami.Execution.SelectionStore (CallLimits, CallOutcome, CallReceipt (..))
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude
-import Shikigami.Store.ExecutionSelection (CallLimits, CallOutcome, CallReceipt (..))
 
 data JobReference = JobReference
   { format :: !Int,

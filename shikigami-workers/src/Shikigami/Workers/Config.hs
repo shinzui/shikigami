@@ -34,6 +34,7 @@ module Shikigami.Workers.Config
   )
 where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Data.Map.Strict (Map)
@@ -60,7 +61,7 @@ import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), beat)
 import Shikigami.Log qualified as Log
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Sink (DanwaConfig, GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig)
 import Shikigami.Sink.GrantStore (withActionAuthorizer)
 import Shikigami.Sink.Http (SinkHttp)
@@ -83,8 +84,8 @@ persistAgentLoadReport logger pool directory report =
       Log.logError
         logger
         "agents.manifest.persistence_failed"
-        [ "directory" Aeson..= directory,
-          "error" Aeson..= problem
+        [ "directory" .= directory,
+          "error" .= problem
         ]
       exitFailure
 
@@ -280,7 +281,7 @@ schedulerSchedules logger strictMode declarations = do
       Log.logError
         logger
         "scheduler.cron.strict_refused"
-        ["invalid" Aeson..= length invalid]
+        ["invalid" .= length invalid]
       exitFailure
   pure (Map.fromList [(agentName, schedule) | (agentName, Right schedule) <- parsed])
   where
@@ -288,7 +289,7 @@ schedulerSchedules logger strictMode declarations = do
       Log.logError
         logger
         "scheduler.cron.invalid"
-        ["agent" Aeson..= agentName, "error" Aeson..= err]
+        ["agent" .= agentName, "error" .= err]
 
 -- | The scheduler's view: the pool, the schedules resolved at boot, the catch-up
 -- policy, and the logger the timer loop reports through.
@@ -329,6 +330,6 @@ startProcessDirectory :: Log.Logger -> Heartbeats -> DirectorySettings -> IO Dir
 startProcessDirectory logger registry settings =
   startDirectoryWithHeartbeat logger (beat registry DirectoryLoop) settings >>= \case
     Left problem -> do
-      Log.logError logger "directory.start_failed" ["reason" Aeson..= problem]
+      Log.logError logger "directory.start_failed" ["reason" .= problem]
       exitFailure
     Right runtime -> pure runtime

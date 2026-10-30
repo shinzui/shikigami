@@ -76,7 +76,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TextIO
 import GHC.Generics (Generic)
-import Options.Applicative (Parser, ParserInfo)
+import Options.Applicative (Parser, ParserInfo, (<**>))
 import Options.Applicative qualified as Options
 import Settei
 import Settei.Env
@@ -180,8 +180,8 @@ withConfigOptions ::
 withConfigOptions binaryName description own named =
   Options.info
     ( ((,) <$> own <*> configOptionsWith named)
-        Options.<**> Options.helper
-        Options.<**> versionOption binaryName
+        <**> Options.helper
+        <**> versionOption binaryName
     )
     ( Options.fullDesc
         <> Options.progDesc description
@@ -214,15 +214,18 @@ data ConfigRun = ConfigRun
 -- source failure, a resolution failure, or an unmet role requirement all exit
 -- here, before the caller has opened anything.
 runAppConfig :: Role -> ConfigOptions -> IO AppConfig
-runAppConfig role options = do
-  fileSources <- readConfigSources ((.configPaths) options)
-  environment <- readEnvironmentSource environmentBindings
-  let run = appConfigRun role options fileSources environment
-  TextIO.putStr ((.standardOutput) run)
-  TextIO.hPutStr IO.stderr ((.standardError) run)
-  case (.resolved) run of
-    Just config | (.exitCode) run == 0 -> pure config
-    _ -> exitWith (if (.exitCode) run == 0 then ExitSuccess else ExitFailure ((.exitCode) run))
+runAppConfig role options =
+  case schemaDiagnostic options.diagnosticMode appConfigSchema of
+    Just output -> TextIO.putStr output >> exitWith ExitSuccess
+    Nothing -> do
+      fileSources <- readConfigSources options.configPaths
+      environment <- readEnvironmentSource environmentBindings
+      let run = appConfigRun role options fileSources environment
+      TextIO.putStr run.standardOutput
+      TextIO.hPutStr IO.stderr run.standardError
+      case run.resolved of
+        Just config | run.exitCode == 0 -> pure config
+        _ -> exitWith (if run.exitCode == 0 then ExitSuccess else ExitFailure run.exitCode)
 
 -- | Read every @--config PATH@ file, in order.
 --

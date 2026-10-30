@@ -11,8 +11,8 @@ import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Prelude
-import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.WorkerSession.Transfer
 import Shikigami.Workspace.Allocation (workspaceMetadata)
 import Shikigami.Workspace.ContainedFile

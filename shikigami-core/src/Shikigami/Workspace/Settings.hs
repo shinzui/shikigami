@@ -2,6 +2,7 @@
 -- paths have no public rendering and are not copied into model context.
 module Shikigami.Workspace.Settings where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as Bytes
 import Data.List (nub, sort)
@@ -10,7 +11,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
 import Shikigami.Decision.Contract (versionedDigest)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.Instructions (validWorkspacePath)
 import Shikigami.Workspace.ProcessPolicy (IdentityRange, ProcessPolicy (..), processPolicyIdentity, validIdentityRange, validProcessPolicy)
@@ -101,7 +102,7 @@ pathAdmitted prefixes target = any (\prefix -> Text.null prefix || target == pre
 -- restriction set. Adding bases does not change the policy for existing bases;
 -- their reviewed instruction identities are checked separately.
 workspacePolicyIdentity :: WorkspaceRepository -> Text
-workspacePolicyIdentity entry = "policy1-" <> Text.drop 7 (versionedDigest "shikigami.workspace-operator-policy/1" (Aeson.object ["revision" Aeson..= entry.policyRevision, "readPaths" Aeson..= sort entry.readPaths, "writePaths" Aeson..= sort entry.writePaths]))
+workspacePolicyIdentity entry = "policy1-" <> Text.drop 7 (versionedDigest "shikigami.workspace-operator-policy/1" (Aeson.object ["revision" .= entry.policyRevision, "readPaths" .= sort entry.readPaths, "writePaths" .= sort entry.writePaths]))
 
 configuredPolicyIdentity :: WorkspaceSettings -> WorkspaceRepository -> Text
 configuredPolicyIdentity settings entry = maybe (workspacePolicyIdentity entry) processPolicyIdentity (settings.process >>= Map.lookup entry.identity . (.policies))

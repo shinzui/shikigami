@@ -36,6 +36,7 @@ module Shikigami.PracticeReview.Evidence
   )
 where
 
+import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as ByteString
@@ -66,7 +67,7 @@ import Shikigami.PracticeReview
     validatedResolutionValue,
     validatedTriggerValue,
   )
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Repository
   ( RelativePath,
     RepoRef (..),
@@ -339,27 +340,27 @@ data EvidenceBundle = EvidenceBundle
 instance ToJSON EvidenceBundle where
   toJSON EvidenceBundle {target, references, upstream, priorResolutions, problems, completeness} =
     Aeson.object
-      [ "schemaVersion" Aeson..= evidenceBundleSchemaVersion,
-        "target" Aeson..= target,
-        "references" Aeson..= references,
-        "upstream" Aeson..= upstream,
-        "priorResolutions" Aeson..= priorResolutions,
-        "problems" Aeson..= problems,
-        "completeness" Aeson..= completeness
+      [ "schemaVersion" .= evidenceBundleSchemaVersion,
+        "target" .= target,
+        "references" .= references,
+        "upstream" .= upstream,
+        "priorResolutions" .= priorResolutions,
+        "problems" .= problems,
+        "completeness" .= completeness
       ]
 
 instance FromJSON EvidenceBundle where
   parseJSON = Aeson.withObject "EvidenceBundle" \objectValue -> do
-    schemaVersion <- objectValue Aeson..: "schemaVersion"
+    schemaVersion <- objectValue .: "schemaVersion"
     if schemaVersion /= evidenceBundleSchemaVersion
       then fail ("unsupported evidence-bundle schema version: " <> show (schemaVersion :: Int))
       else do
-        target <- objectValue Aeson..: "target"
-        references <- objectValue Aeson..: "references"
-        upstream <- objectValue Aeson..: "upstream"
-        priorResolutions <- objectValue Aeson..: "priorResolutions"
-        problems <- objectValue Aeson..: "problems"
-        completeness <- objectValue Aeson..: "completeness"
+        target <- objectValue .: "target"
+        references <- objectValue .: "references"
+        upstream <- objectValue .: "upstream"
+        priorResolutions <- objectValue .: "priorResolutions"
+        problems <- objectValue .: "problems"
+        completeness <- objectValue .: "completeness"
         let expectedCompleteness = if null problems then Complete else Incomplete
         if completeness /= expectedCompleteness
           then fail "evidence-bundle completeness does not match its problem set"

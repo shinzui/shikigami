@@ -17,6 +17,7 @@ where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad (forever)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Text qualified as Text
 import Keiro.Telemetry (KeiroMetrics)
@@ -25,7 +26,7 @@ import Kiroku.Store.Error (StoreError)
 import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Health.Worker (LoopName (TimerLoop), beat)
 import Shikigami.Log qualified as Log
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Trigger.Scheduler qualified as Scheduler
 import Shikigami.Workers.Config (WorkerEnv (..), envHeartbeats, envKeiroMetrics, envLogger, schedulerEnv)
 
@@ -47,8 +48,8 @@ runTimerWorker env = do
     now <- getCurrentTime
     result <- runTimerPass ((.appEnv) env) (envKeiroMetrics env) (schedulerEnv env) now
     case result of
-      Left err -> Log.logError (envLogger env) "worker.timer.failed" ["error" Aeson..= Text.pack (show err)]
-      Right count -> Log.logDebug (envLogger env) "worker.timer.pass" ["fired" Aeson..= count]
+      Left err -> Log.logError (envLogger env) "worker.timer.failed" ["error" .= Text.pack (show err)]
+      Right count -> Log.logDebug (envLogger env) "worker.timer.pass" ["fired" .= count]
     -- Beat on every pass, failed included: see the outbox publisher for why a
     -- store error is not a wedge.
     beat (envHeartbeats env) TimerLoop

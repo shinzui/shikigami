@@ -25,8 +25,8 @@ import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Prelude
-import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.ContainedFile
 import Shikigami.Workspace.Instructions

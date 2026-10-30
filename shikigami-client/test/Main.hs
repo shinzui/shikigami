@@ -3,11 +3,12 @@ module Main (main) where
 import Data.List (isInfixOf)
 import Options.Applicative
 import Shikigami.Client.Command (clientInfo, clientSubcommands)
+import Shikigami.Client.ConfigSpec qualified as ConfigSpec
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
 main :: IO ()
-main = defaultMain (testGroup "shikigami-client" [commandTests])
+main = defaultMain (testGroup "shikigami-client" [commandTests, ConfigSpec.tests])
 
 -- | The client binary's command line is reachable and complete.
 --
@@ -24,6 +25,11 @@ commandTests =
           Success _ -> pure ()
           _ -> assertBool "token option rejected" False
         assertBool "token option missing" ("--token" `isInfixOf` helpTextOf ["--help"]),
+      testCase "version and static diagnostics are available without a command" do
+        assertBool "version prefix missing" ("shikigami-client v0.1.0.0" `isInfixOf` helpTextOf ["--version"])
+        case execParserPure defaultPrefs clientInfo ["--describe-config"] of
+          Success _ -> pure ()
+          _ -> assertBool "standalone diagnostic rejected" False,
       testCase "the client offers a health command" $
         fmap fst clientSubcommands @?= ["health", "agents", "runs"],
       testCase "shikigami-client --help lists every command" do

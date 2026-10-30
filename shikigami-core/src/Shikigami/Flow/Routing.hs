@@ -27,7 +27,7 @@ import Baikai.Context (systemUser)
 import Baikai.Response (flattenAssistantBlocks, flattenAssistantText, responseError)
 import Baikai.ResponseFormat (ResponseFormat (JsonObject))
 import Control.Exception (Exception, fromException)
-import Data.Aeson (Value)
+import Data.Aeson (Value, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Text (encodeToLazyText)
 import Data.Generics.Labels ()
@@ -45,7 +45,7 @@ import Shikigami.Agent.Loader (AgentLoadReport)
 import Shikigami.Behavior.Compatibility
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest)
 import Shikigami.Directory (DirectoryHandle, readDirectorySnapshot, renderDirectorySourceKind)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Router.Catalog (CandidateAvailability (..), CandidateCatalog (..), CandidateEntry (..), CatalogVersion (..), buildCandidateCatalog)
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..), RoutingError, renderRoutingError, validateRouteDecision)
 import Shikigami.Router.Declaration (RouterDeclarationError, ValidatedRouterDeclaration (..), renderRouterDeclarationError, validateRouterDeclaration)
@@ -255,8 +255,8 @@ routingUserPrompt catalog payload =
   LazyText.toStrict
     ( encodeToLazyText
         ( Aeson.object
-            [ "catalog" Aeson..= catalog,
-              "input" Aeson..= payload
+            [ "catalog" .= catalog,
+              "input" .= payload
             ]
         )
     )

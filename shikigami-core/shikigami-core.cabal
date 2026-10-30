@@ -19,6 +19,7 @@ common common
 
   ghc-options:
     -Wall
+    -Werror=missing-fields
     -Wcompat
     -Widentities
     -Wincomplete-record-updates
@@ -46,6 +47,7 @@ library
     Shikigami.Agent.Delegate.Depth
     Shikigami.Agent.Loader
     Shikigami.Agent.Name
+    Shikigami.Agent.Payload
     Shikigami.Agent.Principal
     Shikigami.Agent.Run
     Shikigami.Agent.Run.Key
@@ -89,6 +91,7 @@ library
     Shikigami.Decision.Evidence
     Shikigami.Decision.ModelCatalog
     Shikigami.Decision.StubProvider
+    Shikigami.Delegation.BudgetStore
     Shikigami.Directory
     Shikigami.Directory.Store
     Shikigami.DomainDiagrams
@@ -105,9 +108,11 @@ library
     Shikigami.Execution.Policy.Types
     Shikigami.Execution.Request
     Shikigami.Execution.Resources
+    Shikigami.Execution.ResourcesStore
     Shikigami.Execution.Runner
     Shikigami.Execution.Selection
     Shikigami.Execution.SelectionRuntime
+    Shikigami.Execution.SelectionStore
     Shikigami.Execution.Start
     Shikigami.Execution.Store
     Shikigami.Execution.Timer
@@ -195,9 +200,6 @@ library
     Shikigami.Sink.Types
     Shikigami.Sink.Validate
     Shikigami.Sink.Wire
-    Shikigami.Store.DelegationBudget
-    Shikigami.Store.ExecutionResources
-    Shikigami.Store.ExecutionSelection
     Shikigami.Telemetry.Metrics
     Shikigami.Telemetry.TraceContext
     Shikigami.Trigger.Enqueue

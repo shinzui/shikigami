@@ -4,6 +4,7 @@ module Shikigami.WorkspaceProcessStoreSpec (tests) where
 
 import Control.Concurrent.Async (concurrently)
 import Control.Monad (forM_)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (Pair)
@@ -157,13 +158,13 @@ tests fixture =
               Just actual <- run env (inspectProcessTx proposed.operationId)
               actual.phase @?= ProcessLaunchRequested
           )
-          [ ["bootId" Aeson..= otherBoot],
-            ["invocationId" Aeson..= ("invalid" :: Text.Text)],
-            ["unit" Aeson..= ("unrelated.service" :: Text.Text)],
-            ["fingerprint" Aeson..= ("sha256:" <> Text.replicate 64 "b")],
-            ["stdoutBytes" Aeson..= (6 :: Int)],
-            ["descendantsEmpty" Aeson..= False],
-            ["outputComplete" Aeson..= False]
+          [ ["bootId" .= otherBoot],
+            ["invocationId" .= ("invalid" :: Text.Text)],
+            ["unit" .= ("unrelated.service" :: Text.Text)],
+            ["fingerprint" .= ("sha256:" <> Text.replicate 64 "b")],
+            ["stdoutBytes" .= (6 :: Int)],
+            ["descendantsEmpty" .= False],
+            ["outputComplete" .= False]
           ]
         writeCollector directory record []
         Bytes.writeFile (directory </> "stdout") (Bytes.replicate 1025 120)
@@ -174,10 +175,10 @@ tests fixture =
       testCase "observed invocation alone cannot settle and conflicting collector facts keep the barrier closed" $ withProcess fixture \env binding proposed -> do
         record <- launchRecord env binding proposed
         directory <- collectorDirectory binding
-        Lazy.writeFile (directory </> "observed.json") (Aeson.encode (Aeson.object ["bootId" Aeson..= boot, "invocationId" Aeson..= invocation]))
+        Lazy.writeFile (directory </> "observed.json") (Aeson.encode (Aeson.object ["bootId" .= boot, "invocationId" .= invocation]))
         reconcileCollector env directory record >>= (@?= Right Nothing)
         run env (Store.checkWorkspaceOperationTx binding binding.request.owner 0 (OperationId "later")) >>= (@?= Left WorkspaceBindingConflict)
-        writeCollector directory record ["invocationId" Aeson..= otherBoot]
+        writeCollector directory record ["invocationId" .= otherBoot]
         reconcileCollector env directory record >>= (@?= Left CollectorEvidenceConflict)
         run env (markProcessUnresolvedTx record) >>= (@?= Right ())
         writeCollector directory record []
@@ -186,12 +187,12 @@ tests fixture =
       testCase "timeout settlement preserves unavailable status and cannot be interpreted as successful validation" $ withProcess fixture \env binding proposed -> do
         record <- launchRecord env binding proposed
         directory <- collectorDirectory binding
-        let unknownStatus = ["exitCode" Aeson..= Aeson.Null, "termination" Aeson..= ProcessTimedOut]
+        let unknownStatus = ["exitCode" .= Aeson.Null, "termination" .= ProcessTimedOut]
         writeCollector directory record unknownStatus
         readCollectorReceipt directory record >>= (@?= Left CollectorEvidenceConflict)
-        writeCollector directory record (["version" Aeson..= (2 :: Int), "termination" Aeson..= ProcessExited, "exitCode" Aeson..= Aeson.Null])
+        writeCollector directory record (["version" .= (2 :: Int), "termination" .= ProcessExited, "exitCode" .= Aeson.Null])
         readCollectorReceipt directory record >>= (@?= Left CollectorEvidenceConflict)
-        writeCollector directory record (["version" Aeson..= (2 :: Int)] <> unknownStatus)
+        writeCollector directory record (["version" .= (2 :: Int)] <> unknownStatus)
         Just receipt <- right =<< reconcileCollector env directory record
         receipt.exitCode @?= Nothing
         receipt.termination @?= ProcessTimedOut
@@ -221,19 +222,19 @@ writeCollector directory record changed = do
   Bytes.writeFile (directory </> "stderr") ""
   let base =
         Aeson.object
-          [ "version" Aeson..= (1 :: Int),
-            "unit" Aeson..= record.unit,
-            "fingerprint" Aeson..= record.fingerprint,
-            "bootId" Aeson..= boot,
-            "invocationId" Aeson..= invocation,
-            "exitCode" Aeson..= (0 :: Int),
-            "termination" Aeson..= ProcessExited,
-            "stdoutBytes" Aeson..= (7 :: Int),
-            "stderrBytes" Aeson..= (0 :: Int),
-            "stdoutTruncated" Aeson..= True,
-            "stderrTruncated" Aeson..= False,
-            "descendantsEmpty" Aeson..= True,
-            "outputComplete" Aeson..= True
+          [ "version" .= (1 :: Int),
+            "unit" .= record.unit,
+            "fingerprint" .= record.fingerprint,
+            "bootId" .= boot,
+            "invocationId" .= invocation,
+            "exitCode" .= (0 :: Int),
+            "termination" .= ProcessExited,
+            "stdoutBytes" .= (7 :: Int),
+            "stderrBytes" .= (0 :: Int),
+            "stdoutTruncated" .= True,
+            "stderrTruncated" .= False,
+            "descendantsEmpty" .= True,
+            "outputComplete" .= True
           ]
       overrides = Aeson.object changed
       fact = case (overrides, base) of (Aeson.Object a, Aeson.Object b) -> Aeson.Object (a <> b); _ -> base

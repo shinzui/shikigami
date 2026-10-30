@@ -26,12 +26,12 @@ import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Runner (DispatchContext (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
-import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.ContainedFile

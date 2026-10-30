@@ -21,7 +21,7 @@ module Shikigami.Sink.Intent
   )
 where
 
-import Data.Aeson (Value, withObject, (.:), (.:?))
+import Data.Aeson (Value, withObject, (.:), (.:?), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
 import Data.Foldable (traverse_)
@@ -60,7 +60,7 @@ import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Id.Name (nameBytes)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Sink
   ( DanwaTarget,
     GrantSource,
@@ -101,13 +101,13 @@ data SinkIntent = SinkIntent
 instance ToJSON SinkIntent where
   toJSON SinkIntent {agent, identity, runId, ordinal, occurredAt, danwaTarget, resolvedRecipient, conversationKey, triggeringActivityId, sink, output} =
     Aeson.object
-      ( [ "agent" Aeson..= agent,
-          "runId" Aeson..= runId,
-          "ordinal" Aeson..= ordinal,
-          "sink" Aeson..= sink,
-          "output" Aeson..= output
+      ( [ "agent" .= agent,
+          "runId" .= runId,
+          "ordinal" .= ordinal,
+          "sink" .= sink,
+          "output" .= output
         ]
-          <> ["identity" Aeson..= identity | identity /= UnresolvedLegacyIdentity]
+          <> ["identity" .= identity | identity /= UnresolvedLegacyIdentity]
           <> maybeField "occurredAt" occurredAt
           <> maybeField "danwaTarget" danwaTarget
           <> maybeField "resolvedRecipient" resolvedRecipient
@@ -116,7 +116,7 @@ instance ToJSON SinkIntent where
       )
     where
       maybeField _ Nothing = []
-      maybeField key (Just value) = [key Aeson..= value]
+      maybeField key (Just value) = [key .= value]
 
 instance FromJSON SinkIntent where
   parseJSON = withObject "SinkIntent" \object -> do

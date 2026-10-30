@@ -26,11 +26,11 @@ import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
-import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
 import Shikigami.WorkerSession.Store qualified as Sessions
 import Shikigami.WorkerSession.Transfer

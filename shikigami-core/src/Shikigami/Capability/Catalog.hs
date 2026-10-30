@@ -18,6 +18,7 @@ module Shikigami.Capability.Catalog
   )
 where
 
+import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Data.Map.Strict (Map)
@@ -27,7 +28,7 @@ import Data.Set qualified as Set
 import Shikigami.Agent.Decl (Behavior (..))
 import Shikigami.Attestation.Resolve (ResolvedProfile)
 import Shikigami.Capability.Overlay
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 
 newtype CapabilityCatalog = CapabilityCatalog (Map CapabilityId CapabilityDescriptor)
   deriving stock (Eq, Show)
@@ -106,47 +107,47 @@ data CapabilityResolutionError
 instance ToJSON CapabilityResolutionError where
   toJSON = \case
     DuplicateCapabilityRequest {capability} ->
-      Aeson.object ["type" Aeson..= ("duplicate-request" :: Text), "capability" Aeson..= capability]
+      Aeson.object ["type" .= ("duplicate-request" :: Text), "capability" .= capability]
     UnknownCapability {capability} ->
-      Aeson.object ["type" Aeson..= ("unknown-capability" :: Text), "capability" Aeson..= capability]
+      Aeson.object ["type" .= ("unknown-capability" :: Text), "capability" .= capability]
     MissingCapabilityIdentity ->
-      Aeson.object ["type" Aeson..= ("missing-identity" :: Text)]
+      Aeson.object ["type" .= ("missing-identity" :: Text)]
     CapabilityAuthorizationDenied {capability, reason} ->
       Aeson.object
-        [ "type" Aeson..= ("authorization-denied" :: Text),
-          "capability" Aeson..= capability,
-          "reason" Aeson..= reason
+        [ "type" .= ("authorization-denied" :: Text),
+          "capability" .= capability,
+          "reason" .= reason
         ]
     CapabilityBehaviorUnsupported {behaviorKind} ->
       Aeson.object
-        [ "type" Aeson..= ("behavior-unsupported" :: Text),
-          "behavior" Aeson..= behaviorKind
+        [ "type" .= ("behavior-unsupported" :: Text),
+          "behavior" .= behaviorKind
         ]
     DurableCapabilityOperationNotAllowed {capability, name, operationClass} ->
       Aeson.object
-        [ "type" Aeson..= ("durable-operation-not-allowed" :: Text),
-          "capability" Aeson..= capability,
-          "tool" Aeson..= name,
-          "operationClass" Aeson..= operationClass
+        [ "type" .= ("durable-operation-not-allowed" :: Text),
+          "capability" .= capability,
+          "tool" .= name,
+          "operationClass" .= operationClass
         ]
 
 instance FromJSON CapabilityResolutionError where
   parseJSON = Aeson.withObject "CapabilityResolutionError" \value -> do
-    tag <- value Aeson..: "type"
+    tag <- value .: "type"
     case (tag :: Text) of
-      "duplicate-request" -> DuplicateCapabilityRequest <$> value Aeson..: "capability"
-      "unknown-capability" -> UnknownCapability <$> value Aeson..: "capability"
+      "duplicate-request" -> DuplicateCapabilityRequest <$> value .: "capability"
+      "unknown-capability" -> UnknownCapability <$> value .: "capability"
       "missing-identity" -> pure MissingCapabilityIdentity
       "authorization-denied" ->
         CapabilityAuthorizationDenied
-          <$> value Aeson..: "capability"
-          <*> value Aeson..: "reason"
-      "behavior-unsupported" -> CapabilityBehaviorUnsupported <$> value Aeson..: "behavior"
+          <$> value .: "capability"
+          <*> value .: "reason"
+      "behavior-unsupported" -> CapabilityBehaviorUnsupported <$> value .: "behavior"
       "durable-operation-not-allowed" ->
         DurableCapabilityOperationNotAllowed
-          <$> value Aeson..: "capability"
-          <*> value Aeson..: "tool"
-          <*> value Aeson..: "operationClass"
+          <$> value .: "capability"
+          <*> value .: "tool"
+          <*> value .: "operationClass"
       _ -> fail ("unknown capability resolution error type: " <> show tag)
 
 resolveCapabilityOverlays ::

@@ -285,7 +285,7 @@ triggeringActivity =
       Activity.occurredAt = "2026-08-23T12:00:00Z",
       Activity.source = "external/intercom",
       Activity.actor = Activity.Actor {Activity.kind = "human", Activity.id = "person_42", Activity.session = Nothing},
-      Activity.subject = Activity.Subject {Activity.subjectType = "conversation", Activity.subjectId = "conv_55012"},
+      Activity.subject = Activity.Subject {Activity.kind = "conversation", Activity.subjectId = "conv_55012"},
       Activity.verb = "conversation.message_received",
       Activity.payload = object ["text" .= ("Could I get an update?" :: Text)],
       Activity.contextRefs = [],

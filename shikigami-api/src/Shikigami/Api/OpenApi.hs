@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
+
 -- | The generated description of the public HTTP API.
 --
 -- \"OpenAPI\" is a vendor-neutral JSON format for describing an HTTP API:
@@ -27,17 +29,25 @@ module Shikigami.Api.OpenApi
   )
 where
 
+import Data.Aeson (Value)
 import Data.Aeson.Encode.Pretty (Config (..), Indent (Spaces), encodePretty')
 import Data.Aeson.Encode.Pretty qualified as Pretty
 import Data.ByteString.Lazy qualified as LBS
 import Data.Char qualified as Char
 import Data.HashMap.Strict.InsOrd.Compat qualified as InsOrdHashMap
 import Data.OpenApi (OpenApi, Operation, PathItem)
+import Data.OpenApi qualified as O
 import Data.OpenApi.Lens qualified as L
 import Data.Text qualified as Text
+import Relay.Pagination.Servant.OpenApi ()
 import Servant.OpenApi (toOpenApi)
 import Shikigami.Api (shikigamiApi)
 import Shikigami.Prelude
+
+-- The live document is an opaque JSON value. Keep this third-party orphan at
+-- the single generator boundary, including explicit object extension allowance.
+instance O.ToSchema Value where
+  declareNamedSchema _ = pure (O.NamedSchema (Just "AnyValue") (mempty & L.additionalProperties ?~ O.AdditionalPropertiesAllowed True))
 
 -- | Where the generated artifact lives, relative to the repository root.
 openApiArtifactPath :: FilePath

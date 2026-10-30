@@ -10,6 +10,7 @@ import Data.Text.Encoding qualified as TE
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
 import Shikigami.Agent.Loader (loadAgentsReport, loadedAgents)
+import Shikigami.Agent.Payload (readPayloadArgument)
 import Shikigami.Agent.RunJob (RunRouteKind (..))
 import Shikigami.App.Config (AppConfig (agentsDirectory, directorySettings), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
@@ -41,12 +42,13 @@ import System.IO (hPutStrLn, stderr)
 -- entirely offline.
 runEnqueueRun :: String -> Maybe String -> Bool -> Maybe String -> AppConfig -> IO ()
 runEnqueueRun agent mpayload conversation mkey config = do
-  payload <- case mpayload of
+  supplied <- readPayloadArgument mpayload
+  payload <- case supplied of
     Nothing -> pure (Aeson.object [])
     Just raw -> case Aeson.decodeStrict (TE.encodeUtf8 (Text.pack raw)) of
       Just v -> pure v
       Nothing -> do
-        hPutStrLn stderr ("enqueue-run: --payload is not valid JSON: " <> raw)
+        hPutStrLn stderr "enqueue-run: payload input is not valid JSON"
         exitFailure
   report <- loadAgentsReport ((.agentsDirectory) config)
   decl <-

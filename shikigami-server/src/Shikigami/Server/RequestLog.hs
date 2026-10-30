@@ -11,6 +11,7 @@ module Shikigami.Server.RequestLog
   )
 where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (Pair)
 import Data.ByteString (ByteString)
@@ -52,11 +53,11 @@ requestLogMiddlewareWith writeLine include app request respond
         correlation <- traceFields request
         let durationMs = fromIntegral (finishedAt - startedAt) / 1_000_000 :: Double
             fields =
-              [ "time" Aeson..= iso8601Show now,
-                "method" Aeson..= decode (requestMethod request),
-                "path" Aeson..= decode (rawPathInfo request),
-                "status" Aeson..= statusCode (responseStatus response),
-                "duration_ms" Aeson..= durationMs
+              [ "time" .= iso8601Show now,
+                "method" .= decode (requestMethod request),
+                "path" .= decode (rawPathInfo request),
+                "status" .= statusCode (responseStatus response),
+                "duration_ms" .= durationMs
               ]
                 <> correlation
                 <> userAgentFields request
@@ -78,8 +79,8 @@ traceFields request =
       pure
         if Trace.isValid context
           then
-            [ "trace_id" Aeson..= traceIdBaseEncodedText Base16 (Trace.traceId context),
-              "span_id" Aeson..= spanIdBaseEncodedText Base16 (Trace.spanId context)
+            [ "trace_id" .= traceIdBaseEncodedText Base16 (Trace.traceId context),
+              "span_id" .= spanIdBaseEncodedText Base16 (Trace.spanId context)
             ]
           else []
 
@@ -91,8 +92,8 @@ userAgentFields request =
       let decoded = decode raw
           bounded = Text.take userAgentLimit decoded
           truncated = Text.length decoded > userAgentLimit
-       in [ "user_agent" Aeson..= bounded,
-            "user_agent_truncated" Aeson..= truncated
+       in [ "user_agent" .= bounded,
+            "user_agent_truncated" .= truncated
           ]
 
 userAgentLimit :: Int

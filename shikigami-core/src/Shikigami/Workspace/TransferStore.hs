@@ -20,6 +20,7 @@ module Shikigami.Workspace.TransferStore
 where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip6)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Functor.Contravariant ((>$<))
 import Data.Text qualified as Text
@@ -33,7 +34,7 @@ import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId (..))
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Transcript (ExecutionId (..), executionIdFor)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.WorkerSession.Transfer
 import Shikigami.WorkerSession.Types hiding (assignmentIdFor)
 import Shikigami.Workspace.Catalog
@@ -165,7 +166,7 @@ admitFollowupTx binding admission = do
     (Right (Just current), Just (session, originalAssignment))
       | current.session == session && isNothing current.handoff && current.sequence > 0 && current.owner == binding.request.owner && current.epoch == binding.request.epoch && admission.owner == current.owner && admission.epoch == current.epoch && admission.runId /= binding.request.runId && admission.assignmentId == assignmentIdFor admission.runId && admission.filePolicy == Just transferableFilePolicy && matchesAdmission binding admission -> do
           let ExecutionId execution = executionIdFor (assignmentIdFor binding.request.runId)
-              scope = Aeson.object ["executionId" Aeson..= execution, "assignmentId" Aeson..= assignmentIdFor binding.request.runId, "owner" Aeson..= current.owner, "rootId" Aeson..= current.rootId, "sequence" Aeson..= current.sequence]
+              scope = Aeson.object ["executionId" .= execution, "assignmentId" .= assignmentIdFor binding.request.runId, "owner" .= current.owner, "rootId" .= current.rootId, "sequence" .= current.sequence]
           prior <- Tx.statement (binding.workspace.resource, session.value, originalAssignment.value, scope) priorAssignmentsSettled
           settled <- Tx.statement binding.workspace.resource settledWorkspace
           if prior && settled && control == Just (Store.WorkspaceControl current.owner current.epoch False)
@@ -178,7 +179,7 @@ admitFollowupTx binding admission = do
 
 findFollowupWorkspaceTx :: Text -> SessionChild -> FilePath -> ResolvedRepository -> Transaction (Either WorkspaceError (Maybe WorkspaceBinding))
 findFollowupWorkspaceTx run child storage repository = do
-  let scope = Aeson.object ["runId" Aeson..= run, "repository" Aeson..= repositoryIdentity repository, "base" Aeson..= repositoryBase repository, "policyRevision" Aeson..= repositoryPolicyRevision repository, "source" Aeson..= repositorySource repository, "storageRoot" Aeson..= storage, "rootId" Aeson..= child.rootId, "owner" Aeson..= child.owner, "epoch" Aeson..= child.epoch]
+  let scope = Aeson.object ["runId" .= run, "repository" .= repositoryIdentity repository, "base" .= repositoryBase repository, "policyRevision" .= repositoryPolicyRevision repository, "source" .= repositorySource repository, "storageRoot" .= storage, "rootId" .= child.rootId, "owner" .= child.owner, "epoch" .= child.epoch]
   matches <- Tx.statement (child.session.value, scope) selectFollowupWorkspace
   pure case matches of [] -> Right Nothing; [binding] -> Right (Just binding); _ -> Left WorkspaceBindingConflict
 

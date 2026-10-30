@@ -54,8 +54,8 @@ descriptor (DecisionProgramRef value) = value
 -- | A stored-result codec has no validator or executable dependency. Retain it
 -- when retiring an implementation; replay must preserve a committed decision.
 data ResultCodec o = ResultCodec
-  { encode :: o -> Value,
-    decode :: Value -> Either DecisionFailure o
+  { encode :: !(o -> Value),
+    decode :: !(Value -> Either DecisionFailure o)
   }
 
 -- | Retain explicit historical decoders when a current FromJSON instance changes.
@@ -78,8 +78,8 @@ data RegisteredProgram i o = RegisteredProgram
     program :: !(Program i o),
     codec :: !(ResultCodec o),
     parameterState :: !Value,
-    inputValidator :: i -> Either Text i,
-    resultValidator :: o -> Either Text o
+    inputValidator :: !(i -> Either Text i),
+    resultValidator :: !(o -> Either Text o)
   }
 
 -- | Registration computes the state commitment rather than trusting a caller's

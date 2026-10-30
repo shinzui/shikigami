@@ -54,6 +54,10 @@ let
     packageNames + ''
     package blake3
       ghc-options: -optc-DBLAKE3_USE_NEON=0
+    package shikigami-migrations
+      ghc-options: "-DGIT_HASH=\"${gitRev}\""
+    package shikigami-client
+      ghc-options: "-DGIT_HASH=\"${gitRev}\""
     package shikigami-core
       ghc-options: "-DGIT_HASH=\"${gitRev}\""
   '');
@@ -118,6 +122,7 @@ pkgs.stdenv.mkDerivation {
     substituteInPlace "$out/share/shikigami/fixtures/qualification/agents/service-health-reporter.dhall" \
       "$out/share/shikigami/fixtures/qualification/agents/service-health-observer.dhall" \
       --replace-fail "fixtures/qualification/skills/service-health" "$out/share/shikigami/fixtures/qualification/skills/service-health"
+    cp -R ${source}/shikigami-api/test/hurl "$out/share/shikigami/api-hurl"
     cp cohort.json "$out/share/shikigami/cohort.json"
     runHook postInstall
   '';

@@ -38,10 +38,11 @@ where
 
 import Control.Concurrent.Async (mapConcurrently_)
 import Control.Exception (Exception, throwIO)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Shikigami.Health.Worker (LoopName, loopCheckName)
 import Shikigami.Log qualified as Log
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 
 -- | A loop stopped when it was supposed to run forever.
 --
@@ -70,7 +71,7 @@ superviseLoops logger = mapConcurrently_ supervised
       Log.logError
         logger
         "worker.loop.exited"
-        [ "loop" Aeson..= loopCheckName name,
-          "reason" Aeson..= ("the loop returned; every loop in this process is expected to run until the process stops" :: Text)
+        [ "loop" .= loopCheckName name,
+          "reason" .= ("the loop returned; every loop in this process is expected to run until the process stops" :: Text)
         ]
       throwIO (LoopExited name)

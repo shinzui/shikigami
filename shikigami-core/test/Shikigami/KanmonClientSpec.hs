@@ -123,7 +123,7 @@ triggerActivity =
       Activity.occurredAt = "2026-08-23T12:00:00Z",
       Activity.source = "external/intercom",
       Activity.actor = Activity.Actor {Activity.kind = "human", Activity.id = "person_1", Activity.session = Nothing},
-      Activity.subject = Activity.Subject {Activity.subjectType = "conversation", Activity.subjectId = "conv_activity"},
+      Activity.subject = Activity.Subject {Activity.kind = "conversation", Activity.subjectId = "conv_activity"},
       Activity.verb = "conversation.message_received",
       Activity.payload = object [],
       Activity.contextRefs = [],

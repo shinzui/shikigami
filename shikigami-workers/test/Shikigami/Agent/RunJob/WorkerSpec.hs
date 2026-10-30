@@ -5,6 +5,7 @@ module Shikigami.Agent.RunJob.WorkerSpec (tests) where
 import Control.Concurrent (threadDelay)
 import Control.Exception (Exception)
 import Control.Exception qualified as Exception
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Foldable (for_)
 import Data.IORef (modifyIORef', newIORef, readIORef, writeIORef)
@@ -372,7 +373,7 @@ sampleJob =
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 8 19) 0,
-      triggerPayload = Aeson.object ["kind" Aeson..= ("test" :: Text)],
+      triggerPayload = Aeson.object ["kind" .= ("test" :: Text)],
       idempotencyKey = RunKey "codec-agent:event:1",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,

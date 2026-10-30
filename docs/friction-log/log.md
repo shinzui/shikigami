@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-30
+* **Addition**: FRIC-35 records detour documentation friction with mori://shinzui/keiro-runtime-patterns/docs/architecture-vertical-slice-modules: The generated firewall guide names a banner the released emitter no longer writes
 * **Update**: FRIC-34 accepted: Accepted the narrow kiroku-cli TLS exception after compiled listener qualification.
 * **Addition**: FRIC-34 records detour interface friction with mori://shinzui/kiroku/packages/kiroku-cli: Kiroku metrics 0.4 pulls a CLI with a stale TLS upper bound
 * **Update**: FRIC-33 accepted: Baseline and current strict validation outputs compare byte-for-byte equal; retain the inherited eight diagnostics as a known qualification limit.

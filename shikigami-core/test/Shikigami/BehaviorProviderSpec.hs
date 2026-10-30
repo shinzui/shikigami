@@ -58,7 +58,7 @@ import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Concurrent.MVar
 import Control.Exception (SomeException, bracket, finally, try)
 import Control.Monad (unless, void)
-import Data.Aeson (Value)
+import Data.Aeson (Value, (.=))
 import Data.Aeson qualified as Aeson
 import Data.IORef (newIORef, readIORef, writeIORef)
 import Data.List.NonEmpty qualified as NonEmpty
@@ -376,7 +376,7 @@ failureTests =
     [ testCase "a successful reply is still a reply" do
         result <- runWith (const (pure (textResponse "triaged: billing")))
         case result of
-          Right value -> value @?= Aeson.object ["reply" Aeson..= ("triaged: billing" :: Text)]
+          Right value -> value @?= Aeson.object ["reply" .= ("triaged: billing" :: Text)]
           Left err -> assertFailure ("expected a reply, got " <> show err),
       testCase "a rate limit is a retryable failure, not an empty reply" do
         result <- runWith (const (pure (failureResponse (rateLimited (Just 30) "slow down"))))

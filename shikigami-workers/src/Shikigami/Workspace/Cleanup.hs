@@ -10,6 +10,7 @@ module Shikigami.Workspace.Cleanup
 where
 
 import Control.Exception (Exception, IOException, catch, throwIO)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Maybe (listToMaybe)
 import Data.Text qualified as Text
@@ -20,7 +21,7 @@ import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Decision.Contract (versionedDigest)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.CleanupStore
 import Shikigami.Workspace.ContainedFile
@@ -57,8 +58,8 @@ listWorkspaces runtime actor cursor = protect do
   rows <- forM (filter ((== runtime.storageRoot) . (.storageRoot)) page) \binding -> do
     retired <- transact runtime (inspectCleanupTx binding)
     eligible <- transact runtime (cleanupEligibleTx binding)
-    pure (Aeson.object ["workspace" Aeson..= binding.workspace, "repository" Aeson..= binding.repository, "base" Aeson..= binding.base, "eligible" Aeson..= eligible, "cleanup" Aeson..= (case retired of Nothing -> "retained"; Just (_, False) -> "pending"; Just (_, True) -> "complete" :: Text)])
-  pure (Aeson.object ["workspaces" Aeson..= rows, "next" Aeson..= (if length page == 20 then (.resource) . (.workspace) <$> listToMaybe (reverse page) else Nothing)])
+    pure (Aeson.object ["workspace" .= binding.workspace, "repository" .= binding.repository, "base" .= binding.base, "eligible" .= eligible, "cleanup" .= (case retired of Nothing -> "retained"; Just (_, False) -> "pending"; Just (_, True) -> "complete" :: Text)])
+  pure (Aeson.object ["workspaces" .= rows, "next" .= (if length page == 20 then (.resource) . (.workspace) <$> listToMaybe (reverse page) else Nothing)])
 
 cleanupWorkspace :: MaintenanceRuntime -> AgentIdentity -> WorkspaceRef -> IO (Either CleanupError ())
 cleanupWorkspace runtime actor ref = protect do

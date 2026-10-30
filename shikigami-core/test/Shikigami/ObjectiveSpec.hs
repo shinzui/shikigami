@@ -1,5 +1,6 @@
 module Shikigami.ObjectiveSpec (tests) where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Data.Text qualified
@@ -9,7 +10,7 @@ import Shikigami.Execution.Identity (ExecutionRootId (..))
 import Shikigami.Objective.Acceptance
 import Shikigami.Objective.Command
 import Shikigami.Objective.Types
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -26,7 +27,7 @@ tests =
         validateGraph [draft (showText n) [ObjectiveAssignmentId (showText p) | p <- [1 .. n - 1]] | n <- [1 .. 128 :: Int]] @?= Right (),
       testCase "internal checkpoint and transfer tags are absent from public JSON" do
         forM_ ["IngestCheckpoint", "TransferOwnership"] \tag ->
-          assertBool "private command refused" (case Aeson.fromJSON (Aeson.object ["tag" Aeson..= (tag :: Text)]) :: Aeson.Result Command of Aeson.Error _ -> True; _ -> False),
+          assertBool "private command refused" (case Aeson.fromJSON (Aeson.object ["tag" .= (tag :: Text)]) :: Aeson.Result Command of Aeson.Error _ -> True; _ -> False),
       testCase "criteria require unique, nonempty structured keys" do
         validateCriteria [Criterion "build" "build passes" Automatic False] @?= Right ()
         assertBool "empty criteria refused" (validateCriteria [] /= Right ())

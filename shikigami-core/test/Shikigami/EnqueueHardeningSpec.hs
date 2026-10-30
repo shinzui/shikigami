@@ -83,7 +83,7 @@ envelopeAt occurred =
       occurredAt = occurred,
       source = "shinzui/rei",
       actor = Actor {kind = "human", id = "someone", session = Nothing},
-      subject = Subject {subjectType = "ticket", subjectId = "t-1"},
+      subject = Subject {kind = "ticket", subjectId = "t-1"},
       verb = "ticket.received",
       payload = object [],
       contextRefs = [],

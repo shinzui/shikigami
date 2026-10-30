@@ -6,6 +6,7 @@ where
 
 import Baikai.Trace.Sink.OpenTelemetry (otelSink)
 import Control.Monad (void)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Data.Set qualified as Set
@@ -69,7 +70,7 @@ runResumeCmd passes candidates force config
       Log.logInfo
         logger
         "worker.resume.preview"
-        ["passes" Aeson..= passes, "candidates_per_pass" Aeson..= candidates, "force_required" Aeson..= True]
+        ["passes" .= passes, "candidates_per_pass" .= candidates, "force_required" .= True]
 
 runWorkerCmdWith :: Maybe (Int, Int) -> AppConfig -> IO ()
 runWorkerCmdWith resumeBudget config = do
@@ -90,7 +91,7 @@ runWorkerCmdWith resumeBudget config = do
           ((.agentsStrict) config)
           (persistAgentLoadReport logger storePool manifestDirectory)
       agents <- enabledAgentsFromReport logger report
-      Log.logInfo logger "worker.agents.loaded" ["count" Aeson..= length agents]
+      Log.logInfo logger "worker.agents.loaded" ["count" .= length agents]
       refuseUndeployableAgents logger agents
       let kizashiConfig =
             KizashiConfig
@@ -129,18 +130,18 @@ runWorkerCmdWith resumeBudget config = do
       Log.logInfo
         logger
         "worker.approval.policy"
-        [ "mode" Aeson..= if null requiredKinds then ("auto_approve" :: Text) else "required",
-          "required_sink_kinds" Aeson..= requiredKinds,
-          "channel" Aeson..= renderApprovalChannel ((.approvalChannel) config),
-          "deadline_seconds" Aeson..= (floor (nominalDiffTimeToSeconds ((.approvalDeadline) config)) :: Integer)
+        [ "mode" .= if null requiredKinds then ("auto_approve" :: Text) else "required",
+          "required_sink_kinds" .= requiredKinds,
+          "channel" .= renderApprovalChannel ((.approvalChannel) config),
+          "deadline_seconds" .= (floor (nominalDiffTimeToSeconds ((.approvalDeadline) config)) :: Integer)
         ]
       Log.logInfo
         logger
         "worker.sink_credentials.configured"
-        [ "kawa" Aeson..= credentialPresence ((.kawaToken) config),
-          "kizashi" Aeson..= credentialPresence ((.kizashiToken) config),
-          "kanmon" Aeson..= credentialPresence ((.kanmonToken) config),
-          "danwa" Aeson..= credentialPresence ((.danwaToken) config)
+        [ "kawa" .= credentialPresence ((.kawaToken) config),
+          "kizashi" .= credentialPresence ((.kizashiToken) config),
+          "kanmon" .= credentialPresence ((.kanmonToken) config),
+          "danwa" .= credentialPresence ((.danwaToken) config)
         ]
       -- Resolved here, at the composition root, so an unparseable cron is
       -- reported (and under agents.strict refused) once at boot rather than
@@ -217,7 +218,7 @@ credentialPresence = maybe "none" (const "token")
 
 refuseInvalidSinkHttp :: Log.Logger -> SinkHttpError -> IO SinkHttp
 refuseInvalidSinkHttp logger failure = do
-  Log.logError logger "worker.sink_http.invalid" ["error" Aeson..= show failure]
+  Log.logError logger "worker.sink_http.invalid" ["error" .= show failure]
   Exit.die "shikigami-worker: refusing to start; invalid sink HTTP configuration"
 
 buildActionAuthorizer :: Log.Logger -> AppConfig -> IO ActionAuthorizer
@@ -244,7 +245,7 @@ refuseUndeployableAgents logger agents =
     problems -> do
       traverse_
         ( \(agent, err) ->
-            Log.logError logger "worker.agents.undeployable" ["agent" Aeson..= agent, "error" Aeson..= err]
+            Log.logError logger "worker.agents.undeployable" ["agent" .= agent, "error" .= err]
         )
         problems
       Exit.die

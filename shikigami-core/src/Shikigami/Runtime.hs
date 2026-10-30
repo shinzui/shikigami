@@ -2,6 +2,7 @@
 module Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings) where
 
 import Control.Lens ((&), (.~))
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Data.Text (Text)
@@ -46,12 +47,12 @@ runtimeConnectionSettings logger metrics connectionString =
     & #eventHandler
       .~ Just
         ( kirokuEventBridge metrics \event ->
-            Log.logDebug logger "store.event" ["kind" Aeson..= Text.takeWhile (/= ' ') (Text.pack (show event))]
+            Log.logDebug logger "store.event" ["kind" .= Text.takeWhile (/= ' ') (Text.pack (show event))]
         )
     & #observationHandler
       .~ Just
         ( \(Pool.ConnectionObservation _ status) ->
-            Log.logDebug logger "store.pool" ["status" Aeson..= poolStatus status]
+            Log.logDebug logger "store.pool" ["status" .= poolStatus status]
         )
   where
     poolStatus :: Pool.ConnectionStatus -> Text

@@ -59,7 +59,7 @@ data AgentRunResult = AgentRunResult
 recordActivityAsMemory :: AppEnv -> AgentDecl -> ActivityEnvelope -> IO (Either Text MemoryId)
 recordActivityAsMemory appEnv AgentDecl {name = agentName'} env = do
   let ActivityEnvelope {occurredAt = oat, verb = vb, payload = pl, subject = subj} = env
-      Subject {subjectType = sty} = subj
+      Subject {kind = sty} = subj
       recordedIdentity = CompatibilityAgent agentName'
       scope' = agentScope recordedIdentity
       tags' = Set.fromList ["verb:" <> vb, "subject:" <> sty]

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for command in cabal createdb curl hurl initdb pg_ctl python3; do
+for command in cabal createdb curl hurl hurlfmt initdb pg_ctl python3; do
   command -v "$command" >/dev/null || {
     echo "tests/hurl/run.sh: missing required command: $command" >&2
     exit 1
@@ -84,7 +84,14 @@ for _ in $(seq 1 100); do
 done
 curl -fsS "$base_url/health/ready" >/dev/null
 
-hurl --test --variable "base_url=$base_url" --variable "token=$token" tests/hurl/*.hurl
+suite_dir="$repo_root/shikigami-api/test/hurl"
+secrets_file="$work_dir/hurl-secrets.env"
+printf 'token=%s\n' "$token" > "$secrets_file"
+chmod 600 "$secrets_file"
+hurlfmt --check "$suite_dir/"*.hurl
+bash "$suite_dir/run.sh" "$base_url" "$secrets_file"
+# The disposable fixture explicitly opts into perimeter and write scenarios.
+hurl --test --variable "base_url=$base_url" --secrets-file "$secrets_file" "$suite_dir/auth.hurl" "$suite_dir/agent-runs.hurl"
 
 client_bin="$(cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} list-bin exe:shikigami-client)"
 "$client_bin" --token "$token" agents show heartbeat --server "$base_url"
@@ -92,6 +99,15 @@ client_bin="$(cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_P
 
 "$client_bin" runs request heartbeat --key client-live --server "$base_url"
 "$client_bin" runs request heartbeat --key client-live --server "$base_url"
+
+# A real piped payload and a literal retry identify the same accepted work.
+printf '{"input":"stdin-contract"}' | "$client_bin" runs request heartbeat --key client-stdin --stdin --server "$base_url"
+printf 'invalid PRIVATE_STDIN_MUST_BE_IGNORED' | "$client_bin" runs request heartbeat --key client-stdin --payload '{"input":"stdin-contract"}' --server "$base_url" >"$work_dir/stdin-replay.txt"
+python3 - "$work_dir/stdin-replay.txt" <<'PY_STDIN'
+from pathlib import Path
+import sys
+assert Path(sys.argv[1]).read_text().startswith("replayed ")
+PY_STDIN
 
 # Before drain, the client can observe acceptance and distinguish timeout/errors.
 live_request="$("$client_bin" runs request heartbeat --key client-live --server "$base_url")"
@@ -152,3 +168,11 @@ wait_status=0
 "$client_bin" runs wait heartbeat "$failed_run_id" --timeout 60 --interval 1 --server "$base_url" || wait_status=$?
 [ "$wait_status" -eq 1 ]
 "$client_bin" runs show heartbeat "$failed_run_id" --server "$base_url"
+
+# The same process remains live through a dependency outage; only this task's
+# database is stopped. No worker remains when its fixture database is removed.
+kill "$worker_pid"
+wait "$worker_pid"
+worker_pid=""
+pg_ctl -D "$pg_data" stop -m fast >/dev/null
+hurl --test --max-time 30 --variable "base_url=$base_url" --secrets-file "$secrets_file" "$suite_dir/unavailable.hurl"

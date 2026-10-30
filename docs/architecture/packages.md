@@ -149,11 +149,11 @@ overlay registry and cannot be replaced by an adapter.
    not rename it; it is still the trigger vertical.
 2. Technical composition module names are limited to this allowlist:
    - `Shikigami.Runtime`, `Shikigami.Workflow.Registry` — validated runtime startup
-     wiring and the shared three-family workflow registry (plan 65 / ADR 0038).
+     wiring and the shared five-family workflow registry (plan 65 / ADR 0038).
    - `Shikigami.App.Config`, `Shikigami.App.Config.Load` — the one process-configuration
      declaration and its loader, in `shikigami-core`. Application-configured executables
      resolve their settings from these two modules. The migration CLI owns its
-     `DATABASE_URL` boundary, the client has its own `health --server` parser, the OpenAPI generator takes no
+     `DATABASE_URL` boundary, the client owns its leaf Settei configuration (including `--server` and `--token`), the OpenAPI generator takes no
      configuration, and
      standard `OTEL_*` variables remain SDK-owned. See `docs/operations/configuration.md`.
    - `Shikigami.Server.App`, `Shikigami.Server.Boot`, `Shikigami.Server.Config`,
@@ -224,9 +224,9 @@ it, because the coupling was inside a package rather than between two.
 
 `shikigami-api` owns the contract; `shikigami-server` owns execution.
 
-- One umbrella `Shikigami.Api` record with `NamedRoutes`. Every terminal route uses
+- One umbrella `Shikigami.Api` record with `NamedRoutes`. Every application result route uses
   `MultiVerb` so that each status code, media type, and response body is part of the type.
-- Application JSON errors are RFC 7807 problem details served as
+- Application JSON errors are RFC 9457 problem details served as
   `application/problem+json`. There is exactly one `ProblemDetails` codec and schema
   (`Shikigami.Api.Problem`) whose wire keys are exactly `type`, `title`, `status`,
   `detail`, `code`, and `retryable`. `type` stays `"about:blank"` until real
@@ -237,7 +237,9 @@ it, because the coupling was inside a package rather than between two.
 - Server error formatters cover body, URL, header, and not-found failures, and a narrow
   WAI rewrite covers Servant's otherwise empty 405 response. Auth and rate-limit
   middleware use the same renderer. Health status bodies are explicitly exempt: a
-  degraded health check is a status report, not an error.
+  degraded health check is a status report, not an error. Native Relay pagination
+  errors retain the public `RelayPageError` JSON protocol. `/openapi` is a pure
+  single-status document route using the same proxy as the server and client.
 - `docs/api/openapi.json` is generated, never hand-edited, from the exact proxy the
   server serves, using the released `openapi-hs` / `servant-openapi-hs` cohort. The
   `openapi3` lineage is not a substitute: it does not model `MultiVerb` responses.

@@ -19,12 +19,12 @@ import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Execution.Resources (Admission (..), Root (..))
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Transcript (ExecutionId (..))
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude
 import Shikigami.RouterWorkflowSpec qualified as Fixture
-import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.WorkerSession.Checkpoint qualified as Checkpoint
 import Shikigami.WorkerSession.Handoff qualified as Handoff
 import Shikigami.WorkerSession.Identity (assignmentChildWorkflowId, sessionWorkflowId, sessionWorkflowName)
@@ -175,13 +175,13 @@ tests fixture =
     ]
 
 data Owners = Owners
-  { services :: Handoff.TransferServices,
-    workspace :: WorkspaceProvider,
-    ownership :: OwnershipProvider,
-    checkpoints :: Checkpoint.CheckpointProvider,
-    inFlight :: IORef Bool,
-    writes :: IORef [OperationId],
-    ownershipUpdates :: IORef Int
+  { services :: !(Handoff.TransferServices),
+    workspace :: !(WorkspaceProvider),
+    ownership :: !(OwnershipProvider),
+    checkpoints :: !(Checkpoint.CheckpointProvider),
+    inFlight :: !(IORef Bool),
+    writes :: !(IORef [OperationId]),
+    ownershipUpdates :: !(IORef Int)
   }
 
 workspaceRef :: WorkspaceRef

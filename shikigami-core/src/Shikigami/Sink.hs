@@ -23,7 +23,7 @@ module Shikigami.Sink
   )
 where
 
-import Data.Aeson (Value)
+import Data.Aeson (Value, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Data.Generics.Labels ()
@@ -70,10 +70,10 @@ dispatch ctx sink output = do
       Log.logWarn
         ((.logger) ctx)
         "sink.lifecycle_skipped"
-        [ "agent" Aeson..= agent,
-          Log.runIdKey Aeson..= (.runId) ctx,
-          "sink_kind" Aeson..= sinkKindText kind,
-          "reason" Aeson..= reason
+        [ "agent" .= agent,
+          Log.runIdKey .= (.runId) ctx,
+          "sink_kind" .= sinkKindText kind,
+          "reason" .= reason
         ]
       pure (SinkResult kind (SkippedLifecycle reason))
     Right _ -> do
@@ -83,10 +83,10 @@ dispatch ctx sink output = do
           Log.logWarn
             ((.logger) ctx)
             "sink.denied"
-            [ "agent" Aeson..= sinkIdentityText ctx,
-              Log.runIdKey Aeson..= (.runId) ctx,
-              "sink_kind" Aeson..= sinkKindText kind,
-              "reason" Aeson..= reason
+            [ "agent" .= sinkIdentityText ctx,
+              Log.runIdKey .= (.runId) ctx,
+              "sink_kind" .= sinkKindText kind,
+              "reason" .= reason
             ]
           pure (SinkResult kind (DeniedOutcome reason))
         Right () -> do
@@ -94,11 +94,11 @@ dispatch ctx sink output = do
           authorizeSinkAction (actionAuthorizerFor ((.grants) ctx)) ((.identity) ctx) sink ((.danwaTarget) ctx) ((.recipientOverride) ctx) resolvedConversation now >>= \case
             Left failure@ActionPolicyDenied {} -> do
               let reason = authorizationFailureDetail failure
-              Log.logWarn ((.logger) ctx) "sink.action_denied" ["agent" Aeson..= agent, Log.runIdKey Aeson..= (.runId) ctx, "sink_kind" Aeson..= sinkKindText kind, "reason" Aeson..= reason]
+              Log.logWarn ((.logger) ctx) "sink.action_denied" ["agent" .= agent, Log.runIdKey .= (.runId) ctx, "sink_kind" .= sinkKindText kind, "reason" .= reason]
               pure (SinkResult kind (DeniedOutcome reason))
             Left failure -> do
               let reason = authorizationFailureDetail failure
-              Log.logError ((.logger) ctx) "sink.authorization_failed" ["agent" Aeson..= agent, Log.runIdKey Aeson..= (.runId) ctx, "sink_kind" Aeson..= sinkKindText kind, "reason" Aeson..= reason]
+              Log.logError ((.logger) ctx) "sink.authorization_failed" ["agent" .= agent, Log.runIdKey .= (.runId) ctx, "sink_kind" .= sinkKindText kind, "reason" .= reason]
               pure (SinkResult kind (AuthorizationFailed reason))
             Right _ -> SinkResult kind <$> runSink ctx sink output
 
@@ -120,10 +120,10 @@ runSink ctx sink output = case sink of
           Log.logWarn
             ((.logger) ctx)
             "sink.recipient.unresolved"
-            [ "agent" Aeson..= sinkIdentityText ctx,
-              Log.runIdKey Aeson..= (.runId) ctx,
-              "sink_kind" Aeson..= sinkKindText SKizashiSignal,
-              "detail" Aeson..= warning
+            [ "agent" .= sinkIdentityText ctx,
+              Log.runIdKey .= (.runId) ctx,
+              "sink_kind" .= sinkKindText SKizashiSignal,
+              "detail" .= warning
             ]
       )
       (unresolvableRecipientWarning sink ((.recipientOverride) ctx))

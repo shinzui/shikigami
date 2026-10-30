@@ -270,3 +270,8 @@ keiro-gate since="HEAD^":
     just keiro-scaffold
     just keiro-diff {{since}}
     cabal test keiro-shikigami-conformance
+
+# Stable language/package invariants with mutation checks.
+haskell-conventions:
+    python3 tools/style/check_haskell.py
+    python3 -m unittest discover -s tools/style -v

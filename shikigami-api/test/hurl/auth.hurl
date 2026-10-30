@@ -11,6 +11,7 @@ GET {{base_url}}/agents
 Authorization: Bearer wrong
 HTTP 401
 [Asserts]
+header "Content-Type" contains "application/problem+json"
 jsonpath "$.detail" == "A valid bearer token is required."
 jsonpath "$.code" == "unauthorized"
 

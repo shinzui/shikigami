@@ -83,6 +83,7 @@ module Shikigami.Server.Command.Ops
   )
 where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -137,14 +138,14 @@ runOps invocation config = do
   Log.logInfo
     logger
     "operator.ops.invoked"
-    ["command" Aeson..= command, "invocation" Aeson..= correlation]
+    ["command" .= command, "invocation" .= correlation]
   exitCode <- runOpsInvocation shikigamiOpsHooks configured
   Log.logInfo
     logger
     "operator.ops.finished"
-    [ "command" Aeson..= command,
-      "invocation" Aeson..= correlation,
-      "exit_code" Aeson..= exitStatus exitCode
+    [ "command" .= command,
+      "invocation" .= correlation,
+      "exit_code" .= exitStatus exitCode
     ]
   case exitCode of
     ExitSuccess -> pure ()

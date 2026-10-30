@@ -31,6 +31,7 @@ where
 import Control.Exception (SomeAsyncException, SomeException, displayException, fromException, mask, throwIO)
 import Control.Exception qualified as Exception
 import Control.Monad (foldM)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (Pair)
 import Data.ByteString.Lazy qualified as Lazy
@@ -432,23 +433,23 @@ logAcquireFailed logger scope descriptor detail =
   Log.logError
     logger
     "capability.overlay.acquire_failed"
-    (lifecycleFields scope descriptor (descriptorToolNames descriptor) <> ["error" Aeson..= detail])
+    (lifecycleFields scope descriptor (descriptorToolNames descriptor) <> ["error" .= detail])
 
 logReleaseFailed :: Log.Logger -> CapabilityScope -> CapabilityDescriptor -> Text -> IO ()
 logReleaseFailed logger scope descriptor detail =
   Log.logError
     logger
     "capability.overlay.release_failed"
-    (lifecycleFields scope descriptor (descriptorToolNames descriptor) <> ["error" Aeson..= detail])
+    (lifecycleFields scope descriptor (descriptorToolNames descriptor) <> ["error" .= detail])
 
 lifecycleFields :: CapabilityScope -> CapabilityDescriptor -> [Text] -> [Pair]
 lifecycleFields CapabilityScope {runId, principal, mode} CapabilityDescriptor {capability, revision} names =
-  [ "run_id" Aeson..= runId,
-    "principal" Aeson..= principal,
-    "mode" Aeson..= mode,
-    "capability" Aeson..= capabilityIdText capability,
-    "revision" Aeson..= capabilityRevisionText revision,
-    "tool_names" Aeson..= sort names
+  [ "run_id" .= runId,
+    "principal" .= principal,
+    "mode" .= mode,
+    "capability" .= capabilityIdText capability,
+    "revision" .= capabilityRevisionText revision,
+    "tool_names" .= sort names
   ]
 
 -- | Descriptions contain no executable callbacks. Menu inspection cannot

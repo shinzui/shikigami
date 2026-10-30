@@ -109,6 +109,6 @@ assertProblemBody body expectedCode expectedStatus expectedRetryable =
       (.code) details @?= expectedCode
       (.status) details @?= expectedStatus
       (.retryable) details @?= expectedRetryable
-      (.problemType) details @?= "about:blank"
+      (.typeUri) details @?= "about:blank"
       assertBool "title is non-empty" ((.title) details /= "")
       assertBool "detail is non-empty" ((.detail) details /= "")

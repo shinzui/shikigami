@@ -13,6 +13,7 @@ import Network.Wai.Handler.Warp (testWithApplication)
 import OpenTelemetry.Trace qualified as Trace
 import Relay.Pagination
 import Relay.Pagination.Conformance
+import Relay.Pagination.Servant (RelayPageError (..))
 import Servant.Health (ProbeVerdict (Healthy))
 import Shikigami.Agent.Api (AgentView (..))
 import Shikigami.Agent.Catalog (AgentCatalog (..))
@@ -52,13 +53,13 @@ tests =
           view <- decodeBody bytes
           view.lifecycle @?= "paused"
           view.runnable @?= False,
-      testCase "zero, negative, malformed and foreign cursors return problems" $
+      testCase "zero, negative, malformed and foreign cursors retain native Relay errors" $
         withCatalog Directory.disabledDirectoryHandle \get ->
-          forM_ ["?first=0", "?first=-1", "?first=bad", "?after=e30"] \query -> do
+          forM_ [("?first=0", "invalid_page_size"), ("?first=-1", "negative_page_size"), ("?first=bad", "invalid_integer"), ("?after=e30", "invalid_cursor")] \(query, expected) -> do
             (status, bytes) <- get ("/agents" <> query)
             status @?= 400
-            details <- either (assertFailure . show) pure (eitherDecode bytes :: Either String Shikigami.Api.Problem.ProblemDetails)
-            details.code @?= "invalid_url",
+            details <- either (assertFailure . show) pure (eitherDecode bytes :: Either String RelayPageError)
+            details.code @?= expected,
       testCase "an unavailable directory returns 503" do
         directory <- Directory.newDirectoryHandle (pure (Left "unavailable"))
         withCatalog directory \get -> do

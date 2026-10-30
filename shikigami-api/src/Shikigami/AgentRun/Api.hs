@@ -16,6 +16,7 @@ module Shikigami.AgentRun.Api
   )
 where
 
+import Data.Aeson ((.:))
 import Data.Aeson qualified as Aeson
 import Data.Char (isControl)
 import Data.HashMap.Strict.InsOrd.Compat qualified as Map
@@ -24,8 +25,7 @@ import Data.OpenApi qualified as O
 import Data.SOP (I (..), NS (..))
 import Data.Text qualified as Text
 import Relay.Pagination (Connection)
-import Relay.Pagination.Servant (RelayPage)
-import Relay.Pagination.Servant.OpenApi ()
+import Relay.Pagination.Servant (RelayPage, RelayPageError)
 import Servant.API
 import Servant.API.MultiVerb
 import Shikigami.Api.Problem
@@ -40,8 +40,8 @@ data AgentRunRequest = AgentRunRequest {idempotencyKey :: !Text, payload :: !Aes
 
 instance FromJSON AgentRunRequest where
   parseJSON = Aeson.withObject "AgentRunRequest" \object -> do
-    key <- object Aeson..: "idempotencyKey"
-    payload <- object Aeson..: "payload"
+    key <- object .: "idempotencyKey"
+    payload <- object .: "payload"
     unless (validRunKey key) (fail "invalid idempotency key")
     case payload of
       Aeson.Object _ -> pure (AgentRunRequest key payload)
@@ -84,7 +84,8 @@ type RunRequestResponses =
      RespondAs ProblemJSON 409 "Agent not runnable" ProblemDetails,
      RespondAs ProblemJSON 409 "Idempotency key conflict" ProblemDetails,
      RespondAs ProblemJSON 413 "Payload too large" ProblemDetails,
-     RespondAs ProblemJSON 503 "Store or directory unavailable" ProblemDetails
+     RespondAs ProblemJSON 503 "Store or directory unavailable" ProblemDetails,
+     RespondAs ProblemJSON 400 "Invalid request body" ProblemDetails
    ]
 
 data RunRequestResult
@@ -95,6 +96,7 @@ data RunRequestResult
   | RunConflict !ProblemDetails
   | RunPayloadTooLarge !ProblemDetails
   | RunRequestUnavailable !ProblemDetails
+  | RunRequestInvalid !ProblemDetails
   deriving stock (Eq, Show)
 
 instance AsUnion RunRequestResponses RunRequestResult where
@@ -106,6 +108,7 @@ instance AsUnion RunRequestResponses RunRequestResult where
     RunConflict body -> S (S (S (S (Z (I body)))))
     RunPayloadTooLarge body -> S (S (S (S (S (Z (I body))))))
     RunRequestUnavailable body -> S (S (S (S (S (S (Z (I body)))))))
+    RunRequestInvalid body -> S (S (S (S (S (S (S (Z (I body))))))))
   fromUnion = \case
     Z (I body) -> RunAccepted body
     S (Z (I body)) -> RunReplayed body
@@ -114,7 +117,8 @@ instance AsUnion RunRequestResponses RunRequestResult where
     S (S (S (S (Z (I body))))) -> RunConflict body
     S (S (S (S (S (Z (I body)))))) -> RunPayloadTooLarge body
     S (S (S (S (S (S (Z (I body))))))) -> RunRequestUnavailable body
-    S (S (S (S (S (S (S impossible)))))) -> case impossible of {}
+    S (S (S (S (S (S (S (Z (I body)))))))) -> RunRequestInvalid body
+    S (S (S (S (S (S (S (S impossible))))))) -> case impossible of {}
 
 data AgentRunApi mode = AgentRunApi
   { show :: mode :- Capture "runId" Text :> MultiVerb 'GET '[JSON] RunShowResponses RunShowResult,
@@ -169,10 +173,11 @@ type RunShowResponses =
   '[ Respond 200 "The run lifecycle" (AgentRunStatus),
      RespondAs ProblemJSON 404 "Agent not found" ProblemDetails,
      RespondAs ProblemJSON 404 "Run not found" ProblemDetails,
-     RespondAs ProblemJSON 503 "Store unavailable" ProblemDetails
+     RespondAs ProblemJSON 503 "Store unavailable" ProblemDetails,
+     RespondAs ProblemJSON 500 "Stored history invalid" ProblemDetails
    ]
 
-data RunShowResult = RunFound !(AgentRunStatus) | RunShowAgentMissing !(ProblemDetails) | RunMissing !(ProblemDetails) | RunShowUnavailable !(ProblemDetails)
+data RunShowResult = RunFound !(AgentRunStatus) | RunShowAgentMissing !(ProblemDetails) | RunMissing !(ProblemDetails) | RunShowUnavailable !(ProblemDetails) | RunShowInternal !ProblemDetails
   deriving stock (Eq, Show)
 
 instance AsUnion RunShowResponses RunShowResult where
@@ -181,21 +186,23 @@ instance AsUnion RunShowResponses RunShowResult where
     RunShowAgentMissing body -> S (Z (I body))
     RunMissing body -> S (S (Z (I body)))
     RunShowUnavailable body -> S (S (S (Z (I body))))
+    RunShowInternal body -> S (S (S (S (Z (I body)))))
   fromUnion = \case
     Z (I body) -> RunFound body
     S (Z (I body)) -> RunShowAgentMissing body
     S (S (Z (I body))) -> RunMissing body
     S (S (S (Z (I body)))) -> RunShowUnavailable body
-    S (S (S (S (impossible)))) -> case impossible of {}
+    S (S (S (S (Z (I body))))) -> RunShowInternal body
+    S (S (S (S (S impossible)))) -> case impossible of {}
 
 type RunListResponses =
   '[ Respond 200 "A page of accepted run requests" (Connection RunRequestView),
-     RespondAs ProblemJSON 400 "Invalid pagination cursor or size" ProblemDetails,
+     Respond 400 "Invalid pagination cursor or size" RelayPageError,
      RespondAs ProblemJSON 404 "Agent not found" ProblemDetails,
      RespondAs ProblemJSON 503 "Store unavailable" ProblemDetails
    ]
 
-data RunListResult = RunPage !(Connection RunRequestView) | RunPageInvalid !(ProblemDetails) | RunListAgentMissing !(ProblemDetails) | RunListUnavailable !(ProblemDetails)
+data RunListResult = RunPage !(Connection RunRequestView) | RunPageInvalid !RelayPageError | RunListAgentMissing !(ProblemDetails) | RunListUnavailable !(ProblemDetails)
   deriving stock (Eq, Show)
 
 instance AsUnion RunListResponses RunListResult where

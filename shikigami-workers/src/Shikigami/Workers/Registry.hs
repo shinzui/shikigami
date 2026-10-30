@@ -25,6 +25,7 @@ module Shikigami.Workers.Registry
 where
 
 import Control.Exception (throwIO)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Int (Int32)
 import Data.Text qualified as Text
@@ -37,7 +38,7 @@ import Shikigami.App (AppEnv (..))
 import Shikigami.Flow.SinkOutbox.Publisher (runOutboxPublisher)
 import Shikigami.Health.Worker (LoopName (DirectoryLoop, OutboxLoop, QueueLoop, ResumeLoop, TelemetryLoop, TimerLoop, WorkflowGcLoop), registerReport, supervisedLoopVerdictWithStaleness)
 import Shikigami.Log qualified as Log
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Telemetry.Sampler (runTelemetrySampler)
 import Shikigami.Trigger.Timer (runTimerWorker)
@@ -55,7 +56,7 @@ import Shikigami.Workers.Supervision (LoopExited (LoopExited), superviseLoops)
 -- running three loops around a corpse.
 runWorkers :: WorkerEnv -> IO ()
 runWorkers env = do
-  Log.logInfo (envLogger env) "worker.loop.started" ["queue" Aeson..= jobName runJob]
+  Log.logInfo (envLogger env) "worker.loop.started" ["queue" .= jobName runJob]
   let durableLoops =
         [ (QueueLoop, runQueueWorker env),
           (ResumeLoop, runResumeWorker env),
@@ -97,8 +98,8 @@ runQueueWorker env = do
       Log.logInfo
         (envLogger env)
         "worker.queue.reconciled"
-        [ "queue" Aeson..= ("shikigami_run_jobs" :: Text),
-          "dlq" Aeson..= ("shikigami_run_jobs_dlq" :: Text)
+        [ "queue" .= ("shikigami_run_jobs" :: Text),
+          "dlq" .= ("shikigami_run_jobs_dlq" :: Text)
         ]
     appResult <-
       withConsumerAppAcquisition
@@ -127,16 +128,16 @@ runQueueWorker env = do
           -- an empty map is itself the signal that the whole supervisor went.
           metrics <- getAppMetrics app
           liftIO do
-            Log.logError (envLogger env) "worker.queue.stopped" ["processors" Aeson..= metrics]
+            Log.logError (envLogger env) "worker.queue.stopped" ["processors" .= metrics]
             throwIO (LoopExited QueueLoop)
     case appResult of
       Left err -> liftIO do
-        Log.logError (envLogger env) "worker.loop.failed" ["error" Aeson..= Text.pack (show err)]
+        Log.logError (envLogger env) "worker.loop.failed" ["error" .= Text.pack (show err)]
         ioError (userError ("run-job processor failed to start: " <> show err))
       Right () -> pure ()
   case result of
     Left perr -> do
-      Log.logError (envLogger env) "worker.queue.failed" ["error" Aeson..= Text.pack (show perr)]
+      Log.logError (envLogger env) "worker.queue.failed" ["error" .= Text.pack (show perr)]
       ioError (userError ("run-job queue reconciliation failed: " <> show perr))
     Right () -> pure ()
 

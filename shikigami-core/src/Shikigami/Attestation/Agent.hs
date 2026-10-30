@@ -121,14 +121,17 @@ newtype PolicyDigest = PolicyDigest {value :: Text}
 -- immediately with a byte diff.
 data AgentVersionRef = AgentVersionRef
   { logicalAgentId :: !LogicalAgentId,
-    agentVersion :: !AgentVersion,
+    version :: !AgentVersion,
     declarationDigest :: !DeclarationDigest
   }
   deriving stock (Eq, Show, Generic)
 
-instance ToJSON AgentVersionRef where toJSON = genericToJSON agentAesonOptions
+instance ToJSON AgentVersionRef where toJSON = genericToJSON versionRefOptions
 
-instance FromJSON AgentVersionRef where parseJSON = genericParseJSON agentAesonOptions
+instance FromJSON AgentVersionRef where parseJSON = genericParseJSON versionRefOptions
+
+versionRefOptions :: Options
+versionRefOptions = agentAesonOptions {fieldLabelModifier = \field -> if field == "version" then "agentVersion" else field}
 
 -- | The portable bundle of digests that binds a run to exactly the parts the
 -- agent was made of.

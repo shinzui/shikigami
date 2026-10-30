@@ -5,6 +5,7 @@
 module Shikigami.Caller.Verifier (newCallerVerifier) where
 
 import Control.Monad.Except (throwError)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Network.Wai (Request, requestHeaders)
 import Servant.Server (ServerError (..))
@@ -13,7 +14,7 @@ import Shikigami.Api.Problem (ProblemCode (Unauthorized))
 import Shikigami.App.Config (HttpAuthSettings (..))
 import Shikigami.Caller.Api
 import Shikigami.Log qualified as Log
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Server.Seam (problemServerError)
 import Shikigami.Sink.Auth (credentialToken, matchesBearerHeader)
 
@@ -27,6 +28,6 @@ newCallerVerifier logger settings = mkAuthHandler \request -> case settings of
      in case headers of
           [value] | matchesBearerHeader (credentialToken token) value -> pure (ApiCaller caller)
           _ -> do
-            liftIO (Log.logInfo logger "server.auth.rejected" ["reason" Aeson..= (if null headers then "missing" else "invalid" :: Text)])
+            liftIO (Log.logInfo logger "server.auth.rejected" ["reason" .= (if null headers then "missing" else "invalid" :: Text)])
             let refusal = problemServerError Unauthorized "A valid bearer token is required."
             throwError refusal {errHeaders = ("WWW-Authenticate", "Bearer realm=\"shikigami\"") : refusal.errHeaders}

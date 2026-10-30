@@ -18,8 +18,7 @@ import Data.SOP.BasicFunctors (I (..))
 import Data.SOP.NS (NS (..))
 import Data.Text qualified as Text
 import Relay.Pagination (Connection)
-import Relay.Pagination.Servant (RelayPage)
-import Relay.Pagination.Servant.OpenApi ()
+import Relay.Pagination.Servant (RelayPage, RelayPageError)
 import Servant.API
 import Servant.API.Generic ((:-))
 import Servant.API.MultiVerb
@@ -59,11 +58,11 @@ instance ToParamSchema AgentName where
 
 type AgentPageResponses =
   '[ Respond 200 "A page of declared agents" (Connection AgentView),
-     RespondAs ProblemJSON 400 "Invalid pagination cursor or size" ProblemDetails,
+     Respond 400 "Invalid pagination cursor or size" RelayPageError,
      RespondAs ProblemJSON 503 "The lifecycle directory is unavailable" ProblemDetails
    ]
 
-data AgentPageResult = AgentPage !(Connection AgentView) | AgentPageInvalid !ProblemDetails | AgentPageUnavailable !ProblemDetails
+data AgentPageResult = AgentPage !(Connection AgentView) | AgentPageInvalid !RelayPageError | AgentPageUnavailable !ProblemDetails
   deriving stock (Eq, Show)
 
 instance AsUnion AgentPageResponses AgentPageResult where

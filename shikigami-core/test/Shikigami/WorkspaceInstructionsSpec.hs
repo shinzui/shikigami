@@ -1,6 +1,7 @@
 module Shikigami.WorkspaceInstructionsSpec (tests) where
 
 import Control.Lens ((&), (.~))
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Either (isLeft)
@@ -22,7 +23,7 @@ tests =
     [ testCase "historical admissions preserve JSON and cannot acquire a native file profile" $ do
         bundle <- right (mkInstructionBundle 65536 repository base [])
         let admission = WorkspaceAdmission (WorkspaceRef "provider" "resource") "binding" "run" "assignment" (ExecutionRootId "root") (CompatibilityIdentity "worker") 0 bundle Nothing
-            historical = Aeson.object ["workspace" Aeson..= admission.workspace, "bindingDigest" Aeson..= admission.bindingDigest, "runId" Aeson..= admission.runId, "assignmentId" Aeson..= admission.assignmentId, "rootId" Aeson..= admission.rootId, "owner" Aeson..= admission.owner, "epoch" Aeson..= admission.epoch, "instructions" Aeson..= bundle]
+            historical = Aeson.object ["workspace" .= admission.workspace, "bindingDigest" .= admission.bindingDigest, "runId" .= admission.runId, "assignmentId" .= admission.assignmentId, "rootId" .= admission.rootId, "owner" .= admission.owner, "epoch" .= admission.epoch, "instructions" .= bundle]
         Aeson.fromJSON historical @?= Aeson.Success admission
         Aeson.toJSON admission @?= historical
         Aeson.fromJSON (Aeson.toJSON (admission & #filePolicy .~ Just nativeFilePolicy)) @?= Aeson.Success (admission & #filePolicy .~ Just nativeFilePolicy),

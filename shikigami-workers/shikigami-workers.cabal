@@ -21,6 +21,7 @@ common common
 
   ghc-options:
     -Wall
+    -Werror=missing-fields
     -Wcompat
     -Widentities
     -Wincomplete-record-updates

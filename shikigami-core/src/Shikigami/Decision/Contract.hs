@@ -239,8 +239,8 @@ data CallTerminal = CallSucceeded | CallFailed | CallUnknown
   deriving anyclass (ToJSON, FromJSON)
 
 data DecisionCallHooks = DecisionCallHooks
-  { beginCall :: DecisionCallContext -> IO (Either DecisionFailure AttemptToken),
-    finishCall :: AttemptToken -> CallTerminal -> Maybe ModelCallEvidence -> IO (Either DecisionFailure ())
+  { beginCall :: !(DecisionCallContext -> IO (Either DecisionFailure AttemptToken)),
+    finishCall :: !(AttemptToken -> CallTerminal -> Maybe ModelCallEvidence -> IO (Either DecisionFailure ()))
   }
 
 -- | Test implementation with the production convergence contract. Missing

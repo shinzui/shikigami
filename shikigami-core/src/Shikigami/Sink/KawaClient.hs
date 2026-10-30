@@ -62,7 +62,7 @@ buildEnvelope ctx@SinkContext {identity = ctxIdentity, occurredAt = ctxOccurredA
                     occurredAt = Text.pack (iso8601Show now),
                     source = "shinzui/shikigami",
                     actor = Actor {kind = "agent", id = nm, session = Nothing},
-                    subject = Subject {subjectType = sty, subjectId = subjectIdFromOutput output nm},
+                    subject = Subject {kind = sty, subjectId = subjectIdFromOutput output nm},
                     verb = vb,
                     payload = output,
                     contextRefs,

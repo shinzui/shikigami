@@ -12,7 +12,7 @@ module Shikigami.RunJobs
   )
 where
 
-import Data.Aeson (Value, toJSON)
+import Data.Aeson (Value, toJSON, (.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (parseEither)
@@ -63,7 +63,7 @@ domainCodec =
       encode = Queue.encodeRunJobMessage . toMessage,
       decode = \_ value -> do
         message <- Queue.parseRunJobMessage value
-        (root, request, permissions, input) <- parseValue (Aeson.withObject "RunInput" (\o -> (,,,) <$> o Aeson..: "executionRootId" <*> o Aeson..: "executionRequest" <*> o Aeson..: "executionPermissions" <*> o Aeson..: "input")) message.triggerPayload
+        (root, request, permissions, input) <- parseValue (Aeson.withObject "RunInput" (\o -> (,,,) <$> o .: "executionRootId" <*> o .: "executionRequest" <*> o .: "executionPermissions" <*> o .: "input")) message.triggerPayload
         let domain = Queue.encodeRunJobMessage message
         parseValue (Aeson.withObject "RunJob" (\o -> Aeson.parseJSON (Aeson.Object (KeyMap.insert "executionRootId" (toJSON (root :: Maybe ExecutionRootId)) (KeyMap.insert "executionRequest" (toJSON (request :: Maybe ExecutionRequest)) (KeyMap.insert "executionPermissions" (toJSON (permissions :: Maybe [Text])) (KeyMap.insert "triggerPayload" input o))))))) domain,
       upcasters = []
@@ -82,7 +82,7 @@ toMessage job =
       identity = toJSON job.identity,
       triggerKind = job.triggerKind,
       occurredAt = job.occurredAt,
-      triggerPayload = Aeson.object ["executionRootId" Aeson..= job.executionRootId, "executionRequest" Aeson..= job.executionRequest, "executionPermissions" Aeson..= job.executionPermissions, "input" Aeson..= job.triggerPayload],
+      triggerPayload = Aeson.object ["executionRootId" .= job.executionRootId, "executionRequest" .= job.executionRequest, "executionPermissions" .= job.executionPermissions, "input" .= job.triggerPayload],
       idempotencyKey = runKeyText job.idempotencyKey,
       parentSessionId = idText <$> job.parentSessionId,
       parentRunWorkflowId = (.unWorkflowId) <$> job.parentRunWorkflowId,

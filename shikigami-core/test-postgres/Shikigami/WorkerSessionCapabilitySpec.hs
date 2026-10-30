@@ -1,6 +1,7 @@
 module Shikigami.WorkerSessionCapabilitySpec (tests) where
 
 import Control.Exception (SomeException, try)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Generics.Labels ()
@@ -42,7 +43,7 @@ import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Flow.Workers qualified as Flow
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.RouterWorkflowSpec qualified as Fixture
 import Shikigami.WorkerSession.Capability
 import Shikigami.WorkerSession.Handoff (TransferServices (..))
@@ -95,7 +96,7 @@ tests fixture =
           registered <- run env (lookupInstance sessionWorkflowName (sessionWorkflowId session))
           assertBool "registered for the common resume registry" (isJust registered)
           entries <- run env (loadStepIndex sessionWorkflowName (sessionWorkflowId session) 0)
-          Map.lookup "ingest-session" entries @?= Just (Aeson.object ["sessionId" Aeson..= session]),
+          Map.lookup "ingest-session" entries @?= Just (Aeson.object ["sessionId" .= session]),
       testCase "find reuses the admitted session after parent rotation without replacing frozen context" $
         withCapabilityFixture fixture \env admission host scope authorizer _ _ -> do
           nextMemory <- genSessionId

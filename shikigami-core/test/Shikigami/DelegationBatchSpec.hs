@@ -1,6 +1,7 @@
 module Shikigami.DelegationBatchSpec (tests) where
 
 import Data.Aeson (Value (Null))
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import Keiro.Workflow (WorkflowId (..))
@@ -43,7 +44,7 @@ tests =
   testGroup
     "DelegationBatch"
     [ testCase "preflight computes every deterministic child id in selection order" do
-        let requests = batchRequest "first-key" "first" NonEmpty.:| [batchRequest "second-key" "second"]
+        let requests = batchRequest "first-key" "first" :| [batchRequest "second-key" "second"]
             expectedIds =
               [ delegatedWorkflowId parentWorkflowId "first" "first-key",
                 delegatedWorkflowId parentWorkflowId "second" "second-key"
@@ -59,9 +60,9 @@ tests =
         let constrained = routerDecl {routing = Just routerPolicy {maxSelections = 1}}
             requests =
               batchRequest "same-key" "first"
-                NonEmpty.:| [ batchRequest "same-key" "paused",
-                              batchRequest "third-key" "intruder"
-                            ]
+                :| [ batchRequest "same-key" "paused",
+                     batchRequest "third-key" "intruder"
+                   ]
         case preflightDelegationBatch constrained delegateCtx catalog parentWorkflowId requests of
           Right _ -> assertFailure "expected the complete batch to be rejected"
           Left errors -> do
@@ -75,7 +76,7 @@ tests =
               (DelegationBatchGovernanceRejected (Just "intruder") (DelegationNotAllowed "intruder") `elem` found),
       testCase "preflight checks complete lineage, depth, and parent session before reservation" do
         let blockedCtx = delegateCtx {depth = DelegationDepth 3, sessionId = Nothing, lineage = map AgentName ["root", "first"]}
-        case preflightDelegationBatch routerDecl blockedCtx catalog parentWorkflowId (batchRequest "cycle" "first" NonEmpty.:| []) of
+        case preflightDelegationBatch routerDecl blockedCtx catalog parentWorkflowId (batchRequest "cycle" "first" :| []) of
           Right _ -> assertFailure "expected lineage, depth, and session rejection"
           Left errors -> do
             let found = NonEmpty.toList errors

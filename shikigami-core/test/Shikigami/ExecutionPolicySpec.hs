@@ -3,6 +3,7 @@ module Shikigami.ExecutionPolicySpec (tests) where
 import Baikai.Api (Api (OpenAIResponses))
 import Baikai.StopReason (StopReason (Stop, ToolUse))
 import Control.Lens ((%~), (&), (.~))
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Either (isLeft)
@@ -47,7 +48,7 @@ tests =
         assertBool "unbounded recovery refused" (isLeft (applyHarnessOptions defaultHarnessPolicy (emptyHarnessOverrides & #recoveryAttempts .~ Just 101))),
       testCase "historical model input bytes omit the new provenance extension" do
         context <- expectRight (selectContextView defaultHarnessPolicy (ReplayContext 1 Nothing [UserTurn [TextBlock "request"] Nothing]))
-        let legacy = Aeson.object ["format" Aeson..= (1 :: Int), "view" Aeson..= context, "maxOutputTokens" Aeson..= (Nothing :: Maybe Int)]
+        let legacy = Aeson.object ["format" .= (1 :: Int), "view" .= context, "maxOutputTokens" .= (Nothing :: Maybe Int)]
             input = ModelOperationInput 1 context Nothing Nothing
         Aeson.fromJSON legacy @?= Aeson.Success input
         Aeson.toJSON input @?= legacy,
@@ -99,7 +100,7 @@ tests =
       testCase "output requirements compose and validate accepted content" do
         policy <- expectRight (narrowHarnessPolicy (defaultHarnessPolicy & #output .~ JsonFields ["one"]) (Just (emptyHarnessOverrides & #output .~ Just (JsonFields ["two"]))))
         assertBool "missing field refused" (isLeft (validateTerminalOutput policy (answer "{\"one\":1}")))
-        validateTerminalOutput policy (answer "{\"one\":1,\"two\":2}") @?= Right (Aeson.object ["reply" Aeson..= ("{\"one\":1,\"two\":2}" :: Text.Text)]),
+        validateTerminalOutput policy (answer "{\"one\":1,\"two\":2}") @?= Right (Aeson.object ["reply" .= ("{\"one\":1,\"two\":2}" :: Text.Text)]),
       testCase "tool policy uses immutable bindings and explicit human admission" do
         let assistant = toolReply [("first", "observe", Aeson.object []), ("second", "observe", Aeson.object [])]
             held = defaultHarnessPolicy & #humanTools .~ ["observe"]

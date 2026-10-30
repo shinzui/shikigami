@@ -17,7 +17,7 @@ module Shikigami.Trigger.Enqueue
   )
 where
 
-import Data.Aeson (Value)
+import Data.Aeson (Value, (.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as LazyByteString
 import Data.Text qualified as Text
@@ -38,7 +38,7 @@ import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
 import Shikigami.Id.Name (nameBytes)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunJobs (encodeRunJob, queuePhysical, runJob)
 
 -- | The IP-7 queue name (shared with the worker).
@@ -188,9 +188,9 @@ enqueueScheduledRun pool identity agent dueAt =
         occurredAt = dueAt,
         triggerPayload =
           Aeson.object
-            [ "kind" Aeson..= ("shikigami.schedule" :: Text),
-              "agent" Aeson..= agent,
-              "dueAt" Aeson..= dueAt
+            [ "kind" .= ("shikigami.schedule" :: Text),
+              "agent" .= agent,
+              "dueAt" .= dueAt
             ],
         idempotencyKey = RunKey (scheduleRunIdempotencyKey agent dueAt),
         parentSessionId = Nothing,

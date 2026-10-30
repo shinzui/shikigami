@@ -32,6 +32,7 @@ where
 import Options.Applicative
 import Shikigami.Agent.Command.AgentRun (runAgentRun)
 import Shikigami.Agent.Command.RunBehavior (runRunBehavior)
+import Shikigami.Agent.Payload (payloadArgument)
 import Shikigami.App.Config (Role (..))
 import Shikigami.App.Config.Load (withConfigOptions)
 import Shikigami.App.Role (RoleInfo (..), runRole)
@@ -63,7 +64,7 @@ runBehaviorRoleInfo =
           "Run an agent's behavior once, with no database and no recalled memory"
           ( runRunBehavior
               <$> strOption (long "agent" <> metavar "FILE" <> help "Agent manifest (.dhall)")
-              <*> optional (strOption (long "payload" <> metavar "JSON" <> help "Trigger payload as JSON"))
+              <*> payloadArgument
               <*> optional (strOption (long "workspace" <> metavar "DIR" <> help "Git worktree for requested capability overlays"))
           )
           (pure [])

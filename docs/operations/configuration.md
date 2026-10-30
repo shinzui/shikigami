@@ -514,7 +514,7 @@ non-loopback interface emits `server.auth.disabled` at warning level.
 
 Every route under `/agents` requires the configured bearer credential. Health
 probes remain public. The typed client accepts a global `--token TOKEN`, with
-`SHIKIGAMI_API_TOKEN` as its runtime fallback; help never includes that value.
+`SHIKIGAMI_API_TOKEN` through an explicit Settei environment binding; help never includes that value.
 Authentication identifies a caller; this setting does not define per-agent
 permissions. Credential rotation requires a server restart.
 
@@ -679,3 +679,23 @@ normal exit with code zero. Neither a timeout nor requested cancellation proves
 success. See [workspace operations](workspaces.md) for native qualification and
 receipt recovery. The full native parent/child workflow gate passes fourteen cases; handoff and
 integrated-revision qualification remain open in Plan 96.
+
+## HTTP client configuration
+
+The client resolves `server.base-url` and secret `http.auth.token` through its own
+leaf Settei declaration. Source precedence is built-in `http://localhost:8080`,
+ordered `--config` YAML files, explicitly bound `SHIKIGAMI_SERVER_URL` and
+`SHIKIGAMI_API_TOKEN`, named `--server`/`--token` flags, then ordered `--set`
+overrides. Unknown keys and malformed winning URLs fail; credentials in a URL
+are refused. The client never reads an ambient value inside an HTTP action.
+
+All five diagnostic modes work without a subcommand. Static `--describe-config`
+and `--describe-config-json` avoid source IO. Effective explain/check modes load
+sources, preserve origins and redact winning and shadowed tokens. Source failures
+exit 3, resolution failures exit 4 and usage errors exit 2.
+
+`runs request --stdin` and `runs request --payload -` read a JSON object up to
+4 MiB. A literal `--payload` ignores stdin; omitted input remains `{}`. Invalid
+input diagnostics never print payload content. Use a private environment or
+configuration file for credentials. Version and native shell-completion actions
+need no service connection. See [ADR 72](../adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md).

@@ -28,7 +28,7 @@ matchesStreamWith include m env =
   where
     ActivityEnvelope {verb = eVerb, source = eSource, actor = eActor, subject = eSubject} = env
     Actor {kind = aKind} = eActor
-    Subject {subjectType = eSubjectType} = eSubject
+    Subject {kind = eSubjectType} = eSubject
     StreamMatch {verb = mVerb, source = mSource, subjectType = mSubjectType, verbs = mVerbs} = m
     guardActor = case include of
       IncludeAgentActors -> True

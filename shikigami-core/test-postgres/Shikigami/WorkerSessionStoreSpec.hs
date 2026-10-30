@@ -27,10 +27,10 @@ import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
 import Shikigami.Execution.Resources (Admission (..))
 import Shikigami.Execution.Resources qualified as R
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
-import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.WorkerSession.Checkpoint qualified as Checkpoint
 import Shikigami.WorkerSession.Identity (assignmentChildWorkflowId)
 import Shikigami.WorkerSession.Store qualified as Store

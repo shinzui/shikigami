@@ -24,6 +24,7 @@ where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (Exception, IOException, catch, onException, throwIO)
+import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (parseEither)
@@ -44,12 +45,12 @@ import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy.Types (RecoveryClass (..), ToolInvoiceCost (..))
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
-import Shikigami.Prelude
-import Shikigami.Store.ExecutionResources qualified as Roots
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Workspace.Allocation (workspaceFiles, workspaceMetadata, workspaceScratch)
 import Shikigami.Workspace.Collector
 import Shikigami.Workspace.ContainedFile
@@ -144,7 +145,7 @@ execDescriptorFor transferable = CapabilityDescriptor (must (mkCapabilityId "wor
     must :: (Show e) => Either e a -> a; must = either (error . show) id
 
 workspaceExecSchema :: Aeson.Value
-workspaceExecSchema = Aeson.object ["type" Aeson..= ("object" :: Text), "properties" Aeson..= Aeson.object ["rule" Aeson..= Aeson.object ["type" Aeson..= ("string" :: Text), "maxLength" Aeson..= (256 :: Int)]], "required" Aeson..= ["rule" :: Text], "additionalProperties" Aeson..= False]
+workspaceExecSchema = Aeson.object ["type" .= ("object" :: Text), "properties" .= Aeson.object ["rule" .= Aeson.object ["type" .= ("string" :: Text), "maxLength" .= (256 :: Int)]], "required" .= ["rule" :: Text], "additionalProperties" .= False]
 
 workspaceExecBinding :: ToolBinding
 workspaceExecBinding = execBindingFor False
@@ -205,7 +206,7 @@ loadAccepted runtime request = do
   let next = if tool.position + 1 < length (toolInvocations assistant) then NeedTool tool.response (tool.position + 1) else NeedModel
       routing = ProcessRouting 1 snapshot.executionId snapshot.identity operation.input.digest next
   unless (validProcessRouting routing) (abort SupervisorRefused)
-  rule <- either (const (abort SupervisorRefused)) pure (parseEither (Aeson.withObject "validation rule" (\fields -> if length fields /= 1 then fail "invalid rule request" else fields Aeson..: "rule")) tool.invocation.arguments)
+  rule <- either (const (abort SupervisorRefused)) pure (parseEither (Aeson.withObject "validation rule" (\fields -> if length fields /= 1 then fail "invalid rule request" else fields .: "rule")) tool.invocation.arguments)
   unless (bounded rule) (abort SupervisorRefused)
   (binding, state) <- transact runtime (Workspaces.inspectWorkspaceTx admission.workspace) >>= maybe (abort SupervisorRefused) pure
   unless (state == Ready && matchesWorkspaceAdmission binding admission && admission.runId == snapshot.runId && admission.assignmentId == snapshot.selection.assignmentId && Just admission.rootId == snapshot.selection.rootId && admission.rootId == binding.request.rootId && admission.owner == snapshot.identity && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base) (abort SupervisorRefused)

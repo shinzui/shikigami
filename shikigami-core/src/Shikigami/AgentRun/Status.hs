@@ -6,6 +6,8 @@ module Shikigami.AgentRun.Status
     RunFailure (..),
     RunStatusView (..),
     RunFacts (..),
+    RunStatusFailure (..),
+    runStatusFailureText,
     gatherRunFacts,
     classifyRun,
     deriveRunStatus,
@@ -69,7 +71,15 @@ data RunFacts = RunFacts
   }
   deriving stock (Generic, Eq, Show)
 
-gatherRunFacts :: KirokuStore -> AgentName -> Text -> IO (Either Text (Maybe RunFacts))
+data RunStatusFailure = RunStatusStoreUnavailable | RunStatusHistoryInvalid
+  deriving stock (Eq, Show)
+
+runStatusFailureText :: RunStatusFailure -> Text
+runStatusFailureText = \case
+  RunStatusStoreUnavailable -> "The run status store is unavailable."
+  RunStatusHistoryInvalid -> "The stored run history cannot be interpreted."
+
+gatherRunFacts :: KirokuStore -> AgentName -> Text -> IO (Either RunStatusFailure (Maybe RunFacts))
 gatherRunFacts store agent runId = do
   request <- lookupRunRequest store.pool agent runId
   case request of
@@ -105,13 +115,20 @@ gatherRunFacts store agent runId = do
             (Right skip, Right accepted') -> Right (Just (RunFacts accepted' facts.instance_ facts.steps facts.session skip))
             _ -> Left unavailable
   where
-    unavailable = "The run status store is unavailable."
-    sessionLink steps = case Map.lookup "open-session" steps of
-      Nothing -> Right Nothing
-      Just value -> case Aeson.fromJSON value :: Aeson.Result (StepResult Text) of
-        Aeson.Success (StepProduced raw) -> Just <$> parseId raw
-        Aeson.Success (StepRefused _) -> Right Nothing
-        Aeson.Error _ -> Left unavailable
+    unavailable = RunStatusStoreUnavailable
+    sessionLink steps
+      | Just value <- Map.lookup "ingest-job" steps,
+        Aeson.Error _ <- (Aeson.fromJSON value :: Aeson.Result RunJob) =
+          Left RunStatusHistoryInvalid
+      | Just value <- Map.lookup "complete" steps,
+        Aeson.Error _ <- (Aeson.fromJSON value :: Aeson.Result (StepResult ())) =
+          Left RunStatusHistoryInvalid
+      | otherwise = case Map.lookup "open-session" steps of
+          Nothing -> Right Nothing
+          Just value -> case Aeson.fromJSON value :: Aeson.Result (StepResult Text) of
+            Aeson.Success (StepProduced raw) -> either (const (Left RunStatusHistoryInvalid)) (Right . Just) (parseId raw)
+            Aeson.Success (StepRefused _) -> Right Nothing
+            Aeson.Error _ -> Left RunStatusHistoryInvalid
 
 recordedJob :: Map Text Aeson.Value -> Maybe RunJob
 recordedJob steps =
@@ -162,7 +179,7 @@ classifyRun agent runId facts =
       Just row | row.disposition == "dead_lettered" -> row.dispositionAt
       _ -> Nothing
 
-deriveRunStatus :: KirokuStore -> AgentName -> Text -> IO (Either Text (Maybe RunStatusView))
+deriveRunStatus :: KirokuStore -> AgentName -> Text -> IO (Either RunStatusFailure (Maybe RunStatusView))
 deriveRunStatus store agent runId = fmap (fmap (classifyRun agent runId)) <$> gatherRunFacts store agent runId
 
 lifecycleText :: RunLifecycle -> Text

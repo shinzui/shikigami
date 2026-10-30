@@ -2,6 +2,7 @@
 -- Authentication and fresh action decisions belong to Objective.Capability.
 module Shikigami.Objective.Types where
 
+import Data.Aeson ((.!=), (.:?))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.List (nub)
@@ -217,7 +218,7 @@ data ObjectiveSettings = ObjectiveSettings
 instance FromJSON ObjectiveSettings where
   parseJSON = Aeson.withObject "objective settings" \o -> do
     unless (all (`elem` ["enabled", "operator", "administration", "agentCreation"]) (KeyMap.keys o)) (fail "unknown objective setting")
-    settings <- ObjectiveSettings <$> o Aeson..:? "enabled" Aeson..!= False <*> o Aeson..:? "operator" <*> o Aeson..:? "administration" Aeson..!= OwnObjectivesOnly <*> o Aeson..:? "agentCreation" Aeson..!= []
+    settings <- ObjectiveSettings <$> o .:? "enabled" .!= False <*> o .:? "operator" <*> o .:? "administration" .!= OwnObjectivesOnly <*> o .:? "agentCreation" .!= []
     either (fail . Text.unpack) (const (pure settings)) (validateSettings settings)
 
 defaultObjectiveSettings :: ObjectiveSettings

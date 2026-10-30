@@ -33,8 +33,8 @@ import Shikumi.Tool (ToolError (..), ToolRegistry, mkDynTool, mkRegistry, regist
 -- Describing a menu cannot manufacture accepted operation coordinates. A
 -- trusted factory receives those coordinates only when preparing actual work.
 data NativeToolFactory = NativeToolFactory
-  { describe :: ExecutionSnapshot -> IO (Either ExecutionError [BoundTool]),
-    prepare :: ExecutionSnapshot -> OperationContext -> Maybe Text -> IO (Either ExecutionError [BoundTool])
+  { describe :: !(ExecutionSnapshot -> IO (Either ExecutionError [BoundTool])),
+    prepare :: !(ExecutionSnapshot -> OperationContext -> Maybe Text -> IO (Either ExecutionError [BoundTool]))
   }
 
 data ExecutionToolMenu = ExecutionToolMenu

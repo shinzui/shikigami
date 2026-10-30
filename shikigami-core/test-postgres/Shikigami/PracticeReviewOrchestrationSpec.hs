@@ -874,7 +874,7 @@ reviewActivity =
       occurredAt = "2026-08-26T00:00:00Z",
       source = "shinzui/shikigami",
       actor = Actor {kind = "agent", id = reviewerAgent, session = Nothing},
-      subject = Subject {subjectType = "practice-review", subjectId = "fixture"},
+      subject = Subject {kind = "practice-review", subjectId = "fixture"},
       verb = "practice-review.requested",
       payload = Aeson.object [],
       contextRefs = [],

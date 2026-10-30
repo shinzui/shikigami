@@ -46,6 +46,7 @@ import Options.Applicative hiding (action)
 import Settei.Optparse (namedOption)
 import Settei.Source (Source)
 import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Payload (payloadArgument)
 import Shikigami.App.Config (AppConfig, Role (AdminRole), kafkaActivityTopicKey, kafkaBrokerKey, sinksDanwaBaseUrlKey)
 import Shikigami.App.Config.Load
   ( ConfigOptions (..),
@@ -378,7 +379,7 @@ enqueueRunInfo =
     parser =
       (\agent payload conversation key -> (runEnqueueRun agent payload conversation key, []))
         <$> argument str (metavar "AGENT")
-        <*> optional (strOption (long "payload" <> metavar "JSON" <> help "Addressed run payload as JSON"))
+        <*> payloadArgument
         <*> switch (long "conversation" <> help "Route the job as a danwa conversation turn instead of an agent run")
         <*> optional (strOption (long "key" <> metavar "TEXT" <> help "Idempotency key; defaults to one derived from the agent and payload"))
 

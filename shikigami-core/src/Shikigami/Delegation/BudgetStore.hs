@@ -6,7 +6,7 @@
 -- child workflow id is replay success; reserving a new id consumes exactly one
 -- slot while the ledger row is locked, so sibling branches cannot overspend a
 -- remainder they each observed independently.
-module Shikigami.Store.DelegationBudget
+module Shikigami.Delegation.BudgetStore
   ( ReservationResult (..),
     BatchReservationResult (..),
     BudgetReservationError (..),
@@ -38,9 +38,9 @@ import Shikigami.Agent.Decl (DelegationBudget, delegationBudgetInt)
 import Shikigami.Agent.Delegate.Context (DelegationBudgetId (..))
 import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Resources
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
-import Shikigami.Store.ExecutionResources qualified as Resources
 
 data ReservationResult
   = DelegationSlotReserved

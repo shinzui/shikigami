@@ -5,6 +5,7 @@ module Shikigami.WorkspaceSupervisorSpec (tests) where
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (withAsync)
 import Control.Exception (throwIO)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as Bytes
 import Data.ByteString.Lazy qualified as Lazy
@@ -24,12 +25,12 @@ import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Resources (Root (..))
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
-import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.Workspace.FileProvider (FileRuntime (..))
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Process
@@ -289,19 +290,19 @@ withProcessVersion transferred toolCount fixture configure acknowledge use = do
                 (directory </> "complete.json")
                 ( Aeson.encode
                     ( Aeson.object
-                        [ "version" Aeson..= (2 :: Int),
-                          "unit" Aeson..= record.unit,
-                          "fingerprint" Aeson..= record.fingerprint,
-                          "bootId" Aeson..= boot,
-                          "invocationId" Aeson..= ("22222222222222222222222222222222" :: Text.Text),
-                          "exitCode" Aeson..= (0 :: Int),
-                          "termination" Aeson..= ProcessExited,
-                          "stdoutBytes" Aeson..= (0 :: Int),
-                          "stderrBytes" Aeson..= (0 :: Int),
-                          "stdoutTruncated" Aeson..= False,
-                          "stderrTruncated" Aeson..= False,
-                          "descendantsEmpty" Aeson..= True,
-                          "outputComplete" Aeson..= True
+                        [ "version" .= (2 :: Int),
+                          "unit" .= record.unit,
+                          "fingerprint" .= record.fingerprint,
+                          "bootId" .= boot,
+                          "invocationId" .= ("22222222222222222222222222222222" :: Text.Text),
+                          "exitCode" .= (0 :: Int),
+                          "termination" .= ProcessExited,
+                          "stdoutBytes" .= (0 :: Int),
+                          "stderrBytes" .= (0 :: Int),
+                          "stdoutTruncated" .= False,
+                          "stderrTruncated" .= False,
+                          "descendantsEmpty" .= True,
+                          "outputComplete" .= True
                         ]
                     )
                 )
@@ -312,7 +313,7 @@ withProcessVersion transferred toolCount fixture configure acknowledge use = do
       makeRuntime file = configure (SupervisorRuntime file.appEnv file.authorizer (const (pure (Right ()))) file.lifecycle select backend)
       install file = adapterWithVersion transferred id (makeRuntime file) observed file
       qualify admission = admission & #filePolicy .~ Just (if transferred then transferableFilePolicy else supervisedFilePolicy)
-  Fixture.withEffectAdapterForTools toolCount qualify install workspaceExecBinding.name "validate" (Just (Aeson.object ["rule" Aeson..= ("validate" :: Text.Text)])) fixture \_ _ snapshot _ reference file _ ->
+  Fixture.withEffectAdapterForTools toolCount qualify install workspaceExecBinding.name "validate" (Just (Aeson.object ["rule" .= ("validate" :: Text.Text)])) fixture \_ _ snapshot _ reference file _ ->
     use file (makeRuntime file) observed calls snapshot reference
   where
     boot = "11111111-1111-4111-8111-111111111111"

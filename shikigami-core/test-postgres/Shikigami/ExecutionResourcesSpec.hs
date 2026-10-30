@@ -12,11 +12,11 @@ import Kiroku.Store.Connection (defaultConnectionSettings)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Decl (mkDelegationBudget)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
+import Shikigami.Delegation.BudgetStore
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Resources
+import Shikigami.Execution.ResourcesStore
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
-import Shikigami.Store.DelegationBudget
-import Shikigami.Store.ExecutionResources
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 

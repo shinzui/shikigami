@@ -48,11 +48,11 @@ import Shikigami.Decision.ModelCatalog
 import Shikigami.Execution.Attempt (ModelCallPreparation (..))
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Resources
 import Shikigami.Execution.Selection
+import Shikigami.Execution.SelectionStore qualified as Calls
 import Shikigami.Log.Correlation (RunCorrelationId, callCorrelationId)
 import Shikigami.Prelude hiding ((.=))
-import Shikigami.Store.ExecutionResources qualified as Resources
-import Shikigami.Store.ExecutionSelection qualified as Calls
 import Streamly.Data.Stream qualified as Stream
 
 data SelectionRuntime = SelectionRuntime

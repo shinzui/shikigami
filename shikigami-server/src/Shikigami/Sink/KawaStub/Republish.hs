@@ -43,7 +43,7 @@ mkRepublisher broker topic ingest actId = do
 -- the @keiro-*@ header set).
 republish :: Text -> Text -> IngestRequest -> Text -> IO (Either String ())
 republish broker topic (IngestRequest {verb = vb, actor = ac, subject = sj, payload = pl, contextRefs = crs, sourceEventId = sevid, occurredAt = oat}) actId = do
-  let Subject {subjectType = sty, subjectId = sid} = sj
+  let Subject {kind = sty, subjectId = sid} = sj
       env =
         ActivityEnvelope
           { activityId = actId,

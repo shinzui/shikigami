@@ -21,6 +21,9 @@ runnable. A configured directory without a valid snapshot returns an unavailable
 problem. Later refresh failures retain the last valid snapshot.
 
 The declaration catalog uses Relay keyset pagination in ascending agent-name order.
+Invalid page sizes, malformed pagination and invalid cursors use the native
+`RelayPageError` JSON response declared in the API and OpenAPI. The server does
+not inspect private WAI response constructors or rewrite Relay response bodies.
 HTTP capture and schema instances stay in the API package; the catalog and lifecycle
 classification stay in core. The server owns and cancels the directory refresher.
 

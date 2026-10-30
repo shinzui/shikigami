@@ -12,6 +12,7 @@ GET {{base_url}}/agents?first=1
 Authorization: Bearer {{token}}
 HTTP 200
 [Asserts]
+header "Content-Type" contains "application/json"
 jsonpath "$.edges" count == 1
 jsonpath "$.pageInfo.hasNextPage" == true
 
@@ -19,6 +20,7 @@ GET {{base_url}}/agents/heartbeat
 Authorization: Bearer {{token}}
 HTTP 200
 [Asserts]
+header "Content-Type" contains "application/json"
 jsonpath "$.runnable" == true
 jsonpath "$.lifecycle" == "unverified"
 
@@ -26,6 +28,7 @@ GET {{base_url}}/agents/disabled-heartbeat
 Authorization: Bearer {{token}}
 HTTP 200
 [Asserts]
+header "Content-Type" contains "application/json"
 jsonpath "$.enabled" == false
 jsonpath "$.runnable" == false
 
@@ -41,12 +44,20 @@ GET {{base_url}}/agents?first=0
 Authorization: Bearer {{token}}
 HTTP 400
 [Asserts]
-header "Content-Type" == "application/problem+json"
-jsonpath "$.code" == "invalid_url"
+header "Content-Type" startsWith "application/json"
+jsonpath "$.code" == "invalid_page_size"
 
 GET {{base_url}}/agents?first=-1
 Authorization: Bearer {{token}}
 HTTP 400
 [Asserts]
-header "Content-Type" == "application/problem+json"
-jsonpath "$.code" == "invalid_url"
+header "Content-Type" startsWith "application/json"
+jsonpath "$.code" == "negative_page_size"
+
+GET {{base_url}}/agents?first=1&last=1
+Authorization: Bearer {{token}}
+HTTP 400
+[Asserts]
+header "Content-Type" contains "application/json"
+jsonpath "$.code" == "mixed_pagination_directions"
+jsonpath "$.retryable" == false

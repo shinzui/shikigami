@@ -1,6 +1,6 @@
 module Shikigami.ApprovalNotificationSpec (tests) where
 
-import Data.Aeson (Value, eitherDecode, encode, object, (.=))
+import Data.Aeson (Value, eitherDecode, encode, object, (.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy.Char8 qualified as LazyByteString
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
@@ -165,7 +165,7 @@ extractContent value =
 newtype PostBody = PostBody Text
 
 instance Aeson.FromJSON PostBody where
-  parseJSON = Aeson.withObject "PostBody" (fmap PostBody . (Aeson..: "content"))
+  parseJSON = Aeson.withObject "PostBody" (fmap PostBody . (.: "content"))
 
 kizashiApplication :: Status -> IORef [Wire.CreateSignalReq] -> Application
 kizashiApplication status requests request' respond = do

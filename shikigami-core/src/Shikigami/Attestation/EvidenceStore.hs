@@ -16,7 +16,7 @@ module Shikigami.Attestation.EvidenceStore
   )
 where
 
-import Data.Aeson (Value (..))
+import Data.Aeson (Value (..), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Data.Functor.Contravariant ((>$<))
@@ -45,7 +45,7 @@ import Shikigami.Attestation.CallFacts (CallComplianceFacts (..))
 import Shikigami.Attestation.Compliance (ComplianceRollUp (..))
 import Shikigami.Attestation.Evidence
 import Shikigami.Log.Correlation (CallCorrelationId, RunCorrelationId, renderCallCorrelationId, renderRunCorrelationId)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.RunEvidence.Generated.EventStream (runEvidenceCategory, runEvidenceEventStream)
 import Shikigami.RunEvidence.Query
@@ -236,12 +236,12 @@ bindingValue
       idempotencyKey
     } =
     Aeson.object
-      [ "agentVersion" Aeson..= agentVersion,
-        "artifacts" Aeson..= artifacts,
-        "reviewed" Aeson..= reviewed,
-        "profile" Aeson..= profile,
-        "reviewRequestId" Aeson..= reviewRequestId,
-        "idempotencyKey" Aeson..= idempotencyKey
+      [ "agentVersion" .= agentVersion,
+        "artifacts" .= artifacts,
+        "reviewed" .= reviewed,
+        "profile" .= profile,
+        "reviewRequestId" .= reviewRequestId,
+        "idempotencyKey" .= idempotencyKey
       ]
 
 observationsValue :: RunEvidence -> Value
@@ -257,24 +257,24 @@ observationsValue
       peakConcurrency
     } =
     Aeson.object
-      [ "expectedCalls" Aeson..= expectedCalls,
-        "deterministicSteps" Aeson..= deterministicSteps,
-        "expectedChildRunIds" Aeson..= (renderRunCorrelationId <$> expectedChildRunIds),
-        "delegatedChildren" Aeson..= (childValue <$> delegatedChildren),
-        "observedArtifactDigest" Aeson..= observedArtifactDigest,
-        "resultEvidence" Aeson..= resultEvidence,
-        "durationSeconds" Aeson..= durationSeconds,
-        "peakConcurrency" Aeson..= peakConcurrency
+      [ "expectedCalls" .= expectedCalls,
+        "deterministicSteps" .= deterministicSteps,
+        "expectedChildRunIds" .= (renderRunCorrelationId <$> expectedChildRunIds),
+        "delegatedChildren" .= (childValue <$> delegatedChildren),
+        "observedArtifactDigest" .= observedArtifactDigest,
+        "resultEvidence" .= resultEvidence,
+        "durationSeconds" .= durationSeconds,
+        "peakConcurrency" .= peakConcurrency
       ]
 
 childValue :: RelevantChild -> Value
 childValue RelevantChild {childRunId, parentRunWorkflowId, parentSessionId, phase, calls} =
   Aeson.object
-    [ "childRunId" Aeson..= renderRunCorrelationId childRunId,
-      "parentRunWorkflowId" Aeson..= parentRunWorkflowId.unWorkflowId,
-      "parentSessionId" Aeson..= parentSessionId,
-      "phase" Aeson..= phase,
-      "callIds" Aeson..= (renderCallCorrelationId . recordedCallId <$> calls)
+    [ "childRunId" .= renderRunCorrelationId childRunId,
+      "parentRunWorkflowId" .= parentRunWorkflowId.unWorkflowId,
+      "parentSessionId" .= parentSessionId,
+      "phase" .= phase,
+      "callIds" .= (renderCallCorrelationId . recordedCallId <$> calls)
     ]
 
 recordedCallId :: RecordedCallEvidence -> CallCorrelationId

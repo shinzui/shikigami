@@ -11,6 +11,7 @@ module Shikigami.Agent.Loader
 where
 
 import Control.Exception (SomeException, try)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Data.List (isSuffixOf, sort)
@@ -18,7 +19,7 @@ import Data.Text qualified as Text
 import Dhall (auto, inputFile)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Log qualified as Log
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import System.Directory (listDirectory)
 import System.Exit (exitFailure)
 import System.FilePath ((</>))
@@ -80,10 +81,10 @@ loadAgentsLoud logger dir strictMode afterReport = do
   let loadedCount = length [() | AgentLoaded {} <- entries]
       failedCount = length entries - loadedCount
       summary =
-        [ "directory" Aeson..= dir,
-          "loaded" Aeson..= loadedCount,
-          "total" Aeson..= length entries,
-          "failed" Aeson..= failedCount
+        [ "directory" .= dir,
+          "loaded" .= loadedCount,
+          "total" .= length entries,
+          "failed" .= failedCount
         ]
   if failedCount > 0
     then Log.logError logger "agents.manifest.loaded" summary
@@ -97,7 +98,7 @@ loadAgentsLoud logger dir strictMode afterReport = do
     Log.logError
       logger
       "agents.manifest.strict_refused"
-      ["directory" Aeson..= dir, "failed" Aeson..= failedCount]
+      ["directory" .= dir, "failed" .= failedCount]
     exitFailure
   pure report
   where
@@ -107,7 +108,7 @@ loadAgentsLoud logger dir strictMode afterReport = do
         Log.logError
           logger
           "agents.manifest.load_failed"
-          ["path" Aeson..= path, "error" Aeson..= message]
+          ["path" .= path, "error" .= message]
 
 loadedAgents :: AgentLoadReport -> [AgentDecl]
 loadedAgents AgentLoadReport {entries} =
@@ -128,5 +129,5 @@ enabledAgentsFromReport logger AgentLoadReport {entries} = do
         Log.logInfo
           logger
           "agents.manifest.disabled"
-          ["agent" Aeson..= name, "path" Aeson..= path]
+          ["agent" .= name, "path" .= path]
       _ -> pure ()

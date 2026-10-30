@@ -4,6 +4,7 @@ module Shikigami.Workers.Subscription
   )
 where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Kiroku.Store.Connection (KirokuStore (..))
 import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
@@ -67,7 +68,7 @@ runConsumeStream config = do
       Log.logInfo
         logger
         "stream.consumer.started"
-        ["count" Aeson..= length agents, "topic" Aeson..= topic, "broker" Aeson..= broker]
+        ["count" .= length agents, "topic" .= topic, "broker" .= broker]
       queueResult <- ensureRunQueue storePool
       case queueResult of
         Left err -> fail ("run-job queue reconciliation failed: " <> show err)
@@ -86,7 +87,7 @@ runConsumeStream config = do
                 inspection = consumerInspection (loopStaleAfter ConsumerLoop) config.inspection logger settings st storeMetrics
               }
           onHit StreamHit {agentName} = do
-            let matched = ["agent" Aeson..= agentName, "topic" Aeson..= topic]
+            let matched = ["agent" .= agentName, "topic" .= topic]
             Log.logInfo logger "stream.record.matched" matched
       registry <-
         newHeartbeatsWithStaleness
@@ -132,7 +133,7 @@ runConsumeEvents config = do
       Log.logInfo
         logger
         "events.consumer.started"
-        ["count" Aeson..= length agents, "topic" Aeson..= topic, "broker" Aeson..= broker]
+        ["count" .= length agents, "topic" .= topic, "broker" .= broker]
       queueResult <- ensureRunQueue storePool
       case queueResult of
         Left err -> fail ("run-job queue reconciliation failed: " <> show err)
@@ -152,12 +153,12 @@ runConsumeEvents config = do
               }
           onHit EventHit {agentName, eventType, integrationMessageId} = do
             let matched =
-                  [ "agent" Aeson..= agentName,
-                    "event_type" Aeson..= eventType,
-                    "topic" Aeson..= topic
+                  [ "agent" .= agentName,
+                    "event_type" .= eventType,
+                    "topic" .= topic
                   ]
             Log.logInfo logger "events.record.matched" matched
-            Log.logDebug logger "events.job.enqueued" (matched <> [Log.runIdKey Aeson..= (agentName <> ":" <> integrationMessageId)])
+            Log.logDebug logger "events.job.enqueued" (matched <> [Log.runIdKey .= (agentName <> ":" <> integrationMessageId)])
       registry <-
         newHeartbeatsWithStaleness
           ((ConsumerLoop, loopStaleAfter ConsumerLoop) : directoryLoopRegistration ((.directorySettings) config))

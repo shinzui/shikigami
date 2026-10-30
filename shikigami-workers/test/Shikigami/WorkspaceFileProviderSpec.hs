@@ -3,6 +3,7 @@ module Shikigami.WorkspaceFileProviderSpec (tests, withEffectAdapter, withEffect
 import Baikai.Options (emptyOptions)
 import Baikai.StopReason (StopReason (ToolUse))
 import Control.Exception (throwIO)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as AesonKeyMap
 import Data.Generics.Labels ()
@@ -36,8 +37,10 @@ import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Runner (DispatchContext (..))
 import Shikigami.Execution.Selection
+import Shikigami.Execution.SelectionStore qualified as Calls
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Tools qualified as Tools
 import Shikigami.Execution.Transcript
@@ -45,8 +48,6 @@ import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
-import Shikigami.Store.ExecutionResources qualified as Roots
-import Shikigami.Store.ExecutionSelection qualified as Calls
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.ContainedFile (withWorkspaceLock)
@@ -380,7 +381,7 @@ withEffectAdapterPolicyInput processPolicy toolCount qualify install wire logica
       runtime = FileRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ _ _ -> pure (Right ()))
       assignment = "file-execution"
   (binding, _) <- right =<< run env (runTransaction (Store.reserveWorkspaceTx root request repository))
-  let input = maybe (if logical == "read" then Aeson.object ["path" Aeson..= ("src/dependency.txt" :: Text.Text)] else Aeson.toJSON (Replacement "src/dependency.txt" (Just (contentDigest "old dependency\n")) "PRIVATE_REPLACEMENT\n")) id (supplied binding)
+  let input = maybe (if logical == "read" then Aeson.object ["path" .= ("src/dependency.txt" :: Text.Text)] else Aeson.toJSON (Replacement "src/dependency.txt" (Just (contentDigest "old dependency\n")) "PRIVATE_REPLACEMENT\n")) id (supplied binding)
   allocateWorkspace root binding Reserved >>= (@?= Right ())
   run env (runTransaction (Store.markWorkspaceReadyTx binding)) >>= (@?= Right ())
   admission <- qualify <$> (right =<< loadWorkspaceAdmission binding assignment 65536)

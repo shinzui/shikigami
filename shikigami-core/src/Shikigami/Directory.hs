@@ -39,7 +39,7 @@ where
 import Control.Concurrent (threadDelay)
 import Control.Lens ((&), (.~))
 import Control.Monad (forever)
-import Data.Aeson (FromJSON (..), withObject, withText, (.:))
+import Data.Aeson (FromJSON (..), withObject, withText, (.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as BS
 import Data.Generics.Labels ()
@@ -416,11 +416,11 @@ refreshLoop logger heartbeat directoryHandle filePath interval = forever do
       Log.logWarn
         logger
         "directory.refresh_failed"
-        [ "path" Aeson..= filePath,
-          "reason" Aeson..= problem
+        [ "path" .= filePath,
+          "reason" .= problem
         ]
     Right () ->
-      Log.logDebug logger "directory.refreshed" ["path" Aeson..= filePath]
+      Log.logDebug logger "directory.refreshed" ["path" .= filePath]
   heartbeat
 
 durationMicroseconds :: NominalDiffTime -> Int

@@ -286,7 +286,7 @@ sampleAgentVersionRef :: AgentVersionRef
 sampleAgentVersionRef =
   AgentVersionRef
     { logicalAgentId = LogicalAgentId "architecture-reviewer",
-      agentVersion = AgentVersion "2026-08-05.1",
+      version = AgentVersion "2026-08-05.1",
       declarationDigest = DeclarationDigest "sha256:11111111111111111111111111111111"
     }
 

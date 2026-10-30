@@ -7,6 +7,7 @@ import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Data.HashMap.Strict qualified as HashMap
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -89,7 +90,7 @@ semanticAndAuthorizationMatrix :: DatabaseFixture -> IO ()
 semanticAndAuthorizationMatrix databaseFixture =
   withTestTracer \tracer spansRef ->
     (withDatabaseTracer databaseFixture) tracer \appEnv behaviorEnv -> do
-      let singleOutcome = Matched (selection "first" RoutingHigh "single" NonEmpty.:| [])
+      let singleOutcome = Matched (selection "first" RoutingHigh "single" :| [])
       singleProbe <- newProbe catalog (Aeson.toJSON (RouteDecision 1 testCatalogVersion singleOutcome))
       single <- runDirect appEnv behaviorEnv "router-direct-single" singleProbe
       assertDirectOutcome "one authorized specialist is a valid matched route" singleOutcome single
@@ -98,24 +99,24 @@ semanticAndAuthorizationMatrix databaseFixture =
       noMatch <- runDirect appEnv behaviorEnv "router-direct-no-match" noMatchProbe
       assertDirectOutcome "no-match is a successful semantic outcome" (NoMatch "no specialist") noMatch
 
-      ambiguousProbe <- newProbe catalog (Aeson.toJSON (RouteDecision 1 testCatalogVersion (Ambiguous (selection "first" RoutingHigh "possible" NonEmpty.:| []) "unclear")))
+      ambiguousProbe <- newProbe catalog (Aeson.toJSON (RouteDecision 1 testCatalogVersion (Ambiguous (selection "first" RoutingHigh "possible" :| []) "unclear")))
       ambiguous <- runDirect appEnv behaviorEnv "router-direct-ambiguous" ambiguousProbe
       assertDirectOutcome
         "ambiguous is a successful advisory outcome"
-        (Ambiguous (selection "first" RoutingHigh "possible" NonEmpty.:| []) "unclear")
+        (Ambiguous (selection "first" RoutingHigh "possible" :| []) "unclear")
         ambiguous
 
       let invalidCases =
             [ ( "undeclared",
-                RouteDecision 1 testCatalogVersion (Matched (selection "ghost" RoutingHigh "invented" NonEmpty.:| [])),
+                RouteDecision 1 testCatalogVersion (Matched (selection "ghost" RoutingHigh "invented" :| [])),
                 UndeclaredSelection "ghost"
               ),
               ( "paused",
-                RouteDecision 1 testCatalogVersion (Matched (selection "paused" RoutingHigh "paused" NonEmpty.:| [])),
+                RouteDecision 1 testCatalogVersion (Matched (selection "paused" RoutingHigh "paused" :| [])),
                 UnavailableSelection "paused" Paused
               ),
               ( "low-confidence",
-                RouteDecision 1 testCatalogVersion (Matched (selection "first" RoutingLow "weak" NonEmpty.:| [])),
+                RouteDecision 1 testCatalogVersion (Matched (selection "first" RoutingLow "weak" :| [])),
                 ConfidenceBelowMinimum "first" RoutingLow RoutingMedium
               ),
               ( "fanout",
@@ -124,9 +125,9 @@ semanticAndAuthorizationMatrix databaseFixture =
                   testCatalogVersion
                   ( Matched
                       ( selection "first" RoutingHigh "first"
-                          NonEmpty.:| [ selection "second" RoutingHigh "second",
-                                        selection "third" RoutingHigh "third"
-                                      ]
+                          :| [ selection "second" RoutingHigh "second",
+                               selection "third" RoutingHigh "third"
+                             ]
                       )
                   ),
                 TooManySelections 3 2
@@ -149,7 +150,7 @@ matchedReplayProof databaseFixture =
               testCatalogVersion
               ( Matched
                   ( selection "first" RoutingHigh longRationale
-                      NonEmpty.:| [selection "second" RoutingMedium "second rationale"]
+                      :| [selection "second" RoutingMedium "second rationale"]
                   )
               )
           job = routerJob "router:matched-replay"
@@ -218,7 +219,7 @@ nonExecutableOutcomesSpawnNothing databaseFixture = do
   (withDatabaseTracer databaseFixture) tracer \appEnv behaviorEnv -> do
     let cases =
           [ ("no-match", RouteDecision 1 testCatalogVersion (NoMatch "none")),
-            ("ambiguous", RouteDecision 1 testCatalogVersion (Ambiguous (selection "first" RoutingHigh "maybe" NonEmpty.:| []) "unclear"))
+            ("ambiguous", RouteDecision 1 testCatalogVersion (Ambiguous (selection "first" RoutingHigh "maybe" :| []) "unclear"))
           ]
     traverse_ (runCase appEnv behaviorEnv) cases
   where

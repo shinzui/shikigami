@@ -320,7 +320,11 @@ in  Schema.Project::{
         , path = Some "shikigami-client"
         , description = Some "Typed client for the Shikigami HTTP API"
         , dependencies =
-          [ Schema.Dependency.WithAugmentation
+          [ Schema.Dependency.ByName "shinzui/settei:settei"
+          , Schema.Dependency.ByName "shinzui/settei:settei-env"
+          , Schema.Dependency.ByName "shinzui/settei:settei-optparse-applicative"
+          , Schema.Dependency.ByName "shinzui/settei:settei-yaml"
+          , Schema.Dependency.WithAugmentation
               { name = "snoyberg/http-client:http-client"
               , extraDocs = [] : List Schema.DocRef.Type
               , localPathOverride = None Text

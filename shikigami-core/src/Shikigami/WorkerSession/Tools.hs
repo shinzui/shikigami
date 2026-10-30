@@ -3,6 +3,7 @@
 -- supply an actor, root, scope grant or durable operation key.
 module Shikigami.WorkerSession.Tools (coordinationTools, appendNativeFactory, coordinatorRunFor) where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Text qualified as Text
@@ -18,7 +19,7 @@ import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Tools (NativeToolFactory (..))
 import Shikigami.Execution.Transcript (ExecutionError (..), ExecutionSnapshot (..), ToolBinding (..))
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.WorkerSession.Capability
 import Shikigami.WorkerSession.Handoff (TransferServices (..))
 import Shikigami.WorkerSession.Workflow (SessionRuntime (..))
@@ -94,24 +95,24 @@ appendNativeFactory base extra =
 schema :: Aeson.Value
 schema =
   Aeson.object
-    [ "type" Aeson..= ("object" :: Text),
-      "additionalProperties" Aeson..= False,
+    [ "type" .= ("object" :: Text),
+      "additionalProperties" .= False,
       "properties"
-        Aeson..= Aeson.object
-          [ "tag" Aeson..= Aeson.object ["type" Aeson..= ("string" :: Text), "enum" Aeson..= (["FindWorker", "SendWorker", "InspectWorker", "ReadWorkerEvents", "ReadWorkerResult", "InterruptWorker", "CancelWorker", "TransferWorker", "ReconcileWorker", "IntegrateWorkerEvents"] :: [Text])],
-            "workerKey" Aeson..= string,
-            "sessionId" Aeson..= string,
-            "expectedRevision" Aeson..= integer,
-            "epoch" Aeson..= integer,
-            "instruction" Aeson..= Aeson.object ["type" Aeson..= ("object" :: Text), "description" Aeson..= ("text, objectiveRevision, assignmentRevision, criteriaRevision, selection (null or declared alias requirements). Actor, operation, kind and root are supplied by the runtime." :: Text)],
-            "assignmentId" Aeson..= string,
-            "after" Aeson..= integer,
-            "limit" Aeson..= integer,
-            "workspace" Aeson..= Aeson.object ["type" Aeson..= ("object" :: Text), "description" Aeson..= ("operator-owned provider and resource identities" :: Text)],
-            "target" Aeson..= string
+        .= Aeson.object
+          [ "tag" .= Aeson.object ["type" .= ("string" :: Text), "enum" .= (["FindWorker", "SendWorker", "InspectWorker", "ReadWorkerEvents", "ReadWorkerResult", "InterruptWorker", "CancelWorker", "TransferWorker", "ReconcileWorker", "IntegrateWorkerEvents"] :: [Text])],
+            "workerKey" .= string,
+            "sessionId" .= string,
+            "expectedRevision" .= integer,
+            "epoch" .= integer,
+            "instruction" .= Aeson.object ["type" .= ("object" :: Text), "description" .= ("text, objectiveRevision, assignmentRevision, criteriaRevision, selection (null or declared alias requirements). Actor, operation, kind and root are supplied by the runtime." :: Text)],
+            "assignmentId" .= string,
+            "after" .= integer,
+            "limit" .= integer,
+            "workspace" .= Aeson.object ["type" .= ("object" :: Text), "description" .= ("operator-owned provider and resource identities" :: Text)],
+            "target" .= string
           ],
-      "required" Aeson..= (["tag"] :: [Text])
+      "required" .= (["tag"] :: [Text])
     ]
   where
-    string = Aeson.object ["type" Aeson..= ("string" :: Text)]
-    integer = Aeson.object ["type" Aeson..= ("integer" :: Text)]
+    string = Aeson.object ["type" .= ("string" :: Text)]
+    integer = Aeson.object ["type" .= ("integer" :: Text)]

@@ -77,11 +77,11 @@ data WorkspaceProvider = WorkspaceProvider
   { -- Must fence former writes before returning settled, including processes
     -- already executing. Expiry alone returns unresolved. The operation is
     -- deduplicated; retries reconcile rather than allocating a new workspace.
-    reconcile :: TransferIntent -> IO FenceOutcome,
+    reconcile :: !(TransferIntent -> IO FenceOutcome),
     -- Every real write requires both fresh current-session authority and a
     -- conditional provider epoch check at the effect boundary. A text epoch
     -- supplied by a model is not an authorization grant.
-    admitWrite :: WorkspaceRef -> WorkerSessionId -> AgentIdentity -> Integer -> OperationId -> IO (Either Text ())
+    admitWrite :: !(WorkspaceRef -> WorkerSessionId -> AgentIdentity -> Integer -> OperationId -> IO (Either Text ()))
   }
 
 newtype OwnershipProvider = OwnershipProvider
