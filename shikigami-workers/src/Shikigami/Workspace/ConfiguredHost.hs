@@ -1,7 +1,8 @@
 -- | Production composition of reviewed repository policy, exact agent grants,
--- current principal/profile authority and the file-only native adapter.
+-- current principal/profile authority and exact retained workspace adapters.
 module Shikigami.Workspace.ConfiguredHost (configuredWorkspaceHost) where
 
+import Data.Map.Strict qualified as Map
 import Data.Time (getCurrentTime)
 import Hasql.Pool (Pool)
 import Kioku.App (AppEnv)
@@ -17,9 +18,13 @@ import Shikigami.Prelude
 import Shikigami.Workspace.Admission (WorkspaceHost)
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.FileProvider
+import Shikigami.Workspace.GitProvider (workspaceGitAdapter)
 import Shikigami.Workspace.Host
 import Shikigami.Workspace.Instructions
+import Shikigami.Workspace.ProcessProvider
+import Shikigami.Workspace.Provision
 import Shikigami.Workspace.Settings
+import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Types
 
 configuredWorkspaceHost :: AppEnv -> Pool -> DirectoryHandle -> ActionAuthorizer -> WorkspaceSettings -> Either Text WorkspaceHost
@@ -39,11 +44,28 @@ configuredWorkspaceHost appEnv pool directory authorizer settings = do
           Just admission | bundleRepository admission.instructions == repositoryIdentity selected && bundleBase admission.instructions == repositoryBase selected -> authority snapshot.identity snapshot.sanctionedProfile
           _ -> pure refused
       runtime = FileRuntime appEnv authorizer activeSnapshot (identityLifecycleAdmission directory . (.identity)) targetPolicy
-  fileWorkspaceHost runtime settings.storageRoot (\assignment -> pure (resolve assignment.agent assignment.identity)) (\assignment -> case resolve assignment.agent assignment.identity of Left err -> pure (Left err); Right _ -> authority assignment.identity assignment.sanctionedProfile)
+      select assignment = do
+        supported <- case settings.process of
+          Nothing -> pure (Right ())
+          Just _ -> fmap (either (const refused) (const (Right ()))) Systemd.systemdBootIdentity
+        pure (supported >> resolve assignment.agent assignment.identity)
+      current assignment = case resolve assignment.agent assignment.identity of Left err -> pure (Left err); Right _ -> authority assignment.identity assignment.sanctionedProfile
+  case settings.process of
+    Nothing -> fileWorkspaceHost runtime settings.storageRoot select current
+    Just process -> do
+      let client = ProcessClient process.socketPath process.serverUser process.requestSeconds process.waitSeconds
+          prepare assignment binding admission = case Map.lookup binding.repository process.policies of
+            Nothing -> pure refused
+            Just policy -> do
+              let provision = ProvisionRuntime appEnv authorizer (current assignment) nativeProvisionBackend
+                  supervised = admission & #filePolicy .~ Just supervisedFilePolicy
+              result <- provisionWorkspaceProfile provision binding supervised policy process.identities
+              pure (either (const refused) (const (Right supervised)) result)
+      governedWorkspaceHost runtime [supervisedWorkspaceEditAdapter runtime, workspaceExecAdapter client, workspaceGitAdapter runtime] [workspaceEditAdapter runtime] prepare settings.storageRoot select current
   where
     refused = Left "workspace operator policy refused"
     targetPolicy binding admission _scoped kind path = pure do
-      entry <- case filter (\entry -> entry.identity == binding.repository && workspacePolicyIdentity entry == binding.policyRevision && entry.source == binding.source) settings.repositories of
+      entry <- case filter (\entry -> entry.identity == binding.repository && configuredPolicyIdentity settings entry == binding.policyRevision && entry.source == binding.source) settings.repositories of
         [entry] -> Right entry
         _ -> refused
       revision <- case filter (\revision -> revision.base == binding.base) entry.revisions of

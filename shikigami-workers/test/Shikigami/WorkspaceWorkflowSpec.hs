@@ -61,9 +61,11 @@ import Shikigami.Workspace.Catalog (repositoryBase)
 import Shikigami.Workspace.ConfiguredHost
 import Shikigami.Workspace.FileProvider
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), bundleDigest, mkInstructionBundle)
+import Shikigami.Workspace.ProcessPolicy
 import Shikigami.Workspace.Provider
 import Shikigami.Workspace.Settings
 import Shikigami.Workspace.Store qualified as Store
+import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Types
 import Shikigami.WorkspaceStoreSpec qualified as Fixture
 import System.Directory (doesPathExist, makeAbsolute)
@@ -128,8 +130,22 @@ tests fixture =
           Agent.runAgentRunWorkflow deps job >>= assertRefused
           doesPathExist root >>= (@?= False)
           readIORef observed >>= (@?= []),
+      testCase "configured process host description performs no provisioning and unsupported admission never allocates" $
+        withWorkflowConfig supervised fixture \_ root job host deps observed -> do
+          doesPathExist root >>= (@?= False)
+          readIORef observed >>= (@?= [])
+          -- Constructing the operator host exposes descriptions only. On an
+          -- unsupported host its actual admission refuses before source IO.
+          supported <- Systemd.systemdBootIdentity
+          case supported of
+            Left _ -> do
+              Agent.runAgentRunWorkflow deps job >>= assertRefused
+              doesPathExist root >>= (@?= False)
+              readIORef observed >>= (@?= [])
+            Right _ -> pure ()
+          host `seq` pure (),
       testCase "a configured write restriction refuses the accepted target without a file effect" $
-        withWorkflowConfig (\settings -> settings & #repositories .~ [entry {writePaths = ["other"]} | entry <- settings.repositories]) fixture \env root job _ deps observed -> do
+        withWorkflowConfig (\settings -> settings & #repositories .~ [entry & #writePaths .~ ["other"] | entry <- settings.repositories]) fixture \env root job _ deps observed -> do
           Agent.runAgentRunWorkflow deps job >>= assertSuspended
           let execution = executionIdFor (assignmentIdFor (runJobWorkflowId job).unWorkflowId)
           _ <- right =<< driveExecutionForeground (Agent.executionRuntime deps) (ExecutionStart execution) 30
@@ -140,6 +156,9 @@ tests fixture =
           readFile (workspaceFiles root binding </> "dependency.txt") >>= (@?= "old dependency\n")
           length <$> readIORef observed >>= (@?= 2)
     ]
+  where
+    supervised settings = settings & #process .~ Just (WorkspaceProcessSettings "/run/shikigami/supervisor.sock" 0 5 60 (IdentityRange 64000 64031) (Map.fromList [(entry.identity, ProcessPolicy 1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") digest [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] entry.readPaths entry.writePaths) | entry <- settings.repositories]))
+    digest = "sha256:" <> Text.replicate 64 "a"
 
 withWorkflow :: DatabaseFixture -> (AppEnv -> FilePath -> RunJob -> WorkspaceHost -> Agent.AgentRunDeps -> IORef [Context.Context] -> IO a) -> IO a
 withWorkflow = withWorkflowConfig id
@@ -165,7 +184,7 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
   providers <- Provider.newProviderRegistryFrom [provider]
   expected <- right (mkInstructionBundle 65536 "mori://fixture/repo" (repositoryBase repository) [("AGENTS.md", "PRIVATE_WORKFLOW_POLICY: validate changes")])
   principal <- right (identityText (CompatibilityIdentity "workspace-worker"))
-  let settings = WorkspaceSettings root [WorkspaceRepository "mori://fixture/repo" source [WorkspaceRevision (repositoryBase repository) (bundleDigest expected)] (repositoryBase repository) "policy-1" [""] ["dependency.txt"]] [WorkspaceGrant "workspace-worker" principal "mori://fixture/repo" Nothing]
+  let settings = WorkspaceSettings root [WorkspaceRepository "mori://fixture/repo" source [WorkspaceRevision (repositoryBase repository) (bundleDigest expected)] (repositoryBase repository) "policy-1" [""] ["dependency.txt"]] [WorkspaceGrant "workspace-worker" principal "mori://fixture/repo" Nothing] Nothing
   host <- right (configuredWorkspaceHost env store.pool disabledDirectoryHandle authorizer (configure settings))
   let declaration = original & #name .~ "workspace-worker" & #behavior .~ Skill (Text.pack skill) & #identity .~ Just (IdentityDecl "workspace-principal") & #capabilityOverlays .~ [workspaceEditDescriptor.capability] & #sinks .~ []
       identity = CompatibilityIdentity "workspace-worker"

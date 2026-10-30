@@ -36,6 +36,11 @@ provenance:
       at: 2026-10-30T04:34:39Z
       mode: "implement"
       note: "Continue interrupted accepted Git adapter and independent receipt publication; qualify native local commit recovery"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-30T13:02:18Z
+      mode: "implement"
+      note: "Install reviewed process-backed worker host and qualify durable upgrade integration"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -130,7 +135,9 @@ The accepted Git adapter and independent publication owner are implemented (2026
 
 Milestone 3 verified (2026-10-30): `bash tests/workspace/run-apple.sh --git` passes all thirteen named provisioning/process/Git cases (`/tmp/shikigami-96-git-apple.log`, private evidence `/tmp/shikigami-workspace-run.WnJ0QB/evidence`). The accepted native edit and successful validation produce exactly one local commit despite duplicate delivery, preserving an unchanged binary blob above the ordinary file-read bound. After the committing worker is killed following HEAD publication, the restarted independent daemon settles the original actual while ownership is frozen and new authority is denied. Denial after tree capture retains a refused candidate without changing HEAD. All ten previous provisioning/process cases pass in the same run. The task container and generated credentials were removed successfully. `docs/operations/workspaces.md` records current installation boundaries, qualification commands, bounds and recovery contracts.
 
-Next install the process-backed worker host and complete the normal durable-worker upgrade path. The accepted-executor fixture qualifies the adapters, but does not install them in the configured worker host or prove a complete parent/child workflow terminal result with structured commit/validation evidence. That distinction keeps Milestone 4 open. The collector, guarded launch transport, accepted admission/reconciliation, original-attempt receipt-publication functions, peer-checked transport, factual scheduling, immutable rule/profile metadata and native ownership primitives are implemented. File revision 1 remains file-only. File operations require all repository processes settled; a queue lease or unlocked file alone supplies no process fence. Process, handoff and terminal cleanup capabilities remain unavailable in configured workers.
+The process-backed configured worker host is implemented (2026-10-30), with an optional strict process configuration covering every approved repository, a private peer-checked supervisor endpoint and a bounded reserved Unix identity pool. The complete command/image/property/path policy forms the workspace revision. Admission checks native support before source allocation, reviews frozen instructions, then provisions the retained identity before model dispatch. The catalog selects file revision 2, process revision 1 and Git revision 1; historical file revision 1 remains registered for retained snapshots. Configuration and unsupported-host tests pass. The separate Linux fixture now compiles a normal agent parent and execution child with this configured host and a deterministic model that returns bounded structured commit/validation evidence. Native execution of that new fixture is still pending; Milestone 4 remains open.
+
+Next qualify the normal durable-worker upgrade path. The accepted-executor fixture qualifies the adapters, but does not install them in the configured worker host or prove a complete parent/child workflow terminal result with structured commit/validation evidence. That distinction keeps Milestone 4 open. The collector, guarded launch transport, accepted admission/reconciliation, original-attempt receipt-publication functions, peer-checked transport, factual scheduling, immutable rule/profile metadata and native ownership primitives are implemented. File revision 1 remains file-only. File operations require all repository processes settled; a queue lease or unlocked file alone supplies no process fence. Process, handoff and terminal cleanup capabilities remain unavailable in configured workers.
 
 ## Surprises & Discoveries
 

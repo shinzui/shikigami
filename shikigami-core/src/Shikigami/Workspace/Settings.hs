@@ -5,17 +5,34 @@ module Shikigami.Workspace.Settings where
 import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as Bytes
 import Data.List (nub, sort)
+import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Prelude
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.Instructions (validWorkspacePath)
+import Shikigami.Workspace.ProcessPolicy (IdentityRange, ProcessPolicy (..), processPolicyIdentity, validIdentityRange, validProcessPolicy)
 import System.FilePath (isAbsolute, normalise, splitDirectories)
 
 data WorkspaceSettings = WorkspaceSettings
-  {storageRoot :: !FilePath, repositories :: ![WorkspaceRepository], grants :: ![WorkspaceGrant]}
+  {storageRoot :: !FilePath, repositories :: ![WorkspaceRepository], grants :: ![WorkspaceGrant], process :: !(Maybe WorkspaceProcessSettings)}
   deriving stock (Eq, Generic)
+
+-- Every repository in a process host has an explicit retained policy. There is
+-- no implicit shell, default command or unsupervised execution fallback.
+data WorkspaceProcessSettings = WorkspaceProcessSettings
+  { socketPath :: !FilePath,
+    serverUser :: !Integer,
+    requestSeconds :: !Int,
+    waitSeconds :: !Int,
+    identities :: !IdentityRange,
+    policies :: !(Map Text ProcessPolicy)
+  }
+  deriving stock (Eq, Generic)
+
+instance FromJSON WorkspaceProcessSettings where parseJSON = Aeson.genericParseJSON strictOptions
 
 data WorkspaceRepository = WorkspaceRepository
   { identity :: !Text,
@@ -53,7 +70,13 @@ validateWorkspaceSettings settings = do
   unless (settings.storageRoot /= "/" && isAbsolute settings.storageRoot && normalise settings.storageRoot == settings.storageRoot && ".." `notElem` splitDirectories settings.storageRoot && length settings.storageRoot <= 4096 && '\0' `notElem` settings.storageRoot) refused
   unless (not (null settings.repositories) && length settings.repositories <= 64 && not (null settings.grants) && length settings.grants <= 256) refused
   mapM_ validateRepository settings.repositories
-  catalog <- either (const (Left "invalid workspace repository catalog")) Right (mkWorkspaceCatalog [RepositoryPolicy entry.identity entry.source (map (.base) entry.revisions) entry.defaultRevision (workspacePolicyIdentity entry) | entry <- settings.repositories])
+  forM_ settings.process \process -> do
+    unless (validSocketPath process.socketPath && process.serverUser >= 0 && process.serverUser <= 4294967295 && process.requestSeconds >= 1 && process.requestSeconds <= 120 && process.waitSeconds >= 1 && process.waitSeconds <= 3600 && validIdentityRange process.identities) refused
+    unless (Map.keysSet process.policies == Map.keysSet (Map.fromList [(entry.identity, ()) | entry <- settings.repositories])) refused
+    forM_ settings.repositories \entry -> case Map.lookup entry.identity process.policies of
+      Just policy | validProcessPolicy policy && sort policy.readPaths == sort entry.readPaths && sort policy.writePaths == sort entry.writePaths -> pure ()
+      _ -> refused
+  catalog <- either (const (Left "invalid workspace repository catalog")) Right (mkWorkspaceCatalog [RepositoryPolicy entry.identity entry.source (map (.base) entry.revisions) entry.defaultRevision (configuredPolicyIdentity settings entry) | entry <- settings.repositories])
   unless (length (nub (map (.agent) settings.grants)) == length settings.grants) refused
   forM_ settings.grants \grant -> do
     unless (bounded grant.agent && bounded grant.principal) refused
@@ -80,6 +103,12 @@ pathAdmitted prefixes target = any (\prefix -> Text.null prefix || target == pre
 workspacePolicyIdentity :: WorkspaceRepository -> Text
 workspacePolicyIdentity entry = "policy1-" <> Text.drop 7 (versionedDigest "shikigami.workspace-operator-policy/1" (Aeson.object ["revision" Aeson..= entry.policyRevision, "readPaths" Aeson..= sort entry.readPaths, "writePaths" Aeson..= sort entry.writePaths]))
 
+configuredPolicyIdentity :: WorkspaceSettings -> WorkspaceRepository -> Text
+configuredPolicyIdentity settings entry = maybe (workspacePolicyIdentity entry) processPolicyIdentity (settings.process >>= Map.lookup entry.identity . (.policies))
+
+validSocketPath :: FilePath -> Bool
+validSocketPath path = isAbsolute path && path /= "/" && normalise path == path && '\0' `notElem` path && ".." `notElem` splitDirectories path && Bytes.length (Encoding.encodeUtf8 (Text.pack path)) <= 100
+
 -- The daemon selects commands from retained profiles. This configuration only
 -- identifies its manager-owned socket and bounds authenticated RPC intake.
 data WorkspaceSupervisorSettings = WorkspaceSupervisorSettings
@@ -89,5 +118,5 @@ data WorkspaceSupervisorSettings = WorkspaceSupervisorSettings
 instance FromJSON WorkspaceSupervisorSettings where
   parseJSON value = do
     settings <- Aeson.genericParseJSON strictOptions value
-    unless (isAbsolute settings.socketPath && settings.socketPath /= "/" && normalise settings.socketPath == settings.socketPath && '\0' `notElem` settings.socketPath && ".." `notElem` splitDirectories settings.socketPath && Bytes.length (Encoding.encodeUtf8 (Text.pack settings.socketPath)) <= 100 && not (null settings.users) && length settings.users <= 32 && length (nub settings.users) == length settings.users && all (\uid -> uid >= 0 && uid <= 4294967295) settings.users && settings.workers >= 1 && settings.workers <= 16 && settings.timeoutSeconds >= 1 && settings.timeoutSeconds <= 120) (fail "invalid workspace supervisor configuration")
+    unless (validSocketPath settings.socketPath && not (null settings.users) && length settings.users <= 32 && length (nub settings.users) == length settings.users && all (\uid -> uid >= 0 && uid <= 4294967295) settings.users && settings.workers >= 1 && settings.workers <= 16 && settings.timeoutSeconds >= 1 && settings.timeoutSeconds <= 120) (fail "invalid workspace supervisor configuration")
     pure settings

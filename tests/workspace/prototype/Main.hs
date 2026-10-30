@@ -17,6 +17,7 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
 import Data.Time (addUTCTime, getCurrentTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime, utcTimeToPOSIXSeconds)
+import Durable (workflowCase)
 import Effectful (Eff)
 import En.Biscuit.Grant qualified as Grant
 import En.Biscuit.Keys (parseSigningKeyText, renderIssuerKeySetText, singleKey)
@@ -113,6 +114,7 @@ main = catch dispatch \(failure :: SomeException) -> do
               checkPrefix prefix
               authority <- authorityApplication prefix
               runSettings (setHost "127.0.0.1" (setPort number defaultSettings)) authority
+        ["workflow", config, prefix, stage] -> checkPrefix prefix >> workflowCase config prefix stage
         ["native-provision", config, spec] -> nativeProvision config spec
         ["prepare", config, prefix, name, mode] -> prepareCase config prefix name (Text.pack mode)
         ["prepare-upgrade", config, prefix, name] -> prepareCase config prefix name "upgrade"

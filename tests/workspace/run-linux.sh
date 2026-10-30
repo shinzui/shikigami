@@ -4,7 +4,7 @@
 set -eEuo pipefail
 mode=${1:-}
 runtime=${2:-}
-[[ $# == 2 && ( "$mode" == --prototype || "$mode" == --provision || "$mode" == --git ) && "$runtime" == /nix/store/* ]] || { echo 'Usage: run-linux.sh --prototype|--provision|--git RUNTIME'; exit 64; }
+[[ $# == 2 && ( "$mode" == --prototype || "$mode" == --provision || "$mode" == --git || "$mode" == --workflow ) && "$runtime" == /nix/store/* ]] || { echo 'Usage: run-linux.sh --prototype|--provision|--git|--workflow RUNTIME'; exit 64; }
 [[ $(uname -s) == Linux && $(id -u) == 0 && -f /run/shikigami-workspace-prototype.disposable ]] || { echo 'REFUSED: a marked disposable Linux guest running as root is required'; exit 78; }
 [[ $(ps -p 1 -o comm=) == systemd && $(stat -fc %T /sys/fs/cgroup) == cgroup2fs ]]
 sudo -n true
@@ -23,7 +23,7 @@ config="$prefix/config.json"
 pg_bindir=$(/usr/bin/pg_config --bindir)
 pg_started=false
 cases=(duplicate worker-restart supervisor-restart cancellation completion-recovery denials capture-loss authority-denial)
-if [[ "$mode" == --git ]]; then cases+=(git-upgrade git-recovery git-denial); fi
+if [[ "$mode" == --git || "$mode" == --workflow ]]; then cases+=(git-upgrade git-recovery git-denial); fi
 cleanup() {
   status=$?
   trap - EXIT ERR
@@ -304,7 +304,7 @@ wait_settled authority-denial
 verify authority-denial refused
 rm "$prefix/deny-authority"
 echo 'PASS denied fresh exact authority records a proven refusal without a repository launch'
-if [[ "$mode" != --git ]]; then
+if [[ "$mode" != --git && "$mode" != --workflow ]]; then
   echo 'Workspace Linux prototype passed (10 cases); local Git, handoff and full IR-11 qualification remain open.'
   exit 0
 fi
@@ -336,3 +336,16 @@ verify_git git-denial refused
 rm "$prefix/deny-authority"
 echo 'PASS fresh publication denial after tree capture refuses the retained candidate without changing HEAD'
 echo 'Workspace Linux process and local Git prototype passed (13 cases); production workflow, handoff and full IR-11 qualification remain open.'
+
+if [[ "$mode" == --workflow ]]; then
+  rm -f "$prefix/deny-authority"
+  "$prototype" workflow "$config" "$prefix" admit >"$prefix/workflow-admit.log" 2>&1
+  "$prototype" workflow "$config" "$prefix" edit >"$prefix/workflow-edit.log" 2>&1
+  if [[ -f /run/shikigami-workspace-prototype.clock-steps ]]; then
+    /usr/bin/timeout 40 "$prefix/root/bin/probe" --await-clock-step >>"$prefix/clock-barrier.log"
+  fi
+  "$prototype" workflow "$config" "$prefix" run >"$prefix/workflow-run.log" 2>&1
+  "$prototype" workflow "$config" "$prefix" verify >"$prefix/workflow-verify.log" 2>&1
+  echo 'PASS configured durable parent/child upgrades, validates and commits once across worker restart and parent redelivery'
+  echo 'Workspace configured durable workflow qualification passed (14 cases); handoff and full IR-11 qualification remain open.'
+fi

@@ -41,18 +41,18 @@ tests =
         let revision = WorkspaceRevision base ("sha256:" <> Text.replicate 64 "c")
             repository = WorkspaceRepository "mori://fixture/repo" "/operator/repo" [revision] base "policy-1" [""] ["src"]
             grant = WorkspaceGrant "worker" "agent_fixture" "mori://fixture/repo" Nothing
-            settings = WorkspaceSettings "/private/workspaces" [repository] [grant]
+            settings = WorkspaceSettings "/private/workspaces" [repository] [grant] Nothing
         assertBool "reviewed immutable configuration admitted" (not (isLeft (validateWorkspaceSettings settings)))
         mapM_
           (\invalid -> assertBool "invalid operator input refused" (isLeft (validateWorkspaceSettings invalid)))
-          [ WorkspaceSettings "/" [repository] [grant],
-            WorkspaceSettings "relative" [repository] [grant],
-            WorkspaceSettings "/private/workspaces" [repository, repository] [grant],
-            WorkspaceSettings "/private/workspaces" [repository] [grant, grant],
-            WorkspaceSettings "/private/workspaces" [repository {revisions = [WorkspaceRevision "main" revision.instructionDigest], defaultRevision = "main"}] [grant],
-            WorkspaceSettings "/private/workspaces" [repository {revisions = [WorkspaceRevision base "unreviewed"]}] [grant],
-            WorkspaceSettings "/private/workspaces" [repository {writePaths = ["../escape"]}] [grant],
-            WorkspaceSettings "/private/workspaces" [repository] [grant {repository = "mori://fixture/other"}]
+          [ WorkspaceSettings "/" [repository] [grant] Nothing,
+            WorkspaceSettings "relative" [repository] [grant] Nothing,
+            WorkspaceSettings "/private/workspaces" [repository, repository] [grant] Nothing,
+            WorkspaceSettings "/private/workspaces" [repository] [grant, grant] Nothing,
+            WorkspaceSettings "/private/workspaces" [repository {revisions = [WorkspaceRevision "main" revision.instructionDigest], defaultRevision = "main"}] [grant] Nothing,
+            WorkspaceSettings "/private/workspaces" [repository {revisions = [WorkspaceRevision base "unreviewed"]}] [grant] Nothing,
+            WorkspaceSettings "/private/workspaces" [repository {writePaths = ["../escape"]}] [grant] Nothing,
+            WorkspaceSettings "/private/workspaces" [repository] [grant {repository = "mori://fixture/other"}] Nothing
           ]
         pathAdmitted ["src"] "src/file.hs" @?= True
         pathAdmitted ["src"] "src-other/file.hs" @?= False

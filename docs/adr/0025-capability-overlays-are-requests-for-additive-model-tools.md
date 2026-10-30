@@ -84,11 +84,19 @@ adapter's tested receipt contract, never solely from a public operation-class la
 workflow branches and snapshots gain no new authority. The
 `shikigami-governed-workspaces-v1` guard selects separate governed resolution
 and workspace Skill admission labels for the new capability family. Explicit
-worker `workspaces` configuration installs only `workspace.edit:1`, with reviewed
+worker `workspaces` configuration defaults to `workspace.edit:1`, with reviewed
 immutable instruction digests, exact agent/principal grants and content-bound
 read/write restrictions. Actual file effects and lost-acknowledgement recovery
 are exercised through the real parent, child and executor. No process or Git
-adapter is installed until its independent qualification passes. Generic
+adapter is installed until its independent qualification passes. The native
+accepted-executor process/Git gate passed on 2026-10-30. Explicit
+`workspaces.process` configuration now selects `workspace.edit:2`,
+`workspace.exec:1` and `workspace.git:1`, retaining file revision 1 in the adapter
+registry for historical protected snapshots. Every configured repository must
+have a complete reviewed process policy and matching path restrictions.
+Native support, reviewed instructions and ready reserved Unix identity are
+required before model admission. The normal durable-workflow fixture is an
+additional integration gate; handoff remains independently qualified. Generic
 observation providers, including `workspace.read`, retain their semantics.
 
 The first concrete one-off provider is the immutable `workspace.read` revision `1` descriptor

@@ -5,7 +5,10 @@ build-type: Simple
 synopsis: Disposable governed workspace Linux qualification
 
 executable shikigami-workspace-prototype
-  other-modules: Accepted
+  other-modules:
+    Accepted
+    Durable
+
   main-is: Main.hs
   hs-source-dirs: .
   default-language: GHC2024

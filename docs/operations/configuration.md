@@ -596,11 +596,85 @@ The entire setting is redacted from configuration diagnostics, including invalid
 raw candidates. Local source paths are not model input. A private copy keeps
 provider Git metadata outside the mutable files. Edit publication uses an OS
 lock and independent receipts; uncertain effects require reconciliation and
-never justify another writer. This host offers no validation process, local
-commit, transfer fence or cleanup operation. Those remain Plan 96 gates. On
+never justify another writer. Omitting `process` selects this file-only host.
+The explicit supervised host below adds validation and local commits; transfer
+fences and cleanup remain Plan 96 gates. On
 macOS, use Apple containers first for Linux qualification, as recorded in
 [AGENTS.md](../../AGENTS.md).
 
 See [workspace operations](workspaces.md) for the implemented process/Git
 qualification adapters, native fixture commands, bounds and retained-evidence
 recovery contracts.
+
+
+### Supervised repository files, validation and local Git
+
+Add an optional `process` object inside the same `workspaces` setting to select
+`workspace.edit:2`, `workspace.exec:1` and `workspace.git:1`. Each Skill still
+needs to declare each requested capability. New process assignments use
+`ascii-exact-process-v1`; accepted file-only snapshots retain their original
+profile and exact adapter. This installation adds no workflow labels: the
+existing governed-workspace branch already freezes the selected descriptors.
+
+The host runs on the qualified Linux/systemd/cgroup-v2 environment as a trusted
+provisioner with permission to create its reserved Unix accounts and change
+workspace ownership. It refuses native macOS before source allocation. Provision
+an immutable execution root and the independent socket-activated supervisor
+before assigning work. The supervisor's `workspace.supervisor` setting remains
+separate; its allowed peer users must include this worker's kernel identity.
+Validation services have a distinct unprivileged identity per workspace.
+
+Example `process` object (replace image and compiled-property digests with the
+reviewed production identities):
+
+```json
+{
+  "socketPath": "/run/shikigami-workspace/supervisor.sock",
+  "serverUser": 0,
+  "requestSeconds": 5,
+  "waitSeconds": 60,
+  "identities": {"firstId": 64000, "lastId": 64999},
+  "policies": {
+    "mori://example/project": {
+      "format": 1,
+      "image": {
+        "rootDirectory": "/var/lib/shikigami-images/reviewed-root",
+        "rootIdentity": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "environmentExecutable": "/bin/env",
+        "deadlineExecutable": "/bin/shikigami-workspace-deadline",
+        "collectorExecutable": "/opt/shikigami/bin/shikigami-workspace-collector"
+      },
+      "propertiesDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "rules": [{
+        "rule": "validate",
+        "executable": "/bin/validate",
+        "arguments": [],
+        "directory": "",
+        "environment": {"HOME": "/scratch"},
+        "timeoutSeconds": 30,
+        "outputBytes": 32768
+      }],
+      "readPaths": [""],
+      "writePaths": ["src", "project.cabal"]
+    }
+  }
+}
+```
+
+`policies` must cover exactly the repository catalog, with read/write prefixes
+matching each repository's reviewed restrictions. Unknown fields, invalid
+identity ranges, duplicate rules and unbounded limits refuse configuration.
+Use `Shikigami.Workspace.Systemd.systemdPropertiesIdentity` from the built workers
+library to obtain the compiled containment-property digest. The complete policy,
+including image, helpers, properties, command arguments, environment and path
+restrictions, determines the retained workspace policy identity. Configuration
+changes cannot reinterpret a retained command. Keep the admitted base and
+instruction digest available while its operations need fresh authority.
+
+Commands accept only a reviewed rule name, never caller-supplied argv or host
+paths. The frozen `AGENTS.md` instructions should identify the approved validation
+rules and commit conventions. Whole-tree Git capture needs complete read access;
+every changed path needs write admission. A successful validation is a retained
+normal exit with code zero. Neither a timeout nor requested cancellation proves
+success. See [workspace operations](workspaces.md) for native qualification and
+receipt recovery. The normal parent/child workflow gate remains pending.

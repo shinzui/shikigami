@@ -57,7 +57,9 @@ data ProcessProfile = ProcessProfile
   deriving anyclass (ToJSON)
 
 data IdentityRange = IdentityRange {firstId :: !Int, lastId :: !Int}
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+
+instance FromJSON IdentityRange where parseJSON = Aeson.genericParseJSON strictOptions
 
 data ProfileState = ProfileReserved | ProfileReady deriving stock (Eq, Show)
 

@@ -1,9 +1,10 @@
 # Governed repository workspaces
 
-The configured durable worker currently offers the file-only workspace host.
+The configured durable worker offers file-only and supervised workspace hosts.
 Enable it through the reviewed repository catalog and exact agent/principal
 grants described in [configuration](configuration.md#governed-repository-files).
-A Skill must declare `workspace.edit`; installing the host alone does not add
+A Skill must declare `workspace.edit`, `workspace.exec` or `workspace.git` for
+the corresponding tools; installing the host alone does not add
 tools to a Skill. Historical workflow branches and snapshots retain their
 original admission behavior.
 
@@ -17,9 +18,10 @@ instructions; a later assignment must admit the new approved base.
 ## Process and Git qualification
 
 The independent Linux supervisor, process-aware file adapter and local Git
-adapter are implemented for qualification. Configured workers still install
-only file revision 1. Process-backed production admission, handoff, integration
-and terminal cleanup remain delivery gates in
+adapter have passed the native accepted-executor qualification. An explicit
+`workspaces.process` configuration installs them into the configured worker;
+omitting it retains file revision 1. The complete normal-workflow qualification,
+handoff, integration and terminal cleanup remain delivery gates in
 [plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md).
 Do not infer production enablement from a passing prototype.
 
@@ -36,12 +38,16 @@ root:
 ```bash
 bash tests/workspace/run-apple.sh --prototype
 bash tests/workspace/run-apple.sh --git
+bash tests/workspace/run-apple.sh --workflow
 ```
 
 The first command checks ten process/provisioning cases. The second includes
 those cases plus accepted dependency edit, validation and local commit,
 duplicate commit delivery, recovery after the committing worker is killed, and
-fresh publication denial. It expects thirteen named cases overall. The runner
+fresh publication denial. It expects thirteen named cases overall. `--workflow` additionally runs the
+normal agent parent and execution child, restarts the worker after its accepted
+edit, and verifies one terminal result with exact commit and validation evidence.
+It expects fourteen named cases; this new gate is pending qualification. The runner
 builds its controller through the configured Nix builder, copies its closure
 through Nix, creates a task-specific container and temporary SSH credentials,
 and removes its container and credentials on exit. It prints the private
@@ -56,7 +62,7 @@ that must run across a guest clock change.
 
 ## Local Git contracts
 
-The qualification adapter is `workspace.git:1`, with namespaced `status`, `diff`
+The local Git adapter is `workspace.git:1`, with namespaced `status`, `diff`
 and `commit` tools. Exact operator installation, an explicit capability
 declaration, the process-aware filesystem profile and a ready retained Unix
 profile are all required. Tool description performs no repository IO.

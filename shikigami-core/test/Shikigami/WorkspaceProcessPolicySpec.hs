@@ -6,8 +6,10 @@ import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Shikigami.Prelude ((&), (.~))
+import Shikigami.Workspace.Catalog (repositoryPolicyRevision, resolveRepository)
 import Shikigami.Workspace.Process
 import Shikigami.Workspace.ProcessPolicy
+import Shikigami.Workspace.Settings qualified as Settings
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -41,6 +43,18 @@ tests =
             Aeson.Error _ -> pure ()
             _ -> assertFailure "unknown policy fields accepted"
           _ -> assertFailure "policy must be an object",
+      testCase "configured process hosts bind complete policies and refuse inconsistent or unbounded configuration" $ do
+        let base = Text.replicate 40 "a"
+            repository = Settings.WorkspaceRepository "mori://fixture/repo" "/operator/repo" [Settings.WorkspaceRevision base digest] base "reviewed" [""] ["src"]
+            process = Settings.WorkspaceProcessSettings "/run/workspace/supervisor.sock" 0 5 60 (IdentityRange 64000 64031) (Map.singleton repository.identity policy)
+            settings = Settings.WorkspaceSettings "/private/workspaces" [repository] [Settings.WorkspaceGrant "worker" "agent_fixture" repository.identity Nothing] (Just process)
+            invalid changed = case Settings.validateWorkspaceSettings (settings & #process .~ Just changed) of Left _ -> pure (); Right _ -> assertFailure "invalid process configuration admitted"
+        case Settings.validateWorkspaceSettings settings >>= (either (const (Left "resolution refused")) Right . (\catalog -> resolveRepository catalog repository.identity Nothing)) of
+          Right selected -> repositoryPolicyRevision selected @?= processPolicyIdentity policy
+          Left err -> assertFailure (Text.unpack err)
+        mapM_ invalid [process & #socketPath .~ "relative", process & #serverUser .~ (-1), process & #requestSeconds .~ 0, process & #waitSeconds .~ 3601, process & #identities .~ IdentityRange 0 10, process & #policies .~ Map.empty, process & #policies .~ Map.singleton "mori://fixture/other" policy, process & #policies .~ Map.singleton repository.identity (policy & #writePaths .~ [""])]
+        let changed = settings & #process .~ Just (process & #policies .~ Map.singleton repository.identity (policy & #rules .~ [rule & #arguments .~ ["new"]]))
+        assertBool "same human label cannot change retained command policy" (Settings.configuredPolicyIdentity changed repository /= Settings.configuredPolicyIdentity settings repository),
       testCase "file restrictions use exact path segments and independent read and write scopes" $ do
         mapM_ (\path -> assertBool "approved write scope" (processFileAllowed policy "replace" path)) ["src", "src/file", "src/nested/file"]
         mapM_ (\path -> assertBool "outside write scope" (not (processFileAllowed policy "replace" path))) ["src-other/file", "lib/file", "../src/file", "src/../lib"]

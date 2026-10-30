@@ -1,6 +1,6 @@
--- | Explicit operator installation for the file-only workspace backend.
--- Process admission is separate and remains unavailable on this host.
-module Shikigami.Workspace.Host (fileWorkspaceHost) where
+-- | Pre-model allocation and reviewed instruction admission, shared by the
+-- file-only host and the explicitly configured supervised host.
+module Shikigami.Workspace.Host (fileWorkspaceHost, governedWorkspaceHost) where
 
 import Data.Time (getCurrentTime)
 import Kioku.App (runAppIO)
@@ -32,10 +32,16 @@ import Shikigami.Workspace.Types
 -- must check current lifecycle and retained profile authority; file target
 -- policy is supplied by FileRuntime.admitTarget. There is no allow-all default.
 fileWorkspaceHost :: FileRuntime -> FilePath -> (SkillAssignment -> IO (Either Text ResolvedRepository)) -> (SkillAssignment -> IO (Either Text ())) -> Either Text WorkspaceHost
-fileWorkspaceHost runtime storageRoot select currentAuthority = do
-  catalog <- either (const (Left "workspace catalog is invalid")) Right (mkCapabilityCatalog [workspaceEditDescriptor])
-  providers <- either (const (Left "workspace adapter installation refused")) Right (installDurableAdapters [workspaceEditAdapter runtime] emptyCapabilityProviderRegistry)
-  let capabilities = CapabilityRuntime catalog providers (\_ descriptor -> if descriptor == workspaceEditDescriptor then Right () else Left (CapabilityAuthorizationDenied descriptor.capability "workspace capability is unavailable"))
+fileWorkspaceHost runtime = governedWorkspaceHost runtime [workspaceEditAdapter runtime] [] (\_ _ -> pure . Right)
+
+-- Historical adapters are available only for protected snapshots that already
+-- pinned them. New resolution uses only the selected descriptors.
+governedWorkspaceHost :: FileRuntime -> [DurableAdapter] -> [DurableAdapter] -> (SkillAssignment -> WorkspaceBinding -> WorkspaceAdmission -> IO (Either Text WorkspaceAdmission)) -> FilePath -> (SkillAssignment -> IO (Either Text ResolvedRepository)) -> (SkillAssignment -> IO (Either Text ())) -> Either Text WorkspaceHost
+governedWorkspaceHost runtime selected historical prepare storageRoot select currentAuthority = do
+  let descriptors = map (.descriptor) selected
+  catalog <- either (const (Left "workspace catalog is invalid")) Right (mkCapabilityCatalog descriptors)
+  providers <- either (const (Left "workspace adapter installation refused")) Right (installDurableAdapters (selected <> historical) emptyCapabilityProviderRegistry)
+  let capabilities = CapabilityRuntime catalog providers (\_ descriptor -> if descriptor `elem` (descriptors <> map (.descriptor) historical) then Right () else Left (CapabilityAuthorizationDenied descriptor.capability "workspace capability is unavailable"))
   pure (WorkspaceHost capabilities load)
   where
     refused = Left (ExecutionPolicyRefused "workspace admission refused")
@@ -66,7 +72,9 @@ fileWorkspaceHost runtime storageRoot select currentAuthority = do
                                 Left _ -> pure refused
                                 Right admission -> do
                                   reviewed <- runtime.admitTarget binding admission (bundleFiles admission.instructions) "admit" ""
-                                  pure (either (const refused) (const (Right admission)) reviewed)
+                                  case reviewed of
+                                    Left _ -> pure refused
+                                    Right () -> either (const refused) Right <$> prepare assignment binding admission
                             Left _ -> pure (Left ExecutionStorageUnavailable)
                             _ -> pure refused
                     _ -> pure refused

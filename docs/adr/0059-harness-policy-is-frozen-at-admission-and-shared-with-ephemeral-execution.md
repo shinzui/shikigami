@@ -58,7 +58,13 @@ an exact file-adapter revision that requires the process-registration barrier.
 Keep accepted file-only snapshots on their original profile and adapter. Older
 providers must refuse the new profile before IO, so enabling the process backend
 cannot expose its workspaces to a writer that predates process registration.
-The process adapter and this profile transition remain plan-96 enablement gates.
+The native process/Git gate passed on 2026-10-30. The explicit process host now
+selects file revision 2 and `ascii-exact-process-v1` only after retaining and
+provisioning the exact Unix profile. Its complete image, compiled properties,
+command rules and path restrictions determine the workspace policy revision.
+A current human label cannot reinterpret that revision. Unsupported native
+hosts refuse before allocation; no model request precedes profile readiness.
+The normal durable parent/child integration remains a separate plan-96 gate.
 
 The database-free command explicitly selects ephemeral recording. It uses the
 same pure context selection, summary preparation, tool admission and output
