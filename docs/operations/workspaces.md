@@ -1,0 +1,100 @@
+# Governed repository workspaces
+
+The configured durable worker currently offers the file-only workspace host.
+Enable it through the reviewed repository catalog and exact agent/principal
+grants described in [configuration](configuration.md#governed-repository-files).
+A Skill must declare `workspace.edit`; installing the host alone does not add
+tools to a Skill. Historical workflow branches and snapshots retain their
+original admission behavior.
+
+Each assignment receives a private repository copy at an approved full commit.
+Provider Git metadata is separate from mutable files. Admission freezes every
+regular `AGENTS.md` blob and its directory scope from that commit, within the
+instruction budget. Review the complete instruction digest before approving a
+base. Editing an instruction file does not change the current assignment's
+instructions; a later assignment must admit the new approved base.
+
+## Process and Git qualification
+
+The independent Linux supervisor, process-aware file adapter and local Git
+adapter are implemented for qualification. Configured workers still install
+only file revision 1. Process-backed production admission, handoff, integration
+and terminal cleanup remain delivery gates in
+[plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md).
+Do not infer production enablement from a passing prototype.
+
+The prototype uses systemd system services and writable cgroup v2, an immutable
+execution root, separate reserved Unix identities, a private network and PID
+namespace, and independent bounded output collection and deadline enforcement.
+Unsupported hosts refuse execution. A command rule alone supplies no repository
+containment. The supervisor owns the socket-activated listener and factual
+receipt recovery independently of queue workers.
+
+Run the native qualification in a disposable Apple container from the repository
+root:
+
+```bash
+bash tests/workspace/run-apple.sh --prototype
+bash tests/workspace/run-apple.sh --git
+```
+
+The first command checks ten process/provisioning cases. The second includes
+those cases plus accepted dependency edit, validation and local commit,
+duplicate commit delivery, recovery after the committing worker is killed, and
+fresh publication denial. It expects thirteen named cases overall. The runner
+builds its controller through the configured Nix builder, copies its closure
+through Nix, creates a task-specific container and temporary SSH credentials,
+and removes its container and credentials on exit. It prints the private
+evidence directory. The fixture sources and runtime are copied without host
+mounts or existing credentials.
+
+Apple's periodic guest clock changes can expire the absolute deadline guard.
+The fixture observes a clock change before admitting a short command and holds
+restart cases until their intended boundary is established. It leaves clock
+change protection enabled. Passing these short cases does not qualify commands
+that must run across a guest clock change.
+
+## Local Git contracts
+
+The qualification adapter is `workspace.git:1`, with namespaced `status`, `diff`
+and `commit` tools. Exact operator installation, an explicit capability
+declaration, the process-aware filesystem profile and a ready retained Unix
+profile are all required. Tool description performs no repository IO.
+
+Status and diff require whole-tree read permission. Capture enumerates ordinary
+ASCII paths under the shared workspace lock after all retained processes have
+settled. It refuses symlinks, hardlinks, special files and ambiguous case
+spellings. Capture allows up to 100,000 entries, depth 128, individual blobs of
+16 MiB and combined contents of 64 MiB; each directory allows at most 10,000
+entries. Ordinary model file reads and edits retain their separate 256 KiB
+limit. Git results are bounded to 32 KiB, so a larger diff refuses.
+
+A commit accepts only an exact expected parent and a nonempty message of at
+most 4096 UTF-8 bytes. It requires a nonempty change set of at most 256 paths,
+and every changed path must satisfy the frozen write policy. Object construction
+uses literal captured bytes, preserves executable intent and runs without
+worktree filters, hooks, signing, external diff helpers or transport. It retains
+the exact parent, tree, result and changed paths before conditional HEAD
+publication. A second fresh C13 authorization binds that candidate immediately
+before publication admission. No push or pull-request operation is provided.
+
+## Recovery and retained evidence
+
+Retain the database, protected payloads, private metadata and accepted policy
+while operations remain pending. An expired lease, free file lock or exited
+main PID does not establish settlement. Process receipts require complete
+bounded output and matching boot/invocation evidence with every descendant
+settled. Successful validation requires a confirmed normal exit with code zero.
+
+An interrupted commit is reconciled by observing its exact retained result.
+A prepared candidate alone cannot establish completion. Once publication
+admission has been consumed, recovery cannot update HEAD again. Missing or
+conflicting evidence leaves the workspace unavailable to other operations.
+The independent receipt owner can acknowledge the original actual attempt
+after execution authority is revoked or ownership freezes, without acquiring
+authority to read model payloads or launch new work.
+
+Do not repair exposed receipt-directory permissions and then trust its contents.
+Do not remove pending workspace directories, replace receipt files, clear
+reservations or recycle reserved Unix identities to regain capacity. Automated
+terminal cleanup awaits the ownership and fencing implementation in plan 96.

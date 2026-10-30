@@ -600,3 +600,7 @@ never justify another writer. This host offers no validation process, local
 commit, transfer fence or cleanup operation. Those remain Plan 96 gates. On
 macOS, use Apple containers first for Linux qualification, as recorded in
 [AGENTS.md](../../AGENTS.md).
+
+See [workspace operations](workspaces.md) for the implemented process/Git
+qualification adapters, native fixture commands, bounds and retained-evidence
+recovery contracts.

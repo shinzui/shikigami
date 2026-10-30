@@ -227,7 +227,12 @@ without replay reads or current launch authority. A live actual claim remains
 with its executor until expiry; superseded receipts settle their own pending
 accounting without replacing accepted progress. Prepared-only and missing or
 conflicting publication evidence remain conservative. Production installation
-and native coupled qualification remain separate plan-96 gates.
+remains a separate plan-96 gate. The thirteen-case Apple Linux fixture now
+qualifies accepted native edit/validation/commit, duplicate commit delivery,
+original Git receipt recovery after worker SIGKILL and ownership freeze with
+new authority denied, and denial after capture without HEAD publication. These
+checks preserve the ten earlier provisioning/process cases; they do not prove
+the normal configured parent/child workflow or handoff.
 
 ## Alternatives rejected
 
