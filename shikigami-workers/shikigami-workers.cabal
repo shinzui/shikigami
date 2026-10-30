@@ -77,6 +77,8 @@ library
     Shikigami.Workspace.Service
     Shikigami.Workspace.Supervisor
     Shikigami.Workspace.Systemd
+    Shikigami.Workspace.Transfer
+    Shikigami.Workspace.TransferClient
 
   build-depends:
     aeson >=2.2,
@@ -231,6 +233,7 @@ test-suite shikigami-workers-test
     Shikigami.WorkspaceStoreSpec
     Shikigami.WorkspaceSupervisorSpec
     Shikigami.WorkspaceSystemdSpec
+    Shikigami.WorkspaceTransferSpec
     Shikigami.WorkspaceWorkflowSpec
 
   ghc-options:

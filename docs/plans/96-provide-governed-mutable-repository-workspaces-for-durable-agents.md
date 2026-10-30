@@ -165,6 +165,21 @@ substituted targets and bounded scan traversal. The complete candidate passes
 `git diff --check`. Native Linux qualification and
 successor/handoff/integration remain outstanding.
 
+The concrete workspace-side transfer owner is implemented (2026-10-30).
+`Workspace.Transfer` validates the retained session intent and fresh parent
+authority, freezes under the shared OS lock, reconciles file/Git facts and asks
+the independent process owner to cancel frozen workspaces. Only retained complete
+settlement permits the deduplicated fence. `Workspace.TransferClient` uses a
+peer-checked version-2 RPC extension, preserving version-1 process frames and
+checking that returned proofs match their complete request. Five concrete
+PostgreSQL/native-lock/socket cases pass for restart after revocation, pending
+process cancellation without invented settlement, unlaunched refusal, fresh
+denial and busy-lock refusal. The real Kikan producer/verifier tests also bind
+the complete transfer. All 533 core, 358 PostgreSQL, 234 worker and five migration
+tests pass; worker executables build and `git diff --check` passes.
+Transfer-aware accepted tool adapters, real Linux
+handoff and revision integration remain outstanding; Milestone 5 stays open.
+
 ## Surprises & Discoveries
 
 2026-10-30 successor design: retain the original allocation and process profile
@@ -176,7 +191,8 @@ the session has retained its matching fence and separate objective receipt. The
 store contract and five PostgreSQL cases are implemented. The full candidate
 passes 533 core, 358 PostgreSQL and five migration tests, schema isolation and
 `git diff --check`; no transfer-aware adapter or concrete handoff provider is
-installed yet.
+installed yet at that checkpoint; the concrete provider boundary above is now
+implemented and separately qualified with instrumented process evidence.
 
 
 The baseline build fails before solving dependencies because `kikan-en-contract` and `kikan-en-client` are absent from the checkout referenced by `cabal.project`. The registered producer checkout has only one worktree. A clean fast-forward to the verified upstream master commit `16704290d527d413568bfa40c983f5c3604c35c8` restored both packages and the baseline core build. FRIC-14 is resolved.

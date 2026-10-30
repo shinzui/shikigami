@@ -10,6 +10,7 @@ module Shikigami.Workspace.TransferStore
     pendingWorkspaceOperationsTx,
     admitSuccessorTx,
     checkWorkspaceAdmissionTx,
+    checkSessionWriteTx,
     currentWorkspaceRequestTx,
   )
 where
@@ -160,6 +161,15 @@ checkWorkspaceAdmissionTx binding admission operation = do
         pure (admission.filePolicy == Just transferableFilePolicy && retained == Just admission && either (const False) (maybe False (\current -> current.owner == admission.owner && current.epoch == admission.epoch && current.rootId == admission.rootId)) child)
   if admitted && matchesAdmission binding admission then Store.checkWorkspaceOperationTx binding admission.owner admission.epoch operation else pure (Left WorkspaceBindingConflict)
 
+-- Consumer-side admission is not a bearer grant. Actual tool providers still
+-- validate their protected snapshot, actual claim and fresh exact IO authority.
+checkSessionWriteTx :: WorkspaceBinding -> WorkerSessionId -> AgentIdentity -> Integer -> OperationId -> Transaction (Either WorkspaceError ())
+checkSessionWriteTx binding session owner epoch operation = do
+  retained <- Tx.statement session.value selectSession
+  case retained of
+    Just (state, bound) | state.sessionId == session && bound.sessionId == session && state.phase `elem` [Idle, Active] && state.owner == owner && state.epoch == epoch && bound.rootId == binding.request.rootId && maybe False ((== session) . fst) binding.request.assignment -> Store.checkWorkspaceOperationTx binding owner epoch operation
+    _ -> pure (Left WorkspaceBindingConflict)
+
 -- Cleanup follows the latest accepted owner/run without rewriting allocation.
 -- Unknown ownership has no terminal fallback to the original execution.
 currentWorkspaceRequestTx :: WorkspaceBinding -> Transaction (Maybe WorkspaceRequest)
@@ -189,6 +199,9 @@ operationKey (OperationId key) = key
 
 selectChild :: Statement Text [(SessionState, SessionBinding, MessageReceipt)]
 selectChild = preparable "SELECT s.state,s.binding,m.state FROM shikigami.worker_session_messages m JOIN shikigami.worker_sessions s USING(session_id) WHERE m.state->>'childWorkflowId'=$1 LIMIT 2" textParam (D.rowList ((,,) <$> jsonRow <*> jsonRow <*> jsonRow))
+
+selectSession :: Statement Text (Maybe (SessionState, SessionBinding))
+selectSession = preparable "SELECT state,binding FROM shikigami.worker_sessions WHERE session_id=$1" textParam (D.rowMaybe ((,) <$> jsonRow <*> jsonRow))
 
 selectSessionTransfer :: Statement (Text, Text) (Maybe (SessionState, SessionBinding, TransferIntent))
 selectSessionTransfer = preparable "SELECT s.state,s.binding,c.state FROM shikigami.worker_sessions s JOIN shikigami.worker_session_commands c USING(session_id) WHERE s.session_id=$1 AND c.operation_id=$2" (contrazip2 textParam textParam) (D.rowMaybe ((,,) <$> jsonRow <*> jsonRow <*> jsonRow))

@@ -4,6 +4,7 @@ import Control.Concurrent.Async (async, cancel, concurrently)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (bracket)
 import Data.ByteString qualified as Bytes
+import Data.Generics.Labels ()
 import Data.List (sort)
 import Data.Text qualified as Text
 import Data.Time (UTCTime)
@@ -16,6 +17,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.Execution.Identity (ExecutionRootId (..))
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.Prelude ((&), (.~))
 import Shikigami.WorkerSession.Types (AssignmentId (..), WorkerSessionId (..))
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
@@ -57,7 +59,7 @@ tests fixture =
         _ <- right =<< run env (reserveWorkspaceTx root request repo)
         mapM_
           (\changed -> run env (reserveWorkspaceTx root changed repo) >>= (@?= Left WorkspaceBindingConflict))
-          [request {runId = "different"}, request {owner = CompatibilityIdentity "other"}, request {epoch = 1}, request {rootId = ExecutionRootId "other"}]
+          [request & #runId .~ "different", request & #owner .~ CompatibilityIdentity "other", request & #epoch .~ 1, request & #rootId .~ ExecutionRootId "other"]
         changed <- resolved (repositorySource repo) (repositoryBase repo) "policy-2"
         run env (reserveWorkspaceTx root request changed) >>= (@?= Left WorkspaceBindingConflict)
         changedSource <- resolved (repositorySource repo <> "-other") (repositoryBase repo) "policy-1"

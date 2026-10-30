@@ -29,10 +29,14 @@ import Data.Text.Encoding qualified as Encoding
 import Foreign.C
 import Network.Socket qualified as Socket
 import Network.Socket.ByteString qualified as SocketBytes
+import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Execution.Identity (AttemptId (..), OperationId (..))
 import Shikigami.Prelude
+import Shikigami.WorkerSession.Transfer
+import Shikigami.WorkerSession.Types (WorkerSessionId)
 import Shikigami.Workspace.Process
 import Shikigami.Workspace.Supervisor
+import Shikigami.Workspace.Transfer (workspaceTransferProvider)
 import Shikumi.Tool (ToolError)
 import Shikumi.Tool.Output (ToolOutput)
 import System.FilePath (isAbsolute, normalise)
@@ -42,7 +46,7 @@ data RpcError = RpcRefused | RpcUnavailable | RpcMalformed | RpcPeerDenied | Rpc
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data RpcRequest = RpcLaunch !SupervisorRequest | RpcObserve !OperationId
+data RpcRequest = RpcLaunch !SupervisorRequest | RpcObserve !OperationId | RpcFence !TransferIntent | RpcAdmitWrite !WorkspaceRef !WorkerSessionId !AgentIdentity !Integer !OperationId
   deriving stock (Eq)
 
 instance Show RpcRequest where show _ = "RpcRequest <protected>"
@@ -61,7 +65,7 @@ data ProcessView = ProcessView
 instance Show ProcessView where show _ = "ProcessView <protected>"
 
 -- An error carries no no-launch/completion proof.
-data RpcReply = RpcFailure !SupervisorError | RpcView !ProcessView
+data RpcReply = RpcFailure !SupervisorError | RpcView !ProcessView | RpcFenceResult !FenceOutcome | RpcWriteResult !Bool
   deriving stock (Eq)
 
 instance Show RpcReply where show _ = "RpcReply <protected>"
@@ -73,36 +77,40 @@ instance ToJSON RpcRequest where
   toJSON request = case request of
     RpcLaunch value -> Aeson.object ["format" Aeson..= (1 :: Int), "action" Aeson..= ("launch" :: Text), "request" Aeson..= value]
     RpcObserve value -> Aeson.object ["format" Aeson..= (1 :: Int), "action" Aeson..= ("observe" :: Text), "operationId" Aeson..= value]
+    RpcFence value -> Aeson.object ["format" Aeson..= (2 :: Int), "action" Aeson..= ("fence" :: Text), "intent" Aeson..= value]
+    RpcAdmitWrite workspace session owner epoch operation -> Aeson.object ["format" Aeson..= (2 :: Int), "action" Aeson..= ("admitWrite" :: Text), "workspace" Aeson..= workspace, "sessionId" Aeson..= session, "owner" Aeson..= owner, "epoch" Aeson..= epoch, "operationId" Aeson..= operation]
 
 instance FromJSON RpcRequest where
   parseJSON = Aeson.withObject "workspace request" \fields -> do
     format <- fields Aeson..: "format"
-    unless (format == (1 :: Int)) (fail "unsupported protocol")
     action <- fields Aeson..: "action"
-    case (action :: Text) of
-      "launch" | keys fields ["format", "action", "request"] -> RpcLaunch <$> fields Aeson..: "request"
-      "observe" | keys fields ["format", "action", "operationId"] -> do
+    case (format :: Int, action :: Text) of
+      (1, "launch") | keys fields ["format", "action", "request"] -> RpcLaunch <$> fields Aeson..: "request"
+      (1, "observe") | keys fields ["format", "action", "operationId"] -> do
         operation <- fields Aeson..: "operationId"
         let OperationId value = operation
         unless (bounded value) (fail "invalid operation")
         pure (RpcObserve operation)
+      (2, "fence") | keys fields ["format", "action", "intent"] -> RpcFence <$> fields Aeson..: "intent"
+      (2, "admitWrite") | keys fields ["format", "action", "workspace", "sessionId", "owner", "epoch", "operationId"] -> RpcAdmitWrite <$> fields Aeson..: "workspace" <*> fields Aeson..: "sessionId" <*> fields Aeson..: "owner" <*> fields Aeson..: "epoch" <*> fields Aeson..: "operationId"
       _ -> fail "unsupported request"
 
 instance ToJSON RpcReply where
   toJSON reply = case reply of
     RpcFailure err -> Aeson.object ["format" Aeson..= (1 :: Int), "error" Aeson..= err]
     RpcView value -> Aeson.object ["format" Aeson..= (1 :: Int), "view" Aeson..= value]
+    RpcFenceResult value -> Aeson.object ["format" Aeson..= (2 :: Int), "fence" Aeson..= value]
+    RpcWriteResult value -> Aeson.object ["format" Aeson..= (2 :: Int), "admitted" Aeson..= value]
 
 instance FromJSON RpcReply where
   parseJSON = Aeson.withObject "workspace reply" \fields -> do
     format <- fields Aeson..: "format"
-    unless (format == (1 :: Int)) (fail "unsupported protocol")
-    if keys fields ["format", "error"]
-      then RpcFailure <$> fields Aeson..: "error"
-      else
-        if keys fields ["format", "view"]
-          then RpcView <$> fields Aeson..: "view"
-          else fail "unsupported reply"
+    case (format :: Int) of
+      1 | keys fields ["format", "error"] -> RpcFailure <$> fields Aeson..: "error"
+      1 | keys fields ["format", "view"] -> RpcView <$> fields Aeson..: "view"
+      2 | keys fields ["format", "fence"] -> RpcFenceResult <$> fields Aeson..: "fence"
+      2 | keys fields ["format", "admitted"] -> RpcWriteResult <$> fields Aeson..: "admitted"
+      _ -> fail "unsupported reply"
 
 keys :: Aeson.Object -> [Key] -> Bool
 keys fields expected = length fields == length expected && all (`KeyMap.member` fields) expected
@@ -170,13 +178,22 @@ callRpc path serverUser seconds request
                     pure do
                       body <- received
                       reply <- either (const (Left RpcMalformed)) Right (Aeson.eitherDecodeStrict body)
-                      case reply of
-                        RpcView value | value.operationId /= requestOperation request || not (validView value) -> Left RpcMalformed
-                        _ -> Right reply
+                      case (request, reply) of
+                        (_, RpcFailure _) -> Right reply
+                        (RpcLaunch _, RpcView value) | value.operationId == requestOperation request && validView value -> Right reply
+                        (RpcObserve _, RpcView value) | value.operationId == requestOperation request && validView value -> Right reply
+                        (RpcFence intent, RpcFenceResult (FencedAndSettled proof)) | matchesFence intent proof -> Right reply
+                        (RpcFence _, RpcFenceResult outcome) | outcome `elem` [FenceUnresolved, FenceConflict, FenceUnavailable] -> Right reply
+                        (RpcAdmitWrite {}, RpcWriteResult _) -> Right reply
+                        _ -> Left RpcMalformed
               else pure (Left RpcPeerDenied)
       pure (fromMaybe (Left RpcTimeout) result)
 
 dispatchSupervisorRpc :: SupervisorRuntime -> RpcRequest -> IO RpcReply
+dispatchSupervisorRpc runtime (RpcFence intent) = RpcFenceResult <$> (workspaceTransferProvider runtime).reconcile intent
+dispatchSupervisorRpc runtime (RpcAdmitWrite workspace session owner epoch operation) = do
+  result <- (workspaceTransferProvider runtime).admitWrite workspace session owner epoch operation
+  pure (RpcWriteResult (either (const False) (const True) result))
 dispatchSupervisorRpc runtime request = do
   result <- case request of
     RpcLaunch actual -> superviseProcess runtime actual
@@ -188,6 +205,8 @@ dispatchSupervisorRpc runtime request = do
 requestOperation :: RpcRequest -> OperationId
 requestOperation (RpcLaunch request) = request.operationId
 requestOperation (RpcObserve operation) = operation
+requestOperation (RpcFence intent) = intent.operationId
+requestOperation (RpcAdmitWrite _ _ _ _ operation) = operation
 
 processViewResult :: ProcessView -> Maybe (Either ToolError ToolOutput)
 processViewResult value

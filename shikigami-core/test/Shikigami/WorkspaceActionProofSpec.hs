@@ -17,11 +17,15 @@ import En.Schema (ObjectType (..), RelationName (..))
 import En.Tuple (ObjectRef (..), Subject (SubjectId))
 import Kikan.En.Action qualified as Kikan
 import Kikan.En.Client (newActionProofVerifier, verifyIssuedAction)
+import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Runner
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadRef (..))
 import Shikigami.Prelude ((&), (.~))
+import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
+import Shikigami.WorkerSession.Transfer (TransferIntent (..))
+import Shikigami.WorkerSession.Types (AssignmentId (..), ObjectiveRef (..), WorkerSessionId (..))
 import Shikigami.Workspace.GitTypes qualified as Git
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Process
@@ -269,6 +273,31 @@ tests =
             ]
         mapM_ (\action -> verifyIssuedAction verifier now (statusRequest & #action .~ action) statusIssued >>= \answer -> assertBool "Git observation proof binds kind, input, anchor, assignment, actual claim and profile" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) changedObservations
         observation provisionAdmission gitDispatch profile "commit" command.profile "device:files" @?= Left FileEffectRefused
+        let workerSession = WorkerSessionId "retained-session"
+            transferBinding = provisionBinding & #request . #assignment .~ Just (workerSession, AssignmentId "retained-assignment")
+            intent = TransferIntent 1 workerSession (ObjectiveRef "checkpoints" "objective") owner (OperationId "handoff") (ObjectiveVersion 1 1 1 0 owner True transferBinding.request.rootId expiry) owner (CompatibilityIdentity "successor") (AgentName "successor") 0 1 transferBinding.request.rootId transferBinding.workspace
+        fenceAction <- right (workspaceTransferAction transferBinding intent)
+        let fenceRequest = commitRequest & #action .~ fenceAction
+            fenceGrant = commitGrant & #object .~ ObjectRef (ObjectType (Kikan.actionObjectType fenceAction)) (Kikan.actionObjectId fenceAction)
+        fenceMinted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed fenceGrant
+        fenceProof <- right (Kikan.mkDecisionProof (decodeUtf8 fenceMinted.token))
+        let fenceIssued = Kikan.IssuedActionProof fenceProof fenceMinted.expiresAt [] checkedAt
+        _ <- right =<< verifyIssuedAction verifier now fenceRequest fenceIssued
+        changedFences <-
+          mapM
+            (right . workspaceTransferAction transferBinding)
+            [ intent & #operationId .~ OperationId "other-transfer",
+              intent & #actor .~ CompatibilityIdentity "other-parent",
+              intent & #newOwner .~ CompatibilityIdentity "other-successor",
+              intent & #newWorker .~ AgentName "other-worker",
+              intent & #objective . #key .~ "other-objective",
+              intent & #expected . #revision .~ 2,
+              intent & #expected . #cutoff .~ addUTCTime 1 expiry,
+              intent & #oldEpoch .~ 1 & #newEpoch .~ 2
+            ]
+        writeAdmission <- right (workspaceWriteAdmissionAction transferBinding transferBinding.workspace workerSession intent.newOwner 1 (OperationId "write"))
+        mapM_ (\action -> verifyIssuedAction verifier now (fenceRequest & #action .~ action) fenceIssued >>= \answer -> assertBool "fence proof binds complete transfer and cannot authorize writes" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) (writeAdmission : changedFences)
+        workspaceTransferAction provisionBinding intent @?= Left FileEffectRefused
     ]
 
 right :: (Show e) => Either e a -> IO a

@@ -116,6 +116,15 @@ resulting content; missing or conflicting evidence stays unresolved. Recovery
 does not write repository bytes. Historical file receipts without retained
 routing require their original authorized recovery path.
 
+The supervisor also implements the workspace half of continuing-session
+handoff through `Workspace.TransferClient`. It accepts only a matching retained
+session transfer intent and fresh parent authority before freezing admission.
+Frozen workspaces request process cancellation; missing settlement keeps the
+fence unresolved. Restart can reconcile an already admitted intent after
+revocation. These callbacks do not supply objective ownership or install
+transfer-aware tools; real successor-write and Linux handoff qualification
+remain open.
+
 Do not repair exposed receipt-directory permissions and then trust its contents.
 Do not remove pending workspace directories, replace receipt files, clear
 reservations or recycle reserved Unix identities to regain capacity. Explicit terminal cleanup retains provider metadata and receipts. The operator commands

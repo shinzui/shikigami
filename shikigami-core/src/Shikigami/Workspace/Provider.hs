@@ -4,10 +4,13 @@ module Shikigami.Workspace.Provider where
 import Data.Aeson qualified as Aeson
 import Data.Text qualified as Text
 import Kikan.En.Action (AgentAction (InvokeCapabilityTool), mkCapabilityToolTarget)
+import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (AttemptId, OperationId)
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Prelude
+import Shikigami.WorkerSession.Transfer (TransferIntent (..), WorkspaceRef (..))
+import Shikigami.WorkerSession.Types (WorkerSessionId)
 import Shikigami.Workspace.GitTypes qualified as Git
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), bundleBase, bundleDigest, bundleRepository, nativeFilePolicy, supervisedFilePolicy, validWorkspacePath)
 import Shikigami.Workspace.Process
@@ -64,6 +67,22 @@ instance Show FileRegistration where show _ = "FileRegistration <protected>"
 
 contentDigest :: Text -> Text
 contentDigest = versionedDigest "shikigami.workspace-content/1" . toJSON
+
+workspaceTransferAction :: WorkspaceBinding -> TransferIntent -> Either FileEffectError AgentAction
+workspaceTransferAction binding intent = do
+  unless (intent.format == 1 && intent.workspace == binding.workspace && intent.rootId == binding.request.rootId && intent.oldEpoch >= binding.request.epoch && intent.newEpoch == intent.oldEpoch + 1 && intent.newEpoch < 9223372036854775808 && intent.oldOwner /= intent.newOwner && maybe False ((== intent.sessionId) . fst) binding.request.assignment) (Left FileEffectRefused)
+  workspaceControlAction binding "fence" (toJSON intent)
+
+workspaceWriteAdmissionAction :: WorkspaceBinding -> WorkspaceRef -> WorkerSessionId -> AgentIdentity -> Integer -> OperationId -> Either FileEffectError AgentAction
+workspaceWriteAdmissionAction binding workspace session owner epoch operation = do
+  unless (workspace == binding.workspace && epoch >= binding.request.epoch && epoch < 9223372036854775808 && maybe False ((== session) . fst) binding.request.assignment) (Left FileEffectRefused)
+  workspaceControlAction binding "write-admission" (toJSON (workspace, session, owner, epoch, operation))
+
+workspaceControlAction :: WorkspaceBinding -> Text -> Aeson.Value -> Either FileEffectError AgentAction
+workspaceControlAction binding kind value = do
+  let digest = Text.replace ":" "-" (versionedDigest "shikigami.workspace-control-action/1" (toJSON (workspaceBindingDigest binding, kind, value)))
+      revision = "control1-" <> Text.replace ":" "-" (workspaceBindingDigest binding)
+  either (const (Left FileEffectRefused)) (Right . InvokeCapabilityTool) (mkCapabilityToolTarget "shikigami.workspace" revision (kind <> "-" <> digest))
 
 -- Allocation is protected IO too. This action binds the reserved immutable
 -- resource and execution assignment before reading the operator's source.

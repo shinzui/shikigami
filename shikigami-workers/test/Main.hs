@@ -22,6 +22,7 @@ import Shikigami.WorkspaceRpcSpec qualified as WorkspaceRpcSpec
 import Shikigami.WorkspaceStoreSpec qualified as WorkspaceStoreSpec
 import Shikigami.WorkspaceSupervisorSpec qualified as WorkspaceSupervisorSpec
 import Shikigami.WorkspaceSystemdSpec qualified as WorkspaceSystemdSpec
+import Shikigami.WorkspaceTransferSpec qualified as WorkspaceTransferSpec
 import Shikigami.WorkspaceWorkflowSpec qualified as WorkspaceWorkflowSpec
 import System.Environment (lookupEnv)
 import Test.Tasty (defaultMain, testGroup)
@@ -36,6 +37,7 @@ main = do
         ( testGroup
             "shikigami-workers"
             [ WorkspaceGitProviderSpec.tests databaseFixture,
+              WorkspaceTransferSpec.tests databaseFixture,
               WorkspaceGitStoreSpec.tests databaseFixture,
               WorkspaceGitObjectsSpec.tests,
               WorkspaceSupervisorSpec.tests databaseFixture,

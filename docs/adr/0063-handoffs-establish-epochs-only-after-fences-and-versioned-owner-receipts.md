@@ -88,6 +88,17 @@ writers must refuse the new filesystem profile before IO. The store contract is
 implemented; concrete process fencing, transfer-aware adapters and native
 successor writes remain plan-96 qualification gates.
 
+The concrete workspace provider now treats its retained freeze as cancellation
+control for the independent process owner. The shared lock serializes freeze
+against file publication and process launch registration. Cancellation writes a
+private marker and requests whole-unit stop; only matching collector evidence
+and settled file/Git effects permit the retained fence. A restarted service may
+recover an already admitted intent and return its factual proof after revocation,
+without requesting a new launch or fabricating objective ownership. Version-2
+peer-checked RPC carries this workspace-side contract; historical process frames
+keep version 1. Instrumented process tests establish this boundary; real Linux
+handoff and accepted successor writes remain plan-96 gates.
+
 ## Alternatives rejected
 
 Transferring on lease expiry would permit simultaneous writers. Cancelling a
