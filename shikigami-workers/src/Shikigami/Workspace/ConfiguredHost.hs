@@ -65,7 +65,7 @@ configuredWorkspaceHost appEnv pool directory authorizer settings = do
   where
     refused = Left "workspace operator policy refused"
     targetPolicy binding admission _scoped kind path = pure do
-      entry <- case filter (\entry -> entry.identity == binding.repository && configuredPolicyIdentity settings entry == binding.policyRevision && entry.source == binding.source) settings.repositories of
+      entry <- case filter (\entry -> entry.identity == binding.repository && binding.policyRevision `elem` [workspacePolicyIdentity entry, configuredPolicyIdentity settings entry] && entry.source == binding.source) settings.repositories of
         [entry] -> Right entry
         _ -> refused
       revision <- case filter (\revision -> revision.base == binding.base) entry.revisions of

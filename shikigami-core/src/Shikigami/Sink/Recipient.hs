@@ -32,6 +32,7 @@ module Shikigami.Sink.Recipient
 where
 
 import Data.Text qualified as Text
+
 -- Qualified: @Actor@ is both an activity's actor record and the name of the
 -- routing strategy that reads it.
 import Shikigami.Activity qualified as Activity

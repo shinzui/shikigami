@@ -179,6 +179,25 @@ tests fixture =
           journal <- run env (loadStepIndex Agent.agentRunWorkflowName (runJobWorkflowId job) 0)
           assertBool "new admission label belongs to the real parent" (Map.member "admit-workspace-skill-execution" journal)
           assertBool "historical admission label is not reused" (not (Map.member "admit-skill-execution" journal)),
+      testCase "installing the supervised host preserves an admitted file-only execution without provisioning it" $
+        withWorkflow fixture \env root job _ deps observed -> withStore env.connectionSettings \store -> do
+          Agent.runAgentRunWorkflow deps job >>= assertSuspended
+          binding <- admittedBinding env job
+          let execution = executionIdFor (assignmentIdFor (runJobWorkflowId job).unWorkflowId)
+          access <- right =<< run env (Execution.authorizeReplay execution job.identity (pure (Right ())))
+          (snapshot, _) <- right =<< run env (Execution.loadExecution access)
+          admission <- maybe (fail "workspace admission missing") pure snapshot.workspace
+          principal <- right (identityText job.identity)
+          let digest = "sha256:" <> Text.replicate 64 "a"
+              policy = ProcessPolicy 1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") digest [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] ["dependency.txt"]
+              process = WorkspaceProcessSettings "/run/shikigami/supervisor.sock" 0 5 60 (IdentityRange 64000 64031) (Map.singleton binding.repository policy)
+              settings = WorkspaceSettings root [WorkspaceRepository binding.repository binding.source [WorkspaceRevision binding.base (bundleDigest admission.instructions)] binding.base "policy-1" [""] ["dependency.txt"]] [WorkspaceGrant "workspace-worker" principal binding.repository Nothing] (Just process)
+          host <- right (configuredWorkspaceHost env store.pool disabledDirectoryHandle allowAllActionAuthorizerForTests settings)
+          let resumed = deps {Agent.capabilities = host.capabilities, Agent.workspace = Just (host {load = \_ -> assertFailure "old file assignment attempted process provisioning" >> fail "unreachable"})}
+          _ <- right =<< driveExecutionForeground (Agent.executionRuntime resumed) (ExecutionStart execution) 30
+          Agent.runAgentRunWorkflow resumed job >>= assertCompleted
+          readFile (workspaceFiles root binding </> "dependency.txt") >>= (@?= "workflow replacement\n")
+          length <$> readIORef observed >>= (@?= 2),
       testCase "old patch snapshot refuses mutation without allocating or calling a model" $
         withWorkflow fixture \env root job _ deps observed -> do
           let options = shikigamiWorkflowRunOptions env & #activePatches .~ Set.delete (PatchId "shikigami-governed-workspaces-v1") (shikigamiWorkflowRunOptions env).activePatches

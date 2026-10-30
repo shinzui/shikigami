@@ -90,6 +90,7 @@ import Data.ByteString.Lazy qualified as LBS
 import Data.Text qualified as Text
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Shikigami.Log.Correlation
+
 -- 'Level' is hidden because "Shikigami.Prelude" re-exports @Control.Lens@,
 -- which has an unrelated internal type of the same name. Call sites normally
 -- name a constructor ('Info', 'Warn', …) rather than the type, so this
