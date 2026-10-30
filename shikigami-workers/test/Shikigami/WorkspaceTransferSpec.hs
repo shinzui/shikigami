@@ -187,7 +187,6 @@ tests fixture =
             result <- maybe (fail "missing successor result") pure operation.outcome
             output <- right =<< run env (Execution.readReplayPayload @OperationOutcome access "operation-outcome" result)
             assertBool "successor reads retained accepted bytes" ("old dependency" `Text.isInfixOf` Text.pack (show (Aeson.encode output)))
-            _ <- right =<< run env (Execution.stopExecution snapshot.identity snapshot.executionId state.revision False (ExecutionPolicyRefused "fixture terminal"))
             parent <- right =<< run env (Sessions.authorizeSession intent.sessionId intent.actor (pure (Right ())))
             Just (active, _) <- right =<< run env (Sessions.inspectSession intent.sessionId)
             assignment <- maybe (fail "missing successor assignment") pure active.activeAssignment
@@ -197,7 +196,25 @@ tests fixture =
             -- terminal original-allocation execution being present.
             run env (runTransaction (cleanupEligibleTx binding)) >>= (@?= False)
             Just (idle, _) <- right =<< run env (Sessions.inspectSession intent.sessionId)
-            _ <- right =<< run env (Sessions.closeSession parent idle.revision 1 (OperationId "close-successor") AssignmentFailed)
+            (_, nextMessage) <- right =<< run env (Sessions.acceptMessage parent idle.revision 1 (OperationId "successor-followup-message") (Instruction 1 FollowUp "continue successor" 1 1 1 Nothing))
+            (_, nextStarted) <- right =<< run env (Sessions.startAssignment parent (idle.revision + 1) 1 (OperationId "successor-followup-start") nextMessage.assignmentId)
+            nextRun <- maybe (fail "missing successor followup child") pure nextStarted.childWorkflowId
+            nextSelection <- right (resolveExecutionSelection (Selection.assignmentIdFor nextRun) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just intent.rootId) now)
+            let nextAssignment = assignmentFor nextRun nextSelection
+                assignmentFor run selected = SkillAssignment run intent.newWorker intent.newOwner session selected Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host cannot call models")
+            host.load nextAssignment >>= \case Left _ -> pure (); Right _ -> assertFailure "live prior successor execution admitted followup"
+            _ <- right =<< run env (Execution.stopExecution snapshot.identity snapshot.executionId state.revision False (ExecutionPolicyRefused "fixture terminal"))
+            nextAdmission <- right =<< host.load nextAssignment
+            nextToken <- UUID4.nextRandom
+            FileFixture.withAcceptedWorkspaceTool 1 transferredWorkspaceEditAdapter intent.newWorker "overlay__workspace-edit__read" nextToken env nextAdmission fileRuntime (Aeson.object ["path" Aeson..= ("dependency.txt" :: Text)]) \nextSnapshot nextAccess nextReference -> do
+              Executor.executeAcceptedAttempt (FileFixture.executorForAdapter transferredWorkspaceEditAdapter fileRuntime) nextSnapshot.identity nextReference >>= (@?= Right Executor.ExecutorDone)
+              (_, nextState) <- right =<< run env (Execution.loadExecution nextAccess)
+              _ <- right =<< run env (Execution.stopExecution nextSnapshot.identity nextSnapshot.executionId nextState.revision False (ExecutionPolicyRefused "fixture terminal"))
+              Just (running, _) <- right =<< run env (Sessions.inspectSession intent.sessionId)
+              _ <- right =<< run env (Sessions.recordResult parent running.revision 1 (OperationId "finish-successor-followup") (AssignmentResult 1 nextMessage.assignmentId AssignmentFailed (Just nextSnapshot.executionId) Aeson.Null []))
+              pure ()
+            Just (finished, _) <- right =<< run env (Sessions.inspectSession intent.sessionId)
+            _ <- right =<< run env (Sessions.closeSession parent finished.revision 1 (OperationId "close-successor") AssignmentFailed)
             run env (runTransaction (cleanupEligibleTx binding)) >>= (@?= True)
           run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Just (binding, Ready))
           run env (runTransaction (inspectProcessProfileTx binding.workspace)) >>= (@?= Just (profile, ProfileReady))

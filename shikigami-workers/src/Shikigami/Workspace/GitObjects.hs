@@ -9,6 +9,9 @@ module Shikigami.Workspace.GitObjects
     storeFlatTree,
     storeCommit,
     readHead,
+    readCommit,
+    readFlatTree,
+    readBlob,
     publishCommit,
     verifyPublishedCommit,
     changedPaths,
@@ -97,6 +100,56 @@ storeCommit metadata parent tree author at operation message
 
 readHead :: FilePath -> IO (Either WorkspaceError Text.Text)
 readHead metadata = objectId <$> git metadata 65 [] ["rev-parse", "--verify", "HEAD^{commit}"] ""
+
+-- Read only exact object ids, with a separate type check: cat-file may otherwise
+-- peel a tag. No revision expression, worktree, helper or transport is accepted.
+-- mori://git/git, Documentation/git-cat-file.adoc and
+-- Documentation/git-ls-tree.adoc (artifact URIs pending).
+readCommit :: FilePath -> Text.Text -> IO (Either WorkspaceError (Text.Text, [Text.Text]))
+readCommit metadata object
+  | not (validObject object) = pure refused
+  | otherwise = do
+      kind <- git metadata 16 [] ["cat-file", "-t", Text.unpack object] ""
+      bytes <- if kind == Right "commit\n" then git metadata 65536 [] ["cat-file", "commit", Text.unpack object] "" else pure refused
+      pure do
+        body <- bytes
+        text <- either (const refused) Right (Encoding.decodeUtf8' body)
+        let headers = Text.lines (fst (Text.breakOn "\n\n" text))
+            trees = [Text.drop 5 line | line <- headers, Text.isPrefixOf "tree " line]
+            parents = [Text.drop 7 line | line <- headers, Text.isPrefixOf "parent " line]
+        case trees of
+          [tree] | all validObject (tree : parents) && length parents <= 16 -> Right (tree, parents)
+          _ -> refused
+
+readFlatTree :: FilePath -> Text.Text -> IO (Either WorkspaceError [GitEntry])
+readFlatTree metadata object
+  | not (validObject object) = pure refused
+  | otherwise = do
+      kind <- git metadata 16 [] ["cat-file", "-t", Text.unpack object] ""
+      bytes <- if kind == Right "tree\n" then git metadata 16777216 [] ["ls-tree", "-r", "-z", "--full-tree", Text.unpack object] "" else pure refused
+      pure do
+        body <- bytes
+        text <- either (const refused) Right (Encoding.decodeUtf8' body)
+        unless (Text.null text || Text.isSuffixOf "\0" text) refused
+        entries <- traverse parse (if Text.null text then [] else init (Text.splitOn "\0" text))
+        let paths = map (.name) entries
+            prefixes = Set.fromList [Text.intercalate "/" prefix | path <- paths, prefix <- drop 1 (inits (Text.splitOn "/" path))]
+            directories = Set.fromList [Text.intercalate "/" prefix | path <- paths, prefix <- drop 1 (init (inits (Text.splitOn "/" path)))]
+        unless (length entries <= 10000 && length paths == Set.size (Set.fromList paths) && Set.size prefixes == Set.size (Set.map Text.toCaseFold prefixes) && Set.null (Set.intersection (Set.fromList paths) directories)) refused
+        pure entries
+  where
+    parse line = case Text.breakOn "\t" line of
+      (header, suffix) | not (Text.null suffix) -> case Text.words header of
+        [mode, "blob", object] | mode `elem` ["100644", "100755"] && validObject object && validWorkspacePath (Text.drop 1 suffix) && Text.all (< '\DEL') suffix && length (Text.splitOn "/" suffix) <= 128 -> Right (GitEntry (Text.drop 1 suffix) mode object)
+        _ -> refused
+      _ -> refused
+
+readBlob :: FilePath -> Int -> Text.Text -> IO (Either WorkspaceError Bytes.ByteString)
+readBlob metadata limit object
+  | not (validObject object) || limit < 0 || limit > 16777216 = pure refused
+  | otherwise = do
+      kind <- git metadata 16 [] ["cat-file", "-t", Text.unpack object] ""
+      if kind == Right "blob\n" then git metadata limit [] ["cat-file", "blob", Text.unpack object] "" else pure refused
 
 -- A lost update acknowledgement recovers by inspecting the exact result.
 -- Another parent never gets overwritten. --no-deref prevents branch traversal.

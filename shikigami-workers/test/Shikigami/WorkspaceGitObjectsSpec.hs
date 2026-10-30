@@ -9,7 +9,7 @@ import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUID
 import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Workspace.ContainedFile (ensurePrivateDirectory)
-import Shikigami.Workspace.Git (runWorkspaceGit)
+import Shikigami.Workspace.Git (runWorkspaceGit, runWorkspaceGitInput)
 import Shikigami.Workspace.GitObjects
 import Shikigami.Workspace.Types (WorkspaceError)
 import System.Directory (createDirectory, doesFileExist, getTemporaryDirectory, removeFile, removePathForcibly)
@@ -22,7 +22,34 @@ tests :: TestTree
 tests =
   testGroup
     "workspace trusted Git objects"
-    [ testCase "exact bytes and executable intent form an isolated tree without filters" $ fixture \root metadata parent -> do
+    [ testCase "exact reads preserve bytes and reject expressions and wrong types" $ fixture \_ metadata parent -> do
+        (tree, parents) <- right =<< readCommit metadata parent
+        parents @?= []
+        entries <- right =<< readFlatTree metadata tree
+        map (.name) entries @?= ["dependency.txt"]
+        let [entry] = entries
+        readBlob metadata 1024 entry.objectId >>= (@?= Right "old dependency\n")
+        readCommit metadata (parent <> "^{commit}") >>= assertLeft
+        readCommit metadata tree >>= assertLeft
+        readFlatTree metadata parent >>= assertLeft
+        readBlob metadata 1024 tree >>= assertLeft
+        readBlob metadata 2 entry.objectId >>= assertLeft,
+      testCase "immutable artifacts remain readable after source HEAD advances" $ fixture \_ metadata parent -> do
+        blob <- right =<< storeBlob metadata "first\n"
+        tree <- right =<< storeFlatTree metadata [GitEntry "dependency.txt" "100644" blob]
+        first <- right =<< storeCommit metadata parent tree author now (OperationId "first") "First"
+        publishCommit metadata parent first >>= (@?= Right ())
+        second <- right =<< storeCommit metadata first tree author now (OperationId "second") "Second"
+        publishCommit metadata first second >>= (@?= Right ())
+        readCommit metadata first >>= (@?= Right (tree, [parent]))
+        readHead metadata >>= (@?= Right second),
+      testCase "untrusted existing trees refuse symlinks and case aliases" $ fixture \root metadata _ -> do
+        blob <- right =<< storeBlob metadata "outside"
+        symlink <- rawTree root metadata ("120000 blob " <> blob <> "\tlink\0")
+        aliases <- rawTree root metadata ("100644 blob " <> blob <> "\tA\0" <> "100644 blob " <> blob <> "\ta\0")
+        readFlatTree metadata symlink >>= assertLeft
+        readFlatTree metadata aliases >>= assertLeft,
+      testCase "exact bytes and executable intent form an isolated tree without filters" $ fixture \root metadata parent -> do
         marker <- armHelpers root metadata
         blob <- right =<< storeBlob metadata "new dependency\r\n"
         attributes <- right =<< storeBlob metadata "* filter=hostile diff=hostile\n"
@@ -137,3 +164,6 @@ author = GitAuthor "Shikigami Fixture" "fixture@example.invalid"
 
 now :: UTCTime
 now = UTCTime (fromGregorian 2026 10 30) 0
+
+rawTree :: FilePath -> FilePath -> Text.Text -> IO Text.Text
+rawTree root metadata body = Text.strip . Encoding.decodeUtf8 <$> (right =<< runWorkspaceGitInput root 1048576 [] ["--git-dir=" <> metadata, "mktree", "-z"] (Encoding.encodeUtf8 body))

@@ -4,18 +4,22 @@ module Shikigami.WorkspaceGitProviderSpec (tests) where
 
 import Control.Exception (throwIO)
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString qualified as Bytes
 import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Encoding
 import Data.Time (addUTCTime, getCurrentTime)
 import Data.UUID qualified as UUID
+import Data.UUID.V4 qualified as UUID
 import Effectful (Eff)
 import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Kioku.App (AppEffects, AppEnv, runAppIO)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization
+import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Capability.Provider (DurableAdapter (..))
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Executor qualified as Executor
@@ -29,6 +33,7 @@ import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.Store.ExecutionResources qualified as Roots
 import Shikigami.Workspace.Allocation
+import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.ContainedFile
 import Shikigami.Workspace.FileProvider
 import Shikigami.Workspace.Git (runWorkspaceGit)
@@ -37,7 +42,9 @@ import Shikigami.Workspace.GitObjects qualified as Objects
 import Shikigami.Workspace.GitProvider
 import Shikigami.Workspace.GitStore qualified as Git
 import Shikigami.Workspace.GitTypes
+import Shikigami.Workspace.InstructionLoader
 import Shikigami.Workspace.Instructions
+import Shikigami.Workspace.Integration qualified as Integration
 import Shikigami.Workspace.Process
 import Shikigami.Workspace.ProcessPolicy
 import Shikigami.Workspace.ProcessProfileStore
@@ -56,7 +63,34 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace accepted Git provider"
-    [ testCase "transfer-aware Git revision recovers its original exact commit after freeze" $ withGitVersion True fixture "commit" \env binding snapshot _ reference runtime profile backend -> do
+    [ testCase "accepted integration combines two retained worker artifacts in a third clean workspace" $ withIntegration fixture False \env target admission runtime backend artifacts -> do
+        let input = Aeson.toJSON (Integration.Request target.base artifacts)
+        withIntegrationTool env admission runtime backend input \output -> do
+          value <- outputValue output
+          field "conflicts" value @?= Just (Aeson.toJSON ([] :: [Text.Text]))
+          field "paths" value @?= Just (Aeson.toJSON ["src/AGENTS.md", "src/dependency.txt" :: Text.Text])
+          assertBool "combined tree retained" (isJustValue (field "tree" value))
+          replacements <- case field "replacements" value of Just body -> right (Aeson.fromJSON body `asEither` ()); _ -> fail "missing replacements"
+          map (\(replacement :: Replacement) -> replacement.path) replacements @?= ["src/AGENTS.md", "src/dependency.txt"]
+          readFile (workspaceFiles target.storageRoot target </> "src/dependency.txt") >>= (@?= "old dependency\n")
+          Objects.readHead (workspaceMetadata target.storageRoot target) >>= (@?= Right target.base),
+      testCase "unequal overlapping worker changes return conflicts without changing files or HEAD" $ withIntegration fixture True \env target admission runtime backend artifacts ->
+        withIntegrationTool env admission runtime backend (Aeson.toJSON (Integration.Request target.base artifacts)) \output -> do
+          value <- outputValue output
+          field "conflicts" value @?= Just (Aeson.toJSON ["src/dependency.txt" :: Text.Text])
+          field "replacements" value @?= Just (Aeson.toJSON ([] :: [Replacement]))
+          Objects.readHead (workspaceMetadata target.storageRoot target) >>= (@?= Right target.base),
+      testCase "forged artifact coordinates refuse before capture" $ withIntegration fixture False \env target admission runtime backend artifacts -> do
+        let forged = head artifacts & #revision .~ Text.replicate 40 "0"
+        withIntegrationTool env admission runtime backend (Aeson.toJSON (Integration.Request target.base (forged : tail artifacts))) assertRefused,
+      testCase "denied integration authority refuses without changing HEAD" $ withIntegration fixture False \env target admission runtime backend artifacts -> do
+        withIntegrationTool env admission (runtime & #authorizer .~ denyAllActionAuthorizer) backend (Aeson.toJSON (Integration.Request target.base artifacts)) assertRefused
+        Objects.readHead (workspaceMetadata target.storageRoot target) >>= (@?= Right target.base),
+      testCase "dirty integration target refuses rather than overwriting prior work" $ withIntegration fixture False \env target admission runtime backend artifacts -> do
+        writeFile (workspaceFiles target.storageRoot target </> "src/dependency.txt") "uncommitted integrator change\n"
+        withIntegrationTool env admission runtime backend (Aeson.toJSON (Integration.Request target.base artifacts)) assertRefused
+        readFile (workspaceFiles target.storageRoot target </> "src/dependency.txt") >>= (@?= "uncommitted integrator change\n"),
+      testCase "transfer-aware Git revision recovers its original exact commit after freeze" $ withGitVersion True fixture "commit" \env binding snapshot _ reference runtime profile backend -> do
         profileReady env binding profile
         publications <- newIORef (0 :: Int)
         Bytes.writeFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") "new dependency\n"
@@ -265,3 +299,74 @@ run env action = runAppIO env action >>= right
 
 right :: (Show e) => Either e a -> IO a
 right = either (\err -> assertFailure (show err) >> fail "unreachable") pure
+
+-- All three allocations share one actual execution root and approved base.
+-- Source commits use the real accepted Git adapter; only native enumeration is
+-- instrumented on Darwin. Applying recipes/validation belongs to Linux gates.
+withIntegration :: DatabaseFixture -> Bool -> (AppEnv -> WorkspaceBinding -> WorkspaceAdmission -> FileRuntime -> GitBackend -> [Integration.Artifact] -> IO a) -> IO a
+withIntegration fixture conflicting use = withGitVersion True fixture "commit" \env first snapshot _ reference runtime profile backend -> do
+  profileReady env first profile
+  Bytes.writeFile (workspaceFiles first.storageRoot first </> "src/dependency.txt") "worker one\n"
+  execute (Fixture.executorForAdapter (transferredWorkspaceGitAdapterWithBackend backend) runtime) snapshot reference
+  firstArtifact <- artifact env reference
+  (second, secondAdmission) <- sibling env first profile "worker-two"
+  let secondPath = if conflicting then "src/dependency.txt" else "src/AGENTS.md"
+  Bytes.writeFile (workspaceFiles second.storageRoot second </> Text.unpack secondPath) "worker two\n"
+  token <- UUID.nextRandom
+  Fixture.withAcceptedWorkspaceTool 1 (transferredWorkspaceGitAdapterWithBackend backend) (AgentName "worker") "overlay__workspace-git__commit" token env secondAdmission runtime (Aeson.toJSON (GitCommitRequest second.base "Worker two")) \secondSnapshot _ secondReference -> do
+    execute (Fixture.executorForAdapter (transferredWorkspaceGitAdapterWithBackend backend) runtime) secondSnapshot secondReference
+    secondArtifact <- artifact env secondReference
+    (target, admission) <- sibling env first profile "integrator"
+    use env target admission runtime backend [firstArtifact, secondArtifact]
+  where
+    artifact env reference = do
+      Just (binding, record) <- run env (runTransaction (Git.inspectRegisteredGitTx reference.operationId))
+      record.phase @?= GitApplied
+      candidate <- maybe (fail "missing applied artifact") pure record.candidate
+      pure (Integration.Artifact reference.operationId (workspaceBindingDigest binding) binding.base candidate.result)
+
+sibling :: AppEnv -> WorkspaceBinding -> ProcessProfile -> Text.Text -> IO (WorkspaceBinding, WorkspaceAdmission)
+sibling env original profile runId = do
+  catalog <- right (mkWorkspaceCatalog [RepositoryPolicy original.repository original.source [original.base] original.base original.policyRevision])
+  repository <- right (resolveRepository catalog original.repository Nothing)
+  let request = original.request & #runId .~ runId
+  (binding, state) <- right =<< run env (runTransaction (Store.reserveWorkspaceTx original.storageRoot request repository))
+  allocateWorkspace original.storageRoot binding state >>= (@?= Right ())
+  run env (runTransaction (Store.markWorkspaceReadyTx binding)) >>= (@?= Right ())
+  admission <- right =<< loadWorkspaceAdmission binding (runId <> "-assignment") 65536
+  (retained, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest admission.instructions) profile.policy (IdentityRange 62002 62020)))
+  profileReady env binding retained
+  pure (binding, admission & #filePolicy .~ Just transferableFilePolicy)
+
+withIntegrationTool :: AppEnv -> WorkspaceAdmission -> FileRuntime -> GitBackend -> Aeson.Value -> (OperationOutcome -> IO a) -> IO a
+withIntegrationTool env admission runtime backend input use = do
+  token <- UUID.nextRandom
+  let adapter = workspaceIntegrationAdapterWithBackend backend
+  Fixture.withAcceptedWorkspaceTool 1 adapter (AgentName "worker") integrationBinding.name token env admission runtime input \snapshot access reference -> do
+    execute (Fixture.executorForAdapter adapter runtime) snapshot reference
+    Just operation <- right =<< run env (Execution.inspectOperation reference.operationId)
+    result <- maybe (fail "missing integration result") pure operation.outcome
+    output <- right =<< run env (Execution.readReplayPayload @OperationOutcome access "operation-outcome" result)
+    use output
+
+outputValue :: OperationOutcome -> IO Aeson.Value
+outputValue (RichToolReturned result) | not result.failed = case result.blocks of
+  [TextBlock value] -> right (Aeson.eitherDecodeStrict (Encoding.encodeUtf8 value))
+  _ -> fail "expected exact integration JSON"
+outputValue _ = fail "expected successful integration"
+
+field :: Aeson.Key -> Aeson.Value -> Maybe Aeson.Value
+field name (Aeson.Object fields) = KeyMap.lookup name fields
+field _ _ = Nothing
+
+isJustValue :: Maybe a -> Bool
+isJustValue = maybe False (const True)
+
+asEither :: Aeson.Result a -> () -> Either String a
+asEither (Aeson.Success value) _ = Right value
+asEither (Aeson.Error err) _ = Left err
+
+assertRefused :: OperationOutcome -> Assertion
+assertRefused (ToolReturned _ True) = pure ()
+assertRefused (RichToolReturned result) | result.failed = pure ()
+assertRefused _ = assertFailure "expected bounded refusal"

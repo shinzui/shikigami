@@ -198,6 +198,20 @@ conversation overlays requires a separately declared, patch-gated resolution bou
 conversation lifecycle.
 
 
+
+## Retained artifact integration
+
+`workspace.integrate:1` is a separate exact observation descriptor; adding it
+does not reinterpret an accepted Git revision or menu. Its grant binds the full
+retained applied artifacts and current integrator coordinates. It consumes
+immutable local objects from distinct workspaces under one execution root and
+returns a protected combined-tree proposal. It never acquires source worktree
+write authority. Applying replacements, validating and committing remain
+separate accepted operations. Overlap conflicts and unsupported deltas fail
+closed. The final validation evidence belongs to the combined tree rather than
+being inferred from successful worker-local checks.
+
+
 ## References
 
 * `docs/plans/56-declare-agent-capability-overlay-requirements-and-the-operator-catalog.md`

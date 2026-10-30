@@ -139,9 +139,10 @@ admitSuccessorTx binding admission = do
         case transferred of
           Just (intent, Just proof) | matchesFence intent proof && intent.sessionId == current.session && intent.operationId == progress.operationId && intent.newOwner == current.owner && intent.newEpoch == current.epoch && intent.rootId == current.rootId -> do
             settled <- Tx.statement binding.workspace.resource settledWorkspace
+            earlier <- Tx.statement (binding.workspace.resource, current.sequence) priorSuccessorsSettled
             let old = Store.WorkspaceControl intent.oldOwner intent.oldEpoch True
                 new = Store.WorkspaceControl intent.newOwner intent.newEpoch False
-            if settled && (control == Just old || control == Just new)
+            if settled && earlier && (control == Just old || control == Just new)
               then do
                 Tx.statement (admission.runId, binding.workspace.resource, current.session.value, current.assignment.value, current.sequence, admission) insertAdmission
                 stored <- Tx.statement admission.runId selectAdmission
@@ -295,3 +296,8 @@ selectFollowupWorkspace = preparable "SELECT binding FROM shikigami.workspace_bi
 
 priorAssignmentsSettled :: Statement (Text, Text, Text, Aeson.Value) Bool
 priorAssignmentsSettled = preparable "SELECT EXISTS(SELECT 1 FROM shikigami.worker_session_messages m JOIN shikigami.worker_session_results r USING(assignment_id) JOIN shikigami.executions e ON e.execution_id=$4->>'executionId' WHERE m.session_id=$2 AND m.assignment_id=$3 AND m.state->>'phase'='AssignmentFinished' AND e.binding->>'assignmentId'=$4->>'assignmentId' AND e.binding->'identity'=$4->'owner' AND e.binding->'rootId'=$4->'rootId' AND e.state->>'phase' IN ('Succeeded','Failed','Cancelled') AND COALESCE((e.state->>'pendingReceipts')::bigint,0)=0 AND COALESCE(e.state->'activeOperation','null'::jsonb)='null'::jsonb AND (COALESCE(m.state->'executionId','null'::jsonb)='null'::jsonb OR m.state->>'executionId'=e.execution_id)) AND NOT EXISTS(SELECT 1 FROM shikigami.workspace_successor_admissions a JOIN shikigami.worker_session_messages m ON m.assignment_id=a.assignment_id LEFT JOIN shikigami.executions e ON e.binding->>'assignmentId'=a.admission->>'assignmentId' WHERE a.resource=$1 AND a.sequence<($4->>'sequence')::bigint AND (m.state->>'phase'<>'AssignmentFinished' OR e.execution_id IS NULL OR e.binding->'identity'<>$4->'owner' OR e.binding->'rootId'<>$4->'rootId' OR e.state->>'phase' NOT IN ('Succeeded','Failed','Cancelled') OR COALESCE((e.state->>'pendingReceipts')::bigint,0)<>0 OR COALESCE(e.state->'activeOperation','null'::jsonb)<>'null'::jsonb OR (COALESCE(m.state->'executionId','null'::jsonb)<>'null'::jsonb AND m.state->>'executionId'<>e.execution_id)))" (contrazip4 textParam textParam textParam (E.param (E.nonNullable E.jsonb))) (D.singleRow (D.column (D.nonNullable D.bool)))
+
+-- A session result alone cannot retire an admitted execution. Later children
+-- at an established successor epoch wait for the actual execution and receipts.
+priorSuccessorsSettled :: Statement (Text, Integer) Bool
+priorSuccessorsSettled = preparable "SELECT NOT EXISTS(SELECT 1 FROM shikigami.workspace_successor_admissions a LEFT JOIN shikigami.worker_session_messages m ON m.assignment_id=a.assignment_id LEFT JOIN shikigami.executions e ON e.binding->>'assignmentId'=a.admission->>'assignmentId' WHERE a.resource=$1 AND a.sequence<$2 AND (m.state IS NULL OR m.state->>'phase'<>'AssignmentFinished' OR e.execution_id IS NULL OR e.binding->'identity'<>a.admission->'owner' OR e.binding->'rootId'<>a.admission->'rootId' OR e.state->>'phase' NOT IN ('Succeeded','Failed','Cancelled') OR COALESCE((e.state->>'pendingReceipts')::bigint,0)<>0 OR COALESCE(e.state->'activeOperation','null'::jsonb)<>'null'::jsonb OR (COALESCE(m.state->'executionId','null'::jsonb)<>'null'::jsonb AND m.state->>'executionId'<>e.execution_id)))" (contrazip2 textParam integerParam) (D.singleRow (D.column (D.nonNullable D.bool)))

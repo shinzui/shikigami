@@ -18,7 +18,7 @@ import Shikigami.Prelude
 import Shikigami.Workspace.Admission (WorkspaceHost)
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.FileProvider
-import Shikigami.Workspace.GitProvider (transferredWorkspaceGitAdapter, workspaceGitAdapter)
+import Shikigami.Workspace.GitProvider (transferredWorkspaceGitAdapter, workspaceGitAdapter, workspaceIntegrationAdapter)
 import Shikigami.Workspace.Host
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.ProcessProvider
@@ -74,7 +74,7 @@ configuredWorkspaceHostFor transferable appEnv pool directory authorizer setting
                       accepted = if transferable then admission else admission & #filePolicy .~ Just supervisedFilePolicy
                   result <- provisionWorkspaceProfile provision binding accepted policy process.identities
                   pure (either (const refused) (const (Right accepted)) result)
-          selected = if transferable then [transferredWorkspaceEditAdapter runtime, transferredWorkspaceExecAdapter client, transferredWorkspaceGitAdapter runtime] else [supervisedWorkspaceEditAdapter runtime, workspaceExecAdapter client, workspaceGitAdapter runtime]
+          selected = if transferable then [transferredWorkspaceEditAdapter runtime, transferredWorkspaceExecAdapter client, transferredWorkspaceGitAdapter runtime, workspaceIntegrationAdapter runtime] else [supervisedWorkspaceEditAdapter runtime, workspaceExecAdapter client, workspaceGitAdapter runtime]
           historical = if transferable then [workspaceEditAdapter runtime, supervisedWorkspaceEditAdapter runtime, workspaceExecAdapter client, workspaceGitAdapter runtime] else [workspaceEditAdapter runtime]
           host = if transferable then governedWorkspaceHostWithTransfers else governedWorkspaceHost
       host runtime selected historical prepare settings.storageRoot select current

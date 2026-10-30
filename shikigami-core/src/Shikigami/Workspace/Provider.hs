@@ -2,6 +2,7 @@
 module Shikigami.Workspace.Provider where
 
 import Data.Aeson qualified as Aeson
+import Data.List (nub)
 import Data.Text qualified as Text
 import Kikan.En.Action (AgentAction (InvokeCapabilityTool), mkCapabilityToolTarget)
 import Shikigami.Agent.Principal (AgentIdentity)
@@ -245,3 +246,15 @@ workspaceGitObservationActionFor transferable binding admission dispatch profile
       digest = Text.replace ":" "-" (versionedDigest (if transferable then "shikigami.workspace-git-observation/2" else "shikigami.workspace-git-observation/1") coordinates)
       revision = (if transferable then "git2-" else "git1-") <> Text.replace ":" "-" (workspaceBindingDigest binding)
   either (const (Left FileEffectRefused)) (Right . InvokeCapabilityTool) (mkCapabilityToolTarget "shikigami.workspace" revision (kind <> "-" <> digest))
+
+-- The exact source receipts are part of the grant, not caller-selected paths.
+-- Reading artifacts grants no authority over their worktrees or HEADs.
+workspaceIntegrationAction :: WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> ProcessProfile -> Text -> Text -> [(WorkspaceBinding, Git.GitRecord)] -> Either FileEffectError AgentAction
+workspaceIntegrationAction binding admission dispatch profile input target sources = do
+  _ <- workspaceTransferredGitObservationAction binding admission dispatch profile "status" input target
+  unless (length sources >= 2 && length sources <= 8 && length (nub (map (workspaceBindingDigest . fst) sources)) == length sources) (Left FileEffectRefused)
+  forM_ sources \(source, record) -> do
+    unless (source.workspace /= binding.workspace && source.repository == binding.repository && source.base == binding.base && source.request.rootId == admission.rootId && Git.validGitRecord record && record.bindingDigest == workspaceBindingDigest source && record.fingerprint == Git.gitFingerprint source record && record.phase == Git.GitApplied) (Left FileEffectRefused)
+    candidate <- maybe (Left FileEffectRefused) Right record.candidate
+    unless (candidate.parent == source.base) (Left FileEffectRefused)
+  workspaceControlAction binding "integrate" (toJSON (admission, dispatch.operation, dispatch.attemptId, dispatch.owner, dispatch.generation, profile, input, target, sources))

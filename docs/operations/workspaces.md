@@ -171,3 +171,27 @@ observes its original completion. Files and scratch are removed, while Git
 metadata, allocation markers, receipts, database rows and Unix identities
 remain available for audit/recovery. This does not grant capacity by discarding
 uncertain effects or provide general deletion of arbitrary host directories.
+
+## Exact artifact integration
+
+The explicit qualification host also offers `workspace.integrate:1`. An agent
+must declare that capability to see `overlay__workspace-integrate__plan`.
+Supply an exact target parent and two to eight retained worker artifact
+references (`operationId`, `bindingDigest`, `base`, `revision`). Sources must be
+applied Git receipts from distinct workspaces with the same repository, approved
+base and execution root. This revision requires one-parent worker commits made
+directly on that base. No source worktree, remote or branch is read.
+
+The target must be clean. Planning reports overlap conflicts without modifying
+files or HEAD. A successful protected result contains the exact combined tree,
+changed paths and bounded replacement proposals. Apply those through the edit
+tool, validate the combined tree and commit against the returned expected parent.
+Compare the final commit's tree with the proposal. Successful worker-local
+checks do not establish combined validation. Proposals support ordinary UTF-8
+replacements/creation in existing directories; deletions, binary changes, new
+directories and executable-mode changes refuse. Unchanged binary objects remain
+exact. The complete proposal is limited to 32 KiB and 256 changed paths.
+
+The production host still selects the earlier qualified revisions. Native
+successor writes and the real objective ownership provider remain separate
+activation gates; an integration test supplies neither.

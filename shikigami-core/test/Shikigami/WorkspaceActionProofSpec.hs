@@ -343,6 +343,18 @@ tests =
         nextFollowupAction <- right (workspaceFollowupAdmissionAction transferBinding (followup & #runId .~ "next-followup" & #assignmentId .~ "next-assignment") retainedProfile)
         verifyTargets followupAction [successorAction, nextFollowupAction]
         workspaceSuccessorAdmissionAction transferBinding followup retainedProfile @?= Left FileEffectRefused
+        let sourceBinding suffix = provisionBinding & #workspace . #resource .~ Text.replicate 64 suffix & #request . #runId .~ ("artifact-" <> suffix)
+            sourceRecord source = let raw = gitRecord & #bindingDigest .~ workspaceBindingDigest source & #phase .~ Git.GitApplied in raw & #fingerprint .~ Git.gitFingerprint source raw
+            sourceOne = sourceBinding "d"
+            sourceTwo = sourceBinding "e"
+            sources = [(sourceOne, sourceRecord sourceOne), (sourceTwo, sourceRecord sourceTwo)]
+            integrationAction admission selected = workspaceIntegrationAction transferBinding admission gitDispatch retainedProfile command.profile "device:files" selected
+        exactIntegration <- right (integrationAction successorAdmission sources)
+        changedIntegrationRun <- right (integrationAction (successorAdmission & #runId .~ "other-integration-run") sources)
+        let changedArtifact = (sourceOne, let raw = sourceRecord sourceOne & #candidate .~ Just (candidate & #result .~ Text.replicate 40 "f") in raw & #fingerprint .~ Git.gitFingerprint sourceOne raw)
+        changedIntegrationSource <- right (integrationAction successorAdmission (changedArtifact : tail sources))
+        verifyTargets exactIntegration [successorStatus, changedIntegrationRun, changedIntegrationSource]
+        integrationAction successorAdmission [head sources, head sources] @?= Left FileEffectRefused
     ]
 
 right :: (Show e) => Either e a -> IO a

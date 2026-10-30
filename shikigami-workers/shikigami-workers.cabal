@@ -69,6 +69,7 @@ library
     Shikigami.Workspace.GitProvider
     Shikigami.Workspace.Host
     Shikigami.Workspace.InstructionLoader
+    Shikigami.Workspace.Integration
     Shikigami.Workspace.Maintenance
     Shikigami.Workspace.ProcessProvider
     Shikigami.Workspace.Profile

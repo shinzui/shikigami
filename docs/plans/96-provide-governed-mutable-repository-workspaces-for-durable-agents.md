@@ -212,6 +212,25 @@ session epoch; successor follow-ups still use the established-transfer path.
 All 533 core, 358 PostgreSQL, 239 worker and five migration tests pass. Native
 owned writes, process fencing and integrated artifacts remain open.
 
+
+Revision-pinned integration is implemented as the separately declared exact
+`workspace.integrate:1` observation (2026-10-30). It checks applied original Git
+receipts from distinct workspaces sharing the repository, approved base and
+execution root. Fresh C13 binds the full retained artifacts, target profile,
+anchor and actual claim. It reads immutable Git objects without consulting the
+workers' mutable trees and returns bounded compare-and-replace proposals or
+explicit overlap conflicts. File-3 edits, process-2 validation and Git-2 commits
+remain separately accepted effects. The first revision supports direct
+one-parent artifacts on the approved base and bounded UTF-8 changes in existing
+directories, preserving unchanged binary objects. Deletes, new directories and
+executable-mode changes refuse. Dirty targets refuse before planning. All 533
+core, 358 PostgreSQL, 247 worker and five migration tests pass, including actual
+accepted artifacts/planning, conflict, denial, forgery and dirty-target cases.
+The real Kikan verifier binds changed source artifacts and integrator runs.
+Successor follow-ups also wait for preceding admitted executions and receipts
+to become terminal. The native integration/followup/fence fixture is being
+built; these host results do not qualify Linux owned writes or joint handoff.
+
 ## Surprises & Discoveries
 
 2026-10-30 successor design: retain the original allocation and process profile

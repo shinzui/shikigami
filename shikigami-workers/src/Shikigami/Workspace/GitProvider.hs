@@ -15,6 +15,10 @@ module Shikigami.Workspace.GitProvider
     workspaceGitAdapterWithBackend,
     runGitTool,
     reconcileGitEffect,
+    workspaceIntegrationDescriptor,
+    workspaceIntegrationAdapter,
+    workspaceIntegrationAdapterWithBackend,
+    integrationBinding,
     GitPublication (..),
     publishGitReceipt,
   )
@@ -55,6 +59,7 @@ import Shikigami.Workspace.GitObjects qualified as Objects
 import Shikigami.Workspace.GitStore qualified as Git
 import Shikigami.Workspace.GitTypes
 import Shikigami.Workspace.Instructions
+import Shikigami.Workspace.Integration qualified as Integration
 import Shikigami.Workspace.ProcessPolicy
 import Shikigami.Workspace.Profile (retainedFileProfile)
 import Shikigami.Workspace.Provider
@@ -189,13 +194,16 @@ emptyInput (Aeson.Object fields) | null fields = pure ()
 emptyInput _ = abort FileEffectRefused
 
 loadAccepted :: Bool -> FileRuntime -> ExecutionSnapshot -> DispatchContext -> Text -> Aeson.Value -> IO AcceptedGit
-loadAccepted transferable runtime snapshot dispatch name input = do
+loadAccepted transferable runtime snapshot dispatch name input = loadAcceptedTool transferable (gitDescriptorFor transferable) (gitBindingFor transferable name) runtime snapshot dispatch input
+
+loadAcceptedTool :: Bool -> CapabilityDescriptor -> ToolBinding -> FileRuntime -> ExecutionSnapshot -> DispatchContext -> Aeson.Value -> IO AcceptedGit
+loadAcceptedTool transferable descriptor expected runtime snapshot dispatch input = do
   access <- execute runtime.appEnv (Execution.authorizeReplay snapshot.executionId snapshot.identity (runtime.replayAuthority snapshot))
   (retained, _) <- execute runtime.appEnv (Execution.loadExecution access)
   operation <- execute runtime.appEnv (Execution.inspectOperation dispatch.operation.operationId) >>= maybe (abort FileEffectRefused) pure
   admission <- maybe (abort FileEffectRefused) pure snapshot.workspace
-  let expected = gitBindingFor transferable name; OperationId key = dispatch.operation.operationId
-  unless (retained == snapshot && admission.filePolicy == Just (if transferable then transferableFilePolicy else supervisedFilePolicy) && gitDescriptorFor transferable `elem` resolvedCapabilities snapshot.capabilities && dispatch.operation == OperationContext snapshot.executionId dispatch.operation.operationId key operation.fingerprint operation.specification.scopeDigest && operation.executionId == snapshot.executionId && operation.specification.kind == ToolOperation && operation.specification.name == expected.name && operation.specification.recovery == expected.recovery && operation.specification.scopeDigest == toolScopeDigest expected && operation.specification.policyDigest == versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) (abort FileEffectRefused)
+  let OperationId key = dispatch.operation.operationId
+  unless (retained == snapshot && admission.filePolicy == Just (if transferable then transferableFilePolicy else supervisedFilePolicy) && descriptor `elem` resolvedCapabilities snapshot.capabilities && dispatch.operation == OperationContext snapshot.executionId dispatch.operation.operationId key operation.fingerprint operation.specification.scopeDigest && operation.executionId == snapshot.executionId && operation.specification.kind == ToolOperation && operation.specification.name == expected.name && operation.specification.recovery == expected.recovery && operation.specification.scopeDigest == toolScopeDigest expected && operation.specification.policyDigest == versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) (abort FileEffectRefused)
   tool <- execute runtime.appEnv (Execution.readReplayPayload @ToolOperationInput access "operation-input" operation.input)
   unless (tool.binding == expected && expected `elem` snapshot.toolBindings && tool.invocation.name == expected.name && tool.invocation.arguments == input && operation.specification.responsePosition == Just tool.position) (abort FileEffectRefused)
   response <- execute runtime.appEnv (Execution.readReplayPayload @OperationOutcome access "operation-outcome" tool.response)
@@ -436,3 +444,73 @@ abort = throwIO . GitAbort
 
 protect :: IO a -> IO (Either FileEffectError a)
 protect action = catch (catch (Right <$> action) (\(GitAbort err) -> pure (Left err))) (\(_ :: IOException) -> pure (Left FileEffectUnresolved))
+
+-- A separate exact revision avoids changing the accepted Git tool menu.
+workspaceIntegrationDescriptor :: CapabilityDescriptor
+workspaceIntegrationDescriptor = CapabilityDescriptor (must (mkCapabilityId "workspace.integrate")) (must (mkCapabilityRevision "1")) [CapabilityToolDescriptor "plan" Observation]
+  where
+    must :: (Show e) => Either e a -> a; must = either (error . show) id
+
+integrationBinding :: ToolBinding
+integrationBinding = ToolBinding "overlay__workspace-integrate__plan" "workspace.integrate:1" (versionedDigest "shikigami.tool-schema/1" Integration.schema) RepeatableObservation NoInvoiceCost
+
+workspaceIntegrationAdapter :: FileRuntime -> DurableAdapter
+workspaceIntegrationAdapter = workspaceIntegrationAdapterWithBackend nativeGitBackend
+
+workspaceIntegrationAdapterWithBackend :: GitBackend -> FileRuntime -> DurableAdapter
+workspaceIntegrationAdapterWithBackend backend runtime = DurableAdapter workspaceIntegrationDescriptor [DurableToolContract "plan" description Integration.schema RepeatableObservation NoInvoiceCost] \snapshot dispatch name ->
+  pure
+    ( Right
+        ( mkDynTool
+            name
+            description
+            Integration.schema
+            ( \input -> unsafeEff_ do
+                result <- protect (integration backend runtime snapshot dispatch name input)
+                pure (either (const (Left (ToolRunFailed name "workspace integration refused"))) (Right . textToolOutput . Encoding.decodeUtf8 . Lazy.toStrict . Aeson.encode) result)
+            )
+        )
+    )
+  where
+    description = "Plan exact retained worker artifacts in this separate clean workspace. Conflicts change no files or HEAD. Apply returned replacements, validate and commit using the governed tools."
+
+integration :: GitBackend -> FileRuntime -> ExecutionSnapshot -> DispatchContext -> Text -> Aeson.Value -> IO Aeson.Value
+integration backend runtime snapshot dispatch name input = do
+  unless (name == "plan") (abort FileEffectRefused)
+  request <- either (const (abort FileEffectRefused)) pure (parseEither Aeson.parseJSON input)
+  unless (Integration.validRequest request) (abort FileEffectRefused)
+  accepted <- loadAcceptedTool True workspaceIntegrationDescriptor integrationBinding runtime snapshot dispatch input
+  _ <- backend.host >>= either (const (abort FileEffectRefused)) pure
+  sources <- forM request.artifacts \artifact -> do
+    (source, record) <- transact runtime.appEnv (Git.inspectRegisteredGitTx artifact.operationId) >>= maybe (abort FileEffectRefused) pure
+    unless (workspaceBindingDigest source == artifact.bindingDigest && source.base == artifact.base && maybe False ((== artifact.revision) . (.result)) record.candidate) (abort FileEffectRefused)
+    pure (source, record)
+  let binding = accepted.binding; metadata = workspaceMetadata binding.storageRoot binding
+  needFile =<< checkPrivateDirectory binding.storageRoot
+  needFile =<< checkPrivateDirectory metadata
+  locked <-
+    withWorkspaceLock
+      metadata
+      ( Right <$> do
+          current runtime accepted
+          profile <- retainedFileProfile runtime.appEnv binding accepted.admission >>= either (const (abort FileEffectRefused)) pure
+          anchored <-
+            withContainedFile
+              (workspaceFiles binding.storageRoot binding)
+              ".shikigami-git-target"
+              ( \anchor ->
+                  Right <$> do
+                    target <- containedTargetIdentity anchor >>= either (const (abort FileEffectRefused)) pure
+                    grant runtime accepted (workspaceIntegrationAction binding accepted.admission dispatch profile accepted.routing.inputDigest target sources)
+                    headId <- Objects.readHead metadata >>= either (const (abort FileEffectRefused)) pure
+                    unless (headId == request.expectedParent) (abort FileEffectConflict)
+                    captured <- capture backend runtime accepted profile target
+                    (headTree, _) <- Objects.readCommit metadata headId >>= either (const (abort FileEffectRefused)) pure
+                    unless (captured.tree == headTree) (abort FileEffectConflict)
+                    result <- Integration.planIntegration binding request sources (admitPath runtime accepted profile "replace") >>= either (const (abort FileEffectRefused)) pure
+                    current runtime accepted
+                    bounded result
+              )
+          either (const (abort FileEffectRefused)) pure anchored
+      )
+  either (const (abort FileEffectUnresolved)) pure locked
