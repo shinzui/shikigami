@@ -46,6 +46,15 @@ first-release exception; neutral native helper references do not imply old
 producer-identity compatibility. No old citation factory fallback is introduced.
 
 
+[ADR-93](adr/0093-review-entities-are-allocated-behind-durable-request-receipts.md)
+adds the review identity reservation step and changes resolution input/result
+contracts to owner-allocated UUIDv7 entities. Allocation receipts retain logical
+request convergence; memory candidate recording and retirement keep their
+recovery protocol. Retain the exact breaking native findings under this unused
+first-release exception and establish the committed current baseline. No old ID
+reader or patch false branch is introduced.
+
+
 ## What a durable workflow is, and why editing one is not like editing ordinary code
 
 Shikigami runs each agent run and each Danwa conversation as a **durable

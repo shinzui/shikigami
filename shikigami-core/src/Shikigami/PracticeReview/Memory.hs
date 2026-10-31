@@ -5,9 +5,9 @@
 -- The public effect is deliberately narrower than the generic Flow memory
 -- capability. A review transition owns logical ids, typed envelopes, an exact
 -- practice scope, and Kioku's separate record/retire protocol. Flow code gets
--- those four operations and no Kioku environment or IO capability.
+-- these operations and no Kioku environment or IO capability.
 --
--- The specialist Flow installs this interpreter with four static journal
+-- The specialist Flow installs this interpreter with static journal
 -- labels declared in domain/shikigami/agent-run.keiro. Every durable call
 -- journals its operation; the explicit unjournaled interpreter is test-only.
 module Shikigami.PracticeReview.Memory
@@ -28,6 +28,10 @@ module Shikigami.PracticeReview.Memory
     encodePracticeReviewMemory,
     decodePracticeReviewMemory,
     appliesTo,
+    ReviewIdentityRef,
+    allocatedReviewId,
+    reserveReviewIdentity,
+    ResolvedPracticeReview (..),
     rememberProvisional,
     resolveReview,
     recallPracticeReviews,
@@ -83,20 +87,28 @@ import Shikigami.PracticeReview
     EvidenceItem (..),
     PracticeKey,
     PracticeReviewResolution (..),
+    PracticeReviewResolutionRequest (..),
     PracticeReviewVerdict (..),
     ProjectRef (..),
-    ResolutionId (..),
+    ResolutionId,
     ResolutionOutcome (..),
-    ReviewId (..),
+    ReviewId,
     ValidatedPracticeReviewResolution,
+    ValidatedPracticeReviewTrigger,
     ValidatedPracticeReviewVerdict,
+    ValidatedResolutionRequest,
     confidencePercent,
     practiceKeyText,
+    resolutionIdText,
+    reviewIdText,
     validateResolution,
     validateVerdict,
+    validatedResolutionRequestValue,
     validatedResolutionValue,
     validatedVerdictValue,
   )
+import Shikigami.PracticeReview.IdentityStore (ReviewIdentityRef, allocatedReviewId)
+import Shikigami.PracticeReview.IdentityStore qualified as IdentityStore
 import Shikigami.Prelude (Generic, eventAesonOptions, genericParseJSON, genericToJSON)
 import Shikigami.Repository (RelativePath, RepositoryId (..), relativePathText)
 
@@ -288,11 +300,11 @@ decodePracticeReviewMemory content =
 
 -- | Stable id of a provisional finding across workflow identities and replays.
 provisionalMemoryId :: ReviewId -> MemoryId
-provisionalMemoryId (ReviewId reviewId) = reviewMemoryId ["provisional", reviewId]
+provisionalMemoryId reviewId = reviewMemoryId ["provisional", reviewIdText reviewId]
 
 -- | Stable id of an adjudication command across workflow identities and replays.
 resolvedMemoryId :: ResolutionId -> MemoryId
-resolvedMemoryId (ResolutionId resolutionId) = reviewMemoryId ["resolved", resolutionId]
+resolvedMemoryId resolutionId = reviewMemoryId ["resolved", resolutionIdText resolutionId]
 
 reviewMemoryId :: [Text] -> MemoryId
 reviewMemoryId identityParts =
@@ -322,7 +334,7 @@ practiceReviewTags envelope =
         "practice-review:v1",
         "state:" <> stateTag,
         "practice:" <> practiceKeyText practiceKey,
-        "review:" <> reviewValue,
+        "review:" <> reviewIdText reviewId,
         "classification:" <> enumText classification
       ]
         <> maybe [] (\value -> ["resolution:" <> value]) resolutionValue
@@ -337,14 +349,14 @@ practiceReviewTags envelope =
         ProvisionalReview verdict ->
           (verdict, "provisional", Nothing, Nothing, verdictApplicability verdict)
         ResolvedReview verdict resolution ->
-          let PracticeReviewResolution {resolutionId = ResolutionId resolutionId, outcome, resultingApplicability} = validatedResolutionValue resolution
+          let PracticeReviewResolution {resolutionId, outcome, resultingApplicability} = validatedResolutionValue resolution
            in ( verdict,
                 "resolved",
-                Just resolutionId,
+                Just (resolutionIdText resolutionId),
                 Just (enumText outcome),
                 maybe (verdictApplicability verdict) id resultingApplicability
               )
-    rawVerdict@PracticeReviewVerdict {reviewId = ReviewId reviewValue, practice = practiceKey, classification} =
+    rawVerdict@PracticeReviewVerdict {reviewId, practice = practiceKey, classification} =
       validatedVerdictValue validatedVerdict
     Applicability {paths = tagPaths, dependencies = tagDependencies} = applicabilityForTags
     projectValues = repositoryValues rawVerdict applicabilityForTags
@@ -419,17 +431,34 @@ data PracticeReviewMemoryEnv = PracticeReviewMemoryEnv
   }
 
 data PracticeReviewMemory :: Effect where
-  RememberProvisional :: Maybe MemoryId -> ValidatedPracticeReviewVerdict -> PracticeReviewMemory m (Either ReviewMemoryError MemoryId)
-  ResolveReview :: MemoryId -> ValidatedPracticeReviewResolution -> PracticeReviewMemory m (Either ReviewMemoryError MemoryId)
+  ReserveReviewIdentity :: ValidatedPracticeReviewTrigger -> PracticeKey -> Text -> PracticeReviewMemory m (Either ReviewMemoryError ReviewIdentityRef)
+  RememberProvisional :: ReviewIdentityRef -> Maybe MemoryId -> ValidatedPracticeReviewVerdict -> PracticeReviewMemory m (Either ReviewMemoryError MemoryId)
+  ResolveReview :: MemoryId -> ValidatedResolutionRequest -> PracticeReviewMemory m (Either ReviewMemoryError ResolvedPracticeReview)
   RecallPracticeReviews :: ReviewRecallContext -> PracticeReviewMemory m RecalledPracticeReviews
   RecallPracticeReviewChain :: ReviewId -> PracticeReviewMemory m PracticeReviewChain
 
 type instance DispatchOf PracticeReviewMemory = Dynamic
 
-rememberProvisional :: (PracticeReviewMemory :> es) => Maybe MemoryId -> ValidatedPracticeReviewVerdict -> Eff es (Either ReviewMemoryError MemoryId)
-rememberProvisional prior verdict = send (RememberProvisional prior verdict)
+data ResolvedPracticeReview = ResolvedPracticeReview
+  { memoryId :: !MemoryId,
+    resolution :: !ValidatedPracticeReviewResolution
+  }
+  deriving stock (Eq, Show)
 
-resolveReview :: (PracticeReviewMemory :> es) => MemoryId -> ValidatedPracticeReviewResolution -> Eff es (Either ReviewMemoryError MemoryId)
+instance ToJSON ResolvedPracticeReview where
+  toJSON ResolvedPracticeReview {memoryId, resolution} = object ["memoryId" .= memoryId, "resolution" .= validatedResolutionValue resolution]
+
+instance FromJSON ResolvedPracticeReview where
+  parseJSON = withObject "ResolvedPracticeReview" \value ->
+    ResolvedPracticeReview <$> value .: "memoryId" <*> (value .: "resolution" >>= parseValidatedResolution)
+
+reserveReviewIdentity :: (PracticeReviewMemory :> es) => ValidatedPracticeReviewTrigger -> PracticeKey -> Text -> Eff es (Either ReviewMemoryError ReviewIdentityRef)
+reserveReviewIdentity trigger practice specialist = send (ReserveReviewIdentity trigger practice specialist)
+
+rememberProvisional :: (PracticeReviewMemory :> es) => ReviewIdentityRef -> Maybe MemoryId -> ValidatedPracticeReviewVerdict -> Eff es (Either ReviewMemoryError MemoryId)
+rememberProvisional reference prior verdict = send (RememberProvisional reference prior verdict)
+
+resolveReview :: (PracticeReviewMemory :> es) => MemoryId -> ValidatedResolutionRequest -> Eff es (Either ReviewMemoryError ResolvedPracticeReview)
 resolveReview provisional resolution = send (ResolveReview provisional resolution)
 
 recallPracticeReviews :: (PracticeReviewMemory :> es) => ReviewRecallContext -> Eff es RecalledPracticeReviews
@@ -451,8 +480,10 @@ runPracticeReviewMemoryWithJournal :: (Workflow :> es, IOE :> es) => Bool -> Pra
 runPracticeReviewMemoryWithJournal journalReviewMemory env action =
   interpret
     ( \_ -> \case
-        RememberProvisional prior verdict ->
-          runOperation journalReviewMemory "practice-review-remember-provisional" (rememberProvisionalIO env prior verdict)
+        ReserveReviewIdentity trigger practice specialist ->
+          runOperation journalReviewMemory "practice-review-reserve-identity" (fmap (either (Left . ReviewMemoryRefused) Right) (IdentityStore.reserveReviewIdentity env.appEnv env.identity trigger practice specialist))
+        RememberProvisional reference prior verdict ->
+          runOperation journalReviewMemory "practice-review-remember-provisional" (rememberProvisionalIO env reference prior verdict)
         ResolveReview provisional resolution ->
           runOperation journalReviewMemory "practice-review-resolve" (resolveReviewIO env provisional resolution)
         RecallPracticeReviews context ->
@@ -466,8 +497,14 @@ runPracticeReviewMemoryWithJournal journalReviewMemory env action =
       | journal = step (StepName label) (liftIO operation)
       | otherwise = liftIO operation
 
-rememberProvisionalIO :: PracticeReviewMemoryEnv -> Maybe MemoryId -> ValidatedPracticeReviewVerdict -> IO (Either ReviewMemoryError MemoryId)
-rememberProvisionalIO env prior validatedVerdict = do
+rememberProvisionalIO :: PracticeReviewMemoryEnv -> ReviewIdentityRef -> Maybe MemoryId -> ValidatedPracticeReviewVerdict -> IO (Either ReviewMemoryError MemoryId)
+rememberProvisionalIO env reference prior validatedVerdict =
+  IdentityStore.verifyReviewIdentity env.appEnv env.identity reference validatedVerdict >>= \case
+    Left problem -> pure (Left (ReviewMemoryRefused problem))
+    Right () -> rememberAllocatedProvisionalIO env prior validatedVerdict
+
+rememberAllocatedProvisionalIO :: PracticeReviewMemoryEnv -> Maybe MemoryId -> ValidatedPracticeReviewVerdict -> IO (Either ReviewMemoryError MemoryId)
+rememberAllocatedProvisionalIO env prior validatedVerdict = do
   let PracticeReviewVerdict {reviewId, practice} = validatedVerdictValue validatedVerdict
       candidate = provisionalMemoryId reviewId
       envelope = ProvisionalReview validatedVerdict
@@ -475,8 +512,22 @@ rememberProvisionalIO env prior validatedVerdict = do
     Left err -> pure (Left err)
     Right _ -> finishTransition env prior candidate
 
-resolveReviewIO :: PracticeReviewMemoryEnv -> MemoryId -> ValidatedPracticeReviewResolution -> IO (Either ReviewMemoryError MemoryId)
-resolveReviewIO env suppliedProvisional validatedResolution = do
+resolveReviewIO :: PracticeReviewMemoryEnv -> MemoryId -> ValidatedResolutionRequest -> IO (Either ReviewMemoryError ResolvedPracticeReview)
+resolveReviewIO env suppliedProvisional request = do
+  let PracticeReviewResolutionRequest {reviewId} = validatedResolutionRequestValue request
+  if suppliedProvisional /= provisionalMemoryId reviewId
+    then pure (Left (ReviewProvisionalIdMismatch (provisionalMemoryId reviewId) suppliedProvisional))
+    else
+      loadEnvelope env suppliedProvisional >>= \case
+        Left problem -> pure (Left problem)
+        Right (ResolvedReview _ _) -> pure (Left (ReviewExpectedProvisional (idText suppliedProvisional)))
+        Right (ProvisionalReview _) ->
+          IdentityStore.reserveResolutionIdentity env.appEnv env.identity request >>= \case
+            Left problem -> pure (Left (ReviewMemoryRefused problem))
+            Right resolution -> fmap (fmap (\memoryId -> ResolvedPracticeReview {memoryId, resolution})) (resolveAllocatedReviewIO env suppliedProvisional resolution)
+
+resolveAllocatedReviewIO :: PracticeReviewMemoryEnv -> MemoryId -> ValidatedPracticeReviewResolution -> IO (Either ReviewMemoryError MemoryId)
+resolveAllocatedReviewIO env suppliedProvisional validatedResolution = do
   let PracticeReviewResolution {reviewId = resolutionReviewId, resolutionId, outcome} = validatedResolutionValue validatedResolution
       expectedProvisional = provisionalMemoryId resolutionReviewId
   if suppliedProvisional /= expectedProvisional
@@ -678,8 +729,8 @@ verdictMatchesContext context validated =
 
 reviewSortKey :: ValidatedPracticeReviewVerdict -> Text -> (Text, Text)
 reviewSortKey validated memoryId =
-  let PracticeReviewVerdict {reviewId = ReviewId reviewId} = validatedVerdictValue validated
-   in (reviewId, memoryId)
+  let PracticeReviewVerdict {reviewId} = validatedVerdictValue validated
+   in (reviewIdText reviewId, memoryId)
 
 recallPracticeReviewChainIO :: PracticeReviewMemoryEnv -> ReviewId -> IO PracticeReviewChain
 recallPracticeReviewChainIO PracticeReviewMemoryEnv {appEnv} reviewId =

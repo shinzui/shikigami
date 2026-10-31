@@ -5,7 +5,9 @@
 -- the durable review flow will decode and validate it at its own boundary.
 module Shikigami.PracticeReview
   ( practiceReviewSchemaVersion,
-    ReviewId (..),
+    ReviewId,
+    parseReviewId,
+    reviewIdText,
     PracticeKey,
     parsePracticeKey,
     practiceKeyText,
@@ -24,7 +26,9 @@ module Shikigami.PracticeReview
     PracticeReviewTriggerKind (..),
     ChangedReference (..),
     PracticeReviewTrigger (..),
-    ResolutionId (..),
+    ResolutionId,
+    parseResolutionId,
+    resolutionIdText,
     EvidenceId,
     parseEvidenceId,
     evidenceIdText,
@@ -61,15 +65,19 @@ module Shikigami.PracticeReview
     validatedTriggerValue,
     validatedVerdictValue,
     validatedResolutionValue,
-    deriveReviewId,
-    deriveResolutionId,
+    PracticeReviewResolutionRequest (..),
+    ValidatedResolutionRequest,
+    validateResolutionRequest,
+    validatedResolutionRequestValue,
+    allocateResolution,
     validateTrigger,
     validateVerdict,
     validateResolution,
   )
 where
 
-import Data.Aeson (Value (Object), withText)
+import Data.Aeson (Value (Object), withObject, withText, (.:), (.:?))
+import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString qualified as ByteString
 import Data.Set qualified as Set
@@ -77,17 +85,13 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TextEncoding
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUIDv5
+import Shikigami.PracticeReview.Identity
 import Shikigami.Prelude
 import Shikigami.Repository (RelativePath, RepoRef (..), RepositoryId (..), Revision, relativePathText, revisionText)
 
 -- | The only schema version accepted by the first contract release.
 practiceReviewSchemaVersion :: Int
 practiceReviewSchemaVersion = 1
-
--- | Stable identity shared by verdicts, memory, activities, and attention.
-newtype ReviewId = ReviewId {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
 
 -- | Stable key for one registered architecture practice.
 newtype PracticeKey = PracticeKey {value :: Text}
@@ -255,11 +259,6 @@ instance FromJSON PracticeReviewTrigger where
     | KeyMap.member "candidates" object = fail "PracticeReviewTrigger must not name specialist candidates"
     | otherwise = genericParseJSON practiceReviewAesonOptions value
   parseJSON value = genericParseJSON practiceReviewAesonOptions value
-
--- | Stable identity of one explicit human resolution command.
-newtype ResolutionId = ResolutionId {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
 
 -- | Identity of one pinned evidence item within a verdict.
 newtype EvidenceId = EvidenceId {value :: Text}
@@ -462,6 +461,48 @@ instance ToJSON PracticeReviewResolution where toJSON = genericToJSON practiceRe
 
 instance FromJSON PracticeReviewResolution where parseJSON = genericParseJSON practiceReviewAesonOptions
 
+-- | Authorized command before its owner allocates a resolution entity.
+data PracticeReviewResolutionRequest = PracticeReviewResolutionRequest
+  { schemaVersion :: !Int,
+    idempotencyKey :: !Text,
+    reviewId :: !ReviewId,
+    outcome :: !ResolutionOutcome,
+    resolver :: !OwnerPrincipal,
+    reason :: !Text,
+    resolvedAt :: !UTCTime,
+    resultingApplicability :: !(Maybe Applicability),
+    supersedingReviewId :: !(Maybe ReviewId)
+  }
+  deriving stock (Eq, Show, Generic)
+
+instance ToJSON PracticeReviewResolutionRequest where toJSON = genericToJSON practiceReviewAesonOptions
+
+instance FromJSON PracticeReviewResolutionRequest where
+  parseJSON = withObject "PracticeReviewResolutionRequest" \value -> do
+    let allowed = ["schemaVersion", "idempotencyKey", "reviewId", "outcome", "resolver", "reason", "resolvedAt", "resultingApplicability", "supersedingReviewId"]
+    unless (all ((`elem` allowed) . Key.toText) (KeyMap.keys value)) (fail "unknown resolution request field")
+    PracticeReviewResolutionRequest <$> value .: "schemaVersion" <*> value .: "idempotencyKey" <*> value .: "reviewId" <*> value .: "outcome" <*> value .: "resolver" <*> value .: "reason" <*> value .: "resolvedAt" <*> value .:? "resultingApplicability" <*> value .:? "supersedingReviewId"
+
+newtype ValidatedResolutionRequest = ValidatedResolutionRequest PracticeReviewResolutionRequest
+  deriving stock (Eq, Show)
+
+validatedResolutionRequestValue :: ValidatedResolutionRequest -> PracticeReviewResolutionRequest
+validatedResolutionRequestValue (ValidatedResolutionRequest request) = request
+
+validateResolutionRequest :: PracticeReviewResolutionRequest -> Either (NonEmpty ReviewContractError) ValidatedResolutionRequest
+validateResolutionRequest PracticeReviewResolutionRequest {schemaVersion, idempotencyKey, reviewId, outcome, resolver, reason, resolvedAt, resultingApplicability, supersedingReviewId} =
+  toValidationResult
+    ( schemaErrors "resolution" schemaVersion
+        <> blankErrors "resolution.idempotencyKey" idempotencyKey
+        <> blankErrors "resolution.reason" reason
+        <> resolutionOutcomeErrors outcome resultingApplicability supersedingReviewId reviewId
+    )
+    (ValidatedResolutionRequest PracticeReviewResolutionRequest {schemaVersion, idempotencyKey = normalizeOpaqueKey idempotencyKey, reviewId, outcome, resolver = normalizeOwnerPrincipal resolver, reason, resolvedAt, resultingApplicability = fmap normalizeApplicability resultingApplicability, supersedingReviewId})
+
+allocateResolution :: ResolutionId -> ValidatedResolutionRequest -> ValidatedPracticeReviewResolution
+allocateResolution resolutionId (ValidatedResolutionRequest PracticeReviewResolutionRequest {schemaVersion, idempotencyKey, reviewId, outcome, resolver, reason, resolvedAt, resultingApplicability, supersedingReviewId}) =
+  ValidatedPracticeReviewResolution PracticeReviewResolution {schemaVersion, resolutionId, idempotencyKey, reviewId, outcome, resolver, reason, resolvedAt, resultingApplicability, supersedingReviewId}
+
 -- | One precise reason a raw contract value was rejected.
 data ReviewContractError = ReviewContractError
   { field :: !Text,
@@ -479,7 +520,7 @@ newtype ValidatedPracticeReviewTrigger = ValidatedPracticeReviewTrigger Practice
 newtype ValidatedPracticeReviewVerdict = ValidatedPracticeReviewVerdict PracticeReviewVerdict
   deriving stock (Eq, Show)
 
--- | A resolution whose deterministic identity and outcome-specific fields have
+-- | A resolution whose allocated identity and outcome-specific fields have
 -- been checked and normalized.
 newtype ValidatedPracticeReviewResolution = ValidatedPracticeReviewResolution PracticeReviewResolution
   deriving stock (Eq, Show)
@@ -492,34 +533,6 @@ validatedVerdictValue (ValidatedPracticeReviewVerdict verdict) = verdict
 
 validatedResolutionValue :: ValidatedPracticeReviewResolution -> PracticeReviewResolution
 validatedResolutionValue (ValidatedPracticeReviewResolution resolution) = resolution
-
--- | Deterministically identify one practice/specialist review of a normalized
--- producer trigger.
-deriveReviewId :: PracticeReviewTrigger -> PracticeKey -> Text -> ReviewId
-deriveReviewId PracticeReviewTrigger {idempotencyKey} practice specialist =
-  deriveReviewIdFromParts idempotencyKey practice specialist
-
--- | Deterministically identify one resolution command for a review.
-deriveResolutionId :: ReviewId -> Text -> ResolutionId
-deriveResolutionId (ReviewId reviewValue) commandKey =
-  ResolutionId
-    ( uuidText
-        [ "resolution",
-          Text.strip reviewValue,
-          normalizeOpaqueKey commandKey
-        ]
-    )
-
-deriveReviewIdFromParts :: Text -> PracticeKey -> Text -> ReviewId
-deriveReviewIdFromParts triggerKey (PracticeKey practice) specialist =
-  ReviewId
-    ( uuidText
-        [ "review",
-          normalizeOpaqueKey triggerKey,
-          normalizeNamedKey practice,
-          normalizeNamedKey specialist
-        ]
-    )
 
 uuidText :: [Text] -> Text
 uuidText identityParts =
@@ -625,8 +638,7 @@ triggerErrors
       targetRange,
       changedDecisionPaths,
       adoptions,
-      referenceChange,
-      priorReviewId
+      referenceChange
     } =
     schemaErrors "trigger" schemaVersion
       <> blankErrors "trigger.idempotencyKey" idempotencyKey
@@ -636,7 +648,6 @@ triggerErrors
       <> check (null adoptions) "trigger.adoptions" "must contain at least one practice adoption"
       <> concatMap (uncurry adoptionErrors) (indexedFields "trigger.adoptions" adoptions)
       <> referenceChangeErrors triggerKind referenceChange
-      <> maybe [] (\(ReviewId reviewValue) -> blankErrors "trigger.priorReviewId" reviewValue) priorReviewId
 
 referenceChangeErrors :: PracticeReviewTriggerKind -> Maybe ChangedReference -> [ReviewContractError]
 referenceChangeErrors TargetChange Nothing = []
@@ -696,9 +707,7 @@ verdictErrors :: PracticeReviewVerdict -> [ReviewContractError]
 verdictErrors
   PracticeReviewVerdict
     { schemaVersion,
-      reviewId = actualReviewId@(ReviewId reviewValue),
       triggerIdempotencyKey,
-      practice = practiceKey,
       specialist,
       lineage,
       targetEvidence,
@@ -714,13 +723,8 @@ verdictErrors
       applicability
     } =
     schemaErrors "verdict" schemaVersion
-      <> blankErrors "verdict.reviewId" reviewValue
       <> blankErrors "verdict.triggerIdempotencyKey" triggerIdempotencyKey
       <> blankErrors "verdict.specialist" specialist
-      <> check
-        (actualReviewId /= deriveReviewIdFromParts triggerIdempotencyKey practiceKey specialist)
-        "verdict.reviewId"
-        "does not match the deterministic trigger/practice/specialist identity"
       <> lineageErrors lineage
       <> check (classification /= Unresolved && null targetEvidence) "verdict.targetEvidence" "must contain pinned target evidence"
       <> check (classification /= Unresolved && null referenceEvidence) "verdict.referenceEvidence" "must contain pinned practice evidence"
@@ -741,12 +745,11 @@ verdictErrors
       knownEvidence = Set.fromList [evidenceId | EvidenceItem {evidenceId} <- allEvidence]
 
 lineageErrors :: ReviewLineage -> [ReviewContractError]
-lineageErrors ReviewLineage {parentSessionId, childSessionId, parentWorkflowId, childWorkflowId, priorReviewId} =
+lineageErrors ReviewLineage {parentSessionId, childSessionId, parentWorkflowId, childWorkflowId} =
   blankErrors "verdict.lineage.parentSessionId" parentSessionId
     <> blankErrors "verdict.lineage.childSessionId" childSessionId
     <> blankErrors "verdict.lineage.parentWorkflowId" parentWorkflowId
     <> blankErrors "verdict.lineage.childWorkflowId" childWorkflowId
-    <> maybe [] (\(ReviewId reviewValue) -> blankErrors "verdict.lineage.priorReviewId" reviewValue) priorReviewId
 
 evidenceCollectionErrors :: EvidenceRole -> Text -> [EvidenceItem] -> [ReviewContractError]
 evidenceCollectionErrors expected prefix =
@@ -857,22 +860,15 @@ resolutionErrors :: PracticeReviewResolution -> [ReviewContractError]
 resolutionErrors
   PracticeReviewResolution
     { schemaVersion,
-      resolutionId = actualResolutionId@(ResolutionId resolution),
       idempotencyKey,
-      reviewId = reviewId@(ReviewId reviewValue),
+      reviewId,
       outcome,
       reason,
       resultingApplicability,
       supersedingReviewId
     } =
     schemaErrors "resolution" schemaVersion
-      <> blankErrors "resolution.resolutionId" resolution
       <> blankErrors "resolution.idempotencyKey" idempotencyKey
-      <> blankErrors "resolution.reviewId" reviewValue
-      <> check
-        (actualResolutionId /= deriveResolutionId reviewId idempotencyKey)
-        "resolution.resolutionId"
-        "does not match the deterministic review/command identity"
       <> blankErrors "resolution.reason" reason
       <> resolutionOutcomeErrors outcome resultingApplicability supersedingReviewId reviewId
 
@@ -937,10 +933,10 @@ normalizeOwnerPrincipal :: OwnerPrincipal -> OwnerPrincipal
 normalizeOwnerPrincipal (OwnerPrincipal principal) = OwnerPrincipal (Text.strip principal)
 
 normalizeReviewId :: ReviewId -> ReviewId
-normalizeReviewId (ReviewId reviewValue) = ReviewId (Text.strip reviewValue)
+normalizeReviewId = id
 
 normalizeResolutionId :: ResolutionId -> ResolutionId
-normalizeResolutionId (ResolutionId resolution) = ResolutionId (Text.strip resolution)
+normalizeResolutionId = id
 
 normalizeEvidenceId :: EvidenceId -> EvidenceId
 normalizeEvidenceId (EvidenceId evidence) = EvidenceId (Text.strip evidence)

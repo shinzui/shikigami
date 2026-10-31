@@ -30,6 +30,7 @@ import Shikigami.PracticeReview
     PracticeReviewClaim (..),
     PracticeReviewClassification (..),
     PracticeReviewResolution (..),
+    PracticeReviewResolutionRequest (..),
     PracticeReviewTrigger (..),
     PracticeReviewVerdict (..),
     ProjectRef (..),
@@ -37,17 +38,18 @@ import Shikigami.PracticeReview
     RecommendedOwner (..),
     RecommendedOwnerRole (..),
     RegisteredUpstreamProject (..),
-    ReviewId (..),
+    ReviewId,
     ReviewLineage (..),
     ReviewOwners (..),
     ValidatedPracticeReviewResolution,
     ValidatedPracticeReviewTrigger,
     ValidatedPracticeReviewVerdict,
-    deriveReviewId,
     evidenceProblemClaimId,
     practiceKeyText,
+    reviewIdText,
     validateTrigger,
     validateVerdict,
+    validatedResolutionRequestValue,
     validatedResolutionValue,
     validatedTriggerValue,
     validatedVerdictValue,
@@ -81,11 +83,14 @@ import Shikigami.PracticeReview.Memory
     PracticeReviewMemory,
     PracticeReviewMemoryEnvelope (..),
     RecalledPracticeReviews (..),
+    ResolvedPracticeReview (..),
     ReviewRecallContext (..),
+    allocatedReviewId,
     provisionalMemoryId,
     recallPracticeReviewChain,
     recallPracticeReviews,
     rememberProvisional,
+    reserveReviewIdentity,
     resolveReview,
   )
 import Shikigami.Prelude hiding ((.=))
@@ -190,20 +195,22 @@ reviewTrigger validatedTrigger = do
   context <- executionContext
   lineage <- either failFlow pure (reviewLineage context trigger)
   adoption <- either failFlow pure (selectOpenTelemetryAdoption trigger)
-  let recallContext = reviewRecallContext trigger adoption
+  reference <- reserveReviewIdentity validatedTrigger adoption.practice opentelemetrySpecialist >>= either (failFlow . Text.pack . show) pure
+  let identifier = allocatedReviewId reference
+      recallContext = reviewRecallContext trigger adoption
   recalled <- recallPracticeReviews recallContext
   evidence <- acquirePracticeReviewEvidence validatedTrigger adoption (recalledResolutions recalled)
   validatedVerdict <-
     case (.completeness) evidence of
       Complete -> do
         rawProposal <- evaluatePracticeReview evidence recalled
-        rawVerdict <- case Aeson.fromJSON rawProposal of
+        rawVerdict <- case Aeson.fromJSON (case rawProposal of Aeson.Object proposal -> Aeson.Object (KeyMap.insert "reviewId" (toJSON identifier) proposal); other -> other) of
           Aeson.Error detail -> failFlow ("practice-review evaluator returned invalid verdict JSON: " <> Text.pack detail)
           Aeson.Success verdict -> pure verdict
-        either failFlow pure (trustedVerdict trigger adoption lineage evidence rawVerdict)
+        either failFlow pure (trustedVerdict identifier trigger adoption lineage evidence rawVerdict)
       Incomplete ->
-        either failFlow pure (incompleteVerdict trigger adoption lineage evidence)
-  remembered <- rememberProvisional (priorActiveMemoryId trigger recalled) validatedVerdict
+        either failFlow pure (incompleteVerdict identifier trigger adoption lineage evidence)
+  remembered <- rememberProvisional reference (priorActiveMemoryId trigger recalled) validatedVerdict
   memoryId <- either (failFlow . ("practice-review provisional memory failed: " <>) . Text.pack . show) pure remembered
   let verdict = validatedVerdictValue validatedVerdict
   history <- emitSignal "review-history" reviewHistorySink (reviewHistoryPayload verdict)
@@ -232,12 +239,13 @@ resolveAuthorized envelope = do
       (failFlow . ("authorized resolution was refused: " <>) . Text.pack . show)
       pure
       (validateAuthorizedPracticeReviewResolution envelope)
-  let resolution@PracticeReviewResolution {reviewId} = validatedResolutionValue validatedResolution
+  let PracticeReviewResolutionRequest {reviewId} = validatedResolutionRequestValue validatedResolution
       provisionalId = provisionalMemoryId reviewId
   chain <- recallPracticeReviewChain reviewId
   verdict <- maybe (failFlow "authorized resolution does not reference an existing provisional review") pure (provisionalReview reviewId chain)
   resolved <- resolveReview provisionalId validatedResolution
-  memoryId <- either (failFlow . ("practice-review resolution memory failed: " <>) . Text.pack . show) pure resolved
+  ResolvedPracticeReview {memoryId, resolution = allocatedResolution} <- either (failFlow . ("practice-review resolution memory failed: " <>) . Text.pack . show) pure resolved
+  let resolution = validatedResolutionValue allocatedResolution
   history <- emitSignal "resolution-history" resolutionHistorySink (resolutionHistoryPayload verdict resolution)
   pure
     ( Aeson.object
@@ -286,6 +294,7 @@ recalledResolutions RecalledPracticeReviews {guiding, doNotRepeat, retired} =
   [resolution | AdjudicatedPracticeReview {resolution} <- guiding <> doNotRepeat <> retired]
 
 trustedVerdict ::
+  ReviewId ->
   PracticeReviewTrigger ->
   PracticeAdoptionBinding ->
   ReviewLineage ->
@@ -293,23 +302,26 @@ trustedVerdict ::
   PracticeReviewVerdict ->
   Either Text ValidatedPracticeReviewVerdict
 trustedVerdict
-  trigger@PracticeReviewTrigger {idempotencyKey = triggerKey}
+  identifier
+  PracticeReviewTrigger {idempotencyKey = triggerKey}
   adoption@PracticeAdoptionBinding {practice = adoptionPractice}
   lineage
   evidence@EvidenceBundle {target = evidenceTarget, references = evidenceReferences, upstream = evidenceUpstream}
   proposal@PracticeReviewVerdict {classification = proposalClassification, exceptionApproval = proposalApproval, reReviewCondition = proposalReReview} =
     firstProblem "invalid practice-review evaluator verdict" $
       validateVerdict
-        (proposal & #schemaVersion .~ (1) & #reviewId .~ (deriveReviewId trigger adoptionPractice opentelemetrySpecialist) & #triggerIdempotencyKey .~ (triggerKey) & #practice .~ (adoptionPractice) & #specialist .~ (opentelemetrySpecialist) & #lineage .~ (lineage) & #targetEvidence .~ (citations evidenceTarget) & #referenceEvidence .~ (citations evidenceReferences) & #upstreamEvidence .~ (citations evidenceUpstream) & #recommendedOwner .~ (trustedOwner adoption proposalClassification proposalApproval) & #reReviewCondition .~ ((proposalReReview & #watches .~ ([provenance | EvidenceItem {content = ContentReference {provenance}} <- allCitations evidence]))))
+        (proposal & #schemaVersion .~ (1) & #reviewId .~ (identifier) & #triggerIdempotencyKey .~ (triggerKey) & #practice .~ (adoptionPractice) & #specialist .~ (opentelemetrySpecialist) & #lineage .~ (lineage) & #targetEvidence .~ (citations evidenceTarget) & #referenceEvidence .~ (citations evidenceReferences) & #upstreamEvidence .~ (citations evidenceUpstream) & #recommendedOwner .~ (trustedOwner adoption proposalClassification proposalApproval) & #reReviewCondition .~ ((proposalReReview & #watches .~ ([provenance | EvidenceItem {content = ContentReference {provenance}} <- allCitations evidence]))))
 
 incompleteVerdict ::
+  ReviewId ->
   PracticeReviewTrigger ->
   PracticeAdoptionBinding ->
   ReviewLineage ->
   EvidenceBundle ->
   Either Text ValidatedPracticeReviewVerdict
 incompleteVerdict
-  trigger@PracticeReviewTrigger {idempotencyKey = triggerKey}
+  identifier
+  PracticeReviewTrigger {idempotencyKey = triggerKey}
   PracticeAdoptionBinding {practice = adoptionPractice, owners = ReviewOwners {triageOwner}, claimedApplicability}
   lineage
   EvidenceBundle {target = evidenceTarget, references = evidenceReferences, upstream = evidenceUpstream, problems = evidenceProblems} =
@@ -317,7 +329,7 @@ incompleteVerdict
       validateVerdict
         PracticeReviewVerdict
           { schemaVersion = 1,
-            reviewId = deriveReviewId trigger adoptionPractice opentelemetrySpecialist,
+            reviewId = identifier,
             triggerIdempotencyKey = triggerKey,
             practice = adoptionPractice,
             specialist = opentelemetrySpecialist,
@@ -416,9 +428,6 @@ historyContextRefs reviewId evidence =
 
 repositoryRef :: RepositoryId -> Text
 repositoryRef (RepositoryId raw) = fromMaybe raw (Text.stripPrefix "mori://" raw)
-
-reviewIdText :: ReviewId -> Text
-reviewIdText (ReviewId value) = value
 
 actionable :: PracticeReviewVerdict -> Bool
 actionable PracticeReviewVerdict {classification, exceptionApproval} =

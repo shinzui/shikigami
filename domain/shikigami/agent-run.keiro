@@ -37,8 +37,9 @@ workflow AgentRun
     step remember-acknowledged -> RecordedLearning
     step remember-declined -> RecordedLearning
     step remember-escalated -> RecordedLearning
+    step practice-review-reserve-identity -> PracticeReviewIdentityResult
     step practice-review-remember-provisional -> PracticeReviewMemoryResult
-    step practice-review-resolve -> PracticeReviewMemoryResult
+    step practice-review-resolve -> PracticeReviewResolutionResult
     step practice-review-recall -> RecalledPracticeReviews
     step practice-review-chain -> PracticeReviewChain
     step practice-review-evidence -> EvidenceBundle

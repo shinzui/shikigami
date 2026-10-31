@@ -32,7 +32,7 @@ import Shikigami.PracticeReview
     RegisteredPracticeReference (..),
     RegisteredUpstreamProject (..),
     ResolutionOutcome (..),
-    ReviewId (..),
+    ReviewId,
     ReviewMode (..),
     ReviewOwners (..),
     RevisionChangeKind (..),
@@ -40,10 +40,11 @@ import Shikigami.PracticeReview
     ValidatedPracticeReviewResolution,
     ValidatedPracticeReviewTrigger,
     contentHashText,
-    deriveResolutionId,
     evidenceIdText,
     parseOwnerPrincipal,
     parsePracticeKey,
+    parseResolutionId,
+    parseReviewId,
     practiceReviewSchemaVersion,
     validateResolution,
     validateTrigger,
@@ -678,11 +679,11 @@ validatedResolution outcome resultingApplicability commandKey =
     Left problems -> error (show problems)
     Right value -> value
   where
-    reviewId = ReviewId "review-prior"
+    reviewId = fixtureReviewId "shikigami_practice_review_6qqyrw7p5ffa9873q5jp4aahjm"
     rawResolution =
       PracticeReviewResolution
         { schemaVersion = practiceReviewSchemaVersion,
-          resolutionId = deriveResolutionId reviewId commandKey,
+          resolutionId = either (error . show) id (parseResolutionId "shikigami_practice_review_resolution_7vrc7qfsy9fjer83xyg2t8m382"),
           idempotencyKey = commandKey,
           reviewId,
           outcome,
@@ -692,7 +693,7 @@ validatedResolution outcome resultingApplicability commandKey =
           resultingApplicability,
           supersedingReviewId =
             case outcome of
-              Superseded -> Just (ReviewId "review-newer")
+              Superseded -> Just (fixtureReviewId "shikigami_practice_review_3380yeg7akfr6t0vrqkd5t3vhy")
               _ -> Nothing
         }
 
@@ -852,3 +853,6 @@ fixturePracticeKey = either (error . show) id . parsePracticeKey
 
 fixtureOwnerPrincipal :: Text -> OwnerPrincipal
 fixtureOwnerPrincipal = either (error . show) id . parseOwnerPrincipal
+
+fixtureReviewId :: Text -> ReviewId
+fixtureReviewId = either (error . show) id . parseReviewId

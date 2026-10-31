@@ -29,6 +29,7 @@ Review and fix every applicable Haskell and service-architecture guideline acros
 
 - [ ] M1: Core/package/record/error/resource conventions have an explicit complete applicability review and fixes.
 - [x] M2: Public HTTP, CLI, configuration and telemetry clauses implemented with explicit optional-interface decisions, 28 source rows and real process/live HTTP evidence. Final packaged/Linux qualification remains plan95.
+- [x] M3: Practice-review entity IDs use owner-allocated UUIDv7 values with durable logical-key receipts; authorization, cross-workflow retry and record-then-retire recovery remain qualified.
 
 ## Surprises & Discoveries
 
@@ -78,18 +79,25 @@ addressed caller keys retain distinct meanings through store/SQL boundaries;
 versioned structured producers retain agent, route and source coordinates.
 Native inbox redelivery and same-caller retries retain their expected identities.
 
-The remaining review-identity audit must account for ADR-31: practice reviews
-outlive their producing workflow, and competing resolutions converge across
-workflow instances. Existing ReviewId/ResolutionId UUIDv5 derivations cannot be
-exempted merely because Kioku memory rows use deterministic lookup coordinates.
-Any allocation change must retain logical-key receipts, record-before-retire and
-losing-candidate cleanup; that work remains open.
+ADR-93 moves review entities to private UUIDv7 domains with durable request
+receipts. Their technical Kioku memory mappings and record-before-retire/loser
+cleanup protocol remain. The declared allocation step and complete resolution
+result intentionally break the unused first-release workflow contract; the exact
+native finding is retained. Authentication material remains opaque and actual
+ingress authorizes an ID-free command before enqueue.
 ADR-51 also states that root resource reservations, deduplication and actual
 attempts survive terminal workflow garbage collection. Resource-root, allocation
 and actual-attempt identity authority still requires review; a private hash
 namespace alone does not establish the native-runtime exception.
 
 ## Decision Log
+
+2026-10-31: Continue review identity adoption inside its existing memory owner.
+Use durable allocation receipts and ID-free authorized resolution requests. This
+preserves the actual pre-enqueue authorization and cross-workflow memory protocol
+while moving application entity identity to UUIDv7. Exact native declaration
+breaks will be retained; no compatibility exemption is inferred from old hashes.
+
 
 2026-10-30: Apply the user's first-release policy and exhaustive current-guide adoption. Replace old-history qualification with fresh provisioning and same-build recovery. Preserve real transaction, authority and privacy invariants.
 
@@ -101,19 +109,19 @@ cases. The language checker and thirteen style/ownership mutation tests pass.
 [The adoption record](../evidence/keiro-0.22/haskell-service-adoption.md) links each
 implemented domain-value wave and its exact candidate/evidence.
 
-Latest review-value acceptance passed 581 pure, 390 serial PostgreSQL, 262
-worker, 95 server, 31 API, nine client and 37 agent cases, plus 170 compiler
-clients, 143 domain assertions, six diagrams, 156 native rows, 82 CLI checks and
-live HTTP. ADR-92 keeps six checked review values and complete valid fixture
-bytes. A before admitted-coordinate case reproduces citation aliasing; a v2
-length-prefixed factory separates it under the unused first-release exception.
-Redundant scalar rechecks were removed; affected 581/390, native/domain/diagram
-and HTTP checks reran. The native gate has no findings against fbde25d and four
-transducer hashes remain unchanged; this is not old producer-identity compatibility
-or live Mori qualification. Forty-two of 46 assigned sources have implemented
-dispositions. Complete scalar/allocated-identity, other owners' decoder review and
-three final-profile clauses remain open. M1 is incomplete; this is not packaged
-Linux qualification.
+Latest review-identity acceptance passed 580 pure, 394 serial PostgreSQL,
+262 worker, 95 server, 31 API, nine client and 37 agent cases, plus 184 compiler
+clients, nine migration composition and eleven live migration smoke cases,
+143 domain assertions, six diagrams, 156 native rows, 82 CLI checks and live
+HTTP. All 38 affected practice cases pass after adding permanent decorated-v5
+refusals. [Acceptance](../evidence/keiro-0.22/review-identity-results.txt) records
+phase boundaries, controls and the intentional single native workflow break.
+The reviewed application schema gains exactly sixteen receipt-table objects.
+The 320-module/902-declaration worklist, source/tool hashes and all 124 frozen
+guide hashes are verified. Forty-two of 46 assigned sources have implemented
+dispositions. Complete scalar/allocated-identity, other owners' decoder review
+and three final-profile clauses remain open. M1 is incomplete; this is not
+packaged Linux qualification.
 
 ## Context and Orientation
 
@@ -133,6 +141,43 @@ M2 reviews all API and CLI clauses against actual consumers: typed Servant route
 
 Add focused architecture/style checks under `tools/` where a stable invariant is mechanically enforceable, with mutation/self-tests that reject real regressions. Structural scans are not proof of JSON, API or cancellation behavior. Run actual CLI stdin/help/version and authenticated HTTP/error cases with source-owned fixtures. Update guide rows and narrow ADR exceptions; do not copy a source's example API bounds without verifying its current released dependency through Mori and registries.
 
+### Review identity allocation continuation
+
+ReviewId and ResolutionId identify logical application records that survive their
+producing workflows (ADR-31). Replace their UUIDv5 derivations with private
+KindID-v7 wrappers using singular prefixes `shikigami_practice_review` and
+`shikigami_practice_review_resolution`. Keep their natural request coordinates as
+separate locators, rather than presenting deterministic names as allocations.
+
+The memory capability owns allocation. Before evidence/model work, one declared
+identity step reserves a review ID under canonical target/trigger/practice/
+specialist coordinates and binds the normalized trigger. A new application table
+stores the winning ID and exact binding. Concurrent or lost-response retries use
+the committed receipt; a changed binding refuses. Existing Kioku provisional and
+resolved memory IDs remain technical mappings, with record-before-retire and
+losing-candidate cleanup unchanged.
+
+Authorize an ID-free resolution request before enqueue. Its review ID, caller
+key, outcome, resolver, reason, timestamp and resulting scope are the actual
+command the authorizer approves. The memory owner reserves the ResolutionId under
+review/caller-key coordinates and binds the complete canonical request before
+recording its candidate. The resolution result carries both the memory reference
+and the allocated complete resolution for history output. Do not reserve an
+identity for an unauthenticated ingress request, invent a second delivery state
+machine or replace native queue/journal ownership. Keep authentication material
+opaque and never serializable.
+
+Append application-owned receipt DDL to the migration manifest. Add the actual
+allocation step and current resolution-result contract to AgentRun's declaration,
+regenerate through the pinned scaffold and retain every strict breaking finding
+under the user's confirmed unused first-release exception. No legacy ID factory
+or old reader is required. Acceptance covers prefix/version/private construction,
+canonical logical-key conflicts, concurrent/lost-response/restarted allocation,
+complete codecs, authorization before enqueue, cross-workflow candidate recovery,
+competing resolution cleanup, all five workflow-family regressions and migration
+verification. The complete scalar/identity census and plan95 remain open until
+all other applicable findings are resolved.
+
 ## Concrete Steps
 
 Run from the repository root in the declared development shell. Use disposable task-owned databases and the existing source-owned fixtures. These are implementation commands, not evidence of tests already run:
@@ -143,6 +188,12 @@ nix develop --no-write-lock-file -c cabal test shikigami-core-test shikigami-api
 nix develop --no-write-lock-file -c just hurl
 git diff --check
 ```
+
+For focused Tasty selection, use literal alternatives such as
+`--test-option=-p --test-option='/practice/||/Practice/'` and require a nonzero
+selected count. Tasty does not implement regular expressions. The owning
+`mori://UnkindPartition/tasty` documents this in `tasty/README.md`; its source-file
+artifact URI is pending. Zero-selection runs are not acceptance evidence.
 
 Record actual cases and concise output under `docs/evidence/keiro-0.22/`. Database tests that skip are not accepted. Before claiming Linux is unavailable, inspect `container --help`, `container list --all` and `tests/workspace/build-apple.sh`; use native ARM64 Apple containers, retaining the documented remote-builder fallback only when needed. Do not claim runtime containment from compilation alone.
 

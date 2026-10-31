@@ -137,6 +137,11 @@ column	practice_review_attention.target_project	text not null
 column	practice_review_attention_reviews.attention_key	text not null
 column	practice_review_attention_reviews.linked_at	timestamp with time zone not null
 column	practice_review_attention_reviews.review_id	text not null
+column	practice_review_identities.binding	jsonb not null
+column	practice_review_identities.entity_id	text not null
+column	practice_review_identities.kind	text not null
+column	practice_review_identities.owner_key	text not null
+column	practice_review_identities.request_key	text not null
 column	run_evidence.binding	jsonb not null
 column	run_evidence.created_at	timestamp with time zone not null default now()
 column	run_evidence.expected_call_count	integer not null default 0
@@ -471,6 +476,14 @@ constraint	practice_review_attention_reviews.practice_review_attention_reviews_a
 constraint	practice_review_attention_reviews.practice_review_attention_reviews_linked_at_not_null	NOT NULL linked_at
 constraint	practice_review_attention_reviews.practice_review_attention_reviews_pkey	PRIMARY KEY (attention_key, review_id)
 constraint	practice_review_attention_reviews.practice_review_attention_reviews_review_id_not_null	NOT NULL review_id
+constraint	practice_review_identities.practice_review_identities_binding_not_null	NOT NULL binding
+constraint	practice_review_identities.practice_review_identities_entity_id_key	UNIQUE (entity_id)
+constraint	practice_review_identities.practice_review_identities_entity_id_not_null	NOT NULL entity_id
+constraint	practice_review_identities.practice_review_identities_kind_check	CHECK ((kind = ANY (ARRAY['review'::text, 'resolution'::text])))
+constraint	practice_review_identities.practice_review_identities_kind_not_null	NOT NULL kind
+constraint	practice_review_identities.practice_review_identities_owner_key_not_null	NOT NULL owner_key
+constraint	practice_review_identities.practice_review_identities_pkey	PRIMARY KEY (kind, owner_key, request_key)
+constraint	practice_review_identities.practice_review_identities_request_key_not_null	NOT NULL request_key
 constraint	run_evidence.run_evidence_binding_not_null	NOT NULL binding
 constraint	run_evidence.run_evidence_counts	CHECK (((expected_call_count >= 0) AND (recorded_call_count >= 0)))
 constraint	run_evidence.run_evidence_created_at_not_null	NOT NULL created_at
@@ -704,6 +717,8 @@ index	objectives_pkey	CREATE UNIQUE INDEX objectives_pkey ON shikigami.objective
 index	practice_review_attention_outbox_message_id_key	CREATE UNIQUE INDEX practice_review_attention_outbox_message_id_key ON shikigami.practice_review_attention USING btree (outbox_message_id)
 index	practice_review_attention_pkey	CREATE UNIQUE INDEX practice_review_attention_pkey ON shikigami.practice_review_attention USING btree (attention_key)
 index	practice_review_attention_reviews_pkey	CREATE UNIQUE INDEX practice_review_attention_reviews_pkey ON shikigami.practice_review_attention_reviews USING btree (attention_key, review_id)
+index	practice_review_identities_entity_id_key	CREATE UNIQUE INDEX practice_review_identities_entity_id_key ON shikigami.practice_review_identities USING btree (entity_id)
+index	practice_review_identities_pkey	CREATE UNIQUE INDEX practice_review_identities_pkey ON shikigami.practice_review_identities USING btree (kind, owner_key, request_key)
 index	run_evidence_calls_baikai_call_idx	CREATE INDEX run_evidence_calls_baikai_call_idx ON shikigami.run_evidence_calls USING btree (baikai_call_id)
 index	run_evidence_calls_pkey	CREATE UNIQUE INDEX run_evidence_calls_pkey ON shikigami.run_evidence_calls USING btree (run_id, call_id)
 index	run_evidence_calls_source_run_idx	CREATE INDEX run_evidence_calls_source_run_idx ON shikigami.run_evidence_calls USING btree (source_run_id)
@@ -776,6 +791,7 @@ table	objective_scopes	kind=r
 table	objectives	kind=r
 table	practice_review_attention	kind=r
 table	practice_review_attention_reviews	kind=r
+table	practice_review_identities	kind=r
 table	run_evidence	kind=r
 table	run_evidence_calls	kind=r
 table	run_skips	kind=r

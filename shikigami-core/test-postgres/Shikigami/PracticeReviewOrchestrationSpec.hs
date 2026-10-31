@@ -19,6 +19,7 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Time (UTCTime (..), fromGregorian, secondsToNominalDiffTime)
+import Data.Vector qualified as Vector
 import Effectful (runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
 import Hasql.Decoders qualified as Decoders
@@ -34,6 +35,7 @@ import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, wit
 import Kiroku.Store.Effect (runStoreResource)
 import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
+import Pgmq qualified
 import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval (autoApprovePolicy)
@@ -70,21 +72,22 @@ import Shikigami.PracticeReview
     PracticeKey,
     PracticeReviewClaim (..),
     PracticeReviewClassification (..),
-    PracticeReviewResolution (..),
+    PracticeReviewResolutionRequest (..),
     PracticeReviewTrigger (..),
     PracticeReviewVerdict (..),
     ResolutionOutcome (..),
-    ReviewId (..),
+    ReviewId,
     ReviewLineage (..),
-    deriveResolutionId,
-    deriveReviewId,
     parseClaimId,
     parseOwnerPrincipal,
     parsePracticeKey,
-    validateResolution,
+    reviewIdText,
+    validateResolutionRequest,
+    validateTrigger,
     validateVerdict,
     validatedVerdictValue,
   )
+import Shikigami.PracticeReview qualified as Review
 import Shikigami.PracticeReview.Attention
   ( AttentionKey (..),
     PracticeReviewAttentionEnv (..),
@@ -96,6 +99,9 @@ import Shikigami.PracticeReview.Authorization
     AuthorizedResolutionReceipt (authorizationId),
     ResolutionAuthorityKind (Human),
     ResolutionAuthorizationError (..),
+    ResolutionSubmissionEvidence (..),
+    ReviewResolutionAuthorizer (..),
+    enqueueAuthorizedPracticeReviewResolution,
     mkAuthorizedResolutionReceipt,
     validateAuthorizedPracticeReviewResolution,
   )
@@ -119,6 +125,8 @@ import Shikigami.PracticeReview.Evidence
     EvidenceReader (..),
     EvidenceSource (..),
   )
+import Shikigami.PracticeReview.Identity (newReviewId)
+import Shikigami.PracticeReview.IdentityStore qualified as IdentityStore
 import Shikigami.PracticeReview.Memory
   ( PracticeReviewMemoryEnv (..),
     runPracticeReviewMemory,
@@ -131,9 +139,11 @@ import Shikigami.PracticeReviewEvidenceSpec
     completeReferenceRevision,
   )
 import Shikigami.Repository (RepoRef (..), revisionText)
+import Shikigami.RunJobs (decodeRunJob)
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (SinkKind (SKawaDigest, SKizashiSignal))
+import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
@@ -145,6 +155,7 @@ tests databaseFixture =
   testGroup
     "practice review orchestration"
     [ authorizationTests,
+      ingressTests databaseFixture,
       attentionIdentityTests,
       (completeClassificationTests databaseFixture),
       (agentRunSpecialistTests databaseFixture),
@@ -158,32 +169,35 @@ authorizationTests =
     "authorized resolution"
     [ testCase "valid receipt round-trips and remains bound to the resolution" do
         resolution <- firstResolution
-        validated <- expectRight (validateResolution resolution)
+        validated <- expectRight (validateResolutionRequest resolution)
         receipt <- expectRight (mkAuthorizedResolutionReceipt Human (resolverOf resolution) "mori://shinzui/shikigami/reviews/approval-1" (resolvedAtOf resolution) validated)
-        let envelope = AuthorizedPracticeReviewResolution {schemaVersion = 1, resolution, authorization = receipt}
+        let envelope = AuthorizedPracticeReviewResolution {schemaVersion = 2, resolution, authorization = receipt}
         decoded <- decodeOrFail (encode envelope)
         validateAuthorizedPracticeReviewResolution decoded @?= Right (validated, receipt)
-        (.authorizationId) receipt @?= "7898dedb-294d-5f61-872b-211c0df7c6af",
+        (.authorizationId) receipt @?= "dc9940fc-5b78-5d6d-b8fb-0b9d4ddcd166",
       testCase "subject mismatch, disallowed source, and altered receipt are refused" do
         resolution <- firstResolution
-        validated <- expectRight (validateResolution resolution)
+        validated <- expectRight (validateResolutionRequest resolution)
         mismatched <- expectRight (mkAuthorizedResolutionReceipt Human (fixtureOwnerPrincipal "different-subject") "activity://approval/1" (resolvedAtOf resolution) validated)
-        let mismatchedEnvelope = AuthorizedPracticeReviewResolution {schemaVersion = 1, resolution, authorization = mismatched}
+        let mismatchedEnvelope = AuthorizedPracticeReviewResolution {schemaVersion = 2, resolution, authorization = mismatched}
         assertBool "subject mismatch was accepted" (isSubjectMismatch (validateAuthorizedPracticeReviewResolution mismatchedEnvelope))
         assertBool
           "noncanonical authorization source was accepted"
           (isSourceInvalid (mkAuthorizedResolutionReceipt Human (resolverOf resolution) "https://example.invalid/approval" (resolvedAtOf resolution) validated))
         validReceipt <- expectRight (mkAuthorizedResolutionReceipt Human (resolverOf resolution) "activity://approval/1" (resolvedAtOf resolution) validated)
-        let validEnvelope = AuthorizedPracticeReviewResolution {schemaVersion = 1, resolution, authorization = validReceipt}
+        let validEnvelope = AuthorizedPracticeReviewResolution {schemaVersion = 2, resolution, authorization = validReceipt}
         altered <- decodeOrFail (encode (alterAuthorizationId "altered" (Aeson.toJSON validEnvelope)))
         assertBool "altered authorization id was accepted" (isIdInvalid (validateAuthorizedPracticeReviewResolution altered)),
       testCase "authorization decoders reject unknown envelope and receipt fields" do
         resolution <- firstResolution
-        validated <- expectRight (validateResolution resolution)
+        validated <- expectRight (validateResolutionRequest resolution)
         receipt <- expectRight (mkAuthorizedResolutionReceipt Human (resolverOf resolution) "activity://approval/1" (resolvedAtOf resolution) validated)
-        let envelope = AuthorizedPracticeReviewResolution {schemaVersion = 1, resolution, authorization = receipt}
+        let envelope = AuthorizedPracticeReviewResolution {schemaVersion = 2, resolution, authorization = receipt}
         assertDecodeFailure @AuthorizedPracticeReviewResolution (insertObjectField "unexpected" Aeson.Null (Aeson.toJSON envelope))
         assertDecodeFailure @AuthorizedPracticeReviewResolution (insertAuthorizationField "unexpected" Aeson.Null (Aeson.toJSON envelope))
+        assertDecodeFailure @PracticeReviewResolutionRequest (insertObjectField "resolutionId" (String "caller-selected") (Aeson.toJSON resolution))
+        changed <- decodeOrFail (encode (envelope & #resolution .~ (resolution & #reason .~ "changed after authorization")))
+        assertBool "receipt did not bind the complete command" (isIdInvalid (validateAuthorizedPracticeReviewResolution changed))
     ]
 
 attentionIdentityTests :: TestTree
@@ -261,9 +275,8 @@ completeClassificationTests databaseFixture =
         reReviewEvidenceCalls <- newIORef 0
         reReviewEvaluatorCalls <- newIORef 0
         reReviewAttentionCalls <- newIORef 0
-        let priorTrigger = completeOpenTelemetryTrigger "complete-consistent"
-            priorReviewId = deriveReviewId priorTrigger (fixturePracticeKey "opentelemetry") reviewerAgent
-            reReviewTrigger = completeOpenTelemetryReferenceChangeTrigger "complete-reference-change" priorReviewId
+        priorReviewId <- allocatedIdFor appEnv (completeOpenTelemetryTrigger "complete-consistent")
+        let reReviewTrigger = completeOpenTelemetryReferenceChangeTrigger "complete-reference-change" priorReviewId
             reReviewRuntime = completeRuntime reReviewEvidenceCalls reReviewEvaluatorCalls reReviewAttentionCalls referenceSuspect
             reReviewWorkflowId = WorkflowId "practice-review-complete-reference-change"
             runReReview = runPracticeReviewInput appEnv behaviorEnv reReviewSession reReviewRuntime reReviewWorkflowId (Aeson.toJSON reReviewTrigger)
@@ -292,20 +305,20 @@ completeClassificationTests databaseFixture =
           evaluatorCalls <- newIORef 0
           attentionCalls <- newIORef 0
           let reviewedTrigger@PracticeReviewTrigger {adoptions} = completeOpenTelemetryTrigger ("complete-" <> reviewLabel)
-              reviewId = deriveReviewId reviewedTrigger (fixturePracticeKey "opentelemetry") reviewerAgent
-              resultingApplicability =
+          reviewId <- allocatedIdFor appEnv reviewedTrigger
+          superseding <- newReviewId
+          let resultingApplicability =
                 case adoptions of
                   PracticeAdoptionBinding {claimedApplicability} : _
                     | retainsApplicability -> Just claimedApplicability
                   _ -> Nothing
               supersedingReviewId
-                | isSuperseded = Just (deriveReviewId (completeOpenTelemetryTrigger "complete-superseding-review") (fixturePracticeKey "opentelemetry") reviewerAgent)
+                | isSuperseded = Just superseding
                 | otherwise = Nothing
               commandKey = "complete-resolution-" <> resolutionLabel
               resolution =
-                PracticeReviewResolution
+                PracticeReviewResolutionRequest
                   { schemaVersion = 1,
-                    resolutionId = deriveResolutionId reviewId commandKey,
                     idempotencyKey = commandKey,
                     reviewId,
                     outcome,
@@ -315,7 +328,7 @@ completeClassificationTests databaseFixture =
                     resultingApplicability,
                     supersedingReviewId
                   }
-          validatedResolution <- expectRight (validateResolution resolution)
+          validatedResolution <- expectRight (validateResolutionRequest resolution)
           receipt <-
             expectRight
               ( mkAuthorizedResolutionReceipt
@@ -325,7 +338,7 @@ completeClassificationTests databaseFixture =
                   (resolvedAtOf resolution)
                   validatedResolution
               )
-          let envelope = AuthorizedPracticeReviewResolution {schemaVersion = 1, resolution, authorization = receipt}
+          let envelope = AuthorizedPracticeReviewResolution {schemaVersion = 2, resolution, authorization = receipt}
               runtime = completeRuntime evidenceCalls evaluatorCalls attentionCalls consistent
               workflowId = WorkflowId ("practice-review-complete-resolution-" <> resolutionLabel)
               runOnce = runPracticeReviewInput appEnv behaviorEnv session runtime workflowId (Aeson.toJSON envelope)
@@ -478,11 +491,10 @@ replayTests databaseFixture =
                 assertBool "attention step is absent" (Map.member "practice-review-attention" index)
                 assertBool "incomplete evidence invoked the evaluator" (Map.notMember "practice-review-evaluate" index)
 
-            let reviewId = deriveReviewId contractTrigger (fixturePracticeKey "opentelemetry") reviewerAgent
-                resolution =
-                  PracticeReviewResolution
+            reviewId <- allocatedIdFor appEnv contractTrigger
+            let resolution =
+                  PracticeReviewResolutionRequest
                     { schemaVersion = 1,
-                      resolutionId = deriveResolutionId reviewId "resolution-command-fixture",
                       idempotencyKey = "resolution-command-fixture",
                       reviewId,
                       outcome = Rejected,
@@ -496,7 +508,7 @@ replayTests databaseFixture =
               try @SomeException
                 (runInput (WorkflowId "practice-review-bare-resolution") (Aeson.toJSON resolution))
             assertRunRefused bareResolution
-            validatedResolution <- expectRight (validateResolution resolution)
+            validatedResolution <- expectRight (validateResolutionRequest resolution)
             receipt <-
               expectRight
                 ( mkAuthorizedResolutionReceipt
@@ -506,7 +518,7 @@ replayTests databaseFixture =
                     (resolvedAtOf resolution)
                     validatedResolution
                 )
-            let envelope = AuthorizedPracticeReviewResolution {schemaVersion = 1, resolution, authorization = receipt}
+            let envelope = AuthorizedPracticeReviewResolution {schemaVersion = 2, resolution, authorization = receipt}
             resolved <- runInput (WorkflowId "practice-review-resolution-replay") (Aeson.toJSON envelope)
             assertResolutionOutcome resolved
             resolvedReplay <- runInput (WorkflowId "practice-review-resolution-replay") (Aeson.toJSON envelope)
@@ -521,11 +533,9 @@ atomicAttentionTests databaseFixture =
     "atomic attention"
     [ testCase "concurrent equivalent reviews share one reservation, outbox, and receipt" do
         verdict <- targetSuspectVerdict
-        trigger <- readFixture "trigger-valid.json" >>= decodeOrFail . LazyByteString.fromStrict
         firstVerdict <- expectRight (validateVerdict verdict)
+        secondReviewId <- newReviewId
         let secondTriggerKey = "equivalent-trigger-two"
-            PracticeReviewVerdict {practice, specialist} = verdict
-            secondReviewId = deriveReviewId (trigger & #idempotencyKey .~ secondTriggerKey) practice specialist
         secondVerdict <-
           expectRight
             ( validateVerdict
@@ -701,8 +711,8 @@ completeRuntime evidenceCalls evaluatorCalls attentionCalls proposal =
         pure (Right (Aeson.toJSON (proposalWithEvidence evidence proposal))),
       attention = \validated -> do
         modifyIORef' attentionCalls (+ 1)
-        let PracticeReviewVerdict {reviewId = ReviewId reviewValue} = validatedVerdictValue validated
-        pure (Right (Reserved ("attention-" <> reviewValue) ("outbox-" <> reviewValue))),
+        let PracticeReviewVerdict {reviewId} = validatedVerdictValue validated
+        pure (Right (Reserved ("attention-" <> reviewIdText reviewId) ("outbox-" <> reviewIdText reviewId))),
       attentionRecipients = emptyAttentionRecipientMap
     }
 
@@ -888,9 +898,10 @@ reviewActivity =
 reviewerAgent :: Text
 reviewerAgent = "opentelemetry-practice-reviewer"
 
-firstResolution :: IO PracticeReviewResolution
+firstResolution :: IO PracticeReviewResolutionRequest
 firstResolution = do
-  resolutions <- readFixture "resolutions-valid.json" >>= decodeOrFail . LazyByteString.fromStrict
+  values <- readFixture "resolutions-valid.json" >>= decodeOrFail . LazyByteString.fromStrict
+  resolutions <- traverse (decodeOrFail . encode . removeAllocatedId) (values :: [Value])
   case resolutions of
     resolution : _ -> pure resolution
     [] -> assertFailure "resolution fixture is empty"
@@ -902,11 +913,11 @@ targetSuspectVerdict = do
     _ : verdict : _ -> pure verdict
     _ -> assertFailure "target-suspect verdict fixture is absent"
 
-resolverOf :: PracticeReviewResolution -> OwnerPrincipal
-resolverOf PracticeReviewResolution {resolver} = resolver
+resolverOf :: PracticeReviewResolutionRequest -> OwnerPrincipal
+resolverOf PracticeReviewResolutionRequest {resolver} = resolver
 
-resolvedAtOf :: PracticeReviewResolution -> UTCTime
-resolvedAtOf PracticeReviewResolution {resolvedAt} = resolvedAt
+resolvedAtOf :: PracticeReviewResolutionRequest -> UTCTime
+resolvedAtOf PracticeReviewResolutionRequest {resolvedAt} = resolvedAt
 
 alterAuthorizationId :: Text -> Value -> Value
 alterAuthorizationId replacement = insertAuthorizationField "authorizationId" (String replacement)
@@ -982,3 +993,43 @@ fixtureOwnerPrincipal = either (error . show) id . parseOwnerPrincipal
 
 fixtureClaimId :: Text -> ClaimId
 fixtureClaimId = either (error . show) id . parseClaimId
+
+removeAllocatedId :: Value -> Value
+removeAllocatedId (Object value) = Object (KeyMap.delete "resolutionId" value)
+removeAllocatedId value = value
+
+allocatedIdFor :: AppEnv -> PracticeReviewTrigger -> IO ReviewId
+allocatedIdFor app trigger = do
+  validated <- expectRight (validateTrigger trigger)
+  reference <- IdentityStore.reserveReviewIdentity app (CompatibilityAgent (fixtureAgentName reviewerAgent)) validated (fixturePracticeKey "opentelemetry") reviewerAgent >>= expectRight
+  pure (IdentityStore.allocatedReviewId reference)
+
+ingressTests :: DatabaseFixture -> TestTree
+ingressTests fixture = testCase "practice resolution ingress authorizes the ID-free command before queue publication" do
+  withShikigamiFreshDatabase fixture \connection -> withStore (defaultConnectionSettings connection) \store -> do
+    ensureRunQueue store.pool >>= expectRight
+    request <- firstResolution
+    calls <- newIORef (0 :: Int)
+    let identity = compatibilityIdentity (fixtureAgentName reviewerAgent)
+        submission = ResolutionSubmissionEvidence "protected-authentication-material"
+        denied = ReviewResolutionAuthorizer \_ _ -> modifyIORef' calls (+ 1) >> pure (Left (ResolutionAuthorizerRefused "fixture refusal"))
+        send = enqueueAuthorizedPracticeReviewResolution store.pool identity reviewerAgent
+    show submission @?= "<resolution-submission-evidence>"
+    refused <- send denied request submission
+    case refused of Left (ResolutionAuthorizerRefused _) -> pure (); other -> assertFailure (show other)
+    metrics <- Pool.use store.pool (Pgmq.queueMetrics runQueueName) >>= expectRight
+    metrics.queueLength @?= 0
+    let allowed = ReviewResolutionAuthorizer \command _ -> do
+          command @?= request
+          modifyIORef' calls (+ 1)
+          validated <- expectRight (validateResolutionRequest command)
+          pure (mkAuthorizedResolutionReceipt Human (resolverOf command) "activity://approval/ingress" (resolvedAtOf command) validated)
+    _ <- send allowed request submission >>= expectRight
+    readIORef calls >>= (@?= 2)
+    messages <- Pool.use store.pool (Pgmq.readMessage (Pgmq.ReadMessage runQueueName 30 (Just 10) Nothing)) >>= expectRight
+    Vector.length messages @?= 1
+    forM_ (Vector.toList messages) \message -> do
+      job <- expectRight (decodeRunJob message.body.unMessageBody)
+      envelope <- decodeOrFail (encode job.triggerPayload)
+      (validated, _) <- expectRight (validateAuthorizedPracticeReviewResolution envelope)
+      Aeson.toJSON (Review.validatedResolutionRequestValue validated) @?= Aeson.toJSON request

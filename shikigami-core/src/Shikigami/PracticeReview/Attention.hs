@@ -57,10 +57,10 @@ import Shikigami.PracticeReview
     PracticeReviewVerdict (..),
     ProjectRef (..),
     RecommendedOwner (..),
-    ReviewId (..),
     ValidatedPracticeReviewVerdict,
     ownerPrincipalText,
     practiceKeyText,
+    reviewIdText,
     validatedVerdictValue,
   )
 import Shikigami.PracticeReview.Capability
@@ -124,7 +124,7 @@ deriveAttentionKey recipients validated = do
   pure key
 
 attentionProjection :: AttentionRecipientMap -> PracticeReviewVerdict -> Either Text AttentionProjection
-attentionProjection recipients verdict@PracticeReviewVerdict {reviewId = ReviewId reviewId, practice = practiceKey, classification, recommendedOwner, recommendedAction} = do
+attentionProjection recipients verdict@PracticeReviewVerdict {reviewId = allocatedId, practice = practiceKey, classification, recommendedOwner, recommendedAction} = do
   recipient <- resolveAttentionRecipient recipients verdict
   (ownerRole, _) <- case recommendedOwner of
     Nothing -> Left "actionable practice review has no owner role"
@@ -160,7 +160,7 @@ attentionProjection recipients verdict@PracticeReviewVerdict {reviewId = ReviewI
         classification = enumText classification,
         ownerRole,
         recipient,
-        reviewId,
+        reviewId = reviewIdText allocatedId,
         claimEvidenceDigest,
         intent = Text.take 512 recommendedAction
       }

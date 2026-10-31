@@ -229,6 +229,11 @@
           "rationale": "Six private review types reject blank/out-of-range values without Generic/Num/IsString construction, retaining complete valid fixture and scalar bytes. Explicit raw content-plane hash Text refines once; graph/owner/authorization checks remain. A before public-validator case reproduces opaque path/hash citation aliasing; v2 length-prefixed commitments separate admitted coordinates with frozen vectors. ADR-92 and 581 pure/390 PostgreSQL/262 worker/95 server plus 170 compiler/native/domain/diagram/82 CLI/live HTTP checks cover this clause. Fresh source identity meaning intentionally resets under ADR-27, without a historical factory fallback or live Mori claim. Complete scalar/allocated-identity review remains pending."
         },
         {
+          "id": "allocated-review-entities-and-durable-request-receipts",
+          "disposition": "implemented",
+          "rationale": "Private KindID-v7 ReviewId/ResolutionId replace entity derivations. Creator/request-bound receipts retain concurrent, lost-response and cross-workflow recovery; current owner/metadata are rechecked before publication. The declared allocation step precedes model work. ID-free resolution authorization binds the full canonical command before enqueue; owner allocation precedes candidate recording and complete allocated results feed history. Migration integrity, live schema drift refusal, record-before-retire and loser cleanup remain qualified. ADR-93, 580 pure/394 PostgreSQL/262 worker/95 server, 184 compiler clients, native/domain/diagram/82 CLI/live HTTP acceptance cover this clause. Exactly one retained AgentRun WorkflowBodyChanged finding establishes the intentional unused first-release reset; complete scalar/identity review remains pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -309,7 +314,13 @@
         "docs/evidence/keiro-0.22/practice-values-vectors.json",
         "docs/evidence/keiro-0.22/practice-values-native-diff.json",
         "docs/evidence/keiro-0.22/practice-values-native-replay.json",
-        "docs/evidence/keiro-0.22/practice-values-fold-identities.json"
+        "docs/evidence/keiro-0.22/practice-values-fold-identities.json",
+        "docs/adr/0093-review-entities-are-allocated-behind-durable-request-receipts.md",
+        "docs/evidence/keiro-0.22/review-identity-results.txt",
+        "docs/evidence/keiro-0.22/review-identity-reset-native-diff.json",
+        "docs/evidence/keiro-0.22/review-identity-reset-native-replay.json",
+        "docs/evidence/keiro-0.22/review-identity-fold-identities.json",
+        "shikigami-core/src/Shikigami/PracticeReview/IdentityStore.hs"
       ]
     },
     {

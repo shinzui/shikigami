@@ -13,23 +13,22 @@ import Data.Text qualified as Text
 import Data.Vector ((!?), (//))
 import Data.Vector qualified as Vector
 import Shikigami.PracticeReview
-  ( PracticeKey,
-    PracticeReviewClassification (..),
+  ( PracticeReviewClassification (..),
     PracticeReviewResolution (..),
     PracticeReviewTrigger,
     PracticeReviewVerdict (..),
-    ResolutionId,
     ResolutionOutcome (..),
-    ReviewId (..),
-    deriveResolutionId,
-    deriveReviewId,
-    parsePracticeKey,
+    parseResolutionId,
+    parseReviewId,
+    resolutionIdText,
+    reviewIdText,
     validateResolution,
     validateTrigger,
     validateVerdict,
     validatedTriggerValue,
   )
 import Shikigami.PracticeReview qualified as Review
+import Shikigami.PracticeReview.Identity (newResolutionId, newReviewId)
 import Shikigami.Repository
   ( mkRelativePath,
     mkRevision,
@@ -96,24 +95,21 @@ triggerContractTests =
               Left _ -> pure ()
               Right _ -> assertFailure "trigger decoder accepted a specialist field"
           _ -> assertFailure "trigger fixture is not a JSON object",
-      testCase "derives a pinned ReviewId from normalized identity inputs" do
-        bytes <- readFixture "trigger-valid.json"
-        trigger <- decodeStrictOrFail @PracticeReviewTrigger bytes
-        let expected = ReviewId "b717afda-1273-54d4-8241-4d66330e3fd3"
-        deriveReviewId trigger (fixturePracticeKey "opentelemetry") "opentelemetry-practice-reviewer" @?= expected
-        deriveReviewId trigger (fixturePracticeKey " OpenTelemetry ") " OPENTELEMETRY-PRACTICE-REVIEWER " @?= expected,
-      testCase "reference ordering does not change identity but a material trigger key does" do
-        bytes <- readFixture "trigger-valid.json"
-        trigger <- decodeStrictOrFail @PracticeReviewTrigger bytes
-        value <- decodeStrictOrFail @Value bytes
-        reorderedValue <- expectRight (reverseArrayAt ["adoptions", "0", "references"] value)
-        reordered <- decodeLazyOrFail @PracticeReviewTrigger (encode reorderedValue)
-        changedValue <- expectRight (setPointer ["targetRange", "head"] (String "ffffffffffffffffffffffffffffffffffffffff") value)
-        changedKeyValue <- expectRight (setPointer ["idempotencyKey"] (String "mori:practice-review:target:repo_target:ffffffffffffffffffffffffffffffffffffffff") changedValue)
-        changed <- decodeLazyOrFail @PracticeReviewTrigger (encode changedKeyValue)
-        let originalId = deriveReviewIdFromFixture trigger
-        deriveReviewIdFromFixture reordered @?= originalId
-        assertBool "a changed material trigger key must produce a new ReviewId" (deriveReviewIdFromFixture changed /= originalId),
+      testCase "allocated review and resolution IDs are distinct canonical UUIDv7 domains" do
+        first <- newReviewId
+        second <- newReviewId
+        resolution <- newResolutionId
+        assertBool "allocations collided" (first /= second)
+        parseReviewId (reviewIdText first) @?= Right first
+        parseResolutionId (resolutionIdText resolution) @?= Right resolution
+        eitherDecode (encode first) @?= Right first
+        eitherDecode (encode resolution) @?= Right resolution
+        expectLeft (parseReviewId (resolutionIdText resolution))
+        expectLeft (parseResolutionId (reviewIdText first))
+        expectLeft (parseReviewId "b717afda-1273-54d4-8241-4d66330e3fd3")
+        expectLeft (parseReviewId "shikigami_practice_review_5q2yqxm4kkaka84gadcrsgwfyk")
+        expectLeft (parseResolutionId "shikigami_practice_review_resolution_5q2yqxm4kkaka84gadcrsgwfyk")
+        expectLeft (parseReviewId (" " <> reviewIdText first)),
       testCase "validation accumulates independent trigger errors" do
         value <- readFixtureValue "trigger-valid.json"
         badSchema <- expectRight (setPointer ["schemaVersion"] (Number 2) value)
@@ -155,13 +151,6 @@ resolutionContractTests =
         fixtureWire <- decodeStrictOrFail @Value bytes
         encode resolutions @?= encode fixtureWire
         forM_ resolutions (expectRight . validateResolution)
-        case resolutions of
-          firstResolution : _ ->
-            resolutionIdentity firstResolution
-              @?= deriveResolutionId
-                (ReviewId "be79e848-6ce5-5fef-a5c8-bce0596f3784")
-                "resolution-command-accepted"
-          [] -> assertFailure "resolution fixture array is empty"
     ]
 
 invalidFixtureTests :: TestTree
@@ -184,13 +173,6 @@ verdictClassification PracticeReviewVerdict {classification} = classification
 
 resolutionOutcome :: PracticeReviewResolution -> ResolutionOutcome
 resolutionOutcome PracticeReviewResolution {outcome} = outcome
-
-resolutionIdentity :: PracticeReviewResolution -> ResolutionId
-resolutionIdentity PracticeReviewResolution {resolutionId} = resolutionId
-
-deriveReviewIdFromFixture :: PracticeReviewTrigger -> ReviewId
-deriveReviewIdFromFixture trigger =
-  deriveReviewId trigger (fixturePracticeKey "opentelemetry") "opentelemetry-practice-reviewer"
 
 data InvalidFixture = InvalidFixture
   { name :: !Text,
@@ -299,12 +281,6 @@ parseArrayIndex segment =
 setPointer :: [Text] -> Value -> Value -> Either String Value
 setPointer segments replacement = alterPointer segments (const (Right (Just replacement)))
 
-reverseArrayAt :: [Text] -> Value -> Either String Value
-reverseArrayAt segments =
-  alterPointer segments \case
-    Just (Array values) -> Right (Just (Array (Vector.reverse values)))
-    _ -> Left "reverse pointer does not name an array"
-
 assertInvalidRejected :: InvalidFixture -> Value -> IO ()
 assertInvalidRejected InvalidFixture {name, expected} payload =
   case expected of
@@ -342,9 +318,6 @@ expectRight = either (assertFailure . ("expected Right, got Left: " <>) . show) 
 
 expectLeft :: (Show value) => Either error value -> IO ()
 expectLeft = either (const (pure ())) (assertFailure . ("expected Left, got Right: " <>) . show)
-
-fixturePracticeKey :: Text -> PracticeKey
-fixturePracticeKey = either (error . show) id . parsePracticeKey
 
 scalarValueTests :: TestTree
 scalarValueTests =

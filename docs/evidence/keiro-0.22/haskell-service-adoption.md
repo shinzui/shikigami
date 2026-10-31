@@ -306,3 +306,17 @@ frozen vectors, complete fixture byte controls, 581 pure/390 PostgreSQL/262 work
 95 server and 170 compiler cases. Affected tests, native/domain/diagram and live
 HTTP rerun after removing redundant scalar rechecks. No live Mori or Linux
 qualification is claimed; full scalar/identity review remains open.
+
+Review and resolution entities now use private UUIDv7 KindIDs with durable
+creator/request-bound allocation receipts. An ID-free request is authorized
+before native enqueue; the owner allocates its resolution and history receives
+the complete allocated result. Current ownership, lost-response/concurrent
+recovery, record-before-retire, loser cleanup and nonjournaled store failures
+remain qualified. [ADR-93](../../adr/0093-review-entities-are-allocated-behind-durable-request-receipts.md)
+and [review identity acceptance](review-identity-results.txt) retain 580 pure/
+394 PostgreSQL/262 worker/95 server, 184 compiler, nine migration composition,
+eleven live schema smoke, 156 native, 143 domain/six diagram and CLI/HTTP results.
+Exactly one native AgentRun body break is retained under ADR-27. The updated
+worklist has 320 modules/902 declarations and fourteen entrypoints; it remains
+unclassified. Complete scalar/identity and other decoder-owner review remain
+open before plan95.

@@ -3,8 +3,9 @@
 module Shikigami.PracticeReviewMemorySpec (tests) where
 
 import Control.Concurrent (forkFinally)
+import Control.Concurrent.Async (replicateConcurrently)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, readMVar, takeMVar)
-import Control.Exception (SomeException, displayException)
+import Control.Exception (SomeException, displayException, try)
 import Control.Lens ((&), (.~))
 import Data.Aeson (FromJSON, Value, eitherDecode, eitherDecodeStrict', encode, object, (.=))
 import Data.ByteString qualified as ByteString
@@ -14,7 +15,10 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time.Clock (getCurrentTime)
-import Effectful (Eff, (:>))
+import Effectful (Eff, IOE, (:>))
+import Effectful qualified
+import Hasql.Pool qualified as Pool
+import Hasql.Session qualified as Session
 import Keiro.Workflow
   ( WorkflowId (..),
     WorkflowName (..),
@@ -29,7 +33,7 @@ import Kioku.Id (MemoryId, SessionId, genMemoryId, genSessionId, idText)
 import Kioku.Memory qualified as Memory
 import Kioku.Memory.Domain (RecordMemoryData (..))
 import Kioku.Memory.ReadModel (MemoryRow (..))
-import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
+import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Agent.Decl
   ( AgentDecl (..),
@@ -46,20 +50,30 @@ import Shikigami.PracticeReview
   ( Applicability (..),
     PracticeKey,
     PracticeReviewResolution (..),
+    PracticeReviewResolutionRequest (..),
     PracticeReviewVerdict (..),
     ProjectRef (..),
-    ResolutionId (..),
+    ResolutionId,
     ResolutionOutcome (..),
-    ReviewId (..),
+    ReviewId,
     ValidatedPracticeReviewResolution,
     ValidatedPracticeReviewVerdict,
-    deriveResolutionId,
     parsePracticeKey,
+    parseResolutionId,
+    parseReviewId,
+    resolutionIdText,
+    reviewIdText,
     validateResolution,
+    validateResolutionRequest,
+    validateTrigger,
     validateVerdict,
     validatedResolutionValue,
+    validatedTriggerValue,
     validatedVerdictValue,
   )
+import Shikigami.PracticeReview qualified as Review
+import Shikigami.PracticeReview.Identity (newResolutionId)
+import Shikigami.PracticeReview.IdentityStore qualified as IdentityStore
 import Shikigami.PracticeReview.Memory
   ( PracticeReviewChain (..),
     PracticeReviewChainEntry (..),
@@ -67,9 +81,11 @@ import Shikigami.PracticeReview.Memory
     PracticeReviewMemoryEnv (..),
     PracticeReviewMemoryEnvelope (..),
     RecalledPracticeReviews (..),
+    ResolvedPracticeReview (..),
     ReviewMemoryDiagnostic (..),
     ReviewMemoryError (..),
     ReviewRecallContext (..),
+    allocatedReviewId,
     appliesTo,
     decodePracticeReviewMemory,
     encodePracticeReviewMemory,
@@ -78,11 +94,11 @@ import Shikigami.PracticeReview.Memory
     provisionalMemoryId,
     recallPracticeReviewChain,
     recallPracticeReviews,
-    rememberProvisional,
-    resolveReview,
+    reserveReviewIdentity,
     resolvedMemoryId,
     runPracticeReviewMemory,
   )
+import Shikigami.PracticeReview.Memory qualified as ReviewMemory
 import Shikigami.Repository (RelativePath, RepositoryId (..), mkRelativePath)
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
@@ -136,11 +152,11 @@ identityTests =
   testGroup
     "logical ids"
     [ testCase "provisional ReviewId mapping has a frozen vector" do
-        idText (provisionalMemoryId (ReviewId "be79e848-6ce5-5fef-a5c8-bce0596f3784"))
-          @?= "kioku_memory_0gg1z2ykx0ah8tcjndjjv6d3ds",
+        idText (provisionalMemoryId (fixtureReviewId "shikigami_practice_review_6qqyrw7p5ffa9873q5jp4aahjm"))
+          @?= "kioku_memory_6w46arhnxdbjy89t9nhx5m73hc",
       testCase "resolved ResolutionId mapping has a frozen vector" do
-        idText (resolvedMemoryId (ResolutionId "e2b49500-7d39-5f99-8cc9-fde8dbc18853"))
-          @?= "kioku_memory_2kxg1vkpjjbt3arkd5s8y8hxvm"
+        idText (resolvedMemoryId (fixtureResolutionId "shikigami_practice_review_resolution_7vrc7qfsy9fjer83xyg2t8m382"))
+          @?= "kioku_memory_30xdzf1f12an8tm1c746a0nzpv"
     ]
 
 applicabilityTests :: TestTree
@@ -179,10 +195,10 @@ tagTests =
         (verdicts, _) <- readValidatedContracts
         verdict <- itemAt "target-suspect verdict" 1 verdicts
         let tags = practiceReviewTags (ProvisionalReview verdict)
-            PracticeReviewVerdict {reviewId = ReviewId reviewId} = validatedVerdictValue verdict
+            PracticeReviewVerdict {reviewId} = validatedVerdictValue verdict
         assertBool "state tag" (Set.member "state:provisional" tags)
         assertBool "practice tag" (Set.member "practice:opentelemetry" tags)
-        assertBool "review tag" (Set.member ("review:" <> reviewId) tags)
+        assertBool "review tag" (Set.member ("review:" <> reviewIdText reviewId) tags)
         assertBool "target repository tag" (Set.member "project:repo_target" tags)
         assertBool "classification tag" (Set.member "classification:target-suspect" tags),
       testCase "resolved tags add resolution and outcome identities deterministically" do
@@ -191,10 +207,10 @@ tagTests =
         resolution <- itemAt "accepted resolution" 0 resolutions
         let envelope = ResolvedReview verdict resolution
             tags = practiceReviewTags envelope
-            PracticeReviewResolution {resolutionId = ResolutionId resolutionId} = validatedResolutionValue resolution
+            PracticeReviewResolution {resolutionId} = validatedResolutionValue resolution
         practiceReviewTags envelope @?= tags
         assertBool "resolved state" (Set.member "state:resolved" tags)
-        assertBool "resolution id" (Set.member ("resolution:" <> resolutionId) tags)
+        assertBool "resolution id" (Set.member ("resolution:" <> resolutionIdText resolutionId) tags)
         assertBool "accepted outcome" (Set.member "outcome:accepted" tags)
     ]
 
@@ -202,9 +218,68 @@ postgresTests :: DatabaseFixture -> TestTree
 postgresTests databaseFixture =
   testGroup
     "PostgreSQL transitions"
-    [ testCase "journals provisional replay with one row and refuses semantic drift" do
+    [ testCase "allocation receipts converge concurrently and refuse changed bindings" do
+        withReviewEnv databaseFixture \app session -> do
+          trigger <- readFixture "trigger-valid.json" >>= decodeOrFail >>= expectRight . validateTrigger
+          let creator = CompatibilityAgent (fixtureAgentName "opentelemetry-practice-reviewer")
+              reserve = IdentityStore.reserveReviewIdentity app creator trigger (fixturePracticeKey "opentelemetry") "opentelemetry-practice-reviewer"
+          gate <- newEmptyMVar
+          left <- newEmptyMVar
+          right <- newEmptyMVar
+          _ <- forkFinally (readMVar gate >> reserve) (putMVar left)
+          _ <- forkFinally (readMVar gate >> reserve) (putMVar right)
+          putMVar gate ()
+          first <- takeMVar left >>= expectThread >>= expectRight
+          second <- takeMVar right >>= expectThread >>= expectRight
+          first @?= second
+          recovered <- reserve >>= expectRight
+          recovered @?= first
+          eitherDecode (encode recovered) @?= Right recovered
+          changedPath <- expectRight (mkRelativePath "docs/adr/changed.md")
+          changed <- expectRight (validateTrigger (validatedTriggerValue trigger & #changedDecisionPaths .~ [changedPath]))
+          conflict <- IdentityStore.reserveReviewIdentity app creator changed (fixturePracticeKey "opentelemetry") "opentelemetry-practice-reviewer"
+          assertBool "changed trigger reused receipt" (isLeft conflict)
+          other <- IdentityStore.reserveReviewIdentity app (CompatibilityAgent (fixtureAgentName "another-reviewer")) trigger (fixturePracticeKey "opentelemetry") "opentelemetry-practice-reviewer" >>= expectRight
+          assertBool "creators shared an allocation" (allocatedReviewId other /= allocatedReviewId first)
+          (verdicts, _) <- readAllocatedContracts app
+          verdict <- itemAt "target-suspect verdict" 1 verdicts
+          forged <- expectRight (validateVerdict (validatedVerdictValue verdict & #reviewId .~ allocatedReviewId other & #triggerIdempotencyKey .~ (validatedTriggerValue trigger).idempotencyKey))
+          IdentityStore.verifyReviewIdentity app (CompatibilityAgent (fixtureAgentName "another-reviewer")) other forged >>= (@?= Right ())
+          refusal <- IdentityStore.verifyReviewIdentity app creator other forged
+          assertBool "parsed reference established ownership" (isLeft refusal)
+          refusedWrite <- runReviewOperation app session (WorkflowId "forged-reference") (ReviewMemory.rememberProvisional other Nothing forged) >>= expectCompleted
+          case refusedWrite of Left (ReviewMemoryRefused _) -> pure (); unexpected -> assertFailure (show unexpected)
+          activePracticeRows app (fixturePracticeKey "opentelemetry") >>= (\rows -> length rows @?= 0)
+          -- Allocation is durable without a successful workflow/journal response.
+          runReviewOperation app session (WorkflowId "allocation-recovery") (reserveReviewIdentity trigger (fixturePracticeKey "opentelemetry") "opentelemetry-practice-reviewer") >>= expectCompleted >>= (\value -> value @?= Right first),
+      testCase "resolution receipts recover the same entity and bind the complete command" do
+        withReviewEnv databaseFixture \app _ -> do
+          (_, resolutions) <- readAllocatedContracts app
+          resolution <- itemAt "accepted resolution" 0 resolutions
+          let creator = CompatibilityAgent (fixtureAgentName "opentelemetry-practice-reviewer")
+              request = requestFor resolution
+          concurrent <- replicateConcurrently 8 (IdentityStore.reserveResolutionIdentity app creator request) >>= traverse expectRight
+          concurrent @?= replicate 8 resolution
+          recovered <- IdentityStore.reserveResolutionIdentity app creator request >>= expectRight
+          recovered @?= resolution
+          let raw = Review.validatedResolutionRequestValue request
+          changed <- expectRight (validateResolutionRequest (raw & #reason .~ "different adjudication"))
+          conflict <- IdentityStore.reserveResolutionIdentity app creator changed
+          assertBool "changed command reused an allocated resolution" (isLeft conflict)
+          wrongOwner <- IdentityStore.reserveResolutionIdentity app (CompatibilityAgent (fixtureAgentName "another-reviewer")) request
+          assertBool "another creator recovered a resolution" (isLeft wrongOwner)
+          IdentityStore.reserveResolutionIdentity app creator request >>= (\result -> result @?= Right recovered),
+      testCase "identity store transport failure is not journaled as a permanent refusal" do
+        withReviewEnv databaseFixture \app session -> do
+          trigger <- readFixture "trigger-valid.json" >>= decodeOrFail >>= expectRight . validateTrigger
+          withStore app.connectionSettings \store -> Pool.use store.pool (Session.script "DROP TABLE shikigami.practice_review_identities") >>= expectRight
+          result <- try @SomeException (runReviewOperation app session (WorkflowId "identity-store-unavailable") (reserveReviewIdentity trigger (fixturePracticeKey "opentelemetry") "opentelemetry-practice-reviewer"))
+          case result of Left _ -> pure (); Right (Left _) -> pure (); unexpected -> assertFailure (show unexpected)
+          journal <- loadReviewStepIndex app (WorkflowId "identity-store-unavailable")
+          assertBool "transport failure became a journaled result" (Map.notMember "practice-review-reserve-identity" journal),
+      testCase "journals provisional replay with one row and refuses semantic drift" do
         (withReviewEnv databaseFixture) \appEnv session -> do
-          (verdicts, _) <- readValidatedContracts
+          (verdicts, _) <- readAllocatedContracts appEnv
           verdict <- itemAt "target-suspect verdict" 1 verdicts
           let workflowId = WorkflowId "practice-review-provisional-replay"
               expectedId = verdictProvisionalId verdict
@@ -255,7 +330,7 @@ postgresTests databaseFixture =
             other -> assertFailure ("expected changed-content conflict, got " <> show other),
       testCase "classifies all four resolved outcomes and scope-narrows guidance" do
         (withReviewEnv databaseFixture) \appEnv session -> do
-          (verdicts, resolutions) <- readValidatedContracts
+          (verdicts, resolutions) <- readAllocatedContracts appEnv
           pairs <- traverse (pairAt verdicts resolutions) [(1, 0), (2, 1), (3, 2), (4, 3)]
           resolvedIds <-
             traverse
@@ -301,7 +376,7 @@ postgresTests databaseFixture =
           Set.fromList (idText <$> resolvedIds) @?= Set.fromList (rowMemoryId <$> activeRows),
       testCase "a newer review retires the prior resolution and preserves the full chain" do
         (withReviewEnv databaseFixture) \appEnv session -> do
-          (verdicts, resolutions) <- readValidatedContracts
+          (verdicts, resolutions) <- readAllocatedContracts appEnv
           original <- itemAt "target-suspect verdict" 1 verdicts
           accepted <- itemAt "accepted resolution" 0 resolutions
           priorResolution <- recordAndResolve appEnv session 0 original accepted
@@ -348,7 +423,7 @@ postgresTests databaseFixture =
             other -> assertFailure ("expected one malformed diagnostic, got " <> show other),
       testCase "valid content stored under the wrong practice scope is diagnostic" do
         (withReviewEnv databaseFixture) \appEnv session -> do
-          (verdicts, _) <- readValidatedContracts
+          (verdicts, _) <- readAllocatedContracts appEnv
           verdict <- itemAt "target-suspect verdict" 1 verdicts
           misplacedId <-
             seedReviewContent
@@ -374,7 +449,7 @@ postgresTests databaseFixture =
             other -> assertFailure ("expected one scope diagnostic, got " <> show other),
       testCase "competing resolutions converge on one active winner and retain the loser" do
         (withReviewEnv databaseFixture) \appEnv session -> do
-          (verdicts, resolutions) <- readValidatedContracts
+          (verdicts, resolutions) <- readAllocatedContracts appEnv
           verdict <- itemAt "target-suspect verdict" 1 verdicts
           accepted <- itemAt "accepted resolution" 0 resolutions
           _ <-
@@ -440,7 +515,7 @@ runReviewOperation ::
   AppEnv ->
   SessionId ->
   WorkflowId ->
-  (forall es. (PracticeReviewMemory :> es) => Eff es result) ->
+  (forall es. (PracticeReviewMemory :> es, IOE :> es) => Eff es result) ->
   IO (Either StoreError (WorkflowOutcome result))
 runReviewOperation = runReviewOperationWith reviewRunOptions
 
@@ -449,7 +524,7 @@ runReviewOperationWith ::
   AppEnv ->
   SessionId ->
   WorkflowId ->
-  (forall es. (PracticeReviewMemory :> es) => Eff es result) ->
+  (forall es. (PracticeReviewMemory :> es, IOE :> es) => Eff es result) ->
   IO (Either StoreError (WorkflowOutcome result))
 runReviewOperationWith runOptions appEnv session workflowId operation =
   runAppIO appEnv $
@@ -620,13 +695,13 @@ seedReviewContent appEnv session practice content = do
 
 competingRejected :: ValidatedPracticeReviewResolution -> IO ValidatedPracticeReviewResolution
 competingRejected accepted = do
+  identifier <- newResolutionId
   let acceptedValue = validatedResolutionValue accepted
-      PracticeReviewResolution {reviewId} = acceptedValue
       commandKey = "race-rejected"
       rejectedValue =
         acceptedValue
           & #resolutionId
-            .~ deriveResolutionId reviewId commandKey
+            .~ identifier
           & #idempotencyKey
             .~ commandKey
           & #outcome
@@ -717,3 +792,52 @@ fixtureAgentName = either (error . show) id . mkAgentName
 
 fixturePracticeKey :: Text -> PracticeKey
 fixturePracticeKey = either (error . show) id . parsePracticeKey
+
+fixtureReviewId :: Text -> ReviewId
+fixtureReviewId = either (error . show) id . parseReviewId
+
+fixtureResolutionId :: Text -> ResolutionId
+fixtureResolutionId = either (error . show) id . parseResolutionId
+
+requestFor :: ValidatedPracticeReviewResolution -> Review.ValidatedResolutionRequest
+requestFor validated =
+  let PracticeReviewResolution {schemaVersion, idempotencyKey, reviewId, outcome, resolver, reason, resolvedAt, resultingApplicability, supersedingReviewId} = validatedResolutionValue validated
+   in either (error . show) id (validateResolutionRequest PracticeReviewResolutionRequest {schemaVersion, idempotencyKey, reviewId, outcome, resolver, reason, resolvedAt, resultingApplicability, supersedingReviewId})
+
+triggerFor :: ValidatedPracticeReviewVerdict -> IO Review.ValidatedPracticeReviewTrigger
+triggerFor validated = do
+  template <- readFixture "trigger-valid.json" >>= decodeOrFail
+  let PracticeReviewVerdict {triggerIdempotencyKey} = validatedVerdictValue validated
+  expectRight (validateTrigger (template & #idempotencyKey .~ triggerIdempotencyKey))
+
+rememberProvisional :: (PracticeReviewMemory :> es, IOE :> es) => Maybe MemoryId -> ValidatedPracticeReviewVerdict -> Eff es (Either ReviewMemoryError MemoryId)
+rememberProvisional prior verdict = do
+  let PracticeReviewVerdict {practice, specialist} = validatedVerdictValue verdict
+  trigger <- Effectful.liftIO (triggerFor verdict)
+  reference <- reserveReviewIdentity trigger practice specialist
+  case reference of
+    Left problem -> pure (Left problem)
+    Right allocated -> ReviewMemory.rememberProvisional allocated prior verdict
+
+resolveReview :: (PracticeReviewMemory :> es) => MemoryId -> ValidatedPracticeReviewResolution -> Eff es (Either ReviewMemoryError MemoryId)
+resolveReview provisional resolution = fmap (fmap (\ResolvedPracticeReview {memoryId} -> memoryId)) (ReviewMemory.resolveReview provisional (requestFor resolution))
+
+readAllocatedContracts :: AppEnv -> IO ([ValidatedPracticeReviewVerdict], [ValidatedPracticeReviewResolution])
+readAllocatedContracts app = do
+  (verdicts, resolutions) <- readValidatedContracts
+  pairs <- traverse allocate verdicts
+  let replace identifier = maybe identifier id (lookup identifier pairs)
+  updatedVerdicts <- traverse (expectRight . validateVerdict . (\raw@PracticeReviewVerdict {reviewId} -> raw & #reviewId .~ replace reviewId) . validatedVerdictValue) verdicts
+  updatedResolutions <- traverse (allocateCommand replace) resolutions
+  pure (updatedVerdicts, updatedResolutions)
+  where
+    creator = CompatibilityAgent (fixtureAgentName "opentelemetry-practice-reviewer")
+    allocate verdict = do
+      trigger <- triggerFor verdict
+      let PracticeReviewVerdict {reviewId, practice, specialist} = validatedVerdictValue verdict
+      reference <- IdentityStore.reserveReviewIdentity app creator trigger practice specialist >>= expectRight
+      pure (reviewId, allocatedReviewId reference)
+    allocateCommand replace validated = do
+      let raw@PracticeReviewResolution {reviewId, supersedingReviewId} = validatedResolutionValue validated
+      changed <- expectRight (validateResolution (raw & #reviewId .~ replace reviewId & #supersedingReviewId .~ fmap replace supersedingReviewId))
+      IdentityStore.reserveResolutionIdentity app creator (requestFor changed) >>= expectRight

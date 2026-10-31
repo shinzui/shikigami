@@ -1,9 +1,9 @@
 [
   {
     "schemaVersion": 1,
-    "resolutionId": "e2b49500-7d39-5f99-8cc9-fde8dbc18853",
+    "resolutionId": "shikigami_practice_review_resolution_7vrc7qfsy9fjer83xyg2t8m382",
     "idempotencyKey": "resolution-command-accepted",
-    "reviewId": "be79e848-6ce5-5fef-a5c8-bce0596f3784",
+    "reviewId": "shikigami_practice_review_6qqyrw7p5ffa9873q5jp4aahjm",
     "outcome": "accepted",
     "resolver": "architecture-council",
     "reason": "The cited contradiction is confirmed.",
@@ -17,9 +17,9 @@
   },
   {
     "schemaVersion": 1,
-    "resolutionId": "446d1e78-4b67-53e8-87ce-c51bf2c50881",
+    "resolutionId": "shikigami_practice_review_resolution_6s11ysp1mjewysydmh9gwth850",
     "idempotencyKey": "resolution-command-rejected",
-    "reviewId": "b0d0b23d-2c41-5fd9-820f-a2940a2b0380",
+    "reviewId": "shikigami_practice_review_1ww2q3y6pxeb5t7f3hyzt2pend",
     "outcome": "rejected",
     "resolver": "architecture-council",
     "reason": "The upstream excerpt did not apply to the target configuration.",
@@ -27,9 +27,9 @@
   },
   {
     "schemaVersion": 1,
-    "resolutionId": "ad730fab-4879-5241-9d5c-6f868ea378ee",
+    "resolutionId": "shikigami_practice_review_resolution_15rac8g31pezfaw0f4cgetqhq0",
     "idempotencyKey": "resolution-command-narrowed",
-    "reviewId": "766f5730-1349-5830-b462-4694c6f9c109",
+    "reviewId": "shikigami_practice_review_41bf37ry2kfq9rwvnmvc43zmpt",
     "outcome": "narrowed",
     "resolver": "architecture-council",
     "reason": "The exception applies only to the regulated adapter.",
@@ -43,13 +43,13 @@
   },
   {
     "schemaVersion": 1,
-    "resolutionId": "28a94983-9e5b-558c-a33c-28caa2a372a8",
+    "resolutionId": "shikigami_practice_review_resolution_4cntnd8c58f9f9k8q3x75s8cey",
     "idempotencyKey": "resolution-command-superseded",
-    "reviewId": "34221675-3b4b-5da7-b345-13d596e07391",
+    "reviewId": "shikigami_practice_review_7se30b9dcvf2nv6eadjv13cj3e",
     "outcome": "superseded",
     "resolver": "architecture-council",
     "reason": "A newer revision produced a complete review.",
     "resolvedAt": "2026-08-19T20:03:00Z",
-    "supersedingReviewId": "12ee877e-85da-561d-8cfc-0ebbd5a1f497"
+    "supersedingReviewId": "shikigami_practice_review_3380yeg7akfr6t0vrqkd5t3vhy"
   }
 ]

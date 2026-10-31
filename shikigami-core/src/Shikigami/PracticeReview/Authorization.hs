@@ -12,7 +12,7 @@ module Shikigami.PracticeReview.Authorization
   )
 where
 
-import Data.Aeson ((.:))
+import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -20,7 +20,6 @@ import Data.Aeson.Types (Parser)
 import Data.Bifunctor (first)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
-import Data.Time.Format.ISO8601 (iso8601Show)
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
 import Hasql.Pool (Pool)
@@ -28,16 +27,15 @@ import Pgmq (MessageId)
 import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Agent.RunJob (RunRouteKind (AgentWorkflowRoute))
+import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.PracticeReview
   ( OwnerPrincipal,
-    PracticeReviewResolution (..),
-    ResolutionId (..),
-    ValidatedPracticeReviewResolution,
-    ownerPrincipalText,
-    validateResolution,
-    validatedResolutionValue,
+    PracticeReviewResolutionRequest (..),
+    ValidatedResolutionRequest,
+    validateResolutionRequest,
+    validatedResolutionRequestValue,
   )
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Trigger.Enqueue (enqueueAddressedRunWithKey)
 import Shikigami.Trigger.RequestKey qualified as Addressed
 
@@ -53,7 +51,9 @@ instance FromJSON ResolutionAuthorityKind where
 -- | Opaque authentication material presented to the ingress authorizer. It is
 -- deliberately not serializable and never crosses the run-job boundary.
 newtype ResolutionSubmissionEvidence = ResolutionSubmissionEvidence {value :: Text}
-  deriving stock (Eq, Show)
+  deriving stock (Eq)
+
+instance Show ResolutionSubmissionEvidence where show _ = "<resolution-submission-evidence>"
 
 data AuthorizedResolutionReceipt = AuthorizedResolutionReceipt
   { authorizationId :: !Text,
@@ -79,7 +79,7 @@ instance FromJSON AuthorizedResolutionReceipt where
 
 data AuthorizedPracticeReviewResolution = AuthorizedPracticeReviewResolution
   { schemaVersion :: !Int,
-    resolution :: !PracticeReviewResolution,
+    resolution :: !PracticeReviewResolutionRequest,
     authorization :: !AuthorizedResolutionReceipt
   }
   deriving stock (Eq, Show, Generic)
@@ -96,7 +96,7 @@ instance FromJSON AuthorizedPracticeReviewResolution where
       <*> objectValue .: "authorization"
 
 newtype ReviewResolutionAuthorizer = ReviewResolutionAuthorizer
-  { authorize :: PracticeReviewResolution -> ResolutionSubmissionEvidence -> IO (Either ResolutionAuthorizationError AuthorizedResolutionReceipt)
+  { authorize :: PracticeReviewResolutionRequest -> ResolutionSubmissionEvidence -> IO (Either ResolutionAuthorizationError AuthorizedResolutionReceipt)
   }
 
 data ResolutionAuthorizationError
@@ -118,7 +118,7 @@ mkAuthorizedResolutionReceipt ::
   OwnerPrincipal ->
   Text ->
   UTCTime ->
-  ValidatedPracticeReviewResolution ->
+  ValidatedResolutionRequest ->
   Either ResolutionAuthorizationError AuthorizedResolutionReceipt
 mkAuthorizedResolutionReceipt authorityKind verifiedSubject sourceReference authorizedAt validated = do
   validateSource sourceReference
@@ -135,23 +135,23 @@ mkAuthorizedResolutionReceipt authorityKind verifiedSubject sourceReference auth
 
 validateAuthorizedPracticeReviewResolution ::
   AuthorizedPracticeReviewResolution ->
-  Either ResolutionAuthorizationError (ValidatedPracticeReviewResolution, AuthorizedResolutionReceipt)
+  Either ResolutionAuthorizationError (ValidatedResolutionRequest, AuthorizedResolutionReceipt)
 validateAuthorizedPracticeReviewResolution AuthorizedPracticeReviewResolution {schemaVersion, resolution, authorization}
   | schemaVersion /= authorizationEnvelopeSchemaVersion =
       Left (AuthorizationReceiptInvalid ("unsupported authorization envelope schema version: " <> Text.pack (show schemaVersion)))
   | otherwise = do
-      validated <- firstContract (validateResolution resolution)
+      validated <- firstContract (validateResolutionRequest resolution)
       validateReceipt validated authorization
       pure (validated, authorization)
   where
     firstContract = either (Left . ResolutionContractInvalid . Text.pack . show) Right
 
 validateReceipt ::
-  ValidatedPracticeReviewResolution ->
+  ValidatedResolutionRequest ->
   AuthorizedResolutionReceipt ->
   Either ResolutionAuthorizationError ()
 validateReceipt validated receipt@AuthorizedResolutionReceipt {authorizationId, verifiedSubject, sourceReference} = do
-  let PracticeReviewResolution {resolver} = validatedResolutionValue validated
+  let PracticeReviewResolutionRequest {resolver} = validatedResolutionRequestValue validated
   whenEither
     (verifiedSubject == resolver)
     (AuthorizationSubjectMismatch resolver verifiedSubject)
@@ -169,39 +169,35 @@ validateSource raw
   where
     normalized = Text.strip raw
 
-expectedAuthorizationId :: ValidatedPracticeReviewResolution -> AuthorizedResolutionReceipt -> Text
-expectedAuthorizationId validated AuthorizedResolutionReceipt {authorityKind, verifiedSubject = subject, sourceReference, authorizedAt} =
-  let PracticeReviewResolution {resolutionId = ResolutionId resolutionId} = validatedResolutionValue validated
-      preimage =
-        Text.intercalate
-          "|"
-          [ "practice-review-resolution-authorization-v1",
-            enumText authorityKind,
-            ownerPrincipalText subject,
-            Text.strip sourceReference,
-            Text.pack (iso8601Show authorizedAt),
-            resolutionId
-          ]
-   in UUID.toText (UUID.V5.generateNamed UUID.V5.namespaceURL (nameBytes preimage))
-
-enumText :: (ToJSON value) => value -> Text
-enumText value = case Aeson.toJSON value of
-  Aeson.String rendered -> rendered
-  other -> error ("Shikigami.PracticeReview.Authorization: expected enum JSON string, got " <> show other)
+expectedAuthorizationId :: ValidatedResolutionRequest -> AuthorizedResolutionReceipt -> Text
+expectedAuthorizationId validated AuthorizedResolutionReceipt {authorityKind, verifiedSubject, sourceReference, authorizedAt} =
+  UUID.toText (UUID.V5.generateNamed UUID.V5.namespaceURL (nameBytes preimage))
+  where
+    preimage =
+      versionedDigest
+        "shikigami.practice-review-resolution-authorization/2"
+        ( Aeson.object
+            [ "request" .= validatedResolutionRequestValue validated,
+              "authorityKind" .= authorityKind,
+              "subject" .= verifiedSubject,
+              "source" .= Text.strip sourceReference,
+              "authorizedAt" .= authorizedAt
+            ]
+        )
 
 enqueueAuthorizedPracticeReviewResolution ::
   Pool ->
   AgentIdentity ->
   Text ->
   ReviewResolutionAuthorizer ->
-  PracticeReviewResolution ->
+  PracticeReviewResolutionRequest ->
   ResolutionSubmissionEvidence ->
   IO (Either ResolutionAuthorizationError MessageId)
 enqueueAuthorizedPracticeReviewResolution pool identity agent ReviewResolutionAuthorizer {authorize} resolution submission
   | agent /= "opentelemetry-practice-reviewer" =
       pure (Left (ResolutionAuthorizerRefused "authorized practice-review resolutions may target only the OpenTelemetry reviewer"))
   | otherwise =
-      case validateResolution resolution of
+      case validateResolutionRequest resolution of
         Left errors -> pure (Left (ResolutionContractInvalid (Text.pack (show errors))))
         Right validated ->
           authorize resolution submission >>= \case
@@ -216,8 +212,8 @@ enqueueAuthorizedPracticeReviewResolution pool identity agent ReviewResolutionAu
                             resolution,
                             authorization = receipt
                           }
-                      PracticeReviewResolution {resolutionId = ResolutionId resolutionId} = validatedResolutionValue validated
-                      key = agent <> ":resolution:" <> resolutionId
+                      PracticeReviewResolutionRequest {reviewId, idempotencyKey} = validatedResolutionRequestValue validated
+                      key = versionedDigest "shikigami.practice-review-resolution-enqueue/2" (Aeson.object ["reviewId" .= reviewId, "key" .= idempotencyKey])
                   case (mkAgentName agent, Addressed.parseRequestKey key) of
                     (Left problem, _) -> pure (Left (ResolutionAuthorizerRefused problem))
                     (_, Left problem) -> pure (Left (ResolutionAuthorizerRefused problem))
@@ -226,7 +222,7 @@ enqueueAuthorizedPracticeReviewResolution pool identity agent ReviewResolutionAu
                         <&> first (ResolutionEnqueueFailed . Text.pack . show)
 
 authorizationEnvelopeSchemaVersion :: Int
-authorizationEnvelopeSchemaVersion = 1
+authorizationEnvelopeSchemaVersion = 2
 
 authorityEnumOptions :: Options
 authorityEnumOptions =

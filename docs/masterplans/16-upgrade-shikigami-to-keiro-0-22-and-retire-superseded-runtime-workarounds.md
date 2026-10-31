@@ -90,16 +90,18 @@ a checked allocated TypeID; objective content, worker/workspace ownership,
 execution policies, counters, decisions and assignment locators retain their
 nominal checked meanings.
 
-Latest review-value acceptance passed 581 pure, 390 serial PostgreSQL, 262
-worker, 95 server, all API/client/agent suites, 170 compiler clients, 82 CLI checks
-and live HTTP. ADR-92 keeps six private scalar meanings and exact valid fixture
-bytes, while a real admitted citation collision requires a v2 coordinate factory.
-The unused first-release identity reset is explicit; neutral native findings do
-not imply old producer compatibility. Affected tests and native/domain/diagram/
-HTTP gates reran after redundant-check removal. Four transducer hashes remain
-unchanged against fbde25d. Full scalar/allocated-identity and other owners' decoder
-review keep EP-5 In Progress. Three rows retain final-profile clauses owned by
-EP-6; its frozen closure, Linux/runtime and inventory gates have not started.
+Latest review-identity acceptance passed 580 pure, 394 serial PostgreSQL,
+262 worker, 95 server, all API/client/agent suites, 184 compiler clients, nine
+migration composition and eleven live migration smoke cases, 82 CLI checks and
+live HTTP. ADR-93 adds owner-allocated UUIDv7 review entities and durable logical
+request receipts while preserving cross-workflow memory recovery and competing
+candidate cleanup. The exact single AgentRun WorkflowBodyChanged finding is
+retained under the unused first-release policy. Native/domain/diagram checks
+pass; four transducer hashes remain unchanged. The current unclassified census
+has 320 modules and 902 declarations. Full scalar/allocated-identity and other
+owners' decoder review keep EP-5 In Progress. Three rows retain final-profile
+clauses owned by EP-6; its frozen closure, Linux/runtime and inventory gates have
+not started.
 
 ## Surprises & Discoveries
 

@@ -38,6 +38,7 @@ import Shikigami.Execution.AssignmentKey qualified as Assignment
 import Shikigami.Execution.ToolPosition qualified as Position
 import Shikigami.Decision.Contract qualified as Decision
 import Shikigami.Log.Correlation qualified as Correlation
+import Shikigami.PracticeReview.IdentityStore qualified as ReviewIdentity
 import Shikigami.PracticeReview qualified as Review
 import Shikigami.PracticeReview.Evidence qualified as Evidence
 import Shikigami.Router.Declaration qualified as Declaration
@@ -47,7 +48,11 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''practiceKey :: Text -> Either Text Review.PracticeKey
+POSITIVE = '''reviewId :: Text -> Either Text Review.ReviewId
+reviewId = Review.parseReviewId
+resolutionId :: Text -> Either Text Review.ResolutionId
+resolutionId = Review.parseResolutionId
+practiceKey :: Text -> Either Text Review.PracticeKey
 practiceKey = Review.parsePracticeKey
 ownerPrincipal :: Text -> Either Text Review.OwnerPrincipal
 ownerPrincipal = Review.parseOwnerPrincipal
@@ -135,6 +140,10 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('ReviewIdentity.ReviewIdentityRef', 'generic'),
+    ('Review.ValidatedResolutionRequest', 'generic'),
+    ('Review.ReviewId', 'parse'),
+    ('Review.ResolutionId', 'parse'),
     ('Review.PracticeKey', 'parse'),
     ('Review.OwnerPrincipal', 'parse'),
     ('Review.EvidenceId', 'parse'),

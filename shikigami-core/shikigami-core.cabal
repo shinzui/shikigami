@@ -180,6 +180,8 @@ library
     Shikigami.PracticeReview.Authorization
     Shikigami.PracticeReview.Capability
     Shikigami.PracticeReview.Evidence
+    Shikigami.PracticeReview.Identity
+    Shikigami.PracticeReview.IdentityStore
     Shikigami.PracticeReview.Memory
     Shikigami.Prelude
     Shikigami.Program.Decision
