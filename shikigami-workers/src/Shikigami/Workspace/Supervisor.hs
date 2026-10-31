@@ -49,6 +49,7 @@ import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Store qualified as Execution
+import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Workspace.Allocation (workspaceFiles, workspaceMetadata, workspaceScratch)
@@ -203,8 +204,8 @@ loadAccepted runtime request = do
   unless (tool.binding == expected && tool.binding `elem` snapshot.toolBindings && tool.invocation.name == expected.name && operation.specification.responsePosition == Just tool.position) (abort SupervisorRefused)
   response <- execute runtime (Execution.readReplayPayload @OperationOutcome access "operation-outcome" tool.response)
   assistant <- case response of ModelReturned value _ -> pure value; _ -> abort SupervisorRefused
-  unless (tool.position >= 0 && take 1 (drop tool.position (toolInvocations assistant)) == [tool.invocation]) (abort SupervisorRefused)
-  let next = if tool.position + 1 < length (toolInvocations assistant) then NeedTool tool.response (tool.position + 1) else NeedModel
+  unless (take 1 (drop (toolPositionNumber tool.position) (toolInvocations assistant)) == [tool.invocation]) (abort SupervisorRefused)
+  let next = toolContinuation tool assistant
       routing = ProcessRouting 1 snapshot.executionId snapshot.identity operation.input.digest next
   unless (validProcessRouting routing) (abort SupervisorRefused)
   rule <- either (const (abort SupervisorRefused)) pure (parseEither (Aeson.withObject "validation rule" (\fields -> if length fields /= 1 then fail "invalid rule request" else fields .: "rule")) tool.invocation.arguments)

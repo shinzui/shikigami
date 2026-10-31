@@ -11,6 +11,7 @@ import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (AttemptId (..), OperationId (..))
 import Shikigami.Execution.Runner (OperationContext (..))
+import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadRef (..))
 import Shikigami.Prelude
 import Shikigami.Workspace.Instructions (validWorkspacePath)
@@ -79,7 +80,7 @@ validGitRecord record = record.format == 1 && bounded operation && bounded execu
     AttemptId attempt = record.attemptId
     validRouting = either (const False) bounded (identityText record.routing.identity) && validNext record.routing.next && Bytes.length (Aeson.encode record.routing) <= 4096
     validNext NeedModel = True
-    validNext (NeedTool response position) = position > 0 && position <= 10000 && digestText response.digest && bounded response.payloadId && response.bytes > 0
+    validNext (NeedTool response position) = position > firstToolPosition && digestText response.digest && bounded response.payloadId && response.bytes > 0
     validNext _ = False
     validCandidate value = validGitCandidate value && value.parent == record.expectedParent
     validPhase = case record.phase of

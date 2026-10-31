@@ -21,6 +21,7 @@ import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Runner
+import Shikigami.Execution.ToolPosition (ToolPosition, parseToolPosition)
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadRef (..))
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision (StateRevision, parseRevision)
@@ -142,7 +143,7 @@ tests =
                      workspaceProcessAction binding processAdmission dispatch record boot "device:other-parent",
                      workspaceProcessAction binding (processAdmission & #assignmentId .~ "other-assignment") dispatch record boot "device:parent",
                      workspaceProcessAction binding processAdmission dispatch (record & #routing .~ Just (ProcessRouting 1 logical.executionId owner ("sha256:" <> Text.replicate 64 "b") NeedModel)) boot "device:parent",
-                     workspaceProcessAction binding processAdmission dispatch (record & #routing .~ Just (ProcessRouting 1 logical.executionId owner ("sha256:" <> Text.replicate 64 "a") (NeedTool (PayloadRef "response" ("sha256:" <> Text.replicate 64 "a") 1) 1))) boot "device:parent"
+                     workspaceProcessAction binding processAdmission dispatch (record & #routing .~ Just (ProcessRouting 1 logical.executionId owner ("sha256:" <> Text.replicate 64 "a") (NeedTool (PayloadRef "response" ("sha256:" <> Text.replicate 64 "a") 1) (fixtureToolPosition 1)))) boot "device:parent"
                    ]
             )
         processBindingActions <-
@@ -363,3 +364,6 @@ right = either (\err -> assertFailure (show err) >> fail "unreachable") pure
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureToolPosition :: Integer -> ToolPosition
+fixtureToolPosition value = either (error . show) id (parseToolPosition value)

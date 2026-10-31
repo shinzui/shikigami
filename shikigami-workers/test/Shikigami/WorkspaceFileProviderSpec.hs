@@ -45,6 +45,7 @@ import Shikigami.Execution.Runner (DispatchContext (..))
 import Shikigami.Execution.Selection
 import Shikigami.Execution.SelectionStore qualified as Calls
 import Shikigami.Execution.Store qualified as Execution
+import Shikigami.Execution.ToolPosition (ToolPosition, parseToolPosition)
 import Shikigami.Execution.Tools qualified as Tools
 import Shikigami.Execution.Transcript
 import Shikigami.Log qualified as Log
@@ -427,9 +428,9 @@ withAcceptedWorkspaceTool toolCount install agent wire token env admission runti
   let assistant = ReplayAssistant 1 ([ToolBlock (ToolInvocation "replace-call" tool.name input)] <> [ToolBlock (ToolInvocation ("additional-call-" <> Text.pack (show index)) tool.name input) | index <- [1 .. toolCount - 1]]) ToolUse Nothing Nothing (Aeson.object []) Nothing
       outcome = ModelReturned assistant Nothing
   response <- right (Execution.outcomeReference outcome)
-  run env (Execution.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId outcome (NeedTool response 0) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.singleton Resources.Tokens (fixtureAmount 1)) [Resources.CostMicroUsd] Nothing Nothing Nothing))) >>= (@?= Right Resources.Accepted)
-  let toolInput = ToolOperationInput response 0 (ToolInvocation "replace-call" tool.name input) tool
-      specification = OperationSpec (operationIdFor snapshot.executionId (fixtureRevision 1)) ToolOperation tool.recovery tool.name (versionedDigest "shikigami.harness-policy/1" (Aeson.toJSON snapshot.policy)) (toolScopeDigest tool) (Just 0)
+  run env (Execution.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId outcome (NeedTool response (fixtureToolPosition 0)) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.singleton Resources.Tokens (fixtureAmount 1)) [Resources.CostMicroUsd] Nothing Nothing Nothing))) >>= (@?= Right Resources.Accepted)
+  let toolInput = ToolOperationInput response (fixtureToolPosition 0) (ToolInvocation "replace-call" tool.name input) tool
+      specification = OperationSpec (operationIdFor snapshot.executionId (fixtureRevision 1)) ToolOperation tool.recovery tool.name (versionedDigest "shikigami.harness-policy/1" (Aeson.toJSON snapshot.policy)) (toolScopeDigest tool) (Just (fixtureToolPosition 0))
       reference = Attempt.JobReference 1 snapshot.executionId specification.operationId (AttemptId ("file-tool:" <> case specification.operationId of OperationId key -> key))
       submission = Attempt.AttemptSubmission (Execution.toolAttemptRequest reference.attemptId reference.operationId tool) Nothing (Attempt.ExecutionWake (AwakeableId token) 0)
   _ <- right =<< run env (Execution.acceptOperation access (fixtureRevision 2) specification (Aeson.toJSON toolInput))
@@ -488,3 +489,6 @@ fixtureCount count = either (error . show) id (parseAttemptCount count)
 
 fixtureProgress :: (ProgressNumber a) => Integer -> a
 fixtureProgress number = either (error . show) id (parseProgress number)
+
+fixtureToolPosition :: Integer -> ToolPosition
+fixtureToolPosition value = either (error . show) id (parseToolPosition value)

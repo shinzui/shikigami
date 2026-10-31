@@ -2,11 +2,13 @@
 
 module Shikigami.ExecutionPositionSpec (tests) where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Shikigami.Decision.Contract (versionedDigest)
-import Shikigami.Execution.Policy.Types (RecoveryClass (RepeatableObservation))
+import Shikigami.Execution.Policy.Types (RecoveryClass (RepeatableObservation), ToolInvoiceCost (NoInvoiceCost))
 import Shikigami.Execution.Progress
+import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
 import Shikigami.StateRevision
 import Test.Tasty
@@ -16,7 +18,31 @@ tests :: TestTree
 tests =
   testGroup
     "execution revision and operation positions"
-    [ testCase "state revisions and positions keep exact numeric bytes and bounds" do
+    [ testCase "tool positions retain full input, continuation and specification bytes" do
+        let position = checkedToolPosition 3
+            invocation = ToolInvocation "call" "observe" (Aeson.object [])
+            binding = ToolBinding "observe" "1" "schema" RepeatableObservation NoInvoiceCost
+            input = ToolOperationInput payload position invocation binding
+            next = NeedTool payload position
+            specification = OperationSpec (operationIdFor execution (revision 7)) ToolOperation RepeatableObservation "observe" "policy" "scope" (Just position)
+            inputWire = Aeson.object ["response" .= payload, "position" .= (3 :: Int), "invocation" .= invocation, "binding" .= binding]
+            nextWire = Aeson.object ["tag" .= Aeson.String "NeedTool", "contents" .= [Aeson.toJSON payload, Aeson.toJSON (3 :: Int)]]
+            specWire = Aeson.object ["operationId" .= specification.operationId, "kind" .= ToolOperation, "recovery" .= RepeatableObservation, "name" .= Aeson.String "observe", "policyDigest" .= Aeson.String "policy", "scopeDigest" .= Aeson.String "scope", "responsePosition" .= (3 :: Int)]
+        assertWire input inputWire
+        assertWire next nextWire
+        assertWire specification specWire
+        Aeson.eitherDecode (Aeson.encode (255 :: Int)) @?= Right (checkedToolPosition 255)
+        nextToolPosition firstToolPosition @?= Just (checkedToolPosition 1)
+        nextToolPosition (checkedToolPosition 255) @?= Nothing
+        mapM_
+          ( \bad -> do
+              assertBool "invalid tool position refused" (case parseToolPosition bad of Left _ -> True; Right _ -> False)
+              case inputWire of
+                Aeson.Object fields -> assertBool "invalid retained input refused" (case Aeson.fromJSON (Aeson.Object (KeyMap.insert "position" (Aeson.toJSON bad) fields)) :: Aeson.Result ToolOperationInput of Aeson.Error _ -> True; Aeson.Success _ -> False)
+                _ -> assertFailure "input wire control was not an object"
+          )
+          [-1, 256],
+      testCase "state revisions and positions keep exact numeric bytes and bounds" do
         let state = ExecutionState 1 execution (revision 5) Active (revision 7) NeedModel payload Nothing Nothing (progress 2) (progress 3) Nothing Nothing (progress 4)
             encoded = Aeson.toJSON state
         Aeson.fromJSON encoded @?= Aeson.Success state
@@ -58,3 +84,11 @@ revision number = either (error . show) id (parseRevision number)
 
 progress :: (ProgressNumber a) => Integer -> a
 progress number = either (error . show) id (parseProgress number)
+
+checkedToolPosition :: Integer -> ToolPosition
+checkedToolPosition value = either (error . show) id (parseToolPosition value)
+
+assertWire :: (Eq a, Show a, Aeson.ToJSON a, Aeson.FromJSON a) => a -> Aeson.Value -> Assertion
+assertWire value expected = do
+  Aeson.eitherDecode (Aeson.encode value) @?= Right value
+  Aeson.encode value @?= Aeson.encode expected

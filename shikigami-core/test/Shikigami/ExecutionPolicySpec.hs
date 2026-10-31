@@ -13,6 +13,7 @@ import Data.Text qualified as Text
 import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
+import Shikigami.Execution.ToolPosition (ToolPosition, parseToolPosition)
 import Shikigami.Execution.Transcript
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Workspace.Instructions (instructionPrompt, mkInstructionBundle)
@@ -135,15 +136,19 @@ tests =
       testCase "tool policy uses immutable bindings and explicit human admission" do
         let assistant = toolReply [("first", "observe", Aeson.object []), ("second", "observe", Aeson.object [])]
             held = defaultHarnessPolicy & #humanTools .~ ["observe"]
-        validateToolInvocation held [binding] [binding] assistant 1 @?= Right (ToolNeedsPermission binding)
-        assertBool "denial wins over human approval" (isLeft (validateToolInvocation (held & #deniedTools .~ ["observe"]) [binding] [binding] assistant 0))
-        assertBool "new revision refused" (isLeft (validateToolInvocation held [binding] [binding & #revision .~ "2"] assistant 0))
-        assertBool "scope cannot be invented" (isLeft (validateToolInvocation held [] [binding] assistant 0)),
+        validateToolInvocation held [binding] [binding] assistant (fixtureToolPosition 1) @?= Right (ToolNeedsPermission binding)
+        let response = PayloadRef "response" "digest" 1
+            first = ToolOperationInput response (fixtureToolPosition 0) (ToolInvocation "first" "observe" (Aeson.object [])) binding
+        toolContinuation first assistant @?= NeedTool response (fixtureToolPosition 1)
+        toolContinuation (first & #position .~ fixtureToolPosition 1) assistant @?= NeedModel
+        assertBool "denial wins over human approval" (isLeft (validateToolInvocation (held & #deniedTools .~ ["observe"]) [binding] [binding] assistant (fixtureToolPosition 0)))
+        assertBool "new revision refused" (isLeft (validateToolInvocation held [binding] [binding & #revision .~ "2"] assistant (fixtureToolPosition 0)))
+        assertBool "scope cannot be invented" (isLeft (validateToolInvocation held [] [binding] assistant (fixtureToolPosition 0))),
       testCase "cut-off JSON and duplicate ids never dispatch" do
         mapM_
-          (\assistant -> assertBool "invalid tool refused" (isLeft (validateToolInvocation defaultHarnessPolicy [binding] [binding] assistant 0)))
+          (\assistant -> assertBool "invalid tool refused" (isLeft (validateToolInvocation defaultHarnessPolicy [binding] [binding] assistant (fixtureToolPosition 0))))
           [toolReply [("id", "observe", Aeson.String "{cut-off")], toolReply [("id", "observe", Aeson.object []), ("id", "observe", Aeson.object [])]]
-        assertBool "negative position refused" (isLeft (validateToolInvocation defaultHarnessPolicy [binding] [binding] (toolReply [("id", "observe", Aeson.object [])]) (-1))),
+        assertBool "negative position refused" (isLeft (parseToolPosition (-1))),
       testCase "compaction preserves anchors and complete tool groups with provenance" do
         let pair = [AssistantTurn (toolReply [("id", "observe", Aeson.object [])]), ToolTurn "id" "observe" [TextBlock (Text.replicate 500 "x")] False Nothing]
             source = ReplayContext 1 (Just "instructions") ([UserTurn [TextBlock "initial request"] Nothing] <> pair <> [UserTurn [TextBlock (Text.replicate 1500 "y")] Nothing, AssistantTurn (answer "latest")])
@@ -206,3 +211,6 @@ fixtureRevision value = either (error . show) id (parseRevision value)
 
 fixturePolicy :: (PolicyNumber a) => Integer -> a
 fixturePolicy number = either (error . show) id (parsePolicyNumber number)
+
+fixtureToolPosition :: Integer -> ToolPosition
+fixtureToolPosition value = either (error . show) id (parseToolPosition value)

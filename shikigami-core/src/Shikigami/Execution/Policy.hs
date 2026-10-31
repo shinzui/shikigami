@@ -29,6 +29,7 @@ import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId)
 import Shikigami.Execution.Policy.Limits (policyNumber)
 import Shikigami.Execution.Policy.Types
+import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude hiding ((.=))
 
@@ -45,13 +46,13 @@ data ToolAdmission = ToolAdmitted !ToolBinding | ToolNeedsPermission !ToolBindin
 
 -- The offered binding comes from a trusted factory. Model arguments cannot
 -- provide a revision, recovery class, scope or idempotency key.
-validateToolInvocation :: HarnessPolicy -> [ToolBinding] -> [ToolBinding] -> ReplayAssistant -> Int -> Either ExecutionError ToolAdmission
+validateToolInvocation :: HarnessPolicy -> [ToolBinding] -> [ToolBinding] -> ReplayAssistant -> ToolPosition -> Either ExecutionError ToolAdmission
 validateToolInvocation policy pinned offered assistant position = do
   unless (assistant.format == 1 && assistant.stopReason == ToolUse && isNothing assistant.failure) (deny "assistant did not finish a tool request")
   let calls = toolInvocations assistant
       ids = map (\(call :: ToolInvocation) -> call.callId) calls
   unless (not (null calls) && length calls <= 128 && length (nub ids) == length ids && all (\value -> not (Text.null value) && Text.length value <= 256) ids) (deny "invalid tool call identities")
-  call <- maybe (deny "tool response position is invalid") Right (listToMaybe (drop position calls) <* guard (position >= 0))
+  call <- maybe (deny "tool response position is invalid") Right (listToMaybe (drop (toolPositionNumber position) calls))
   case call.arguments of
     Aeson.Object _ -> Right ()
     -- Baikai retains a cut-off JSON argument as a string for replay. It must

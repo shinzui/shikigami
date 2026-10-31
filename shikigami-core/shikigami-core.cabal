@@ -119,6 +119,7 @@ library
     Shikigami.Execution.Start
     Shikigami.Execution.Store
     Shikigami.Execution.Timer
+    Shikigami.Execution.ToolPosition
     Shikigami.Execution.Tools
     Shikigami.Execution.Transcript
     Shikigami.ExecutionDriver.Generated.WorkflowFacts

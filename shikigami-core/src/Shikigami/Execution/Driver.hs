@@ -49,6 +49,7 @@ import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.SelectionRuntime (preparePinnedExecutionCall)
 import Shikigami.Execution.Store qualified as Store
 import Shikigami.Execution.Timer (armObservation)
+import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as Generated
 import Shikigami.Prelude hiding ((.=))
@@ -216,7 +217,7 @@ decide runtime start wake = do
                   assistant <- case outcome of ModelReturned value _ -> pure value; _ -> throwError CorruptReplay
                   admission <- either throwError pure (validateToolInvocation snapshot.policy snapshot.toolBindings snapshot.toolBindings assistant position)
                   let binding = case admission of ToolAdmitted value -> value; ToolNeedsPermission value -> value
-                  invocation <- maybe (throwError OperationConflict) pure (listToMaybe (drop position (toolInvocations assistant)))
+                  invocation <- maybe (throwError OperationConflict) pure (listToMaybe (drop (toolPositionNumber position) (toolInvocations assistant)))
                   let input = ToolOperationInput ref position invocation binding
                       spec = OperationSpec (operationIdFor start.executionId fresh.cursor) ToolOperation binding.recovery binding.name (policyDigest snapshot) (toolScopeDigest binding) (Just position)
                   _ <- checked (owned (Store.acceptOperation access fresh.revision spec (toJSON input)))

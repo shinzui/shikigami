@@ -180,8 +180,8 @@ underflow refusal cases. Full affected acceptance is 556 pure, 382 PostgreSQL,
 complete scalar/identity census remain open.
 
 The [compiled declaration worklist](domain-declarations.json) and
-[census acquisition results](domain-census-results.txt) enumerate 310 hand-owned
-modules, 887 declarations and 14 separately listed role entrypoints. The source
+[census acquisition results](domain-census-results.txt) enumerate 311 hand-owned
+modules, 888 declarations and 14 separately listed role entrypoints. The source
 and interface hashes preserve the actual candidate; the worklist does not assign
 automatic domain/boundary exemptions or certify the remaining review.
 
@@ -216,3 +216,8 @@ Root cancellation, overage and execution termination now retain separate closed
 types under ADR-82. [Root-decision acceptance](root-decisions-results.txt) records
 unchanged boolean wire bytes, 67 compiler clients, neutral native reports and
 559 pure/383 PostgreSQL/260 worker/95 server tests. The wider census remains open.
+
+Retained tool positions now use private ToolPosition under ADR-83, with separate
+assistant cardinality and shared continuation semantics. [Tool-position acceptance](tool-position-results.txt)
+records exact codecs, 72 compiler clients, neutral native reports and
+560 pure/383 PostgreSQL/260 worker/95 server tests. The full census remains open.

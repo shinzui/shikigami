@@ -17,6 +17,7 @@ import Effectful (Eff)
 import Shikigami.Execution.Identity (AttemptId, OperationId (..))
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Store qualified as Store
+import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude
 import Shikigami.StateRevision (StateRevision)
@@ -98,7 +99,7 @@ validatePreparedTool now stopped cutoff snapshot state operation tool assistant 
   let specification = operation.specification
   unless (snapshot.executionId == state.executionId && operation.executionId == state.executionId && state.activeOperation == Just specification.operationId && operation.position == state.cursor && isNothing operation.outcome && not operation.uncertain && specification.kind == ToolOperation && specification.operationId == operationIdFor state.executionId state.cursor && state.next == NeedTool tool.response tool.position && specification.responsePosition == Just tool.position && specification.name == tool.invocation.name && specification.recovery == tool.binding.recovery && specification.scopeDigest == toolScopeDigest tool.binding) (Left OperationConflict)
   admission <- validateToolInvocation snapshot.policy snapshot.toolBindings offered assistant tool.position
-  unless (take 1 (drop tool.position (toolInvocations assistant)) == [tool.invocation]) (Left OperationConflict)
+  unless (take 1 (drop (toolPositionNumber tool.position) (toolInvocations assistant)) == [tool.invocation]) (Left OperationConflict)
   let ready binding = do
         unless (binding == tool.binding) (Left OperationConflict)
         let OperationId key = specification.operationId

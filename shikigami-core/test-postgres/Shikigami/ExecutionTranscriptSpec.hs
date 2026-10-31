@@ -96,6 +96,7 @@ import Shikigami.Execution.SelectionStore qualified as Calls
 import Shikigami.Execution.Start qualified as Start
 import Shikigami.Execution.Store qualified as Store
 import Shikigami.Execution.Timer (armObservation, observationFireAction)
+import Shikigami.Execution.ToolPosition (ToolPosition, parseToolPosition)
 import Shikigami.Execution.Tools qualified as Tools
 import Shikigami.Execution.Transcript
 import Shikigami.Execution.Transcript qualified as Replay
@@ -455,7 +456,7 @@ tests fixture =
           secondAccess <- expectRight =<< run env (Store.authorizeReplay second.executionId second.identity (pure (Right ())))
           let prepare snapshot access = do
                 (response, assistant) <- commitToolRequest env snapshot access
-                let input = ToolOperationInput response 0 (head (toolInvocations assistant)) observationBinding
+                let input = ToolOperationInput response (fixtureToolPosition 0) (head (toolInvocations assistant)) observationBinding
                     specification = toolSpec snapshot 1 input
                 _ <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
                 pure (Attempt.AttemptSubmission (Store.toolAttemptRequest (AttemptId "shared-tool-attempt") specification.operationId observationBinding) Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0))
@@ -603,7 +604,7 @@ tests fixture =
           let billed = terminal & #known .~ Map.fromList [(R.Tokens, (fixtureAmount 3)), (R.CostMicroUsd, (fixtureAmount 0))] & #missing .~ []
           (response, assistant) <- commitToolRequestWith billed env snapshot access
           let binding = head snapshot.toolBindings
-              input = ToolOperationInput response 0 (head (toolInvocations assistant)) binding
+              input = ToolOperationInput response (fixtureToolPosition 0) (head (toolInvocations assistant)) binding
               specification = toolSpec snapshot 1 input
           _ <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
           let request = Store.toolAttemptRequest (AttemptId "unreported-tool-invoice") specification.operationId binding
@@ -646,25 +647,25 @@ tests fixture =
       testCase "each tool has a separate immutable operation and accepted outcome" $
         withConfiguredFixture fixture toolConfiguration \env snapshot access -> do
           (response, assistant) <- commitToolRequest env snapshot access
-          let firstInput = ToolOperationInput response 0 (head (toolInvocations assistant)) observationBinding
+          let firstInput = ToolOperationInput response (fixtureToolPosition 0) (head (toolInvocations assistant)) observationBinding
               firstSpec = toolSpec snapshot 1 firstInput
           (_, first) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) firstSpec (toJSON firstInput))
           run env (Store.acceptOperation access (fixtureRevision 2) firstSpec (toJSON firstInput)) >>= (@?= Right (R.AlreadyAccepted, first))
           let altered = firstInput & #invocation . #arguments .~ object ["injected" .= True]
           run env (Store.acceptOperation access (fixtureRevision 2) firstSpec (toJSON altered)) >>= (@?= Left OperationConflict)
-          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 3) firstSpec.operationId (ToolReturned [TextBlock "opaque accepted-message reference"] False) (NeedTool response 1) Nothing) >>= (@?= Right R.Accepted)
-          let secondInput = ToolOperationInput response 1 (toolInvocations assistant !! 1) observationBinding
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 3) firstSpec.operationId (ToolReturned [TextBlock "opaque accepted-message reference"] False) (NeedTool response (fixtureToolPosition 1)) Nothing) >>= (@?= Right R.Accepted)
+          let secondInput = ToolOperationInput response (fixtureToolPosition 1) (toolInvocations assistant !! 1) observationBinding
           (_, second) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 4) (toolSpec snapshot 2 secondInput) (toJSON secondInput))
           assertBool "tool identity uses committed cursor" (first.specification.operationId /= second.specification.operationId)
           run env (Store.recordOutcomeAndAdvance access (fixtureRevision 5) second.specification.operationId (ToolReturned [TextBlock "second result"] False) NeedModel Nothing) >>= (@?= Right R.Accepted)
-          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 3) firstSpec.operationId (ToolReturned [TextBlock "opaque accepted-message reference"] False) (NeedTool response 1) Nothing) >>= (@?= Right R.AlreadyAccepted)
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 3) firstSpec.operationId (ToolReturned [TextBlock "opaque accepted-message reference"] False) (NeedTool response (fixtureToolPosition 1)) Nothing) >>= (@?= Right R.AlreadyAccepted)
           (_, state) <- expectRight =<< run env (Store.loadExecution access)
           state.cursor @?= (fixtureRevision 3)
           state.modelTurns @?= (fixtureProgress 1),
       testCase "bound approval uses the real opaque token path and resumes the same tool" $
         withConfiguredFixture fixture (\snapshot -> toolConfiguration snapshot & #policy . #humanTools .~ ["observe"]) \env snapshot access -> do
           (response, assistant) <- commitToolRequest env snapshot access
-          let input = ToolOperationInput response 0 (head (toolInvocations assistant)) observationBinding
+          let input = ToolOperationInput response (fixtureToolPosition 0) (head (toolInvocations assistant)) observationBinding
               specification = toolSpec snapshot 1 input
           _ <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
           now <- getCurrentTime
@@ -724,7 +725,7 @@ tests fixture =
       testCase "expired permission refuses approval and records timeout without a new turn" $
         withConfiguredFixture fixture (\snapshot -> toolConfiguration snapshot & #policy . #humanTools .~ ["observe"] & #policy . #permissionSeconds .~ (fixturePolicy 1)) \env snapshot access -> do
           (response, assistant) <- commitToolRequest env snapshot access
-          let input = ToolOperationInput response 0 (head (toolInvocations assistant)) observationBinding
+          let input = ToolOperationInput response (fixtureToolPosition 0) (head (toolInvocations assistant)) observationBinding
               specification = toolSpec snapshot 1 input
           _ <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
           permission <- expectRight =<< run env (Store.parkOperationPermission access (fixtureRevision 3) specification.operationId)
@@ -1058,7 +1059,7 @@ nativeExecutorCase fixture billing = testCase (show billing <> " preserves rich 
   withConfiguredFixture fixture (\snapshot -> toolConfiguration snapshot & #toolBindings .~ [observationBinding & #invoiceCost .~ billing]) \env snapshot access -> do
     (response, assistant) <- commitToolRequest env snapshot access
     let binding = head snapshot.toolBindings
-        input = ToolOperationInput response 0 (head (toolInvocations assistant)) binding
+        input = ToolOperationInput response (fixtureToolPosition 0) (head (toolInvocations assistant)) binding
         specification = toolSpec snapshot 1 input
     (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
     invocations <- newIORef (0 :: Int)
@@ -1193,7 +1194,7 @@ toolRecoveryCase fixture recovery = testCase (show recovery <> " retains its log
   withConfiguredResourceFixture fixture (\snapshot -> toolConfiguration snapshot & #toolBindings .~ [observationBinding & #recovery .~ recovery]) (Map.insert R.ActiveWork (R.Limited (fixtureAmount 2))) \env snapshot access -> do
     (response, assistant) <- commitToolRequest env snapshot access
     let binding = observationBinding & #recovery .~ recovery
-        input = ToolOperationInput response 0 (head (toolInvocations assistant)) binding
+        input = ToolOperationInput response (fixtureToolPosition 0) (head (toolInvocations assistant)) binding
         specification = toolSpec snapshot 1 input
         firstRequest = Store.toolAttemptRequest (AttemptId "lost-native-attempt") specification.operationId binding
         secondRequest = Store.toolAttemptRequest (AttemptId "recovery-native-attempt") specification.operationId binding
@@ -1252,7 +1253,7 @@ toolRecoveryCase fixture recovery = testCase (show recovery <> " retains its log
         (_, chosen) <- expectRight =<< run env (Store.loadExecution access)
         chosen.cursor @?= (fixtureRevision 2)
         chosen.pendingReceipts @?= (fixtureProgress 1)
-        let late = Attempt.AttemptResult (ToolReturned [TextBlock "opaque-accepted-message"] False) (NeedTool response 1) Nothing
+        let late = Attempt.AttemptResult (ToolReturned [TextBlock "opaque-accepted-message"] False) (NeedTool response (fixtureToolPosition 1)) Nothing
         run env (Store.recordLateExecutionReceipt access chosen.revision former late) >>= (@?= Right R.Accepted)
         (_, settled) <- expectRight =<< run env (Store.loadExecution access)
         settled.cursor @?= chosen.cursor
@@ -1307,7 +1308,7 @@ commitToolRequestWith callOutcome env snapshot access = do
   let assistant = ReplayAssistant 1 [ToolBlock (ToolInvocation "first" "observe" (object [])), ToolBlock (ToolInvocation "second" "observe" (object []))] ToolUse Nothing Nothing (object []) Nothing
       outcome = ModelReturned assistant Nothing
   ref <- expectRight (Store.outcomeReference outcome)
-  run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId outcome (NeedTool ref 0) (Just (receipt, callOutcome))) >>= (@?= Right R.Accepted)
+  run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId outcome (NeedTool ref (fixtureToolPosition 0)) (Just (receipt, callOutcome))) >>= (@?= Right R.Accepted)
   pure (ref, assistant)
 
 rootId :: ExecutionRootId
@@ -1447,3 +1448,6 @@ recoveryReceiptCapacityCase fixture = testCase "full pending-receipt capacity re
     payloadCount env snapshot.executionId >>= (@?= beforePayloads)
     queueCount env >>= (@?= beforeQueue)
     lifecycleVersion env snapshot.executionId >>= (@?= beforeVersion)
+
+fixtureToolPosition :: Integer -> ToolPosition
+fixtureToolPosition value = either (error . show) id (parseToolPosition value)

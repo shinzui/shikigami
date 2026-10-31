@@ -41,6 +41,7 @@ import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.Selection
 import Shikigami.Execution.SelectionStore qualified as Calls
 import Shikigami.Execution.Store qualified as Execution
+import Shikigami.Execution.ToolPosition (ToolPosition, parseToolPosition, toolPositionNumber)
 import Shikigami.Execution.Tools qualified as Tools
 import Shikigami.Execution.Transcript
 import Shikigami.Log qualified as Log
@@ -100,12 +101,12 @@ preparePlan upgrade env authorizer current client binding admission mode = do
   call <- case reservation of Calls.NewCall value -> pure value; _ -> fail "new fixture model call required"
   let outcome = ModelReturned assistant Nothing
   response <- right (Execution.outcomeReference outcome)
-  void (right =<< run env (Execution.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId outcome (NeedTool response 0) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.fromList [(Resources.Tokens, (fixtureAmount 1)), (Resources.CostMicroUsd, (fixtureAmount 0))]) [] Nothing Nothing Nothing))))
-  first <- submit env snapshot access (ToolOperationInput response 0 (ToolInvocation "edit-mode" edit.name editInput) edit)
+  void (right =<< run env (Execution.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId outcome (NeedTool response (fixtureToolPosition 0)) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.fromList [(Resources.Tokens, (fixtureAmount 1)), (Resources.CostMicroUsd, (fixtureAmount 0))]) [] Nothing Nothing Nothing))))
+  first <- submit env snapshot access (ToolOperationInput response (fixtureToolPosition 0) (ToolInvocation "edit-mode" edit.name editInput) edit)
   executePrepared env authorizer current client first
   (_, afterEdit) <- right =<< run env (Execution.loadExecution access)
-  unless (afterEdit.cursor == (fixtureRevision 2) && afterEdit.next == NeedTool response 1) (fail "native edit did not advance")
-  submit env snapshot access (ToolOperationInput response 1 (ToolInvocation "validate-mode" validate.name validateInput) validate)
+  unless (afterEdit.cursor == (fixtureRevision 2) && afterEdit.next == NeedTool response (fixtureToolPosition 1)) (fail "native edit did not advance")
+  submit env snapshot access (ToolOperationInput response (fixtureToolPosition 1) (ToolInvocation "validate-mode" validate.name validateInput) validate)
   where
     only [value] = value
     only _ = error "fixture exact tool binding missing"
@@ -116,12 +117,12 @@ advanceUpgrade env current prepared = do
   access <- right =<< run env (Execution.authorizeReplay snapshot.executionId snapshot.identity (current snapshot))
   (_, state) <- right =<< run env (Execution.loadExecution access)
   case state.next of
-    NeedTool response 2 | state.cursor == (fixtureRevision 3) -> do
+    NeedTool response position | position == fixtureToolPosition 2 && state.cursor == (fixtureRevision 3) -> do
       outcome <- right =<< run env (Execution.readReplayPayload @OperationOutcome access "operation-outcome" response)
       case outcome of
         ModelReturned assistant _ -> case drop 2 (toolInvocations assistant) of
           [invocation] -> case filter (\binding -> binding.name == invocation.name && binding == gitBinding "commit") snapshot.toolBindings of
-            [binding] -> submit env snapshot access (ToolOperationInput response 2 invocation binding)
+            [binding] -> submit env snapshot access (ToolOperationInput response (fixtureToolPosition 2) invocation binding)
             _ -> fail "exact Git binding missing"
           _ -> fail "retained commit invocation missing"
         _ -> fail "retained model response missing"
@@ -216,8 +217,8 @@ appendTools env current snapshot calls = do
   let outcome = ModelReturned assistant Nothing
   response <- right (Execution.outcomeReference outcome)
   (_, accepted) <- right =<< run env (Execution.loadExecution access)
-  void (right =<< run env (Execution.recordOutcomeAndAdvance access accepted.revision operation.specification.operationId outcome (NeedTool response 0) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.fromList [(Resources.Tokens, (fixtureAmount 1)), (Resources.CostMicroUsd, (fixtureAmount 0))]) [] Nothing Nothing Nothing))))
-  nextTool env access snapshot response 0 (head invocations)
+  void (right =<< run env (Execution.recordOutcomeAndAdvance access accepted.revision operation.specification.operationId outcome (NeedTool response (fixtureToolPosition 0)) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.fromList [(Resources.Tokens, (fixtureAmount 1)), (Resources.CostMicroUsd, (fixtureAmount 0))]) [] Nothing Nothing Nothing))))
+  nextTool env access snapshot response (fixtureToolPosition 0) (head invocations)
 
 advanceTools :: AppEnv -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> Prepared -> IO (Maybe Prepared)
 advanceTools env current prepared = do
@@ -228,13 +229,13 @@ advanceTools env current prepared = do
     NeedTool response position -> do
       outcome <- right =<< run env (Execution.readReplayPayload @OperationOutcome access "operation-outcome" response)
       case outcome of
-        ModelReturned assistant _ -> case take 1 (drop position (toolInvocations assistant)) of
+        ModelReturned assistant _ -> case take 1 (drop (toolPositionNumber position) (toolInvocations assistant)) of
           [invocation] -> Just <$> nextTool env access prepared.snapshot response position invocation
           _ -> fail "retained invocation missing"
         _ -> fail "retained fixture model missing"
     _ -> fail "fixture tool did not settle"
 
-nextTool :: AppEnv -> Execution.ReplayAccess -> ExecutionSnapshot -> PayloadRef -> Int -> ToolInvocation -> IO Prepared
+nextTool :: AppEnv -> Execution.ReplayAccess -> ExecutionSnapshot -> PayloadRef -> ToolPosition -> ToolInvocation -> IO Prepared
 nextTool env access snapshot response position invocation = case filter ((== invocation.name) . (.name)) snapshot.toolBindings of
   [binding] -> submit env snapshot access (ToolOperationInput response position invocation binding)
   _ -> fail "exact retained fixture tool missing"
@@ -250,3 +251,6 @@ fixtureRevision value = either (error . show) id (parseRevision value)
 
 fixtureAmount :: Integer -> ResourceAmount
 fixtureAmount amount = either (error . show) id (parseResourceAmount amount)
+
+fixtureToolPosition :: Integer -> ToolPosition
+fixtureToolPosition value = either (error . show) id (parseToolPosition value)

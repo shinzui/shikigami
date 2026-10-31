@@ -24,6 +24,7 @@ import Shikigami.Agent.Principal qualified as Principal
 import Shikigami.App.Config qualified as Config
 import Shikigami.Attestation.Reviewed qualified as Reviewed
 import Shikigami.Capability.Overlay qualified as Overlay
+import Shikigami.Execution.ToolPosition qualified as Position
 import Shikigami.Decision.Contract qualified as Decision
 import Shikigami.Log.Correlation qualified as Correlation
 import Shikigami.PracticeReview.Evidence qualified as Evidence
@@ -62,6 +63,8 @@ bearer :: Auth.BearerToken -> ByteString -> Bool
 bearer = Auth.matchesBearerHeader
 failure :: Decision.FailureCode -> Text -> Decision.DecisionFailure
 failure = Decision.decisionFailure
+position :: Integer -> Either Text Position.ToolPosition
+position = Position.parseToolPosition
 run :: Text -> Correlation.RunCorrelationId
 run = Correlation.runCorrelationId
 call :: Correlation.RunCorrelationId -> Text -> Int -> Correlation.CallCorrelationId
@@ -95,6 +98,7 @@ CASES = [
     ('Repository.RelativePath', 'parse'),
     ('Router.ValidatedRouteDecision', 'parse'),
     ('Auth.BearerToken', 'render'),
+    ('Position.ToolPosition', 'parse'),
     ('Decision.DecisionFailure', 'parse'),
     ('Correlation.RunCorrelationId', 'parse'),
     ('Correlation.CallCorrelationId', 'parse'),

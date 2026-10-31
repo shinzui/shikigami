@@ -27,11 +27,24 @@ import Shikigami.WorkerSession.Types qualified as WorkerSession
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.Transcript qualified as Execution
 import Shikigami.Execution.SelectionStore qualified as Calls
+import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Progress
 import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ("tool-position", '''position :: Execution.ToolOperationInput -> ToolPosition
+position input = input.position
+''', True),
+    ("operation-is-not-tool-position", '''position :: Execution.Operation -> ToolPosition
+position operation = operation.position
+''', False),
+    ("unchecked-tool-position-arithmetic", '''position :: ToolPosition
+position = 0
+''', False),
+    ("unchecked-tool-position-coercion", '''position :: Int -> ToolPosition
+position = coerce
+''', False),
     ("root-cancellation", '''cancel :: Resources.Root -> Resources.Cancellation
 cancel root = root.cancelled
 ''', True),
@@ -175,6 +188,9 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
                 "event-is-not-message-sequence": ["Couldn't match type", "worker-message", "worker-event"],
                 "execution-root-is-not-execution": ["Couldn't match type", "execution-root", "execution"],
                 "operation-is-not-execution-revision": ["Couldn't match type", "execution-operation", "execution"],
+                "operation-is-not-tool-position": ["Couldn't match", "ToolPosition", "StateRevision"],
+                "unchecked-tool-position-arithmetic": ["ToolPosition", "Num"],
+                "unchecked-tool-position-coercion": ["ToolPosition", "Int"],
                 "overage-is-not-cancellation": ["Couldn't match", "Cancellation", "Overage"],
                 "cancellation-is-not-termination": ["Couldn't match", "Cancellation", "Termination"],
                 "mailbox-is-not-assignment-limit": ["Couldn't match", "MaximumAssignments", "MailboxLimit"],

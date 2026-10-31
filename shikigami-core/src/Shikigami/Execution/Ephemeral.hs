@@ -26,6 +26,7 @@ import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Policy.Limits (policyNumber)
 import Shikigami.Execution.SelectionRuntime (narrowOutput)
+import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude
 import Shikigami.StateRevision (advanceRevisions, initialRevision)
@@ -115,7 +116,7 @@ runEphemeralBehavior duration base env decl input = case narrowHarnessPolicy bas
       where
         go _ [] | null (toolInvocations assistant) = pure (refused "empty tool request")
         go accepted [] = pure (Right (reverse accepted))
-        go accepted ((position, invocation) : remaining) = case validateToolInvocation policy bindings bindings assistant position of
+        go accepted ((position, invocation) : remaining) = case either (Left . ExecutionPolicyRefused) (validateToolInvocation policy bindings bindings assistant) (parseToolPosition position) of
           Left err -> pure (refused (Text.pack (show err)))
           Right ToolNeedsPermission {} -> pure (refused "human permission requires shikigami-agent-run")
           Right (ToolAdmitted binding) -> case find ((== binding.name) . someToolName) tools of

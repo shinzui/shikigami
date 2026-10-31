@@ -50,6 +50,7 @@ import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Store qualified as Execution
+import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Workspace.Allocation (workspaceFiles, workspaceMetadata)
@@ -209,10 +210,10 @@ loadAcceptedTool transferable descriptor expected runtime snapshot dispatch inpu
   unless (tool.binding == expected && expected `elem` snapshot.toolBindings && tool.invocation.name == expected.name && tool.invocation.arguments == input && operation.specification.responsePosition == Just tool.position) (abort FileEffectRefused)
   response <- execute runtime.appEnv (Execution.readReplayPayload @OperationOutcome access "operation-outcome" tool.response)
   assistant <- case response of ModelReturned value _ -> pure value; _ -> abort FileEffectRefused
-  unless (tool.position >= 0 && take 1 (drop tool.position (toolInvocations assistant)) == [tool.invocation]) (abort FileEffectRefused)
+  unless (take 1 (drop (toolPositionNumber tool.position) (toolInvocations assistant)) == [tool.invocation]) (abort FileEffectRefused)
   (binding, state) <- transact runtime.appEnv (Workspaces.inspectWorkspaceTx admission.workspace) >>= maybe (abort FileEffectRefused) pure
   unless (state == Ready && matchesWorkspaceAdmission binding admission && admission.runId == snapshot.runId && admission.assignmentId == snapshot.selection.assignmentId && Just admission.rootId == snapshot.selection.rootId && admission.rootId == binding.request.rootId && admission.owner == snapshot.identity && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base) (abort FileEffectRefused)
-  let next = if tool.position + 1 < length (toolInvocations assistant) then NeedTool tool.response (tool.position + 1) else NeedModel
+  let next = toolContinuation tool assistant
   pure (AcceptedGit snapshot access binding admission dispatch (GitRouting snapshot.executionId snapshot.identity operation.input.digest next))
 
 current :: FileRuntime -> AcceptedGit -> IO ()

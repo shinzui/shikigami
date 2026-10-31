@@ -44,6 +44,7 @@ import Shikigami.Execution.SelectionRuntime
 import Shikigami.Execution.SelectionRuntime qualified as SelectionRuntime
 import Shikigami.Execution.SelectionStore qualified as Calls
 import Shikigami.Execution.Store qualified as Store
+import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude
 import Shikumi.Error (ShikumiError)
@@ -184,7 +185,7 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
                   Just actual -> do
                     let outcome = ModelReturned (captureAssistant actual) (toJSON <$> actual.evidence)
                     responseRef <- either (Exception.throwIO . userError . show) pure (Store.outcomeReference outcome)
-                    let next = if operation.specification.kind == ModelSummary then NeedModel else if not (null (toolInvocations (captureAssistant actual))) && (captureAssistant actual).stopReason == ToolUse then NeedTool responseRef 0 else NeedValidation responseRef
+                    let next = if operation.specification.kind == ModelSummary then NeedModel else if not (null (toolInvocations (captureAssistant actual))) && (captureAssistant actual).stopReason == ToolUse then NeedTool responseRef firstToolPosition else NeedValidation responseRef
                     commit access lease (Attempt.AttemptResult outcome next (Just accounting)) >>= requireIO
             let selectedRuntime = (env.selectionRuntime snapshot) {SelectionRuntime.authorize = dispatchAuthority access snapshot lease}
             built <- buildPreparedExecutionEnv selectedRuntime snapshot.selection (PreparedSelectionCall receipt terminal)
@@ -216,7 +217,7 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
               source <- owned (Store.readReplayPayload @OperationOutcome access "operation-outcome" request.input.response)
               case source of
                 Right (ModelReturned assistant _) -> do
-                  let next = if request.input.position + 1 < length (toolInvocations assistant) then NeedTool request.input.response (request.input.position + 1) else NeedModel
+                  let next = toolContinuation request.input assistant
                   result <- runEff . runErrorNoCallStack @ShikumiError . runLLMWith emptyRegistry $ runErasedOutput bound.tool request.input.invocation.arguments
                   case result of
                     Left _ -> markUnknown access lease

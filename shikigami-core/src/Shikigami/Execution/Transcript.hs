@@ -39,6 +39,7 @@ import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Progress
 import Shikigami.Execution.Selection (ExecutionSelection (..))
+import Shikigami.Execution.ToolPosition
 import Shikigami.Prelude hiding (Options)
 import Shikigami.StateRevision
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), instructionPrompt)
@@ -192,7 +193,7 @@ instance FromJSON ToolBinding where
 
 data ToolOperationInput = ToolOperationInput
   { response :: !PayloadRef,
-    position :: !Int,
+    position :: !ToolPosition,
     invocation :: !ToolInvocation,
     binding :: !ToolBinding
   }
@@ -200,6 +201,12 @@ data ToolOperationInput = ToolOperationInput
   deriving anyclass (ToJSON, FromJSON)
 
 instance Show ToolOperationInput where show _ = "ToolOperationInput <protected>"
+
+-- The accepted assistant owns the list bound; the position owns its scalar bound.
+toolContinuation :: ToolOperationInput -> ReplayAssistant -> NextWork
+toolContinuation input assistant = case nextToolPosition input.position of
+  Just position | toolPositionNumber position < length (toolInvocations assistant) -> NeedTool input.response position
+  _ -> NeedModel
 
 toolScopeDigest :: ToolBinding -> Text
 toolScopeDigest = versionedDigest "shikigami.execution-tool-scope/1" . toJSON
@@ -279,7 +286,7 @@ data ExecutionPhase = Active | Parked | Unresolved | Succeeded | Failed | Cancel
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data NextWork = NeedModel | NeedTool !PayloadRef !Int | NeedValidation !PayloadRef | WorkFinished
+data NextWork = NeedModel | NeedTool !PayloadRef !ToolPosition | NeedValidation !PayloadRef | WorkFinished
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -323,7 +330,7 @@ data OperationSpec = OperationSpec
     name :: !Text,
     policyDigest :: !Text,
     scopeDigest :: !Text,
-    responsePosition :: !(Maybe Int)
+    responsePosition :: !(Maybe ToolPosition)
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)

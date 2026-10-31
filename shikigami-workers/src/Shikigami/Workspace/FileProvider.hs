@@ -226,7 +226,7 @@ withAccess mode runtime snapshot dispatch logical input perform = catch work (\(
       source <- owned (Execution.readReplayPayload @OperationOutcome permit "operation-outcome" tool.response)
       case source of
         Right (ModelReturned assistant _) -> do
-          let next = if tool.position + 1 < length (toolInvocations assistant) then NeedTool tool.response (tool.position + 1) else NeedModel
+          let next = toolContinuation tool assistant
               routing = ProcessRouting 1 snapshot.executionId snapshot.identity operation.input.digest next
               registration = FileRegistration dispatch.operation dispatch.owner routing receipt
           saved <- runTx runtime do
@@ -248,7 +248,7 @@ withAccess mode runtime snapshot dispatch logical input perform = catch work (\(
             (Right (Just old), Right (ModelReturned assistant _), Right (Just (state, _, _)))
               | old.phase == Attempt.AttemptSuperseded && old.operationId == receipt.operationId && old.executionId == snapshot.executionId && old.generation == receipt.generation,
                 Just owner <- old.owner -> do
-                  let next = if tool.position + 1 < length (toolInvocations assistant) then NeedTool tool.response (tool.position + 1) else NeedModel
+                  let next = toolContinuation tool assistant
                       output =
                         if receipt.state == EditRefused
                           then ToolReturned [TextBlock (renderToolError (ToolRunFailed "replace" "workspace operation refused"))] True

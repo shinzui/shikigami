@@ -29,6 +29,7 @@ import Shikigami.Execution.Resources (Cancellation (..), Root (..))
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Execution.Store qualified as Execution
+import Shikigami.Execution.ToolPosition (ToolPosition, parseToolPosition)
 import Shikigami.Execution.Transcript
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
@@ -185,7 +186,7 @@ tests fixture =
         Just (state, _, _) <- stored file (Execution.inspectExecution snapshot.executionId)
         state.cursor @?= (fixtureRevision 2)
         case state.next of
-          NeedTool _ position -> position @?= 1
+          NeedTool _ position -> position @?= (fixtureToolPosition 1)
           _ -> assertFailure "accepted second tool routing was lost"
         Just actual <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
         actual.phase @?= Attempt.AttemptCommitted
@@ -403,3 +404,6 @@ fixtureRevision value = either (error . show) id (parseRevision value)
 
 fixtureCount :: Integer -> AttemptCount scope
 fixtureCount number = either (error . show) id (parseAttemptCount number)
+
+fixtureToolPosition :: Integer -> ToolPosition
+fixtureToolPosition value = either (error . show) id (parseToolPosition value)

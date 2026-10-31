@@ -101,6 +101,7 @@ import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.SelectionStore qualified as Calls
+import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
 import Shikigami.ExecutionLifecycle.Generated.Domain qualified as Generated
 import Shikigami.ExecutionLifecycle.Generated.EventStream (executionLifecycleCategory, executionLifecycleEventStream)
@@ -452,7 +453,7 @@ checkedOperationInput access binding state snapshot specification input = case s
     case outcome of
       ModelReturned assistant _ -> do
         _ <- except (validateToolInvocation snapshot.policy snapshot.toolBindings snapshot.toolBindings assistant tool.position)
-        unless (take 1 (drop tool.position (toolInvocations assistant)) == [tool.invocation] && tool.binding `elem` snapshot.toolBindings) (throwE OperationConflict)
+        unless (take 1 (drop (toolPositionNumber tool.position) (toolInvocations assistant)) == [tool.invocation] && tool.binding `elem` snapshot.toolBindings) (throwE OperationConflict)
       _ -> throwE OperationConflict
   ModelRepair -> case state.next of
     NeedValidation response -> do
@@ -965,7 +966,7 @@ recordIndependentToolReceipt identity expected claim receipt = catchExecutionWit
     _ -> throwIO (ExecutionAbort AttemptConflict)
   case receipt.next of
     NeedModel -> pure ()
-    NeedTool _ position | position > 0 -> pure ()
+    NeedTool _ position | position > firstToolPosition -> pure ()
     _ -> throwIO (ExecutionAbort AttemptConflict)
   if previous.phase == Attempt.AttemptCommitted
     then do
@@ -1221,7 +1222,6 @@ finishExecution access@(ReplayAccess execution _ _) expected result = catchExecu
 validateOperation :: OperationSpec -> Either ExecutionError ()
 validateOperation specification = do
   unless (all (\text -> not (Text.null text) && Text.length text <= 256) [specification.name, specification.policyDigest, specification.scopeDigest]) (Left OperationConflict)
-  unless (maybe True (\n -> n >= 0 && n < 256) specification.responsePosition) (Left OperationConflict)
 
 advance :: ExecutionId -> StateRevision "execution" -> Generated.ExecutionLifecycleCommand
 advance execution expected = Generated.AdvanceExecution (Generated.AdvanceExecutionData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected))))
