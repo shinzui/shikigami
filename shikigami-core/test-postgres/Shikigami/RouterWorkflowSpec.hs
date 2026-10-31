@@ -39,7 +39,7 @@ import Shikigami.Agent.Decl
     defaultMemoryPolicy,
     mkDelegationBudget,
   )
-import Shikigami.Agent.Delegate (delegatedWorkflowId)
+import Shikigami.Agent.Delegate (delegatedWorkflowIdV2)
 import Shikigami.Agent.Delegate.Context (DelegationError (..))
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (compatibilityIdentity)
@@ -157,8 +157,8 @@ matchedReplayProof databaseFixture =
               )
           job = routerJob "router:matched-replay"
           parentWorkflowId = runJobWorkflowId job
-          firstChildId = delegatedWorkflowId parentWorkflowId "first" "architecture-practice-first"
-          secondChildId = delegatedWorkflowId parentWorkflowId "second" "architecture-practice-second"
+          firstChildId = delegatedWorkflowIdV2 parentWorkflowId "first" "architecture-practice-first"
+          secondChildId = delegatedWorkflowIdV2 parentWorkflowId "second" "architecture-practice-second"
       originalProbe <- newProbe catalog (Aeson.toJSON decision)
       let deps = routerDeps appEnv behaviorEnv ((.runtime) originalProbe) [routerDecl, successSpecialist "first", successSpecialist "second"]
 
@@ -261,7 +261,7 @@ childFailureEscapes databaseFixture = do
     let decision = matchedDecision [selection "failing" RoutingHigh "route"]
         job = routerJob "router:child-failure"
         parentWorkflowId = runJobWorkflowId job
-        childWorkflowId = delegatedWorkflowId parentWorkflowId "failing" "architecture-practice-failing"
+        childWorkflowId = delegatedWorkflowIdV2 parentWorkflowId "failing" "architecture-practice-failing"
     probe <- newProbe catalog (Aeson.toJSON decision)
     let deps = routerDeps appEnv behaviorEnv ((.runtime) probe) [routerDecl, failingSpecialist]
     parked <- AgentWorkflow.runAgentRunWorkflow deps job

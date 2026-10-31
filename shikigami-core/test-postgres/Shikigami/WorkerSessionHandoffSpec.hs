@@ -28,7 +28,7 @@ import Shikigami.RouterWorkflowSpec qualified as Fixture
 import Shikigami.StateRevision (StateRevision, advanceRevision, parseRevision)
 import Shikigami.WorkerSession.Checkpoint qualified as Checkpoint
 import Shikigami.WorkerSession.Handoff qualified as Handoff
-import Shikigami.WorkerSession.Identity (assignmentChildWorkflowId, sessionWorkflowId, sessionWorkflowName)
+import Shikigami.WorkerSession.Identity (assignmentChildWorkflowIdV2, sessionWorkflowId, sessionWorkflowName)
 import Shikigami.WorkerSession.Input (InstructionText, parseInstructionText)
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Transfer
@@ -89,7 +89,7 @@ tests fixture =
           latest.owner @?= successor
           (_, follow) <- expectRight =<< run env (Store.acceptMessage access established.revision (fixtureRevision 1) (OperationId "new-assignment") (instruction 2))
           (_, started) <- expectRight =<< run env (Store.startAssignment access (advanceRevision established.revision) (fixtureRevision 1) (OperationId "new-start") follow.assignmentId)
-          started.childWorkflowId @?= Just (assignmentChildWorkflowId intent.sessionId (AgentName "successor") follow.assignmentId).unWorkflowId,
+          started.childWorkflowId @?= Just (assignmentChildWorkflowIdV2 intent.sessionId (AgentName "successor") follow.assignmentId).unWorkflowId,
       testCase "a fenced workspace cannot establish ownership while an accepted assignment remains active" $
         withTransferFixture fixture False \env admission access owner -> do
           (_, message) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "send") (instruction 1))

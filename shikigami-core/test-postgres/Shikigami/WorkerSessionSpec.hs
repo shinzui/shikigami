@@ -150,7 +150,7 @@ tests fixture =
           run env (runWorkflowWith (shikigamiWorkflowRunOptions env) sessionWorkflowName (sessionWorkflowId (sessionIdFor limited)) (Session.sessionWorkflow runtime (Just (Session.WorkerSessionStart (sessionIdFor limited))))) >>= (@?= ContinuedAsNew)
           stored <- expectRight =<< run env (Store.readResult access message.assignmentId)
           case stored of Just (_, value) -> value.disposition @?= AssignmentFailed; _ -> assertFailure "refusal not retained"
-          let child = assignmentChildWorkflowId (sessionIdFor limited) limited.worker message.assignmentId
+          let child = assignmentChildWorkflowIdV2 (sessionIdFor limited) limited.worker message.assignmentId
           run env (loadStepIndex agentRunWorkflowName child 0) >>= (@?= Map.empty),
       testCase "closed retained events remain acknowledgeable after session journal GC" $
         withFixture fixture \env admission access -> do

@@ -189,6 +189,11 @@
           "rationale": "Private ClaimOwner retains the existing technical lease token; StateRevision execution-attempt retains the fence through execution, workspace registrations/receipts and supervisor RPC. Native workflow generations remain Int; active positivity, RPC bounds, stale-owner matching and atomic accounting/publication remain. ADR-85, complete claim/active-attempt wire controls, 85 compiler clients and 562 pure/383 PostgreSQL/260 worker/95 server cases pass with neutral native reports. The complete scalar/identity census remains pending."
         },
         {
+          "id": "structured-run-coordinates-and-http-request-key",
+          "disposition": "implemented",
+          "rationale": "Actual before probes, admitted delegation preflight and a real PostgreSQL acceptance case reproduced delimiter collisions. Versioned structured commitments distinguish child and HTTP run coordinates; original caller keys are retained explicitly as private RequestKey through API, CLI, SQL and response adapters. Ninety compiler clients, 563 pure/385 PostgreSQL/260 worker/95 server/31 API/9 client/37 agent, 73 offline CLI checks and live Hurl pass under ADR-86. Exactly two native WorkflowBodyChanged findings are retained as the ADR-27 first-release reset; aggregate replay neutrality does not assert child-history compatibility. The full scalar/identity census remains pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -226,7 +231,11 @@
         "docs/adr/0084-execution-assignment-keys-retain-their-locator-meaning.md",
         "docs/evidence/keiro-0.22/assignment-key-results.txt",
         "docs/adr/0085-attempt-fencing-retains-its-owner-token-and-generation-scope.md",
-        "docs/evidence/keiro-0.22/attempt-fence-results.txt"
+        "docs/evidence/keiro-0.22/attempt-fence-results.txt",
+        "docs/adr/0086-versioned-structured-coordinates-identify-delegated-and-http-runs.md",
+        "docs/evidence/keiro-0.22/coordinate-key-results.txt",
+        "docs/evidence/keiro-0.22/coordinate-key-before-probe.json",
+        "docs/evidence/keiro-0.22/coordinate-key-reset-diff.json"
       ]
     },
     {

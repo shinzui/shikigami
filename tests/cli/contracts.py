@@ -48,6 +48,9 @@ with tempfile.TemporaryDirectory(prefix="shikigami-cli-contract-") as directory:
     run(client, ["--config", str(Path(directory) / "missing"), "--check-config"], 3, env=clean)
     run(client, ["--set", "server.base-url=invalid", "--check-config"], 4, env=clean)
     run(client, ["--not-an-option"], 2, env=clean)
+    for invalid_key in ["", "line\nkey", "x" * 201]:
+        output = run(client, ["--config", str(poison), "runs", "request", "heartbeat", "--key", invalid_key, "--stdin"], 2, env=clean)
+        assert b"HTTP request key must contain" in output
     sentinel = b"PRIVATE_PAYLOAD_SENTINEL"
     for flag in ["--stdin", "--payload"]:
         args = ["runs", "request", "heartbeat", "--key", "unused", flag]

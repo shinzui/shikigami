@@ -16,6 +16,15 @@ it first appears.
 On 2026-10-30 the user reconfirmed that Shikigami is unused. [ADR-27](adr/0027-the-first-release-establishes-one-clean-durable-baseline.md) applies to [MasterPlan 16](masterplans/16-upgrade-shikigami-to-keiro-0-22-and-retire-superseded-runtime-workarounds.md): consolidate unreleased workflow shapes and remove obsolete patch false branches instead of protecting nonexistent instances. Record exact breaking diagnostics and establish the reviewed current baseline. Same-build replay and all authority/effect boundaries still apply. The rules below govern subsequent evolution and become unconditional at first release/deployment; this exception does not authorize database deletion.
 
 
+The later [ADR-86](adr/0086-versioned-structured-coordinates-identify-delegated-and-http-runs.md)
+identity audit replaces ambiguous delimiter encodings with versioned structured
+coordinates. AgentRun and ContinuingWorker declare their v2 child derivations;
+their exact native WorkflowBodyChanged findings are retained with the acceptance
+evidence. The aggregate replay-impact verdict covers stored-data folds and does
+not make those changed child identities compatible. This remains part of the
+confirmed unused first-release reset; no old-identity fallback is introduced.
+
+
 ## What a durable workflow is, and why editing one is not like editing ordinary code
 
 Shikigami runs each agent run and each Danwa conversation as a **durable

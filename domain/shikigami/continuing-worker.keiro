@@ -13,5 +13,5 @@ workflow ContinuingWorker
     step observe-session -> SessionState
     step select-assignment -> SessionAction
     step record-assignment-result -> ResultReceipt
-    child agent-run id input via assignmentChildWorkflowId -> AgentRunOutcome
+    child agent-run id input via assignmentChildWorkflowIdV2 -> AgentRunOutcome
     continueAsNew WorkerSessionSeed

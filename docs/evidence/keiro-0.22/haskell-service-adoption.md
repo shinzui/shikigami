@@ -180,8 +180,8 @@ underflow refusal cases. Full affected acceptance is 556 pure, 382 PostgreSQL,
 complete scalar/identity census remain open.
 
 The [compiled declaration worklist](domain-declarations.json) and
-[census acquisition results](domain-census-results.txt) enumerate 313 hand-owned
-modules, 890 declarations and 14 separately listed role entrypoints. The source
+[census acquisition results](domain-census-results.txt) enumerate 314 hand-owned
+modules, 891 declarations and 14 separately listed role entrypoints. The source
 and interface hashes preserve the actual candidate; the worklist does not assign
 automatic domain/boundary exemptions or certify the remaining review.
 
@@ -233,3 +233,13 @@ under ADR-85, independently of native workflow generations and application princ
 [Attempt-fence acceptance](attempt-fence-results.txt) records exact retained bytes,
 85 compiler clients and 562 pure/383 PostgreSQL/260 worker/95 server cases with
 neutral native reports. The complete scalar/identity review remains open.
+
+The identity audit reproduced admitted delegation and HTTP delimiter collisions.
+ADR-86 uses versioned structured coordinates and an explicit private HTTP RequestKey,
+retaining original caller keys and the API-only client package boundary.
+[Coordinate-key acceptance](coordinate-key-results.txt) records both failed before
+controls, corrected atomic acceptance/replay, 90 compiler clients and all affected
+package suites, 73 offline CLI checks and live Hurl. The two retained native
+WorkflowBodyChanged findings establish a deliberate first-release baseline; the
+aggregate replay-impact verdict does not classify the changed child histories as
+compatible. The complete scalar/identity review remains open.

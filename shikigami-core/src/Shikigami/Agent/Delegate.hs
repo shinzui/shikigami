@@ -13,11 +13,12 @@ module Shikigami.Agent.Delegate
     awaitAllDelegated,
     cancelDelegated,
     cancelSiblingsOnFailure,
-    delegatedWorkflowId,
+    delegatedWorkflowIdV2,
   )
 where
 
 import Control.Exception (Exception, fromException)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
 import Data.List (find)
@@ -42,6 +43,7 @@ import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByDelegation))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
+import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Delegation.BudgetStore
   ( BatchReservationResult (..),
     BudgetReservationError (..),
@@ -54,7 +56,7 @@ import Shikigami.Delegation.BudgetStore
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Request (ExecutionRequest)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Router.Catalog (CandidateAvailability (..), CandidateCatalog (..), CandidateEntry (..), ExclusionReason)
 
 -- | A pending delegated child run. The phantom @a@ is the value expected from
@@ -143,7 +145,7 @@ delegateWith expectedIdentity executionRequest declarations directory decl ctx d
       Just sid -> pure sid
       Nothing -> throwIO DelegationMissingSessionId
   (_, parentWorkflowId) <- currentWorkflow
-  let childWorkflowId = delegatedWorkflowId parentWorkflowId childAgent delegationKey
+  let childWorkflowId = delegatedWorkflowIdV2 parentWorkflowId childAgent delegationKey
       WorkflowId childWorkflowIdText = childWorkflowId
       (budgetId, seed) =
         case existingBudgetId of
@@ -259,7 +261,7 @@ preflightDelegationBatch decl@AgentDecl {name = delegatingAgent, routing} ctx@De
     prepare request@DelegationRequest {key, target} =
       PreparedDelegation
         { request,
-          childWorkflowId = delegatedWorkflowId parentWorkflowId target key
+          childWorkflowId = delegatedWorkflowIdV2 parentWorkflowId target key
         }
 
 -- | Reserve the complete routed batch before invoking the existing governed
@@ -383,16 +385,16 @@ awaitDelegatedEither delegated =
         Just failure -> pure (Left (Text.pack (show failure)))
         Nothing -> throwIO err
 
-delegatedWorkflowId :: WorkflowId -> Text -> Text -> WorkflowId
-delegatedWorkflowId (WorkflowId parentWorkflowId) childAgent delegationKey =
+delegatedWorkflowIdV2 :: WorkflowId -> Text -> Text -> WorkflowId
+delegatedWorkflowIdV2 (WorkflowId parentWorkflowId) childAgent delegationKey =
   WorkflowId $
     Text.pack $
       UUID.toString $
         UUID.V5.generateNamed UUID.V5.namespaceURL $
           nameBytes $
-            Text.intercalate
-              ":"
-              ["shikigami", "delegate", parentWorkflowId, childAgent, delegationKey]
+            versionedDigest
+              "shikigami.delegation-child/2"
+              (Aeson.object ["parent" .= parentWorkflowId, "agent" .= childAgent, "key" .= delegationKey])
 
 duplicatesInOrder :: (Ord a) => [a] -> [a]
 duplicatesInOrder = go Set.empty Set.empty

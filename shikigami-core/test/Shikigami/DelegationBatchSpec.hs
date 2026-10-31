@@ -5,6 +5,7 @@ import Data.Aeson (Value (Null))
 import Data.Generics.Labels ()
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Keiro.Workflow (WorkflowId (..))
 import Kioku.Id qualified as NominalId
@@ -23,7 +24,7 @@ import Shikigami.Agent.Delegate
   ( DelegationBatchPreflightError (..),
     DelegationRequest (..),
     PreparedDelegation (..),
-    delegatedWorkflowId,
+    delegatedWorkflowIdV2,
     preflightDelegationBatch,
   )
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..))
@@ -45,11 +46,21 @@ tests :: TestTree
 tests =
   testGroup
     "DelegationBatch"
-    [ testCase "preflight computes every deterministic child id in selection order" do
+    [ testCase "separator-bearing delegation coordinates retain distinct child identities" do
+        let declaration = routerDecl & #delegates .~ ["a:b", "a"]
+            admitted = catalog & #candidates .~ [candidate "a:b" Available, candidate "a" Available]
+            requests = batchRequest "c" "a:b" :| [batchRequest "b:c" "a"]
+        case preflightDelegationBatch declaration delegateCtx admitted parentWorkflowId requests of
+          Left errors -> assertFailure ("valid distinct coordinates were refused: " <> show errors)
+          Right prepared -> do
+            let ids = fmap (.childWorkflowId) (NonEmpty.toList prepared)
+            assertEqual "distinct children cannot share a reservation or spawn identity" 2 (Set.size (Set.fromList ids))
+            assertEqual "retry retains both identities" (Right prepared) (preflightDelegationBatch declaration delegateCtx admitted parentWorkflowId requests),
+      testCase "preflight computes every deterministic child id in selection order" do
         let requests = batchRequest "first-key" "first" :| [batchRequest "second-key" "second"]
             expectedIds =
-              [ delegatedWorkflowId parentWorkflowId "first" "first-key",
-                delegatedWorkflowId parentWorkflowId "second" "second-key"
+              [ delegatedWorkflowIdV2 parentWorkflowId "first" "first-key",
+                delegatedWorkflowIdV2 parentWorkflowId "second" "second-key"
               ]
         case preflightDelegationBatch routerDecl delegateCtx catalog parentWorkflowId requests of
           Left errors -> assertFailure ("expected valid batch, got " <> show errors)

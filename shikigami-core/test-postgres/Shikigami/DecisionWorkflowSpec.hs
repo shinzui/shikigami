@@ -30,7 +30,7 @@ import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowOutcome (..), Wor
 import Keiro.Workflow.Child.Schema (lookupChildrenOfParent)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), ProfileRequirement (..), RecipientFrom (SubjectOwner), RouterConfidence (RoutingHigh), SignalType (Reminder), Sink (..))
-import Shikigami.Agent.Delegate (delegatedWorkflowId)
+import Shikigami.Agent.Delegate (delegatedWorkflowIdV2)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as Agent
@@ -385,7 +385,7 @@ tests fixture =
               request = job "decision-delegate"
           parked <- Agent.runAgentRunWorkflow runtime request
           case parked of Right Suspended -> pure (); _ -> assertFailure "expected governed child suspension"
-          let childId = delegatedWorkflowId (runJobWorkflowId request) "first" "decision-investigate-first"
+          let childId = delegatedWorkflowIdV2 (runJobWorkflowId request) "first" "decision-investigate-first"
           _ <- Fixture.runSuccessfulChild app runtime childId
           _ <- assertCompleted =<< Agent.runAgentRunWorkflow runtime request
           observed >>= (\calls -> length calls @?= 3)

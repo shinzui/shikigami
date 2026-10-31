@@ -59,6 +59,14 @@ workflow/message hash derivations and bytes are unchanged. The compiled declarat
 worklist retains source/interface hashes and current-component selection; it is
 not a semantic compliance claim. Attempt fences now retain their private owner token and scoped generation without conflating native workflow generations or principals (ADR-85). The complete scalar/identity review remains open.
 
+The coordinate audit then reproduced two delimiter collisions in admitted input:
+a two-child preflight shared one child identity, and a second independent HTTP
+request failed its ledger insert. ADR-86 versions structured coordinates and
+retains the caller key explicitly as private RequestKey. The native differ
+correctly reports AgentRun and ContinuingWorker body breaks under the unused
+first-release exception. Their aggregate replay-impact report is a separate
+stored-data verdict and does not assert child-history compatibility.
+
 ## Decision Log
 
 2026-10-30: Apply the user's first-release policy and exhaustive current-guide adoption. Replace old-history qualification with fresh provisioning and same-build recovery. Preserve real transaction, authority and privacy invariants.
@@ -71,15 +79,16 @@ cases. The language checker and thirteen style/ownership mutation tests pass.
 [The adoption record](../evidence/keiro-0.22/haskell-service-adoption.md) links each
 implemented domain-value wave and its exact candidate/evidence.
 
-Latest attempt-fence acceptance rebuilt all enabled components and passed 562
-pure, 383 serial PostgreSQL, 260 worker and 95 server tests, with 85 positive-first
-compiler clients, 143 domain-driver assertions, six diagrams and 156 native
-conformance rows. Its native diff/replay is neutral; this does not erase the
-previous retained identity/binding breaks. Forty-two of the 46 assigned sources
-have implemented dispositions. One local review remains: the complete scalar and
-identity census. Three source rows retain only final-profile clauses owned by
-plan95. M1 and final source dispositions remain open; this is not completion or
-packaged Linux qualification.
+Latest coordinate-key acceptance rebuilt all enabled components and passed 563
+pure, 385 serial PostgreSQL, 260 worker, 95 server, 31 API, nine client and 37 agent
+cases, with 90 positive-first compiler clients, 143 domain-driver assertions, six
+diagrams and 156 native conformance rows. All 73 offline CLI checks and the live
+Hurl fixture pass. Two deliberate native WorkflowBodyChanged findings remain
+retained for the reviewed first-release identity reset; all four aggregate folds
+are unchanged. Forty-two of the 46 assigned sources have implemented dispositions.
+One local review remains: the complete scalar and identity census. Three sources
+retain only final-profile clauses owned by plan95. M1 and final source dispositions
+remain open; this is not completion or packaged Linux qualification.
 
 ## Context and Orientation
 

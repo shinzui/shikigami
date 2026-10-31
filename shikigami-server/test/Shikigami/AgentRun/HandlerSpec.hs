@@ -119,8 +119,8 @@ tests fixture =
           first <- post "POST" "/agents/heartbeat/runs" body
           statusCode (Http.responseStatus first) @?= 202
           accepted <- decodeBody first
-          accepted.runId @?= "34390b28-e1aa-59b4-8df1-6ae2c9abd01e"
-          lookup "Location" (Http.responseHeaders first) @?= Just "/agents/heartbeat/runs/34390b28-e1aa-59b4-8df1-6ae2c9abd01e"
+          accepted.runId @?= "114ab443-f469-59bb-a640-56502b5ae5bf"
+          lookup "Location" (Http.responseHeaders first) @?= Just "/agents/heartbeat/runs/114ab443-f469-59bb-a640-56502b5ae5bf"
           repeated <- post "POST" "/agents/heartbeat/runs" body
           statusCode (Http.responseStatus repeated) @?= 200
           Http.responseBody repeated @?= Http.responseBody first

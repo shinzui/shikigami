@@ -18,6 +18,9 @@ module RevisionBoundary where
 import Data.Coerce (coerce)
 import Data.String (fromString)
 import Data.Text (Text)
+import Shikigami.Agent.Run.Key (RunKey)
+import Shikigami.AgentRun.Ledger qualified as Ledger
+import Shikigami.AgentRun.RequestKey
 import Shikigami.Agent.Principal (AgentPrincipal)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Claim
@@ -40,6 +43,18 @@ import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ("http-request-key", '''key :: Ledger.RunRequestRow -> RequestKey
+key row = row.idempotencyKey
+''', True),
+    ("run-key-is-not-http-request-key", '''key :: RunKey -> RequestKey
+key value = value
+''', False),
+    ("unchecked-http-request-key-coercion", '''key :: Text -> RequestKey
+key = coerce
+''', False),
+    ("unchecked-http-request-key-literal", '''key :: RequestKey
+key = fromString "key"
+''', False),
     ("attempt-fence", '''generation :: Attempt.AttemptClaim -> StateRevision "execution-attempt"
 generation claim = claim.generation
 owner :: Attempt.AttemptClaim -> ClaimOwner
@@ -229,6 +244,9 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
         assert (result.returncode == 0) == expected, (name, result.stdout, result.stderr)
         if not expected:
             fragments = {
+                "run-key-is-not-http-request-key": ["Couldn't match", "RunKey", "RequestKey"],
+                "unchecked-http-request-key-coercion": ["RequestKey", "Text"],
+                "unchecked-http-request-key-literal": ["RequestKey", "IsString"],
                 "worker-epoch-is-not-attempt-generation": ["Couldn't match", "worker-owner", "execution-attempt"],
                 "native-generation-is-not-attempt-generation": ["Couldn't match", "StateRevision", "Int"],
                 "unchecked-attempt-generation": ["StateRevision", "Num"],

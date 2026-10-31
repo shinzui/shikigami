@@ -65,7 +65,7 @@ import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), ProfileRequirement (..), RecordPolicy (..), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy, mkDelegationBudget, mkRecallLimit)
-import Shikigami.Agent.Delegate (awaitAllDelegated, awaitDelegated, cancelSiblingsOnFailure, delegate, delegatedWorkflowId)
+import Shikigami.Agent.Delegate (awaitAllDelegated, awaitDelegated, cancelSiblingsOnFailure, delegate, delegatedWorkflowIdV2)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..))
 import Shikigami.Agent.Delegate.Depth (DelegationDepth (..))
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..), loadAgent)
@@ -1331,8 +1331,8 @@ tests databaseFixture =
                   envelope = Resources.Envelope (Map.singleton Resources.LifetimeDescendants (Resources.Limited (fixtureAmount 1))) (addUTCTime 3600 now)
                   parentName = WorkflowName "shikigami.test-resource-parent"
                   parentId = WorkflowId "resource-parent"
-                  childId = delegatedWorkflowId parentId "heartbeat" "first"
-                  deniedId = delegatedWorkflowId (WorkflowId "other-parent") "heartbeat" "second"
+                  childId = delegatedWorkflowIdV2 parentId "heartbeat" "first"
+                  deniedId = delegatedWorkflowIdV2 (WorkflowId "other-parent") "heartbeat" "second"
                   supervisor = decl & #delegates .~ ["heartbeat"]
                   ctx = parentDelegateContext parentSession & #executionRootId .~ Just root
                   body key = void (delegate [decl] disabledDirectoryHandle supervisor ctx key "heartbeat" (object []))
@@ -1360,7 +1360,7 @@ tests databaseFixture =
                     deps = testDeps appEnv behaviorEnv defaultAgentRunHooks
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-parent"
                     parentWorkflowId = WorkflowId "delegate-parent-1"
-                    childWorkflowId = delegatedWorkflowId parentWorkflowId "heartbeat" "heartbeat"
+                    childWorkflowId = delegatedWorkflowIdV2 parentWorkflowId "heartbeat" "heartbeat"
                     parentBody = parentDelegateWorkflow parentSession
 
                 parked <- runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody)
@@ -1432,8 +1432,8 @@ tests databaseFixture =
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks proofAgents
                     parentWorkflowId = runJobWorkflowId researchSupervisorJob
-                    webWorkflowId = delegatedWorkflowId parentWorkflowId "web-researcher" "delegate-0"
-                    codeWorkflowId = delegatedWorkflowId parentWorkflowId "code-researcher" "delegate-1"
+                    webWorkflowId = delegatedWorkflowIdV2 parentWorkflowId "web-researcher" "delegate-0"
+                    codeWorkflowId = delegatedWorkflowIdV2 parentWorkflowId "code-researcher" "delegate-1"
                     WorkflowId webWorkflowIdText = webWorkflowId
                     WorkflowId codeWorkflowIdText = codeWorkflowId
                     expectedRunningChildLinks =
@@ -1505,7 +1505,7 @@ tests databaseFixture =
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks (flowDelegationDecl : proofAgents)
                     parentWorkflowId = runJobWorkflowId flowDelegationJob
-                    childWorkflowId = delegatedWorkflowId parentWorkflowId "web-researcher" "web-researcher"
+                    childWorkflowId = delegatedWorkflowIdV2 parentWorkflowId "web-researcher" "web-researcher"
 
                 parked <- runAgentRunWorkflow deps flowDelegationJob
                 assertEqual "delegating Flow parks on its child" (Right Suspended) parked
@@ -1544,8 +1544,8 @@ tests databaseFixture =
                     supervisor = collectionSupervisorDecl
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-collect"
                     parentWorkflowId = WorkflowId "delegate-collect-parent"
-                    successId = delegatedWorkflowId parentWorkflowId "heartbeat" "success"
-                    failureId = delegatedWorkflowId parentWorkflowId "missing-task-agent" "failure"
+                    successId = delegatedWorkflowIdV2 parentWorkflowId "heartbeat" "success"
+                    failureId = delegatedWorkflowIdV2 parentWorkflowId "missing-task-agent" "failure"
                     parentBody = parentCollectWorkflow parentSession supervisor
 
                 parked <- runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody)
@@ -1570,8 +1570,8 @@ tests databaseFixture =
                     supervisor = collectionSupervisorDecl
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-cancel"
                     parentWorkflowId = WorkflowId "delegate-cancel-parent"
-                    failureId = delegatedWorkflowId parentWorkflowId "missing-task-agent" "failure-first"
-                    siblingId = delegatedWorkflowId parentWorkflowId "heartbeat" "cancelled-sibling"
+                    failureId = delegatedWorkflowIdV2 parentWorkflowId "missing-task-agent" "failure-first"
+                    siblingId = delegatedWorkflowIdV2 parentWorkflowId "heartbeat" "cancelled-sibling"
                     parentBody = parentCancellationWorkflow parentSession supervisor
 
                 parked <- runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody)

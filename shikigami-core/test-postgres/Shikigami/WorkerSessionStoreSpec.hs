@@ -36,7 +36,7 @@ import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.StateRevision (StateRevision, advanceRevision, parseRevision)
 import Shikigami.WorkerSession.Checkpoint qualified as Checkpoint
-import Shikigami.WorkerSession.Identity (assignmentChildWorkflowId)
+import Shikigami.WorkerSession.Identity (assignmentChildWorkflowIdV2)
 import Shikigami.WorkerSession.Input (InstructionText, SessionLimit (..), parseInstructionText)
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Types
@@ -71,9 +71,9 @@ tests fixture =
           (_, third) <- accept env access 4 "send-3" (instruction "third")
           map (.sequence) [first, second, third] @?= map fixtureRevision [0, 1, 2]
           assertBool "assignment identities differ" (first.assignmentId /= second.assignmentId && second.assignmentId /= third.assignmentId)
-          started.childWorkflowId @?= Just (assignmentChildWorkflowId (sessionIdFor admission) admission.worker first.assignmentId).unWorkflowId
+          started.childWorkflowId @?= Just (assignmentChildWorkflowIdV2 (sessionIdFor admission) admission.worker first.assignmentId).unWorkflowId
           (_, next) <- expectRight =<< run env (Store.startAssignment access (fixtureRevision 5) (fixtureRevision 0) (OperationId "start-2") second.assignmentId)
-          next.childWorkflowId @?= Just (assignmentChildWorkflowId (sessionIdFor admission) admission.worker second.assignmentId).unWorkflowId
+          next.childWorkflowId @?= Just (assignmentChildWorkflowIdV2 (sessionIdFor admission) admission.worker second.assignmentId).unWorkflowId
           assertBool "follow-up gets a new child" (started.childWorkflowId /= next.childWorkflowId)
           Store.readResult access first.assignmentId `inEnv` env >>= (@?= Right (Just (result, resultFor first "retained finding")))
           run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "send-1") (instruction "first")) >>= (@?= Right (AlreadyAccepted, first))

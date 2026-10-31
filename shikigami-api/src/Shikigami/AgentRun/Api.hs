@@ -2,6 +2,9 @@
 module Shikigami.AgentRun.Api
   ( AgentRunApi (..),
     AgentRunRequest (..),
+    RequestKey,
+    parseRequestKey,
+    requestKeyText,
     AgentRunAccepted (..),
     RunRequestResponses,
     RunRequestResult (..),
@@ -18,23 +21,23 @@ where
 
 import Data.Aeson ((.:))
 import Data.Aeson qualified as Aeson
-import Data.Char (isControl)
+import Data.Either (isRight)
 import Data.HashMap.Strict.InsOrd.Compat qualified as Map
 import Data.OpenApi (ToSchema (..), fromAesonOptions, genericDeclareNamedSchema)
 import Data.OpenApi qualified as O
 import Data.SOP (I (..), NS (..))
-import Data.Text qualified as Text
 import Relay.Pagination (Connection)
 import Relay.Pagination.Servant (RelayPage, RelayPageError)
 import Servant.API
 import Servant.API.MultiVerb
+import Shikigami.AgentRun.RequestKey
 import Shikigami.Api.Problem
 import Shikigami.Prelude
 
 validRunKey :: Text -> Bool
-validRunKey key = not (Text.null key) && Text.length key <= 200 && not (Text.any isControl key)
+validRunKey = isRight . parseRequestKey
 
-data AgentRunRequest = AgentRunRequest {idempotencyKey :: !Text, payload :: !Aeson.Value}
+data AgentRunRequest = AgentRunRequest {idempotencyKey :: !RequestKey, payload :: !Aeson.Value}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON)
 
@@ -42,7 +45,6 @@ instance FromJSON AgentRunRequest where
   parseJSON = Aeson.withObject "AgentRunRequest" \object -> do
     key <- object .: "idempotencyKey"
     payload <- object .: "payload"
-    unless (validRunKey key) (fail "invalid idempotency key")
     case payload of
       Aeson.Object _ -> pure (AgentRunRequest key payload)
       _ -> fail "payload must be a JSON object"

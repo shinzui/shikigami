@@ -58,6 +58,7 @@ library
     Shikigami.Agent.Workflow.Input
     Shikigami.Agent.Workflow.Name
     Shikigami.AgentRun.Ledger
+    Shikigami.AgentRun.RequestKey
     Shikigami.AgentRun.Status
     Shikigami.App
     Shikigami.App.Config

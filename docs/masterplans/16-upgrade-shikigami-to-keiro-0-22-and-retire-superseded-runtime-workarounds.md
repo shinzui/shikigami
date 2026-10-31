@@ -90,9 +90,11 @@ a checked allocated TypeID; objective content, worker/workspace ownership,
 execution policies, counters, decisions and assignment locators retain their
 nominal checked meanings.
 
-Latest attempt-fence acceptance rebuilt all enabled components and passed 562
-pure, 383 serial PostgreSQL, 260 worker and 95 server cases, plus 85 compiler
-clients, native/domain/diagram checks and neutral native diff/replay. The remaining
+Latest coordinate-key acceptance rebuilt all enabled components and passed 563
+pure, 385 serial PostgreSQL, 260 worker and 95 server cases, plus 90 compiler
+clients, all API/client/agent suites, 73 CLI checks and live Hurl. Two deliberate
+workflow-body breaks are retained for structured child identities under ADR-86;
+aggregate folds remain unchanged. The remaining
 scalar/identity census keeps EP-5 In Progress. Three further source rows retain
 only final-profile clauses owned by EP-6. EP-6's exact frozen artifacts,
 Linux/runtime integration and final inventory gate have not started; all five

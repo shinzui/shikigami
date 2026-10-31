@@ -88,7 +88,7 @@ import Shikigami.Prelude hiding ((.=))
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Catalog (withLiveSession)
 import Shikigami.WorkerSession.Checkpoint
-import Shikigami.WorkerSession.Identity (assignmentChildWorkflowId, sessionWorkflowId, sessionWorkflowName)
+import Shikigami.WorkerSession.Identity (assignmentChildWorkflowIdV2, sessionWorkflowId, sessionWorkflowName)
 import Shikigami.WorkerSession.Input
 import Shikigami.WorkerSession.Position
 import Shikigami.WorkerSession.Transfer
@@ -332,7 +332,7 @@ startAssignment access expected epoch operation assignment = guarded do
         let bounded = if Lazy.length (Aeson.encode (result :: AssignmentResult).output) <= 8192 then Just result.output else Nothing
         pure (RetainedFinding receipt bounded)
       context <- writePayload state.sessionId (body "assignment-context" findings)
-      let child = assignmentChildWorkflowId state.sessionId (fromMaybe admission.worker state.worker) assignment
+      let child = assignmentChildWorkflowIdV2 state.sessionId (fromMaybe admission.worker state.worker) assignment
           started = message & #phase .~ Running & #epoch .~ state.epoch & #childWorkflowId .~ Just child.unWorkflowId & #context .~ Just context
       saveMessage started
       appendEvent state (AssignmentStarted started)

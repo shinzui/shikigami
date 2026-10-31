@@ -1,0 +1,12 @@
+{
+  "sourceParent": "a0d48d2b03e6ad37c6a9baec424a6806c8e01d91",
+  "compiler": "9.12.4",
+  "sourceSha256": "cce538cfb7896632a175a73df74c429d500ecb56931bb0d2259476e8d882e460",
+  "source": "{-# LANGUAGE OverloadedStrings #-}\nimport Keiro.Workflow.Types (WorkflowId(..))\nimport Shikigami.Agent.Delegate (delegatedWorkflowId)\nimport Shikigami.Agent.Name (AgentName(..))\nimport Shikigami.AgentRun.Ledger (httpRunKey)\nmain :: IO ()\nmain = do\n  print (\"delegation coordinate collision\", delegatedWorkflowId (WorkflowId \"parent\") \"a:b\" \"c\" == delegatedWorkflowId (WorkflowId \"parent\") \"a\" \"b:c\")\n  print (\"HTTP namespace collision\", httpRunKey (AgentName \"a:http:b\") \"c\" == httpRunKey (AgentName \"a\") \"b:http:c\")\n",
+  "observed": [
+    "delegation coordinate collision: True",
+    "HTTP namespace collision: True"
+  ],
+  "pureRegression": "one admitted batch returned one unique child id instead of two; one selected case failed (0.03s)",
+  "postgresRegression": "second independent coordinate could not be accepted; the one selected real ledger case failed with The run acceptance store is unavailable. (0.21s)"
+}

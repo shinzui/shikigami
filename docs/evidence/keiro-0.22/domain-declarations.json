@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "purpose": "unclassified audit worklist; not a compliance claim",
-  "sourceParent": "46f4725c15475c079ff9131fe0fc1aa3530b485c",
+  "sourceParent": "a0d48d2b03e6ad37c6a9baec424a6806c8e01d91",
   "buildRoot": "dist-newstyle/build/aarch64-osx/ghc-9.12.4",
   "compiler": "9.12.4",
   "toolSha256": "0f88e8affbb7cf27ad9ae90c2827e1a0b3c5bf3554e55b0be9a754f4bade611d",
@@ -76,21 +76,21 @@
       "sourcePath": "shikigami-agent/src/Shikigami/Agent/Command.hs",
       "sourceSha256": "33afad7d3f236ddafbb448b909607e120b54de4fb28d789e5a98ba8ba7d83568",
       "module": "Shikigami.Agent.Command",
-      "interfaceSha256": "a6b117c7eef8515364a0b764a1347d6449d664421267f55b289840fa5f0c195e",
+      "interfaceSha256": "f6204306c3d74e9e703e594ee4c27433bd52829975dc591b39eb923722368b0c",
       "declarations": []
     },
     {
       "sourcePath": "shikigami-agent/src/Shikigami/Agent/Command/AgentRun.hs",
       "sourceSha256": "e356c81d86bbee39530cf18388b9df68f65aa974f3cdb3e8774cff396272fb37",
       "module": "Shikigami.Agent.Command.AgentRun",
-      "interfaceSha256": "cf2c55d25af86b588f4b8b003b97160a1c088aeb30bf942352f706826e6d5280",
+      "interfaceSha256": "5f0951d9d60fb2b616759ae64ddfa815acaef2955785ceb98ad02284ba5c6e51",
       "declarations": []
     },
     {
       "sourcePath": "shikigami-agent/src/Shikigami/Agent/Command/Launch.hs",
       "sourceSha256": "61cb1ee8f3c9f2d848b294210539cdf43bd2652951499ee3371a0bc7b2bbb901",
       "module": "Shikigami.Agent.Command.Launch",
-      "interfaceSha256": "c28c9e4f016cdc603e593947ad6717a6a46528ad9d306e719eb28f6f714f3c34",
+      "interfaceSha256": "8fb3fe0774186411731f34125a2bca300ae3d42bdf8ba86a5dfb71d6b74d0f8f",
       "declarations": [
         {
           "name": "LaunchCommand",
@@ -115,7 +115,7 @@
       "sourcePath": "shikigami-api/src/Shikigami/Agent/Api.hs",
       "sourceSha256": "6a4495dbdf867555416d2b676efaf51553f8e6e2f04f95f10ae2d5386a94718b",
       "module": "Shikigami.Agent.Api",
-      "interfaceSha256": "659c3aaf9b210ca9731e3ff0cd897430ae2c20c95aa92c5c27b252b625bbd07a",
+      "interfaceSha256": "fdbc1d71110ce893d4436b68333e1808de78d4ea68424514e067c87a29b019e9",
       "declarations": [
         {
           "name": "AgentApi",
@@ -151,9 +151,9 @@
     },
     {
       "sourcePath": "shikigami-api/src/Shikigami/AgentRun/Api.hs",
-      "sourceSha256": "101b44c36fece9f432b5b671a7818889e3301d24126bc1d2970bf567d9f93f2f",
+      "sourceSha256": "7e362fa8dc910bc3fbee87eb7a39bdd27632b03a6253870995c705cadd8f6624",
       "module": "Shikigami.AgentRun.Api",
-      "interfaceSha256": "2130fabe8b90293238bc1ba4d8a55dc8540160bb634db13017488ca71a6bc113",
+      "interfaceSha256": "a785787ff734ab2045f4d75ae323282f6e9a7bf7641e3e8461b11c2318944ea7",
       "declarations": [
         {
           "name": "AgentRunAccepted",
@@ -168,7 +168,7 @@
         {
           "name": "AgentRunRequest",
           "kind": "data",
-          "declaration": "data AgentRunRequest\n    = AgentRunRequest {idempotencyKey :: !Data.Text.Internal.Text,\n                       payload :: !Data.Aeson.Types.Internal.Value}"
+          "declaration": "data AgentRunRequest\n    = AgentRunRequest {idempotencyKey :: !Shikigami.AgentRun.RequestKey.RequestKey,\n                       payload :: !Data.Aeson.Types.Internal.Value}"
         },
         {
           "name": "AgentRunStatus",
@@ -221,7 +221,7 @@
       "sourcePath": "shikigami-api/src/Shikigami/Api.hs",
       "sourceSha256": "e0948259701de4a0efedbfb90fbb4be809229d17bc3ecd75632bb520dbd76e4d",
       "module": "Shikigami.Api",
-      "interfaceSha256": "4d94b755619f3f489c67858a08aa88d8570a5324334581bf2812a11016d920a8",
+      "interfaceSha256": "b7990abb366f3fb3dd776cc2f6793e50fb90f317503239235d16b626d11ff197",
       "declarations": [
         {
           "name": "ShikigamiApi",
@@ -239,7 +239,7 @@
       "sourcePath": "shikigami-api/src/Shikigami/Api/OpenApi.hs",
       "sourceSha256": "4f0103adee48720ceef91d400232a46534026d4752d2131dcd21b33a60e5f33b",
       "module": "Shikigami.Api.OpenApi",
-      "interfaceSha256": "d5349491a987c62051132b78421c5f7d2a0005b8d8884177f6a4f14a672600c9",
+      "interfaceSha256": "612e8dd70c5ec25dcfe9a3eb88a577cf37d76520077fb6d713e5af64ddc89a9e",
       "declarations": []
     },
     {
@@ -294,7 +294,7 @@
       "sourcePath": "shikigami-client/src/Shikigami/Client.hs",
       "sourceSha256": "5dabc9da22f616284ed91695181f2c23c39f96ab2339faecf242e67ed4adc843",
       "module": "Shikigami.Client",
-      "interfaceSha256": "d989c40375df2803abf4a40c2fe860030aebc74ece07e2ecc2b0738d8cd4c4c1",
+      "interfaceSha256": "04816f9e5c53c4cb738c827691afceaa92be1a4c66e827c45f8333865d54585f",
       "declarations": [
         {
           "name": "Credential",
@@ -305,9 +305,9 @@
     },
     {
       "sourcePath": "shikigami-client/src/Shikigami/Client/Command.hs",
-      "sourceSha256": "c010b5b3794a33f1f3e2d01f3214e14ecb922d472ea56bb08ef203bf6fda4696",
+      "sourceSha256": "9f136bc32b5e2f414e3f54ba6d04397ceb061a00f12e06bc2ab0b867e031a758",
       "module": "Shikigami.Client.Command",
-      "interfaceSha256": "a0ca536255f99d8f61925a317cb4656624276347879270650519476f1a43de8c",
+      "interfaceSha256": "6634a50edfb9683d8cf4cc123576dd37ca9749f7bce1bfd4ec91f60e9f7778b5",
       "declarations": [
         {
           "name": "ClientAction",
@@ -340,7 +340,7 @@
       "sourcePath": "shikigami-client/src/Shikigami/Client/Version.hs",
       "sourceSha256": "163865eaf961b1689b300357d4aab3364eb5582496ddfc4fbd4ef46ebbd700b3",
       "module": "Shikigami.Client.Version",
-      "interfaceSha256": "bb64813e7112d6e3babf5a3104e3ed72de1b73d3ca26b979cea1ca814c686fee",
+      "interfaceSha256": "4993bc9fa2231cf15529e603267f0087a5ceba2d3479692a9e16a2c8f24e094a",
       "declarations": []
     },
     {
@@ -729,9 +729,9 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Agent/Delegate.hs",
-      "sourceSha256": "0f30d831fdbb233557bb8fcef66430fff6f4ecf9138d7bb92666f8bba1b6fee1",
+      "sourceSha256": "b3b7fac7ff0ac4efd60ae8ce940cbe89411721b1a7fc8fee93da9d7ba1d4e597",
       "module": "Shikigami.Agent.Delegate",
-      "interfaceSha256": "72aa806a2a8c784cb37c7a4cea74436aab8bf8165cf6f346869f04f4a4477019",
+      "interfaceSha256": "6952bf180fe4b1cd40bdd2bfeb273dae0d0dd65a2a163d84d653b82afc8947a2",
       "declarations": [
         {
           "name": "Delegated",
@@ -941,7 +941,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Agent/Workflow.hs",
       "sourceSha256": "913b18709d39ed9f702847ef980d81d9ad2d2c658c20e3e419870d9f1565dc57",
       "module": "Shikigami.Agent.Workflow",
-      "interfaceSha256": "0a7671ff8dc098fd3834eb5a6d9876213bfcfb4efad71405f4b14bedc1e7ff99",
+      "interfaceSha256": "ddf6928dc09dd3c0b997ea6c7cd80032901f48c6c548f1aa9d7e0cb26ddf037a",
       "declarations": [
         {
           "name": "AgentRunDeps",
@@ -976,9 +976,9 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/AgentRun/Ledger.hs",
-      "sourceSha256": "dbf17445f376d5a7c72601ed347c0e2f7acb55a62fe5f2a99df27cf211da8fa4",
+      "sourceSha256": "7d99c6dd08a3b330987db9e022679043979e5eb3590a8994699d850149927b20",
       "module": "Shikigami.AgentRun.Ledger",
-      "interfaceSha256": "aae2938979560c4276a0f6bdfc0755332e4adcd64e8c0921bc4c47350178fb7c",
+      "interfaceSha256": "e674783f07c3245cc3904d1726ffc4915bb3a25c1894d7990df741e87b98dd01",
       "declarations": [
         {
           "name": "AcceptOutcome",
@@ -993,7 +993,20 @@
         {
           "name": "RunRequestRow",
           "kind": "data",
-          "declaration": "data RunRequestRow\n    = RunRequestRow {agentName :: !Data.Text.Internal.Text,\n                     idempotencyKey :: !Data.Text.Internal.Text,\n                     runId :: !Data.Text.Internal.Text,\n                     runKey :: !Data.Text.Internal.Text,\n                     payloadFingerprint :: !Data.Text.Internal.Text,\n                     requestedBy :: !Data.Text.Internal.Text,\n                     queueMessageId :: {-# UNPACK #-}GHC.Internal.Int.Int64,\n                     acceptedAt :: !Data.Time.Clock.Internal.UTCTime.UTCTime,\n                     disposition :: !Data.Text.Internal.Text,\n                     dispositionDetail :: !(GHC.Internal.Maybe.Maybe\n                                              Data.Text.Internal.Text),\n                     dispositionAt :: !(GHC.Internal.Maybe.Maybe\n                                          Data.Time.Clock.Internal.UTCTime.UTCTime)}"
+          "declaration": "data RunRequestRow\n    = RunRequestRow {agentName :: !Data.Text.Internal.Text,\n                     idempotencyKey :: !Shikigami.AgentRun.RequestKey.RequestKey,\n                     runId :: !Data.Text.Internal.Text,\n                     runKey :: !Data.Text.Internal.Text,\n                     payloadFingerprint :: !Data.Text.Internal.Text,\n                     requestedBy :: !Data.Text.Internal.Text,\n                     queueMessageId :: {-# UNPACK #-}GHC.Internal.Int.Int64,\n                     acceptedAt :: !Data.Time.Clock.Internal.UTCTime.UTCTime,\n                     disposition :: !Data.Text.Internal.Text,\n                     dispositionDetail :: !(GHC.Internal.Maybe.Maybe\n                                              Data.Text.Internal.Text),\n                     dispositionAt :: !(GHC.Internal.Maybe.Maybe\n                                          Data.Time.Clock.Internal.UTCTime.UTCTime)}"
+        }
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/AgentRun/RequestKey.hs",
+      "sourceSha256": "a5b8a2aec3118c2042f24da5aa66ef37dd5f23efaf1cf62a5678315bd462568c",
+      "module": "Shikigami.AgentRun.RequestKey",
+      "interfaceSha256": "41da0f9f3107e413f52ad6442eb5193c770dd71425bb7530d9c356120a9b90ae",
+      "declarations": [
+        {
+          "name": "RequestKey",
+          "kind": "newtype",
+          "declaration": "newtype RequestKey = RequestKey Data.Text.Internal.Text"
         }
       ]
     },
@@ -1001,7 +1014,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/AgentRun/Status.hs",
       "sourceSha256": "9af3b37828574d7fcc7ee3f65b251140e50e0ca24eb0c6c91caf27b23bd9b389",
       "module": "Shikigami.AgentRun.Status",
-      "interfaceSha256": "de9a0f7401180dc54c3c2754ffc0104d8a650a6dabcbc5c0b0999868205d7a16",
+      "interfaceSha256": "6c88ea203beb65bd211ba5f2695d5a849077ae19c7a5d4b50fa420c329f5213f",
       "declarations": [
         {
           "name": "RunFacts",
@@ -1135,7 +1148,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/App/Config/Load.hs",
       "sourceSha256": "1b2ffceef917c24cda13565cd27e0df4af9284e7df52b660886d475ccd1aa8e1",
       "module": "Shikigami.App.Config.Load",
-      "interfaceSha256": "70acbe5661af9d2c23ded90480ac4538b3b37a3033a4512a9e5510a06427a19a",
+      "interfaceSha256": "9d94b86e7dadf798a02b259e30e03e4389fab1d15ebf7ce88baf7264acaeebcd",
       "declarations": [
         {
           "name": "ConfigOptions",
@@ -1166,7 +1179,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/App/Version.hs",
       "sourceSha256": "91b1129e8299d3764bb38ab815c1ad142989f6431e2d4e57477f29aa0d865f2e",
       "module": "Shikigami.App.Version",
-      "interfaceSha256": "77cfa953271b8b2b79edc89f259773d226f6761e363e0be37bf2f3023c6e8f30",
+      "interfaceSha256": "901337c57277c7f457108f0bb636d66a6974b255447f7f0fb6dba5adf07b200e",
       "declarations": []
     },
     {
@@ -2979,7 +2992,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Flow.hs",
       "sourceSha256": "c955c3f3df23de6443ca61cfc2ffad72756ddc6e44265d129dd5a0e510815837",
       "module": "Shikigami.Flow",
-      "interfaceSha256": "6c4e0d3fa31244350da09f930255d68a08df1e899f04ffe7a538db87e0c672c1",
+      "interfaceSha256": "aae6bea7e5f8399b52123c4790fe53ebc578eb1a2bdcca42d6ad5cc15d9ed23b",
       "declarations": [
         {
           "name": "FlowDef",
@@ -3119,7 +3132,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Flow/Delegate.hs",
       "sourceSha256": "5a0673e9fe4cf9c25610ac7fbd32254376b97bbd72ccb71e27ec66a46787768e",
       "module": "Shikigami.Flow.Delegate",
-      "interfaceSha256": "f8fb5e8713187db968497196861dbe163ea4d8087235459a17e2aa1c8ca14e02",
+      "interfaceSha256": "4d0f288fd34f0cd8846814338ee6b0a22d8540e554e78f21fd4218c7a0b91c1b",
       "declarations": [
         {
           "name": "Delegate",
@@ -3216,7 +3229,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Flow/ShikumiDecisionExample.hs",
       "sourceSha256": "d1f91d031f2f3a5b9fe77204b7e5a8919578bf4d7f81e60d53ffc47c164f35d2",
       "module": "Shikigami.Flow.ShikumiDecisionExample",
-      "interfaceSha256": "0badd085c53b00bac2737f4f8178a73f0d36bd4fb5bc33d80411c4812ea14b2b",
+      "interfaceSha256": "6fbf28710a1dd1b22201f6e507a3a2fe2ef862d0ecbcdd129c7ae51ec21801f2",
       "declarations": []
     },
     {
@@ -5119,9 +5132,9 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Identity.hs",
-      "sourceSha256": "df981b31075006da3324b13b1f509f2c533c92ed43450bdca5c3de7e3cc3fc4c",
+      "sourceSha256": "c22773fbe4c3073599334503dba66f1574506e8fe2a7a31751b84263e7baf468",
       "module": "Shikigami.WorkerSession.Identity",
-      "interfaceSha256": "088a63e8bf77f52d4a7983f7d028a4ba10f3bbdaec31335c9f2f26d51c7aefb1",
+      "interfaceSha256": "4b7ba96c4b63436393e295072ab3791e5f23de49545255ba5b5d932687809096",
       "declarations": []
     },
     {
@@ -5193,9 +5206,9 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Store.hs",
-      "sourceSha256": "5fbca9e1cb1434f24b8b3d24f26143572ca5118858440b7003982b003e12a9f0",
+      "sourceSha256": "28c7bb1d19ca98875bd828f92f25347525d39e2e04ae9a6626ed083afc1a5986",
       "module": "Shikigami.WorkerSession.Store",
-      "interfaceSha256": "8c40dd7f5e95d6fbb664332343ceec59e2f2e233f94f831dd0c45732df31de37",
+      "interfaceSha256": "3b0faec2445853a53163a899768d91da924922559bf97da09c83bcba498b79d3",
       "declarations": [
         {
           "name": "SessionAbort",
@@ -5401,7 +5414,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Workflow.hs",
       "sourceSha256": "146a3427152aeb2746e39d67bb5d5930dacd411ff7343122fe1c87b3ca9e9bad",
       "module": "Shikigami.WorkerSession.Workflow",
-      "interfaceSha256": "4e81da080c4adf9abac94d967a05715b0713d8227a004d7811bf97b77144a94a",
+      "interfaceSha256": "34d84cad4621773a87ef04f4bca4b16cb73c38ef285d9b9024c531645ab532c9",
       "declarations": [
         {
           "name": "SessionAction",
@@ -5835,7 +5848,7 @@
       "sourcePath": "shikigami-migrations/app/Shikigami/Migrations/Version.hs",
       "sourceSha256": "c9243c5abef69e98c4c703a04e1e0667055a3747e7e4f5993a01697ca5dfe13f",
       "module": "Shikigami.Migrations.Version",
-      "interfaceSha256": "abb873449890cce1dd52421da7d082874fd7b099023b5673664acd1bf9626865",
+      "interfaceSha256": "6253c28d7cd811b2ff46e31f2425945c6043d6cee2b271d801fea0efb554f6f8",
       "declarations": []
     },
     {
@@ -5862,14 +5875,14 @@
       "sourcePath": "shikigami-server/src/Shikigami/Agent/Handler.hs",
       "sourceSha256": "7692ff702d09b6def5b6d5d4f97b1fb4fae0f683c358f77607175fb6108961b2",
       "module": "Shikigami.Agent.Handler",
-      "interfaceSha256": "c02f8d081ed7d9c0181ab16c364cb912a1afc6deee3d14383940766e44fae979",
+      "interfaceSha256": "af2fc928196f72af03cffb7eaa37208e3e1760a22732530486a6902665edc6e0",
       "declarations": []
     },
     {
       "sourcePath": "shikigami-server/src/Shikigami/AgentRun/Handler.hs",
-      "sourceSha256": "8e5bbe8afec8ad604b36519bf2f2d97791eb55c0dd8cb3c36337b3dc3f25c21a",
+      "sourceSha256": "96c2c6a481258ec86fd4e034cd41620af4f0665bf207bccc3a74c3fb7e7d9d1c",
       "module": "Shikigami.AgentRun.Handler",
-      "interfaceSha256": "12c7829a616e03953aec215b46a7a0ff909b6469b4b8e8fa93f9afc85c4326c1",
+      "interfaceSha256": "31de33d6b6e9325cf6a65e75d669d52d5ed59268b33828f12bdd174d153d3922",
       "declarations": []
     },
     {
@@ -5897,21 +5910,21 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/App.hs",
       "sourceSha256": "f1ae52537c92b6dc01451f8785626440d2e8331dcebf5ec6f1a5bc5cc3cbdb26",
       "module": "Shikigami.Server.App",
-      "interfaceSha256": "b6a3878865a29281a93af97e624ef752ec8dd7302dfabb626f4c0d5936ff27a2",
+      "interfaceSha256": "81c02ab6c3fe13f962949d3d3b5d37f6b3e0a3e19c663b5f15507477ea7f32ff",
       "declarations": []
     },
     {
       "sourcePath": "shikigami-server/src/Shikigami/Server/Boot.hs",
       "sourceSha256": "bb4eaa62c4770353e7a6a7920c3f009505a6a9d7c5ad1b46613f86a78836bfe0",
       "module": "Shikigami.Server.Boot",
-      "interfaceSha256": "5a761e55b3c608fcdc7c5f21b61af90a2d0b7dfe299834a5dd9dd48fee3d96e2",
+      "interfaceSha256": "77ecfca2545f0c17e7b73aed7519e480078588c6eccbeb31ba6d046e119c8ab8",
       "declarations": []
     },
     {
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command.hs",
       "sourceSha256": "d75af9e26b8b17c0b6d8deed3f68dc4238606b074763b7dc35c5171d2c3e9f78",
       "module": "Shikigami.Server.Command",
-      "interfaceSha256": "cb9fa7738ccda20adf0b481aaa9961d35a2ff60de1a7c3e47e9298d421b7aef1",
+      "interfaceSha256": "3d57df3ca2077b22aa607cdad2a1736c2cd715574df83cfe9a181cb2a10573ca",
       "declarations": [
         {
           "name": "AdminAction",
@@ -5924,7 +5937,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Agents.hs",
       "sourceSha256": "dff049028665b51af8e21c50e036579ddc15eff46db807b1e39ce253b19752ee",
       "module": "Shikigami.Server.Command.Agents",
-      "interfaceSha256": "9d0c2ff547e0e136b06ffff0aa5d98942b040adb57c8f7240a29fb83230697d6",
+      "interfaceSha256": "4c59d6679bcb1c7b5857456d66c41c8f55429751a723ac5e918055281613e6a3",
       "declarations": [
         {
           "name": "AgentInventoryEntry",
@@ -5964,28 +5977,28 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/EnqueueRun.hs",
       "sourceSha256": "b0e47771b2b7cb42bc588e33535bf05b0dda12ee0d7240424f393af0152ccf34",
       "module": "Shikigami.Server.Command.EnqueueRun",
-      "interfaceSha256": "5f593122fb77c2ffa2592ef3466ceddc321586dfecd7cd005d560cbf96be6185",
+      "interfaceSha256": "80430aa1e7e647c35e76a4b3854b509e609080d5d132eb314c3412b412aebc3d",
       "declarations": []
     },
     {
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Executions.hs",
       "sourceSha256": "6a6b95a81f64a088cd7d1395c2c2d9c409e021bb27bcd22133522af0fb37e67c",
       "module": "Shikigami.Server.Command.Executions",
-      "interfaceSha256": "853d2c6f6d91899aabea92693eef91c736c834aaf5b626bd9efb657c1b1cff32",
+      "interfaceSha256": "fa045f070fe1e64a71abee9f5f3d8397a306ca884ce0fb5cf2b7b76a7573ff26",
       "declarations": []
     },
     {
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Grants.hs",
       "sourceSha256": "cea070cc88dfb8e3d1faaf1d958f27235eaa76fbc44aeb912e08626dbc17ff7d",
       "module": "Shikigami.Server.Command.Grants",
-      "interfaceSha256": "7ab1e3d819e6455aabe3a7b918e410e7c24de504529e2cb41ab77771ec8fc24b",
+      "interfaceSha256": "b57ee686114d03d2af2750a8bcaafeb8d3f17e8e4bcd0613f94c25681ad02bb2",
       "declarations": []
     },
     {
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Ops.hs",
       "sourceSha256": "77899d6edf10e48bc999e6984282f35dbb7fb736eb702f963781922b7face61e",
       "module": "Shikigami.Server.Command.Ops",
-      "interfaceSha256": "61821a573474a542761a1db9ef7d73f517e317736dd55c8e805783475c823613",
+      "interfaceSha256": "dd3925bdcd7d57c6b4f01e2d8bddbe5cb67b750fc247bdcdcc04acb045e8e9fe",
       "declarations": []
     },
     {
@@ -6006,21 +6019,21 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/ResolveApproval.hs",
       "sourceSha256": "9c3fb04eac0cfa9f0c7f3be43492454d6273502317a3377bb95b062a22b04d3f",
       "module": "Shikigami.Server.Command.ResolveApproval",
-      "interfaceSha256": "0e7a6dfbf065a0867ad967ac21956c8c62253d32a70060c1ae7f215ee76f8b74",
+      "interfaceSha256": "ba9c06dcb98a3c4cfe64278ec5665ee8d034ac2be17d5b4f018863ab67b69d24",
       "declarations": []
     },
     {
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Resources.hs",
       "sourceSha256": "bc98aa8025155ca4d94dfcdc1802f49739fa80b4d820219491c8db39c24a9bf9",
       "module": "Shikigami.Server.Command.Resources",
-      "interfaceSha256": "36ce3d7797e8986e5820bf5a535eeaa65c75d3e54323ad855d5c3c12a11f1624",
+      "interfaceSha256": "3875c1d7e703ecae4a2270aa6686d874c89535bdffa7c36ba416ee90e5b57af5",
       "declarations": []
     },
     {
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Runs.hs",
       "sourceSha256": "aed5c8cf35b1a6d6514ad21e134156e726432cce49d39b3af8e1913c98960236",
       "module": "Shikigami.Server.Command.Runs",
-      "interfaceSha256": "cce82d79164df98859d6d7a70a8ad7f6bcec1d54a4aa592b44eceb7bcd4a7316",
+      "interfaceSha256": "a14b512f09158a68dde2467ba30e97afc2b6571518f81f6b5d63c28886bea79b",
       "declarations": [
         {
           "name": "SessionLink",
@@ -6054,14 +6067,14 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Workers.hs",
       "sourceSha256": "41041e5b9de3b4d4c9df90f0e760705c027fbbb987e5c9d8e0c17b16536b8898",
       "module": "Shikigami.Server.Command.Workers",
-      "interfaceSha256": "b5018c1231a378fd77d248cc2d276cb4c6ce633b2122714a3ff38be3c9880913",
+      "interfaceSha256": "9cf8463c7900276737bf995520e493d3192f61e033f51d10d286ff48789cba9e",
       "declarations": []
     },
     {
       "sourcePath": "shikigami-server/src/Shikigami/Server/Config.hs",
       "sourceSha256": "013a5361f192510655063257a9a3ca814527297c2a11b8e1c128a95636204a68",
       "module": "Shikigami.Server.Config",
-      "interfaceSha256": "0da4b841ca851cea7e0a500f12146cd0e589254529067ebf6c806ce83ca974a1",
+      "interfaceSha256": "38ce1bc58063e72ff5088261673eb57f6473af58b9bc9fffa76f4d46e5ae7cd4",
       "declarations": [
         {
           "name": "ServerConfig",
@@ -6081,7 +6094,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Seam.hs",
       "sourceSha256": "ea9d6a0b42e3ebaf9c7d57ed66fdba14ea9183e93d563c813dc855a13ef14f0b",
       "module": "Shikigami.Server.Seam",
-      "interfaceSha256": "bab1a2482af545c3db0ba0e68923b22aa057b94c10651275ea5d10e370914848",
+      "interfaceSha256": "8b2438cbbdb500ea08e193e8dcdfb1961f349a695e16785762714514486dc7f9",
       "declarations": [
         {
           "name": "ServerEnv",
@@ -6162,7 +6175,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs",
       "sourceSha256": "f76bfa397d3a59f7fb5981aef75c41b48f570d770624466e6197f1adc9583ee2",
       "module": "Shikigami.Agent.RunJob.Worker",
-      "interfaceSha256": "1cc8c03a2519304a262f624f95259573ff90ba9a05ae711fbb6ff96e96f4da8d",
+      "interfaceSha256": "8e06ccdee8ddcb0f47393c73b7c58adada779b21fa350c23bd39a68498697eef",
       "declarations": [
         {
           "name": "DrainAdmission",
@@ -6371,21 +6384,21 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workers/Command.hs",
       "sourceSha256": "d3c68cd6b9c063669697deff2a1976e15b4d39d2da128fba60ec1ff46d8ebf2b",
       "module": "Shikigami.Workers.Command",
-      "interfaceSha256": "b24df08b52e0ef82f8f2e1afef18268f3c369464f945f1f68249fd427c034b4e",
+      "interfaceSha256": "292e46baa5556afc99660f56b458e9e34f1042eb189fb9ab0f8ab16b04611468",
       "declarations": []
     },
     {
       "sourcePath": "shikigami-workers/src/Shikigami/Workers/Command/Scheduler.hs",
       "sourceSha256": "73eb858b952387aeab1d0a30d1f0ce6848e73434ffe3dc03a1a5974dc3cbe0c1",
       "module": "Shikigami.Workers.Command.Scheduler",
-      "interfaceSha256": "542d4667d5be13aff08f99c23f45287b3324a5ed305bd4f5532240d5ce6bbb6d",
+      "interfaceSha256": "db63ee10c98d7514854a2183f483d3fc44c2eb74aeea075fe866b1d6ef6273d7",
       "declarations": []
     },
     {
       "sourcePath": "shikigami-workers/src/Shikigami/Workers/Command/Worker.hs",
       "sourceSha256": "f955ba6f14d24c27a6327b5553da9a7f1d1da2dcf6fbbc6ac4beef30e6a1e137",
       "module": "Shikigami.Workers.Command.Worker",
-      "interfaceSha256": "3941f7c7e572c45f20140ac4d16d2c8c3e99ae06df97df1b59321f164e592b90",
+      "interfaceSha256": "5115807d76e49a31da6f88497b0f2ade5e8cf7a64f6550b95a7e472ea1c58a5c",
       "declarations": []
     },
     {
@@ -6425,7 +6438,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workers/Subscription.hs",
       "sourceSha256": "da7338c26beb68d1053a3b7cca9f978cad0df8698b085ee9222f818a7bbdc231",
       "module": "Shikigami.Workers.Subscription",
-      "interfaceSha256": "d7c99b1ae8a6fb9805ac65d08afb8a56a6cb726f144bc480297f784186fd9457",
+      "interfaceSha256": "e07ad2b12e95546b845b81d7022600f5b99adebdf6669e10179655eb84ac9c4c",
       "declarations": []
     },
     {
@@ -6515,7 +6528,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Daemon.hs",
       "sourceSha256": "1a0fb4bdf463c94075e8f14e23ccb8d006cf2685aa904f360d8e1dfca2cc3b0e",
       "module": "Shikigami.Workspace.Daemon",
-      "interfaceSha256": "3096b10efbd0ea74f5829adceaae5857b1148b662ea4658b706143e1b268fe69",
+      "interfaceSha256": "caa96827d733ac85868cfbd7d7a68cfec2581a6cec23e7d5d450e221ece421e2",
       "declarations": []
     },
     {
@@ -6653,7 +6666,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Maintenance.hs",
       "sourceSha256": "3a12dc52d3f33c6168f9615453bb09716e2ff4732e5a8d7e8805886cde524e33",
       "module": "Shikigami.Workspace.Maintenance",
-      "interfaceSha256": "c43cd5b42f1e039e47b5489b9890669025125cdb11b18aa08f14c1b12ab45db1",
+      "interfaceSha256": "7ffc67f9c57211bf967923091e686e60e282e9f084986ec3d45852c500cffe28",
       "declarations": [
         {
           "name": "WorkspaceMaintenance",

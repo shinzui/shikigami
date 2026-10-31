@@ -175,7 +175,7 @@ runsInfo =
       )
         <$> serverOption
         <*> strArgument (metavar "AGENT")
-        <*> strOption (long "key" <> metavar "KEY")
+        <*> option (eitherReader (either (Left . Text.unpack) Right . Run.parseRequestKey . Text.pack)) (long "key" <> metavar "KEY")
         <*> payloadArgument
     showParser =
       ( \named agent runId ->

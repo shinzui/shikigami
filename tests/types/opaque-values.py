@@ -24,6 +24,7 @@ import Shikigami.Agent.Principal qualified as Principal
 import Shikigami.App.Config qualified as Config
 import Shikigami.Attestation.Reviewed qualified as Reviewed
 import Shikigami.Capability.Overlay qualified as Overlay
+import Shikigami.AgentRun.RequestKey qualified as Request
 import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.AssignmentKey qualified as Assignment
 import Shikigami.Execution.ToolPosition qualified as Position
@@ -65,6 +66,8 @@ bearer :: Auth.BearerToken -> ByteString -> Bool
 bearer = Auth.matchesBearerHeader
 failure :: Decision.FailureCode -> Text -> Decision.DecisionFailure
 failure = Decision.decisionFailure
+requestKey :: Text -> Either Text Request.RequestKey
+requestKey = Request.parseRequestKey
 claimOwner :: Text -> Either Text Claim.ClaimOwner
 claimOwner = Claim.parseClaimOwner
 assignment :: Text -> Either Text Assignment.AssignmentKey
@@ -107,6 +110,7 @@ CASES = [
     ('Position.ToolPosition', 'parse'),
     ('Assignment.AssignmentKey', 'parse'),
     ('Claim.ClaimOwner', 'parse'),
+    ('Request.RequestKey', 'parse'),
     ('Decision.DecisionFailure', 'parse'),
     ('Correlation.RunCorrelationId', 'parse'),
     ('Correlation.CallCorrelationId', 'parse'),

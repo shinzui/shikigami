@@ -17,6 +17,7 @@ import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.RunJob (RunRouteKind (..))
 import Shikigami.AgentRun.Api
 import Shikigami.AgentRun.Ledger qualified as Ledger
+import Shikigami.AgentRun.RequestKey (requestKeyText)
 import Shikigami.AgentRun.Status qualified as Status
 import Shikigami.Api.Problem
 import Shikigami.Caller.Api
@@ -63,7 +64,7 @@ agentRunServer env caller agent = AgentRunApi {request = requestRun, show = show
             | otherwise -> do
                 now <- liftIO getCurrentTime
                 let job = addressedRunJob now identity (agentNameText agent) AgentWorkflowRoute body.payload (Ledger.httpRunKey agent body.idempotencyKey)
-                outcome <- liftIO (Ledger.acceptRunRequest env.pool job caller.callerId)
+                outcome <- liftIO (Ledger.acceptRunRequest env.pool job body.idempotencyKey caller.callerId)
                 case outcome of
                   Left _ -> pure (RunRequestUnavailable unavailable)
                   Right (Ledger.Accepted row) -> logOutcome "server.run.accepted" row >> pure (RunAccepted (accepted row, location row))
@@ -71,7 +72,7 @@ agentRunServer env caller agent = AgentRunApi {request = requestRun, show = show
                   Right (Ledger.Conflicting row) -> logOutcome "server.run.conflict" row >> pure (RunConflict (problem IdempotencyKeyConflict "This key was already accepted with a different payload."))
     unavailable = problem Unavailable "The run store or lifecycle directory is unavailable."
     logOutcome event row = Log.logInfo env.logger event ["agent" .= row.agentName, "run_id" .= row.runId, "caller" .= caller.callerId]
-    accepted row = AgentRunAccepted row.runId row.agentName row.idempotencyKey "accepted" row.acceptedAt
+    accepted row = AgentRunAccepted row.runId row.agentName (requestKeyText row.idempotencyKey) "accepted" row.acceptedAt
     location row = Text.decodeUtf8 . LBS.toStrict . toLazyByteString $ encodePathSegments ["agents", row.agentName, "runs", row.runId]
 
 statusView :: Status.RunStatusView -> AgentRunStatus
@@ -89,4 +90,4 @@ statusView view =
     (fmap (\failure -> RunFailureView (Status.failureKindText failure.kind) failure.reason) view.failure)
 
 requestView :: Ledger.RunRequestRow -> RunRequestView
-requestView row = RunRequestView row.runId row.idempotencyKey row.acceptedAt row.requestedBy row.disposition
+requestView row = RunRequestView row.runId (requestKeyText row.idempotencyKey) row.acceptedAt row.requestedBy row.disposition

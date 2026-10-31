@@ -25,6 +25,7 @@ import Shikigami.Agent.RunJob.Worker (admitRunJobWith, recordRunJobOutcome)
 import Shikigami.Agent.Workflow (StepResult (..))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
 import Shikigami.AgentRun.Ledger qualified as Ledger
+import Shikigami.AgentRun.RequestKey
 import Shikigami.AgentRun.Status
 import Shikigami.Directory qualified as Directory
 import Shikigami.Log qualified as Log
@@ -159,7 +160,7 @@ tests fixture =
           view.lifecycle @?= Failed
           fmap (.kind) view.failure @?= Just DeadLettered
           assertBool "terminal disposition has a completion time" (isJust view.completedAt)
-          let unrelated = job & #idempotencyKey .~ Ledger.httpRunKey (AgentName "heartbeat") "not-http-accepted"
+          let unrelated = job & #idempotencyKey .~ Ledger.httpRunKey (AgentName "heartbeat") (fixtureRequestKey "not-http-accepted")
           recordRunJobOutcome Log.silentLogger store.pool unrelated (Dead "unrelated")
           Ledger.lookupRunRequest store.pool unrelated.agentName (runJobWorkflowId unrelated).unWorkflowId >>= (@?= Right Nothing),
       testCase "drain lifecycle refusal is terminal and storage failure stays an error" $
@@ -191,8 +192,8 @@ withFixture :: DatabaseFixture -> (KirokuStore -> RunJob -> Text -> IO a) -> IO 
 withFixture fixture body = withShikigamiFreshDatabase fixture \connection -> withStore (defaultConnectionSettings connection) \store -> do
   _ <- right =<< ensureRunQueue store.pool
   now <- getCurrentTime
-  let job = addressedRunJob now (compatibilityIdentity "heartbeat") "heartbeat" AgentWorkflowRoute (Aeson.object []) (Ledger.httpRunKey (AgentName "heartbeat") "status-test")
-  _ <- right =<< Ledger.acceptRunRequest store.pool job "test"
+  let job = addressedRunJob now (compatibilityIdentity "heartbeat") "heartbeat" AgentWorkflowRoute (Aeson.object []) (Ledger.httpRunKey (AgentName "heartbeat") (fixtureRequestKey "status-test"))
+  _ <- right =<< Ledger.acceptRunRequest store.pool job (fixtureRequestKey "status-test") "test"
   body store job connection
 
 right :: (Show e) => Either e a -> IO a
@@ -208,3 +209,6 @@ sendDeadLetter store originalId reason =
   right =<< Pool.use store.pool (Pgmq.sendMessage (Pgmq.SendMessage RunJobs.runJob.jobQueue.dlqName (Pgmq.MessageBody body) Nothing))
   where
     body = Aeson.object ["original_message_id" .= originalId, "original_message" .= Aeson.Null, "dead_letter_reason" .= reason]
+
+fixtureRequestKey :: Text -> RequestKey
+fixtureRequestKey = either (error . show) id . parseRequestKey

@@ -48,7 +48,7 @@ workflow AgentRun
     step fail-session -> FailedSession
     step record -> RecordedLearning
     step complete -> CompletedSession
-    child delegate id input via delegatedWorkflowId -> AgentRunResult
+    child delegate id input via delegatedWorkflowIdV2 -> AgentRunResult
 operation RunAgentRun
   run AgentRun
     input RunJob

@@ -1,6 +1,8 @@
 module Shikigami.AgentRun.ApiSpec (tests) where
 
 import Data.Aeson (encode, object)
+import Data.Aeson qualified as Aeson
+import Data.Either (isLeft)
 import Data.OpenApi (validateToJSON)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
@@ -12,7 +14,21 @@ tests :: TestTree
 tests =
   testGroup
     "agent-run wire contract"
-    [ testCase "history rows have a stable wire shape" $
+    [ testCase "HTTP request keys preserve valid strings and reject invalid input" do
+        mapM_
+          ( \value -> do
+              Aeson.eitherDecode (encode value) @?= Right (key value)
+              encode (key value) @?= encode value
+              Aeson.eitherDecode (encode (AgentRunRequest (key value) (object []))) @?= Right (AgentRunRequest (key value) (object []))
+          )
+          [" ", "a:http:b", "日本", Text.replicate 200 "x"]
+        mapM_
+          ( \value -> do
+              assertBool "factory refuses invalid key" (isLeft (parseRequestKey value))
+              assertBool "wire refuses invalid key" (case Aeson.eitherDecode (encode value) :: Either String RequestKey of Left _ -> True; _ -> False)
+          )
+          ["", "line\nkey", Text.replicate 201 "x"],
+      testCase "history rows have a stable wire shape" $
         encode (RunRequestView "run" "key" (UTCTime (fromGregorian 2026 10 25) 0) "caller" "accepted")
           @?= "{\"acceptedAt\":\"2026-10-25T00:00:00Z\",\"disposition\":\"accepted\",\"idempotencyKey\":\"key\",\"requestedBy\":\"caller\",\"runId\":\"run\"}",
       statusTests,
@@ -25,7 +41,7 @@ tests =
         validateToJSON accepted @?= []
     ]
   where
-    request = AgentRunRequest "key" (object [])
+    request = AgentRunRequest (key "key") (object [])
     accepted = AgentRunAccepted "heartbeat:http:key" "heartbeat" "key" "accepted" (UTCTime (fromGregorian 2026 10 25) 0)
 
 statusTests :: TestTree
@@ -43,3 +59,6 @@ statusTests = testGroup "lifecycle bytes and schema" [testCase label (check (Tex
         ("failed", "{\"acceptedAt\":null,\"agentName\":\"heartbeat\",\"completedAt\":null,\"failure\":{\"kind\":\"behavior_failed\",\"reason\":\"failed\"},\"runId\":\"run\",\"sessionId\":null,\"startedAt\":null,\"status\":\"failed\",\"summary\":null,\"trigger\":null}"),
         ("cancelled", "{\"acceptedAt\":null,\"agentName\":\"heartbeat\",\"completedAt\":null,\"failure\":null,\"runId\":\"run\",\"sessionId\":null,\"startedAt\":null,\"status\":\"cancelled\",\"summary\":null,\"trigger\":null}")
       ]
+
+key :: Text.Text -> RequestKey
+key = either (error . show) id . parseRequestKey
