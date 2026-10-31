@@ -9,6 +9,7 @@ import Control.Exception (throwIO)
 import Control.Monad (forM_)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
@@ -94,7 +95,8 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace governed parent and child"
-    [ testCase "historical cleanup plans retain their encoding without invented ownership" $ do
+    [ testCase "terminal eligibility refuses corrupt execution metadata before deletion" (corruptTerminalMetadata fixture),
+      testCase "historical cleanup plans retain their encoding without invented ownership" $ do
         let original = Aeson.object ["bindingDigest" .= ("sha256:" <> Text.replicate 64 "a"), "filesTarget" .= ("1:2" :: Text.Text), "scratchTarget" .= ("1:3" :: Text.Text), "userId" .= (62000 :: Int)]
         case Aeson.fromJSON original of
           Aeson.Success (plan :: CleanupPlan) -> do
@@ -177,7 +179,27 @@ tests fixture =
           _ <- right =<< run env (Sessions.openSession admission)
           cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
           run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Right Nothing)
-          readFile (workspaceFiles root binding </> "dependency.txt") >>= (@?= "workflow replacement\n"),
+          readFile (workspaceFiles root binding </> "dependency.txt") >>= (@?= "workflow replacement\n")
+          retainedSession <- run env (runTransaction (Tx.statement () (preparable "SELECT binding FROM shikigami.worker_sessions" E.noParams (D.singleRow (D.column (D.nonNullable D.jsonb))))))
+          let replaceSession value = run env (runTransaction (Tx.statement value (preparable "UPDATE shikigami.worker_sessions SET binding=$1" (E.param (E.nonNullable E.jsonb)) D.noResult)))
+              missingRoot = case retainedSession of Aeson.Object fields -> Aeson.Object (KeyMap.delete "rootId" fields); _ -> error "complete session binding was not an object"
+          forM_ [Aeson.Null, missingRoot] \invalid -> do
+            replaceSession invalid
+            run env (runTransaction (cleanupEligibleTx binding)) >>= (@?= Left WorkspaceBindingConflict)
+            refused <-
+              run
+                env
+                ( runTransaction do
+                    Tx.sql "UPDATE shikigami.workspace_controls SET frozen=true"
+                    cleanupEligibleTx binding
+                )
+            refused @?= Left WorkspaceBindingConflict
+            control <- right =<< run env (runTransaction (Store.inspectWorkspaceControlTx binding))
+            fmap (.frozen) control @?= Just False
+            cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
+            doesPathExist (workspaceFiles root binding) >>= (@?= True)
+            replaceSession retainedSession
+          run env (runTransaction (cleanupEligibleTx binding)) >>= (@?= Right False),
       testCase "terminal cleanup refuses a prepared mutation without inferring settlement from a free lock" $
         withWorkflow fixture \env root job _ deps _ -> do
           binding <- finishWorkspace env job deps
@@ -406,3 +428,53 @@ fixtureDelegationDepth = either (error . show) id . parseDelegationDepth . toInt
 
 fixtureRunKey :: Text -> RunKey
 fixtureRunKey = either (error . show) id . parseRunKey
+
+corruptTerminalMetadata :: DatabaseFixture -> IO ()
+corruptTerminalMetadata fixture = withWorkflow fixture \env root job _ deps _ -> do
+  binding <- finishWorkspace env job deps
+  run env (runTransaction (cleanupEligibleTx binding)) >>= (@?= Right True)
+  original <- run env (runTransaction (Tx.statement () (preparable "SELECT state FROM shikigami.executions" E.noParams (D.singleRow (D.column (D.nonNullable D.jsonb))))))
+  let replace value = run env (runTransaction (Tx.statement value (preparable "UPDATE shikigami.executions SET state=$1" (E.param (E.nonNullable E.jsonb)) D.noResult)))
+      withoutSnapshot = case original of Aeson.Object fields -> Aeson.Object (KeyMap.delete "snapshot" fields); _ -> error "complete execution was not an object"
+      negativeReceipts = case original of Aeson.Object fields -> Aeson.Object (KeyMap.insert "pendingReceipts" (Aeson.Number (-1)) fields); _ -> error "complete execution was not an object"
+  forM_ [Aeson.Null, withoutSnapshot, negativeReceipts] \invalid -> do
+    replace invalid
+    run env (runTransaction (cleanupEligibleTx binding)) >>= (@?= Left WorkspaceBindingConflict)
+    refused <-
+      run
+        env
+        ( runTransaction do
+            Tx.sql "UPDATE shikigami.workspace_controls SET frozen=true"
+            cleanupEligibleTx binding
+        )
+    refused @?= Left WorkspaceBindingConflict
+    control <- right =<< run env (runTransaction (Store.inspectWorkspaceControlTx binding))
+    fmap (.frozen) control @?= Just False
+    cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
+    doesPathExist (workspaceFiles root binding) >>= (@?= True)
+    doesPathExist (workspaceScratch root binding) >>= (@?= True)
+    run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Right Nothing)
+    replace original
+    run env (runTransaction (cleanupEligibleTx binding)) >>= (@?= Right True)
+  originalReceipts <- run env (runTransaction (Tx.statement () (preparable "SELECT receipt FROM shikigami.workspace_effects WHERE kind='file' AND settled" E.noParams (D.rowList (D.column (D.nonNullable D.jsonb))))))
+  case originalReceipts of
+    [receipt] -> do
+      run env (runTransaction (Tx.sql "UPDATE shikigami.workspace_effects SET receipt='null'::jsonb WHERE kind='file' AND settled"))
+      run env (runTransaction (cleanupEligibleTx binding)) >>= (@?= Left WorkspaceBindingConflict)
+      refused <-
+        run
+          env
+          ( runTransaction do
+              Tx.sql "UPDATE shikigami.workspace_controls SET frozen=true"
+              cleanupEligibleTx binding
+          )
+      refused @?= Left WorkspaceBindingConflict
+      control <- right =<< run env (runTransaction (Store.inspectWorkspaceControlTx binding))
+      fmap (.frozen) control @?= Just False
+      cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
+      doesPathExist (workspaceFiles root binding) >>= (@?= True)
+      run env (runTransaction (Tx.statement receipt (preparable "UPDATE shikigami.workspace_effects SET receipt=$1 WHERE kind='file' AND settled" (E.param (E.nonNullable E.jsonb)) D.noResult)))
+    _ -> assertFailure "terminal fixture did not retain one settled file effect"
+  cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Right ())
+  doesPathExist (workspaceFiles root binding) >>= (@?= False)
+  doesPathExist (workspaceScratch root binding) >>= (@?= False)

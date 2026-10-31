@@ -73,14 +73,16 @@ refusals. The latest ledger/worker-status/HTTP checks pass 6/10/9 cases; workspa
 checks pass nine core PostgreSQL and 27 worker transfer/file cases, after an
 intermediate 161-case broad worker pass. The 68 opaque compiler checks pass,
 including the new closed RunDisposition. Earlier policy, scope, worker and
-compiler results remain identified separately in the evidence. SQL terminal
-eligibility and prior-assignment settlement predicates still require semantic
-review; these changes do not certify their JSON-derived Boolean decisions.
+compiler results remain identified separately in the evidence. The next workspace settlement checkpoint replaces JSON-derived SQL permission
+predicates with typed owner reads and passes 22 core PostgreSQL plus 162 worker
+workspace cases. Child/root attribution is decoded before filtering; without
+independent relational indexes, scans conservatively refuse unreadable
+attribution and may inspect all remaining metadata.
 
 The full build, fresh census and focused checks are checkpoints, not milestone
 completion. Continue the remaining classification and applicable remediation
 before final M3 validation. See [the current evidence](../evidence/plan-108/acceptance.md)
-and `ledger-workspace-source.json` for the exact tested source snapshot.
+and `workspace-settlement-source.json` for the latest tested source snapshot.
 
 ## Surprises & Discoveries
 

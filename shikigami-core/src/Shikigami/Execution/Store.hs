@@ -12,6 +12,7 @@ module Shikigami.Execution.Store
     authorizeReplay,
     loadExecution,
     inspectExecution,
+    inspectExecutionTx,
     inspectExecutionPage,
     inspectOperation,
     readReplayPayload,
@@ -242,6 +243,18 @@ inspectExecution :: (ExecutionReadEffects es) => ExecutionId -> Eff es (Either E
 inspectExecution execution = protected do
   existing <- readRows execution.value selectExecution
   traverse (\(state, binding) -> (state,binding,) <$> readRows execution.value listOperations) existing
+
+-- | Metadata-only inspection for a caller-owned transaction. The owner keeps
+-- corruption distinct from absence and condemns even an ignored refusal.
+inspectExecutionTx :: ExecutionId -> Transaction (Either ExecutionError (Maybe (ExecutionState, ExecutionBinding)))
+inspectExecutionTx execution = do
+  retained <- Tx.statement execution.value selectExecution
+  case sequence retained of
+    Left () -> Tx.condemn >> pure (Left CorruptReplay)
+    Right (Just pair@(state, binding))
+      | state.executionId /= execution || executionIdFor binding.assignmentId /= execution -> Tx.condemn >> pure (Left CorruptReplay)
+      | otherwise -> pure (Right (Just pair))
+    Right Nothing -> pure (Right Nothing)
 
 -- Operational JSON is assembled from typed metadata only. No payload body or
 -- wake is selected; active work stays visible even outside the history page.

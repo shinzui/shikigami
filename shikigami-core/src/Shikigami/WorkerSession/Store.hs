@@ -12,6 +12,7 @@ module Shikigami.WorkerSession.Store
     ensureSessionDriver,
     authorizeSession,
     inspectSession,
+    rootSessionsTerminalTx,
     inspectSessionPage,
     loadAdmission,
     readInstruction,
@@ -222,6 +223,25 @@ authorizeSession session actor authorize = guarded do
 
 inspectSession :: (SessionReadEffects es) => WorkerSessionId -> Eff es (Either SessionError (Maybe (SessionState, SessionBinding)))
 inspectSession session = protected (readRows session.value selectSession)
+
+-- | Cleanup must not infer absence from fields inside metadata it has not
+-- decoded. With no independent relational root index, unreadable attribution
+-- refuses this metadata-only scan rather than hiding a possibly live session.
+rootSessionsTerminalTx :: ExecutionRootId -> Transaction (Either SessionError Bool)
+rootSessionsTerminalTx root = do
+  retained <- Tx.statement () statement
+  case retained of
+    Left () -> Tx.condemn >> pure (Left SessionBindingConflict)
+    Right terminal -> pure (Right terminal)
+  where
+    statement = preparable "SELECT session_id,state,binding FROM shikigami.worker_sessions" E.noParams (D.foldlRows collect (Right True) row)
+    row :: D.Row (Text, Either () (SessionState, SessionBinding))
+    row = (,) <$> D.column (D.nonNullable D.text) <*> ((\state binding -> (,) <$> state <*> binding) <$> jsonRow <*> jsonRow)
+    collect prior (identifier, parsed) = do
+      allTerminal <- prior
+      (state, binding) <- parsed
+      unless (state.sessionId.value == identifier && binding.sessionId == state.sessionId) (Left ())
+      pure (allTerminal && (binding.rootId /= root || state.phase `elem` [Failed, Cancelled]))
 
 inspectSessionPage :: (SessionReadEffects es) => WorkerSessionId -> MessagePosition -> Int -> Eff es (Either SessionError (Maybe SessionInspection))
 inspectSessionPage session after limit

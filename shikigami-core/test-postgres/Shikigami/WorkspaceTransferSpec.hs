@@ -48,7 +48,9 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace transfer store"
-    [ testCase "binding and control corruption refuse and roll back ignored reads" (corruptWorkspaceReads fixture),
+    [ testCase "workspace listing retains bounded root-scoped keyset pages" (workspacePages fixture),
+      testCase "unreadable child attribution cannot become standalone absence" (corruptChildMapping fixture),
+      testCase "binding and control corruption refuse and roll back ignored reads" (corruptWorkspaceReads fixture),
       testCase "retained transfer corruption cannot authorize another freeze or fence" (corruptTransferReads fixture),
       testCase "cleanup absence and SQL failure remain distinct" $ withWorkspace fixture \env _ _ binding _ -> do
         run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Right Nothing)
@@ -69,27 +71,25 @@ tests fixture =
         listed <- right =<< run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing))
         length listed @?= 2
         let replace value = run env (runTransaction (Tx.statement (second.workspace.resource, value) (preparable "UPDATE shikigami.workspace_bindings SET binding=$2 WHERE resource=$1" (contrazip2 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.jsonb))) D.noResult)))
-        -- Preserve the indexed listing selector while corrupting another required field.
-        replace
-          ( case Aeson.toJSON second of
-              Aeson.Object fields -> Aeson.Object (KeyMap.insert "repository" Aeson.Null fields)
-              _ -> error "complete fixture binding must be an object"
-          )
-        (frozen, refused) <-
-          run
-            env
-            ( runTransaction do
-                frozen <- Workspaces.freezeWorkspaceTx binding binding.request.owner binding.request.epoch
-                refused <- listWorkspacesTx binding.storageRoot Nothing
-                pure (frozen, refused)
-            )
-        frozen @?= Right ()
-        refused @?= Left WorkspaceBindingConflict
-        control <- right =<< run env (runTransaction (Workspaces.inspectWorkspaceControlTx binding))
-        fmap (.frozen) control @?= Just False
-        replace (Aeson.toJSON second)
-        recovered <- right =<< run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing))
-        length recovered @?= 2,
+        forM_ ["repository", "storageRoot"] \field -> do
+          -- Both an ordinary required field and the old JSON selector must
+          -- remain visible to the owning whole-page decoder.
+          replace (case Aeson.toJSON second of Aeson.Object fields -> Aeson.Object (KeyMap.insert field Aeson.Null fields); _ -> error "complete fixture binding must be an object")
+          (frozen, refused) <-
+            run
+              env
+              ( runTransaction do
+                  frozen <- Workspaces.freezeWorkspaceTx binding binding.request.owner binding.request.epoch
+                  refused <- listWorkspacesTx binding.storageRoot Nothing
+                  pure (frozen, refused)
+              )
+          frozen @?= Right ()
+          refused @?= Left WorkspaceBindingConflict
+          control <- right =<< run env (runTransaction (Workspaces.inspectWorkspaceControlTx binding))
+          fmap (.frozen) control @?= Just False
+          replace (Aeson.toJSON second)
+          recovered <- right =<< run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing))
+          length recovered @?= 2,
       testCase "only retained child mappings supply session assignment coordinates" $ withWorkspace fixture \env _ _ binding original -> do
         current <- right =<< run env (runTransaction (lookupSessionChildTx binding.request.runId))
         case current of
@@ -333,3 +333,42 @@ corruptTransferReads fixture = withWorkspace fixture \env session access binding
   replace "proof" (Aeson.toJSON proof)
   run env (runTransaction (inspectTransferTx binding intent.oldEpoch)) >>= (@?= Right (Just (intent, Just proof)))
   run env (runTransaction (retainFenceTx binding intent)) >>= (@?= Right proof)
+
+corruptChildMapping :: DatabaseFixture -> IO ()
+corruptChildMapping fixture = withWorkspace fixture \env _ _ binding _ -> do
+  Right (Just original) <- run env (runTransaction (lookupSessionChildTx binding.request.runId))
+  run env (runTransaction (lookupSessionChildTx "unrelated-standalone-run")) >>= (@?= Right Nothing)
+  retained <- run env (runTransaction (Tx.statement () (preparable "SELECT state FROM shikigami.worker_session_messages" E.noParams (D.singleRow (D.column (D.nonNullable D.jsonb))))))
+  let replace value = run env (runTransaction (Tx.statement value (preparable "UPDATE shikigami.worker_session_messages SET state=$1" (E.param (E.nonNullable E.jsonb)) D.noResult)))
+      lostChild = case retained of Aeson.Object fields -> Aeson.Object (KeyMap.delete "childWorkflowId" fields); _ -> error "complete message metadata was not an object"
+  replace lostChild
+  run env (runTransaction (lookupSessionChildTx binding.request.runId)) >>= (@?= Left WorkspaceBindingConflict)
+  ignored <-
+    run
+      env
+      ( runTransaction do
+          _ <- Workspaces.freezeWorkspaceTx binding binding.request.owner binding.request.epoch
+          lookupSessionChildTx binding.request.runId
+      )
+  ignored @?= Left WorkspaceBindingConflict
+  replace retained
+  control <- right =<< run env (runTransaction (Workspaces.inspectWorkspaceControlTx binding))
+  fmap (.frozen) control @?= Just False
+  run env (runTransaction (lookupSessionChildTx binding.request.runId)) >>= (@?= Right (Just original))
+
+workspacePages :: DatabaseFixture -> IO ()
+workspacePages fixture = withWorkspace fixture \env _ _ binding _ -> do
+  catalog <- right (mkWorkspaceCatalog [RepositoryPolicy binding.repository binding.source [binding.base] binding.base binding.policyRevision])
+  repository <- right (resolveRepository catalog binding.repository Nothing)
+  siblings <- forM [1 .. 21 :: Int] \number -> do
+    let request = binding.request & #runId .~ ("list-page-" <> Text.pack (show number)) & #assignment .~ Nothing
+    fst <$> (right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx binding.storageRoot request repository)))
+  (foreignRoot, _) <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx (binding.storageRoot <> "-other") (binding.request & #runId .~ "foreign-root-page" & #assignment .~ Nothing) repository))
+  first <- right =<< run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing))
+  length first @?= 20
+  let cursor = (.workspace.resource) (last first)
+  second <- right =<< run env (runTransaction (listWorkspacesTx binding.storageRoot (Just cursor)))
+  length second @?= 2
+  let resources = map (.workspace.resource) (first <> second)
+  assertBool "foreign storage root is absent" (foreignRoot.workspace.resource `notElem` resources)
+  mapM_ (\known -> length (filter (== known.workspace.resource) resources) @?= 1) (binding : siblings)

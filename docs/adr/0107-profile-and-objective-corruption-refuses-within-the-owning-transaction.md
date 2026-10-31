@@ -54,8 +54,7 @@ invent stronger target syntax. Completion reads the retained plan before changin
 its completion bit. The maintenance IO adapter maps the domain refusal to
 `CleanupRefused` before filesystem deletion or public listing publication, while
 SQL failures retain `CleanupUnavailable`. Historical plans without ownership
-retain their exact encoding. Cleanup's terminal eligibility query and the other
-workspace stores remain separate audit obligations.
+retain their exact encoding. The remaining workspace stores are reviewed separately below.
 
 Directory skip and sink delivery readers now retain parsed row results as
 `Either Text value` until their owning transaction checks them. A malformed
@@ -103,10 +102,25 @@ retained admissions before filtering their owner/epoch, so unreadable admission
 cannot authorize cleanup fallback. Typed failures propagate through cleanup,
 provisioning, file/Git providers, transfer and process supervision.
 
-These checks qualify the named read boundaries. SQL terminal-eligibility and
-prior-assignment settlement predicates still require their own semantic review;
-this extension does not certify their JSON-derived Boolean decisions, or the
-remaining scalar audit.
+Cleanup eligibility and successor/follow-up settlement now compose typed
+execution, message, result, session, effect and process reads before deciding
+whether work is terminal. An unknown or malformed receipt cannot become zero
+pending work, and a denormalized settlement Boolean must agree with the complete
+validated receipt. The original absent-pending-receipts compatibility rule stays
+in the execution codec. Prior assignments are located by relational coordinates;
+corrupt message/result/execution fields cannot disappear behind JSON joins.
+
+Three discoveries lack independent relational attribution: workspace storage
+roots, session execution roots and child workflow mappings. These readers decode
+the metadata before filtering, keeping bounded accumulators (twenty workspace
+bindings, two child matches, or one terminal flag). The query can scan all
+remaining rows, and unreadable attribution can conservatively refuse an otherwise
+unrelated root or child lookup. This trades availability and scan cost for refusing
+unsafe absence; it is not a performance qualification. A future independently
+maintained relational index would require its own migration and consistency
+acceptance. Existing addresses, identities and table layouts are unchanged.
+
+These checks qualify the named read boundaries, not the remaining scalar audit.
 
 ## Alternatives rejected
 

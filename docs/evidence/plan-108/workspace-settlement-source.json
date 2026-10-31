@@ -1,0 +1,15 @@
+{
+  "sourceParent": "e512f9d",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "files": {
+    "shikigami-core/src/Shikigami/Execution/Store.hs": "f65f59c631bd84ac6e5a8a2bef344f2adc5f76894bb4d92a36a54b36d9a07b3d",
+    "shikigami-core/src/Shikigami/WorkerSession/Store.hs": "afcccf4573b1259bfb5c5a961d4e89cbdd4c0fb7c630a4a4d7164ff1cec8af8e",
+    "shikigami-core/src/Shikigami/Workspace/CleanupStore.hs": "848c6aca1a8ead12841753b3155e9b10f644b2ada192a12cd76dc7d30dc498a0",
+    "shikigami-core/src/Shikigami/Workspace/Store.hs": "e9c161658ed0791a6f85285ba6e27e73f6692babee66d3bf39ebadd92f9a19bc",
+    "shikigami-core/src/Shikigami/Workspace/TransferStore.hs": "3ad14dbb8373b849749d835a0a4255417384e4e70ebcdfa8e3c0a62f609a520c",
+    "shikigami-core/test-postgres/Shikigami/WorkspaceTransferSpec.hs": "7a9797d34deab730b1d0ef010acd626d71d42a8d70004818ed5d2c0d0db82425",
+    "shikigami-workers/test/Shikigami/WorkspaceTransferSpec.hs": "d3b4f5355d1091a70737f0e6d1d993418cbd877a47953a33f1de7e4c54e1f30a",
+    "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs": "6cdaddde53c310688d59f55c119d04034ed50ed52b476dab3bf9105c661830b5"
+  }
+}

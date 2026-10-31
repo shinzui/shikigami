@@ -356,3 +356,50 @@ The total is now 512 reviewed keys (436 compliant, 25 not applicable, 51 explici
 violations), leaving 3,478 unreviewed keys. Both coverage checker modes still
 refuse the incomplete audit. Hash freshness and focused runtime checks do not
 substitute for the remaining semantic review or M3 acceptance.
+
+The next source snapshot is `workspace-settlement-source.json`, against parent
+`e512f9d`. Cleanup eligibility and workspace transfer now inspect complete typed
+execution, message, result, session, file/Git effect and process metadata before
+using terminal/settlement decisions. An unreadable receipt cannot become zero
+pending work, and persisted settlement flags must agree with validated receipts.
+The existing execution codec still owns the historical absent-pending-count rule.
+
+Child mapping, workspace listing and live-session attribution are decoded before
+filtering by values held only inside JSON. No unreadable child mapping can become
+standalone absence, no unreadable storage root can hide a listing member, and no
+unreadable session root can permit deletion. With no independent relational
+attribution index, these queries conservatively refuse unreadable attribution
+anywhere in the scan. Their accumulators are bounded, but query work can cover
+all remaining metadata. This is an explicit availability/scan-cost tradeoff,
+recorded in ADR-107; no performance qualification or schema migration is claimed.
+The valid listing control checks twenty-then-two keyset pages, exact membership,
+no duplication and exclusion of a foreign storage root.
+
+Real governed-workflow controls corrupt complete terminal execution state (null,
+missing required snapshot, negative pending count), a settled file receipt, and
+a live session binding. Ignored refusals roll back an earlier freeze; cleanup
+leaves files/scratch and creates no cleanup plan. Exact repair restores the
+original eligibility; repairing a live session still refuses cleanup. Real
+follow-up admission refuses corrupt prior message/result fields without a fresh
+allocation, then reuses original accepted bytes after repair. Child-attribution
+controls likewise refuse and roll back, then recover the original mapping.
+
+The formatted candidate passes all 22 selected core PostgreSQL cases and all 162
+worker workspace cases on arm64 macOS/GHC 9.12.4, with serial disposable database
+fixtures and no skipped cases:
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test shikigami-workers-test --enable-tests -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/workspace/'
+```
+
+The 24 domain-tool mutation tests, Haskell conventions and whitespace checks also
+pass. No Agent/Flow workflow body, durable identity formula, generated domain,
+HTTP representation, migration or dependency changes. This remains a semantic
+audit checkpoint; exhaustive classification and final M3 acceptance stay open.
+
+The coherent full `cabal build all --enable-tests -j1` passes, followed by
+census refresh: 322 modules, 915 module declarations, fourteen entrypoints and
+3,990 total keys. Independent source/interface/tool freshness validation passes.
+Only the five substantively rereviewed owner source hashes are renewed; the
+512 classifications and 51 unresolved scalar violations are unchanged. Both
+classification checker modes still reject the 3,478 missing keys.

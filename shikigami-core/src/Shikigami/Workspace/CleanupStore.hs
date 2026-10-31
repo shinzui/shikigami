@@ -11,7 +11,7 @@ module Shikigami.Workspace.CleanupStore
   )
 where
 
-import Contravariant.Extras (contrazip2, contrazip4)
+import Contravariant.Extras (contrazip2)
 import Data.Aeson qualified as Aeson
 import Data.Functor.Contravariant ((>$<))
 import Data.Text qualified as Text
@@ -20,9 +20,13 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
+import Shikigami.Execution.Progress (noPendingReceipts)
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
-import Shikigami.Execution.Transcript (ExecutionId (..), executionIdFor)
+import Shikigami.Execution.Store qualified as Execution
+import Shikigami.Execution.Transcript (executionIdFor)
+import Shikigami.Execution.Transcript qualified as Transcript
 import Shikigami.Prelude
+import Shikigami.WorkerSession.Store qualified as Sessions
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.TransferStore (currentWorkspaceRequestTx)
@@ -94,9 +98,7 @@ completeCleanupTx binding plan = do
 -- A bounded protected metadata page. Render only public resource/repository/base
 -- and cleanup status at the operator boundary, never these local paths.
 listWorkspacesTx :: FilePath -> Maybe Text -> Transaction (Either WorkspaceError [WorkspaceBinding])
-listWorkspacesTx storageRoot cursor = do
-  retained <- Tx.statement (Text.pack storageRoot, cursor) listBindings
-  decodeRetained (traverse decodeJson retained)
+listWorkspacesTx = Store.inspectWorkspaceBindingsTx
 
 cleanupEligibleTx :: WorkspaceBinding -> Transaction (Either WorkspaceError Bool)
 cleanupEligibleTx binding = do
@@ -105,8 +107,19 @@ cleanupEligibleTx binding = do
     Left err -> pure (Left err)
     Right Nothing -> pure (Right False)
     Right (Just request) -> do
-      let ExecutionId execution = executionIdFor (assignmentIdFor request.runId)
-      Right <$> Tx.statement (binding.workspace.resource, execution, toJSON binding, toJSON request) terminalWorkspace
+      let execution = executionIdFor (assignmentIdFor request.runId)
+      retained <- Store.inspectWorkspaceTx binding.workspace
+      executed <- Execution.inspectExecutionTx execution
+      sessions <- Sessions.rootSessionsTerminalTx request.rootId
+      effects <- Store.workspaceEffectsSettledTx binding
+      decodeRetained do
+        actual <- retained
+        terminalSessions <- either (const (Left WorkspaceBindingConflict)) Right sessions
+        settled <- effects
+        candidate <- either (const (Left WorkspaceBindingConflict)) Right executed
+        pure case candidate of
+          Just (state, owner) -> actual == Just (binding, Ready) && owner.identity == request.owner && owner.rootId == Just request.rootId && state.phase `elem` [Transcript.Succeeded, Transcript.Failed, Transcript.Cancelled] && state.pendingReceipts == noPendingReceipts && isNothing state.activeOperation && settled && terminalSessions
+          Nothing -> False
 
 jsonParam :: (ToJSON a) => E.Params a
 jsonParam = toJSON >$< E.param (E.nonNullable E.jsonb)
@@ -137,16 +150,3 @@ insertPlan = preparable "INSERT INTO shikigami.workspace_cleanup(resource,plan) 
 
 completePlan :: Statement (Text, CleanupPlan) Bool
 completePlan = preparable "UPDATE shikigami.workspace_cleanup SET complete=true WHERE resource=$1 AND plan=$2 RETURNING true" (contrazip2 textParam jsonParam) (maybe False id <$> D.rowMaybe (D.column (D.nonNullable D.bool)))
-
-listBindings :: Statement (Text, Maybe Text) [Aeson.Value]
-listBindings = preparable "SELECT binding FROM shikigami.workspace_bindings WHERE binding->>'storageRoot'=$1 AND ($2::text IS NULL OR resource>$2) ORDER BY resource LIMIT 20" (contrazip2 textParam (E.param (E.nullable E.text))) (D.rowList jsonRow)
-
--- The retained execution is terminal and receipt-complete, all external effects
--- are settled, and no continuing session sharing this root remains live. A
--- missing execution or missing ownership metadata refuses orphan adoption.
-terminalWorkspace :: Statement (Text, Text, Aeson.Value, Aeson.Value) Bool
-terminalWorkspace =
-  preparable
-    "SELECT EXISTS(SELECT 1 FROM shikigami.workspace_bindings w JOIN shikigami.executions e ON e.execution_id=$2 WHERE w.resource=$1 AND w.binding=$3 AND w.state='ready' AND e.binding->'identity'=$4->'owner' AND e.binding->'rootId'=$4->'rootId' AND e.state->>'phase' IN ('Succeeded','Failed','Cancelled') AND COALESCE((e.state->>'pendingReceipts')::bigint,0)=0 AND (e.state->'activeOperation' IS NULL OR e.state->'activeOperation'='null'::jsonb)) AND NOT EXISTS(SELECT 1 FROM shikigami.workspace_effects WHERE resource=$1 AND NOT settled) AND NOT EXISTS(SELECT 1 FROM shikigami.workspace_processes WHERE resource=$1 AND NOT settled) AND NOT EXISTS(SELECT 1 FROM shikigami.worker_sessions s WHERE s.binding->'rootId'=$4->'rootId' AND s.state->>'phase' NOT IN ('Failed','Cancelled'))"
-    (contrazip4 textParam textParam (E.param (E.nonNullable E.jsonb)) (E.param (E.nonNullable E.jsonb)))
-    (D.singleRow (D.column (D.nonNullable D.bool)))

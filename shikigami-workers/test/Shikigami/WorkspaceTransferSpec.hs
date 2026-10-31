@@ -6,6 +6,8 @@ import Baikai.Options (emptyOptions)
 import Control.Concurrent.Async (withAsync)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
@@ -140,6 +142,14 @@ tests fixture =
           replaceBinding (Aeson.toJSON binding)
           fmap length <$> run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing)) >>= (@?= Right 1)
           readFile (workspaceFiles binding.storageRoot binding </> "dependency.txt") >>= (@?= "ACCEPTED_PRIOR_CHANGE\n")
+          forM_ [("worker_session_messages", "input"), ("worker_session_results", "output")] \(table, field) -> do
+            originalMetadata <- run env (runTransaction (Tx.statement first.value (preparable ("SELECT state FROM shikigami." <> table <> " WHERE assignment_id=$1") (E.param (E.nonNullable E.text)) (D.singleRow (D.column (D.nonNullable D.jsonb))))))
+            let replaceMetadata value = run env (runTransaction (Tx.statement (first.value, value) (preparable ("UPDATE shikigami." <> table <> " SET state=$2 WHERE assignment_id=$1") ((fst >$< E.param (E.nonNullable E.text)) <> (snd >$< E.param (E.nonNullable E.jsonb))) D.noResult)))
+                corrupt = case originalMetadata of Aeson.Object fields -> Aeson.Object (KeyMap.delete field fields); _ -> error "complete prior metadata was not an object"
+            replaceMetadata corrupt
+            host.load assignment >>= \case Left _ -> pure (); Right _ -> assertFailure "unreadable prior assignment authorized follow-up admission"
+            replaceMetadata originalMetadata
+          fmap length <$> run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing)) >>= (@?= Right 1)
           admission <- right =<< host.load assignment
           admission.workspace @?= binding.workspace
           run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Right (Just (binding, Ready)))

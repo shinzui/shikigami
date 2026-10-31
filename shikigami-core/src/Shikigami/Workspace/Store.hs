@@ -3,7 +3,7 @@
 
 -- | Reserve before filesystem effects. Matching duplicate requests converge;
 -- reservation metadata remains immutable after the workspace becomes ready.
-module Shikigami.Workspace.Store (workspaceRefForAssignment, reserveWorkspaceTx, inspectWorkspaceTx, markWorkspaceReadyTx, checkWorkspaceOwnerTx, checkWorkspaceOperationTx, reserveWorkspaceEffectTx, recordWorkspaceReceiptTx, freezeWorkspaceTx, registerFileTx, registerFileForOwnerTx, inspectRegisteredFileTx, inspectFilePageTx, WorkspaceControl (..), inspectWorkspaceControlTx) where
+module Shikigami.Workspace.Store (inspectWorkspaceBindingsTx, workspaceEffectsSettledTx, workspaceRefForAssignment, reserveWorkspaceTx, inspectWorkspaceTx, markWorkspaceReadyTx, checkWorkspaceOwnerTx, checkWorkspaceOperationTx, reserveWorkspaceEffectTx, recordWorkspaceReceiptTx, freezeWorkspaceTx, registerFileTx, registerFileForOwnerTx, inspectRegisteredFileTx, inspectFilePageTx, WorkspaceControl (..), inspectWorkspaceControlTx) where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4)
 import Data.Aeson qualified as Aeson
@@ -24,8 +24,9 @@ import Shikigami.StateRevision
 import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
 import Shikigami.WorkerSession.Types (AssignmentId (..), WorkerSessionId (..))
 import Shikigami.Workspace.Catalog
+import Shikigami.Workspace.GitTypes qualified as Git
 import Shikigami.Workspace.Instructions (validWorkspacePath)
-import Shikigami.Workspace.Process (ProcessRouting (..), validProcessRouting)
+import Shikigami.Workspace.Process (ProcessPhase (..), ProcessRecord (..), ProcessRouting (..), digestText, processUnit, validProcessCommand, validProcessReceipt, validProcessRouting)
 import Shikigami.Workspace.Provider (FileReceipt (..), FileRegistration (..), ReceiptState (..))
 import Shikigami.Workspace.Types
 import System.FilePath (isAbsolute, normalise, splitDirectories)
@@ -85,12 +86,24 @@ inspectWorkspaceTx ref
   | ref.provider /= "shikigami.workspace/1" = pure (Right Nothing)
   | otherwise = do
       retained <- Tx.statement ref.resource selectBinding
-      checkedRead do
-        parsed <- sequence retained
-        case parsed of
-          Just pair@(binding, _) | binding.workspace == ref && workspaceRefForKey (workspaceOriginKey (maybe (toJSON binding.request.runId) toJSON binding.request.assignment)) == ref && validWorkspaceRequest binding.storageRoot binding.request -> Right (Just pair)
-          Just _ -> Left "workspace address mismatch"
-          Nothing -> Right Nothing
+      checkedRead (traverse (>>= checkedBinding ref) retained)
+
+checkedBinding :: WorkspaceRef -> (WorkspaceBinding, AllocationState) -> Either Text (WorkspaceBinding, AllocationState)
+checkedBinding ref pair@(binding, _)
+  | binding.workspace == ref && workspaceRefForKey (workspaceOriginKey (maybe (toJSON binding.request.runId) toJSON binding.request.assignment)) == ref && validWorkspaceRequest binding.storageRoot binding.request = Right pair
+  | otherwise = Left "workspace address or request mismatch"
+
+-- | Keep the original bounded page while decoding attribution before filtering
+-- by storage root. Unreadable attribution refuses; it cannot hide a member.
+inspectWorkspaceBindingsTx :: FilePath -> Maybe Text -> Transaction (Either WorkspaceError [WorkspaceBinding])
+inspectWorkspaceBindingsTx storageRoot cursor = Tx.statement cursor statement >>= checkedRead
+  where
+    statement = preparable "SELECT resource,binding,state,workspace_id FROM shikigami.workspace_bindings WHERE ($1::text IS NULL OR resource>$1) ORDER BY resource" (E.param (E.nullable E.text)) (D.foldlRows collect (Right []) row)
+    row = (,) <$> D.column (D.nonNullable D.text) <*> bindingRow
+    collect prior (resource, parsed) = do
+      page <- prior
+      (binding, _) <- parsed >>= checkedBinding (WorkspaceRef "shikigami.workspace/1" resource)
+      pure (if binding.storageRoot == storageRoot && length page < 20 then page <> [binding] else page)
 
 -- | Only the allocator calls this after atomic publication of a complete copy.
 -- Comparing the full immutable binding also protects against stale callbacks.
@@ -109,9 +122,11 @@ hasCleanup :: Statement Text Bool
 hasCleanup = preparable "SELECT EXISTS(SELECT 1 FROM shikigami.workspace_cleanup WHERE resource=$1)" (E.param (E.nonNullable E.text)) (D.singleRow (D.column (D.nonNullable D.bool)))
 
 selectBinding :: Statement Text (Maybe (Either Text (WorkspaceBinding, AllocationState)))
-selectBinding = preparable "SELECT binding,state,workspace_id FROM shikigami.workspace_bindings WHERE resource=$1" (E.param (E.nonNullable E.text)) (D.rowMaybe row)
+selectBinding = preparable "SELECT binding,state,workspace_id FROM shikigami.workspace_bindings WHERE resource=$1" (E.param (E.nonNullable E.text)) (D.rowMaybe bindingRow)
+
+bindingRow :: D.Row (Either Text (WorkspaceBinding, AllocationState))
+bindingRow = assemble <$> jsonRow <*> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text)
   where
-    row = assemble <$> jsonRow <*> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text)
     assemble value state identifier = do
       binding <- value
       unless (workspaceIdText binding.id == identifier) (Left "workspace identity mismatch")
@@ -306,3 +321,48 @@ selectRegisteredFile = preparable "SELECT b.binding,r.registration,e.receipt,e.f
 
 selectFilePage :: Statement Text [Either Text OperationId]
 selectFilePage = preparable "SELECT operation_id FROM shikigami.workspace_file_registrations WHERE operation_id>$1 ORDER BY operation_id LIMIT 20" (E.param (E.nonNullable E.text)) (D.rowList (D.column (D.nonNullable (fmap parseOperationId D.text))))
+
+-- | Retained settlement is proved by complete typed receipts, not by treating
+-- unreadable JSON as zero pending work or trusting a denormalized Boolean alone.
+workspaceEffectsSettledTx :: WorkspaceBinding -> Transaction (Either WorkspaceError Bool)
+workspaceEffectsSettledTx binding = do
+  effects <- Tx.statement binding.workspace.resource selectEffectSettlement
+  processes <- Tx.statement binding.workspace.resource selectProcessSettlement
+  checkedRead ((&&) <$> effects <*> processes)
+  where
+    selectEffectSettlement = preparable "SELECT operation_id,fingerprint,kind,receipt,settled FROM shikigami.workspace_effects WHERE resource=$1" (E.param (E.nonNullable E.text)) (D.foldlRows effect (Right True) effectRow)
+    effectRow = (,,,,) <$> text <*> text <*> text <*> D.column (D.nullable D.jsonb) <*> boolean
+    selectProcessSettlement = preparable "SELECT operation_id,fingerprint,record,settled FROM shikigami.workspace_processes WHERE resource=$1" (E.param (E.nonNullable E.text)) (D.foldlRows process (Right True) processRow)
+    processRow = (,,,) <$> text <*> text <*> D.column (D.nonNullable D.jsonb) <*> boolean
+    text = D.column (D.nonNullable D.text)
+    boolean = D.column (D.nonNullable D.bool)
+    effect prior (operation, fingerprint, kind, raw, settled) = do
+      previous <- prior
+      terminal <- case kind of
+        "file" -> do
+          receipt <- (traverse decodeJSON raw :: Either Text (Maybe FileReceipt))
+          case receipt of
+            Nothing -> Right False
+            Just value -> do
+              unless (operationIdText value.operationId == operation && value.fingerprint == fingerprint && value.bindingDigest == workspaceBindingDigest binding && value.generation > initialRevision && validWorkspacePath value.path) (Left "inconsistent file settlement")
+              pure (value.state `elem` [EditApplied, EditRefused])
+        "git" -> do
+          value <- (maybe (Left "missing Git settlement") decodeJSON raw :: Either Text Git.GitRecord)
+          unless (Git.validGitRecord value && operationIdText value.operation.operationId == operation && value.fingerprint == fingerprint && value.bindingDigest == workspaceBindingDigest binding) (Left "inconsistent Git settlement")
+          pure (value.phase `elem` [Git.GitApplied, Git.GitRefused])
+        _ -> Left "unknown workspace effect kind"
+      unless (terminal == settled) (Left "inconsistent effect settlement flag")
+      pure (previous && terminal)
+    process prior (operation, fingerprint, raw, settled) = do
+      previous <- prior
+      value <- (decodeJSON raw :: Either Text ProcessRecord)
+      unless (operationIdText value.operationId == operation && value.fingerprint == fingerprint && value.bindingDigest == workspaceBindingDigest binding && digestText value.instructionDigest && value.generation > initialRevision && validProcessCommand value.command && maybe True validProcessRouting value.routing && value.unit == processUnit value.operationId value.fingerprint) (Left "inconsistent process settlement")
+      terminal <- case value.phase of
+        ProcessSettled -> case value.receipt of
+          Just receipt | validProcessReceipt value receipt -> Right True
+          _ -> Left "invalid process settlement receipt"
+        ProcessRefused | isNothing value.bootId && isNothing value.invocationId && isNothing value.receipt -> Right True
+        ProcessRefused -> Left "invalid prelaunch refusal"
+        _ -> Right False
+      unless (terminal == settled) (Left "inconsistent process settlement flag")
+      pure (previous && terminal)
