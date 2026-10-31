@@ -3,11 +3,12 @@
 
 -- | Reserve before filesystem effects. Matching duplicate requests converge;
 -- reservation metadata remains immutable after the workspace becomes ready.
-module Shikigami.Workspace.Store (reserveWorkspaceTx, inspectWorkspaceTx, markWorkspaceReadyTx, checkWorkspaceOwnerTx, checkWorkspaceOperationTx, reserveWorkspaceEffectTx, recordWorkspaceReceiptTx, freezeWorkspaceTx, registerFileTx, registerFileForOwnerTx, inspectRegisteredFileTx, inspectFilePageTx, WorkspaceControl (..), inspectWorkspaceControlTx) where
+module Shikigami.Workspace.Store (workspaceRefForAssignment, reserveWorkspaceTx, inspectWorkspaceTx, markWorkspaceReadyTx, checkWorkspaceOwnerTx, checkWorkspaceOperationTx, reserveWorkspaceEffectTx, recordWorkspaceReceiptTx, freezeWorkspaceTx, registerFileTx, registerFileForOwnerTx, inspectRegisteredFileTx, inspectFilePageTx, WorkspaceControl (..), inspectWorkspaceControlTx) where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4)
 import Data.Aeson qualified as Aeson
 import Data.Functor.Contravariant ((>$<))
+import Data.Generics.Labels ()
 import Data.Text qualified as Text
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -23,6 +24,7 @@ import Shikigami.StateRevision
 import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
 import Shikigami.WorkerSession.Types (AssignmentId (..), WorkerSessionId (..))
 import Shikigami.Workspace.Catalog
+import Shikigami.Workspace.Instructions (validWorkspacePath)
 import Shikigami.Workspace.Process (ProcessRouting (..), validProcessRouting)
 import Shikigami.Workspace.Provider (FileReceipt (..), FileRegistration (..), ReceiptState (..))
 import Shikigami.Workspace.Types
@@ -44,28 +46,51 @@ reserveWorkspaceTx storageRoot request repository = do
           existing <- inspectWorkspaceTx proposed.workspace
           retired <- Tx.statement resource hasCleanup
           case existing of
-            Just pair@(stored, _) | stored == bindingFor stored.id && not retired -> do
+            Right (Just pair@(stored, _)) | stored == bindingFor stored.id && not retired -> do
               Tx.statement (resource, request.owner, revisionNumber request.epoch) insertControl
               pure (Right pair)
             _ -> pure (Left WorkspaceBindingConflict)
-    root = executionRootIdText request.rootId
-    validKey value = not (Text.null value) && Text.length value <= 256 && not (Text.any (== '\0') value)
-    validIdentity = either (const False) validKey . identityText
-    valid = storageRoot /= "/" && ".." `notElem` splitDirectories storageRoot && isAbsolute storageRoot && normalise storageRoot == storageRoot && not ('\0' `elem` storageRoot) && validKey request.runId && validKey root && validIdentity request.principal && validIdentity request.owner && revisionNumber request.epoch < 9223372036854775808 && maybe True (\(session, assignment) -> validKey session.value && validKey assignment.value) request.assignment
-    key = versionedDigest "shikigami.workspace-assignment/1" (maybe (toJSON request.runId) toJSON request.assignment)
+    valid = validWorkspaceRequest storageRoot request
+    key = workspaceOriginKey (maybe (toJSON request.runId) toJSON request.assignment)
     -- This is the provider address of the natural origin, not its entity ID.
-    resource = Text.drop 7 (versionedDigest "shikigami.workspace-resource/1" (toJSON key))
-    bindingFor identifier = WorkspaceBinding identifier request (WorkspaceRef "shikigami.workspace/1" resource) (repositoryIdentity repository) (repositoryBase repository) (repositoryPolicyRevision repository) storageRoot (repositorySource repository)
+    resource = (workspaceRefForKey key).resource
+    bindingFor identifier = WorkspaceBinding identifier request (workspaceRefForKey key) (repositoryIdentity repository) (repositoryBase repository) (repositoryPolicyRevision repository) storageRoot (repositorySource repository)
+
+validWorkspaceRequest :: FilePath -> WorkspaceRequest -> Bool
+validWorkspaceRequest storageRoot request =
+  let root = executionRootIdText request.rootId
+      validKey value = not (Text.null value) && Text.length value <= 256 && not (Text.any (== '\0') value)
+      validIdentity = either (const False) validKey . identityText
+   in storageRoot /= "/" && ".." `notElem` splitDirectories storageRoot && isAbsolute storageRoot && normalise storageRoot == storageRoot && not ('\0' `elem` storageRoot) && validKey request.runId && validKey root && validIdentity request.principal && validIdentity request.owner && revisionNumber request.epoch < 9223372036854775808 && maybe True (\(session, assignment) -> validKey session.value && validKey assignment.value) request.assignment
+
+-- | Reconstruct the existing provider locator from relational session/message
+-- coordinates, without trusting a JSON binding to discover its own location.
+-- This is exactly the allocator's historical origin formula, not a new ID.
+workspaceRefForAssignment :: WorkerSessionId -> AssignmentId -> WorkspaceRef
+workspaceRefForAssignment session assignment = workspaceRefForKey (workspaceOriginKey (toJSON (session, assignment)))
+
+workspaceOriginKey :: Aeson.Value -> Text
+workspaceOriginKey = versionedDigest "shikigami.workspace-assignment/1"
+
+workspaceRefForKey :: Text -> WorkspaceRef
+workspaceRefForKey key = WorkspaceRef "shikigami.workspace/1" (Text.drop 7 (versionedDigest "shikigami.workspace-resource/1" (toJSON key)))
 
 -- PostgreSQL 18 owns UUIDv7 allocation. Only the committed logical-origin
 -- winner escapes; concurrent/transaction retries return its retained identity.
 allocateWorkspaceId :: Statement () (Either Text WorkspaceId)
 allocateWorkspaceId = preparable "SELECT pg_catalog.uuidv7()" E.noParams (D.singleRow (workspaceIdFromUUID <$> D.column (D.nonNullable D.uuid)))
 
-inspectWorkspaceTx :: WorkspaceRef -> Transaction (Maybe (WorkspaceBinding, AllocationState))
+inspectWorkspaceTx :: WorkspaceRef -> Transaction (Either WorkspaceError (Maybe (WorkspaceBinding, AllocationState)))
 inspectWorkspaceTx ref
-  | ref.provider /= "shikigami.workspace/1" = pure Nothing
-  | otherwise = Tx.statement ref.resource selectBinding
+  | ref.provider /= "shikigami.workspace/1" = pure (Right Nothing)
+  | otherwise = do
+      retained <- Tx.statement ref.resource selectBinding
+      checkedRead do
+        parsed <- sequence retained
+        case parsed of
+          Just pair@(binding, _) | binding.workspace == ref && workspaceRefForKey (workspaceOriginKey (maybe (toJSON binding.request.runId) toJSON binding.request.assignment)) == ref && validWorkspaceRequest binding.storageRoot binding.request -> Right (Just pair)
+          Just _ -> Left "workspace address mismatch"
+          Nothing -> Right Nothing
 
 -- | Only the allocator calls this after atomic publication of a complete copy.
 -- Comparing the full immutable binding also protects against stale callbacks.
@@ -83,8 +108,18 @@ insertBinding = preparable "INSERT INTO shikigami.workspace_bindings(assignment_
 hasCleanup :: Statement Text Bool
 hasCleanup = preparable "SELECT EXISTS(SELECT 1 FROM shikigami.workspace_cleanup WHERE resource=$1)" (E.param (E.nonNullable E.text)) (D.singleRow (D.column (D.nonNullable D.bool)))
 
-selectBinding :: Statement Text (Maybe (WorkspaceBinding, AllocationState))
-selectBinding = preparable "SELECT binding,state='ready' FROM shikigami.workspace_bindings WHERE resource=$1" (E.param (E.nonNullable E.text)) (D.rowMaybe ((,) <$> jsonRow <*> ((\ready -> if ready then Ready else Reserved) <$> D.column (D.nonNullable D.bool))))
+selectBinding :: Statement Text (Maybe (Either Text (WorkspaceBinding, AllocationState)))
+selectBinding = preparable "SELECT binding,state,workspace_id FROM shikigami.workspace_bindings WHERE resource=$1" (E.param (E.nonNullable E.text)) (D.rowMaybe row)
+  where
+    row = assemble <$> jsonRow <*> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text)
+    assemble value state identifier = do
+      binding <- value
+      unless (workspaceIdText binding.id == identifier) (Left "workspace identity mismatch")
+      allocation <- case state of
+        "ready" -> Right Ready
+        "reserved" -> Right Reserved
+        _ -> Left "unknown workspace allocation state"
+      pure (binding, allocation)
 
 readyBinding :: Statement (Text, WorkspaceBinding) Bool
 readyBinding = preparable "UPDATE shikigami.workspace_bindings SET state='ready' WHERE resource=$1 AND binding=$2 RETURNING true" (contrazip2 (E.param (E.nonNullable E.text)) jsonParam) (maybe False id <$> D.rowMaybe (D.column (D.nonNullable D.bool)))
@@ -92,21 +127,40 @@ readyBinding = preparable "UPDATE shikigami.workspace_bindings SET state='ready'
 jsonParam :: (ToJSON a) => E.Params a
 jsonParam = toJSON >$< E.param (E.nonNullable E.jsonb)
 
-jsonRow :: (FromJSON a) => D.Row a
-jsonRow = D.column (D.nonNullable (D.refine decode D.jsonb))
+jsonRow :: (FromJSON a) => D.Row (Either Text a)
+jsonRow = decodeJSON <$> D.column (D.nonNullable D.jsonb)
+
+nullableJSONRow :: (FromJSON a) => D.Row (Either Text (Maybe a))
+nullableJSONRow = traverse decodeJSON <$> D.column (D.nullable D.jsonb)
+
+decodeJSON :: (FromJSON a) => Aeson.Value -> Either Text a
+decodeJSON value = case Aeson.fromJSON value of
+  Aeson.Error err -> Left (Text.pack err)
+  Aeson.Success result -> Right result
+
+checkedRead :: Either Text a -> Transaction (Either WorkspaceError a)
+checkedRead = \case
+  Left _ -> Tx.condemn >> pure (Left WorkspaceBindingConflict)
+  Right value -> pure (Right value)
+
+inspectEffectTx :: Text -> Transaction (Either WorkspaceError (Maybe (Text, Text, Maybe FileReceipt)))
+inspectEffectTx key = do
+  retained <- Tx.statement key selectEffect
+  checkedRead (traverse checked retained)
   where
-    decode value = case Aeson.fromJSON value of
-      Aeson.Error err -> Left (Text.pack err)
-      Aeson.Success result -> Right result
+    checked (resource, fingerprint, parsed) = do
+      receipt <- parsed
+      forM_ receipt \value -> unless (operationIdText value.operationId == key && value.fingerprint == fingerprint && value.generation > initialRevision && validWorkspacePath value.path) (Left "inconsistent retained file receipt")
+      pure (resource, fingerprint, receipt)
 
 -- The concrete provider holds the independent workspace lock throughout these
 -- checks and its effect. Freeze/transfer must use that same lock before acting.
 checkWorkspaceOwnerTx :: WorkspaceBinding -> AgentIdentity -> StateRevision "worker-owner" -> Transaction (Either WorkspaceError ())
 checkWorkspaceOwnerTx binding owner epoch = do
   retained <- inspectWorkspaceTx binding.workspace
-  control <- Tx.statement binding.workspace.resource lockControl
+  control <- Tx.statement binding.workspace.resource lockControl >>= checkedRead . sequence
   pure case (retained, control) of
-    (Just (actual, Ready), Just current) | actual == binding && current.owner == owner && current.epoch == epoch && not current.frozen -> Right ()
+    (Right (Just (actual, Ready)), Right (Just current)) | actual == binding && current.owner == owner && current.epoch == epoch && not current.frozen -> Right ()
     _ -> Left WorkspaceBindingConflict
 
 -- An unresolved effect blocks reuse by another logical operation, including
@@ -127,19 +181,20 @@ reserveWorkspaceEffectTx binding owner epoch identifier@(operationIdText -> oper
   case checked of
     Left err -> pure (Left err)
     Right () -> do
-      existing <- Tx.statement operation selectEffect
+      existing <- inspectEffectTx operation
       case existing of
-        Just (resource, previous, receipt) | resource == binding.workspace.resource && previous == fingerprint -> pure (Right receipt)
-        Just _ -> pure (Left WorkspaceBindingConflict)
-        Nothing -> do
+        Right (Just (resource, previous, receipt)) | resource == binding.workspace.resource && previous == fingerprint -> pure (Right receipt)
+        Right (Just _) -> pure (Left WorkspaceBindingConflict)
+        Left err -> pure (Left err)
+        Right Nothing -> do
           pending <- Tx.statement binding.workspace.resource hasPendingEffect
           if pending
             then pure (Left WorkspaceBindingConflict)
             else do
               Tx.statement (operation, binding.workspace.resource, fingerprint) insertEffect
-              actual <- Tx.statement operation selectEffect
+              actual <- inspectEffectTx operation
               pure case actual of
-                Just (resource, previous, receipt) | resource == binding.workspace.resource && previous == fingerprint -> Right receipt
+                Right (Just (resource, previous, receipt)) | resource == binding.workspace.resource && previous == fingerprint -> Right receipt
                 _ -> Left WorkspaceBindingConflict
 
 -- Factual receipt acceptance survives authority revocation. It cannot create a
@@ -149,8 +204,12 @@ recordWorkspaceReceiptTx binding receipt
   | receipt.bindingDigest /= workspaceBindingDigest binding || receipt.generation <= initialRevision = pure (Left WorkspaceBindingConflict)
   | otherwise = do
       let operation = operationIdText receipt.operationId
-      changed <- Tx.statement (operation, binding.workspace.resource, receipt.fingerprint, receipt) saveReceipt
-      pure (if changed then Right () else Left WorkspaceBindingConflict)
+      retained <- inspectEffectTx operation
+      case retained of
+        Left err -> pure (Left err)
+        Right _ -> do
+          changed <- Tx.statement (operation, binding.workspace.resource, receipt.fingerprint, receipt) saveReceipt
+          pure (if changed then Right () else Left WorkspaceBindingConflict)
 
 -- Called in the reservation transaction before writing any private intent or
 -- repository bytes. A duplicate cannot replace the original actual routing.
@@ -162,19 +221,19 @@ registerFileForOwnerTx binding owner epoch registration = do
   current <- checkWorkspaceOwnerTx binding owner epoch
   let receipt = registration.receipt
       key = operationIdText receipt.operationId
-  existing <- Tx.statement key selectEffect
-  if current == Right () && validProcessRouting registration.routing && registration.routing.identity == owner && registration.routing.executionId == registration.operation.executionId && registration.operation.operationId == receipt.operationId && receipt.bindingDigest == workspaceBindingDigest binding && receipt.generation > initialRevision && receipt.state == EditPrepared && maybe False (\(resource, fingerprint, _) -> resource == binding.workspace.resource && fingerprint == receipt.fingerprint) existing
+  existing <- inspectEffectTx key
+  if current == Right () && validProcessRouting registration.routing && registration.routing.identity == owner && registration.routing.executionId == registration.operation.executionId && registration.operation.operationId == receipt.operationId && receipt.bindingDigest == workspaceBindingDigest binding && receipt.generation > initialRevision && receipt.state == EditPrepared && maybe False (\(resource, fingerprint, _) -> resource == binding.workspace.resource && fingerprint == receipt.fingerprint) (either (const Nothing) id existing)
     then do
       Tx.statement (key, registration) insertFileRegistration
       retained <- inspectRegisteredFileTx receipt.operationId
-      pure (if maybe False (\(_, actual, _) -> actual == registration) retained then Right () else Left WorkspaceBindingConflict)
+      pure (if maybe False (\(_, actual, _) -> actual == registration) (either (const Nothing) id retained) then Right () else Left WorkspaceBindingConflict)
     else pure (Left WorkspaceBindingConflict)
 
-inspectRegisteredFileTx :: OperationId -> Transaction (Maybe (WorkspaceBinding, FileRegistration, Maybe FileReceipt))
-inspectRegisteredFileTx (operationIdText -> key) = Tx.statement key selectRegisteredFile
+inspectRegisteredFileTx :: OperationId -> Transaction (Either WorkspaceError (Maybe (WorkspaceBinding, FileRegistration, Maybe FileReceipt)))
+inspectRegisteredFileTx (operationIdText -> key) = Tx.statement key selectRegisteredFile >>= checkedRead . sequence
 
-inspectFilePageTx :: Maybe OperationId -> Transaction [OperationId]
-inspectFilePageTx cursor = Tx.statement (maybe "" operationIdText cursor) selectFilePage
+inspectFilePageTx :: Maybe OperationId -> Transaction (Either WorkspaceError [OperationId])
+inspectFilePageTx cursor = Tx.statement (maybe "" operationIdText cursor) selectFilePage >>= checkedRead . sequence
 
 freezeWorkspaceTx :: WorkspaceBinding -> AgentIdentity -> StateRevision "worker-owner" -> Transaction (Either WorkspaceError ())
 freezeWorkspaceTx binding owner epoch = do
@@ -189,24 +248,30 @@ data WorkspaceControl = WorkspaceControl {owner :: !AgentIdentity, epoch :: !(St
 
 -- The IO owner holds the workspace OS lock across conditional control and IO.
 -- This locked metadata read is also used to reconcile an existing freeze.
-inspectWorkspaceControlTx :: WorkspaceBinding -> Transaction (Maybe WorkspaceControl)
+inspectWorkspaceControlTx :: WorkspaceBinding -> Transaction (Either WorkspaceError (Maybe WorkspaceControl))
 inspectWorkspaceControlTx binding = do
   actual <- inspectWorkspaceTx binding.workspace
-  if actual == Just (binding, Ready) then Tx.statement binding.workspace.resource lockControl else pure Nothing
+  case actual of
+    Left err -> pure (Left err)
+    Right (Just (retained, Ready)) | retained == binding -> Tx.statement binding.workspace.resource lockControl >>= checkedRead . sequence
+    _ -> pure (Right Nothing)
 
 insertControl :: Statement (Text, AgentIdentity, Integer) ()
 insertControl = preparable "INSERT INTO shikigami.workspace_controls(resource,owner,epoch) VALUES($1,$2,$3) ON CONFLICT DO NOTHING" (contrazip3 (E.param (E.nonNullable E.text)) jsonParam (fromInteger >$< E.param (E.nonNullable E.int8))) D.noResult
 
-lockControl :: Statement Text (Maybe WorkspaceControl)
-lockControl = preparable "SELECT jsonb_build_object('owner',owner,'epoch',epoch,'frozen',frozen) FROM shikigami.workspace_controls WHERE resource=$1 FOR UPDATE" (E.param (E.nonNullable E.text)) (D.rowMaybe jsonRow)
+lockControl :: Statement Text (Maybe (Either Text WorkspaceControl))
+lockControl = preparable "SELECT jsonb_build_object('owner',owner,'epoch',epoch,'frozen',frozen) FROM shikigami.workspace_controls WHERE resource=$1 FOR UPDATE" (E.param (E.nonNullable E.text)) (D.rowMaybe (fmap validate jsonRow))
+  where
+    validate parsed = do
+      control <- parsed
+      _ <- identityText control.owner
+      pure control
 
 freezeControl :: Statement Text ()
 freezeControl = preparable "UPDATE shikigami.workspace_controls SET frozen=true WHERE resource=$1" (E.param (E.nonNullable E.text)) D.noResult
 
-selectEffect :: Statement Text (Maybe (Text, Text, Maybe FileReceipt))
-selectEffect = preparable "SELECT resource,fingerprint,receipt FROM shikigami.workspace_effects WHERE operation_id=$1 AND kind='file'" (E.param (E.nonNullable E.text)) (D.rowMaybe ((,,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> D.column (D.nullable (D.refine decode D.jsonb))))
-  where
-    decode value = case Aeson.fromJSON value of Aeson.Success result -> Right result; Aeson.Error err -> Left (Text.pack err)
+selectEffect :: Statement Text (Maybe (Text, Text, Either Text (Maybe FileReceipt)))
+selectEffect = preparable "SELECT resource,fingerprint,receipt FROM shikigami.workspace_effects WHERE operation_id=$1 AND kind='file'" (E.param (E.nonNullable E.text)) (D.rowMaybe ((,,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> nullableJSONRow))
 
 hasPendingEffect :: Statement Text Bool
 hasPendingEffect = preparable "SELECT EXISTS(SELECT 1 FROM shikigami.workspace_effects WHERE resource=$1 AND NOT settled)" (E.param (E.nonNullable E.text)) (D.singleRow (D.column (D.nonNullable D.bool)))
@@ -226,10 +291,18 @@ pendingProcess = preparable "SELECT EXISTS(SELECT 1 FROM shikigami.workspace_pro
 insertFileRegistration :: Statement (Text, FileRegistration) ()
 insertFileRegistration = preparable "INSERT INTO shikigami.workspace_file_registrations(operation_id,registration) VALUES($1,$2) ON CONFLICT DO NOTHING" (contrazip2 (E.param (E.nonNullable E.text)) jsonParam) D.noResult
 
-selectRegisteredFile :: Statement Text (Maybe (WorkspaceBinding, FileRegistration, Maybe FileReceipt))
-selectRegisteredFile = preparable "SELECT b.binding,r.registration,e.receipt FROM shikigami.workspace_file_registrations r JOIN shikigami.workspace_effects e USING(operation_id) JOIN shikigami.workspace_bindings b ON b.resource=e.resource WHERE r.operation_id=$1 AND e.kind='file' AND b.state='ready' AND e.fingerprint=r.registration->'receipt'->>'fingerprint'" (E.param (E.nonNullable E.text)) (D.rowMaybe ((,,) <$> jsonRow <*> jsonRow <*> D.column (D.nullable (D.refine decode D.jsonb))))
+selectRegisteredFile :: Statement Text (Maybe (Either Text (WorkspaceBinding, FileRegistration, Maybe FileReceipt)))
+selectRegisteredFile = preparable "SELECT b.binding,r.registration,e.receipt,e.fingerprint,e.kind,b.state,r.operation_id FROM shikigami.workspace_file_registrations r LEFT JOIN shikigami.workspace_effects e USING(operation_id) LEFT JOIN shikigami.workspace_bindings b ON b.resource=e.resource WHERE r.operation_id=$1" (E.param (E.nonNullable E.text)) (D.rowMaybe row)
   where
-    decode value = case Aeson.fromJSON value of Aeson.Success result -> Right result; Aeson.Error err -> Left (Text.pack err)
+    row = assemble <$> nullableJSONRow <*> jsonRow <*> nullableJSONRow <*> nullableText <*> nullableText <*> nullableText <*> D.column (D.nonNullable D.text)
+    nullableText = D.column (D.nullable D.text)
+    assemble bound registered completed fingerprint kind state operation = do
+      binding <- bound >>= maybe (Left "missing binding") Right
+      registration <- registered
+      receipt <- completed
+      let original = registration.receipt
+      unless (kind == Just "file" && state == Just "ready" && fingerprint == Just original.fingerprint && original.bindingDigest == workspaceBindingDigest binding && operationIdText original.operationId == operation && original.state == EditPrepared && original.generation > initialRevision && validWorkspacePath original.path && validProcessRouting registration.routing && registration.routing.executionId == registration.operation.executionId && registration.operation.operationId == original.operationId && maybe True (\value -> (value & #state .~ EditPrepared) == original) receipt) (Left "inconsistent file registration")
+      pure (binding, registration, receipt)
 
-selectFilePage :: Statement Text [OperationId]
-selectFilePage = preparable "SELECT operation_id FROM shikigami.workspace_file_registrations WHERE operation_id>$1 ORDER BY operation_id LIMIT 20" (E.param (E.nonNullable E.text)) (D.rowList (D.column (D.nonNullable (D.refine parseOperationId D.text))))
+selectFilePage :: Statement Text [Either Text OperationId]
+selectFilePage = preparable "SELECT operation_id FROM shikigami.workspace_file_registrations WHERE operation_id>$1 ORDER BY operation_id LIMIT 20" (E.param (E.nonNullable E.text)) (D.rowList (D.column (D.nonNullable (fmap parseOperationId D.text))))

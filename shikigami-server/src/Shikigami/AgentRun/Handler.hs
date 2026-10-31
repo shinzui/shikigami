@@ -90,4 +90,4 @@ statusView view =
     (fmap (\failure -> RunFailureView (Status.failureKindText failure.kind) failure.reason) view.failure)
 
 requestView :: Ledger.RunRequestRow -> RunRequestView
-requestView row = RunRequestView row.runId (requestKeyText row.idempotencyKey) row.acceptedAt row.requestedBy row.disposition
+requestView row = RunRequestView row.runId (requestKeyText row.idempotencyKey) row.acceptedAt row.requestedBy (Ledger.renderRunDisposition row.disposition)

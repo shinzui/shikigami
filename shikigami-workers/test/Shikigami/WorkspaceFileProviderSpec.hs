@@ -19,6 +19,9 @@ import Data.Time (addUTCTime, getCurrentTime)
 import Data.UUID qualified as UUID
 import Data.Vector qualified as DataVector
 import Effectful (Eff)
+import Hasql.Decoders qualified as D
+import Hasql.Encoders qualified as E
+import Hasql.Statement (preparable)
 import Hasql.Transaction qualified as Tx
 import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Keiro.Workflow.Awakeable.Schema (registerAwakeableTx)
@@ -87,7 +90,8 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace real file provider"
-    [ testCase "independent file recovery settles the original edit after freeze and revoked replay authority" $ withEffect fixture \env binding snapshot access reference runtime _ -> do
+    [ testCase "corrupt file registration preserves the original unresolved edit" (corruptRegisteredFile fixture),
+      testCase "independent file recovery settles the original edit after freeze and revoked replay authority" $ withEffect fixture \env binding snapshot access reference runtime _ -> do
         let checkpoint = throwIO (userError "fixture interrupted after publication")
         Executor.executeAcceptedAttempt (executorFor runtime checkpoint) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         (_, uncertain) <- right =<< run env (Execution.loadExecution access)
@@ -145,7 +149,7 @@ tests fixture =
         readFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") >>= (@?= "old dependency\n")
         Just original <- right =<< run env (Execution.inspectExecutionAttempt reference.attemptId)
         original.lateReceipt @?= Nothing
-        Just (_, registration, _) <- run env (runTransaction (Store.inspectRegisteredFileTx reference.operationId))
+        Just (_, registration, _) <- right =<< run env (runTransaction (Store.inspectRegisteredFileTx reference.operationId))
         run env (runTransaction (Store.registerFileTx binding (registration & #claimOwner .~ (fixtureOwner "forged")))) >>= (@?= Left WorkspaceBindingConflict),
       testCase "independent recovery refuses a substituted target and never searches unregistered operations" $ withEffect fixture \env binding snapshot _ reference runtime _ -> do
         Executor.executeAcceptedAttempt (executorFor runtime (throwIO (userError "lost publication acknowledgement"))) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
@@ -513,3 +517,40 @@ fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+corruptRegisteredFile :: DatabaseFixture -> IO ()
+corruptRegisteredFile fixture = withEffect fixture \env binding snapshot access reference runtime _ -> do
+  Executor.executeAcceptedAttempt (executorFor runtime (throwIO (userError "lost publication acknowledgement"))) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+  Just original <- right =<< run env (runTransaction (Store.inspectRegisteredFileTx reference.operationId))
+  let (_, registration, _) = original
+      file = workspaceFiles binding.storageRoot binding </> "src/dependency.txt"
+      replace value = run env (runTransaction (Tx.statement value (preparable "UPDATE shikigami.workspace_file_registrations SET registration=$1" (E.param (E.nonNullable E.jsonb)) D.noResult)))
+  published <- getModificationTime file
+  (_, before) <- right =<< run env (Execution.loadExecution access)
+  before.phase @?= Unresolved
+  mapM_
+    ( \value -> do
+        replace value
+        run env (runTransaction (Store.inspectRegisteredFileTx reference.operationId)) >>= (@?= Left WorkspaceBindingConflict)
+        ignored <-
+          run
+            env
+            ( runTransaction do
+                _ <- Store.freezeWorkspaceTx binding snapshot.identity (fixtureRevision 0)
+                Store.inspectRegisteredFileTx reference.operationId
+            )
+        ignored @?= Left WorkspaceBindingConflict
+        control <- right =<< run env (runTransaction (Store.inspectWorkspaceControlTx binding))
+        fmap (.frozen) control @?= Just False
+        publishFileReceipt env reference.operationId >>= (@?= Left FileEffectUnresolved)
+        (_, after) <- right =<< run env (Execution.loadExecution access)
+        after @?= before
+        getModificationTime file >>= (@?= published)
+        replace (Aeson.toJSON registration)
+    )
+    [Aeson.Null, Aeson.toJSON (registration & #receipt . #fingerprint .~ "different-retained-intent"), Aeson.toJSON (registration & #receipt . #generation .~ fixtureRevision 0), Aeson.toJSON (registration & #receipt . #path .~ "../outside")]
+  run env (runTransaction (Store.inspectRegisteredFileTx reference.operationId)) >>= (@?= Right (Just original))
+  publishFileReceipt env reference.operationId >>= (@?= Right FileReceiptAcknowledged)
+  publishFileReceipt env reference.operationId >>= (@?= Right FileReceiptAcknowledged)
+  getModificationTime file >>= (@?= published)
+  readFile file >>= (@?= "PRIVATE_REPLACEMENT\n")

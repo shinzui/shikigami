@@ -14,6 +14,10 @@ import Data.Text qualified as Text
 import Data.Time (addUTCTime)
 import Data.UUID.V4 qualified as UUID4
 import Effectful (Eff)
+import Hasql.Decoders qualified as D
+import Hasql.Encoders qualified as E
+import Hasql.Statement (preparable)
+import Hasql.Transaction qualified as Tx
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Transaction (runTransaction)
@@ -128,9 +132,17 @@ tests fixture =
           host.load assignment >>= \case Left _ -> pure (); Right _ -> assertFailure "unknown effect was bypassed"
           fmap length <$> run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing)) >>= (@?= Right 1)
           run env (runTransaction (Workspaces.recordWorkspaceReceiptTx binding (prepared & #state .~ EditRefused))) >>= (@?= Right ())
+          let replaceBinding value = run env (runTransaction (Tx.statement value (preparable "UPDATE shikigami.workspace_bindings SET binding=$1" (E.param (E.nonNullable E.jsonb)) D.noResult)))
+          -- A complete binding with a corrupt locator field used to disappear
+          -- from the JSON-based lookup and permit a fresh-copy fallback.
+          replaceBinding (Aeson.toJSON (binding & #request . #assignment .~ Nothing))
+          host.load assignment >>= \case Left _ -> pure (); Right _ -> assertFailure "corrupt retained origin authorized a replacement workspace"
+          replaceBinding (Aeson.toJSON binding)
+          fmap length <$> run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing)) >>= (@?= Right 1)
+          readFile (workspaceFiles binding.storageRoot binding </> "dependency.txt") >>= (@?= "ACCEPTED_PRIOR_CHANGE\n")
           admission <- right =<< host.load assignment
           admission.workspace @?= binding.workspace
-          run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Just (binding, Ready))
+          run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Right (Just (binding, Ready)))
           admission.owner @?= binding.request.owner
           admission.epoch @?= (fixtureRevision 0)
           host.load assignment >>= (@?= Right admission)
@@ -155,7 +167,7 @@ tests fixture =
             resumed <- right =<< host.load next
             resumed.workspace @?= binding.workspace
             pure thirdRun
-          effective <- run env (runTransaction (Transfers.currentWorkspaceRequestTx binding))
+          effective <- right =<< run env (runTransaction (Transfers.currentWorkspaceRequestTx binding))
           fmap (.runId) effective @?= Just latest
           run env (runTransaction (inspectProcessProfileTx binding.workspace)) >>= (@?= Right (Just (profile, ProfileReady))),
       testCase "successor host admits the real retained child and exact read adapter without reallocating or provisioning" $ do
@@ -204,7 +216,7 @@ tests fixture =
             -- Idleness never retires the continuing session's workspace. Once
             -- closed, eligibility follows the successor execution, despite no
             -- terminal original-allocation execution being present.
-            run env (runTransaction (cleanupEligibleTx binding)) >>= (@?= False)
+            run env (runTransaction (cleanupEligibleTx binding)) >>= (@?= Right False)
             Just (idle, _) <- right =<< run env (Sessions.inspectSession intent.sessionId)
             (_, nextMessage) <- right =<< run env (Sessions.acceptMessage parent idle.revision (fixtureRevision 1) (fixtureOperationId "successor-followup-message") (Instruction 1 FollowUp (fixtureInstruction "continue successor") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
             (_, nextStarted) <- right =<< run env (Sessions.startAssignment parent (advanceRevision idle.revision) (fixtureRevision 1) (fixtureOperationId "successor-followup-start") nextMessage.assignmentId)
@@ -225,8 +237,8 @@ tests fixture =
               pure ()
             Just (finished, _) <- right =<< run env (Sessions.inspectSession intent.sessionId)
             _ <- right =<< run env (Sessions.closeSession parent finished.revision (fixtureRevision 1) (fixtureOperationId "close-successor") AssignmentFailed)
-            run env (runTransaction (cleanupEligibleTx binding)) >>= (@?= True)
-          run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Just (binding, Ready))
+            run env (runTransaction (cleanupEligibleTx binding)) >>= (@?= Right True)
+          run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Right (Just (binding, Ready)))
           run env (runTransaction (inspectProcessProfileTx binding.workspace)) >>= (@?= Right (Just (profile, ProfileReady)))
           (workspaceTransferProvider supervisor).admitWrite binding.workspace intent.sessionId intent.oldOwner (fixtureRevision 0) (fixtureOperationId "late-original") >>= assertRefused,
       testCase "private peer client recovers one retained fence across service restart and revocation" $ withTransfer fixture \env binding intent runtime _ -> withListener \path listener uid -> do
@@ -242,7 +254,7 @@ tests fixture =
           client.reconcile intent >>= (@?= FencedAndSettled proof)
           client.admitWrite binding.workspace intent.sessionId intent.oldOwner (fixtureRevision 0) (fixtureOperationId "late-old") >>= assertRefused
           client.admitWrite binding.workspace intent.sessionId intent.newOwner (fixtureRevision 1) (fixtureOperationId "premature-successor") >>= assertRefused
-        run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Just (binding, Ready)),
+        run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Right (Just (binding, Ready))),
       testCase "freeze cancels the retained process but cannot prove descendant settlement from a stop request" $ withTransferProcess fixture \env binding intent runtime record stopped -> do
         provider <- pure (workspaceTransferProvider runtime)
         provider.reconcile intent >>= (@?= FenceUnresolved)

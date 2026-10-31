@@ -48,7 +48,9 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace transfer store"
-    [ testCase "cleanup absence and SQL failure remain distinct" $ withWorkspace fixture \env _ _ binding _ -> do
+    [ testCase "binding and control corruption refuse and roll back ignored reads" (corruptWorkspaceReads fixture),
+      testCase "retained transfer corruption cannot authorize another freeze or fence" (corruptTransferReads fixture),
+      testCase "cleanup absence and SQL failure remain distinct" $ withWorkspace fixture \env _ _ binding _ -> do
         run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Right Nothing)
         run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing)) >>= (@?= Right [binding])
         failed <-
@@ -83,7 +85,7 @@ tests fixture =
             )
         frozen @?= Right ()
         refused @?= Left WorkspaceBindingConflict
-        control <- run env (runTransaction (Workspaces.inspectWorkspaceControlTx binding))
+        control <- right =<< run env (runTransaction (Workspaces.inspectWorkspaceControlTx binding))
         fmap (.frozen) control @?= Just False
         replace (Aeson.toJSON second)
         recovered <- right =<< run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing))
@@ -163,12 +165,33 @@ tests fixture =
         run env (runTransaction (lookupSessionChildTx binding.request.runId)) >>= (@?= Left WorkspaceBindingConflict)
         run env (runTransaction (admitSuccessorTx binding (admission & #assignmentId .~ (fixtureAssignment "payload-assignment")))) >>= (@?= Left WorkspaceBindingConflict)
         run env (runTransaction (admitSuccessorTx binding (admission & #filePolicy .~ Just supervisedFilePolicy))) >>= (@?= Left WorkspaceBindingConflict)
-        run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Just (binding, Ready))
-        effective <- run env (runTransaction (currentWorkspaceRequestTx binding))
+        run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Right (Just (binding, Ready)))
+        effective <- right =<< run env (runTransaction (currentWorkspaceRequestTx binding))
         fmap (.runId) effective @?= Just runId
         fmap (.assignment) effective @?= Just (Just (sessionIdFor session, message.assignmentId))
         fmap (.owner) effective @?= Just successor
         fmap (.epoch) effective @?= Just (fixtureRevision 1)
+        let replaceAdmission value = run env (runTransaction (Tx.statement value (preparable "UPDATE shikigami.workspace_successor_admissions SET admission=$1" (E.param (E.nonNullable E.jsonb)) D.noResult)))
+        mapM_
+          ( \value -> do
+              replaceAdmission value
+              run env (runTransaction (currentWorkspaceRequestTx binding)) >>= (@?= Left WorkspaceBindingConflict)
+              run env (runTransaction (cleanupEligibleTx binding)) >>= (@?= Left WorkspaceBindingConflict)
+              run env (runTransaction (admitSuccessorTx binding admission)) >>= (@?= Left WorkspaceBindingConflict)
+              refused <-
+                run
+                  env
+                  ( runTransaction do
+                      Tx.sql "UPDATE shikigami.workspace_controls SET frozen=true"
+                      currentWorkspaceRequestTx binding
+                  )
+              refused @?= Left WorkspaceBindingConflict
+              replaceAdmission (Aeson.toJSON admission)
+              current <- right =<< run env (runTransaction (Workspaces.inspectWorkspaceControlTx binding))
+              fmap (.frozen) current @?= Just False
+              run env (runTransaction (admitSuccessorTx binding admission)) >>= (@?= Right ())
+          )
+          [Aeson.Null, Aeson.toJSON (admission & #runId .~ "wrong-retained-run")]
     ]
 
 successor :: AgentIdentity
@@ -228,3 +251,85 @@ renamePendingKey :: AppEnv -> Text.Text -> Text.Text -> IO ()
 renamePendingKey env original replacement = run env (runTransaction (Tx.statement (original, replacement) statement))
   where
     statement = preparable "UPDATE shikigami.workspace_effects SET operation_id=$2 WHERE operation_id=$1" (contrazip2 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.text))) D.noResult
+
+corruptWorkspaceReads :: DatabaseFixture -> IO ()
+corruptWorkspaceReads fixture = withWorkspace fixture \env _ _ binding _ -> do
+  let sql text = run env (runTransaction (Tx.sql text))
+      replace statement value = run env (runTransaction (Tx.statement value (preparable statement (E.param (E.nonNullable E.jsonb)) D.noResult)))
+  run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Right (Just (binding, Ready)))
+  sql "ALTER TABLE shikigami.workspace_bindings DROP CONSTRAINT workspace_entity_identity_matches_binding"
+  mapM_
+    ( \value -> do
+        replace "UPDATE shikigami.workspace_bindings SET binding=$1" value
+        run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Left WorkspaceBindingConflict)
+        refused <-
+          run
+            env
+            ( runTransaction do
+                Tx.sql "UPDATE shikigami.workspace_controls SET frozen=true"
+                result <- Workspaces.inspectWorkspaceTx binding.workspace
+                pure result
+            )
+        refused @?= Left WorkspaceBindingConflict
+        replace "UPDATE shikigami.workspace_bindings SET binding=$1" (Aeson.toJSON binding)
+        control <- right =<< run env (runTransaction (Workspaces.inspectWorkspaceControlTx binding))
+        fmap (.frozen) control @?= Just False
+        run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Right (Just (binding, Ready)))
+    )
+    [Aeson.Null, Aeson.toJSON (binding & #workspace . #resource .~ "wrong-address")]
+  replace "UPDATE shikigami.workspace_controls SET owner=$1" Aeson.Null
+  run env (runTransaction (Workspaces.inspectWorkspaceControlTx binding)) >>= (@?= Left WorkspaceBindingConflict)
+  ignored <-
+    run
+      env
+      ( runTransaction do
+          Tx.sql "UPDATE shikigami.workspace_controls SET frozen=true"
+          Workspaces.inspectWorkspaceControlTx binding
+      )
+  ignored @?= Left WorkspaceBindingConflict
+  replace "UPDATE shikigami.workspace_controls SET owner=$1" (Aeson.toJSON binding.request.owner)
+  restored <- right =<< run env (runTransaction (Workspaces.inspectWorkspaceControlTx binding))
+  fmap (.frozen) restored @?= Just False
+  -- A genuine SQL error still escapes through the store boundary and rolls back
+  -- the task-local table rename, independently of the domain refusal path.
+  unavailable <-
+    runAppIO
+      env
+      ( runTransaction do
+          Tx.sql "ALTER TABLE shikigami.workspace_bindings RENAME TO workspace_bindings_unavailable"
+          Workspaces.inspectWorkspaceTx binding.workspace
+      )
+  case unavailable of
+    Left _ -> pure ()
+    Right _ -> assertFailure "SQL failure became a domain value"
+  run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Right (Just (binding, Ready)))
+
+corruptTransferReads :: DatabaseFixture -> IO ()
+corruptTransferReads fixture = withWorkspace fixture \env session access binding _ -> do
+  intent <- request env session access binding
+  run env (runTransaction (inspectTransferTx binding intent.oldEpoch)) >>= (@?= Right Nothing)
+  run env (runTransaction (beginTransferTx binding intent)) >>= (@?= Right Nothing)
+  run env (runTransaction (inspectTransferTx binding intent.oldEpoch)) >>= (@?= Right (Just (intent, Nothing)))
+  let replace column value = run env (runTransaction (Tx.statement value (preparable ("UPDATE shikigami.workspace_transfers SET " <> column <> "=$1") (E.param (E.nonNullable E.jsonb)) D.noResult)))
+  replace "intent" Aeson.Null
+  run env (runTransaction (inspectTransferTx binding intent.oldEpoch)) >>= (@?= Left WorkspaceBindingConflict)
+  run env (runTransaction (beginTransferTx binding intent)) >>= (@?= Left WorkspaceBindingConflict)
+  run env (runTransaction (retainFenceTx binding intent)) >>= (@?= Left WorkspaceBindingConflict)
+  ignored <-
+    run
+      env
+      ( runTransaction do
+          Tx.sql "UPDATE shikigami.workspace_controls SET frozen=false"
+          inspectTransferTx binding intent.oldEpoch
+      )
+  ignored @?= Left WorkspaceBindingConflict
+  control <- right =<< run env (runTransaction (Workspaces.inspectWorkspaceControlTx binding))
+  fmap (.frozen) control @?= Just True
+  replace "intent" (Aeson.toJSON intent)
+  proof <- right =<< run env (runTransaction (retainFenceTx binding intent))
+  replace "proof" Aeson.Null
+  run env (runTransaction (inspectTransferTx binding intent.oldEpoch)) >>= (@?= Left WorkspaceBindingConflict)
+  run env (runTransaction (beginTransferTx binding intent)) >>= (@?= Left WorkspaceBindingConflict)
+  replace "proof" (Aeson.toJSON proof)
+  run env (runTransaction (inspectTransferTx binding intent.oldEpoch)) >>= (@?= Right (Just (intent, Just proof)))
+  run env (runTransaction (retainFenceTx binding intent)) >>= (@?= Right proof)

@@ -67,7 +67,7 @@ continuingCase config prefix stage = withQualification config prefix \q -> case 
     Just second <- advanceTools q.env q.current first
     executeConfigured q second
     Just process <- advanceTools q.env q.current second
-    Just (binding, _) <- run q.env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
+    Just (binding, _) <- right =<< run q.env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
     Lazy.writeFile (prefix </> "continuing.json") (Aeson.encode (Continuing binding admission process session actor))
   "worker" -> withCase q \item -> executeConfigured q item.prepared
   "inspect" -> withCase q \item -> do
@@ -143,7 +143,7 @@ followup q = do
   nextRun <- maybe (fail "followup child absent") pure started.childWorkflowId
   next <- loadAssignment q root nextRun original.owner
   unless (next.workspace == original.workspace && next.bindingDigest == original.bindingDigest && next.instructions == original.instructions && next.epoch == original.epoch) (fail "followup allocation or accepted instructions changed")
-  Just (binding, _) <- run q.env (runTransaction (Store.inspectWorkspaceTx next.workspace))
+  Just (binding, _) <- right =<< run q.env (runTransaction (Store.inspectWorkspaceTx next.workspace))
   before <- right =<< run q.env (runTransaction (inspectProcessProfileTx binding.workspace))
   second <- prepareTools q.env q.authorizer q.current q.client next [edit "src/integration-c" "1\n" "2\n", validate]
   (secondLast, _) <- runTools q second

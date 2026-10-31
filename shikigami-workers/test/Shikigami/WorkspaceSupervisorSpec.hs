@@ -290,7 +290,7 @@ tests fixture =
           [False, True],
       testCase "ownership freeze refuses actual process dispatch before launch registration" $ withProcess fixture id True \file runtime observed calls snapshot reference -> do
         Just admission <- pure snapshot.workspace
-        Just (binding, _) <- transaction file (Workspaces.inspectWorkspaceTx admission.workspace)
+        Just (binding, _) <- right =<< transaction file (Workspaces.inspectWorkspaceTx admission.workspace)
         transaction file (Workspaces.freezeWorkspaceTx binding binding.request.owner binding.request.epoch) >>= (@?= Right ())
         Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         transaction file (Processes.inspectProcessTx reference.operationId) >>= (@?= Right Nothing)

@@ -260,3 +260,99 @@ The classification census hash and the two reviewed source hashes are refreshed;
 unrelated semantic verdicts are unchanged. Both checker modes still exit 1 with
 `missing 3697 classification keys`. This is intentional refusal of incomplete
 audit coverage, not milestone acceptance or final M3 suite evidence.
+
+The next implementation checkpoint is bound by `ledger-workspace-source.json`
+against parent `9ab8713`. It includes the ledger and workspace owner changes,
+worker/HTTP adapters, public compiler probes, fixture adaptations and the test
+suite's direct dependency on the already-used relay-pagination package. No
+package bound, dependency version, migration or workflow body changes.
+
+The HTTP acceptance ledger now preserves typed row-decoding results inside its
+owning transactions. A complete retained row with an invalid agent/request/run
+key or unknown disposition refuses; ignored reads roll back earlier and later
+writes. Replay after repair returns the original queued winner. Lists validate
+the extra pagination probe before trimming and cursor construction, so corrupt
+probe metadata cannot disappear behind a valid returned edge. Reconciliation
+rereads the retained request before observing the DLQ. SQL failures remain store
+unavailability; absence remains absence. `RunDisposition` has only `RunAccepted`
+and `RunDeadLettered`; its SQL/HTTP renderer preserves the exact historical
+strings. Public compiler controls accept both constructors and the renderer,
+then reject Text, representation coercion, delivery-status substitution and
+Generic construction. All 68 opaque-value compiler controls pass.
+
+The ledger, worker-status and HTTP groups pass 6, 10 and 9 cases respectively:
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test shikigami-workers-test shikigami-server-test --enable-tests -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/HTTP acceptance ledger/||/run status composition/||/agent-run HTTP/'
+nix develop --no-write-lock-file -c python3 tests/types/opaque-values.py
+```
+
+Workspace binding, control, retained file receipt, registered-file and transfer
+readers now return `Either WorkspaceError` and condemn malformed owned metadata.
+Worker adapters preserve that refusal before provisioning, cleanup, independent
+file recovery or transfer. Binding reads reuse the allocator's request/path
+predicate and check the identity column and historical origin locator. Transfer
+inspection reapplies the existing intent/fence checks. Registered-file lookup
+uses left joins and owning consistency checks, retaining a malformed registration
+or missing related fact as refusal rather than omission. Existing locator bytes,
+allocated identities, private receipts and completed effects remain unchanged.
+
+New core controls persist complete bindings/transfers through public writers,
+then corrupt JSON, locator association, control ownership, intent/proof or a
+retained successor admission. Inspection and admission refuse, ignored reads
+roll back control changes, and exact repair recovers the original binding,
+current owner and fence. A genuine SQL failure remains a store failure. The
+worker file fixture performs a real accepted edit, loses its acknowledgement,
+then mutates its complete registration or an existing generation/path invariant.
+The effect remains unresolved, reads refuse, tentative freeze rolls back and
+neither files nor modification time change. Repair acknowledges the original
+actual without another edit.
+
+A complete binding with a corrupted assignment coordinate used to disappear
+behind JSON-based discovery and permit a follow-up's fresh-copy fallback. Both
+follow-up and successor discovery now reconstruct exact historical provider
+locators from relational session/message coordinates before owned decoding. The
+real host fixture proves corruption refuses, no second workspace appears, and
+repair recovers the original accepted bytes. Current-owner lookup similarly
+decodes admissions before filtering owner and epoch; corruption cannot become
+cleanup fallback. SQL terminal-eligibility and prior-assignment settlement
+predicates remain separate semantic audit work.
+
+An intermediate broad workspace pass reports 161 worker cases passing. After the
+locator and retained-invariant refinements, the focused candidate passes nine
+core PostgreSQL cases and 27 worker transfer/file cases:
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test shikigami-workers-test --enable-tests -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/workspace/'
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test shikigami-workers-test --enable-tests -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/workspace transfer store/||/workspace concrete transfer owner/||/workspace real file provider/'
+```
+
+All database cases use disposable suite fixtures, with no skipped database
+acceptance. These are macOS metadata/file/IPC results. Prototype clients have
+been adapted for compilation; this checkpoint claims no additional native Linux
+containment or cross-build recovery qualification.
+
+Semantic review also adds 112 closed nullary declarations, eighteen explicit
+constraint/native/callback aliases and the ledger/control/child records. A
+closed-enum verdict certifies only the declared alternatives; it does not certify
+surrounding state transitions or permissions. Structural aliases do not certify
+nested record members. There are 454 reviewed keys and 51 explicit violations;
+no remaining record or scalar is exempted as persistence. The 24 domain-tool
+mutation tests pass. M1/M2/M3 remain open, and the frozen guide stays deferred.
+
+The formatted full build passes, including the adapted prototype clients. Census
+refresh reports 322 modules, 915 module declarations and fourteen role
+entrypoints, with 3,990 total declaration/member keys. Fresh source/compiler
+fingerprints, interfaces and tools independently enumerate that exact set.
+Only the four substantively rereviewed workspace owner hashes are refreshed;
+other classifications retain their matching source identities. The frozen
+inventory audit and all 21 upgrade-tool mutation tests still pass.
+
+The same review reads 29 existing checked-value implementations, adding 58
+source-supported declaration/payload entries for their exact parser ranges,
+private construction, scoped counters and actual technical-locator lifetimes.
+No new syntax restriction or entity allocation is inferred for these values.
+The total is now 512 reviewed keys (436 compliant, 25 not applicable, 51 explicit
+violations), leaving 3,478 unreviewed keys. Both coverage checker modes still
+refuse the incomplete audit. Hash freshness and focused runtime checks do not
+substitute for the remaining semantic review or M3 acceptance.

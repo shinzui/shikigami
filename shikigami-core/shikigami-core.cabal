@@ -632,6 +632,7 @@ test-suite shikigami-core-postgres-test
     lens,
     pgmq-hasql,
     process,
+    relay-pagination,
     servant-client,
     settei,
     settei-env,

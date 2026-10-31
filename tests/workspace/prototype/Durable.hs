@@ -211,7 +211,7 @@ workflowCase configFile prefix stage = do
         access <- right =<< run env (Execution.authorizeReplay execution job.identity (pure (Right ())))
         (snapshot, state) <- right =<< run env (Execution.loadExecution access)
         admission <- maybe (fail "admitted workspace absent") pure snapshot.workspace
-        Just (binding, _) <- run env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
+        Just (binding, _) <- right =<< run env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
         unless (admission.filePolicy == Just supervisedFilePolicy) (fail "wrong filesystem profile")
         let metadataPath = workspaceMetadata binding.storageRoot binding
         headId <- right =<< Objects.readHead metadataPath

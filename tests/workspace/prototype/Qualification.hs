@@ -165,7 +165,7 @@ integrationCase config prefix = withQualification config prefix \q -> do
         admission <- loadAssignment q root ("integration-target-" <> name) owner
         prepared <- prepareTools q.env q.authorizer q.current q.client admission [("overlay__workspace-integrate__plan", Aeson.toJSON (Integration.Request q.initial.binding.base selected))]
         (lastTool, outputs) <- runTools q prepared
-        Just (binding, _) <- run q.env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
+        Just (binding, _) <- right =<< run q.env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
         Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= \value -> unless (value == Right binding.base) (fail "planning changed HEAD")
         output <- case outputs of [value] -> pure value; _ -> fail "expected one integration proposal"
         pure (binding, lastTool, output)

@@ -214,7 +214,7 @@ loadAccepted runtime request = do
   unless (validProcessRouting routing) (abort SupervisorRefused)
   rule <- either (const (abort SupervisorRefused)) pure (parseEither (Aeson.withObject "validation rule" (\fields -> if length fields /= 1 then fail "invalid rule request" else fields .: "rule")) tool.invocation.arguments)
   unless (bounded rule) (abort SupervisorRefused)
-  (binding, state) <- transact runtime (Workspaces.inspectWorkspaceTx admission.workspace) >>= maybe (abort SupervisorRefused) pure
+  (binding, state) <- transact runtime (Workspaces.inspectWorkspaceTx admission.workspace) >>= either (const (abort SupervisorRefused)) pure >>= maybe (abort SupervisorRefused) pure
   unless (state == Ready && matchesWorkspaceAdmission binding admission && admission.runId == snapshot.runId && admission.assignmentId == snapshot.selection.assignmentId && Just admission.rootId == snapshot.selection.rootId && admission.rootId == binding.request.rootId && admission.owner == snapshot.identity && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base) (abort SupervisorRefused)
   (command, profile) <- runtime.selectRule binding admission rule >>= either (const (abort SupervisorRefused)) pure
   profileIdentity <- Systemd.systemdProfileIdentity profile
@@ -342,7 +342,7 @@ stopControlled runtime binding record directory = do
   root <- runAppIO runtime.appEnv (Roots.inspectRoot binding.request.rootId)
   control <- runAppIO runtime.appEnv (runTransaction (Workspaces.inspectWorkspaceControlTx binding))
   let controlled =
-        either (const False) (maybe False (.frozen)) control || now >= record.deadline || case root of
+        either (const False) (either (const False) (maybe False (.frozen))) control || now >= record.deadline || case root of
           Right (Right currentRoot) -> isLeft (Resources.checkRoot now currentRoot.revision currentRoot)
           _ -> False
   when controlled do

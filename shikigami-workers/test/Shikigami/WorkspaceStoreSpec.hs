@@ -86,7 +86,7 @@ tests fixture =
         run env (reserveWorkspaceTx root request repo) >>= (@?= Right (original, Reserved)),
       testCase "aborted reservation publishes neither identity nor origin" $ withFixture fixture \env _ root repo -> do
         (aborted, _) <- right =<< run env (do result <- reserveWorkspaceTx root request repo; Tx.condemn; pure result)
-        run env (inspectWorkspaceTx aborted.workspace) >>= (@?= Nothing)
+        run env (inspectWorkspaceTx aborted.workspace) >>= (@?= Right Nothing)
         (retained, _) <- right =<< run env (reserveWorkspaceTx root request repo)
         retained.workspace @?= aborted.workspace
         assertBool "rolled back candidate is not reused" (retained.id /= aborted.id)
@@ -179,7 +179,7 @@ tests fixture =
         takeMVar reached
         cancel worker
         doesPathExist (takeDirectoryOfFiles root binding) >>= (@?= False)
-        run env (inspectWorkspaceTx binding.workspace) >>= (@?= Just (binding, Reserved))
+        run env (inspectWorkspaceTx binding.workspace) >>= (@?= Right (Just (binding, Reserved)))
         allocateWorkspace root binding Reserved >>= (@?= Right ())
         run env (markWorkspaceReadyTx binding) >>= (@?= Right ())
         removeDirectoryRecursive (takeDirectoryOfFiles root binding)
@@ -189,7 +189,7 @@ tests fixture =
         repo <- resolved source blob "policy-1"
         (binding, _) <- right =<< run env (reserveWorkspaceTx root request repo)
         allocateWorkspace root binding Reserved >>= (@?= Left WorkspaceAllocationRefused)
-        run env (inspectWorkspaceTx binding.workspace) >>= (@?= Just (binding, Reserved)),
+        run env (inspectWorkspaceTx binding.workspace) >>= (@?= Right (Just (binding, Reserved))),
       testCase "destination substitution and invalid request refuse" $ withFixture fixture \env _ root repo -> do
         run env (reserveWorkspaceTx root ((request & #principal .~ (UnresolvedLegacyIdentity))) repo) >>= (@?= Left InvalidWorkspaceRequest)
         (binding, _) <- right =<< run env (reserveWorkspaceTx root request repo)

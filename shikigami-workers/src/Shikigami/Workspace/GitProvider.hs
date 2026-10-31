@@ -211,7 +211,7 @@ loadAcceptedTool transferable descriptor expected runtime snapshot dispatch inpu
   response <- execute runtime.appEnv (Execution.readReplayPayload @OperationOutcome access "operation-outcome" tool.response)
   assistant <- case response of ModelReturned value _ -> pure value; _ -> abort FileEffectRefused
   unless (take 1 (drop (toolPositionNumber tool.position) (toolInvocations assistant)) == [tool.invocation]) (abort FileEffectRefused)
-  (binding, state) <- transact runtime.appEnv (Workspaces.inspectWorkspaceTx admission.workspace) >>= maybe (abort FileEffectRefused) pure
+  (binding, state) <- transact runtime.appEnv (Workspaces.inspectWorkspaceTx admission.workspace) >>= either (const (abort FileEffectRefused)) pure >>= maybe (abort FileEffectRefused) pure
   unless (state == Ready && matchesWorkspaceAdmission binding admission && admission.runId == snapshot.runId && admission.assignmentId == snapshot.selection.assignmentId && Just admission.rootId == snapshot.selection.rootId && admission.rootId == binding.request.rootId && admission.owner == snapshot.identity && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base) (abort FileEffectRefused)
   let next = toolContinuation tool assistant
   pure (AcceptedGit snapshot access binding admission dispatch (GitRouting snapshot.executionId snapshot.identity operation.input.digest next))

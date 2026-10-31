@@ -2,20 +2,23 @@
 module Shikigami.AgentRun.Ledger
   ( RunRequestRow (..),
     AcceptOutcome (..),
+    RunDisposition (..),
+    renderRunDisposition,
     httpRunKey,
     payloadFingerprint,
     acceptRunRequest,
     lookupRunRequest,
+    lookupRunRequestTx,
     lookupRunRequestById,
     recordDeadLetter,
     refreshRunDisposition,
     listRunRequests,
+    listRunRequestsTx,
     RunListError (..),
   )
 where
 
 import Data.Aeson (Value, encode, object, withObject, (.:), (.=))
-import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
 import Data.Bifunctor (first)
 import Data.ByteString qualified as BS
@@ -24,8 +27,6 @@ import Data.Foldable (toList)
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.Int (Int64)
-import Data.List.NonEmpty (NonEmpty ((:|)))
-import Data.Text qualified as Text
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID
 import Hasql.Decoders qualified as D
@@ -69,11 +70,27 @@ data RunRequestRow = RunRequestRow
     requestedBy :: !Text,
     queueMessageId :: !Int64,
     acceptedAt :: !UTCTime,
-    disposition :: !Text,
+    disposition :: !RunDisposition,
     dispositionDetail :: !(Maybe Text),
     dispositionAt :: !(Maybe UTCTime)
   }
   deriving stock (Generic, Eq, Show)
+
+-- | The service-owned queue disposition; workflow lifecycle remains separately
+-- derived from durable workflow facts. Stored spellings are unchanged.
+data RunDisposition = RunAccepted | RunDeadLettered
+  deriving stock (Eq, Show)
+
+renderRunDisposition :: RunDisposition -> Text
+renderRunDisposition = \case
+  RunAccepted -> "accepted"
+  RunDeadLettered -> "dead_lettered"
+
+parseRunDisposition :: Text -> Either Text RunDisposition
+parseRunDisposition = \case
+  "accepted" -> Right RunAccepted
+  "dead_lettered" -> Right RunDeadLettered
+  _ -> Left "unknown run disposition"
 
 data AcceptOutcome = Accepted !RunRequestRow | Replayed !RunRequestRow | Conflicting !RunRequestRow
   deriving stock (Eq, Show)
@@ -87,7 +104,7 @@ acceptRunRequest pool job key caller
         Left _ -> pure (Left "The run acceptance store is unavailable.")
         Right (Just row) -> pure (Right (Accepted row))
         Right Nothing -> do
-          existing <- safeUse pool (Session.statement (agent, key) lookupKeyStatement)
+          existing <- runRead pool (Tx.statement (agent, key) lookupKeyStatement >>= checkedRead . sequence)
           pure $ case existing of
             Right (Just row)
               | row.payloadFingerprint == fingerprint -> Right (Replayed row)
@@ -99,20 +116,23 @@ acceptRunRequest pool job key caller
     fingerprint = payloadFingerprint job.triggerPayload
     accept = do
       MessageId message <- enqueueRunJobTx job
-      let row = RunRequestRow agent key (runJobWorkflowId job).unWorkflowId job.idempotencyKey fingerprint caller message job.occurredAt "accepted" Nothing Nothing
+      let row = RunRequestRow agent key (runJobWorkflowId job).unWorkflowId job.idempotencyKey fingerprint caller message job.occurredAt RunAccepted Nothing Nothing
       inserted <- Tx.statement row insertStatement
       case inserted of
         Just acceptedAt -> pure (Just (row & #acceptedAt .~ acceptedAt))
         Nothing -> Tx.condemn >> pure Nothing
 
 lookupRunRequest :: Pool -> AgentName -> Text -> IO (Either Text (Maybe RunRequestRow))
-lookupRunRequest pool agent runId = safeUse pool (Session.statement (agent, runId) lookupIdStatement)
+lookupRunRequest pool agent runId = runRead pool (lookupRunRequestTx agent runId)
+
+lookupRunRequestTx :: AgentName -> Text -> Tx.Transaction (Either Text (Maybe RunRequestRow))
+lookupRunRequestTx agent runId = Tx.statement (agent, runId) lookupIdStatement >>= checkedRead . sequence
 
 -- | The operator knows the workflow UUID before a journal can name its agent.
 -- Refuse ambiguous ids rather than selecting an arbitrary agent's request.
 lookupRunRequestById :: Pool -> Text -> IO (Either Text (Maybe RunRequestRow))
 lookupRunRequestById pool runId = do
-  rows <- safeUse pool (Session.statement runId statement)
+  rows <- runRead pool (Tx.statement runId statement >>= checkedRead . sequence)
   pure $ case rows of
     Left err -> Left err
     Right [] -> Right Nothing
@@ -127,13 +147,13 @@ safeUse pool action = first (const "The run acceptance store is unavailable.") <
 columns :: Text
 columns = "agent_name, idempotency_key, run_id, run_key, payload_fingerprint, requested_by, queue_message_id, accepted_at, disposition, disposition_detail, disposition_at"
 
-rowDecoder :: D.Row RunRequestRow
+rowDecoder :: D.Row (Either Text RunRequestRow)
 rowDecoder =
-  RunRequestRow
-    <$> D.column (D.nonNullable (D.refine mkAgentName D.text))
-    <*> D.column (D.nonNullable (D.refine parseRequestKey D.text))
+  assemble
+    <$> text
     <*> text
-    <*> D.column (D.nonNullable (D.refine parseRunKey D.text))
+    <*> text
+    <*> text
     <*> text
     <*> text
     <*> D.column (D.nonNullable D.int8)
@@ -143,14 +163,23 @@ rowDecoder =
     <*> D.column (D.nullable D.timestamptz)
   where
     text = D.column (D.nonNullable D.text)
+    assemble agent key run runKey fingerprint caller message accepted disposition detail observed =
+      RunRequestRow <$> mkAgentName agent <*> parseRequestKey key <*> pure run <*> parseRunKey runKey <*> pure fingerprint <*> pure caller <*> pure message <*> pure accepted <*> parseRunDisposition disposition <*> pure detail <*> pure observed
 
-keyEncoder :: E.Params (Text, Text)
-keyEncoder = (fst >$< E.param (E.nonNullable E.text)) <> (snd >$< E.param (E.nonNullable E.text))
+checkedRead :: Either Text a -> Tx.Transaction (Either Text a)
+checkedRead = \case
+  Left _ -> Tx.condemn >> pure (Left "The retained run acceptance is corrupt.")
+  Right value -> pure (Right value)
 
-lookupKeyStatement :: Statement (AgentName, RequestKey) (Maybe RunRequestRow)
+runRead :: Pool -> Tx.Transaction (Either Text a) -> IO (Either Text a)
+runRead pool action = do
+  result <- safeUse pool (Tx.transaction Tx.ReadCommitted Tx.Write action)
+  pure (result >>= id)
+
+lookupKeyStatement :: Statement (AgentName, RequestKey) (Maybe (Either Text RunRequestRow))
 lookupKeyStatement = preparable ("SELECT " <> columns <> " FROM shikigami.agent_run_requests WHERE agent_name=$1 AND idempotency_key=$2") (((agentNameText . fst) >$< E.param (E.nonNullable E.text)) <> ((requestKeyText . snd) >$< E.param (E.nonNullable E.text))) (D.rowMaybe rowDecoder)
 
-lookupIdStatement :: Statement (AgentName, Text) (Maybe RunRequestRow)
+lookupIdStatement :: Statement (AgentName, Text) (Maybe (Either Text RunRequestRow))
 lookupIdStatement = preparable ("SELECT " <> columns <> " FROM shikigami.agent_run_requests WHERE agent_name=$1 AND run_id=$2") (((agentNameText . fst) >$< E.param (E.nonNullable E.text)) <> (snd >$< E.param (E.nonNullable E.text))) (D.rowMaybe rowDecoder)
 
 insertStatement :: Statement RunRequestRow (Maybe UTCTime)
@@ -190,31 +219,36 @@ recordDeadLetter pool key detail =
 -- Retain DLQ evidence until this receipt is recorded. Later archive/redrive/purge
 -- cannot erase the ledger's fact. No workflow journal or private table is read.
 refreshRunDisposition :: Pool -> RunRequestRow -> IO (Either Text RunRequestRow)
-refreshRunDisposition pool request
-  | request.disposition /= "accepted" = pure (Right request)
-  | otherwise = do
-      result <- safeUse pool (Tx.transaction Tx.ReadCommitted Tx.Write reconcile)
-      pure (either Left id result)
+refreshRunDisposition pool request = runRead pool do
+  retained <- lookupRunRequestTx request.agentName request.runId
+  case retained of
+    Left err -> pure (Left err)
+    Right Nothing -> Tx.condemn >> pure (Left "The run disposition is unavailable.")
+    Right (Just current)
+      | current.disposition /= RunAccepted -> pure (Right current)
+      | otherwise -> reconcile current
   where
-    reconcile = do
+    reconcile current = do
       entries <-
         Tx.statement
           ReadMessage
             { queueName = RunJobs.runJob.jobQueue.dlqName,
               delay = 0,
               batchSize = Just 1,
-              conditional = Just (object ["original_message_id" .= request.queueMessageId])
+              conditional = Just (object ["original_message_id" .= current.queueMessageId])
             }
           PgmqStatements.readMessage
       case toList entries of
-        [] -> pure (Right request)
+        [] -> pure (Right current)
         entry : _ -> case parseEither (withObject "Keiro DLQ envelope" (.: "dead_letter_reason")) (unMessageBody entry.body) of
           Left _ -> Tx.condemn >> pure (Left "The run disposition is unavailable.")
           Right reason -> do
-            updated <- Tx.statement (request.runKey, boundedBehaviorDetail reason) receiptStatement
+            updated <- Tx.statement (current.runKey, boundedBehaviorDetail reason) receiptStatement >>= checkedRead . sequence
             case updated of
-              Nothing -> Tx.condemn >> pure (Left "The run disposition is unavailable.")
-              Just row -> pure (Right row)
+              Left err -> pure (Left err)
+              Right Nothing -> Tx.condemn >> pure (Left "The run disposition is unavailable.")
+              Right (Just row) -> pure (Right row)
+
     receiptStatement =
       preparable
         ("UPDATE shikigami.agent_run_requests SET disposition='dead_lettered', disposition_detail=COALESCE(disposition_detail,$2), disposition_at=COALESCE(disposition_at,now()) WHERE run_key=$1 RETURNING " <> columns)
@@ -225,9 +259,18 @@ data RunListError = InvalidRunCursor !CursorError | RunListUnavailable !Text
   deriving stock (Eq, Show)
 
 listRunRequests :: Pool -> AgentName -> PageRequest -> IO (Either RunListError (Connection RunRequestRow))
-listRunRequests pool agent request = case Relay.paginate runSort request base rowDecoder of
+listRunRequests pool agent request = do
+  result <- safeUse pool (Tx.transaction Tx.ReadCommitted Tx.Write (listRunRequestsTx agent request))
+  pure (first RunListUnavailable result >>= id)
+
+listRunRequestsTx :: AgentName -> PageRequest -> Tx.Transaction (Either RunListError (Connection RunRequestRow))
+listRunRequestsTx agent request = case Relay.paginateSnippet runSort request base of
   Left err -> pure (Left (InvalidRunCursor err))
-  Right statement -> first RunListUnavailable <$> safeUse pool (Session.statement () statement)
+  Right snippet -> do
+    -- Validate every fetched row, including the extra pagination probe, before
+    -- constructing cursors or trimming the page. Corruption is never omission.
+    decoded <- Tx.statement () (Snippet.toStatement snippet (D.rowList rowDecoder)) >>= checkedRead . sequence
+    pure (first RunListUnavailable (Relay.mkConnection runSort request <$> decoded))
   where
     base =
       Snippet.sql ("SELECT " <> columns <> " FROM shikigami.agent_run_requests WHERE agent_name = ")

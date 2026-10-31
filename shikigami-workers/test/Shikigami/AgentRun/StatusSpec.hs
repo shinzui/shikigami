@@ -99,7 +99,7 @@ tests fixture =
             Left _ -> pure ()
             result -> assertFailure ("malformed evidence was a lifecycle: " <> show result)
           unchanged <- acceptedRequest store job
-          unchanged.disposition @?= "accepted"
+          unchanged.disposition @?= Ledger.RunAccepted
           messages <- right =<< Pool.use store.pool (Pgmq.readMessage (Pgmq.ReadMessage RunJobs.runJob.jobQueue.dlqName 0 (Just 1) Nothing))
           case toList messages of
             [entry] -> do

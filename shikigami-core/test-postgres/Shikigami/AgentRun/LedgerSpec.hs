@@ -3,15 +3,24 @@ module Shikigami.AgentRun.LedgerSpec (tests) where
 import Control.Concurrent.Async (replicateConcurrently)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
+import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
+import Data.Text qualified as Text
 import Data.Vector qualified as Vector
+import Hasql.Decoders qualified as D
+import Hasql.Encoders qualified as E
 import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Session
+import Hasql.Statement (preparable)
+import Hasql.Transaction qualified as Tx
+import Hasql.Transaction.Sessions qualified as Transactions
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Pgmq qualified
+import Relay.Pagination qualified as Page
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
+import Shikigami.Agent.Run.Key (runKeyText)
 import Shikigami.Agent.RunJob (RunRouteKind (..), runJobWorkflowId)
 import Shikigami.AgentRun.Ledger
 import Shikigami.AgentRun.RequestKey
@@ -26,7 +35,8 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "HTTP acceptance ledger"
-    [ testCase "accept, replay and conflict leave exactly one queue message" $
+    [ testCase "corrupt accepted metadata refuses reads and rolls back ignored refusals" (corruptAcceptance fixture),
+      testCase "accept, replay and conflict leave exactly one queue message" $
         withShikigamiFreshDatabase fixture \connection -> withStore (defaultConnectionSettings connection) \store -> do
           _ <- right =<< ensureRunQueue store.pool
           now <- getCurrentTime
@@ -106,3 +116,80 @@ fixtureRequestKey = either (error . show) id . parseRequestKey
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+corruptAcceptance :: DatabaseFixture -> IO ()
+corruptAcceptance fixture = withShikigamiFreshDatabase fixture \connection -> withStore (defaultConnectionSettings connection) \store -> do
+  _ <- right =<< ensureRunQueue store.pool
+  now <- getCurrentTime
+  let agent = fixtureAgentName "heartbeat"
+      key = fixtureRequestKey "corruption"
+      job = addressedRunJob now (compatibilityIdentity agent) agent AgentWorkflowRoute (Aeson.object []) (httpRunKey agent key)
+      siblingKey = fixtureRequestKey "sibling"
+      siblingJob = addressedRunJob now (compatibilityIdentity agent) agent AgentWorkflowRoute (Aeson.object []) (httpRunKey agent siblingKey)
+      sql query = right =<< Pool.use store.pool (Session.statement () (preparable query E.noParams D.noResult))
+      corrupt query = right =<< Pool.use store.pool (Session.statement (runJobWorkflowId job).unWorkflowId (preparable query (E.param (E.nonNullable E.text)) D.noResult))
+      transaction :: Tx.Transaction a -> IO a
+      transaction action = right =<< Pool.use store.pool (Transactions.transaction Transactions.ReadCommitted Transactions.Write action)
+      page = Page.PageRequest 20 Page.Forward Nothing
+      refusal = "The retained run acceptance is corrupt."
+  lookupRunRequest store.pool agent "missing" >>= (@?= Right Nothing)
+  lookupRunRequestById store.pool "missing" >>= (@?= Right Nothing)
+  Accepted original <- right =<< acceptRunRequest store.pool job key "caller"
+  Accepted sibling <- right =<< acceptRunRequest store.pool siblingJob siblingKey "caller"
+  lookupRunRequestById store.pool original.runId >>= (@?= Right (Just original))
+  initial <- right =<< listRunRequests store.pool agent page
+  length initial.edges @?= 2
+  -- Place the corrupt row beyond the returned edge in a one-element page. The
+  -- extra probe must be checked before mkConnection discards it.
+  corrupt "UPDATE shikigami.agent_run_requests SET accepted_at=accepted_at - interval '1 day' WHERE run_id=$1"
+  ordered <- right =<< listRunRequests store.pool agent (Page.PageRequest 1 Page.Forward Nothing)
+  map (.node.runId) ordered.edges @?= [sibling.runId]
+  sql "ALTER TABLE shikigami.agent_run_requests DROP CONSTRAINT agent_run_requests_disposition_check"
+  let mutations =
+        [ ("UPDATE shikigami.agent_run_requests SET idempotency_key='' WHERE run_id=$1", "UPDATE shikigami.agent_run_requests SET idempotency_key='corruption' WHERE run_id=$1"),
+          ("UPDATE shikigami.agent_run_requests SET disposition='broken' WHERE run_id=$1", "UPDATE shikigami.agent_run_requests SET disposition='accepted' WHERE run_id=$1"),
+          ("UPDATE shikigami.agent_run_requests SET run_key='' WHERE run_id=$1", "UPDATE shikigami.agent_run_requests SET run_key=$2 WHERE run_id=$1")
+        ]
+  mapM_
+    ( \(damage, repair) -> do
+        corrupt damage
+        lookupRunRequest store.pool agent original.runId >>= (@?= Left refusal)
+        lookupRunRequestById store.pool original.runId >>= (@?= Left refusal)
+        listRunRequests store.pool agent page >>= (@?= Left (RunListUnavailable refusal))
+        listRunRequests store.pool agent (Page.PageRequest 1 Page.Forward Nothing) >>= (@?= Left (RunListUnavailable refusal))
+        ignored <- transaction do
+          Tx.statement () (preparable "UPDATE shikigami.agent_run_requests SET requested_by='must-rollback' WHERE idempotency_key='sibling'" E.noParams D.noResult)
+          result <- lookupRunRequestTx agent original.runId
+          Tx.statement () (preparable "UPDATE shikigami.agent_run_requests SET disposition_detail='also-rollback' WHERE idempotency_key='sibling'" E.noParams D.noResult)
+          pure result
+        ignored @?= Left refusal
+        lookupRunRequest store.pool agent sibling.runId >>= (@?= Right (Just sibling))
+        ignoredList <- transaction do
+          Tx.statement () (preparable "UPDATE shikigami.agent_run_requests SET requested_by='must-rollback' WHERE idempotency_key='sibling'" E.noParams D.noResult)
+          listRunRequestsTx agent page
+        ignoredList @?= Left (RunListUnavailable refusal)
+        lookupRunRequest store.pool agent sibling.runId >>= (@?= Right (Just sibling))
+        refreshRunDisposition store.pool original >>= (@?= Left refusal)
+        if "run_key=''" `Text.isInfixOf` damage
+          then do
+            acceptRunRequest store.pool job key "retry" >>= (@?= Left refusal)
+            _ <- right =<< Pool.use store.pool (Session.statement (original.runId, runKeyText original.runKey) (preparable repair ((fst >$< E.param (E.nonNullable E.text)) <> (snd >$< E.param (E.nonNullable E.text))) D.noResult))
+            pure ()
+          else corrupt repair
+        metrics <- right =<< Pool.use store.pool (Pgmq.queueMetrics runQueueName)
+        metrics.queueLength @?= 2
+    )
+    mutations
+  corrupt "UPDATE shikigami.agent_run_requests SET agent_name='' WHERE run_id=$1"
+  lookupRunRequestById store.pool original.runId >>= (@?= Left refusal)
+  corrupt "UPDATE shikigami.agent_run_requests SET agent_name='heartbeat' WHERE run_id=$1"
+  -- Recovery returns the retained winner, with no replacement queue message.
+  Just recovered <- right =<< lookupRunRequest store.pool agent original.runId
+  recovered.runKey @?= original.runKey
+  recovered.queueMessageId @?= original.queueMessageId
+  acceptRunRequest store.pool job key "retry" >>= (@?= Right (Replayed recovered))
+  sql "ALTER TABLE shikigami.agent_run_requests RENAME TO agent_run_requests_unavailable"
+  lookupRunRequest store.pool agent original.runId >>= (@?= Left "The run acceptance store is unavailable.")
+  lookupRunRequestById store.pool original.runId >>= (@?= Left "The run acceptance store is unavailable.")
+  listRunRequests store.pool agent page >>= (@?= Left (RunListUnavailable "The run acceptance store is unavailable."))
+  sql "ALTER TABLE shikigami.agent_run_requests_unavailable RENAME TO agent_run_requests"

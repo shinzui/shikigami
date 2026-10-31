@@ -183,7 +183,7 @@ withAccess mode runtime snapshot dispatch logical input perform = catch work (\(
                   arguments <- owned (Execution.readReplayPayload @ToolOperationInput permit "operation-input" operation.input)
                   binding <- runTx runtime (Store.inspectWorkspaceTx admission.workspace)
                   case (arguments, binding) of
-                    (Right tool, Right (Just (bound, Ready)))
+                    (Right tool, Right (Right (Just (bound, Ready))))
                       | tool.invocation.arguments == input && tool.invocation.name == wireName logical && tool.binding `elem` snapshot.toolBindings && tool.binding.name == wireName logical && tool.binding.revision == "workspace.edit:" <> fileRevision mode && tool.binding.schemaDigest == versionedDigest "shikigami.tool-schema/1" (if logical == "read" then readSchema else replaceSchema) && tool.binding.recovery == (if logical == "read" then RepeatableObservation else IdempotentEffect) && tool.binding.invoiceCost == NoInvoiceCost && admission.bindingDigest == workspaceBindingDigest bound && admission.runId == snapshot.runId && admission.assignmentId == snapshot.selection.assignmentId && matchesWorkspaceAdmission bound admission && admission.owner == snapshot.identity && Just admission.rootId == snapshot.selection.rootId -> do
                           let check = do
                                 lifecycle <- runtime.lifecycle snapshot
@@ -478,7 +478,7 @@ recoveryExecution env work = runAppIO env work >>= either (const (recoveryAbort 
 -- or performs a repository write. It shares the same lock as every writer.
 reconcileFileEffect :: AppEnv -> OperationId -> IO (Either FileEffectError FileReceipt)
 reconcileFileEffect env operation = protectRecovery do
-  (binding, registration, completed) <- recoveryTx env (Store.inspectRegisteredFileTx operation) >>= maybe (recoveryAbort FileEffectUnresolved) pure
+  (binding, registration, completed) <- recoveryTx env (Store.inspectRegisteredFileTx operation) >>= either (const (recoveryAbort FileEffectUnresolved)) pure >>= maybe (recoveryAbort FileEffectUnresolved) pure
   let original = registration.receipt
       matches receipt = (receipt & #state .~ EditPrepared) == original
       validate receipt = unless (original.state == EditPrepared && matches receipt && original.operationId == operation && original.bindingDigest == workspaceBindingDigest binding && original.generation > initialRevision && validWorkspacePath original.path && validProcessRouting registration.routing) (recoveryAbort FileEffectUnresolved)
@@ -493,7 +493,7 @@ reconcileFileEffect env operation = protectRecovery do
         -- A worker may have completed while this scanner waited for the lock.
         current <- recoveryTx env (Store.inspectRegisteredFileTx operation)
         case current of
-          Just (same, retained, saved) | same == binding && retained == registration -> do
+          Right (Just (same, retained, saved)) | same == binding && retained == registration -> do
             forM_ saved validate
             private <- readPrivateReceipt metadata name >>= either recoveryAbort (maybe (recoveryAbort FileEffectUnresolved) pure)
             validate private
@@ -520,7 +520,7 @@ reconcileFileEffect env operation = protectRecovery do
 
 publishFileReceipt :: AppEnv -> OperationId -> IO (Either FileEffectError FilePublication)
 publishFileReceipt env operationId = protectRecovery do
-  (binding, registration, _) <- recoveryTx env (Store.inspectRegisteredFileTx operationId) >>= maybe (recoveryAbort FileEffectUnresolved) pure
+  (binding, registration, _) <- recoveryTx env (Store.inspectRegisteredFileTx operationId) >>= either (const (recoveryAbort FileEffectUnresolved)) pure >>= maybe (recoveryAbort FileEffectUnresolved) pure
   reconciled <- reconcileFileEffect env operationId
   case reconciled of
     Left FileEffectUnresolved -> pure AwaitingFileReceipt

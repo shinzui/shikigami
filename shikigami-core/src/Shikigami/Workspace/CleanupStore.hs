@@ -63,11 +63,11 @@ prepareCleanupTx binding plan
         Right (Just _) -> pure (Left WorkspaceBindingConflict)
         Right Nothing -> do
           current <- currentWorkspaceRequestTx binding
-          owner <- maybe (pure (Left WorkspaceBindingConflict)) (\request -> Store.checkWorkspaceOwnerTx binding request.owner request.epoch) current
+          owner <- maybe (pure (Left WorkspaceBindingConflict)) (\request -> Store.checkWorkspaceOwnerTx binding request.owner request.epoch) (either (const Nothing) id current)
           terminal <- cleanupEligibleTx binding
           case owner of
-            Right () | terminal && maybe (current == Just binding.request) (\request -> current == Just request) plan.ownership -> do
-              frozen <- maybe (pure (Left WorkspaceBindingConflict)) (\request -> Store.freezeWorkspaceTx binding request.owner request.epoch) current
+            Right () | terminal == Right True && maybe (current == Right (Just binding.request)) (\request -> current == Right (Just request)) plan.ownership -> do
+              frozen <- maybe (pure (Left WorkspaceBindingConflict)) (\request -> Store.freezeWorkspaceTx binding request.owner request.epoch) (either (const Nothing) id current)
               case frozen of
                 Left err -> pure (Left err)
                 Right () -> do
@@ -98,14 +98,15 @@ listWorkspacesTx storageRoot cursor = do
   retained <- Tx.statement (Text.pack storageRoot, cursor) listBindings
   decodeRetained (traverse decodeJson retained)
 
-cleanupEligibleTx :: WorkspaceBinding -> Transaction Bool
+cleanupEligibleTx :: WorkspaceBinding -> Transaction (Either WorkspaceError Bool)
 cleanupEligibleTx binding = do
   current <- currentWorkspaceRequestTx binding
   case current of
-    Nothing -> pure False
-    Just request -> do
+    Left err -> pure (Left err)
+    Right Nothing -> pure (Right False)
+    Right (Just request) -> do
       let ExecutionId execution = executionIdFor (assignmentIdFor request.runId)
-      Tx.statement (binding.workspace.resource, execution, toJSON binding, toJSON request) terminalWorkspace
+      Right <$> Tx.statement (binding.workspace.resource, execution, toJSON binding, toJSON request) terminalWorkspace
 
 jsonParam :: (ToJSON a) => E.Params a
 jsonParam = toJSON >$< E.param (E.nonNullable E.jsonb)

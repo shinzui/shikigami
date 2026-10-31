@@ -57,7 +57,7 @@ listWorkspaces runtime actor cursor = protect do
   page <- transact runtime (listWorkspacesTx runtime.storageRoot cursor) >>= either (const (abort CleanupRefused)) pure
   rows <- forM (filter ((== runtime.storageRoot) . (.storageRoot)) page) \binding -> do
     retired <- transact runtime (inspectCleanupTx binding) >>= either (const (abort CleanupRefused)) pure
-    eligible <- transact runtime (cleanupEligibleTx binding)
+    eligible <- transact runtime (cleanupEligibleTx binding) >>= either (const (abort CleanupRefused)) pure
     pure (Aeson.object ["workspace" .= binding.workspace, "repository" .= binding.repository, "base" .= binding.base, "eligible" .= eligible, "cleanup" .= (case retired of Nothing -> "retained"; Just (_, False) -> "pending"; Just (_, True) -> "complete" :: Text)])
   pure (Aeson.object ["workspaces" .= rows, "next" .= (if length page == 20 then (.resource) . (.workspace) <$> listToMaybe (reverse page) else Nothing)])
 
@@ -65,7 +65,7 @@ cleanupWorkspace :: MaintenanceRuntime -> AgentIdentity -> WorkspaceRef -> IO (E
 cleanupWorkspace runtime actor ref = protect do
   unless (ref.provider == "shikigami.workspace/1" && validResource ref.resource) (abort CleanupRefused)
   grant runtime actor "inspect-cleanup" (toJSON ref)
-  (binding, state) <- transact runtime (Store.inspectWorkspaceTx ref) >>= maybe (abort CleanupRefused) pure
+  (binding, state) <- transact runtime (Store.inspectWorkspaceTx ref) >>= either (const (abort CleanupRefused)) pure >>= maybe (abort CleanupRefused) pure
   unless (state == Ready && binding.storageRoot == runtime.storageRoot) (abort CleanupRefused)
   let metadata = workspaceMetadata binding.storageRoot binding
       directory = binding.storageRoot </> Text.unpack binding.workspace.resource
@@ -82,7 +82,7 @@ cleanupWorkspace runtime actor ref = protect do
             uid <- maybe (fromIntegral <$> getEffectiveUserID) (pure . (.userId) . fst) profile
             files <- anchor (workspaceFiles binding.storageRoot binding)
             scratch <- anchor (workspaceScratch binding.storageRoot binding)
-            current <- transact runtime (currentWorkspaceRequestTx binding) >>= maybe (abort CleanupRefused) pure
+            current <- transact runtime (currentWorkspaceRequestTx binding) >>= either (const (abort CleanupRefused)) pure >>= maybe (abort CleanupRefused) pure
             pure (CleanupPlan (workspaceBindingDigest binding) files scratch uid (Just current))
         let authorize = grant runtime actor "cleanup" (toJSON (binding, plan))
         authorize

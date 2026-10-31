@@ -29,6 +29,8 @@ import Shikigami.Agent.Principal qualified as Principal
 import Shikigami.App.Config qualified as Config
 import Shikigami.Attestation.Reviewed qualified as Reviewed
 import Shikigami.Capability.Overlay qualified as Overlay
+import Shikigami.AgentRun.Ledger qualified as Ledger
+import Shikigami.Sink.Delivery qualified as Delivery
 import Shikigami.AgentRun.RequestKey qualified as Request
 import Shikigami.Agent.Run.Key qualified as FullKey
 import Shikigami.Trigger.RequestKey qualified as Addressed
@@ -54,7 +56,11 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''policyFormat :: ProcessPolicy.ProcessPolicyFormat
+POSITIVE = '''runDisposition :: Ledger.RunDisposition
+runDisposition = Ledger.RunAccepted
+runDispositionText :: Text
+runDispositionText = Ledger.renderRunDisposition Ledger.RunDeadLettered
+policyFormat :: ProcessPolicy.ProcessPolicyFormat
 policyFormat = ProcessPolicy.ProcessPolicyV1
 programIdentity :: Text -> Either Text (Decision.ProgramIdentity "program-id")
 programIdentity = Decision.parseProgramIdentity
@@ -167,6 +173,7 @@ CASES = [
     ('Decision.ProgramIdentity "program-id"', 'generic'),
     ('Decision.ProgramParameterDigest', 'generic'),
     ('ProcessPolicy.ProcessPolicyFormat', 'generic'),
+    ('Ledger.RunDisposition', 'generic'),
     ('Decision.DecisionCallId', 'generic'),
     ('Decision.DecisionCallOrdinal', 'generic'),
     ('Decision.ModelRegistration "model-version"', 'generic'),
@@ -231,6 +238,13 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
     result = compile(POSITIVE)
     assert result.returncode == 0, (result.stdout, result.stderr)
     print('opaque boundary: public factories/adapters: passed', flush=True)
+    for source_kind, body in [
+        ('Text', 'bypass :: Text -> Ledger.RunDisposition\nbypass = id\n'),
+        ('Text coercion', 'bypass :: Text -> Ledger.RunDisposition\nbypass = coerce\n'),
+        ('delivery status', 'bypass :: Delivery.DeliveryStatus -> Ledger.RunDisposition\nbypass = id\n')]:
+        result = compile(body)
+        assert result.returncode != 0 and 'RunDisposition' in result.stderr, (source_kind, result.stderr)
+        print('opaque boundary: run disposition ' + source_kind + ' substitution refused: passed', flush=True)
     for kind, operation in CASES:
         if operation == 'parse':
             body = 'bypass :: Aeson.Value -> Parser ' + kind + '\nbypass = Aeson.genericParseJSON Aeson.defaultOptions\n'

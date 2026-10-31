@@ -72,11 +72,11 @@ tests fixture =
                    refused <- inspectProcessProfileTx binding.workspace
                    controlInside <- Workspaces.inspectWorkspaceControlTx binding
                    -- Deliberately return normally after ignoring the refusal.
-                   pure (frozen, refused, fmap (.frozen) controlInside)
+                   pure (frozen, refused, fmap (fmap (.frozen)) controlInside)
                  frozen @?= Right ()
                  refused @?= Left WorkspaceBindingConflict
-                 frozenInside @?= Just True
-                 control <- run env (Workspaces.inspectWorkspaceControlTx binding)
+                 frozenInside @?= Right (Just True)
+                 control <- right =<< run env (Workspaces.inspectWorkspaceControlTx binding)
                  fmap (.frozen) control @?= Just False
                  retained <- run env (Tx.statement () retainedFacts)
                  retained @?= (1, False, 1)

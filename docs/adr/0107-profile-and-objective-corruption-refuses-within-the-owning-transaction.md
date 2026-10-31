@@ -73,6 +73,41 @@ updating the receipt or sending, and repair recovers the original delivered
 receipt with its downstream ID. This boundary covers status decoding; remaining
 receipt scalar and identity distinctions stay explicit audit violations.
 
+The HTTP acceptance ledger follows the same rule for checked agent/request/run
+keys and its closed `RunDisposition`. It validates all fetched pagination rows,
+including the extra row used only to decide whether another page exists, before
+constructing cursors or trimming the page. Reconciliation rereads retained
+acceptance within its transaction before observing DLQ evidence. Corruption
+cannot commit a queue observation or a replacement acceptance; SQL failures keep
+the existing unavailable result. The disposition renderer preserves the exact
+`accepted` and `dead_lettered` SQL and HTTP spellings.
+
+Workspace binding, control, effect receipt, registered-file and transfer reads
+also return owning refusals and condemn their transaction. Binding reads reuse
+the allocator's existing path/request predicate, check the allocated identity
+column against JSON, and check the immutable origin locator. Transfer reads
+reuse existing intent/fence invariants. Registered-file reads keep the row visible
+through left joins and validate the stored operation, fingerprint, binding,
+prepared receipt and any completed receipt before independent recovery.
+Missing related rows or a corrupt fingerprint cannot masquerade as an
+unregistered operation. Recovery adapters keep the original effect unresolved.
+
+Same-owner follow-up and successor discovery derive exact workspace locators
+from the session's relational assignment coordinates, then use the binding and
+transfer owners to inspect those rows. Discovery must not depend on fields
+inside the JSON it is meant to validate: a corrupt assignment locator could
+otherwise make retained work disappear and authorize a fresh allocation. The
+existing origin formula and provider addresses are unchanged, and no new entity
+identity or migration is introduced. Current-owner lookup likewise decodes
+retained admissions before filtering their owner/epoch, so unreadable admission
+cannot authorize cleanup fallback. Typed failures propagate through cleanup,
+provisioning, file/Git providers, transfer and process supervision.
+
+These checks qualify the named read boundaries. SQL terminal-eligibility and
+prior-assignment settlement predicates still require their own semantic review;
+this extension does not certify their JSON-derived Boolean decisions, or the
+remaining scalar audit.
+
 ## Alternatives rejected
 
 Mapping every database failure to corruption hides outages. Refining owned JSON

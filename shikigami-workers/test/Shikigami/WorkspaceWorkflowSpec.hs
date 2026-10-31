@@ -147,7 +147,7 @@ tests fixture =
                   _ <- inspectCleanupTx binding
                   pure ()
               )
-            control <- run env (runTransaction (Store.inspectWorkspaceControlTx binding))
+            control <- right =<< run env (runTransaction (Store.inspectWorkspaceControlTx binding))
             fmap (.frozen) control @?= Just True
             cleanupWorkspace runtime job.identity binding.workspace >>= (@?= Left CleanupRefused)
             listWorkspaces runtime job.identity Nothing >>= (@?= Left CleanupRefused)
@@ -212,7 +212,7 @@ tests fixture =
           let request = WorkspaceRequest snapshot.runId Nothing (fixtureRootId "workflow-root") job.identity job.identity (fixtureRevision 0)
               -- The binding itself is authoritative, never a model-selected path.
               storage = root
-          Just (binding, _) <- run env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
+          Just (binding, _) <- right =<< run env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
           binding.request @?= request
           readFile (workspaceFiles storage binding </> "dependency.txt") >>= (@?= "workflow replacement\n")
           contexts <- readIORef observed
@@ -281,7 +281,7 @@ tests fixture =
           access <- right =<< run env (Execution.authorizeReplay execution job.identity (pure (Right ())))
           (snapshot, _) <- right =<< run env (Execution.loadExecution access)
           admission <- maybe (fail "workspace admission missing") pure snapshot.workspace
-          Just (binding, _) <- run env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
+          Just (binding, _) <- right =<< run env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
           readFile (workspaceFiles root binding </> "dependency.txt") >>= (@?= "old dependency\n")
           length <$> readIORef observed >>= (@?= 2)
     ]
@@ -381,7 +381,7 @@ admittedBinding env job = do
   access <- right =<< run env (Execution.authorizeReplay execution job.identity (pure (Right ())))
   (snapshot, _) <- right =<< run env (Execution.loadExecution access)
   admission <- maybe (fail "workspace admission missing") pure snapshot.workspace
-  Just (binding, _) <- run env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
+  Just (binding, _) <- right =<< run env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
   pure binding
 
 finishWorkspace :: AppEnv -> RunJob -> Agent.AgentRunDeps -> IO WorkspaceBinding

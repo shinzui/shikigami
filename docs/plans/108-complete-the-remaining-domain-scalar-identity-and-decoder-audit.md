@@ -62,25 +62,25 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 - [ ] M3: Accept the refreshed classification with zero unresolved violations, passing final behavioral evidence, and an updated guide disposition.
 
 Implementation is under way. The schema-2 census and coverage/freshness checker
-pass 24 positive/mutation tests against a successful GHC 9.12.4 macOS build.
-The refreshed census has 3,989 declaration/member keys. Initial classification
-covers 263 keys with 37 explicit violations; 3,726 keys remain unreviewed, and the
-coverage gate correctly refuses completion. Process-profile and Objective row
-decoding and the closed process-policy format have focused evidence: 8 pure,
-31 serial core PostgreSQL, 19 worker and 277 compiler checks pass. The one-off
-workspace scope now also has a private construction boundary, with 15 existing
-agent cases and five public compiler clients passing; its two violations are
-resolved under ADR-80. Cleanup inspection/listing now also preserve an owning
-refusal and transactional rollback, with retained-plan recovery and whole-page
-refusal controls. The cleanup review adds 15 classified keys and five explicit
-scalar/locator violations. The directory/sink review adds another 29 keys and
-nine unresolved scalar/identity violations: 292 keys reviewed, 46 violations and
-3,697 keys unreviewed. Their retained-row corruption now refuses inside the
-transaction, with whole-list rollback and repaired-delivery send suppression
-passing 24 serial PostgreSQL cases. These are
-partial M1/M2 deliverables, not milestone completion. Continue semantic review
-and the remaining decoder owners before M3; see
-[the current evidence](../evidence/plan-108/acceptance.md) and its source snapshot.
+pass 24 positive/mutation tests against a successful full GHC 9.12.4 macOS build.
+The current census has 3,990 declaration/member keys. Semantic classification
+covers 512 keys: 436 compliant entries, 25 exclusions and 51 explicit violations;
+3,478 keys remain unreviewed, and both coverage modes correctly refuse completion.
+
+Process-profile, Objective, cleanup/listing, directory, sink, HTTP acceptance and
+workspace binding/file/transfer read boundaries now have owning transactional
+refusals. The latest ledger/worker-status/HTTP checks pass 6/10/9 cases; workspace
+checks pass nine core PostgreSQL and 27 worker transfer/file cases, after an
+intermediate 161-case broad worker pass. The 68 opaque compiler checks pass,
+including the new closed RunDisposition. Earlier policy, scope, worker and
+compiler results remain identified separately in the evidence. SQL terminal
+eligibility and prior-assignment settlement predicates still require semantic
+review; these changes do not certify their JSON-derived Boolean decisions.
+
+The full build, fresh census and focused checks are checkpoints, not milestone
+completion. Continue the remaining classification and applicable remediation
+before final M3 validation. See [the current evidence](../evidence/plan-108/acceptance.md)
+and `ledger-workspace-source.json` for the exact tested source snapshot.
 
 ## Surprises & Discoveries
 
@@ -108,6 +108,15 @@ constructor/Generic exposure, rather than a missing entity identity, bypassed
 the canonical-root resolver. Keep that locator as a private newtype with an
 explicit renderer; do not allocate an entity or introduce another root wrapper.
 Its runtime filesystem rechecks remain necessary after construction.
+
+2026-10-31: Workspace discovery cannot safely filter by fields inside the JSON
+it must decode: removing the retained assignment coordinate could trigger fresh
+allocation for a follow-up. Reconstruct exact historical provider locators from
+the session's relational assignment coordinates, then ask the owning binding
+reader to decode them. This preserves the old origin formula without a migration.
+The actual host test corrupts a complete binding's assignment coordinate and
+proves refusal, one retained allocation, and recovery of the original bytes after
+repair. Pagination likewise validates its extra probe row before trimming it.
 
 2026-10-31: Directory and sink readers contain owned enum/name/key decoding,
 rather than SQL JSON. The same owning-transaction refusal rule applies. The
@@ -153,7 +162,7 @@ Partial implementation acceptance is recorded in
 [the current evidence](../evidence/plan-108/acceptance.md): the coverage tooling,
 five owner-decoding paths, one policy scalar and one-off scope construction pass
 focused checks. The complete
-classification, 46 unresolved violations, remaining owners and M3 acceptance remain
+classification, 51 unresolved violations, remaining owners and M3 acceptance remain
 unfinished; all three milestone checkboxes stay open and the frozen guide stays
 deferred. FRIC-36 remains logged for triage when the plan completes.
 

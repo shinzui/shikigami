@@ -35,7 +35,7 @@ workspaceTransferProvider runtime = WorkspaceProvider reconcile admit
     reconcile intent =
       either id id <$> protect do
         binding <- loadBinding intent.workspace
-        known <- transaction env (Transfers.inspectTransferTx binding intent.oldEpoch)
+        known <- transaction env (Transfers.inspectTransferTx binding intent.oldEpoch) >>= either (const (abort FenceConflict)) pure
         case known of
           Just (original, Just proof) | original == intent && matchesFence intent proof -> pure (FencedAndSettled proof)
           Just (original, _) | original /= intent -> abort FenceConflict
@@ -43,7 +43,7 @@ workspaceTransferProvider runtime = WorkspaceProvider reconcile admit
             frozen <- locked binding do
               -- Recheck after acquiring the lock: an independently admitted
               -- freeze can now be observed without requesting new authority.
-              retained <- transaction env (Transfers.inspectTransferTx binding intent.oldEpoch)
+              retained <- transaction env (Transfers.inspectTransferTx binding intent.oldEpoch) >>= either (const (abort FenceConflict)) pure
               case retained of
                 Nothing -> do
                   authority intent.actor binding
@@ -77,7 +77,7 @@ workspaceTransferProvider runtime = WorkspaceProvider reconcile admit
       pure (either (const (Left "workspace write admission refused")) Right result)
     loadBinding workspace =
       transaction env (Store.inspectWorkspaceTx workspace) >>= \case
-        Just (binding, Ready) -> pure binding
+        Right (Just (binding, Ready)) -> pure binding
         _ -> abort FenceUnavailable
     authority :: AgentIdentity -> WorkspaceBinding -> IO ()
     authority identity binding = do

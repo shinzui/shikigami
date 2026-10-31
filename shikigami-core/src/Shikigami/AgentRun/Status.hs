@@ -32,7 +32,7 @@ import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Agent.Workflow (StepResult (..))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
-import Shikigami.AgentRun.Ledger (RunRequestRow (..), lookupRunRequest, refreshRunDisposition)
+import Shikigami.AgentRun.Ledger (RunDisposition (..), RunRequestRow (..), lookupRunRequest, refreshRunDisposition)
 import Shikigami.Behavior.Error (boundedBehaviorDetail)
 import Shikigami.Directory.Store (RunSkip (..), lookupDrainSkip)
 import Shikigami.Memory.Access (shikigamiMemorySpace)
@@ -161,7 +161,7 @@ classifyRun agent runId facts =
             then (Succeeded, Nothing)
             else failed BehaviorFailed (fromMaybe "run completed without a successful session" behaviorReason)
       Nothing -> case facts.request of
-        Just row | row.disposition == "dead_lettered" -> failed DeadLettered (fromMaybe "run job dead-lettered" row.dispositionDetail)
+        Just row | row.disposition == RunDeadLettered -> failed DeadLettered (fromMaybe "run job dead-lettered" row.dispositionDetail)
         _ -> case facts.skip of
           Just skip -> failed Refused skip.reason
           Nothing -> (Accepted, Nothing)
@@ -175,7 +175,7 @@ classifyRun agent runId facts =
           [reason | name <- ["open-session", "record", "complete"], Just value <- [Map.lookup name facts.steps], Aeson.Success (StepRefused reason) <- [Aeson.fromJSON value :: Aeson.Result (StepResult ())]]
         <|> ((.lastError) =<< facts.instance_)
     terminalDisposition = case facts.request of
-      Just row | row.disposition == "dead_lettered" -> row.dispositionAt
+      Just row | row.disposition == RunDeadLettered -> row.dispositionAt
       _ -> Nothing
 
 deriveRunStatus :: KirokuStore -> AgentName -> Text -> IO (Either RunStatusFailure (Maybe RunStatusView))

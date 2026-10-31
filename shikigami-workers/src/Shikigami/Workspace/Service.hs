@@ -35,7 +35,8 @@ scanFileReceipts env cursor = do
   page <- runAppIO env (runTransaction (inspectFilePageTx cursor))
   case page of
     Left _ -> pure (Left FileEffectUnavailable)
-    Right operations -> do
+    Right (Left _) -> pure (Left FileEffectUnresolved)
+    Right (Right operations) -> do
       results <- forM operations \operation -> timeout 5000000 (publishFileReceipt env operation)
       let complete = length (filter (== Just (Right FileReceiptAcknowledged)) results)
       pure (Right (FileScan (listToMaybe (reverse operations)) (length operations) complete (length operations - complete)))

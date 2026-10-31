@@ -63,7 +63,7 @@ tests fixture =
           repeated <- request "GET" ("/agents/heartbeat/runs/" <> Text.unpack accepted.runId) Aeson.Null
           Http.responseBody repeated @?= Http.responseBody result
           Ledger.lookupRunRequest store.pool (fixtureAgentName "heartbeat") accepted.runId >>= \case
-            Right (Just row) -> row.disposition @?= "dead_lettered"
+            Right (Just row) -> row.disposition @?= Ledger.RunDeadLettered
             _ -> assertFailure "terminal receipt was not persisted",
       testCase "corrupt stored run history is a non-retryable typed internal failure" $
         withRunServerStore fixture Directory.disabledDirectoryHandle \store request -> do
