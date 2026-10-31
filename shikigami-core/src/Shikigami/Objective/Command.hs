@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.Objective.Command where
 
 import Data.Aeson qualified as Aeson
@@ -33,7 +35,7 @@ instance FromJSON Command where
 -- No FromJSON instance: these are absent from HTTP and model vocabularies.
 data InternalCommand
   = IngestCheckpoint !ObjectiveAssignmentId !CheckpointIntent ![EvidenceInput] ![UnresolvedOperation]
-  | TransferOwnership !ObjectiveAssignmentId !Integer !AgentIdentity
+  | TransferOwnership !ObjectiveAssignmentId !(StateRevision "worker-owner") !AgentIdentity
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON)
 

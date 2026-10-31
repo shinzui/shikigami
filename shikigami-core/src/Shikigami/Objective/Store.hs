@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
 
 -- | The only objective writer. Callers obtain the package-private Access from
 -- Capability; every transaction rechecks membership before revealing a receipt.
@@ -155,10 +156,10 @@ create access operation origin request verifyOrigin = guarded do
   identifier <- either (const (throwIO (Abort ObjectiveUnavailable))) pure (parseObjectiveId allocated)
   let creator = versionedDigest "shikigami.objective-creator/1" (toJSON access.actor)
       fingerprint = versionedDigest "shikigami.objective-create/1" (toJSON (access.actor, operation, origin, request))
-      initial = Objective identifier access.actor [Member access.actor [Owner, Coordinator, Completer]] request.title request.goal request.instructions 0 0 0 request.criteria Open [] [] [] [] [] request.external [] Nothing Nothing
+      initial = Objective identifier access.actor [Member access.actor [Owner, Coordinator, Completer]] request.title request.goal request.instructions initialRevision initialRevision initialRevision request.criteria Open [] [] [] [] [] request.external [] Nothing Nothing
       payload = toJSON (request, origin, initial)
       digest = versionedDigest "shikigami.objective-payload/1" payload
-      receipt = Receipt identifier operation fingerprint 0 digest
+      receipt = Receipt identifier operation fingerprint initialRevision digest
       lookupOriginal = protected do
         now <- Tx.statement () currentTime
         unless (now < access.expiresAt && creationAllowed access.settings access.actor) (abort ObjectiveDenied)
@@ -194,7 +195,7 @@ create access operation origin request verifyOrigin = guarded do
 -- Receipt recovery precedes transition validation. A prepare transaction writes
 -- only definitive negative outcomes; a positive transition is repeated inside
 -- the checked aggregate's append/projection transaction.
-execute :: (ObjectiveEffects es) => Access -> ObjectiveId -> Integer -> OperationId -> Mutation -> Eff es (Either ObjectiveError Receipt)
+execute :: (ObjectiveEffects es) => Access -> ObjectiveId -> StateRevision "objective" -> OperationId -> Mutation -> Eff es (Either ObjectiveError Receipt)
 execute access identifier expected operation mutation = guarded do
   unless (validKey (operationKey operation)) (throwIO (Abort (ObjectiveInvalid "invalid operation key")))
   loop (32 :: Int)
@@ -225,8 +226,8 @@ execute access identifier expected operation mutation = guarded do
             Left err -> pure (Left err)
             Right (Left outcome) -> pure outcome
             Right (Right before) -> do
-              let nextRevision = before.revision + 1
-                  command = G.ApplyObjectiveTransition (G.ApplyObjectiveTransitionData identifier (fromInteger before.revision) (fromInteger nextRevision) fingerprint)
+              let nextRevision = advanceRevision before.revision
+                  command = G.ApplyObjectiveTransition (G.ApplyObjectiveTransitionData identifier (fromInteger (revisionNumber before.revision)) (fromInteger (revisionNumber nextRevision)) fingerprint)
               applied <- persist identifier command do
                 current <- locked identifier
                 checkAccess access current
@@ -263,29 +264,29 @@ versionFor objective key = do
   assignment <- maybe (Left ObjectiveMissing) Right (find ((== key) . (.definition.assignmentId)) objective.assignments)
   root <- maybe (Left (ObjectiveInvalid "assignment has no admitted resource root")) Right assignment.definition.rootId
   cutoff <- maybe (Left (ObjectiveInvalid "assignment has no admitted cutoff")) Right assignment.definition.cutoff
-  pure (CP.ObjectiveVersion objective.revision assignment.revision objective.criteriaRevision assignment.ownerEpoch assignment.definition.owner (objective.status == Open && assignment.definition.state `notElem` [Done, Withdrawn]) root cutoff)
+  pure (CP.ObjectiveVersion (revisionNumber objective.revision) (revisionNumber assignment.revision) (revisionNumber objective.criteriaRevision) (revisionNumber assignment.ownerEpoch) assignment.definition.owner (objective.status == Open && assignment.definition.state `notElem` [Done, Withdrawn]) root cutoff)
 
-validateTransition :: UTCTime -> Access -> Integer -> Mutation -> Objective -> Either ObjectiveError Objective
+validateTransition :: UTCTime -> Access -> StateRevision "objective" -> Mutation -> Objective -> Either ObjectiveError Objective
 validateTransition _now access expected mutation current = do
   unless (authorized access current mutation) (Left ObjectiveDenied)
-  unless (current.revision >= 0 && current.revision < toInteger (maxBound :: Int)) (Left ObjectiveUnavailable)
+  unless (revisionNumber current.revision < toInteger (maxBound :: Int)) (Left ObjectiveUnavailable)
   case mutation of
     Internal (IngestCheckpoint key intent _ _) -> do
       actual <- versionFor current key
       let wanted = intent.expected
-      unless (intent.format == 1 && expected == wanted.revision && expected >= 0 && expected <= actual.revision && actual.assignmentRevision == wanted.assignmentRevision && actual.criteriaRevision == wanted.criteriaRevision && actual.owner == wanted.owner && actual.ownerEpoch == wanted.ownerEpoch && actual.rootId == wanted.rootId && actual.active == wanted.active && intent.epoch == actual.ownerEpoch && wanted.cutoff == actual.cutoff) (Left ObjectiveConflict)
+      unless (intent.format == 1 && revisionNumber expected == wanted.revision && revisionNumber expected <= actual.revision && actual.assignmentRevision == wanted.assignmentRevision && actual.criteriaRevision == wanted.criteriaRevision && actual.owner == wanted.owner && actual.ownerEpoch == wanted.ownerEpoch && actual.rootId == wanted.rootId && actual.active == wanted.active && intent.epoch == actual.ownerEpoch && wanted.cutoff == actual.cutoff) (Left ObjectiveConflict)
     _ -> unless (expected == current.revision) (Left ObjectiveConflict)
   next <- transition
-  let advanced = next & #revision .~ (current.revision + 1)
+  let advanced = next & #revision .~ (advanceRevision current.revision)
   validateSnapshot advanced
   pure advanced
   where
     active = unless (current.status == Open) (Left (ObjectiveInvalid "objective is not open"))
     editable = unless (current.status `elem` [Open, Blocked]) (Left (ObjectiveInvalid "objective is terminal"))
-    invalidate objective = objective & #assignments %~ map (\a -> a & #revision %~ (+ 1))
+    invalidate objective = objective & #assignments %~ map (\a -> a & #revision %~ advanceRevision)
     changeAssignment key f = do
       unless (any ((== key) . (.definition.assignmentId)) current.assignments) (Left ObjectiveMissing)
-      assignments <- traverse (\a -> if a.definition.assignmentId == key then (\next -> next & #revision .~ (a.revision + 1)) <$> f a else Right a) current.assignments
+      assignments <- traverse (\a -> if a.definition.assignmentId == key then (\next -> next & #revision .~ (advanceRevision a.revision)) <$> f a else Right a) current.assignments
       pure (current & #assignments .~ assignments)
     withEvidence objective key inputs = do
       assignment <- maybe (Left ObjectiveMissing) Right (find ((== key) . (.definition.assignmentId)) objective.assignments)
@@ -295,26 +296,26 @@ validateTransition _now access expected mutation current = do
         case input of
           Attestation {statement} -> unless (not (Text.null statement) && Text.length statement <= 4096 && any (\criterion -> criterion.key == input.criterion && criterion.kind == HumanVerifiable) objective.criteria) (Left ObjectiveInvalidEvidence)
           _ -> pure ()
-        pure (Evidence input disposition key (assignmentMeaning assignment) access.actor (current.revision + 1) current.instructionsRevision current.criteriaRevision)
+        pure (Evidence input disposition key (assignmentMeaning assignment) access.actor (advanceRevision current.revision) current.instructionsRevision current.criteriaRevision)
       unless (length (nub (map (.input.key) records)) == length records) (Left ObjectiveInvalidEvidence)
       pure (objective & #evidence %~ (<> records))
     transition = case mutation of
       Public command -> case command of
         ReviseInstructions text -> do
           editable
-          pure (invalidate (current & #instructions .~ text & #instructionsRevision %~ (+ 1)))
-        ReviseCriteria criteria -> editable >> validateCriteria criteria >> pure (current & #criteria .~ criteria & #criteriaRevision %~ (+ 1))
+          pure (invalidate (current & #instructions .~ text & #instructionsRevision %~ advanceRevision))
+        ReviseCriteria criteria -> editable >> validateCriteria criteria >> pure (current & #criteria .~ criteria & #criteriaRevision %~ advanceRevision)
         SetAssignments graph -> do
           editable
           validateGraph graph
           -- Retain withdrawn nodes: their identities and counters cannot revive.
           unless (all (\a -> a.definition.assignmentId `elem` map (.assignmentId) graph) current.assignments) (Left (ObjectiveInvalid "withdraw assignments instead of deleting identities"))
           assignments <- forM graph \draft -> case find ((== draft.assignmentId) . (.definition.assignmentId)) current.assignments of
-            Nothing -> pure (Assignment draft 0 0 0 [])
+            Nothing -> pure (Assignment draft initialRevision initialRevision initialRevision [])
             Just previous -> do
               unless (previous.definition.owner == draft.owner || isNothing previous.definition.sessionId) (Left (ObjectiveInvalid "session ownership requires fenced transfer"))
               unless (((isNothing previous.definition.sessionId && isNothing previous.definition.rootId) || (previous.definition.sessionId == draft.sessionId && previous.definition.rootId == draft.rootId && previous.definition.cutoff == draft.cutoff)) && (previous.definition.state /= Withdrawn || draft.state == Withdrawn)) (Left (ObjectiveInvalid "cannot replace an admitted binding or reuse an assignment"))
-              pure if previous.definition == draft then previous else previous & #definition .~ draft & #revision %~ (+ 1) & #instructionsRevision %~ (if previous.definition.instructions == draft.instructions && previous.definition.dependencies == draft.dependencies && previous.definition.owner == draft.owner then id else (+ 1))
+              pure if previous.definition == draft then previous else previous & #definition .~ draft & #revision %~ advanceRevision & #instructionsRevision %~ (if previous.definition.instructions == draft.instructions && previous.definition.dependencies == draft.dependencies && previous.definition.owner == draft.owner then id else advanceRevision)
           pure (current & #assignments .~ assignments)
         RecordProgress key state decisions assumptions -> do
           active
@@ -350,7 +351,7 @@ validateTransition _now access expected mutation current = do
         unless (either (const False) validKey (identityText owner)) (Left ObjectiveDenied)
         changeAssignment key \assignment -> do
           unless (assignment.ownerEpoch == epoch) (Left ObjectiveConflict)
-          pure (assignment & #definition . #owner .~ owner & #ownerEpoch %~ (+ 1))
+          pure (assignment & #definition . #owner .~ owner & #ownerEpoch %~ advanceRevision)
       Internal (IngestCheckpoint key _ inputs unresolved) -> do
         changed <- changeAssignment key (Right . (\a -> a & #acceptedResults %~ (<> map (.key) inputs)))
         recorded <- withEvidence changed key inputs
@@ -382,7 +383,7 @@ validateSources objective mutation = do
       Nothing -> pure (Right ())
       Just session -> do
         actual <- Tx.statement session.value selectWorkerBinding
-        let epoch = maybe 0 (.ownerEpoch) (find ((== draft.assignmentId) . (.definition.assignmentId)) objective.assignments)
+        let epoch = maybe 0 (revisionNumber . (.ownerEpoch)) (find ((== draft.assignmentId) . (.definition.assignmentId)) objective.assignments)
         pure $ case actual of
           Just (state, binding) | state.owner == draft.owner && state.epoch == epoch && Just binding.rootId == draft.rootId && binding.objective == referenceFor objective.objectiveId draft.assignmentId -> Right ()
           _ -> Left ObjectiveConflict

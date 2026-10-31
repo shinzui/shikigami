@@ -1,5 +1,12 @@
 # Current first-release domain qualification
 
+This document records the plan93 baseline at `e203470`. ObjectiveId was subsequently
+corrected to a generated TypeID-v7 domain under [ADR-73](../../adr/0073-objective-identity-is-allocated-and-creation-receipts-own-deduplication.md);
+see [the exact correction evidence](objective-typeid-results.txt) and
+[the current domain inventory](../../architecture/shikigami-domain-inventory.md).
+The execution/worker-session technical bindings remain; the Objective Text binding
+and the original three-binding conformance count below are historical evidence.
+
 Plan 93; accepted pre-reset source `88d4b3e`; qualified 2026-10-30.
 The four unused-service facts are recorded in the plan and ADR-27. No developer
 DB was changed. The strict differ exits 1 and preserves every breaking finding in

@@ -32,7 +32,7 @@ Review and fix every applicable Haskell and service-architecture guideline acros
 
 ## Surprises & Discoveries
 
-The native Relay query formatter owns a public JSON error protocol. Rewriting its response through private WAI constructors concealed that contract and was removed. Static configuration discovery previously read sources before selecting its static diagnostic; a FIFO exposes the resulting block. Both shared and interactive loaders now select static diagnostics before IO. The domain identity review found that ObjectiveId is application-owned and cannot be accepted as an arbitrary-text technical identity. The correction uses a generated checked TypeID-v7 domain while the atomic creator-scoped receipt remains the deduplication authority (ADR-73). The complete scalar/newtype review remains open.
+The native Relay query formatter owns a public JSON error protocol. Rewriting its response through private WAI constructors concealed that contract and was removed. Static configuration discovery previously read sources before selecting its static diagnostic; a FIFO exposes the resulting block. Both shared and interactive loaders now select static diagnostics before IO. The domain identity review found that ObjectiveId is application-owned and cannot be accepted as an arbitrary-text technical identity. The correction uses a generated checked TypeID-v7 domain while the atomic creator-scoped receipt remains the deduplication authority (ADR-73). Objective counters and command arguments now retain checked nominal StateRevision scopes, with numeric JSON/byte compatibility and four real compiler boundary cases (ADR-74). The complete scalar/newtype review remains open.
 
 ## Decision Log
 
@@ -40,7 +40,7 @@ The native Relay query formatter owns a public JSON error protocol. Rewriting it
 
 ## Outcomes & Retrospective
 
-Public API/CLI changes are implemented and the interim acceptance is in [haskell-service-results.txt](../evidence/keiro-0.22/haskell-service-results.txt): 94 server, 37 agent, 9 client and 30 API tests; live Hurl lifecycle; 70 real-process offline CLI checks. The language checker and nine mutation/lexical tests pass. ObjectiveId now has its checked TypeID-v7 domain, 543 pure and 375 serial PostgreSQL tests pass, and the strict breaking diff/fold change are retained. Workspace placement is strict-diff neutral. M1 and final source dispositions remain open; this is not completion or packaged Linux qualification.
+Public API/CLI changes are implemented and the interim acceptance is in [haskell-service-results.txt](../evidence/keiro-0.22/haskell-service-results.txt): 94 server, 37 agent, 9 client and 30 API tests; live Hurl lifecycle; 70 real-process offline CLI checks. The language checker and nine mutation/lexical tests pass. ObjectiveId now has its checked TypeID-v7 domain, 544 pure and 375 serial PostgreSQL tests pass, and the strict breaking diff/fold change are retained. Workspace placement is strict-diff neutral. M1 and final source dispositions remain open; this is not completion or packaged Linux qualification.
 
 ## Context and Orientation
 

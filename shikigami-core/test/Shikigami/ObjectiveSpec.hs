@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.ObjectiveSpec (tests) where
 
 import Data.Aeson ((.=))
@@ -34,6 +36,14 @@ tests =
           assertBool "evidence admission refused" (either (const True) (const False) (parseEvidenceKey invalid))
           assertBool "criterion JSON refused" (case Aeson.fromJSON (Aeson.String invalid) :: Aeson.Result CriterionKey of Aeson.Error _ -> True; _ -> False)
           assertBool "evidence JSON refused" (case Aeson.fromJSON (Aeson.String invalid) :: Aeson.Result EvidenceKey of Aeson.Error _ -> True; _ -> False),
+      testCase "revision admission is nonnegative and preserves numeric JSON" do
+        let value = revision 7 :: StateRevision "objective"
+        revisionNumber initialRevision @?= 0
+        revisionNumber (advanceRevision value) @?= 8
+        Aeson.toJSON value @?= Aeson.toJSON (7 :: Integer)
+        Aeson.encode value @?= Aeson.encode (7 :: Integer)
+        Aeson.fromJSON (Aeson.toJSON value) @?= Aeson.Success value
+        assertBool "negative revision refused" (case Aeson.fromJSON (Aeson.toJSON (-1 :: Integer)) :: Aeson.Result (StateRevision "objective") of Aeson.Error _ -> True; _ -> False),
       testCase "bounded graphs reject cycles, duplicates and dangling dependencies" do
         validateGraph [draft "a" [], draft "b" [ObjectiveAssignmentId "a"]] @?= Right ()
         mapM_
@@ -50,19 +60,19 @@ tests =
         assertBool "duplicate criteria refused" (validateCriteria [criterion, criterion] /= Right ()),
       testCase "acceptance rejects stale instructions, missing journey and child success alone" do
         validateAcceptance objective proposal @?= Right ()
-        validateAcceptance (objective & #instructionsRevision .~ 1) proposal @?= Left ObjectiveConflict
+        validateAcceptance (objective & #instructionsRevision .~ revision 1) proposal @?= Left ObjectiveConflict
         validateAcceptance (objective & #evidence .~ []) proposal @?= Left ObjectiveInvalidEvidence
-        validateAcceptance (objective & #assignments .~ [assignment & #instructionsRevision .~ 2]) proposal @?= Left ObjectiveInvalidEvidence
+        validateAcceptance (objective & #assignments .~ [assignment & #instructionsRevision .~ revision 2]) proposal @?= Left ObjectiveInvalidEvidence
         validateAcceptance (objective & #evidence .~ [evidence & #verification .~ EvidenceVerification CheckFailed (Just (criterionKey "human")) False]) proposal @?= Left ObjectiveInvalidEvidence
         validateAcceptance (objective & #criteria .~ [criterion & #journeyRequired .~ True]) proposal @?= Left ObjectiveInvalidEvidence
     ]
   where
     criterion = Criterion (criterionKey "human") "integrated user journey" HumanVerifiable False
     actor = VerifiedCaller "fixture"
-    proposal = CompletionProposal 0 0 0 ["artifact"] [evidenceKey "check"] []
-    assignment = Assignment (draft "a" [] & #state .~ Done) 0 0 0 []
-    evidence = Evidence (Attestation (evidenceKey "check") (criterionKey "human") "artifact" "reviewed" False) (EvidenceVerification CheckPassed (Just (criterionKey "human")) False) (ObjectiveAssignmentId "a") (assignmentMeaning assignment) actor 0 0 0
-    objective = Objective (either (error . show) id (parseObjectiveId "shikigami_objective_01h455vb4pex5vsknk084sn02q")) actor [Member actor [Owner]] "title" "goal" "instructions" 1 0 0 [criterion] Open [assignment] [evidence] [] [] [] [] [] (Just (proposal, actor)) Nothing
+    proposal = CompletionProposal (revision 0) (revision 0) (revision 0) ["artifact"] [evidenceKey "check"] []
+    assignment = Assignment (draft "a" [] & #state .~ Done) initialRevision initialRevision initialRevision []
+    evidence = Evidence (Attestation (evidenceKey "check") (criterionKey "human") "artifact" "reviewed" False) (EvidenceVerification CheckPassed (Just (criterionKey "human")) False) (ObjectiveAssignmentId "a") (assignmentMeaning assignment) actor initialRevision initialRevision initialRevision
+    objective = Objective (either (error . show) id (parseObjectiveId "shikigami_objective_01h455vb4pex5vsknk084sn02q")) actor [Member actor [Owner]] "title" "goal" "instructions" (revision 1) initialRevision initialRevision [criterion] Open [assignment] [evidence] [] [] [] [] [] (Just (proposal, actor)) Nothing
 
 draft :: Text -> [ObjectiveAssignmentId] -> AssignmentDraft
 draft key dependencies = AssignmentDraft (ObjectiveAssignmentId key) "work" dependencies (compatibilityIdentity "worker") Pending Nothing (Just (ExecutionRootId "root")) (Just (UTCTime (fromGregorian 2027 1 1) 0))
@@ -75,3 +85,6 @@ criterionKey = either (error . show) id . parseCriterionKey
 
 evidenceKey :: Text -> EvidenceKey
 evidenceKey = either (error . show) id . parseEvidenceKey
+
+revision :: Integer -> StateRevision scope
+revision = either (error . show) id . parseRevision

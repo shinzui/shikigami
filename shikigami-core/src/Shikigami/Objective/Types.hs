@@ -1,6 +1,8 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Durable values are identities and evidence references, never authority.
 -- Authentication and fresh action decisions belong to Objective.Capability.
-module Shikigami.Objective.Types (module Shikigami.Objective.Types, module Shikigami.Objective.Keys, ObjectiveId, parseObjectiveId, objectiveIdText) where
+module Shikigami.Objective.Types (module Shikigami.Objective.Types, module Shikigami.Objective.Keys, module Shikigami.StateRevision, ObjectiveId, parseObjectiveId, objectiveIdText) where
 
 import Data.Aeson ((.!=), (.:?))
 import Data.Aeson qualified as Aeson
@@ -12,6 +14,7 @@ import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Generated.Nominals (ObjectiveId, objectiveIdText, parseObjectiveId)
 import Shikigami.Objective.Keys
 import Shikigami.Prelude
+import Shikigami.StateRevision
 import Shikigami.WorkerSession.Types (AssignmentId, ResultReceipt, WorkerSessionId)
 
 newtype ObjectiveAssignmentId = ObjectiveAssignmentId {value :: Text}
@@ -74,9 +77,9 @@ data AssignmentDraft = AssignmentDraft
 
 data Assignment = Assignment
   { definition :: !AssignmentDraft,
-    revision :: !Integer,
-    instructionsRevision :: !Integer,
-    ownerEpoch :: !Integer,
+    revision :: !(StateRevision "objective-assignment"),
+    instructionsRevision :: !(StateRevision "assignment-instructions"),
+    ownerEpoch :: !(StateRevision "worker-owner"),
     acceptedResults :: ![EvidenceKey]
   }
   deriving stock (Eq, Show, Generic)
@@ -116,17 +119,17 @@ data Evidence = Evidence
     assignmentId :: !ObjectiveAssignmentId,
     assignmentDigest :: !Text,
     recordedBy :: !AccessPrincipal,
-    revision :: !Integer,
-    instructionsRevision :: !Integer,
-    criteriaRevision :: !Integer
+    revision :: !(StateRevision "objective"),
+    instructionsRevision :: !(StateRevision "objective-instructions"),
+    criteriaRevision :: !(StateRevision "objective-criteria")
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
 data CompletionProposal = CompletionProposal
-  { objectiveRevision :: !Integer,
-    instructionsRevision :: !Integer,
-    criteriaRevision :: !Integer,
+  { objectiveRevision :: !(StateRevision "objective"),
+    instructionsRevision :: !(StateRevision "objective-instructions"),
+    criteriaRevision :: !(StateRevision "objective-criteria"),
     artifacts :: ![Text],
     checks :: ![EvidenceKey],
     limitations :: ![Text]
@@ -154,9 +157,9 @@ data Objective = Objective
     title :: !Text,
     goal :: !Text,
     instructions :: !Text,
-    revision :: !Integer,
-    instructionsRevision :: !Integer,
-    criteriaRevision :: !Integer,
+    revision :: !(StateRevision "objective"),
+    instructionsRevision :: !(StateRevision "objective-instructions"),
+    criteriaRevision :: !(StateRevision "objective-criteria"),
     criteria :: ![Criterion],
     status :: !Status,
     assignments :: ![Assignment],
@@ -182,7 +185,7 @@ data Receipt = Receipt
   { objectiveId :: !ObjectiveId,
     operationId :: !OperationId,
     fingerprint :: !Text,
-    revision :: !Integer,
+    revision :: !(StateRevision "objective"),
     payloadDigest :: !Text
   }
   deriving stock (Eq, Show, Generic)

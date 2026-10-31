@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Authenticated admission for every objective adapter. Host callbacks consume
 -- verified caller/runtime context; none is populated from command JSON.
 module Shikigami.Objective.Capability
@@ -81,13 +83,13 @@ readObjectiveVersion host reference = do
   grant <- liftIO (admit host "read-version" (toJSON reference))
   either (pure . Left) (\access -> Store.readVersion access reference) grant
 
-executeCommand :: (Store.ObjectiveEffects es) => ObjectiveHost -> ObjectiveId -> Integer -> OperationId -> Command -> Eff es (Either ObjectiveError Receipt)
+executeCommand :: (Store.ObjectiveEffects es) => ObjectiveHost -> ObjectiveId -> StateRevision "objective" -> OperationId -> Command -> Eff es (Either ObjectiveError Receipt)
 executeCommand host objective expected operation command = execute host objective expected operation (Public command)
 
-executeInternal :: (Store.ObjectiveEffects es) => ObjectiveHost -> ObjectiveId -> Integer -> OperationId -> InternalCommand -> Eff es (Either ObjectiveError Receipt)
+executeInternal :: (Store.ObjectiveEffects es) => ObjectiveHost -> ObjectiveId -> StateRevision "objective" -> OperationId -> InternalCommand -> Eff es (Either ObjectiveError Receipt)
 executeInternal host objective expected operation command = execute host objective expected operation (Internal command)
 
-execute :: (Store.ObjectiveEffects es) => ObjectiveHost -> ObjectiveId -> Integer -> OperationId -> Mutation -> Eff es (Either ObjectiveError Receipt)
+execute :: (Store.ObjectiveEffects es) => ObjectiveHost -> ObjectiveId -> StateRevision "objective" -> OperationId -> Mutation -> Eff es (Either ObjectiveError Receipt)
 execute host objective expected operation command = do
   grant <- liftIO (admit host (commandTag command) (toJSON (objective, expected, operation, command)))
   case grant of

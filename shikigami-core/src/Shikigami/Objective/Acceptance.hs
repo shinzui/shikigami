@@ -40,7 +40,7 @@ assignmentMeaning assignment = versionedDigest "shikigami.objective-assignment-m
 
 validateAcceptance :: Objective -> CompletionProposal -> Either ObjectiveError ()
 validateAcceptance objective proposal = do
-  unless (objective.status == Open && objective.revision == proposal.objectiveRevision + 1 && objective.instructionsRevision == proposal.instructionsRevision && objective.criteriaRevision == proposal.criteriaRevision) (Left ObjectiveConflict)
+  unless (objective.status == Open && objective.revision == advanceRevision proposal.objectiveRevision && objective.instructionsRevision == proposal.instructionsRevision && objective.criteriaRevision == proposal.criteriaRevision) (Left ObjectiveConflict)
   unless (null objective.unresolved) (Left ObjectiveUnresolved)
   unless (not (null proposal.artifacts) && length proposal.artifacts <= 128 && all validKey proposal.artifacts && length (nub proposal.artifacts) == length proposal.artifacts && length proposal.checks <= 256 && length (nub proposal.checks) == length proposal.checks && length proposal.limitations <= 64 && all ((<= 4096) . Text.length) proposal.limitations) invalid
   forM_ objective.assignments \assignment -> do

@@ -29,8 +29,36 @@
       "sourceSha256": "c9bb6e61d42c1345f23529b211f66d7485200aa2bfda41ef9966e8a13970a844",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "allocated-entity-identity",
+          "disposition": "implemented",
+          "rationale": "ObjectiveId now uses the generated checked TypeID-v7 domain and UUIDv7 allocation. Creator-scoped receipts retain concurrent deduplication; strict breaking and fold reports are retained under ADR-73."
+        },
+        {
+          "id": "distinct-objective-locators",
+          "disposition": "implemented",
+          "rationale": "CriterionKey and EvidenceKey are distinct abstract checked types with unchanged JSON strings. Objective assignment IDs are nominal user-authored locators, not independently allocated entities."
+        },
+        {
+          "id": "revision-domains",
+          "disposition": "implemented",
+          "rationale": "Abstract nominal StateRevision scopes cover objective, assignment, instructions, criteria and worker-owner counters, including domain command arguments. Checked nonnegative JSON retains exact numeric bytes. Real positive/negative compiler clients and full core/PostgreSQL acceptance pass; adapters render numbers explicitly under ADR-74."
+        },
+        {
+          "id": "complete-domain-scalar-and-identity-census",
+          "disposition": "pending",
+          "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
+        }
+      ],
+      "evidence": [
+        "docs/adr/0073-objective-identity-is-allocated-and-creation-receipts-own-deduplication.md",
+        "docs/evidence/keiro-0.22/objective-typeid-results.txt",
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/adr/0074-domain-state-revisions-keep-their-scope-at-application-boundaries.md",
+        "docs/evidence/keiro-0.22/state-revision-results.txt",
+        "tests/types/revision-domains.py"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-extended-node-verticals",

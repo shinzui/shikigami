@@ -73,3 +73,14 @@ EvidenceKey types with checked nonempty/bounded admission. Their JSON remains th
 same strings. Allocation of ObjectiveId and receipt deduplication are separately
 qualified by [ADR-73](../../adr/0073-objective-identity-is-allocated-and-creation-receipts-own-deduplication.md).
 The broader domain-scalar inventory remains open.
+
+Objective and assignment revisions now use abstract `StateRevision` values with
+nominal scopes for objective state, assignment state, their instruction revisions,
+criteria and worker ownership. The name distinguishes these counters from the
+existing repository Git `Revision`. Domain command arguments use the same scoped
+types; provider DTOs and generated/SQL adapters render numbers explicitly.
+Construction/JSON decoding rejects negative counters, and the type exposes no Num,
+IsString or Generic instance. Valid JSON remains numeric, including its byte encoding.
+The source-owned compile fixture first proves a valid client, then rejects scope
+coercion, raw representation coercion and unchecked arithmetic. Transaction guards,
+receipt recovery and checkpoint authority remain the existing production paths.

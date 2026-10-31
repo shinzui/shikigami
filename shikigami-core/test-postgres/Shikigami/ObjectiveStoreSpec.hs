@@ -48,22 +48,22 @@ tests fixture =
     "ObjectiveStore"
     [ testCase "public writers at one revision produce one transition and retained conflict" $
         withObjective fixture \env _ objective -> do
-          let write key text = run env (O.executeCommand ownerHost objective 0 (OperationId key) (ReviseInstructions text))
+          let write key text = run env (O.executeCommand ownerHost objective (revision 0) (OperationId key) (ReviseInstructions text))
           (left, rightResult) <- concurrently (write "left" "left") (write "right" "right")
           length (rights [left, rightResult]) @?= 1
           length (filter (== Left ObjectiveConflict) [left, rightResult]) @?= 1
           current <- get env objective
-          current.revision @?= 1
+          current.revision @?= revision 1
           let (key, text) = if isLeft left then ("left", "left") else ("right", "right")
           -- Even a newly edited envelope cannot convert the old rejection.
-          run env (O.executeCommand ownerHost objective 1 (OperationId key) (ReviseInstructions text)) >>= (@?= Left ObjectiveConflict)
+          run env (O.executeCommand ownerHost objective (revision 1) (OperationId key) (ReviseInstructions text)) >>= (@?= Left ObjectiveConflict)
           count env "shikigami.objective_receipts" >>= (@?= 3),
       testCase "accepted retries recover original receipt after progress and reject changed payload" $
         withObjective fixture \env _ objective -> do
-          first <- right =<< run env (O.executeCommand ownerHost objective 0 (OperationId "edit") (ReviseInstructions "new"))
-          _ <- right =<< run env (O.executeCommand ownerHost objective 1 (OperationId "next") (SetNextAction ["continue"]))
-          run env (O.executeCommand ownerHost objective 0 (OperationId "edit") (ReviseInstructions "new")) >>= (@?= Right first)
-          run env (O.executeCommand ownerHost objective 0 (OperationId "edit") (ReviseInstructions "different")) >>= (@?= Left ObjectiveConflict)
+          first <- right =<< run env (O.executeCommand ownerHost objective (revision 0) (OperationId "edit") (ReviseInstructions "new"))
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision 1) (OperationId "next") (SetNextAction ["continue"]))
+          run env (O.executeCommand ownerHost objective (revision 0) (OperationId "edit") (ReviseInstructions "new")) >>= (@?= Right first)
+          run env (O.executeCommand ownerHost objective (revision 0) (OperationId "edit") (ReviseInstructions "different")) >>= (@?= Left ObjectiveConflict)
           run env (O.readCommandReceipt ownerHost objective (OperationId "edit")) >>= (@?= Right (Just (Right first))),
       testCase "creation is creator-scoped, concurrent and atomically retains origin and membership" $
         withDatabase fixture \env -> do
@@ -95,52 +95,52 @@ tests fixture =
       testCase "receipt failure rolls back evidence, revision and lifecycle append" $
         withObjective fixture \env _ objective -> do
           now <- getCurrentTime
-          _ <- right =<< run env (O.executeCommand ownerHost objective 0 (OperationId "graph") (SetAssignments [draft now "a"]))
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision 0) (OperationId "graph") (SetAssignments [draft now "a"]))
           let input = Attestation (evidenceKey "check") (criterionKey "human") "artifact" "reviewed integration" False
           sql env "CREATE FUNCTION shikigami.reject_objective_receipt() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RAISE EXCEPTION ''injected receipt failure''; END'"
           sql env "CREATE TRIGGER reject_receipt BEFORE INSERT ON shikigami.objective_receipts FOR EACH ROW EXECUTE FUNCTION shikigami.reject_objective_receipt()"
-          _ <- try @SomeException (run env (O.executeCommand ownerHost objective 1 (OperationId "evidence") (RecordEvidence (ObjectiveAssignmentId "a") input)))
+          _ <- try @SomeException (run env (O.executeCommand ownerHost objective (revision 1) (OperationId "evidence") (RecordEvidence (ObjectiveAssignmentId "a") input)))
           current <- get env objective
-          current.revision @?= 1
+          current.revision @?= revision 1
           current.evidence @?= []
           count env "shikigami.objective_payloads" >>= (@?= 2)
           sql env "DROP TRIGGER reject_receipt ON shikigami.objective_receipts"
-          _ <- right =<< run env (O.executeCommand ownerHost objective 1 (OperationId "evidence") (RecordEvidence (ObjectiveAssignmentId "a") input))
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision 1) (OperationId "evidence") (RecordEvidence (ObjectiveAssignmentId "a") input))
           current' <- get env objective
           length current'.evidence @?= 1,
       testCase "revoked membership denies both stale writes and retained receipt disclosure" $
         withObjective fixture \env _ objective -> do
           let collaborator = VerifiedCaller "coordinator"
               collaboratorHost = host collaborator
-          _ <- right =<< run env (O.executeCommand ownerHost objective 0 (OperationId "grant") (GrantMember collaborator [Coordinator]))
-          _ <- right =<< run env (O.executeCommand collaboratorHost objective 1 (OperationId "edit") (SetNextAction ["next"]))
-          _ <- right =<< run env (O.executeCommand ownerHost objective 2 (OperationId "revoke") (RevokeMember collaborator))
-          run env (O.executeCommand collaboratorHost objective 1 (OperationId "edit") (SetNextAction ["next"])) >>= (@?= Left ObjectiveDenied)
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision 0) (OperationId "grant") (GrantMember collaborator [Coordinator]))
+          _ <- right =<< run env (O.executeCommand collaboratorHost objective (revision 1) (OperationId "edit") (SetNextAction ["next"]))
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision 2) (OperationId "revoke") (RevokeMember collaborator))
+          run env (O.executeCommand collaboratorHost objective (revision 1) (OperationId "edit") (SetNextAction ["next"])) >>= (@?= Left ObjectiveDenied)
           run env (O.readCommandReceipt collaboratorHost objective (OperationId "edit")) >>= (@?= Left ObjectiveDenied)
-          run env (O.executeCommand collaboratorHost objective 3 (OperationId "new") (SetNextAction [])) >>= (@?= Left ObjectiveDenied),
+          run env (O.executeCommand collaboratorHost objective (revision 3) (OperationId "new") (SetNextAction [])) >>= (@?= Left ObjectiveDenied),
       testCase "revocation race cannot commit a later unauthorized edit" $
         withObjective fixture \env _ objective -> do
           let collaborator = VerifiedCaller "coordinator"
-          _ <- right =<< run env (O.executeCommand ownerHost objective 0 (OperationId "grant") (GrantMember collaborator [Coordinator]))
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision 0) (OperationId "grant") (GrantMember collaborator [Coordinator]))
           (revocation, edit) <-
             concurrently
-              (run env (O.executeCommand ownerHost objective 1 (OperationId "revoke") (RevokeMember collaborator)))
-              (run env (O.executeCommand (host collaborator) objective 1 (OperationId "edit") (SetNextAction ["next"])))
+              (run env (O.executeCommand ownerHost objective (revision 1) (OperationId "revoke") (RevokeMember collaborator)))
+              (run env (O.executeCommand (host collaborator) objective (revision 1) (OperationId "edit") (SetNextAction ["next"])))
           case revocation of
             Right _ -> edit @?= Left ObjectiveDenied
             Left ObjectiveConflict -> do
               assertBool "edit won before revocation" (not (isLeft edit))
-              _ <- right =<< run env (O.executeCommand ownerHost objective 2 (OperationId "revoke-new") (RevokeMember collaborator))
+              _ <- right =<< run env (O.executeCommand ownerHost objective (revision 2) (OperationId "revoke-new") (RevokeMember collaborator))
               pure ()
             other -> assertFailure (show other)
-          run env (O.executeCommand (host collaborator) objective 1 (OperationId "edit") (SetNextAction ["next"])) >>= (@?= Left ObjectiveDenied),
+          run env (O.executeCommand (host collaborator) objective (revision 1) (OperationId "edit") (SetNextAction ["next"])) >>= (@?= Left ObjectiveDenied),
       testCase "readers and workers cannot accept completion or grant access" $
         withObjective fixture \env _ objective -> do
           let reader = VerifiedCaller "reader"
-          _ <- right =<< run env (O.executeCommand ownerHost objective 0 (OperationId "grant") (GrantMember reader [Reader]))
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision 0) (OperationId "grant") (GrantMember reader [Reader]))
           _ <- right =<< run env (O.readObjective (host reader) objective)
           forM_ [AcceptCompletion, GrantMember (VerifiedCaller "intruder") [Coordinator], ReviseInstructions "inject"] \command ->
-            run env (O.executeCommand (host reader) objective 1 (OperationId "denied") command) >>= (@?= Left ObjectiveDenied),
+            run env (O.executeCommand (host reader) objective (revision 1) (OperationId "denied") command) >>= (@?= Left ObjectiveDenied),
       testCase "disabled tracking, default-deny agents and fresh action denial fail closed" $
         withDatabase fixture \env -> do
           let agent = RecordedAgent (VerifiedIdentity (either (error . show) id (mkAgentPrincipal "agent_creator")))
@@ -157,34 +157,34 @@ tests fixture =
           let a = draft now "a"
               b = draft now "b"
           forM_ (zip [1 .. 3 :: Int] [[a & #dependencies .~ [b.assignmentId], b & #dependencies .~ [a.assignmentId]], [a & #dependencies .~ [b.assignmentId]], [a, a]]) \(caseNumber, graph) -> do
-            result <- run env (O.executeCommand ownerHost objective 0 (OperationId (Text.pack (show caseNumber))) (SetAssignments graph))
+            result <- run env (O.executeCommand ownerHost objective (revision 0) (OperationId (Text.pack (show caseNumber))) (SetAssignments graph))
             assertBool "bad graph rejected" (isLeft result)
-          _ <- right =<< run env (O.executeCommand ownerHost objective 0 (OperationId "graph") (SetAssignments [a]))
-          run env (O.executeInternal ownerHost objective 1 (OperationId "transfer") (TransferOwnership a.assignmentId 99 a.owner)) >>= (@?= Left ObjectiveConflict)
-          run env (O.executeCommand ownerHost objective 1 (OperationId "delete") (SetAssignments [])) >>= assertLeft
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision 0) (OperationId "graph") (SetAssignments [a]))
+          run env (O.executeInternal ownerHost objective (revision 1) (OperationId "transfer") (TransferOwnership a.assignmentId (revision 99) a.owner)) >>= (@?= Left ObjectiveConflict)
+          run env (O.executeCommand ownerHost objective (revision 1) (OperationId "delete") (SetAssignments [])) >>= assertLeft
           current <- get env objective
-          current.revision @?= 1
-          _ <- right =<< run env (O.executeCommand ownerHost objective 1 (OperationId "cancel") CancelObjective)
-          run env (O.executeCommand ownerHost objective 2 (OperationId "progress") (RecordProgress a.assignmentId Done [] [])) >>= assertLeft
-          _ <- right =<< run env (O.executeCommand ownerHost objective 2 (OperationId "grant-after-cancel") (GrantMember (VerifiedCaller "auditor") [Reader]))
+          current.revision @?= revision 1
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision 1) (OperationId "cancel") CancelObjective)
+          run env (O.executeCommand ownerHost objective (revision 2) (OperationId "progress") (RecordProgress a.assignmentId Done [] [])) >>= assertLeft
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision 2) (OperationId "grant-after-cancel") (GrantMember (VerifiedCaller "auditor") [Reader]))
           current' <- get env objective
           current'.status @?= Cancelled,
       testCase "integrated acceptance requires current checks and authorized attestation" $
         withObjective fixture \env _ objective -> do
           now <- getCurrentTime
           let a = draft now "a" & #rootId .~ Nothing & #cutoff .~ Nothing
-              send revision key command = run env (O.executeCommand ownerHost objective revision (OperationId key) command)
+              send expected key command = run env (O.executeCommand ownerHost objective (revision expected) (OperationId key) command)
           _ <- right =<< send 0 "graph" (SetAssignments [a])
           _ <- right =<< send 1 "done" (RecordProgress a.assignmentId Done [] [])
-          let missing = CompletionProposal 2 0 0 ["artifact"] [] []
+          let missing = CompletionProposal (revision 2) (revision 0) (revision 0) ["artifact"] [] []
           _ <- right =<< send 2 "propose-missing" (ProposeCompletion missing)
           send 3 "accept-missing" AcceptCompletion >>= (@?= Left ObjectiveInvalidEvidence)
           _ <- right =<< send 3 "attest" (RecordEvidence a.assignmentId (Attestation (evidenceKey "check") (criterionKey "human") "artifact" "reviewed integrated journey" False))
-          _ <- right =<< send 4 "propose" (ProposeCompletion (CompletionProposal 4 0 0 ["artifact"] [evidenceKey "check"] ["known limitation"]))
+          _ <- right =<< send 4 "propose" (ProposeCompletion (CompletionProposal (revision 4) (revision 0) (revision 0) ["artifact"] [evidenceKey "check"] ["known limitation"]))
           _ <- right =<< send 5 "revise" (ReviseInstructions "new instructions")
           send 6 "stale-accept" AcceptCompletion >>= (@?= Left ObjectiveConflict)
           _ <- right =<< send 6 "new-attest" (RecordEvidence a.assignmentId (Attestation (evidenceKey "new-check") (criterionKey "human") "artifact" "reviewed again" False))
-          _ <- right =<< send 7 "new-proposal" (ProposeCompletion (CompletionProposal 7 1 0 ["artifact"] [evidenceKey "new-check"] []))
+          _ <- right =<< send 7 "new-proposal" (ProposeCompletion (CompletionProposal (revision 7) (revision 1) (revision 0) ["artifact"] [evidenceKey "new-check"] []))
           _ <- right =<< send 8 "accept" AcceptCompletion
           current <- get env objective
           current.status @?= Completed
@@ -194,11 +194,11 @@ tests fixture =
         withObjective fixture \env admission objective -> do
           (a, b, firstIntent, secondIntent, firstInput, secondInput) <- checkpointPair env admission objective
           let base = firstIntent.expected.revision
-              commit key intent input keyText = run env (O.executeInternal ownerHost objective base (OperationId keyText) (IngestCheckpoint key intent [input] []))
+              commit key intent input keyText = run env (O.executeInternal ownerHost objective (revision base) (OperationId keyText) (IngestCheckpoint key intent [input] []))
           (left, rightResult) <- concurrently (commit a.assignmentId firstIntent firstInput "checkpoint-a") (commit b.assignmentId secondIntent secondInput "checkpoint-b")
           first <- right left
           second <- right rightResult
-          assertBool "distinct advancing receipts" (first.revision /= second.revision && all (> base) [first.revision, second.revision])
+          assertBool "distinct advancing receipts" (first.revision /= second.revision && all (> revision base) [first.revision, second.revision])
           current <- get env objective
           version <- right (S.versionFor current a.assignmentId)
           version.assignmentRevision @?= firstIntent.expected.assignmentRevision + 1
@@ -208,18 +208,18 @@ tests fixture =
           length current.evidence @?= 2
           _ <- right =<< run env (O.executeCommand ownerHost objective current.revision (OperationId "instructions") (ReviseInstructions "changed"))
           commit a.assignmentId firstIntent firstInput "checkpoint-a" >>= (@?= Right first)
-          run env (O.executeInternal ownerHost objective base (OperationId "stale-new") (IngestCheckpoint a.assignmentId firstIntent [firstInput] [])) >>= (@?= Left ObjectiveConflict),
+          run env (O.executeInternal ownerHost objective (revision base) (OperationId "stale-new") (IngestCheckpoint a.assignmentId firstIntent [firstInput] [])) >>= (@?= Left ObjectiveConflict),
       testCase "instruction and block/unblock cycles never revive prepared checkpoints or advance cursors" $
         withObjective fixture \env admission objective -> do
           (a, _, intent, _, input, _) <- checkpointPair env admission objective
           let base = intent.expected.revision
-          _ <- right =<< run env (O.executeCommand ownerHost objective base (OperationId "instructions") (ReviseInstructions "changed"))
-          _ <- right =<< run env (O.executeCommand ownerHost objective (base + 1) (OperationId "restore") (ReviseInstructions "instructions"))
-          run env (O.executeInternal ownerHost objective base (OperationId "stale") (IngestCheckpoint a.assignmentId intent [input] [])) >>= (@?= Left ObjectiveConflict)
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision base) (OperationId "instructions") (ReviseInstructions "changed"))
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision (base + 1)) (OperationId "restore") (ReviseInstructions "instructions"))
+          run env (O.executeInternal ownerHost objective (revision base) (OperationId "stale") (IngestCheckpoint a.assignmentId intent [input] [])) >>= (@?= Left ObjectiveConflict)
           count env "shikigami.objective_cursors" >>= (@?= 0)
-          _ <- right =<< run env (O.executeCommand ownerHost objective (base + 2) (OperationId "block") (SetBlocked True))
-          _ <- right =<< run env (O.executeCommand ownerHost objective (base + 3) (OperationId "unblock") (SetBlocked False))
-          run env (O.executeInternal ownerHost objective base (OperationId "stale-after-unblock") (IngestCheckpoint a.assignmentId intent [input] [])) >>= (@?= Left ObjectiveConflict)
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision (base + 2)) (OperationId "block") (SetBlocked True))
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision (base + 3)) (OperationId "unblock") (SetBlocked False))
+          run env (O.executeInternal ownerHost objective (revision base) (OperationId "stale-after-unblock") (IngestCheckpoint a.assignmentId intent [input] [])) >>= (@?= Left ObjectiveConflict)
           count env "shikigami.objective_cursors" >>= (@?= 0),
       testCase "workers update only their own assignments and cannot attest or grant" $
         withObjective fixture \env _ objective -> do
@@ -229,26 +229,26 @@ tests fixture =
               workerHost = host (RecordedAgent identity)
               own = draft now "own" & #owner .~ identity
               other = draft now "other"
-          _ <- right =<< run env (O.executeCommand ownerHost objective 0 (OperationId "graph") (SetAssignments [own, other]))
-          _ <- right =<< run env (O.executeCommand ownerHost objective 1 (OperationId "grant") (GrantMember (RecordedAgent identity) [Worker]))
-          _ <- right =<< run env (O.executeCommand workerHost objective 2 (OperationId "own") (RecordProgress own.assignmentId Working [] []))
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision 0) (OperationId "graph") (SetAssignments [own, other]))
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision 1) (OperationId "grant") (GrantMember (RecordedAgent identity) [Worker]))
+          _ <- right =<< run env (O.executeCommand workerHost objective (revision 2) (OperationId "own") (RecordProgress own.assignmentId Working [] []))
           forM_ [RecordProgress other.assignmentId Done [] [], RecordEvidence own.assignmentId (Attestation (evidenceKey "forged") (criterionKey "human") "artifact" "trust me" False), GrantMember (VerifiedCaller "friend") [Coordinator]] \command ->
-            run env (O.executeCommand workerHost objective 3 (OperationId "denied") command) >>= (@?= Left ObjectiveDenied),
+            run env (O.executeCommand workerHost objective (revision 3) (OperationId "denied") command) >>= (@?= Left ObjectiveDenied),
       testCase "automatic completion requires verifier-backed criterion and journey evidence" $
         withObjective fixture \env _ objective -> do
           now <- getCurrentTime
           let assignment = draft now "a"
               reference = RetainedResult "verifier-run" "verifier-execution" "sha256:retained-result" "artifact"
               verifiedHost = (ownerHost & #verifyResult .~ (\source -> pure (if source == reference then Right (EvidenceVerification CheckPassed (Just (criterionKey "auto")) True) else Left ObjectiveInvalidEvidence)))
-              send revision key command = run env (O.executeCommand verifiedHost objective revision (OperationId key) command)
+              send expected key command = run env (O.executeCommand verifiedHost objective (revision expected) (OperationId key) command)
           _ <- right =<< send 0 "criteria" (ReviseCriteria [Criterion (criterionKey "auto") "verified journey" Automatic True])
           _ <- right =<< send 1 "graph" (SetAssignments [assignment & #state .~ Done])
           -- A fabricated result cannot acquire a verifier disposition.
           send 2 "fake" (RecordEvidence assignment.assignmentId (ResultEvidence (evidenceKey "fake") (criterionKey "auto") (RetainedResult "fake-run" "fake" "fake" "artifact") True)) >>= (@?= Left ObjectiveInvalidEvidence)
           evidenceReceipt <- right =<< send 2 "verified" (RecordEvidence assignment.assignmentId (ResultEvidence (evidenceKey "verified") (criterionKey "auto") reference True))
           -- Recovery does not contact an unavailable evidence owner again.
-          run env (O.executeCommand ownerHost objective 2 (OperationId "verified") (RecordEvidence assignment.assignmentId (ResultEvidence (evidenceKey "verified") (criterionKey "auto") reference True))) >>= (@?= Right evidenceReceipt)
-          _ <- right =<< send 3 "propose" (ProposeCompletion (CompletionProposal 3 0 1 ["artifact"] [evidenceKey "verified"] []))
+          run env (O.executeCommand ownerHost objective (revision 2) (OperationId "verified") (RecordEvidence assignment.assignmentId (ResultEvidence (evidenceKey "verified") (criterionKey "auto") reference True))) >>= (@?= Right evidenceReceipt)
+          _ <- right =<< send 3 "propose" (ProposeCompletion (CompletionProposal (revision 3) (revision 0) (revision 1) ["artifact"] [evidenceKey "verified"] []))
           _ <- right =<< send 4 "accept" AcceptCompletion
           current <- get env objective
           current.status @?= Completed,
@@ -256,11 +256,11 @@ tests fixture =
         withObjective fixture \env admission objective -> do
           (a, b, intent, _, input, _) <- checkpointPair env admission objective
           let base = intent.expected.revision
-              send revision key command = run env (O.executeCommand ownerHost objective revision (OperationId key) command)
-          _ <- right =<< run env (O.executeInternal ownerHost objective base (OperationId "checkpoint") (IngestCheckpoint a.assignmentId intent [input] []))
+              send expected key command = run env (O.executeCommand ownerHost objective (revision expected) (OperationId key) command)
+          _ <- right =<< run env (O.executeInternal ownerHost objective (revision base) (OperationId "checkpoint") (IngestCheckpoint a.assignmentId intent [input] []))
           _ <- right =<< send (base + 1) "done-a" (RecordProgress a.assignmentId Done [] [])
           _ <- right =<< send (base + 2) "done-b" (RecordProgress b.assignmentId Done [] [])
-          _ <- right =<< send (base + 3) "propose" (ProposeCompletion (CompletionProposal (base + 3) 0 0 ["artifact"] [input.key] []))
+          _ <- right =<< send (base + 3) "propose" (ProposeCompletion (CompletionProposal (revision (base + 3)) (revision 0) (revision 0) ["artifact"] [input.key] []))
           send (base + 4) "accept" AcceptCompletion >>= (@?= Left ObjectiveInvalidEvidence)
           current <- get env objective
           map (.verification.disposition) current.evidence @?= [ResultObserved],
@@ -268,15 +268,15 @@ tests fixture =
         withObjective fixture \env admission objective -> do
           (a, b, intent, _, input, _) <- checkpointPair env admission objective
           let base = intent.expected.revision
-              send revision key command = run env (O.executeCommand ownerHost objective revision (OperationId key) command)
+              send expected key command = run env (O.executeCommand ownerHost objective (revision expected) (OperationId key) command)
               unresolved = UnresolvedOperation a.assignmentId origin (OperationId "unsettled-effect")
-          run env (O.executeInternal ownerHost objective base (OperationId "forged") (IngestCheckpoint a.assignmentId (intent & #events .~ []) [input] [])) >>= (@?= Left ObjectiveConflict)
+          run env (O.executeInternal ownerHost objective (revision base) (OperationId "forged") (IngestCheckpoint a.assignmentId (intent & #events .~ []) [input] [])) >>= (@?= Left ObjectiveConflict)
           count env "shikigami.objective_cursors" >>= (@?= 0)
-          _ <- right =<< run env (O.executeInternal ownerHost objective base (OperationId "checkpoint") (IngestCheckpoint a.assignmentId intent [input] [unresolved]))
+          _ <- right =<< run env (O.executeInternal ownerHost objective (revision base) (OperationId "checkpoint") (IngestCheckpoint a.assignmentId intent [input] [unresolved]))
           _ <- right =<< send (base + 1) "done-a" (RecordProgress a.assignmentId Done [] [])
           _ <- right =<< send (base + 2) "done-b" (RecordProgress b.assignmentId Done [] [])
           _ <- right =<< send (base + 3) "attest" (RecordEvidence a.assignmentId (Attestation (evidenceKey "human-check") (criterionKey "human") "artifact" "reviewed" False))
-          _ <- right =<< send (base + 4) "propose" (ProposeCompletion (CompletionProposal (base + 4) 0 0 ["artifact"] [evidenceKey "human-check"] []))
+          _ <- right =<< send (base + 4) "propose" (ProposeCompletion (CompletionProposal (revision (base + 4)) (revision 0) (revision 0) ["artifact"] [evidenceKey "human-check"] []))
           send (base + 5) "accept" AcceptCompletion >>= (@?= Left ObjectiveUnresolved),
       testCase "terminal objectives reconcile authentic accepted results while refusing fresh public progress" $
         withObjective fixture \env admission objective -> do
@@ -285,8 +285,8 @@ tests fixture =
               admitted = admission & #scope . #workerKey .~ "late-result" & #objective .~ S.referenceFor objective key
           (_, session) <- right =<< run env (Sessions.openSession admitted)
           let assignment = draft now "late-result" & #sessionId .~ Just session.sessionId & #owner .~ session.owner
-          _ <- right =<< run env (O.executeCommand ownerHost objective 0 (OperationId "graph") (SetAssignments [assignment]))
-          _ <- right =<< run env (O.executeCommand ownerHost objective 1 (OperationId "parent") (GrantMember (RecordedAgent admission.context.identity) [Coordinator]))
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision 0) (OperationId "graph") (SetAssignments [assignment]))
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision 1) (OperationId "parent") (GrantMember (RecordedAgent admission.context.identity) [Coordinator]))
           access <- right =<< run env (Sessions.authorizeSession session.sessionId admission.context.identity (pure (Right ())))
           before <- get env objective
           initialVersion <- right (S.versionFor before key)
@@ -294,14 +294,14 @@ tests fixture =
           (_, message) <- right =<< run env (Sessions.acceptMessage access 0 0 (OperationId "send") instruction)
           _ <- right =<< run env (Sessions.startAssignment access 1 0 (OperationId "start") message.assignmentId)
           (_, result) <- right =<< run env (Sessions.recordResult access 2 0 (OperationId "result") (WS.AssignmentResult 1 message.assignmentId WS.AssignmentSucceeded Nothing (Aeson.object []) ["artifact"]))
-          _ <- right =<< run env (O.executeCommand ownerHost objective 2 (OperationId "cancel") CancelObjective)
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision 2) (OperationId "cancel") CancelObjective)
           cancelled <- get env objective
           version <- right (S.versionFor cancelled key)
           version.active @?= False
           (_, intent) <- right =<< run env (Sessions.prepareCheckpoint access 3 0 (OperationId "prepare") version 0 3)
           let evidence = ResultEvidence (evidenceKey "late") (criterionKey "human") (WorkerResult result "artifact") False
-          _ <- right =<< run env (O.executeInternal ownerHost objective 3 (OperationId "reconcile") (IngestCheckpoint key intent [evidence] []))
-          run env (O.executeCommand ownerHost objective 4 (OperationId "fresh-progress") (RecordProgress key Working [] [])) >>= assertLeft
+          _ <- right =<< run env (O.executeInternal ownerHost objective (revision 3) (OperationId "reconcile") (IngestCheckpoint key intent [evidence] []))
+          run env (O.executeCommand ownerHost objective (revision 4) (OperationId "fresh-progress") (RecordProgress key Working [] [])) >>= assertLeft
           current <- get env objective
           current.status @?= Cancelled
           length current.evidence @?= 1,
@@ -317,9 +317,9 @@ tests fixture =
           fresh <- environment connection
           receipt <- right =<< run fresh (O.createObjective ownerHost (OperationId "lost-create") (Just origin) request)
           current <- right =<< run fresh (O.readObjective ownerHost receipt.objectiveId)
-          current.revision @?= 1
-          replay <- right =<< run fresh (O.executeCommand ownerHost receipt.objectiveId 0 (OperationId "lost-edit") (ReviseInstructions "committed-before-exit"))
-          replay.revision @?= 1
+          current.revision @?= revision 1
+          replay <- right =<< run fresh (O.executeCommand ownerHost receipt.objectiveId (revision 0) (OperationId "lost-edit") (ReviseInstructions "committed-before-exit"))
+          replay.revision @?= revision 1
           count fresh "shikigami.objectives" >>= (@?= 1)
           count fresh "shikigami.objective_origins" >>= (@?= 1)
           count fresh "shikigami.objective_receipts" >>= (@?= 2)
@@ -370,8 +370,8 @@ checkpointPair env admission objective = do
   (_, sb) <- right =<< run env (Sessions.openSession (new "b"))
   let a = draft now "a" & #sessionId .~ Just sa.sessionId & #owner .~ sa.owner
       b = draft now "b" & #sessionId .~ Just sb.sessionId & #owner .~ sb.owner
-  _ <- right =<< run env (O.executeCommand ownerHost objective 0 (OperationId "graph") (SetAssignments [a, b]))
-  _ <- right =<< run env (O.executeCommand ownerHost objective 1 (OperationId "grant-parent") (GrantMember (RecordedAgent admission.context.identity) [Coordinator]))
+  _ <- right =<< run env (O.executeCommand ownerHost objective (revision 0) (OperationId "graph") (SetAssignments [a, b]))
+  _ <- right =<< run env (O.executeCommand ownerHost objective (revision 1) (OperationId "grant-parent") (GrantMember (RecordedAgent admission.context.identity) [Coordinator]))
   current <- get env objective
   (first, inputA) <- checkpoint env admission.context.identity objective current a "evidence-a"
   (second, inputB) <- checkpoint env admission.context.identity objective current b "evidence-b"
@@ -415,7 +415,7 @@ crashWriter = do
   connection <- right . Aeson.eitherDecode =<< Lazy.getContents
   env <- environment connection
   created <- right =<< run env (O.createObjective ownerHost (OperationId "lost-create") (Just origin) request)
-  _ <- right =<< run env (O.executeCommand ownerHost created.objectiveId 0 (OperationId "lost-edit") (ReviseInstructions "committed-before-exit"))
+  _ <- right =<< run env (O.executeCommand ownerHost created.objectiveId (revision 0) (OperationId "lost-edit") (ReviseInstructions "committed-before-exit"))
   exitWith (ExitFailure 91)
 
 criterionKey :: Text -> CriterionKey
@@ -423,3 +423,6 @@ criterionKey = either (error . show) id . parseCriterionKey
 
 evidenceKey :: Text -> EvidenceKey
 evidenceKey = either (error . show) id . parseEvidenceKey
+
+revision :: Integer -> StateRevision scope
+revision = either (error . show) id . parseRevision

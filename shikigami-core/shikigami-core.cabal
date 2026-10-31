@@ -201,6 +201,7 @@ library
     Shikigami.Sink.Types
     Shikigami.Sink.Validate
     Shikigami.Sink.Wire
+    Shikigami.StateRevision
     Shikigami.Telemetry.Metrics
     Shikigami.Telemetry.TraceContext
     Shikigami.Trigger.Enqueue

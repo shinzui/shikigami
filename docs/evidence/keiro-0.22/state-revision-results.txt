@@ -1,0 +1,9 @@
+ExecPlan 107 scoped state revisions; source parent a05c245; 2026-10-31 UTC.
+StateRevision has a private constructor and nominal scope role, with no Num, IsString or Generic instance. Objective/assignment/instruction/criteria/owner counters and domain command arguments retain their scopes. Provider/generated/SQL adapters render integers explicitly.
+Core pure: all 544 passed after final StateRevision naming (5.54s), including numeric JSON value, exact byte encoding and negative decoder refusal.
+Core PostgreSQL: all 375 passed (101.30s) after scoped command/counter conversion; subsequent rename Revision -> StateRevision distinguishes the type from repository Git revisions without changing codecs or operations.
+All enabled application and test components compile after final naming.
+Four real compiler cases passed after final naming: valid client, rejected scope coercion, rejected raw representation coercion, rejected unchecked arithmetic. The positive case runs first; negative cases require relevant type diagnostics.
+Existing full transaction, creator-scoped idempotency, concurrent checkpoint convergence, stale owner/authority refusal and lost-acknowledgement recovery cases remain production paths.
+Final same-candidate suites and packaged/Linux qualification remain plan95.
+just keiro-gate a05c245 passed strict Language 6 check, idempotent scaffold, all 151 conformance assertions and a non-breaking/replay-neutral diff.
