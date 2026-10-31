@@ -178,3 +178,9 @@ records exact codecs, typed profile failure, 23 compiler clients and four couple
 underflow refusal cases. Full affected acceptance is 556 pure, 382 PostgreSQL,
 260 worker and 95 server cases. Remaining execution counters/policies and the
 complete scalar/identity census remain open.
+
+The [compiled declaration worklist](domain-declarations.json) and
+[census acquisition results](domain-census-results.txt) enumerate 307 hand-owned
+modules, 868 declarations and 14 separately listed role entrypoints. The source
+and interface hashes preserve the actual candidate; the worklist does not assign
+automatic domain/boundary exemptions or certify the remaining review.
