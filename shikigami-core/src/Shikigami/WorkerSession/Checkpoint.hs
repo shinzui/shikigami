@@ -34,8 +34,8 @@ data CheckpointIntent = CheckpointIntent
     actor :: !AgentIdentity,
     epoch :: !(StateRevision "worker-owner"),
     expected :: !ObjectiveVersion,
-    previousCursor :: !Integer,
-    throughCursor :: !Integer,
+    previousCursor :: !(StateRevision "worker-event"),
+    throughCursor :: !(StateRevision "worker-event"),
     events :: ![EventReceipt]
   }
   deriving stock (Eq, Show, Generic)

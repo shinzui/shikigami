@@ -26,6 +26,7 @@ import Shikigami.Execution.Transcript (ExecutionId, PayloadRef)
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 import Shikigami.StateRevision
+import Shikigami.WorkerSession.Position
 
 newtype WorkerSessionId = WorkerSessionId {value :: Text}
   deriving stock (Eq, Ord, Show, Generic)
@@ -91,9 +92,9 @@ data SessionState = SessionState
     owner :: !AgentIdentity,
     epoch :: !(StateRevision "worker-owner"),
     activeAssignment :: !(Maybe AssignmentId),
-    nextSequence :: !Integer,
-    eventCursor :: !Integer,
-    consumedCursor :: !Integer,
+    nextSequence :: !(StateRevision "worker-message"),
+    eventCursor :: !(StateRevision "worker-event"),
+    consumedCursor :: !(StateRevision "worker-event"),
     checkpointIntent :: !(Maybe OperationId),
     wake :: !(Maybe PayloadRef),
     worker :: !(Maybe AgentName),
@@ -106,7 +107,7 @@ data SessionState = SessionState
 instance FromJSON SessionState where
   parseJSON = Aeson.withObject "SessionState" \fields -> do
     state <- SessionState <$> fields .: "format" <*> fields .: "sessionId" <*> fields .: "revision" <*> fields .: "phase" <*> fields .: "owner" <*> fields .: "epoch" <*> fields .: "activeAssignment" <*> fields .: "nextSequence" <*> fields .: "eventCursor" <*> fields .: "consumedCursor" <*> fields .:? "checkpointIntent" <*> fields .:? "wake" <*> fields .:? "worker" <*> fields .:? "handoff" <*> (fields .:? "listeners" .!= [])
-    unless (state.format == 1 && all (>= 0) [state.nextSequence, state.eventCursor, state.consumedCursor] && state.consumedCursor <= state.eventCursor && state.eventCursor <= 100000 && state.nextSequence <= 10000 && length state.listeners <= 32) (fail "unsupported worker session state")
+    unless (state.format == 1 && state.consumedCursor <= state.eventCursor && revisionNumber state.eventCursor <= 100000 && revisionNumber state.nextSequence <= 10000 && length state.listeners <= 32) (fail "unsupported worker session state")
     pure state
 
 data SessionListener = SessionListener
@@ -114,7 +115,7 @@ data SessionListener = SessionListener
     generation :: !Int,
     ownerName :: !Text,
     ownerId :: !Text,
-    after :: !Integer
+    after :: !(StateRevision "worker-event")
   }
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -171,7 +172,7 @@ data AssignmentPhase = Queued | Running | AssignmentParked | AssignmentUnresolve
 data MessageReceipt = MessageReceipt
   { format :: !Int,
     sessionId :: !WorkerSessionId,
-    sequence :: !Integer,
+    sequence :: !(StateRevision "worker-message"),
     assignmentId :: !AssignmentId,
     operationId :: !OperationId,
     fingerprint :: !Text,
@@ -193,7 +194,7 @@ instance FromJSON MessageReceipt where
     context <- fields .:? "context"
     aliases <- fields .:? "permittedAliases"
     message <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (KeyMap.insert "permittedAliases" (toJSON (aliases :: Maybe [Text])) (KeyMap.insert "context" (toJSON (context :: Maybe PayloadRef)) fields)))
-    unless (message.format == 1 && message.sequence >= 0 && message.sequence < 10000 && message.assignmentId == assignmentIdFor message.sessionId message.sequence message.operationId) (fail "unsupported assignment receipt identity")
+    unless (message.format == 1 && revisionNumber message.sequence < 10000 && message.assignmentId == assignmentIdFor message.sessionId message.sequence message.operationId) (fail "unsupported assignment receipt identity")
     _ <- traverse (either (fail . show) pure . mkWorkflowId) message.childWorkflowId
     unless (if message.phase == Queued then isNothing message.childWorkflowId else isJust message.childWorkflowId) (fail "assignment child mapping is missing or premature")
     pure message
@@ -210,7 +211,7 @@ data SessionInspection = SessionInspection
     messages :: ![MessageReceipt],
     active :: !(Maybe MessageReceipt),
     results :: ![ResultReceipt],
-    nextCursor :: !Integer,
+    nextCursor :: !MessagePosition,
     truncated :: !Bool
   }
   deriving stock (Eq, Show, Generic)
@@ -241,7 +242,7 @@ data ResultReceipt = ResultReceipt
     fingerprint :: !Text,
     disposition :: !ResultDisposition,
     output :: !PayloadRef,
-    cursor :: !Integer
+    cursor :: !(StateRevision "worker-event")
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -250,7 +251,7 @@ data SessionEvent = MessageAccepted !MessageReceipt | AssignmentStarted !Message
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data EventReceipt = EventReceipt {cursor :: !Integer, event :: !SessionEvent}
+data EventReceipt = EventReceipt {cursor :: !(StateRevision "worker-event"), event :: !SessionEvent}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -283,7 +284,7 @@ scopeDigestFor admission = versionedDigest "shikigami.worker-session-scope/1" (t
 sessionIdFor :: SessionAdmission -> WorkerSessionId
 sessionIdFor = WorkerSessionId . UUID.toText . UUID.generateNamed UUID.namespaceURL . nameBytes . ("shikigami.worker-session:" <>) . scopeDigestFor
 
-assignmentIdFor :: WorkerSessionId -> Integer -> OperationId -> AssignmentId
+assignmentIdFor :: WorkerSessionId -> StateRevision "worker-message" -> OperationId -> AssignmentId
 assignmentIdFor session sequence operation = AssignmentId (UUID.toText (UUID.generateNamed UUID.namespaceURL (nameBytes (versionedDigest "shikigami.worker-assignment/1" (toJSON (session, sequence, operation))))))
 
 validateAdmission :: SessionAdmission -> Either SessionError ()

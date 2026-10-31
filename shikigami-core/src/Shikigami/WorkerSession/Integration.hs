@@ -8,12 +8,13 @@ import Shikigami.App (AppEffects)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Prelude
+import Shikigami.StateRevision
 import Shikigami.WorkerSession.Checkpoint
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Types
 import Shikigami.WorkerSession.Workflow (SessionRuntime (..), sessionAccess)
 
-data IntegrationOutcome = EventsIntegrated !CheckpointReceipt !Integer | EventsPending | EventsConflict | EventsUnavailable | EventsCaughtUp !Integer
+data IntegrationOutcome = EventsIntegrated !CheckpointReceipt !(StateRevision "worker-event") | EventsPending | EventsConflict | EventsUnavailable | EventsCaughtUp !(StateRevision "worker-event")
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -33,7 +34,7 @@ integrateEvents runtime session operation = case runtime.checkpoints of
               Left AssignmentMissing | isNothing state.checkpointIntent -> do
                 current <- trySync (liftIO (provider.current binding.objective))
                 case current of
-                  Right (Right version) -> fmap (Just . snd) <$> Store.prepareCheckpoint access state.revision state.epoch operation version state.consumedCursor (min state.eventCursor (state.consumedCursor + 100))
+                  Right (Right version) -> fmap (Just . snd) <$> Store.prepareCheckpoint access state.revision state.epoch operation version state.consumedCursor (min state.eventCursor (advanceRevisions 100 state.consumedCursor))
                   _ -> pure (Left (SessionInputRefused "current checkpoint provider unavailable"))
               Left err -> pure (Left err)
             case prepared of

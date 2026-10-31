@@ -217,6 +217,7 @@ library
     Shikigami.WorkerSession.Identity
     Shikigami.WorkerSession.Integration
     Shikigami.WorkerSession.Live
+    Shikigami.WorkerSession.Position
     Shikigami.WorkerSession.Store
     Shikigami.WorkerSession.Tools
     Shikigami.WorkerSession.Transfer
@@ -458,6 +459,7 @@ test-suite shikigami-core-test
     Shikigami.SinkHonestySpec
     Shikigami.SinkIntentSpec
     Shikigami.WireCompatSpec
+    Shikigami.WorkerSessionPositionSpec
     Shikigami.WorkspaceActionProofSpec
     Shikigami.WorkspaceAdapterSpec
     Shikigami.WorkspaceCatalogSpec

@@ -18,9 +18,48 @@
       "sourcePath": "runtime-patterns/architecture/domain-design.md",
       "sourceSha256": "3e61b6bdc477e738d5e35deb859732938226dd7a91779833a6d949ad935ee37e",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "context-language-and-authority",
+          "disposition": "existing",
+          "rationale": "shikigami-domain-inventory.md names the four current aggregates and all actual consumers, including Objective and continuing-worker work. Shikigami owns orchestration and objective authority; Danwa/Kioku/directory providers keep their external facts and public protocols."
+        },
+        {
+          "id": "invariant-owners-and-contention",
+          "disposition": "implemented",
+          "rationale": "Lifecycle transitions and revisions are checked by generated aggregates; resource/selection accounting, scope/owner checks and protected payload linkage retain their own serialized transaction owners. Objective creation uses creator-scoped atomic receipts. Native same-database races and late rollback cases prove these boundaries; no async view is treated as an atomic guard."
+        },
+        {
+          "id": "commands-and-private-facts",
+          "disposition": "existing",
+          "rationale": "Commands distinguish acceptance, idempotent recovery, refusal and infrastructure failure. Time, identities and external selections are captured inputs/retained facts before replay. Private lifecycle events carry only their declared facts; they do not pretend to reconstruct protected evidence or become public integration contracts automatically."
+        },
+        {
+          "id": "workflow-and-delivery-choice",
+          "disposition": "existing",
+          "rationale": "Five journaled workflow families implement durable sequencing/waits/children; RunJobs supplies retryable delivery. Native Shibuya/PGMQ ownership, outbox receipt recovery and bounded timers remain their actual mechanisms. No independent stream commits are advertised as one distributed transaction or exactly-once external effect."
+        },
+        {
+          "id": "observable-outcomes-and-minimum-inline-state",
+          "disposition": "existing",
+          "rationale": "Public requests report queue acceptance separately from eventual workflow completion. Minimum authoritative inline lifecycle/owner/accounting facts remain for fencing under ADR-53/54; rich payloads keep their protected retention/rebuild refusal. Ordinary query freshness and native operational views retain explicit current-state sources."
+        },
+        {
+          "id": "scenario-proof",
+          "disposition": "implemented",
+          "rationale": "The database-free driver now runs every aggregate, all behavior witnesses and fifteen focused guard controls. Current isolated database suites cover accepted/refused/idempotent/concurrent/restart/checkpoint/ownership scenarios. Generated conformance complements those cases and does not certify the still-open scalar census or final deployment profile."
+        }
+      ],
+      "evidence": [
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/architecture/packages.md",
+        "docs/evidence/keiro-0.22/domain-driver-results.txt",
+        "docs/evidence/keiro-0.22/worker-owner-revision-results.txt",
+        "docs/evidence/keiro-0.22/resource-root-revision-results.txt",
+        "shikigami-core/test/Shikigami/KeiroSpecificationSpec.hs",
+        "shikigami-core/test/Shikigami/PackageArchitectureSpec.hs"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
@@ -56,6 +95,11 @@
           "rationale": "Resource-root policy revisions retain a separate execution-root scope in state and reservation/attempt/allocation/control APIs. Valid root JSON remains numeric and a complete positive round-trip precedes negative admission refusal. Eight compiler boundary cases reject root/worker/objective substitution. All enabled components compile and 546 pure, 375 serial PostgreSQL and 95 server cases pass. Resource amounts and wider scalar census remain pending."
         },
         {
+          "id": "mailbox-and-event-positions",
+          "disposition": "implemented",
+          "rationale": "Distinct worker-message/worker-event scopes persist across receipts, checkpoint providers, Flow waits and workspace succession. MessagePosition alone admits the -1 assignment-page sentinel. Exact public after field/numeric byte controls pass. Event capacity refuses atomically without retained payload/command/native-event writes. The 549 pure, 376 PostgreSQL, 260 worker, 95 server, ten compiler and 70 offline CLI cases pass; native generation/replay is neutral."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -70,7 +114,8 @@
         "tests/types/revision-domains.py",
         "docs/evidence/keiro-0.22/objective-content-results.txt",
         "docs/evidence/keiro-0.22/worker-owner-revision-results.txt",
-        "docs/evidence/keiro-0.22/resource-root-revision-results.txt"
+        "docs/evidence/keiro-0.22/resource-root-revision-results.txt",
+        "docs/evidence/keiro-0.22/worker-cursor-results.txt"
       ]
     },
     {
@@ -79,9 +124,43 @@
       "sourcePath": "runtime-patterns/architecture/extended-node-verticals.md",
       "sourceSha256": "54b34375d360715285f28d8d2ff55eb284623e9dbf424a107fff2f7dfea63d00",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "typed-read-model-verticals",
+          "disposition": "existing",
+          "rationale": "ExecutionLookup, ObjectiveLookup, RunEvidenceLookup and WorkerSessionLookup use current UpperCamelCase node directories with emitted read-model modules, conditional QueryContract modules and hand-owned ReadModelHoles. Runtime logical names remain unchanged."
+        },
+        {
+          "id": "workflow-verticals",
+          "disposition": "existing",
+          "rationale": "AgentRun, Approval, ContinuingWorker, DanwaConversation and ExecutionDriver each retain generated WorkflowFacts/WorkflowRuntime modules. Hand orchestration stays outside generated modules; these durable computations are not relabelled as process managers."
+        },
+        {
+          "id": "queue-vertical",
+          "disposition": "existing",
+          "rationale": "RunJobs owns the emitted queue/policy/contract surfaces and its actual PGMQ consumer path. The generator manifest, not a fixed prose module count, defines the compilation inventory."
+        },
+        {
+          "id": "unselected-node-kinds",
+          "disposition": "not-applicable",
+          "rationale": "The checked workspace declares no first-class process, router, publisher, inbox or owned public integration-contract node. Model-assisted agent selection is a captured decision/delegation workflow, not stateless command fan-out; HTTP sink/outbox delivery consumes external protocols, not an invented Kafka publisher."
+        },
+        {
+          "id": "integration-ownership",
+          "disposition": "existing",
+          "rationale": "The Danwa integration adapter and transport/sink owners preserve external contract authority. No duplicate per-aggregate hand Transducer/Projection/EventStream/CommandProcessor ring was introduced; generated modules remain in their node verticals."
+        }
+      ],
+      "evidence": [
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/architecture/packages.md",
+        "docs/evidence/keiro-0.22/domain-driver-results.txt",
+        "docs/evidence/keiro-0.22/worker-owner-revision-results.txt",
+        "docs/evidence/keiro-0.22/resource-root-revision-results.txt",
+        "shikigami-core/test/Shikigami/KeiroSpecificationSpec.hs",
+        "shikigami-core/test/Shikigami/PackageArchitectureSpec.hs"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-generated-compilation-contract",
@@ -90,8 +169,43 @@
       "sourceSha256": "aed922d9a97d6ffafb2e58520c3032d693f960fe1a3aa65c1a4f3b64846e12b1",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "complete-build-manifest",
+          "disposition": "existing",
+          "rationale": "Core includes every generated module and consumer requirement from the workspace Cabal fragment, including StructuralConformance, BehaviorSourceMap and the exposed Conformance facade. KeiroSpecificationSpec checks generated source/Cabal membership in both directions; all enabled components compile."
+        },
+        {
+          "id": "edition-and-language-baseline",
+          "disposition": "existing",
+          "rationale": "The current scaffold ledger and emitted idiomatic-v2 records use concise record-dot labels with GHC2024, DuplicateRecordFields, NoFieldSelectors, OverloadedRecordDot and OverloadedStrings. No FieldSelectors compatibility switch was introduced."
+        },
+        {
+          "id": "producer-owned-pragmas-and-imports",
+          "disposition": "existing",
+          "rationale": "Generated module-local pragmas/imports are untouched and generated files are excluded from formatting. The released emitter owns its versioned banner; FRIC-35 records the stale guide banner example and the narrow checker recognition, without forging an old header."
+        },
+        {
+          "id": "explicit-runtime-and-single-conformance",
+          "disposition": "existing",
+          "rationale": "The manifest declares runtime-package shikigami-core and generates one local keiro-shikigami-conformance package. Its runner imports the compiled core facade and compares unique native facts. Current native output has 156 successful rows; application test facades remain hand-owned concept modules."
+        },
+        {
+          "id": "frozen-packaged-ci-qualification",
+          "disposition": "pending",
+          "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md",
+          "rationale": "Plan95 must refresh the exact Nix/Cabal source closure and qualify generated/runtime/role artifacts on the actual Mac/Linux profiles. Current Cabal compilation and generation checks do not certify the still-old Nix qualification archive."
+        }
+      ],
+      "evidence": [
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/architecture/packages.md",
+        "docs/evidence/keiro-0.22/domain-driver-results.txt",
+        "docs/evidence/keiro-0.22/worker-owner-revision-results.txt",
+        "docs/evidence/keiro-0.22/resource-root-revision-results.txt",
+        "shikigami-core/test/Shikigami/KeiroSpecificationSpec.hs",
+        "shikigami-core/test/Shikigami/PackageArchitectureSpec.hs"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-overview",
@@ -99,9 +213,28 @@
       "sourcePath": "runtime-patterns/architecture/overview.md",
       "sourceSha256": "0c25f883f9f48a0b3a8f584bf4ded711aebbd2aa159fbb733f4c74e3ec9df537",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "domain-first-navigation",
+          "disposition": "existing",
+          "rationale": "The context/ownership inventory names four aggregate boundaries, five durable workflow families, four typed lookup models and one workqueue across ten members. Navigation documents remain in the frozen denominator; each linked normative source has its own accountable row."
+        },
+        {
+          "id": "service-specific-application",
+          "disposition": "existing",
+          "rationale": "The service follows its accepted first-release and package decisions instead of copying Danwa or teaching-example semantics. Guide examples are evidence for conventions; they do not create a Shikigami Conversation aggregate or a Kafka publisher."
+        }
+      ],
+      "evidence": [
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/architecture/packages.md",
+        "docs/evidence/keiro-0.22/domain-driver-results.txt",
+        "docs/evidence/keiro-0.22/worker-owner-revision-results.txt",
+        "docs/evidence/keiro-0.22/resource-root-revision-results.txt",
+        "shikigami-core/test/Shikigami/KeiroSpecificationSpec.hs",
+        "shikigami-core/test/Shikigami/PackageArchitectureSpec.hs"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-service-packages",
@@ -110,8 +243,43 @@
       "sourceSha256": "5ccf5a048546225fd461b13149180b7f02e49bebc9c397c23be6175ff1bc846e",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "six-role-ownership",
+          "disposition": "existing",
+          "rationale": "Core owns domain/runtime contracts; API owns Servant types; server executes HTTP/admin commands; workers own background delivery; migrations own native migration composition/public test-support; client derives the API client. Production migration and client libraries retain their leaf dependency budgets."
+        },
+        {
+          "id": "seventh-package-local-decision",
+          "disposition": "implemented",
+          "rationale": "ADR-3 is the deliberate service-specific exception to the generic six-package ceiling: shikigami-agent keeps one-off execution and provider launchers free of server/worker dependencies. This is an application capability, not a seventh technology catch-all; the requested plan explicitly preserves this accepted exception."
+        },
+        {
+          "id": "dependency-direction",
+          "disposition": "existing",
+          "rationale": "PackageArchitectureSpec enforces all seven sibling arrows. Core depends on no sibling production library; migrations on none; workers on neither API nor server; client on API, never server. Migration test-support dependencies are limited to tests."
+        },
+        {
+          "id": "inspection-and-tooling-budget",
+          "disposition": "implemented",
+          "rationale": "Administrative HTTP/live hosting is an optional public core inspection sublibrary under ADR-71, keeping the main core/agent path free of the host collector/server composition. The single generated conformance and Linux fixture packages are tooling, not additional deployable application roles."
+        },
+        {
+          "id": "frozen-packaged-ci-qualification",
+          "disposition": "pending",
+          "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md",
+          "rationale": "Plan95 must refresh the exact Nix/Cabal source closure and qualify generated/runtime/role artifacts on the actual Mac/Linux profiles. Current Cabal compilation and generation checks do not certify the still-old Nix qualification archive."
+        }
+      ],
+      "evidence": [
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/architecture/packages.md",
+        "docs/evidence/keiro-0.22/domain-driver-results.txt",
+        "docs/evidence/keiro-0.22/worker-owner-revision-results.txt",
+        "docs/evidence/keiro-0.22/resource-root-revision-results.txt",
+        "shikigami-core/test/Shikigami/KeiroSpecificationSpec.hs",
+        "shikigami-core/test/Shikigami/PackageArchitectureSpec.hs"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-spec-and-scaffolding",
@@ -119,9 +287,48 @@
       "sourcePath": "runtime-patterns/architecture/spec-and-scaffolding.md",
       "sourceSha256": "2aea9cf9c3af59442db57450a2ed1a245cd0759c9988b06579cc764a061b1923",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "root-workspace-and-member-placement",
+          "disposition": "implemented",
+          "rationale": "The manifest remains domain/shikigami.keiro-workspace and all ten complete members now live under domain/shikigami/. The recursive specification census rejects symlinks, orphan members, wrong context and non-Language-6 preambles."
+        },
+        {
+          "id": "one-service-wide-source-of-truth",
+          "disposition": "existing",
+          "rationale": "All file-taking checks/scaffolds target the manifest with collocated layout and explicit runtime package. A redundant module prefix is forbidden by the pure specification test; no independent member scaffold writes a partial output graph."
+        },
+        {
+          "id": "declared-consumer-owned-types",
+          "disposition": "implemented",
+          "rationale": "Current RunJobs structural enums and the execution/session nominal bindings have one checked declaration/binding authority. ObjectiveId reuses the generated checked TypeID domain. The remaining scalar review stays explicit in the separate domain-newtypes source row; no duplicate generated wrapper or runtime codec selector was added."
+        },
+        {
+          "id": "supported-behavior-and-law-checks",
+          "disposition": "existing",
+          "rationale": "Language 6 generates expressible guards/writes/event copies. Hand-owned behavior witnesses and focused guards now run for all four aggregates in the pure driver. Native structural/nominal laws execute through the same compiled generated facade."
+        },
+        {
+          "id": "firewall-and-current-sidecars",
+          "disposition": "existing",
+          "rationale": "Generation remains producer-owned, holes/bindings/witnesses create-once, and the native workspace sidecars/ledger are committed. Treefmt excludes generated output. Versioned 0.22 ownership headers are preserved under the documented FRIC-35 correction."
+        },
+        {
+          "id": "explicit-evolution",
+          "disposition": "implemented",
+          "rationale": "Strict checks inspect effective Language 6 for all ten members. Exact first-release breaking reports for old patch/codec removal and the ObjectiveId/fold reset remain retained under ADR-27/73; later neutral diffs are retained without weakening the deny policy."
+        }
+      ],
+      "evidence": [
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/architecture/packages.md",
+        "docs/evidence/keiro-0.22/domain-driver-results.txt",
+        "docs/evidence/keiro-0.22/worker-owner-revision-results.txt",
+        "docs/evidence/keiro-0.22/resource-root-revision-results.txt",
+        "shikigami-core/test/Shikigami/KeiroSpecificationSpec.hs",
+        "shikigami-core/test/Shikigami/PackageArchitectureSpec.hs"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-test-layout",
@@ -191,9 +398,33 @@
       "sourcePath": "runtime-patterns/architecture/worked-example-conversation.md",
       "sourceSha256": "9948e7d70dc89b4cbb2cdf03405dd68d49692d15a2e7ced6cb3714354700a4f1",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "business-rule-example",
+          "disposition": "existing",
+          "rationale": "The example is applied through actual execution/objective/session invariants and their accepted/refused/duplicate scenarios. This service orchestrates Danwa conversations through an external owner; it does not own the example service's Conversation entity or private tables."
+        },
+        {
+          "id": "generated-ownership-and-command-results",
+          "disposition": "existing",
+          "rationale": "Actual aggregate rings remain generated, behavior witnesses remain hand-owned, and handlers expose typed acceptance/refusal/query outcomes. Resource and protected-payload side effects retain the same transaction owner instead of copying example persistence code."
+        },
+        {
+          "id": "coordination-and-proof",
+          "disposition": "implemented",
+          "rationale": "Native queued work and five durable workflow families perform coordination outside pure aggregate decisions. The all-aggregate pure driver, PostgreSQL/worker/server scenarios and native generation gates provide the corresponding service proof; the literal example names, fields and HTTP surface are not invented consumers."
+        }
+      ],
+      "evidence": [
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/architecture/packages.md",
+        "docs/evidence/keiro-0.22/domain-driver-results.txt",
+        "docs/evidence/keiro-0.22/worker-owner-revision-results.txt",
+        "docs/evidence/keiro-0.22/resource-root-revision-results.txt",
+        "shikigami-core/test/Shikigami/KeiroSpecificationSpec.hs",
+        "shikigami-core/test/Shikigami/PackageArchitectureSpec.hs"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/config-kubernetes-deployment",

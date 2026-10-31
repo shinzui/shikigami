@@ -10,6 +10,7 @@ module Shikigami.StateRevision
     revisionNumber,
     initialRevision,
     advanceRevision,
+    advanceRevisions,
     previousRevision,
   )
 where
@@ -37,6 +38,10 @@ initialRevision = StateRevision 0
 
 advanceRevision :: StateRevision scope -> StateRevision scope
 advanceRevision (StateRevision number) = StateRevision (number + 1)
+
+-- | Advance a nonnegative number of revisions without losing the scope.
+advanceRevisions :: Word -> StateRevision scope -> StateRevision scope
+advanceRevisions count (StateRevision number) = StateRevision (number + toInteger count)
 
 -- | A predecessor is absent at the initial revision; never admit a negative value.
 previousRevision :: StateRevision scope -> Maybe (StateRevision scope)

@@ -298,7 +298,7 @@ tests fixture =
           cancelled <- get env objective
           version <- right (S.versionFor cancelled key)
           version.active @?= False
-          (_, intent) <- right =<< run env (Sessions.prepareCheckpoint access (fixtureRevision 3) (fixtureRevision 0) (OperationId "prepare") version 0 3)
+          (_, intent) <- right =<< run env (Sessions.prepareCheckpoint access (fixtureRevision 3) (fixtureRevision 0) (OperationId "prepare") version (fixtureRevision 0) (fixtureRevision 3))
           let evidence = ResultEvidence (evidenceKey "late") (criterionKey "human") (WorkerResult result (artifact "artifact")) False
           _ <- right =<< run env (O.executeInternal ownerHost objective (revision 3) (OperationId "reconcile") (IngestCheckpoint key intent [evidence] []))
           run env (O.executeCommand ownerHost objective (revision 4) (OperationId "fresh-progress") (RecordProgress key Working [] [])) >>= assertLeft
@@ -387,7 +387,7 @@ checkpoint env actor _ current assignment key = do
   _ <- right =<< run env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (OperationId "start") message.assignmentId)
   let result = WS.AssignmentResult 1 message.assignmentId WS.AssignmentSucceeded Nothing (Aeson.object []) ["artifact"]
   (_, receipt) <- right =<< run env (Sessions.recordResult access (fixtureRevision 2) (fixtureRevision 0) (OperationId "result") result)
-  (_, intent) <- right =<< run env (Sessions.prepareCheckpoint access (fixtureRevision 3) (fixtureRevision 0) (OperationId "prepare") version 0 3)
+  (_, intent) <- right =<< run env (Sessions.prepareCheckpoint access (fixtureRevision 3) (fixtureRevision 0) (OperationId "prepare") version (fixtureRevision 0) (fixtureRevision 3))
   pure (intent, ResultEvidence (evidenceKey key) (criterionKey "human") (WorkerResult receipt (artifact "artifact")) False)
 
 run :: AppEnv -> Eff AppEffects a -> IO a

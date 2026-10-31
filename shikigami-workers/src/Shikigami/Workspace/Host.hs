@@ -68,7 +68,7 @@ workspaceHostFor transferable runtime selected historical prepare storageRoot se
             case retained of
               Right (Right binding) -> reuse False assignment root policy principal repository child binding
               _ -> pure refused
-          (Right repository, Right (Just child), Right ()) | child.sequence > 0 -> do
+          (Right repository, Right (Just child), Right ()) | child.sequence > initialRevision -> do
             retained <- runAppIO runtime.appEnv (runTransaction (Transfers.findFollowupWorkspaceTx assignment.runId child storageRoot repository))
             case retained of
               Right (Right (Just binding)) -> reuse True assignment root policy principal repository child binding

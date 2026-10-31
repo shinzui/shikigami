@@ -82,7 +82,7 @@ tests fixture =
           run env (Handoff.requestHandoff owner.services intent.sessionId (fixtureRevision 0) (fixtureRevision 0) (OperationId "transfer") workspaceRef (AgentName "worker")) >>= (@?= Left MessageConflict)
           -- A stale checkpoint cannot restore the previous owner.
           stale <- checkpointVersion admission
-          let obsolete = Checkpoint.CheckpointIntent 1 intent.sessionId admission.objective (OperationId "stale-checkpoint") admission.context.identity (fixtureRevision 0) stale 0 1 []
+          let obsolete = Checkpoint.CheckpointIntent 1 intent.sessionId admission.objective (OperationId "stale-checkpoint") admission.context.identity (fixtureRevision 0) stale (fixtureRevision 0) (fixtureRevision 1) []
           owner.checkpoints.commit obsolete >>= (@?= Checkpoint.CheckpointConflict)
           latest <- owner.checkpoints.current admission.objective >>= expectRight
           latest.owner @?= successor
@@ -133,7 +133,7 @@ tests fixture =
           final <- current env admission
           final.owner @?= successor
           final.epoch @?= (fixtureRevision 1)
-          events <- expectRight =<< run env (Store.readEvents access 0 100)
+          events <- expectRight =<< run env (Store.readEvents access (fixtureRevision 0) 100)
           length [() | EventReceipt {event = ResultAvailable {}} <- events] @?= 1,
       testCase "missing execution evidence keeps a settled workspace handoff unresolved" $
         withTransferFixture fixture False \env admission access owner -> do

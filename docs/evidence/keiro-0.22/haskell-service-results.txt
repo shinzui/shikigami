@@ -44,3 +44,6 @@ All six compiler boundary cases passed, including the real WorkerCommand signatu
 just keiro-gate e1d5548 passed strict Language 6 checks for ten members, idempotent scaffold, no breaking findings and replay-neutral impact. Current native conformance output has 156 passing rows (70 aggregate, 30 workflow, 28 read-model, 26 structural, 2 mapped-surface); the earlier 151 summaries undercounted the generated identity checks.
 
 Resource-root revision extension (source parent 1a9feb5): all enabled application/test components compile; 546 pure (5.94s), 375 serial PostgreSQL (101.15s), 95 serial server (18.68s) cases pass. Eight real compiler cases and nine style mutation/lexical cases pass. The full nominal quantity/identity census remains open.
+
+Worker cursor extension (source parent b11b86c): 549 pure (0.64s), 376 serial PostgreSQL (101.97s), 260 serial worker (161.32s), 95 serial server (18.71s) cases pass. The focused seeded event-capacity case confirms native event and payload/command rollback.
+Ten compiler boundary cases, 70 offline CLI process checks and all 143 domain driver assertions pass. just keiro-gate b11b86c has no findings, neutral replay impact, ten Language-6 members and 156 passing native conformance rows.

@@ -35,6 +35,14 @@ Those adapters do not widen authority: current membership, expected state, owner
 and lifecycle fences still execute in the production transaction. Preserve late
 projection/accounting exceptions that cause complete rollback under ADR-53.
 
+Mailbox sequences and event cursors use distinct worker-message and worker-event
+scopes, including Flow waits and checkpoint providers. Assignment pagination has
+an abstract MessagePosition with its own before-first sentinel; an event cursor
+cannot receive -1. Preserve the public after wire field even where the Haskell
+field name must differ. Refuse a new event append at the existing stored cursor
+limit inside the same transaction, preserving payload/receipt/event rollback and
+readability of the retained state. This does not authorize truncation or rotation.
+
 JSON encoding remains an integer with identical bytes for valid values. No scope
 tag is added to a journal or request. Malformed negative counters fail decoding
 rather than entering domain state. Existing finite database bounds remain checked

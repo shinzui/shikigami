@@ -93,7 +93,7 @@ tests fixture =
           generation <- run env (currentGeneration sessionWorkflowName (sessionWorkflowId session))
           drive Nothing >>= (@?= Suspended)
           run env (currentGeneration sessionWorkflowName (sessionWorkflowId session)) >>= (@?= generation)
-          events <- expectRight =<< run env (Store.readEvents access 0 100)
+          events <- expectRight =<< run env (Store.readEvents access (fixtureRevision 0) 100)
           length [() | EventReceipt {event = ResultAvailable {}} <- events] @?= 2
           root <- maybe (assertFailure "missing root" >> fail "missing root") pure admission.context.executionRootId
           ledger <- expectRight =<< run env (Roots.inspectRoot root)
@@ -164,7 +164,7 @@ tests fixture =
           case result of Completed _ -> pure (); _ -> assertFailure (show result)
           now <- getCurrentTime
           _ <- run env (gcWorkflowsOnce (addUTCTime 1 now) (WorkflowGcPolicy 0 10))
-          run env (Store.consumeEventsWith access (fixtureRevision 2) (fixtureRevision 0) (OperationId "final-ack") 0 1 (pure (Right ()))) >>= (@?= Right (Resources.Accepted, 1)),
+          run env (Store.consumeEventsWith access (fixtureRevision 2) (fixtureRevision 0) (OperationId "final-ack") (fixtureRevision 0) (fixtureRevision 1) (pure (Right ()))) >>= (@?= Right (Resources.Accepted, fixtureRevision 1)),
       testCase "checkpoint runtime retries an accepted unknown request before preparing another batch" $
         withFixture fixture \env admission access -> do
           _ <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "first") (Instruction 1 FollowUp "first" (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
@@ -174,10 +174,10 @@ tests fixture =
               integrate = run env (Integration.integrateEvents runtime (sessionIdFor admission) (OperationId "checkpoint"))
           integrate >>= (@?= Right Integration.EventsPending)
           integrated <- expectRight =<< integrate
-          case integrated of Integration.EventsIntegrated _ 1 -> pure (); _ -> assertFailure (show integrated)
+          case integrated of Integration.EventsIntegrated _ cursor | cursor == fixtureRevision 1 -> pure (); _ -> assertFailure (show integrated)
           integrate >>= (@?= Right integrated)
           count >>= (@?= 1)
-          run env (Integration.integrateEvents runtime (sessionIdFor admission) (OperationId "next-batch")) >>= (@?= Right (Integration.EventsCaughtUp 1)),
+          run env (Integration.integrateEvents runtime (sessionIdFor admission) (OperationId "next-batch")) >>= (@?= Right (Integration.EventsCaughtUp (fixtureRevision 1))),
       testCase "missing or stale objective authority admits no child or descendant reservation" $
         withFixture fixture \env admission access -> do
           (_, message) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "first") (Instruction 1 FollowUp "first" (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))

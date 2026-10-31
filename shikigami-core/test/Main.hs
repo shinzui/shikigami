@@ -75,6 +75,7 @@ import Shikigami.SinkIntentSpec qualified as SinkIntentSpec
 import Shikigami.Trigger.Schedule (isDue, nextDue, parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (IncludeAgentActors), matchesStream, matchesStreamWith)
 import Shikigami.WireCompatSpec qualified as WireCompatSpec
+import Shikigami.WorkerSessionPositionSpec qualified as WorkerSessionPositionSpec
 import Shikigami.WorkspaceActionProofSpec qualified as WorkspaceActionProofSpec
 import Shikigami.WorkspaceAdapterSpec qualified as WorkspaceAdapterSpec
 import Shikigami.WorkspaceCatalogSpec qualified as WorkspaceCatalogSpec
@@ -113,6 +114,7 @@ main =
           DelegationBatchSpec.tests,
           ExecutionPolicySpec.tests,
           ExecutionResourcesSpec.tests,
+          WorkerSessionPositionSpec.tests,
           ExecutionSelectionSpec.tests,
           DirectorySpec.tests,
           EnqueueHardeningSpec.tests,

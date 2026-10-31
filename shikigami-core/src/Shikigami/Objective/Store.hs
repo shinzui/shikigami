@@ -244,7 +244,7 @@ execute access identifier expected operation mutation = guarded do
                 saveSnapshot next
                 writePayload identifier digest payload
                 case mutation of
-                  Internal (IngestCheckpoint assignment intent _ _) -> Tx.statement ((objectiveIdText identifier), (objectiveAssignmentIdText assignment), intent.sessionId.value, fromInteger intent.throughCursor) saveCursor
+                  Internal (IngestCheckpoint assignment intent _ _) -> Tx.statement ((objectiveIdText identifier), (objectiveAssignmentIdText assignment), intent.sessionId.value, fromInteger (revisionNumber intent.throughCursor)) saveCursor
                   Public (BindConversation conversation) -> Tx.statement (conversation, (objectiveIdText identifier), toJSON receipt) bindConversation
                   _ -> pure ()
                 writeReceipt receipt (Right receipt)
@@ -392,10 +392,10 @@ validateSources objective mutation = do
     Internal (IngestCheckpoint key intent inputs _) -> do
       storedIntent <- Tx.statement (intent.sessionId.value, operationKey intent.operationId) selectCheckpoint
       let original = storedIntent >>= \value -> case Aeson.fromJSON value of Aeson.Success decoded -> Just decoded; _ -> Nothing
-      cursor <- fromMaybe 0 <$> Tx.statement ((objectiveIdText objective.objectiveId), (objectiveAssignmentIdText key), intent.sessionId.value) selectCursor
+      cursor <- fromMaybe initialRevision <$> Tx.statement ((objectiveIdText objective.objectiveId), (objectiveAssignmentIdText key), intent.sessionId.value) selectCursor
       case find ((== key) . (.definition.assignmentId)) objective.assignments of
         Just assignment -> pure do
-          unless (assignment.definition.sessionId == Just intent.sessionId && intent.actor `matchesActor` objective && original == Just intent && intent.objective == referenceFor objective.objectiveId key && cursor == intent.previousCursor && intent.throughCursor > cursor && intent.throughCursor - cursor <= 100 && map (.cursor) intent.events == [cursor + 1 .. intent.throughCursor]) (Left ObjectiveConflict)
+          unless (assignment.definition.sessionId == Just intent.sessionId && intent.actor `matchesActor` objective && original == Just intent && intent.objective == referenceFor objective.objectiveId key && cursor == intent.previousCursor && intent.throughCursor > cursor && revisionNumber intent.throughCursor - revisionNumber cursor <= 100 && map (revisionNumber . (.cursor)) intent.events == [revisionNumber cursor + 1 .. revisionNumber intent.throughCursor]) (Left ObjectiveConflict)
           let results = [receipt | WS.EventReceipt {event = WS.ResultAvailable receipt} <- intent.events]
           forM_ inputs \case
             ResultEvidence {result = WorkerResult receipt _} -> unless (receipt `elem` results) (Left ObjectiveInvalidEvidence)
@@ -508,8 +508,8 @@ selectWorkerResult = preparable "SELECT r.state,p.body FROM shikigami.worker_ses
 selectCheckpoint :: Statement (Text, Text) (Maybe Aeson.Value)
 selectCheckpoint = preparable "SELECT state FROM shikigami.worker_session_commands WHERE session_id=$1 AND operation_id=$2" (contrazip2 textParam textParam) (D.rowMaybe jsonRow)
 
-selectCursor :: Statement (Text, Text, Text) (Maybe Integer)
-selectCursor = preparable "SELECT cursor FROM shikigami.objective_cursors WHERE objective_id=$1 AND assignment_id=$2 AND session_id=$3" (contrazip3 textParam textParam textParam) (D.rowMaybe (toInteger <$> D.column (D.nonNullable D.int8)))
+selectCursor :: Statement (Text, Text, Text) (Maybe (StateRevision "worker-event"))
+selectCursor = preparable "SELECT cursor FROM shikigami.objective_cursors WHERE objective_id=$1 AND assignment_id=$2 AND session_id=$3" (contrazip3 textParam textParam textParam) (D.rowMaybe (D.column (D.nonNullable (D.refine (parseRevision . toInteger) D.int8))))
 
 saveCursor :: Statement (Text, Text, Text, Int64) ()
 saveCursor = preparable "INSERT INTO shikigami.objective_cursors(objective_id,assignment_id,session_id,cursor) VALUES ($1,$2,$3,$4) ON CONFLICT (objective_id,assignment_id,session_id) DO UPDATE SET cursor=$4" (contrazip4 textParam textParam textParam intParam) D.noResult

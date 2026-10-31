@@ -24,12 +24,13 @@ import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.StateRevision (StateRevision)
 import Shikigami.WorkerSession.Capability
 import Shikigami.WorkerSession.Handoff (TransferServices (..))
+import Shikigami.WorkerSession.Position (MessagePosition)
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Types
 import Shikigami.WorkerSession.Workflow (SessionRuntime (..))
 import System.Exit (die)
 
-runWorkersInspect :: Text -> Integer -> Int -> Bool -> AppConfig -> IO ()
+runWorkersInspect :: Text -> MessagePosition -> Int -> Bool -> AppConfig -> IO ()
 runWorkersInspect key after limit _asJson config = do
   env <- environment "workers inspect" config
   result <- runAppIO env (Store.inspectSessionPage (WorkerSessionId key) after limit)

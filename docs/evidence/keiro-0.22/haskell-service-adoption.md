@@ -110,8 +110,9 @@ Operator revision/epoch readers refine inputs before runtime acquisition. A
 predecessor lookup returns Nothing at zero. The generic scoped codec retains
 numeric JSON, while existing concurrency, lost-acknowledgement, stale-owner and
 workspace settlement cases exercise the same production transaction paths.
-Mailbox sequences/event cursors and the broader resource/identity census remain
-under review; these changes do not certify those remaining fields.
+The subsequent cursor section qualifies mailbox sequences/event cursors. The
+broader resource/identity census remains open; the ownership-only result did not
+certify those remaining fields.
 
 Seven additional frozen core/navigation/governance sources now have explicit
 clause dispositions. Core compiler/extensions, record/deriving/import conventions,
@@ -135,3 +136,15 @@ server cases pass after conversion. Eight real compiler cases include positive
 resource-root and worker-command clients and reject cross-domain substitutions.
 Resource quantities and the wider scalar census remain open; see
 [resource-root-revision-results.txt](resource-root-revision-results.txt).
+
+Mailbox sequences and event cursors now retain distinct scopes through their
+producer and consumer contracts. Assignment pagination represents its -1
+before-first position separately and preserves the public after field and numeric
+bytes. Event-capacity refusal rolls back native and application writes together.
+All 549 pure, 376 PostgreSQL, 260 worker, 95 server, ten compiler, 70 offline CLI
+and 143 domain-driver cases pass; the strict generator has 156 passing rows and a
+neutral diff/replay report. See [worker-cursor-results.txt](worker-cursor-results.txt).
+Seven architecture sources now have explicit clause reviews; generated-artifact,
+package and test-profile qualification remains explicitly owned by plan95. The
+remaining local reviews are cross-cutting placement, aggregate verticals and the
+complete domain scalar/identity census.

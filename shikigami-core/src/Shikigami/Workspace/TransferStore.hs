@@ -48,7 +48,7 @@ import Shikigami.Workspace.Types
 data SessionChild = SessionChild
   { session :: !WorkerSessionId,
     assignment :: !AssignmentId,
-    sequence :: !Integer,
+    sequence :: !(StateRevision "worker-message"),
     owner :: !AgentIdentity,
     epoch :: !(StateRevision "worker-owner"),
     rootId :: !ExecutionRootId,
@@ -167,7 +167,7 @@ admitFollowupTx binding admission = do
   child <- lookupSessionChildTx admission.runId
   case (child, binding.request.assignment) of
     (Right (Just current), Just (session, originalAssignment))
-      | current.session == session && isNothing current.handoff && current.sequence > 0 && current.owner == binding.request.owner && current.epoch == binding.request.epoch && admission.owner == current.owner && admission.epoch == current.epoch && admission.runId /= binding.request.runId && admission.assignmentId == assignmentIdFor admission.runId && admission.filePolicy == Just transferableFilePolicy && matchesAdmission binding admission -> do
+      | current.session == session && isNothing current.handoff && current.sequence > initialRevision && current.owner == binding.request.owner && current.epoch == binding.request.epoch && admission.owner == current.owner && admission.epoch == current.epoch && admission.runId /= binding.request.runId && admission.assignmentId == assignmentIdFor admission.runId && admission.filePolicy == Just transferableFilePolicy && matchesAdmission binding admission -> do
           let ExecutionId execution = executionIdFor (assignmentIdFor binding.request.runId)
               scope = Aeson.object ["executionId" .= execution, "assignmentId" .= assignmentIdFor binding.request.runId, "owner" .= current.owner, "rootId" .= current.rootId, "sequence" .= current.sequence]
           prior <- Tx.statement (binding.workspace.resource, session.value, originalAssignment.value, scope) priorAssignmentsSettled
@@ -247,6 +247,9 @@ textParam = E.param (E.nonNullable E.text)
 epochParam :: E.Params (StateRevision "worker-owner")
 epochParam = revisionNumber >$< integerParam
 
+sequenceParam :: E.Params (StateRevision "worker-message")
+sequenceParam = revisionNumber >$< integerParam
+
 integerParam :: E.Params Integer
 integerParam = fromInteger >$< E.param (E.nonNullable E.int8)
 
@@ -286,8 +289,8 @@ pendingOperations = preparable "SELECT operation_id,kind FROM (SELECT operation_
 establishControl :: Statement (Text, Aeson.Value, StateRevision "worker-owner") ()
 establishControl = preparable "UPDATE shikigami.workspace_controls SET owner=$2,epoch=$3,frozen=false WHERE resource=$1" (contrazip3 textParam (E.param (E.nonNullable E.jsonb)) epochParam) D.noResult
 
-insertAdmission :: Statement (Text, Text, Text, Text, Integer, WorkspaceAdmission) ()
-insertAdmission = preparable "INSERT INTO shikigami.workspace_successor_admissions(run_id,resource,session_id,assignment_id,sequence,admission) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING" (contrazip6 textParam textParam textParam textParam integerParam jsonParam) D.noResult
+insertAdmission :: Statement (Text, Text, Text, Text, StateRevision "worker-message", WorkspaceAdmission) ()
+insertAdmission = preparable "INSERT INTO shikigami.workspace_successor_admissions(run_id,resource,session_id,assignment_id,sequence,admission) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING" (contrazip6 textParam textParam textParam textParam sequenceParam jsonParam) D.noResult
 
 selectAdmission :: Statement Text (Maybe WorkspaceAdmission)
 selectAdmission = preparable "SELECT admission FROM shikigami.workspace_successor_admissions WHERE run_id=$1" textParam (D.rowMaybe jsonRow)
@@ -306,5 +309,5 @@ priorAssignmentsSettled = preparable "SELECT EXISTS(SELECT 1 FROM shikigami.work
 
 -- A session result alone cannot retire an admitted execution. Later children
 -- at an established successor epoch wait for the actual execution and receipts.
-priorSuccessorsSettled :: Statement (Text, Integer) Bool
-priorSuccessorsSettled = preparable "SELECT NOT EXISTS(SELECT 1 FROM shikigami.workspace_successor_admissions a LEFT JOIN shikigami.worker_session_messages m ON m.assignment_id=a.assignment_id LEFT JOIN shikigami.executions e ON e.binding->>'assignmentId'=a.admission->>'assignmentId' WHERE a.resource=$1 AND a.sequence<$2 AND (m.state IS NULL OR m.state->>'phase'<>'AssignmentFinished' OR e.execution_id IS NULL OR e.binding->'identity'<>a.admission->'owner' OR e.binding->'rootId'<>a.admission->'rootId' OR e.state->>'phase' NOT IN ('Succeeded','Failed','Cancelled') OR COALESCE((e.state->>'pendingReceipts')::bigint,0)<>0 OR COALESCE(e.state->'activeOperation','null'::jsonb)<>'null'::jsonb OR (COALESCE(m.state->'executionId','null'::jsonb)<>'null'::jsonb AND m.state->>'executionId'<>e.execution_id)))" (contrazip2 textParam integerParam) (D.singleRow (D.column (D.nonNullable D.bool)))
+priorSuccessorsSettled :: Statement (Text, StateRevision "worker-message") Bool
+priorSuccessorsSettled = preparable "SELECT NOT EXISTS(SELECT 1 FROM shikigami.workspace_successor_admissions a LEFT JOIN shikigami.worker_session_messages m ON m.assignment_id=a.assignment_id LEFT JOIN shikigami.executions e ON e.binding->>'assignmentId'=a.admission->>'assignmentId' WHERE a.resource=$1 AND a.sequence<$2 AND (m.state IS NULL OR m.state->>'phase'<>'AssignmentFinished' OR e.execution_id IS NULL OR e.binding->'identity'<>a.admission->'owner' OR e.binding->'rootId'<>a.admission->'rootId' OR e.state->>'phase' NOT IN ('Succeeded','Failed','Cancelled') OR COALESCE((e.state->>'pendingReceipts')::bigint,0)<>0 OR COALESCE(e.state->'activeOperation','null'::jsonb)<>'null'::jsonb OR (COALESCE(m.state->'executionId','null'::jsonb)<>'null'::jsonb AND m.state->>'executionId'<>e.execution_id)))" (contrazip2 textParam sequenceParam) (D.singleRow (D.column (D.nonNullable D.bool)))

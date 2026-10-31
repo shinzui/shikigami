@@ -13,6 +13,7 @@ import Data.Coerce (coerce)
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Capability (WorkerCommand (CancelWorker))
 import Shikigami.WorkerSession.Types (WorkerSessionId)
+import Shikigami.WorkerSession.Types qualified as WorkerSession
 import Shikigami.Execution.Resources qualified as Resources
 '''
 CASES = [
@@ -26,6 +27,12 @@ rootRevision root = root.revision
 ''', True),
     ("wrong-root-revision", '''rootRevision :: Resources.Root -> StateRevision "worker-session"
 rootRevision root = root.revision
+''', False),
+    ("message-sequence", '''messageSequence :: WorkerSession.SessionState -> StateRevision "worker-message"
+messageSequence state = state.nextSequence
+''', True),
+    ("event-is-not-message-sequence", '''eventAsSequence :: WorkerSession.SessionState -> StateRevision "worker-message"
+eventAsSequence state = state.eventCursor
 ''', False),
     ("worker-command", '''command :: WorkerSessionId -> StateRevision "worker-session" -> StateRevision "worker-owner" -> WorkerCommand
 command = CancelWorker
@@ -53,6 +60,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
         assert (result.returncode == 0) == expected, (name, result.stdout, result.stderr)
         if not expected:
             fragments = {
+                "event-is-not-message-sequence": ["Couldn't match type", "worker-message", "worker-event"],
                 "wrong-root-revision": ["Couldn't match type", "worker-session", "execution-root"],
                 "wrong-worker-revision": ["Couldn't match type", "worker-session", "objective"],
                 "scope-coercion": ["Couldn't match type", "objective", "objective-criteria"],

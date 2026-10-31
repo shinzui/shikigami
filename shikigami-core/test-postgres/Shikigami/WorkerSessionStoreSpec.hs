@@ -16,7 +16,9 @@ import Hasql.Transaction qualified as Tx
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (defaultConnectionSettings)
+import Kiroku.Store.Read qualified as StoreRead
 import Kiroku.Store.Transaction (runTransaction)
+import Kiroku.Store.Types qualified as StoreTypes
 import Shikigami.Agent.Decl (defaultDelegationBudget)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Delegate.Depth (DelegationDepth (..))
@@ -59,7 +61,7 @@ tests fixture =
           Store.readInstruction access first.assignmentId `inEnv` env >>= (@?= Right (instruction "first"))
           (_, result) <- expectRight =<< run env (Store.recordResult access (fixtureRevision 3) (fixtureRevision 0) (OperationId "result-1") (resultFor first "retained finding"))
           (_, third) <- accept env access 4 "send-3" (instruction "third")
-          map (.sequence) [first, second, third] @?= [0, 1, 2]
+          map (.sequence) [first, second, third] @?= map fixtureRevision [0, 1, 2]
           assertBool "assignment identities differ" (first.assignmentId /= second.assignmentId && second.assignmentId /= third.assignmentId)
           started.childWorkflowId @?= Just (assignmentChildWorkflowId (sessionIdFor admission) admission.worker first.assignmentId).unWorkflowId
           (_, next) <- expectRight =<< run env (Store.startAssignment access (fixtureRevision 5) (fixtureRevision 0) (OperationId "start-2") second.assignmentId)
@@ -69,9 +71,9 @@ tests fixture =
           run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "send-1") (instruction "first")) >>= (@?= Right (AlreadyAccepted, first))
           (_, state) <- current env admission
           state.activeAssignment @?= Just second.assignmentId
-          state.nextSequence @?= 3
-          events <- expectRight =<< run env (Store.readEvents access 0 100)
-          map (.cursor) events @?= [1 .. 6],
+          state.nextSequence @?= (fixtureRevision 3)
+          events <- expectRight =<< run env (Store.readEvents access (fixtureRevision 0) 100)
+          map (.cursor) events @?= map fixtureRevision [1 .. 6],
       testCase "concurrent identical acceptance returns one immutable receipt" $
         withFixture fixture \env admission access -> do
           let send = run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "duplicate-send") (instruction "one"))
@@ -83,8 +85,8 @@ tests fixture =
           length (filter (== AlreadyAccepted) [a, b]) @?= 1
           run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "duplicate-send") (instruction "changed")) >>= (@?= Left MessageConflict)
           (_, state) <- current env admission
-          state.nextSequence @?= 1
-          state.eventCursor @?= 1,
+          state.nextSequence @?= (fixtureRevision 1)
+          state.eventCursor @?= (fixtureRevision 1),
       testCase "result and follow-up races converge without losing accepted work" $
         withFixture fixture \env admission access -> do
           (_, first) <- accept env access 0 "send-1" (instruction "first")
@@ -98,11 +100,11 @@ tests fixture =
           case message of Left SessionRevisionConflict -> void (expectRight =<< follow latest.revision); Right _ -> pure (); other -> assertFailure (show other)
           (_, settled) <- current env admission
           settled.phase @?= Idle
-          settled.nextSequence @?= 2
-          settled.eventCursor @?= 4
+          settled.nextSequence @?= (fixtureRevision 2)
+          settled.eventCursor @?= (fixtureRevision 4)
           available <- expectRight =<< run env (Store.readResult access first.assignmentId)
           assertBool "result remains available after lost notification" (isJust available)
-          events <- expectRight =<< run env (Store.readEvents access 0 100)
+          events <- expectRight =<< run env (Store.readEvents access (fixtureRevision 0) 100)
           length [() | EventReceipt {event = ResultAvailable {}} <- events] @?= 1,
       testCase "cursor integration faults roll back local progress and command acceptance" $
         withFixture fixture \env admission access -> do
@@ -112,14 +114,14 @@ tests fixture =
           run env (runTransaction (Tx.statement () (preparable "CREATE TABLE shikigami.session_test_progress (key text PRIMARY KEY)" E.noParams D.noResult)))
           let integrate = Tx.statement () (preparable "INSERT INTO shikigami.session_test_progress(key) VALUES ('once')" E.noParams D.noResult)
               count = run env (runTransaction (Tx.statement () (preparable "SELECT count(*) FROM shikigami.session_test_progress" E.noParams (D.singleRow (D.column (D.nonNullable D.int8))))))
-              commit action = run env (Store.consumeEventsWith access (fixtureRevision 3) (fixtureRevision 0) (OperationId "integrate") 0 3 action)
+              commit action = run env (Store.consumeEventsWith access (fixtureRevision 3) (fixtureRevision 0) (OperationId "integrate") (fixtureRevision 0) (fixtureRevision 3) action)
           commit (integrate >> pure (Left (SessionInputRefused "fixture fault"))) >>= (@?= Left (SessionInputRefused "fixture fault"))
           count >>= (@?= 0)
           (_, unchanged) <- current env admission
           unchanged.revision @?= (fixtureRevision 3)
-          unchanged.consumedCursor @?= 0
-          commit (integrate >> pure (Right ())) >>= (@?= Right (Accepted, 3))
-          commit (error "duplicate integration callback") >>= (@?= Right (AlreadyAccepted, 3))
+          unchanged.consumedCursor @?= (fixtureRevision 0)
+          commit (integrate >> pure (Right ())) >>= (@?= Right (Accepted, fixtureRevision 3))
+          commit (error "duplicate integration callback") >>= (@?= Right (AlreadyAccepted, fixtureRevision 3))
           count >>= (@?= 1),
       testCase "interrupts bind the active assignment and never rewrite its instruction" $
         withFixture fixture \env admission access -> do
@@ -129,7 +131,7 @@ tests fixture =
               valid = instruction "interrupt" & #kind .~ Interrupt first.assignmentId
           run env (Store.acceptMessage access (fixtureRevision 2) (fixtureRevision 0) (OperationId "interrupt") wrong) >>= (@?= Left InterruptTargetChanged)
           (_, accepted) <- accept env access 2 "interrupt" valid
-          accepted.sequence @?= 1
+          accepted.sequence @?= (fixtureRevision 1)
           (_, state) <- current env admission
           state.activeAssignment @?= Just first.assignmentId
           run env (Store.readInstruction access first.assignmentId) >>= (@?= Right (instruction "accepted instruction")),
@@ -155,7 +157,7 @@ tests fixture =
           run env (Store.acceptMessage access (fixtureRevision 3) (fixtureRevision 1) (OperationId "wrong-epoch") (instruction "no")) >>= (@?= Left SessionOwnerRefused)
           (_, state) <- current env admission
           state.revision @?= (fixtureRevision 3)
-          state.nextSequence @?= 2,
+          state.nextSequence @?= (fixtureRevision 2),
       testCase "root cancellation refuses new work while retaining an already accepted result" $
         withFixture fixture \env admission access -> do
           (_, first) <- accept env access 0 "send" (instruction "one")
@@ -184,7 +186,7 @@ tests fixture =
           (_, closed) <- expectRight =<< run env (Store.closeSession access state.revision (fixtureRevision 0) (OperationId "close") AssignmentCancelled)
           closed.phase @?= Cancelled
           run env (Store.acceptMessage access closed.revision (fixtureRevision 0) (OperationId "too-late") (instruction "no")) >>= (@?= Left SessionRevisionConflict)
-          run env (Store.consumeEventsWith access closed.revision (fixtureRevision 0) (OperationId "final-ack") 0 closed.eventCursor (pure (Right ()))) >>= (@?= Right (Accepted, closed.eventCursor)),
+          run env (Store.consumeEventsWith access closed.revision (fixtureRevision 0) (OperationId "final-ack") (fixtureRevision 0) closed.eventCursor (pure (Right ()))) >>= (@?= Right (Accepted, closed.eventCursor)),
       testCase "queued assignments prevent idle session closure" $
         withFixture fixture \env _ access -> do
           (_, first) <- accept env access 0 "send" (instruction "one")
@@ -197,28 +199,28 @@ tests fixture =
           _ <- expectRight =<< run env (Store.recordResult access (fixtureRevision 2) (fixtureRevision 0) (OperationId "finish") (resultFor first "retained finding"))
           version <- checkpointVersion admission
           (provider, count) <- fixtureCheckpoints version True
-          (_, intent) <- expectRight =<< run env (Store.prepareCheckpoint access (fixtureRevision 3) (fixtureRevision 0) (OperationId "checkpoint") version 0 3)
+          (_, intent) <- expectRight =<< run env (Store.prepareCheckpoint access (fixtureRevision 3) (fixtureRevision 0) (OperationId "checkpoint") version (fixtureRevision 0) (fixtureRevision 3))
           provider.commit intent >>= (@?= Checkpoint.CheckpointUnresolved)
           (_, pending) <- current env admission
           pending.checkpointIntent @?= Just (OperationId "checkpoint")
-          pending.consumedCursor @?= 0
-          run env (Store.prepareCheckpoint access (fixtureRevision 4) (fixtureRevision 0) (OperationId "overlap") version 0 3) >>= (@?= Left AssignmentConflict)
-          run env (Store.consumeEventsWith access (fixtureRevision 4) (fixtureRevision 0) (OperationId "bypass") 0 3 (error "pending checkpoint bypass")) >>= (@?= Left AssignmentConflict)
+          pending.consumedCursor @?= (fixtureRevision 0)
+          run env (Store.prepareCheckpoint access (fixtureRevision 4) (fixtureRevision 0) (OperationId "overlap") version (fixtureRevision 0) (fixtureRevision 3)) >>= (@?= Left AssignmentConflict)
+          run env (Store.consumeEventsWith access (fixtureRevision 4) (fixtureRevision 0) (OperationId "bypass") (fixtureRevision 0) (fixtureRevision 3) (error "pending checkpoint bypass")) >>= (@?= Left AssignmentConflict)
           restarted <- expectRight =<< run env (Store.authorizeSession pending.sessionId admission.context.identity (pure (Right ())))
           recovered <- expectRight =<< run env (Store.readCheckpointIntent restarted (OperationId "checkpoint"))
           recovered @?= intent
           Checkpoint.CheckpointAccepted receipt <- provider.commit recovered
-          run env (Store.acceptCheckpointWith restarted (fixtureRevision 4) (fixtureRevision 0) (OperationId "checkpoint-ack") recovered.operationId receipt (pure (Right ()))) >>= (@?= Right (Accepted, 3))
-          run env (Store.acceptCheckpointWith restarted (fixtureRevision 4) (fixtureRevision 0) (OperationId "checkpoint-ack") recovered.operationId receipt (error "duplicate checkpoint integration")) >>= (@?= Right (AlreadyAccepted, 3))
+          run env (Store.acceptCheckpointWith restarted (fixtureRevision 4) (fixtureRevision 0) (OperationId "checkpoint-ack") recovered.operationId receipt (pure (Right ()))) >>= (@?= Right (Accepted, fixtureRevision 3))
+          run env (Store.acceptCheckpointWith restarted (fixtureRevision 4) (fixtureRevision 0) (OperationId "checkpoint-ack") recovered.operationId receipt (error "duplicate checkpoint integration")) >>= (@?= Right (AlreadyAccepted, fixtureRevision 3))
           count >>= (@?= 1)
           (_, integrated) <- current env admission
-          integrated.consumedCursor @?= 3
+          integrated.consumedCursor @?= (fixtureRevision 3)
           integrated.checkpointIntent @?= Nothing,
       testCase "checkpoint conflicts and local faults preserve the exact pending intent" $
         withFixture fixture \env admission access -> do
           _ <- accept env access 0 "send" (instruction "one")
           version <- checkpointVersion admission
-          (_, intent) <- expectRight =<< run env (Store.prepareCheckpoint access (fixtureRevision 1) (fixtureRevision 0) (OperationId "checkpoint") version 0 1)
+          (_, intent) <- expectRight =<< run env (Store.prepareCheckpoint access (fixtureRevision 1) (fixtureRevision 0) (OperationId "checkpoint") version (fixtureRevision 0) (fixtureRevision 1))
           (provider, count) <- fixtureCheckpoints version False
           provider.commit (intent & #expected . #revision .~ (fixtureRevision 99)) >>= (@?= Checkpoint.CheckpointConflict)
           Checkpoint.CheckpointAccepted receipt <- provider.commit intent
@@ -227,16 +229,28 @@ tests fixture =
           ack receipt (pure (Left (SessionInputRefused "integration fault"))) >>= (@?= Left (SessionInputRefused "integration fault"))
           (_, pending) <- current env admission
           pending.revision @?= (fixtureRevision 2)
-          pending.consumedCursor @?= 0
+          pending.consumedCursor @?= (fixtureRevision 0)
           pending.checkpointIntent @?= Just intent.operationId
-          ack receipt (pure (Right ())) >>= (@?= Right (Accepted, 1))
+          ack receipt (pure (Right ())) >>= (@?= Right (Accepted, fixtureRevision 1))
           count >>= (@?= 1),
+      testCase "event capacity refuses atomically before retaining command input" $
+        withFixture fixture \env admission access -> do
+          let sql statement = run env (runTransaction (Tx.sql statement))
+          sql "UPDATE shikigami.worker_sessions SET state=jsonb_set(state,'{eventCursor}','100000'::jsonb)"
+          run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "at-event-capacity") (instruction "must roll back")) >>= (@?= Left SessionLimitExceeded)
+          (_, state) <- current env admission
+          state.revision @?= fixtureRevision 0
+          state.nextSequence @?= fixtureRevision 0
+          state.eventCursor @?= fixtureRevision 100000
+          let count = run env (runTransaction (Tx.statement () (preparable "SELECT (SELECT count(*) FROM shikigami.worker_session_messages),(SELECT count(*) FROM shikigami.worker_session_commands),(SELECT count(*) FROM shikigami.worker_session_payloads)" E.noParams (D.singleRow ((,,) <$> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8))))))
+          count >>= (@?= (0, 0, 1))
+          run env (length <$> StoreRead.readCategory (StoreTypes.CategoryName "workerSessionLifecycle") (StoreTypes.GlobalPosition 0) 100) >>= (@?= 1),
       testCase "oversized instruction refuses before changing session progress" $
         withFixture fixture \env admission access -> do
           run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "large") (instruction (Text.replicate 1048576 "x"))) >>= (@?= Left SessionPayloadTooLarge)
           (_, state) <- current env admission
           state.revision @?= (fixtureRevision 0)
-          state.nextSequence @?= 0
+          state.nextSequence @?= (fixtureRevision 0)
     ]
 
 instruction :: Text -> Instruction

@@ -72,6 +72,7 @@ import Shikigami.Server.Command.Validate (runValidate)
 import Shikigami.Server.Command.Workers (runWorkersControl, runWorkersInspect, runWorkersInterrupt, runWorkersSend)
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.WorkerSession.Capability (WorkerCommand (..))
+import Shikigami.WorkerSession.Position (MessagePosition, beforeMessages, parseMessagePosition)
 import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
 import Shikigami.WorkerSession.Types (WorkerSessionId (..))
 import System.Exit (ExitCode (..), exitWith)
@@ -185,7 +186,7 @@ workersInfo = info (subparser commands <**> helper) (progDesc "Inspect continuin
     inspect =
       (\key after limit json -> action (runWorkersInspect key after limit json))
         <$> session
-        <*> option auto (long "after" <> value (-1) <> metavar "SEQUENCE")
+        <*> option messagePositionReader (long "after" <> value beforeMessages <> metavar "SEQUENCE")
         <*> option auto (long "limit" <> value 10 <> metavar "COUNT" <> help "Assignment page size (1-20)")
         <*> switch (long "json")
     send = (\key op rev owner input -> action (runWorkersSend key op rev owner input)) <$> session <*> operation <*> revision <*> epoch <*> instruction
@@ -472,3 +473,8 @@ revisionReader :: ReadM (StateRevision scope)
 revisionReader = eitherReader \raw -> case reads raw of
   [(value, "")] -> either (Left . Text.unpack) Right (parseRevision value)
   _ -> Left "expected a nonnegative integer"
+
+messagePositionReader :: ReadM MessagePosition
+messagePositionReader = eitherReader \raw -> case reads raw of
+  [(value, "")] -> either (Left . Text.unpack) Right (parseMessagePosition value)
+  _ -> Left "expected a message position (-1 before the first message)"

@@ -50,6 +50,7 @@ import Shikigami.StateRevision
 import Shikigami.WorkerSession.Checkpoint (CheckpointProvider (..), ObjectiveVersion (..))
 import Shikigami.WorkerSession.Handoff (TransferOutcome, TransferServices (..), requestHandoff, resumeHandoff)
 import Shikigami.WorkerSession.Integration (IntegrationOutcome, integrateEvents)
+import Shikigami.WorkerSession.Position
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Transfer (TransferIntent, WorkspaceRef)
 import Shikigami.WorkerSession.Types
@@ -129,8 +130,8 @@ instance Show WorkerInstruction where show _ = "WorkerInstruction <protected>"
 data WorkerCommand
   = FindWorker {workerKey :: !Text}
   | SendWorker {sessionId :: !WorkerSessionId, expectedRevision :: !(StateRevision "worker-session"), epoch :: !(StateRevision "worker-owner"), instruction :: !WorkerInstruction}
-  | InspectWorker {sessionId :: !WorkerSessionId, after :: !Integer, limit :: !Int}
-  | ReadWorkerEvents {sessionId :: !WorkerSessionId, after :: !Integer, limit :: !Int}
+  | InspectWorker {sessionId :: !WorkerSessionId, position :: !MessagePosition, limit :: !Int}
+  | ReadWorkerEvents {sessionId :: !WorkerSessionId, after :: !(StateRevision "worker-event"), limit :: !Int}
   | ReadWorkerResult {sessionId :: !WorkerSessionId, assignmentId :: !AssignmentId}
   | InterruptWorker {sessionId :: !WorkerSessionId, expectedRevision :: !(StateRevision "worker-session"), epoch :: !(StateRevision "worker-owner"), assignmentId :: !AssignmentId, instruction :: !WorkerInstruction}
   | CancelWorker {sessionId :: !WorkerSessionId, expectedRevision :: !(StateRevision "worker-session"), epoch :: !(StateRevision "worker-owner")}
@@ -138,10 +139,19 @@ data WorkerCommand
   | ReconcileWorker {sessionId :: !WorkerSessionId}
   | IntegrateWorkerEvents {sessionId :: !WorkerSessionId}
   deriving stock (Eq, Generic)
-  deriving anyclass (ToJSON)
+
+instance ToJSON WorkerCommand where
+  toJSON = Aeson.genericToJSON workerCommandOptions
 
 instance FromJSON WorkerCommand where
-  parseJSON = Aeson.genericParseJSON (Aeson.defaultOptions {Aeson.rejectUnknownFields = True})
+  parseJSON = Aeson.genericParseJSON workerCommandOptions
+
+workerCommandOptions :: Aeson.Options
+workerCommandOptions =
+  Aeson.defaultOptions
+    { Aeson.rejectUnknownFields = True,
+      Aeson.fieldLabelModifier = \field -> if field == "position" then "after" else field
+    }
 
 instance Show WorkerCommand where show _ = "WorkerCommand <protected>"
 
@@ -249,7 +259,7 @@ executeAdmittedCommand host authorizer (CoordinationGrant scope) operation comma
     dispatch access session = case command of
       SendWorker {expectedRevision, epoch, instruction} -> send access session expectedRevision epoch (message FollowUp instruction)
       InterruptWorker {expectedRevision, epoch, assignmentId, instruction} -> send access session expectedRevision epoch (message (Interrupt assignmentId) instruction)
-      InspectWorker {after, limit} -> Store.inspectSessionPage session after limit <&> (>>= maybe (Left SessionMissing) (Right . WorkerInspected))
+      InspectWorker {position, limit} -> Store.inspectSessionPage session position limit <&> (>>= maybe (Left SessionMissing) (Right . WorkerInspected))
       ReadWorkerEvents {after, limit} -> fmap WorkerEvents <$> Store.readEvents access after limit
       ReadWorkerResult {assignmentId} -> fmap (WorkerResult . fmap (\(receipt, result) -> (receipt, if Lazy.length (Aeson.encode result) <= 16384 then Just result else Nothing))) <$> Store.readResult access assignmentId
       CancelWorker {expectedRevision, epoch} -> fmap (WorkerClosed . snd) <$> Store.closeSession access expectedRevision epoch operation AssignmentCancelled
@@ -269,7 +279,7 @@ executeAdmittedCommand host authorizer (CoordinationGrant scope) operation comma
           admission <- Store.loadAdmission access
           metadata <- Store.inspectSession session
           case (admission, metadata) of
-            (Right admitted, Right (Just (state, _))) | state.nextSequence < toInteger scope.maximumAssignments -> do
+            (Right admitted, Right (Just (state, _))) | revisionNumber state.nextSequence < toInteger scope.maximumAssignments -> do
               let permissions = case (admitted.context.executionPermissions, scope.context.executionPermissions) of
                     (Nothing, narrowed) -> narrowed
                     (existing, Nothing) -> existing
@@ -351,7 +361,7 @@ commandSession = \case
 
 -- | Only the Flow interpreter supplies this listener; it is absent from model
 -- command input and must belong to the admitted parent run.
-subscribeCommand :: CoordinationHost -> ActionAuthorizer -> CoordinationGrant -> OperationId -> WorkerSessionId -> SessionListener -> Eff AppEffects (Either SessionError Integer)
+subscribeCommand :: CoordinationHost -> ActionAuthorizer -> CoordinationGrant -> OperationId -> WorkerSessionId -> SessionListener -> Eff AppEffects (Either SessionError (StateRevision "worker-event"))
 subscribeCommand host authorizer (CoordinationGrant scope) operation session listener
   | listener.ownerId /= scope.run.runId = pure (Left SessionOwnerRefused)
   | otherwise =
