@@ -78,7 +78,7 @@ cleanupWorkspace runtime actor ref = protect do
         plan <- case retained of
           Just (original, _) -> pure original
           Nothing -> do
-            profile <- transact runtime (inspectProcessProfileTx binding.workspace)
+            profile <- transact runtime (inspectProcessProfileTx binding.workspace) >>= either (const (abort CleanupRefused)) pure
             uid <- maybe (fromIntegral <$> getEffectiveUserID) (pure . (.userId) . fst) profile
             files <- anchor (workspaceFiles binding.storageRoot binding)
             scratch <- anchor (workspaceScratch binding.storageRoot binding)

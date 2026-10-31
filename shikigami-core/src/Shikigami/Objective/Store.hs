@@ -130,24 +130,24 @@ readVersion :: (ObjectiveEffects es) => Access -> WS.ObjectiveRef -> Eff es (Eit
 readVersion access reference = protected do
   unless (reference.provider == "shikigami-objective-v1") (abort ObjectiveMissing)
   (objective, assignment) <- Tx.statement reference.key selectReference >>= maybe (abort ObjectiveMissing) pure
-  identifier <- either (const (abort ObjectiveUnavailable)) pure (parseObjectiveId objective)
+  identifier <- requireDecoded (parseObjectiveId objective)
   current <- locked identifier
   checkAccess access current
-  key <- either (const (abort ObjectiveUnavailable)) pure (parseObjectiveAssignmentId assignment)
+  key <- requireDecoded (parseObjectiveAssignmentId assignment)
   require (versionFor current key)
 
 readReceipt :: (ObjectiveEffects es) => Access -> ObjectiveId -> OperationId -> Eff es (Either ObjectiveError (Maybe (Either ObjectiveError Receipt)))
 readReceipt access objective operation = protected do
   current <- locked objective
   checkAccess access current
-  fmap snd <$> Tx.statement ((objectiveIdText objective), (operationKey operation)) selectReceipt
+  fmap snd <$> readRow ((objectiveIdText objective), (operationKey operation)) selectReceipt
 
 lookupCommandReceipt :: (ObjectiveEffects es) => Access -> ObjectiveId -> OperationId -> Mutation -> Eff es (Either ObjectiveError (Maybe (Either ObjectiveError Receipt)))
 lookupCommandReceipt access objective operation mutation = protected do
   current <- locked objective
   checkAccess access current
   unless (authorized access current mutation) (abort ObjectiveDenied)
-  fmap snd <$> Tx.statement ((objectiveIdText objective), operationKey operation) selectReceipt
+  fmap snd <$> readRow ((objectiveIdText objective), operationKey operation) selectReceipt
 
 create :: (ObjectiveEffects es) => Access -> OperationId -> Maybe CreationOrigin -> CreateRequest -> IO (Either ObjectiveError ()) -> Eff es (Either ObjectiveError Receipt)
 create access operation origin request verifyOrigin = guarded do
@@ -164,7 +164,7 @@ create access operation origin request verifyOrigin = guarded do
       lookupOriginal = protected do
         now <- Tx.statement () currentTime
         unless (now < access.expiresAt && creationAllowed access.settings access.actor) (abort ObjectiveDenied)
-        stored <- Tx.statement (creator, (operationKey operation)) selectOrigin
+        stored <- readRow (creator, (operationKey operation)) selectOrigin
         case stored of
           Nothing -> pure Nothing
           Just (actual, old) -> do
@@ -182,7 +182,7 @@ create access operation origin request verifyOrigin = guarded do
       result <- persist identifier (G.CreateObjective (G.CreateObjectiveData identifier)) do
         -- Locks serialize identical creation, including creator-scoped retries.
         void (Tx.statement creator lockKey)
-        old <- Tx.statement (creator, (operationKey operation)) selectOrigin
+        old <- readRow (creator, (operationKey operation)) selectOrigin
         when (isJust old) (throw Retry)
         now <- Tx.statement () currentTime
         unless (now < access.expiresAt && creationAllowed access.settings access.actor) (abort ObjectiveDenied)
@@ -206,7 +206,7 @@ execute access identifier expected operation mutation = guarded do
       current <- locked identifier
       checkAccess access current
       unless (authorized access current mutation) (abort ObjectiveDenied)
-      old <- Tx.statement ((objectiveIdText identifier), (operationKey operation)) selectReceipt
+      old <- readRow ((objectiveIdText identifier), (operationKey operation)) selectReceipt
       case old of
         Just (digest, outcome) -> pure (Left (if digest == fingerprint then outcome else Left ObjectiveConflict))
         Nothing -> do
@@ -234,7 +234,7 @@ execute access identifier expected operation mutation = guarded do
                 checkAccess access current
                 unless (authorized access current mutation) (abort ObjectiveDenied)
                 unless (current.revision == before.revision) (throw Retry)
-                old <- Tx.statement ((objectiveIdText identifier), (operationKey operation)) selectReceipt
+                old <- readRow ((objectiveIdText identifier), (operationKey operation)) selectReceipt
                 when (isJust old) (throw Retry)
                 now <- Tx.statement () currentTime
                 validateSources current mutation >>= require
@@ -367,24 +367,24 @@ validateSources objective mutation = do
     ResultEvidence {result = WorkerResult receipt artifact} -> do
       let addressed = case mutation of Public (RecordEvidence key _) -> Just key; Internal (IngestCheckpoint key _ _ _) -> Just key; _ -> Nothing
           bound = any (\a -> Just a.definition.assignmentId == addressed && a.definition.sessionId == Just receipt.sessionId) objective.assignments
-      stored <- Tx.statement (receipt.sessionId.value, receipt.assignmentId.value) selectWorkerResult
+      stored <- readRow (receipt.sessionId.value, receipt.assignmentId.value) selectWorkerResult
       case stored of
-        Just (actual, payload) -> pure do
-          expectedDigest <- either (const (Left ObjectiveInvalidEvidence)) Right (parsePayloadDigest (versionedDigest "shikigami.worker-session-payload/1" payload))
-          unless (bound && actual == receipt && expectedDigest == receipt.output.digest) (Left ObjectiveInvalidEvidence)
-          result <- case payload of
-            Aeson.Object fields -> case Aeson.parseMaybe (\o -> o .: "content") fields of
-              Just value -> Right (value :: WS.AssignmentResult)
-              Nothing -> Left ObjectiveInvalidEvidence
-            _ -> Left ObjectiveInvalidEvidence
-          unless (artifactRefText artifact `elem` result.artifacts && result.assignmentId == receipt.assignmentId && result.disposition == receipt.disposition) (Left ObjectiveInvalidEvidence)
+        Just (actual, payload, result) -> do
+          expectedDigest <- requireDecoded (parsePayloadDigest (versionedDigest "shikigami.worker-session-payload/1" payload))
+          -- Check the retained source against its own keys/body before judging
+          -- the caller's evidence. Source corruption is never a definitive
+          -- negative receipt for an otherwise recoverable checkpoint command.
+          unless (actual.sessionId == receipt.sessionId && actual.assignmentId == receipt.assignmentId && actual.output.digest == expectedDigest && result.assignmentId == actual.assignmentId && result.disposition == actual.disposition) (requireDecoded (Left () :: Either () ()))
+          pure do
+            unless (bound && actual == receipt) (Left ObjectiveInvalidEvidence)
+            unless (artifactRefText artifact `elem` result.artifacts) (Left ObjectiveInvalidEvidence)
         Nothing -> pure (Left ObjectiveInvalidEvidence)
     _ -> pure (Right ())
   bindings <- case mutation of
     Public (SetAssignments graph) -> forM graph \draft -> case draft.sessionId of
       Nothing -> pure (Right ())
       Just session -> do
-        actual <- Tx.statement session.value selectWorkerBinding
+        actual <- readRow session.value selectWorkerBinding
         let epoch = maybe initialRevision (.ownerEpoch) (find ((== draft.assignmentId) . (.definition.assignmentId)) objective.assignments)
         pure $ case actual of
           Just (state, binding) | state.owner == draft.owner && state.epoch == epoch && Just binding.rootId == draft.rootId && binding.objective == referenceFor objective.objectiveId draft.assignmentId -> Right ()
@@ -392,9 +392,8 @@ validateSources objective mutation = do
     _ -> pure []
   checkpoint <- case mutation of
     Internal (IngestCheckpoint key intent inputs _) -> do
-      storedIntent <- Tx.statement (intent.sessionId.value, operationKey intent.operationId) selectCheckpoint
-      let original = storedIntent >>= \value -> case Aeson.fromJSON value of Aeson.Success decoded -> Just decoded; _ -> Nothing
-      cursor <- fromMaybe initialRevision <$> Tx.statement ((objectiveIdText objective.objectiveId), (objectiveAssignmentIdText key), intent.sessionId.value) selectCursor
+      original <- readRow (intent.sessionId.value, operationKey intent.operationId) selectCheckpoint
+      cursor <- fromMaybe initialRevision <$> readRow ((objectiveIdText objective.objectiveId), (objectiveAssignmentIdText key), intent.sessionId.value) selectCursor
       case find ((== key) . (.definition.assignmentId)) objective.assignments of
         Just assignment -> pure do
           unless (assignment.definition.sessionId == Just intent.sessionId && intent.actor `matchesActor` objective && original == Just intent && intent.objective == referenceFor objective.objectiveId key && cursor == intent.previousCursor && intent.throughCursor > cursor && revisionNumber intent.throughCursor - revisionNumber cursor <= 100 && map (revisionNumber . (.cursor)) intent.events == [revisionNumber cursor + 1 .. revisionNumber intent.throughCursor]) (Left ObjectiveConflict)
@@ -412,7 +411,10 @@ referenceFor :: ObjectiveId -> ObjectiveAssignmentId -> WS.ObjectiveRef
 referenceFor objective assignment = WS.ObjectiveRef "shikigami-objective-v1" (versionedDigest "shikigami.objective-assignment-ref/1" (toJSON (objective, assignment)))
 
 locked :: ObjectiveId -> Transaction Objective
-locked identifier = Tx.statement (objectiveIdText identifier) lockObjective >>= maybe (abort ObjectiveMissing) pure
+locked identifier = do
+  current <- readRow (objectiveIdText identifier) lockObjective >>= maybe (abort ObjectiveMissing) pure
+  requireDecoded (validateSnapshot current)
+  pure current
 
 saveSnapshot :: Objective -> Transaction ()
 saveSnapshot objective = do
@@ -470,10 +472,21 @@ jsonParam = toJSON >$< E.param (E.nonNullable E.jsonb)
 intParam :: E.Params Int64
 intParam = E.param (E.nonNullable E.int8)
 
-jsonRow :: (FromJSON a) => D.Row a
-jsonRow = D.column (D.nonNullable (D.refine (\value -> case Aeson.fromJSON value of Aeson.Success answer -> Right answer; Aeson.Error _ -> Left "unreadable objective record") D.jsonb))
+jsonRow :: (FromJSON a) => D.Row (Either () a)
+jsonRow = decode <$> D.column (D.nonNullable D.jsonb)
+  where
+    decode value = case Aeson.fromJSON value of Aeson.Success answer -> Right answer; Aeson.Error _ -> Left ()
 
-lockObjective :: Statement Text (Maybe Objective)
+-- SQL errors retain the store path. A present but unreadable owned row is an
+-- objective refusal and condemns any earlier command/projection writes.
+readRow :: input -> Statement input (Maybe (Either () a)) -> Transaction (Maybe a)
+readRow input statement = Tx.statement input statement >>= traverse requireDecoded
+
+requireDecoded :: Either err a -> Transaction a
+requireDecoded (Right value) = pure value
+requireDecoded (Left _) = Tx.condemn >> abort ObjectiveConflict
+
+lockObjective :: Statement Text (Maybe (Either () Objective))
 lockObjective = preparable "SELECT state FROM shikigami.objectives WHERE objective_id=$1 FOR UPDATE" textParam (D.rowMaybe jsonRow)
 
 insertObjective, updateObjective :: Statement (Text, Objective) ()
@@ -486,14 +499,14 @@ saveAssignment = preparable "INSERT INTO shikigami.objective_assignments(objecti
 insertPayload :: Statement (Text, Text, Aeson.Value) ()
 insertPayload = preparable "INSERT INTO shikigami.objective_payloads(objective_id,digest,payload) VALUES ($1,$2,$3)" (contrazip3 textParam textParam jsonParam) D.noResult
 
-selectReceipt :: Statement (Text, Text) (Maybe (Text, Either ObjectiveError Receipt))
-selectReceipt = preparable "SELECT fingerprint,outcome FROM shikigami.objective_receipts WHERE objective_id=$1 AND operation_key=$2" (contrazip2 textParam textParam) (D.rowMaybe ((,) <$> D.column (D.nonNullable D.text) <*> jsonRow))
+selectReceipt :: Statement (Text, Text) (Maybe (Either () (Text, Either ObjectiveError Receipt)))
+selectReceipt = preparable "SELECT fingerprint,outcome FROM shikigami.objective_receipts WHERE objective_id=$1 AND operation_key=$2" (contrazip2 textParam textParam) (D.rowMaybe ((\fingerprint value -> (fingerprint,) <$> value) <$> D.column (D.nonNullable D.text) <*> jsonRow))
 
 insertReceipt :: Statement (Text, Text, Text, Either ObjectiveError Receipt) ()
 insertReceipt = preparable "INSERT INTO shikigami.objective_receipts(objective_id,operation_key,fingerprint,outcome) VALUES ($1,$2,$3,$4)" (contrazip4 textParam textParam textParam jsonParam) D.noResult
 
-selectOrigin :: Statement (Text, Text) (Maybe (Text, Receipt))
-selectOrigin = preparable "SELECT fingerprint,receipt FROM shikigami.objective_origins WHERE creator_key=$1 AND operation_key=$2" (contrazip2 textParam textParam) (D.rowMaybe ((,) <$> D.column (D.nonNullable D.text) <*> jsonRow))
+selectOrigin :: Statement (Text, Text) (Maybe (Either () (Text, Receipt)))
+selectOrigin = preparable "SELECT fingerprint,receipt FROM shikigami.objective_origins WHERE creator_key=$1 AND operation_key=$2" (contrazip2 textParam textParam) (D.rowMaybe ((\fingerprint value -> (fingerprint,) <$> value) <$> D.column (D.nonNullable D.text) <*> jsonRow))
 
 insertOrigin :: Statement (Text, Text, Text, Text, Aeson.Value, Receipt) ()
 insertOrigin = preparable "INSERT INTO shikigami.objective_origins(creator_key,operation_key,objective_id,fingerprint,origin,receipt) VALUES ($1,$2,$3,$4,$5,$6)" (contrazip6 textParam textParam textParam textParam jsonParam jsonParam) D.noResult
@@ -504,14 +517,20 @@ lockKey = preparable "SELECT pg_advisory_xact_lock(hashtextextended($1,0))" text
 currentTime :: Statement () UTCTime
 currentTime = preparable "SELECT clock_timestamp()" E.noParams (D.singleRow (D.column (D.nonNullable D.timestamptz)))
 
-selectWorkerResult :: Statement (Text, Text) (Maybe (WS.ResultReceipt, Aeson.Value))
-selectWorkerResult = preparable "SELECT r.state,p.body FROM shikigami.worker_session_results r JOIN shikigami.worker_session_payloads p ON p.session_id=r.session_id AND p.payload_id=r.state->'output'->>'payloadId' WHERE r.session_id=$1 AND r.assignment_id=$2" (contrazip2 textParam textParam) (D.rowMaybe ((,) <$> jsonRow <*> D.column (D.nonNullable D.jsonb)))
+selectWorkerResult :: Statement (Text, Text) (Maybe (Either () (WS.ResultReceipt, Aeson.Value, WS.AssignmentResult)))
+selectWorkerResult = preparable "SELECT r.state,p.body FROM shikigami.worker_session_results r LEFT JOIN shikigami.worker_session_payloads p ON p.session_id=r.session_id AND p.payload_id=r.state->'output'->>'payloadId' WHERE r.session_id=$1 AND r.assignment_id=$2" (contrazip2 textParam textParam) (D.rowMaybe (decode <$> jsonRow <*> D.column (D.nullable D.jsonb)))
+  where
+    decode receipt payload = do
+      actual <- receipt
+      body <- maybe (Left ()) Right payload
+      result <- either (const (Left ())) Right (Aeson.parseEither (Aeson.withObject "worker result payload" (.: "content")) body)
+      pure (actual, body, result)
 
-selectCheckpoint :: Statement (Text, Text) (Maybe Aeson.Value)
+selectCheckpoint :: Statement (Text, Text) (Maybe (Either () CP.CheckpointIntent))
 selectCheckpoint = preparable "SELECT state FROM shikigami.worker_session_commands WHERE session_id=$1 AND operation_id=$2" (contrazip2 textParam textParam) (D.rowMaybe jsonRow)
 
-selectCursor :: Statement (Text, Text, Text) (Maybe (StateRevision "worker-event"))
-selectCursor = preparable "SELECT cursor FROM shikigami.objective_cursors WHERE objective_id=$1 AND assignment_id=$2 AND session_id=$3" (contrazip3 textParam textParam textParam) (D.rowMaybe (D.column (D.nonNullable (D.refine (parseRevision . toInteger) D.int8))))
+selectCursor :: Statement (Text, Text, Text) (Maybe (Either () (StateRevision "worker-event")))
+selectCursor = preparable "SELECT cursor FROM shikigami.objective_cursors WHERE objective_id=$1 AND assignment_id=$2 AND session_id=$3" (contrazip3 textParam textParam textParam) (D.rowMaybe ((either (const (Left ())) Right . parseRevision . toInteger) <$> D.column (D.nonNullable D.int8)))
 
 saveCursor :: Statement (Text, Text, Text, Int64) ()
 saveCursor = preparable "INSERT INTO shikigami.objective_cursors(objective_id,assignment_id,session_id,cursor) VALUES ($1,$2,$3,$4) ON CONFLICT (objective_id,assignment_id,session_id) DO UPDATE SET cursor=$4" (contrazip4 textParam textParam textParam intParam) D.noResult
@@ -522,5 +541,5 @@ bindConversation = preparable "INSERT INTO shikigami.objective_associations(kind
 selectReference :: Statement Text (Maybe (Text, Text))
 selectReference = preparable "SELECT objective_id,assignment_id FROM shikigami.objective_assignments WHERE reference_key=$1" textParam (D.rowMaybe ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text)))
 
-selectWorkerBinding :: Statement Text (Maybe (WS.SessionState, WS.SessionBinding))
-selectWorkerBinding = preparable "SELECT state,binding FROM shikigami.worker_sessions WHERE session_id=$1" textParam (D.rowMaybe ((,) <$> jsonRow <*> jsonRow))
+selectWorkerBinding :: Statement Text (Maybe (Either () (WS.SessionState, WS.SessionBinding)))
+selectWorkerBinding = preparable "SELECT state,binding FROM shikigami.worker_sessions WHERE session_id=$1" textParam (D.rowMaybe ((\state binding -> (,) <$> state <*> binding) <$> jsonRow <*> jsonRow))

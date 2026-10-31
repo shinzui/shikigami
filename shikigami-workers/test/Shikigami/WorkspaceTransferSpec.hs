@@ -90,7 +90,7 @@ tests fixture =
     [ testCase "same-owner follow-up reuses retained bytes and unknown effects prevent a fresh-copy fallback" $ do
         properties <- Systemd.systemdPropertiesIdentity
         let digest = "sha256:" <> Text.replicate 64 "a"
-            policy = ProcessPolicy 1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") properties [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] [""]
+            policy = ProcessPolicy ProcessPolicyV1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") properties [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] [""]
         withWorkspacePolicy False (Just policy) fixture \env binding context _ _ -> do
           original <- (\admission -> admission & #filePolicy .~ Just transferableFilePolicy) <$> (right =<< loadWorkspaceAdmission binding (Selection.assignmentIdFor binding.request.runId) 65536)
           (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest original.instructions) policy (IdentityRange 62000 62001)))
@@ -157,11 +157,11 @@ tests fixture =
             pure thirdRun
           effective <- run env (runTransaction (Transfers.currentWorkspaceRequestTx binding))
           fmap (.runId) effective @?= Just latest
-          run env (runTransaction (inspectProcessProfileTx binding.workspace)) >>= (@?= Just (profile, ProfileReady)),
+          run env (runTransaction (inspectProcessProfileTx binding.workspace)) >>= (@?= Right (Just (profile, ProfileReady))),
       testCase "successor host admits the real retained child and exact read adapter without reallocating or provisioning" $ do
         properties <- Systemd.systemdPropertiesIdentity
         let digest = "sha256:" <> Text.replicate 64 "a"
-            policy = ProcessPolicy 1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") properties [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] [""]
+            policy = ProcessPolicy ProcessPolicyV1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") properties [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] [""]
         withTransferPolicy (Just policy) fixture \env binding intent supervisor _ -> do
           original <- right =<< loadWorkspaceAdmission binding (Selection.assignmentIdFor binding.request.runId) 65536
           (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest original.instructions) policy (IdentityRange 62000 62001)))
@@ -227,7 +227,7 @@ tests fixture =
             _ <- right =<< run env (Sessions.closeSession parent finished.revision (fixtureRevision 1) (fixtureOperationId "close-successor") AssignmentFailed)
             run env (runTransaction (cleanupEligibleTx binding)) >>= (@?= True)
           run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Just (binding, Ready))
-          run env (runTransaction (inspectProcessProfileTx binding.workspace)) >>= (@?= Just (profile, ProfileReady))
+          run env (runTransaction (inspectProcessProfileTx binding.workspace)) >>= (@?= Right (Just (profile, ProfileReady)))
           (workspaceTransferProvider supervisor).admitWrite binding.workspace intent.sessionId intent.oldOwner (fixtureRevision 0) (fixtureOperationId "late-original") >>= assertRefused,
       testCase "private peer client recovers one retained fence across service restart and revocation" $ withTransfer fixture \env binding intent runtime _ -> withListener \path listener uid -> do
         let client = workspaceTransferClient (ProcessClient path uid 3 3)

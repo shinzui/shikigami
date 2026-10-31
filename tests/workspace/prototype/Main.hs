@@ -195,7 +195,7 @@ nativeProvision configFile specFile = do
   void (git ["-C", source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "fixture base"])
   base <- Text.strip . Encoding.decodeUtf8 <$> git ["-C", source, "rev-parse", "HEAD"]
   properties <- Systemd.systemdPropertiesIdentity
-  let policy = ProcessPolicy 1 spec.image properties [CommandRule "validate" "/bin/probe" ["validate"] "" (Map.singleton "HOME" "/scratch") 30 1024] [""] ["src"]
+  let policy = ProcessPolicy ProcessPolicyV1 spec.image properties [CommandRule "validate" "/bin/probe" ["validate"] "" (Map.singleton "HOME" "/scratch") 30 1024] [""] ["src"]
       request = WorkspaceRequest "native-fixture" Nothing (fixtureRootId "native-fixture-root") principal principal (fixtureRevision 0)
   catalog <- requireRight (mkWorkspaceCatalog [RepositoryPolicy "mori://fixture/repo" source [base] base (processPolicyIdentity policy)])
   repository <- requireRight (resolveRepository catalog "mori://fixture/repo" Nothing)
@@ -213,7 +213,7 @@ nativeProvision configFile specFile = do
   first <- provisionWorkspaceProfile interrupted binding admission policy pool
   injected <- readIORef reachedReady
   unless (injected && first == Left ProvisionUnresolved) (fail ("missing injected ready acknowledgement loss: " <> either show (const "unexpected ready result") first))
-  (reserved, status) <- maybe (fail "missing retained profile") pure =<< transact env (inspectProcessProfileTx binding.workspace)
+  (reserved, status) <- maybe (fail "missing retained profile") pure =<< (requireRight =<< transact env (inspectProcessProfileTx binding.workspace))
   unless (status == ProfileReserved) (fail "premature database readiness")
   putStrLn "PASS native provisioning retains its original identity after ready acknowledgement loss"
   ready <- requireRight =<< provisionWorkspaceProfile runtime binding admission policy pool
@@ -221,7 +221,7 @@ nativeProvision configFile specFile = do
   repeated <- requireRight =<< provisionWorkspaceProfile runtime binding admission policy pool
   unless (repeated == ready) (fail "duplicate provisioning changed the identity")
   retained <- transact env (inspectProcessProfileTx binding.workspace)
-  unless (retained == Just (ready, ProfileReady)) (fail "readiness was not retained")
+  unless (retained == Right (Just (ready, ProfileReady))) (fail "readiness was not retained")
   putStrLn "PASS native duplicate provisioning recovers the exact ready profile"
   principalText <- requireRight (identityText principal)
   let manifest = Aeson.object ["binding" Aeson..= binding, "admission" Aeson..= admission, "profile" Aeson..= ready, "principal" Aeson..= principalText]

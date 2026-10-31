@@ -297,7 +297,7 @@ withGitVersion :: Bool -> DatabaseFixture -> Text.Text -> (AppEnv -> WorkspaceBi
 withGitVersion transferred fixture name use = do
   properties <- Systemd.systemdPropertiesIdentity
   let digest = "sha256:" <> Text.replicate 64 "a"
-      policy = ProcessPolicy 1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") properties [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] ["src"]
+      policy = ProcessPolicy ProcessPolicyV1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") properties [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] ["src"]
       backend = GitBackend (pure (Right "11111111-1111-4111-8111-111111111111")) fixtureCapture (pure ())
       input binding = Just (if name == "commit" then Aeson.toJSON (GitCommitRequest binding.base "chore(deps): PRIVATE_COMMIT_MESSAGE") else Aeson.object [])
   Fixture.withEffectAdapterPolicyInput (Just policy) 1 (\admission -> admission & #filePolicy .~ Just (if transferred then transferableFilePolicy else supervisedFilePolicy)) ((if transferred then transferredWorkspaceGitAdapterWithBackend else workspaceGitAdapterWithBackend) backend) ("overlay__workspace-git__" <> name) name input fixture \env binding snapshot access reference runtime _ -> do

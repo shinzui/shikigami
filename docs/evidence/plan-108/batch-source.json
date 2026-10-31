@@ -1,0 +1,28 @@
+{
+  "sourceParent": "59876123a5f163ea3a5a3c49e9e66007aa56dba2",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "files": {
+    "shikigami-core/shikigami-core.cabal": "54af8eb75409ebc7f0d4d851f64658daf358683a8dfdb128f84f3620ca55e13b",
+    "shikigami-core/src/Shikigami/Objective/Store.hs": "b10db2cbcdfb1fccd35dbdb4d1afec4e1cbceaa93d3dc63b9841e63389d27a3a",
+    "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs": "a6d6dba287d398aec852acbcec6a11f355371ba2f680272484c86c1ff85d3a96",
+    "shikigami-core/src/Shikigami/Workspace/ProcessProfileStore.hs": "788a515dacce7b0d23d2a5cae6e9a2dba1a07d0b6690f285eb4df81a1a9dbd71",
+    "shikigami-core/test-postgres/Main.hs": "8fd66e4b311ad1e433cc974d2d8f6af80db9e7b0c9330fd74ab6d6033d4ab456",
+    "shikigami-core/test-postgres/Shikigami/ObjectiveStoreSpec.hs": "f62cf2d1aca7e92e3ec9ffb1bf0a7edce0337dfa4c955179e99b0ad9236b695e",
+    "shikigami-core/test-postgres/Shikigami/WorkspaceProcessProfileStoreSpec.hs": "f09785f1ab63a530947d24d83839222a8e2046c0ce0be81c62d147379d0498b3",
+    "shikigami-core/test/Shikigami/WorkspaceActionProofSpec.hs": "a816db67d23117cdbb248c8886cb50d5750e97dfd867d83ae9530665d1305ab2",
+    "shikigami-core/test/Shikigami/WorkspaceProcessPolicySpec.hs": "26642422f8e009d1e3279dd415e2e9c147d3175ab5823a4edb10326c9149c280",
+    "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs": "4526e87d36fbdfe4c494a4e2e51e067014eec6b95f7309ab3aca1ff0ede351e9",
+    "shikigami-workers/src/Shikigami/Workspace/Profile.hs": "fcb4c5fde0af3524b4ca6c341666962e08e6e10d1626669b9345befa9455595e",
+    "shikigami-workers/test/Shikigami/WorkspaceFileProviderSpec.hs": "b28ab9e1cc1f00720ae1bc19e9df4e0edc0ece48e30e67714685ee7f47747ee7",
+    "shikigami-workers/test/Shikigami/WorkspaceGitProviderSpec.hs": "115fec3bb5cd93915bf77ed6016faa6bb3835610e26578bc27241b67b0a91a00",
+    "shikigami-workers/test/Shikigami/WorkspaceProcessProfileSpec.hs": "0b805676312943a508ba863456974a11e6ce3c90e6e63916d0ca6246511b12d5",
+    "shikigami-workers/test/Shikigami/WorkspaceProvisionSpec.hs": "131d32b2fde8d6fb62423ec6b196e76fe5f9b1388ecbbb478f67534be29ebd81",
+    "shikigami-workers/test/Shikigami/WorkspaceTransferSpec.hs": "68155d20309826d8a5581c6afe004a779763732930ee6871568e22986520b9e7",
+    "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs": "d7be08707f0705b9fba6be2ea8766b5f6674301b8cba045744ed9806554a9c8f",
+    "tests/types/opaque-values.py": "7971e146fa437d790c25a588eac7cd3e2924161fbd932cecf6db04c74cbbdb7d",
+    "tests/types/revision-domains.py": "a5e5b3303e7575cde2132c6d351cb4b26e214a4c5378eacca91793ee4114641f",
+    "tests/workspace/prototype/Continuing.hs": "aee76189b6cb4f09c0c41191a2e85cffc90e248f0eac75f45c842ed4c9aec1ab",
+    "tests/workspace/prototype/Main.hs": "e9134523778b7e7b01dd12a250cec211bc3f2e557e0d824588eb11133c3fd235"
+  }
+}

@@ -144,10 +144,10 @@ followup q = do
   next <- loadAssignment q root nextRun original.owner
   unless (next.workspace == original.workspace && next.bindingDigest == original.bindingDigest && next.instructions == original.instructions && next.epoch == original.epoch) (fail "followup allocation or accepted instructions changed")
   Just (binding, _) <- run q.env (runTransaction (Store.inspectWorkspaceTx next.workspace))
-  before <- run q.env (runTransaction (inspectProcessProfileTx binding.workspace))
+  before <- right =<< run q.env (runTransaction (inspectProcessProfileTx binding.workspace))
   second <- prepareTools q.env q.authorizer q.current q.client next [edit "src/integration-c" "1\n" "2\n", validate]
   (secondLast, _) <- runTools q second
-  after <- run q.env (runTransaction (inspectProcessProfileTx binding.workspace))
+  after <- right =<< run q.env (runTransaction (inspectProcessProfileTx binding.workspace))
   unless (after == before) (fail "followup changed the ready Unix profile")
   terminal q secondLast
   Just (running, _) <- right =<< run q.env (Sessions.inspectSession session)

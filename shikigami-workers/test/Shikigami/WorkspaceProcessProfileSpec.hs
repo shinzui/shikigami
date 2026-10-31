@@ -62,7 +62,7 @@ tests fixture =
         run env (Workspaces.freezeWorkspaceTx a a.request.owner a.request.epoch) >>= (@?= Right ())
         reserve a admissionA >>= (@?= Left WorkspaceBindingConflict)
         reserve c admissionC >>= (@?= Left WorkspaceAllocationRefused)
-        run env (inspectProcessProfileTx a.workspace) >>= (@?= Just (profileA, ProfileReserved)),
+        run env (inspectProcessProfileTx a.workspace) >>= (@?= Right (Just (profileA, ProfileReserved))),
       testCase "changed instructions, rules, identity and binding cannot overwrite a reservation" $ withProfiles fixture \env policy create -> do
         (binding, admission) <- create "one"
         let instructions = bundleDigest admission.instructions
@@ -71,7 +71,7 @@ tests fixture =
         run env (reserveProcessProfileTx binding instructions (policy & #rules .~ []) pool) >>= (@?= Left InvalidWorkspaceRequest)
         run env (readyProcessProfileTx binding (profile & #userId .~ 62001 & #groupId .~ 62001)) >>= (@?= Left WorkspaceBindingConflict)
         run env (readyProcessProfileTx binding (profile & #bindingDigest .~ other)) >>= (@?= Left WorkspaceBindingConflict)
-        run env (inspectProcessProfileTx binding.workspace) >>= (@?= Just (profile, ProfileReserved)),
+        run env (inspectProcessProfileTx binding.workspace) >>= (@?= Right (Just (profile, ProfileReserved))),
       testCase "supervisor resolves only ready retained rules with matching instructions and compiled containment properties" $ withProfiles fixture \env policy create -> do
         (binding, admission) <- create "one"
         (profile, _) <- right =<< run env (reserveProcessProfileTx binding (bundleDigest admission.instructions) policy pool)
@@ -90,11 +90,11 @@ tests fixture =
         (binding, admission) <- create "one"
         let reserve range = run env (reserveProcessProfileTx binding (bundleDigest admission.instructions) policy range)
         reserve (IdentityRange 0 10) >>= (@?= Left InvalidWorkspaceRequest)
-        run env (inspectProcessProfileTx binding.workspace) >>= (@?= Nothing)
+        run env (inspectProcessProfileTx binding.workspace) >>= (@?= Right Nothing)
         (profile, _) <- right =<< reserve pool
         run env (Workspaces.freezeWorkspaceTx binding binding.request.owner binding.request.epoch) >>= (@?= Right ())
         run env (readyProcessProfileTx binding profile) >>= (@?= Left WorkspaceBindingConflict)
-        run env (inspectProcessProfileTx binding.workspace) >>= (@?= Just (profile, ProfileReserved))
+        run env (inspectProcessProfileTx binding.workspace) >>= (@?= Right (Just (profile, ProfileReserved)))
     ]
 
 withProfiles :: DatabaseFixture -> (AppEnv -> ProcessPolicy -> (Text.Text -> IO (WorkspaceBinding, WorkspaceAdmission)) -> IO a) -> IO a
@@ -102,7 +102,7 @@ withProfiles fixture use = Fixture.withFixture fixture \env source root reposito
   properties <- Systemd.systemdPropertiesIdentity
   let image = ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector"
       rule = CommandRule "validate" "/bin/validate" ["$HOME", "%n"] "" (Map.singleton "HOME" "/scratch") 30 1024
-      policy = ProcessPolicy 1 image properties [rule] [""] ["src"]
+      policy = ProcessPolicy ProcessPolicyV1 image properties [rule] [""] ["src"]
       base = repositoryBase repository
   catalog <- right (mkWorkspaceCatalog [RepositoryPolicy (repositoryIdentity repository) source [base] base (processPolicyIdentity policy)])
   selected <- right (resolveRepository catalog (repositoryIdentity repository) Nothing)

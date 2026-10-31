@@ -53,9 +53,14 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 
 Implementation is under way. The schema-2 census and coverage/freshness checker
 pass 24 positive/mutation tests against a successful GHC 9.12.4 macOS build.
-There are 3,988 declaration/member keys, including the migration entrypoint's
-`Command`. Semantic classification and remediation remain unfinished; see
-[the current evidence](../evidence/plan-108/acceptance.md).
+The refreshed census has 3,989 declaration/member keys. Initial classification
+covers 248 keys with 34 explicit violations; 3,741 keys remain unreviewed, and the
+coverage gate correctly refuses completion. Process-profile and Objective row
+decoding and the closed process-policy format have focused evidence: 8 pure,
+31 serial core PostgreSQL, 19 worker and 277 compiler checks pass. These are
+partial M1/M2 deliverables, not milestone completion. Continue semantic review
+and the remaining decoder owners before M3; see
+[the current evidence](../evidence/plan-108/acceptance.md) and its source snapshot.
 
 ## Surprises & Discoveries
 
@@ -69,6 +74,14 @@ already has broad nominal/value/transaction improvements; the remaining
 times predate touched source files. The census now compares the interface's
 embedded source fingerprint with actual source bytes, in addition to binding
 source/interface/tool bytes with SHA-256. Executable interfaces are checked too.
+
+2026-10-31: An Objective worker-result inner join could hide a present corrupt
+receipt behind its unreadable payload reference. Its left join now retains that
+row for owner decoding. Checkpoint JSON must similarly decode directly rather
+than becoming `Nothing`; neither condition may retain a definitive negative
+command receipt. Current Keiro `currentRunGeneration` returns `Int`, not an
+opaque generation type. FRIC-36 in `docs/friction-log/` records compiler-gate
+startup/buffered-progress cost; it did not change acceptance.
 
 ## Decision Log
 
@@ -86,10 +99,24 @@ PostgreSQL suite fixture and focused owner tests during M2, followed by one full
 behavioral pass for the final candidate, rather than repeating full suites for
 classification-only or documentation-only milestones.
 
+2026-10-31: Apply the existing transactional refusal pattern to process profiles
+and Objective rows. Keep SQL failures distinct, preserve present result rows
+across payload lookup, and abort corrupt source reads before persisting negative
+command receipts. Use a closed process-policy format with unchanged numeric
+JSON/commitments. [ADR-107](../adr/0107-profile-and-objective-corruption-refuses-within-the-owning-transaction.md)
+holds this durable owner boundary; it does not exempt the remaining scalars.
+
 ## Outcomes & Retrospective
 
 
-No implementation acceptance. The prior work is in
+Partial implementation acceptance is recorded in
+[the current evidence](../evidence/plan-108/acceptance.md): the coverage tooling,
+two owner-decoding paths and one policy scalar pass focused checks. The complete
+classification, unresolved violations, remaining owners and M3 acceptance remain
+unfinished; all three milestone checkboxes stay open and the frozen guide stays
+deferred. FRIC-36 remains logged for triage when the plan completes.
+
+The prior upgrade work is in
 [plan107](107-adopt-current-haskell-and-service-architecture-practices.md) and
 [the adoption evidence](../evidence/keiro-0.22/haskell-service-adoption.md).
 

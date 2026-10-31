@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-31
+* **Addition**: FRIC-36 records slowdown tooling friction with mori://shinzui/shikigami: Compiler boundary suite starts Cabal separately for every probe
 * **Update**: FRIC-35 accepted: Retain native 0.22 ownership headers, keep generated output outside formatting, and reject fake generated banners in hand-owned paths.
 
 ## 2026-10-30

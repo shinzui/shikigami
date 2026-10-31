@@ -38,7 +38,7 @@ retainedFileProfile :: AppEnv -> WorkspaceBinding -> WorkspaceAdmission -> IO (E
 retainedFileProfile appEnv binding admission = do
   retained <- runAppIO appEnv (runTransaction (inspectProcessProfileTx binding.workspace))
   case retained of
-    Right (Just (profile, ProfileReady))
+    Right (Right (Just (profile, ProfileReady)))
       | profile.bindingDigest == workspaceBindingDigest binding && admission.bindingDigest == profile.bindingDigest && profile.instructionDigest == bundleDigest admission.instructions && binding.policyRevision == processPolicyIdentity profile.policy && admission.filePolicy `elem` map Just [supervisedFilePolicy, transferableFilePolicy] && profileStorageSafe binding profile -> do
           systemd <- retainedSystemdProfile profile
           case systemd of

@@ -194,7 +194,7 @@ tests =
             record & #invocationId .~ Just boot,
             record & #routing .~ Nothing
           ]
-        let policy = ProcessPolicy 1 (ProcessImage "/qualified/root" command.profile "/bin/env" "/bin/deadline" "/qualified/collector") command.profile [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] ["src"]
+        let policy = ProcessPolicy ProcessPolicyV1 (ProcessImage "/qualified/root" command.profile "/bin/env" "/bin/deadline" "/qualified/collector") command.profile [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] ["src"]
             provisionBinding = binding & #policyRevision .~ processPolicyIdentity policy
         provisionAdmission <- (\a -> a & #filePolicy .~ Just supervisedFilePolicy) <$> admissionFor provisionBinding
         let profileFor b a selected uid = ProcessProfile (workspaceBindingDigest b) (bundleDigest a.instructions) selected uid uid

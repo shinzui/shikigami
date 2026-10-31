@@ -13,6 +13,20 @@ import Shikigami.Workspace.Instructions (validWorkspacePath)
 import Shikigami.Workspace.Process
 import System.FilePath (isAbsolute, normalise)
 
+-- | The retained policy protocol has one admitted version. Keep its JSON
+-- number while preventing arbitrary numeric or unrelated format substitution.
+data ProcessPolicyFormat = ProcessPolicyV1
+  deriving stock (Eq, Show)
+
+instance ToJSON ProcessPolicyFormat where
+  toJSON ProcessPolicyV1 = toJSON (1 :: Int)
+  toEncoding ProcessPolicyV1 = toEncoding (1 :: Int)
+
+instance FromJSON ProcessPolicyFormat where
+  parseJSON value = do
+    number <- parseJSON @Integer value
+    if number == 1 then pure ProcessPolicyV1 else fail "unsupported workspace process policy format"
+
 data ProcessImage = ProcessImage
   { rootDirectory :: !FilePath,
     rootIdentity :: !Text,
@@ -36,7 +50,7 @@ data CommandRule = CommandRule
   deriving anyclass (ToJSON)
 
 data ProcessPolicy = ProcessPolicy
-  { format :: !Int,
+  { format :: !ProcessPolicyFormat,
     image :: !ProcessImage,
     propertiesDigest :: !Text,
     rules :: ![CommandRule],
@@ -86,7 +100,7 @@ processPolicyIdentity :: ProcessPolicy -> Text
 processPolicyIdentity policy = "policy2-" <> Text.drop 7 (versionedDigest "shikigami.workspace-supervised-policy/1" (toJSON (policy.format, policy.image, policy.propertiesDigest, sortOn (.rule) policy.rules, sort policy.readPaths, sort policy.writePaths)))
 
 validProcessPolicy :: ProcessPolicy -> Bool
-validProcessPolicy policy = policy.format == 1 && digestText policy.propertiesDigest && validImage && not (null policy.rules) && length policy.rules <= 64 && length (nub (map (.rule) policy.rules)) == length policy.rules && all (validProcessCommand . commandFor digest) policy.rules && all validPrefixes [policy.readPaths, policy.writePaths] && Bytes.length (Aeson.encode policy) <= 262144
+validProcessPolicy policy = policy.format == ProcessPolicyV1 && digestText policy.propertiesDigest && validImage && not (null policy.rules) && length policy.rules <= 64 && length (nub (map (.rule) policy.rules)) == length policy.rules && all (validProcessCommand . commandFor digest) policy.rules && all validPrefixes [policy.readPaths, policy.writePaths] && Bytes.length (Aeson.encode policy) <= 262144
   where
     digest = versionedDigest "shikigami.workspace-rule-validation/1" Aeson.Null
     image = policy.image

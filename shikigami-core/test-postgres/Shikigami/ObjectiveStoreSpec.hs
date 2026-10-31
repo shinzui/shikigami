@@ -1,8 +1,10 @@
 module Shikigami.ObjectiveStoreSpec (tests, crashWriter) where
 
+import Contravariant.Extras (contrazip2, contrazip3)
 import Control.Concurrent.Async (concurrently)
 import Control.Exception (SomeException, try)
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy.Char8 qualified as Lazy
 import Data.Either (isLeft, rights)
 import Data.Generics.Labels ()
@@ -24,7 +26,9 @@ import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
-import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
+import Shikigami.Execution.Identity (ExecutionRootId, OperationId, operationIdText)
+import Shikigami.Execution.Payload (payloadIdText)
+import Shikigami.Execution.Transcript (PayloadRef (..))
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId, fixtureRootId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Objective.Capability qualified as O
@@ -49,7 +53,105 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "ObjectiveStore"
-    [ testCase "public writers at one revision produce one transition and retained conflict" $
+    [ testCase "corrupt snapshot refuses through the owner and recovery preserves the retained objective" $
+        withObjective fixture \env _ objective -> do
+          current <- get env objective
+          beforeEvents <- objectiveEventCount env
+          case Aeson.toJSON current of
+            Aeson.Object fields -> replaceJson env "UPDATE shikigami.objectives SET state=$1" (Aeson.Object (KeyMap.insert "title" (Aeson.Number 0) fields))
+            _ -> assertFailure "complete objective must be an object"
+          run env (O.readObjective ownerHost objective) >>= (@?= Left ObjectiveConflict)
+          -- Public callers can ignore the refusal, but no native event, payload
+          -- or negative receipt is committed by the failed command.
+          _ <- run env (O.executeCommand ownerHost objective (revision 0) (fixtureOperationId "corrupt-read") (ReviseInstructions (instructions "changed")))
+          objectiveEventCount env >>= (@?= beforeEvents)
+          count env "shikigami.objective_receipts" >>= (@?= 1)
+          count env "shikigami.objective_payloads" >>= (@?= 1)
+          replaceJson env "UPDATE shikigami.objectives SET state=$1" (toJSON current)
+          get env objective >>= (@?= current)
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision 0) (fixtureOperationId "corrupt-read") (ReviseInstructions (instructions "changed")))
+          pure (),
+      testCase "corrupt command receipt refuses rather than replacing the retained outcome" $
+        withObjective fixture \env _ objective -> do
+          let operation = fixtureOperationId "edit"
+              retry = O.executeCommand ownerHost objective (revision 0) operation (ReviseInstructions (instructions "new"))
+          receipt <- right =<< run env retry
+          run env (O.readCommandReceipt ownerHost objective operation) >>= (@?= Right (Just (Right receipt)))
+          beforeEvents <- objectiveEventCount env
+          replaceJson env "UPDATE shikigami.objective_receipts SET outcome=$1" Aeson.Null
+          run env (O.readCommandReceipt ownerHost objective operation) >>= (@?= Left ObjectiveConflict)
+          run env retry >>= (@?= Left ObjectiveConflict)
+          objectiveEventCount env >>= (@?= beforeEvents)
+          count env "shikigami.objective_receipts" >>= (@?= 2)
+          replaceJson env "UPDATE shikigami.objective_receipts SET outcome=$1 WHERE operation_key LIKE '%edit%'" (toJSON (Right receipt :: Either ObjectiveError Receipt))
+          run env retry >>= (@?= Right receipt),
+      testCase "corrupt creation receipt prevents replacement allocation and recovers the original winner" $
+        withObjective fixture \env _ objective -> do
+          let recover = O.createObjective ownerHost (fixtureOperationId "create") (Just origin) request
+          original <- right =<< run env recover
+          original.objectiveId @?= objective
+          beforeEvents <- objectiveEventCount env
+          replaceJson env "UPDATE shikigami.objective_origins SET receipt=$1" Aeson.Null
+          run env recover >>= (@?= Left ObjectiveConflict)
+          count env "shikigami.objectives" >>= (@?= 1)
+          count env "shikigami.objective_origins" >>= (@?= 1)
+          objectiveEventCount env >>= (@?= beforeEvents)
+          replaceJson env "UPDATE shikigami.objective_origins SET receipt=$1" (toJSON original)
+          run env recover >>= (@?= Right original),
+      testCase "absent receipts and genuine SQL failure retain distinct results" $
+        withObjective fixture \env _ objective -> do
+          let operation = fixtureOperationId "absent"
+          run env (O.readCommandReceipt ownerHost objective operation) >>= (@?= Right Nothing)
+          sql env "ALTER TABLE shikigami.objective_receipts RENAME TO unavailable_objective_receipts_fixture"
+          run env (O.readCommandReceipt ownerHost objective operation) >>= (@?= Left ObjectiveUnavailable)
+          sql env "ALTER TABLE shikigami.unavailable_objective_receipts_fixture RENAME TO objective_receipts"
+          run env (O.readCommandReceipt ownerHost objective operation) >>= (@?= Right Nothing),
+      testCase "corrupt checkpoint metadata cannot become absence or retain a negative receipt" $
+        withObjective fixture \env admission objective -> do
+          (a, b, first, second, inputA, inputB) <- checkpointPair env admission objective
+          access <- right =<< run env (Sessions.authorizeSession first.sessionId admission.context.identity (pure (Right ())))
+          run env (Sessions.readCheckpointIntent access first.operationId) >>= (@?= Right first)
+          _ <- right =<< run env (O.executeInternal ownerHost objective first.expected.revision (fixtureOperationId "valid-sibling") (IngestCheckpoint b.assignmentId second [inputB] []))
+          before <- get env objective
+          let retry = O.executeInternal ownerHost objective first.expected.revision (fixtureOperationId "corrupt-checkpoint") (IngestCheckpoint a.assignmentId first [inputA] [])
+          beforeReceipts <- count env "shikigami.objective_receipts"
+          beforeEvents <- objectiveEventCount env
+          replaceOwnedRow env "UPDATE shikigami.worker_session_commands SET state=$3 WHERE session_id=$1 AND operation_id=$2" first.sessionId.value (operationIdText first.operationId) Aeson.Null
+          run env retry >>= (@?= Left ObjectiveConflict)
+          count env "shikigami.objective_receipts" >>= (@?= beforeReceipts)
+          objectiveEventCount env >>= (@?= beforeEvents)
+          get env objective >>= (@?= before)
+          replaceOwnedRow env "UPDATE shikigami.worker_session_commands SET state=$3 WHERE session_id=$1 AND operation_id=$2" first.sessionId.value (operationIdText first.operationId) (toJSON first)
+          _ <- right =<< run env retry
+          pure (),
+      testCase "corrupt worker result cannot disappear behind its payload join" $
+        withObjective fixture \env admission objective -> do
+          (a, _, intent, _, input, _) <- checkpointPair env admission objective
+          receipt <- case input of ResultEvidence {result = WorkerResult receipt _} -> pure receipt; _ -> fail "missing worker result"
+          access <- right =<< run env (Sessions.authorizeSession receipt.sessionId admission.context.identity (pure (Right ())))
+          retained <- right =<< run env (Sessions.readResult access receipt.assignmentId)
+          result <- case retained of Just (_, value) -> pure value; Nothing -> fail "complete valid result missing"
+          originalBody <- readOwnedJson env "SELECT body FROM shikigami.worker_session_payloads WHERE session_id=$1 AND payload_id=$2" receipt.sessionId.value (payloadIdText receipt.output.payloadId)
+          before <- get env objective
+          beforeReceipts <- count env "shikigami.objective_receipts"
+          let retry = O.executeInternal ownerHost objective before.revision (fixtureOperationId "corrupt-result") (IngestCheckpoint a.assignmentId intent [input] [])
+              replace = replaceOwnedRow env "UPDATE shikigami.worker_session_results SET state=$3 WHERE session_id=$1 AND assignment_id=$2" receipt.sessionId.value receipt.assignmentId.value
+          replace Aeson.Null
+          run env retry >>= (@?= Left ObjectiveConflict)
+          count env "shikigami.objective_receipts" >>= (@?= beforeReceipts)
+          get env objective >>= (@?= before)
+          replace (toJSON receipt)
+          let replaceBody = replaceOwnedRow env "UPDATE shikigami.worker_session_payloads SET body=$3 WHERE session_id=$1 AND payload_id=$2" receipt.sessionId.value (payloadIdText receipt.output.payloadId)
+          case originalBody of
+            Aeson.Object fields -> replaceBody (Aeson.Object (KeyMap.insert "content" (toJSON (result & #artifacts .~ ["different"])) fields))
+            _ -> assertFailure "complete result envelope must be an object"
+          run env retry >>= (@?= Left ObjectiveConflict)
+          count env "shikigami.objective_receipts" >>= (@?= beforeReceipts)
+          get env objective >>= (@?= before)
+          replaceBody originalBody
+          _ <- right =<< run env retry
+          pure (),
+      testCase "public writers at one revision produce one transition and retained conflict" $
         withObjective fixture \env _ objective -> do
           let write key text = run env (O.executeCommand ownerHost objective (revision 0) (fixtureOperationId key) (ReviseInstructions (instructions text)))
           (left, rightResult) <- concurrently (write "left" "left") (write "right" "right")
@@ -410,6 +512,15 @@ objectiveEventCount env = run env (length <$> StoreRead.readCategory (StoreTypes
 
 sql :: AppEnv -> Text -> IO ()
 sql env statement = run env (runTransaction (Tx.sql (Text.encodeUtf8 statement)))
+
+replaceJson :: AppEnv -> Text -> Aeson.Value -> IO ()
+replaceJson env query value = run env (runTransaction (Tx.statement value (preparable query (E.param (E.nonNullable E.jsonb)) D.noResult)))
+
+replaceOwnedRow :: AppEnv -> Text -> Text -> Text -> Aeson.Value -> IO ()
+replaceOwnedRow env query first second value = run env (runTransaction (Tx.statement (first, second, value) (preparable query (contrazip3 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.jsonb))) D.noResult)))
+
+readOwnedJson :: AppEnv -> Text -> Text -> Text -> IO Aeson.Value
+readOwnedJson env query first second = run env (runTransaction (Tx.statement (first, second) (preparable query (contrazip2 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.text))) (D.singleRow (D.column (D.nonNullable D.jsonb))))))
 
 -- No application acknowledgement escapes this process. The parent reopens the
 -- database after exit and recovers both immutable receipts by their original keys.

@@ -56,6 +56,7 @@ import Shikigami.Agent.Delegate.Context qualified as AliasDelegate
 import Shikigami.WorkerSession.Capability qualified as AliasCoordinator
 import Shikigami.Workspace.GitTypes qualified as Git
 import Shikigami.Workspace.Process qualified as Process
+import Shikigami.Workspace.ProcessPolicy qualified as ProcessPolicy
 import Shikigami.Workspace.Types qualified as Workspace
 import Shikigami.Execution.Quantity
 import Shikigami.StateRevision
@@ -72,6 +73,10 @@ import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ('process-policy-format', 'value :: ProcessPolicy.ProcessPolicyFormat\nvalue = ProcessPolicy.ProcessPolicyV1\nreadFormat :: ProcessPolicy.ProcessPolicy -> ProcessPolicy.ProcessPolicyFormat\nreadFormat policy = policy.format\n', True),
+    ('process-policy-format-numeric', 'value :: ProcessPolicy.ProcessPolicyFormat\nvalue = 2\n', False),
+    ('process-policy-format-coercion', 'value :: Int -> ProcessPolicy.ProcessPolicyFormat\nvalue = coerce\n', False),
+    ('routing-is-not-policy-format', 'value :: Process.ProcessRoutingFormat -> ProcessPolicy.ProcessPolicyFormat\nvalue = id\n', False),
     ('provider-coordinate-domains', 'capture :: Text -> ProviderCoordinate.ProviderCoordinate "provider-name"\ncapture = ProviderCoordinate.providerCoordinate\nprovider :: ProviderCall.ProviderCall -> ProviderCoordinate.ProviderCoordinate "provider-name"\nprovider call = call.provider\napi :: ProviderProfile.AllowedCall -> ProviderCoordinate.ProviderCoordinate "provider-api"\napi call = call.api\nendpoint :: Decision.ModelDescriptor -> ProviderCoordinate.ProviderCoordinate "endpoint-class"\nendpoint model = model.endpointClass\nmodel :: Decision.ModelDescriptor -> ProviderCoordinate.ProviderCoordinate "provider-model-id"\nmodel value = value.modelId\n', True),
     ('provider-coordinate-constructor', 'value = ProviderCoordinate.ProviderCoordinate\n', False),
     ('provider-coordinate-coercion', 'value :: Text -> ProviderCoordinate.ProviderCoordinate "provider-name"\nvalue = coerce\n', False),
@@ -496,6 +501,11 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
             fragments.update({'model-alias-constructor': ['ModelAlias'], 'model-alias-coercion': ['ModelAlias', 'Text'], 'model-alias-literal': ['ModelAlias', 'IsString'], 'agent-name-is-not-model-alias': ["Couldn't match", 'AgentName', 'ModelAlias']})
             fragments.update({'model-registration-constructor': ['ModelRegistration'], 'model-registration-coercion': ['ModelRegistration', 'Text'], 'model-registration-scope-coercion': ["Couldn't match", 'model-version', 'credential-binding-version'], 'model-registration-scope-substitution': ["Couldn't match", 'credential-binding-id', 'credential-binding-version'], 'model-registration-literal': ['ModelRegistration', 'IsString'], 'program-is-not-model-registration': ["Couldn't match", 'ProgramIdentity', 'ModelRegistration'], 'model-digest-constructor': ['ModelDescriptorDigest'], 'model-digest-coercion': ['ModelDescriptorDigest', 'Text'], 'model-digest-literal': ['ModelDescriptorDigest', 'IsString'], 'payload-is-not-model-digest': ["Couldn't match", 'PayloadDigest', 'ModelDescriptorDigest'], 'program-parameters-are-not-model-digest': ["Couldn't match", 'ProgramParameterDigest', 'ModelDescriptorDigest']})
             fragments.update({'provider-coordinate-constructor': ['ProviderCoordinate'], 'provider-coordinate-coercion': ['ProviderCoordinate', 'Text'], 'provider-coordinate-literal': ['ProviderCoordinate', 'IsString'], 'provider-coordinate-scope-coercion': ["Couldn't match", 'provider-name', 'provider-api'], 'endpoint-is-not-provider-model': ["Couldn't match", 'endpoint-class', 'provider-model-id'], 'alias-is-not-provider-model': ["Couldn't match", 'ModelAlias', 'ProviderCoordinate'], 'registration-is-not-provider-name': ["Couldn't match", 'ModelRegistration', 'ProviderCoordinate']})
+            fragments.update({
+                'process-policy-format-numeric': ['ProcessPolicyFormat', 'Num'],
+                'process-policy-format-coercion': ['Int', 'ProcessPolicyFormat'],
+                'routing-is-not-policy-format': ["Couldn't match", 'ProcessRoutingFormat', 'ProcessPolicyFormat'],
+            })
             if name.endswith("-constructor"):
                 assert any(marker in result.stderr.lower() for marker in ["not in scope", "does not export", "illegal term-level"]), (name, result.stderr)
             assert all(fragment in result.stderr for fragment in fragments[name]), (name, result.stderr)

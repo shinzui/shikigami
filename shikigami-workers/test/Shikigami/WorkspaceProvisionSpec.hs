@@ -38,7 +38,7 @@ tests fixture =
         (runtime, _, counts) <- fakeRuntime env
         profile <- right =<< provisionWorkspaceProfile runtime binding admission policy pool
         provisionWorkspaceProfile runtime binding admission policy pool >>= (@?= Right profile)
-        run env (inspectProcessProfileTx binding.workspace) >>= (@?= Just (profile, ProfileReady))
+        run env (inspectProcessProfileTx binding.workspace) >>= (@?= Right (Just (profile, ProfileReady)))
         readIORef counts >>= (@?= (1, 2)),
       testCase "denied exact authority never creates an account, changes ownership or writes an intent receipt" $ withProfiles fixture \env policy create -> do
         (binding, admission) <- create "one"
@@ -47,7 +47,7 @@ tests fixture =
         provisionWorkspaceProfile (runtime & #authorizer .~ denyAllActionAuthorizer) binding admission policy pool >>= (@?= Left ProvisionRefused)
         readIORef counts >>= (@?= (0, 0))
         doesPathExist (workspaceMetadata binding.storageRoot binding </> "profile-provision.json") >>= (@?= False)
-        Just (_, state) <- run env (inspectProcessProfileTx binding.workspace)
+        Right (Just (_, state)) <- run env (inspectProcessProfileTx binding.workspace)
         state @?= ProfileReserved,
       testCase "lost account acknowledgement recovers the original identity rather than creating another" $ withProfiles fixture \env policy create -> do
         (binding, admission) <- create "one"
@@ -62,7 +62,7 @@ tests fixture =
                        case result of Right () -> pure (Left ProvisionUnresolved); _ -> pure result
                    )
         provisionWorkspaceProfile lost binding admission policy pool >>= (@?= Left ProvisionUnresolved)
-        Just (original, ProfileReserved) <- run env (inspectProcessProfileTx binding.workspace)
+        Right (Just (original, ProfileReserved)) <- run env (inspectProcessProfileTx binding.workspace)
         completed <- right =<< provisionWorkspaceProfile runtime binding admission policy pool
         completed @?= original
         readIORef counts >>= (@?= (1, 2)),
@@ -81,7 +81,7 @@ tests fixture =
                        if first then throwIO (userError "fixture ownership acknowledgement lost") else pure result
                    )
         provisionWorkspaceProfile interrupted binding admission policy pool >>= (@?= Left ProvisionUnresolved)
-        Just (original, ProfileReserved) <- run env (inspectProcessProfileTx binding.workspace)
+        Right (Just (original, ProfileReserved)) <- run env (inspectProcessProfileTx binding.workspace)
         provisionWorkspaceProfile runtime binding admission policy pool >>= (@?= Right original)
         readIORef counts >>= (@?= (1, 3)),
       testCase "a ready private receipt recovers a missing database acknowledgement without repeating Unix effects" $ withProfiles fixture \env policy create -> do
@@ -90,7 +90,7 @@ tests fixture =
         (runtime, _, counts) <- fakeRuntime env
         let interrupted = runtime & #backend . #afterReady .~ throwIO (userError "fixture ready acknowledgement lost")
         provisionWorkspaceProfile interrupted binding admission policy pool >>= (@?= Left ProvisionUnresolved)
-        Just (original, ProfileReserved) <- run env (inspectProcessProfileTx binding.workspace)
+        Right (Just (original, ProfileReserved)) <- run env (inspectProcessProfileTx binding.workspace)
         provisionWorkspaceProfile runtime binding admission policy pool >>= (@?= Right original)
         readIORef counts >>= (@?= (1, 2)),
       testCase "an existing identity without this provider's prepared receipt cannot be adopted" $ withProfiles fixture \env policy create -> do
@@ -107,7 +107,7 @@ tests fixture =
         (runtime, _, counts) <- fakeRuntime env
         provisionWorkspaceProfile (runtime & #backend . #bootIdentity .~ pure (Left Systemd.SystemdUnsupported)) binding admission policy pool >>= (@?= Left ProvisionUnsupported)
         provisionWorkspaceProfile (runtime & #current .~ pure (Left "revoked")) binding admission policy pool >>= (@?= Left ProvisionRefused)
-        run env (inspectProcessProfileTx binding.workspace) >>= (@?= Nothing)
+        run env (inspectProcessProfileTx binding.workspace) >>= (@?= Right Nothing)
         readIORef counts >>= (@?= (0, 0))
     ]
 

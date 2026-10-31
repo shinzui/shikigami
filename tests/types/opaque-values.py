@@ -46,6 +46,7 @@ import Shikigami.PracticeReview.Evidence qualified as Evidence
 import Shikigami.Router.Declaration qualified as Declaration
 import Shikigami.Workspace.Instructions qualified as Instructions
 import Shikigami.Workspace.Types qualified as Workspace
+import Shikigami.Workspace.ProcessPolicy qualified as ProcessPolicy
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Behavior.Provider.Coordinate qualified as ProviderCoordinate
 import Shikigami.Inspection.Settings qualified as Inspection
@@ -53,7 +54,9 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''programIdentity :: Text -> Either Text (Decision.ProgramIdentity "program-id")
+POSITIVE = '''policyFormat :: ProcessPolicy.ProcessPolicyFormat
+policyFormat = ProcessPolicy.ProcessPolicyV1
+programIdentity :: Text -> Either Text (Decision.ProgramIdentity "program-id")
 programIdentity = Decision.parseProgramIdentity
 programDigest :: Text -> Either Text Decision.ProgramParameterDigest
 programDigest = Decision.parseProgramParameterDigest
@@ -163,6 +166,7 @@ ordinaryPinnedRecord value = Generic.from value `seq` ()
 CASES = [
     ('Decision.ProgramIdentity "program-id"', 'generic'),
     ('Decision.ProgramParameterDigest', 'generic'),
+    ('ProcessPolicy.ProcessPolicyFormat', 'generic'),
     ('Decision.DecisionCallId', 'generic'),
     ('Decision.DecisionCallOrdinal', 'generic'),
     ('Decision.ModelRegistration "model-version"', 'generic'),

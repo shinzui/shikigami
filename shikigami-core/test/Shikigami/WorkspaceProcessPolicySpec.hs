@@ -1,10 +1,14 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
+
 module Shikigami.WorkspaceProcessPolicySpec (tests) where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
+import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.Workspace.Catalog (repositoryPolicyRevision, resolveRepository)
 import Shikigami.Workspace.Process
@@ -17,7 +21,29 @@ tests :: TestTree
 tests =
   testGroup
     "workspace retained process policies"
-    [ testCase "policy identity binds every command, image and file restriction" $ do
+    [ testCase "complete policy and profile retain numeric format bytes and policy identity" $ do
+        Aeson.toJSON policy @?= legacyPolicy
+        Aeson.encode policy @?= Aeson.encode legacyPolicy
+        Aeson.eitherDecode @ProcessPolicy (Aeson.encode legacyPolicy) @?= Right policy
+        let profile = ProcessProfile digest digest policy 62000 62000
+            legacyProfile = Aeson.object ["bindingDigest" .= digest, "instructionDigest" .= digest, "policy" .= legacyPolicy, "userId" .= (62000 :: Int), "groupId" .= (62000 :: Int)]
+        assertBool "complete valid profile" (validProcessProfile profile)
+        Aeson.encode profile @?= Aeson.encode legacyProfile
+        Aeson.eitherDecode @ProcessProfile (Aeson.encode legacyProfile) @?= Right profile
+        processPolicyIdentity policy @?= "policy2-" <> Text.drop 7 (versionedDigest "shikigami.workspace-supervised-policy/1" (Aeson.toJSON ((1 :: Int), policy.image, policy.propertiesDigest, [rule], ["" :: Text.Text], ["src" :: Text.Text])))
+        case legacyPolicy of
+          Aeson.Object fields ->
+            mapM_
+              ( \invalid -> do
+                  let changed = Aeson.Object (KeyMap.insert "format" invalid fields)
+                  assertDecodeRefused @ProcessPolicy changed
+                  case legacyProfile of
+                    Aeson.Object profileFields -> assertDecodeRefused @ProcessProfile (Aeson.Object (KeyMap.insert "policy" changed profileFields))
+                    _ -> assertFailure "profile must be an object"
+              )
+              [Aeson.Number 0, Aeson.Number 2, Aeson.Number 1.5, Aeson.String "1", Aeson.Bool True, Aeson.Null]
+          _ -> assertFailure "policy must be an object",
+      testCase "policy identity binds every command, image and file restriction" $ do
         assertBool "fixture policy valid" (validProcessPolicy policy)
         mapM_
           (\changed -> assertBool "changed reviewed policy has another identity" (processPolicyIdentity changed /= processPolicyIdentity policy))
@@ -34,7 +60,7 @@ tests =
       testCase "invalid, duplicate and over-budget operator policies refuse" $
         mapM_
           (\invalid -> assertBool "invalid policy" (not (validProcessPolicy invalid)))
-          [policy & #format .~ 2, policy & #rules .~ [], policy & #rules .~ [rule, rule], policy & #rules .~ [rule & #executable .~ "/bin/../sh"], policy & #rules .~ [rule & #timeoutSeconds .~ 0], policy & #rules .~ [rule & #environment .~ Map.singleton "LD_PRELOAD" "/workspace/lib.so"], policy & #rules .~ [rule & #arguments .~ [Text.replicate 262144 "x"]], policy & #image . #rootDirectory .~ "/unsafe/%n", policy & #image . #deadlineExecutable .~ "/workspace/guard", policy & #image . #environmentExecutable .~ "/scratch/env", policy & #writePaths .~ ["../outside"]],
+          [policy & #rules .~ [], policy & #rules .~ [rule, rule], policy & #rules .~ [rule & #executable .~ "/bin/../sh"], policy & #rules .~ [rule & #timeoutSeconds .~ 0], policy & #rules .~ [rule & #environment .~ Map.singleton "LD_PRELOAD" "/workspace/lib.so"], policy & #rules .~ [rule & #arguments .~ [Text.replicate 262144 "x"]], policy & #image . #rootDirectory .~ "/unsafe/%n", policy & #image . #deadlineExecutable .~ "/workspace/guard", policy & #image . #environmentExecutable .~ "/scratch/env", policy & #writePaths .~ ["../outside"]],
       testCase "identity pools are bounded and stored decoders reject caller extensions" $ do
         mapM_ (\range -> assertBool "invalid pool" (not (validIdentityRange range))) [IdentityRange 0 10, IdentityRange 1000 999, IdentityRange 1000 66536]
         assertBool "reserved pool valid" (validIdentityRange (IdentityRange 62000 62999))
@@ -62,8 +88,16 @@ tests =
         assertBool "unknown operation refuses" (not (processFileAllowed policy "chmod" "src/file"))
     ]
 
+assertDecodeRefused :: forall a. (Aeson.FromJSON a) => Aeson.Value -> IO ()
+assertDecodeRefused value = case Aeson.eitherDecode @a (Aeson.encode value) of
+  Left _ -> pure ()
+  Right _ -> assertFailure "unsupported format admitted"
+
+legacyPolicy :: Aeson.Value
+legacyPolicy = Aeson.object ["format" .= (1 :: Int), "image" .= policy.image, "propertiesDigest" .= digest, "rules" .= [rule], "readPaths" .= ["" :: Text.Text], "writePaths" .= ["src" :: Text.Text]]
+
 policy :: ProcessPolicy
-policy = ProcessPolicy 1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") digest [rule] [""] ["src"]
+policy = ProcessPolicy ProcessPolicyV1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") digest [rule] [""] ["src"]
 
 rule :: CommandRule
 rule = CommandRule "validate" "/bin/validate" ["$HOME", "%n"] "" (Map.singleton "HOME" "/scratch") 30 1024

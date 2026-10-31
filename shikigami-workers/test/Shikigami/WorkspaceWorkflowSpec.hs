@@ -199,7 +199,7 @@ tests fixture =
           admission <- maybe (fail "workspace admission missing") pure snapshot.workspace
           principal <- right (identityText job.identity)
           let digest = "sha256:" <> Text.replicate 64 "a"
-              policy = ProcessPolicy 1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") digest [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] ["dependency.txt"]
+              policy = ProcessPolicy ProcessPolicyV1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") digest [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] ["dependency.txt"]
               process = WorkspaceProcessSettings "/run/shikigami/supervisor.sock" 0 5 60 (IdentityRange 64000 64031) (Map.singleton binding.repository policy)
               settings = WorkspaceSettings root [WorkspaceRepository binding.repository binding.source [WorkspaceRevision binding.base (bundleDigest admission.instructions)] binding.base "policy-1" [""] ["dependency.txt"]] [WorkspaceGrant "workspace-worker" principal binding.repository Nothing] (Just process)
           host <- right (configuredWorkspaceHost env store.pool disabledDirectoryHandle allowAllActionAuthorizerForTests settings)
@@ -251,7 +251,7 @@ tests fixture =
           length <$> readIORef observed >>= (@?= 2)
     ]
   where
-    supervised settings = settings & #process .~ Just (WorkspaceProcessSettings "/run/shikigami/supervisor.sock" 0 5 60 (IdentityRange 64000 64031) (Map.fromList [(entry.identity, ProcessPolicy 1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") digest [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] entry.readPaths entry.writePaths) | entry <- settings.repositories]))
+    supervised settings = settings & #process .~ Just (WorkspaceProcessSettings "/run/shikigami/supervisor.sock" 0 5 60 (IdentityRange 64000 64031) (Map.fromList [(entry.identity, ProcessPolicy ProcessPolicyV1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") digest [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] entry.readPaths entry.writePaths) | entry <- settings.repositories]))
     digest = "sha256:" <> Text.replicate 64 "a"
 
 withWorkflow :: DatabaseFixture -> (AppEnv -> FilePath -> RunJob -> WorkspaceHost -> Agent.AgentRunDeps -> IORef [Context.Context] -> IO a) -> IO a

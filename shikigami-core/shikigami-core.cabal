@@ -584,6 +584,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.WorkerSessionSpec
     Shikigami.WorkerSessionStoreSpec
     Shikigami.WorkflowVersioningSpec
+    Shikigami.WorkspaceProcessProfileStoreSpec
     Shikigami.WorkspaceTransferSpec
 
   hs-source-dirs:

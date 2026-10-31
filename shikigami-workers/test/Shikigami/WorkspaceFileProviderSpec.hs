@@ -475,7 +475,7 @@ withSupervisedEffect :: DatabaseFixture -> (ProcessPolicy -> ProcessPolicy) -> T
 withSupervisedEffect fixture change logical use = do
   properties <- Systemd.systemdPropertiesIdentity
   let digest = "sha256:" <> Text.replicate 64 "a"
-      policy = change (ProcessPolicy 1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") properties [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] ["src"])
+      policy = change (ProcessPolicy ProcessPolicyV1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") properties [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] ["src"])
   withEffectAdapterPolicy (Just policy) 1 (\admission -> admission & #filePolicy .~ Just supervisedFilePolicy) supervisedWorkspaceEditAdapter ("overlay__workspace-edit__" <> logical) logical Nothing fixture \env binding snapshot _ reference runtime _ -> do
     admission <- maybe (fail "workspace admission missing") pure snapshot.workspace
     (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest admission.instructions) policy (IdentityRange 62000 62001)))
