@@ -47,7 +47,7 @@ import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..), versi
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Execution.AssignmentKey (assignmentIdFor, conversationAssignmentIdFor)
 import Shikigami.Execution.Attempt (ModelCallPreparation (..))
-import Shikigami.Execution.Counter (attemptNumber)
+import Shikigami.Execution.Counter (callOrdinalNumber)
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Quantity (parseResourceAmount)
 import Shikigami.Execution.Resources qualified as Resources
@@ -263,7 +263,7 @@ buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = c
               boundedOptions = (options & #timeoutMs .~ (case timeouts of [] -> Nothing; xs -> Just (minimum xs)))
               AttemptId attempt = receipt.request.attemptId
               strength = max (minimumStrength (bindingOptions binding)) (minimumStrength boundedOptions)
-              correlated = configureEvidenceCall env.runId (callCorrelationId env.runId attempt 0) (fromInteger (attemptNumber receipt.ordinal)) Nothing strength boundedOptions
+              correlated = configureEvidenceCall env.runId (callCorrelationId env.runId attempt 0) (fromInteger (callOrdinalNumber receipt.ordinal)) Nothing strength boundedOptions
               effective = case Model.api model of
                 AnthropicMessages -> (correlated & #metadata .~ (Options.metadata options))
                 OpenAIChatCompletions -> (correlated & #metadata .~ (Options.metadata options))

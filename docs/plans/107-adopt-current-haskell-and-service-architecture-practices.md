@@ -101,18 +101,17 @@ cases. The language checker and thirteen style/ownership mutation tests pass.
 [The adoption record](../evidence/keiro-0.22/haskell-service-adoption.md) links each
 implemented domain-value wave and its exact candidate/evidence.
 
-Latest retained-JSON acceptance rebuilt all enabled components and passed 577
+Latest execution-value acceptance rebuilt all enabled components and passed 578
 pure, 390 serial PostgreSQL, 262 worker, 95 server, 31 API, nine client and 37 agent
-cases. All 143 domain assertions, six diagrams, 156 native conformance rows, 82 CLI
-checks and live HTTP including outages pass. ADR-90 fixes two real retained-row
-corruption cases that reported storage unavailability. Typed SQL decode results
-become domain refusals inside transactions; mutation and native-stream invariants
-pass. Native generation/diff is neutral against 5feaf08 and all four transducer
-hashes are unchanged. Public construction types are unchanged; ADR-89's 133
-compiler clients remain their baseline. Earlier resets remain retained. Forty-two
-of 46 assigned sources have implemented dispositions. Complete scalar/allocated-
-identity, other owners' decoder review and three final-profile clauses remain
-open. M1 is incomplete; this is not packaged Linux qualification.
+cases. All 141 compiler clients, 143 domain assertions, six diagrams, 156 native
+conformance rows, 82 CLI checks and live HTTP including outages pass. ADR-91 keeps
+explicit operation uncertainty and private positive receipt ordinals with complete
+valid byte controls and unchanged call-limit priority. Native generation/diff is
+neutral against 4a53e3c; all four transducer hashes are unchanged. Earlier deliberate
+resets remain retained. Forty-two of 46 assigned sources have implemented
+dispositions. Complete scalar/allocated-identity, other owners' decoder review and
+three final-profile clauses remain open. M1 is incomplete; this is not packaged
+Linux qualification.
 
 ## Context and Orientation
 

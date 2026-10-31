@@ -32,6 +32,7 @@ import Shikigami.AgentRun.RequestKey qualified as Request
 import Shikigami.Agent.Run.Key qualified as FullKey
 import Shikigami.Trigger.RequestKey qualified as Addressed
 import Shikigami.Execution.Claim qualified as Claim
+import Shikigami.Execution.Counter qualified as Counter
 import Shikigami.Execution.Payload qualified as Payload
 import Shikigami.Execution.AssignmentKey qualified as Assignment
 import Shikigami.Execution.ToolPosition qualified as Position
@@ -45,7 +46,9 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''payloadId :: Text -> Either Text Payload.PayloadId
+POSITIVE = '''callOrdinal :: Integer -> Either Text Counter.CallOrdinal
+callOrdinal = Counter.parseCallOrdinal
+payloadId :: Text -> Either Text Payload.PayloadId
 payloadId = Payload.parsePayloadId
 payloadDigest :: Text -> Either Text Payload.PayloadDigest
 payloadDigest = Payload.parsePayloadDigest
@@ -119,6 +122,7 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('Counter.CallOrdinal', 'parse'),
     ('Payload.PayloadId', 'parse'),
     ('Payload.PayloadDigest', 'parse'),
     ('Payload.PayloadByteCount', 'parse'),

@@ -105,7 +105,7 @@ runEphemeralBehavior duration base env decl input = case narrowHarnessPolicy bas
                                         pure (PayloadRef payloadId digest bytes)
                                   case (reference (toJSON accepted), reference (toJSON assistant)) of
                                     (Right input, Right output) -> do
-                                      let operation = Operation 1 execution position specification "ephemeral" input (Just output) (Just NeedModel) False Nothing
+                                      let operation = Operation 1 execution position specification "ephemeral" input (Just output) (Just NeedModel) NotMarkedUncertain Nothing
                                       loop retained policy calls' toolCount repairs kind source (Just (operation, accepted, assistant))
                                     _ -> pure (refused "ephemeral payload reference is invalid")
                               else

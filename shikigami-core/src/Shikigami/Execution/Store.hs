@@ -320,7 +320,7 @@ acceptOperation access@(ReplayAccess execution _ _) expected specification input
       Left err -> pure (Left err)
       Right ref -> do
         let fingerprint = versionedDigest "shikigami.execution-operation-request/1" (toJSON (specification, ref, binding.snapshotDigest))
-            operation = Operation 1 execution state.cursor specification fingerprint ref Nothing Nothing False Nothing
+            operation = Operation 1 execution state.cursor specification fingerprint ref Nothing Nothing NotMarkedUncertain Nothing
         old <- findOperation specification.operationId
         case old of
           Just previous -> pure (duplicate fingerprint previous)
@@ -510,10 +510,10 @@ submitAttempt retired access@(ReplayAccess execution _ _) expected submission en
             snapshot <- checkedPayload @ExecutionSnapshot access actualBinding "snapshot" current.snapshot
             retiring <- case retired of
               Nothing -> do
-                unless (current.phase == Active && isNothing operation.outcome && not operation.uncertain) (throwE OperationConflict)
+                unless (current.phase == Active && isNothing operation.outcome && operation.uncertain == NotMarkedUncertain) (throwE OperationConflict)
                 pure Nothing
               Just previousId -> do
-                unless (current.phase == Unresolved && operation.uncertain && operation.specification.recovery `elem` [RepeatableObservation, IdempotentEffect]) (throwE UnresolvedOperation)
+                unless (current.phase == Unresolved && operation.uncertain == MarkedUncertain && operation.specification.recovery `elem` [RepeatableObservation, IdempotentEffect]) (throwE UnresolvedOperation)
                 previous <- checkedAttempt (Attempt.JobReference 1 execution operation.specification.operationId previousId)
                 unless (previous.phase == Attempt.AttemptUncertain && isNothing previous.lateReceipt && isJust previous.uncertainty && operation.outcome == previous.uncertainty) (throwE AttemptConflict)
                 attempts <- checkedRows (operationKey operation.specification.operationId) listOperationAttempts
@@ -541,7 +541,7 @@ submitAttempt retired access@(ReplayAccess execution _ _) expected submission en
         \(current, actualBinding, snapshot, retiring, resumeNext, now, pendingReceipts) -> do
           forM_ retiring \previous -> do
             saveAttempt (previous & #phase .~ Attempt.AttemptSuperseded)
-            Tx.statement (operationKey operation.specification.operationId, operation & #outcome .~ Nothing & #continuation .~ Nothing & #uncertain .~ False) updateOperation
+            Tx.statement (operationKey operation.specification.operationId, operation & #outcome .~ Nothing & #continuation .~ Nothing & #uncertain .~ NotMarkedUncertain) updateOperation
           -- Retirement changes pending membership. This integrity check must
           -- observe the tentative write and retain whole-transaction rollback.
           when (isJust retiring) do
@@ -637,7 +637,7 @@ stopExecution identity execution expected termination reason = catchExecutionWit
               (_, pending) <- checkedStatement (operationKey operationId) executionAttemptInventory
               when pending (throwE UnresolvedOperation)
               operation <- checkedRows (operationKey operationId) lockOperation >>= maybe (throwE OperationMissing) pure
-              unless (isNothing operation.outcome && not operation.uncertain) (throwE UnresolvedOperation)
+              unless (isNothing operation.outcome && operation.uncertain == NotMarkedUncertain) (throwE UnresolvedOperation)
               pure (operationId, operation)
             when cancelled do
               root <- maybe (throwE OperationConflict) pure actualBinding.rootId
@@ -1064,7 +1064,7 @@ reconcileExecutionAttempt access@(ReplayAccess execution _ _) expected attemptId
             now <- checkedStatement () currentTime
             receipt <- checkedPayload @Attempt.AttemptResult (ReplayAccess execution actualBinding.identity (addUTCTime 60 now)) actualBinding "late-attempt-receipt" late
             operation <- checkedRows (operationKey current.operationId) lockOperation >>= maybe (throwE OperationMissing) pure
-            unless (operation.uncertain && operation.outcome == current.uncertainty && isJust current.uncertainty) (throwE OperationConflict)
+            unless (operation.uncertain == MarkedUncertain && operation.outcome == current.uncertainty && isJust current.uncertainty) (throwE OperationConflict)
             checkedAttemptReceipt operation receipt
             pure (state, actualBinding, current, receipt, operation)
         )
@@ -1072,7 +1072,7 @@ reconcileExecutionAttempt access@(ReplayAccess execution _ _) expected attemptId
           settleRetainedReceipt actualBinding current receipt
           outcomeRef <- writePayload execution (envelope "operation-outcome" (toJSON receipt.outcome))
           resultRef <- writePayload execution (envelope "attempt-result" (toJSON receipt))
-          Tx.statement (operationKey current.operationId, operation & #outcome .~ Just outcomeRef & #continuation .~ Just receipt.next & #uncertain .~ False) updateOperation
+          Tx.statement (operationKey current.operationId, operation & #outcome .~ Just outcomeRef & #continuation .~ Just receipt.next & #uncertain .~ NotMarkedUncertain) updateOperation
           saveAttempt (current & #phase .~ Attempt.AttemptCommitted & #outcome .~ Just resultRef)
           saveExecution (state & #revision .~ (advanceRevision expected) & #phase .~ Active & #activeOperation .~ Nothing & #cursor .~ (advanceRevision state.cursor) & #next .~ receipt.next)
       pure (case result of Right () -> Right Accepted; Left (CheckFailed err) -> Left err; Left EventRejected -> Left ExecutionRevisionConflict)
@@ -1125,8 +1125,8 @@ recordOutcomeAndAdvanceWith access@(ReplayAccess execution _ _) expected operati
           case stored of
             Nothing -> pure (Left ExecutionMissing)
             Just (_, binding) -> do
-              let unresolved = case outcome of OperationUnresolved {} -> True; _ -> False
-                  command = if unresolved then Generated.MarkExecutionUnresolved (Generated.MarkExecutionUnresolvedData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected)))) else advance execution expected
+              let unresolved = case outcome of OperationUnresolved {} -> MarkedUncertain; _ -> NotMarkedUncertain
+                  command = if unresolved == MarkedUncertain then Generated.MarkExecutionUnresolved (Generated.MarkExecutionUnresolvedData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected)))) else advance execution expected
               let precondition = outcomePrecondition access expected operation outcome accounting binding
               result <- persistGuarded execution command precondition do
                 -- The precondition retains root/execution/operation row locks.
@@ -1137,7 +1137,7 @@ recordOutcomeAndAdvanceWith access@(ReplayAccess execution _ _) expected operati
                 actual <- writePayload execution body
                 unless (actual == ref) (abort CorruptReplay)
                 Tx.statement (operationKey operationId, operation & #outcome .~ Just ref & #continuation .~ Just next & #uncertain .~ unresolved) updateOperation
-                saveExecution (state & #revision .~ (advanceRevision expected) & #cursor .~ (if unresolved then state.cursor else advanceRevision state.cursor) & #phase .~ (if unresolved then Unresolved else Active) & #activeOperation .~ (if unresolved then Just operationId else Nothing) & #next .~ next)
+                saveExecution (state & #revision .~ (advanceRevision expected) & #cursor .~ (if unresolved == MarkedUncertain then state.cursor else advanceRevision state.cursor) & #phase .~ (if unresolved == MarkedUncertain then Unresolved else Active) & #activeOperation .~ (if unresolved == MarkedUncertain then Just operationId else Nothing) & #next .~ next)
                 finalCheck >>= require
               case result of
                 Right () -> pure (Right Accepted)

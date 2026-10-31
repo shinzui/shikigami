@@ -90,17 +90,16 @@ a checked allocated TypeID; objective content, worker/workspace ownership,
 execution policies, counters, decisions and assignment locators retain their
 nominal checked meanings.
 
-Latest retained-JSON acceptance rebuilt all enabled components and passed 577
+Latest execution-value acceptance rebuilt all enabled components and passed 578
 pure, 390 serial PostgreSQL, 262 worker and 95 server cases, all API/client/agent
-suites, 82 CLI checks and live HTTP including outages. Two real corruption controls
-previously masqueraded as storage failures; ADR-90 moves typed JSON decoding into
-owner transactions and preserves refused-mutation/stream invariants. Native
-generation/diff is neutral against 5feaf08; four transducer hashes are unchanged.
-ADR-89's 133 compiler clients remain the unchanged public construction baseline.
-Earlier deliberate resets remain retained. Complete scalar/allocated-identity and
-other owners' decoder review keep EP-5 In Progress. Three rows retain final-profile
-clauses owned by EP-6; its frozen closure, Linux/runtime and inventory gates have
-not started.
+suites, 141 compiler clients, 82 CLI checks and live HTTP including outages. ADR-91
+keeps explicit operation uncertainty and private positive receipt ordinals with
+exact valid bytes and unchanged admission priority. Native generation/diff is
+neutral against 4a53e3c; four transducer hashes are unchanged. Earlier deliberate
+resets remain retained. Complete scalar/allocated-identity and other owners'
+decoder review keep EP-5 In Progress. Three rows retain final-profile clauses
+owned by EP-6; its frozen closure, Linux/runtime and inventory gates have not
+started.
 
 ## Surprises & Discoveries
 

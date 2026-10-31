@@ -337,6 +337,20 @@ data OperationSpec = OperationSpec
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
+-- | Not marked uncertain includes reserved/in-flight work. It does not assert
+-- successful completion; the separate outcome and attempt records own that fact.
+data OperationUncertainty = NotMarkedUncertain | MarkedUncertain
+  deriving stock (Eq, Show)
+
+instance ToJSON OperationUncertainty where
+  toJSON value = toJSON (value == MarkedUncertain)
+  toEncoding value = toEncoding (value == MarkedUncertain)
+
+instance FromJSON OperationUncertainty where
+  parseJSON value = do
+    marked <- parseJSON value
+    pure (if marked then MarkedUncertain else NotMarkedUncertain)
+
 data Operation = Operation
   { format :: !Int,
     executionId :: !ExecutionId,
@@ -346,7 +360,7 @@ data Operation = Operation
     input :: !PayloadRef,
     outcome :: !(Maybe PayloadRef),
     continuation :: !(Maybe NextWork),
-    uncertain :: !Bool,
+    uncertain :: !OperationUncertainty,
     permission :: !(Maybe PermissionBinding)
   }
   deriving stock (Eq, Show, Generic)

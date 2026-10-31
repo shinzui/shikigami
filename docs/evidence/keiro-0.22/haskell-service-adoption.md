@@ -286,3 +286,12 @@ and full 577 pure/390 PostgreSQL/262 worker/95 server acceptance are retained in
 [ADR-90](../../adr/0090-execution-and-session-json-corruption-is-a-transactional-domain-refusal.md).
 Native/domain/diagram, 82 CLI and live HTTP including outage checks pass. Public
 construction types are unchanged; other owners and the full census remain open.
+
+Operation uncertainty now uses explicit domain alternatives with exact boolean
+JSON. Positive int64 CallOrdinal is private and distinct from the observed call
+count; checked next-ordinal admission retains refusal ordering and accounting.
+[ADR-91](../../adr/0091-operation-uncertainty-and-call-ordinals-retain-their-meanings.md)
+and [execution-value acceptance](execution-values-results.txt) retain complete
+operation/accepted-receipt byte controls and 578 pure/390 PostgreSQL/262 worker/95
+server plus 141 compiler cases. Native/domain/diagram, 82 CLI and live HTTP pass.
+The 318-module/898-declaration worklist and full scalar/identity review remain open.

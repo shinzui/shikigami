@@ -48,6 +48,13 @@ Execution transcript revisions and expected command revisions retain the separat
 `execution` StateRevision scope, including PreparedTool. The transcript cursor,
 retained operation positions and operation-id derivation retain
 `execution-operation`; they cannot substitute for resource-root policy revisions.
+Operation uncertainty also retains a closed domain choice with boolean JSON.
+Receipt CallOrdinal is positive signed-int64 and distinct from the observed
+selection count. Its checked successor preserves existing call-limit priority;
+SQL/evidence SDK adapters render explicitly. [ADR-91](../adr/0091-operation-uncertainty-and-call-ordinals-retain-their-meanings.md)
+and [execution-value controls](../evidence/keiro-0.22/execution-values-results.txt)
+retain complete operation/receipt byte and recovery evidence.
+
 Native generated command and SQL codecs render numbers explicitly. Exact positive
 state/operation codecs, invalid-position rejection and unchanged deterministic ID
 input bytes are covered by ExecutionPositionSpec. This scalar refactor changes no

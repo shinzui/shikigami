@@ -219,6 +219,11 @@
           "rationale": "Two new PostgreSQL controls reproduce stored-reference corruption disguised as storage unavailability, with three existing malformed-data controls passing. Execution/session statement results now capture Either () typed values; owner transaction traversal produces CorruptReplay/SessionBindingConflict before commit. Native guards and true transport failures retain their behavior. The focused five and full 577 pure/390 PostgreSQL/262 worker/95 server plus native/domain/diagram/82 CLI/live HTTP checks pass under ADR-90. Other owners and complete scalar/identity review remain pending."
         },
         {
+          "id": "operation-uncertainty-and-call-receipt-ordinals",
+          "disposition": "implemented",
+          "rationale": "OperationUncertainty retains explicit states and exact boolean JSON; private positive int64 CallOrdinal stays distinct from the observed selection count. Checked next-ordinal admission preserves refusal priority and SQL/SDK rendering stays explicit. Complete operation and actual accepted-receipt byte controls precede invalid values; 141 compiler clients prevent substitution/private construction/Generic bypasses. ADR-91 and 578 pure/390 PostgreSQL/262 worker/95 server plus native/domain/diagram/82 CLI/live HTTP checks cover this clause; complete scalar/identity review remains pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -287,7 +292,12 @@
         "docs/evidence/keiro-0.22/json-row-before-regressions.txt",
         "docs/evidence/keiro-0.22/json-row-native-diff.json",
         "docs/evidence/keiro-0.22/json-row-native-replay.json",
-        "docs/evidence/keiro-0.22/json-row-fold-identities.json"
+        "docs/evidence/keiro-0.22/json-row-fold-identities.json",
+        "docs/adr/0091-operation-uncertainty-and-call-ordinals-retain-their-meanings.md",
+        "docs/evidence/keiro-0.22/execution-values-results.txt",
+        "docs/evidence/keiro-0.22/execution-values-native-diff.json",
+        "docs/evidence/keiro-0.22/execution-values-native-replay.json",
+        "docs/evidence/keiro-0.22/execution-values-fold-identities.json"
       ]
     },
     {

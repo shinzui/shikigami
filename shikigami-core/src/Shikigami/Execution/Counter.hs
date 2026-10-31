@@ -15,10 +15,17 @@ module Shikigami.Execution.Counter
     noAttempts,
     nextAttempt,
     previousAttempt,
+    CallOrdinal,
+    parseCallOrdinal,
+    nextCallOrdinal,
+    callOrdinalNumber,
+    callOrdinalInt64,
+    callOrdinalCount,
   )
 where
 
 import Data.Aeson (FromJSON (..), ToJSON (..))
+import Data.Int (Int64)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import GHC.TypeLits (Symbol)
@@ -79,3 +86,32 @@ instance ToJSON (AttemptLimit scope) where
 
 instance FromJSON (AttemptLimit scope) where
   parseJSON value = parseJSON value >>= either (fail . Text.unpack) pure . parseAttemptLimit
+
+-- | A receipt's one-based position is distinct from the assignment's observed
+-- count, whose initial value is zero. The SQL ordinal fits signed int64.
+newtype CallOrdinal = CallOrdinal Int64
+  deriving stock (Eq, Ord, Show)
+
+parseCallOrdinal :: Integer -> Either Text CallOrdinal
+parseCallOrdinal number
+  | number > 0 && number <= toInteger (maxBound :: Int64) = Right (CallOrdinal (fromInteger number))
+  | otherwise = Left "call ordinal must be positive and fit signed int64"
+
+nextCallOrdinal :: AttemptCount "selection-calls" -> Either Text CallOrdinal
+nextCallOrdinal count = parseCallOrdinal (attemptNumber count + 1)
+
+callOrdinalNumber :: CallOrdinal -> Integer
+callOrdinalNumber (CallOrdinal number) = toInteger number
+
+callOrdinalInt64 :: CallOrdinal -> Int64
+callOrdinalInt64 (CallOrdinal number) = number
+
+callOrdinalCount :: CallOrdinal -> AttemptCount "selection-calls"
+callOrdinalCount (CallOrdinal number) = AttemptCount (fromIntegral number)
+
+instance ToJSON CallOrdinal where
+  toJSON = toJSON . callOrdinalNumber
+  toEncoding = toEncoding . callOrdinalNumber
+
+instance FromJSON CallOrdinal where
+  parseJSON value = parseJSON value >>= either (fail . Text.unpack) pure . parseCallOrdinal

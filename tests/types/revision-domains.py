@@ -16,6 +16,7 @@ HEADER = '''{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 module RevisionBoundary where
 import Data.Coerce (coerce)
+import Data.Int (Int64)
 import Data.String (fromString)
 import Data.Text (Text)
 import Numeric.Natural (Natural)
@@ -55,6 +56,13 @@ import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ('execution-uncertainty-and-call-ordinal', 'uncertainty :: Execution.Operation -> Execution.OperationUncertainty\nuncertainty value = value.uncertain\nordinal :: Calls.CallReceipt -> CallOrdinal\nordinal value = value.ordinal\nfirst :: Either Text CallOrdinal\nfirst = nextCallOrdinal noAttempts\n', True),
+    ('boolean-is-not-operation-uncertainty', 'value :: Bool -> Execution.OperationUncertainty\nvalue = id\n', False),
+    ('cancellation-is-not-operation-uncertainty', 'value :: Resources.Cancellation -> Execution.OperationUncertainty\nvalue = id\n', False),
+    ('attempt-count-is-not-call-ordinal', 'value :: AttemptCount "selection-calls" -> CallOrdinal\nvalue = id\n', False),
+    ('unchecked-call-ordinal-coercion', 'value :: Int64 -> CallOrdinal\nvalue = coerce\n', False),
+    ('unchecked-call-ordinal-constructor', 'value :: Int64 -> CallOrdinal\nvalue = CallOrdinal\n', False),
+    ('unchecked-call-ordinal-numeric', 'value :: CallOrdinal\nvalue = 0\n', False),
     ('retained-payload-values', 'locator :: Execution.PayloadRef -> Payload.PayloadId\nlocator ref = ref.payloadId\ndigest :: Execution.PayloadRef -> Payload.PayloadDigest\ndigest ref = ref.digest\nbytes :: Execution.PayloadRef -> Payload.PayloadByteCount\nbytes ref = ref.bytes\nbinding :: PayloadStore.ExecutionBinding -> Payload.PayloadDigest\nbinding ref = ref.snapshotDigest\n', True),
     ('unchecked-PayloadId-coercion', 'value :: Text -> Payload.PayloadId\nvalue = coerce\n', False),
     ('unchecked-PayloadId-constructor', 'value :: Text -> Payload.PayloadId\nvalue = Payload.PayloadId\n', False),
@@ -346,6 +354,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
                 fragments["unchecked-" + kind + ("-literal" if raw == "Text" else "-numeric")] = [kind, "IsString" if raw == "Text" else "Num"]
             fragments.update({'unchecked-full-run-key-coercion': ['RunKey', 'Text'], 'unchecked-full-run-key-constructor': ['RunKey'], 'unchecked-full-run-key-literal': ['RunKey', 'IsString'], 'unchecked-addressed-request-key-coercion': ['RequestKey', 'Text'], 'unchecked-addressed-request-key-constructor': ['RequestKey'], 'unchecked-addressed-request-key-literal': ['RequestKey', 'IsString'], 'http-request-key-is-not-addressed': ["Couldn't match", 'RequestKey'], 'full-run-key-is-not-addressed': ["Couldn't match", 'RunKey', 'RequestKey']})
             fragments.update({'unchecked-PayloadId-coercion': ['PayloadId', 'Text'], 'unchecked-PayloadId-constructor': ['PayloadId'], 'unchecked-PayloadId-literal': ['PayloadId', 'IsString'], 'unchecked-PayloadDigest-coercion': ['PayloadDigest', 'Text'], 'unchecked-PayloadDigest-constructor': ['PayloadDigest'], 'unchecked-PayloadDigest-literal': ['PayloadDigest', 'IsString'], 'unchecked-PayloadByteCount-coercion': ['PayloadByteCount', 'Integer'], 'unchecked-PayloadByteCount-constructor': ['PayloadByteCount'], 'unchecked-PayloadByteCount-literal': ['PayloadByteCount', 'Num'], 'payload-id-is-not-digest': ["Couldn't match", 'PayloadId', 'PayloadDigest'], 'resource-amount-is-not-payload-bytes': ["Couldn't match", 'ResourceAmount', 'PayloadByteCount']})
+            fragments.update({'boolean-is-not-operation-uncertainty': ["Couldn't match", 'Bool', 'OperationUncertainty'], 'cancellation-is-not-operation-uncertainty': ["Couldn't match", 'Cancellation', 'OperationUncertainty'], 'attempt-count-is-not-call-ordinal': ["Couldn't match", 'AttemptCount', 'CallOrdinal'], 'unchecked-call-ordinal-coercion': ['Int64', 'CallOrdinal'], 'unchecked-call-ordinal-constructor': ['CallOrdinal'], 'unchecked-call-ordinal-numeric': ['CallOrdinal', 'Num']})
             if name.endswith("-constructor"):
                 assert any(marker in result.stderr.lower() for marker in ["not in scope", "does not export", "illegal term-level"]), (name, result.stderr)
             assert all(fragment in result.stderr for fragment in fragments[name]), (name, result.stderr)

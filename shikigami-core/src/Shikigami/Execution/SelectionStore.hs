@@ -76,17 +76,11 @@ data CallReceipt = CallReceipt
     rootId :: !(Maybe ExecutionRootId),
     request :: !AttemptRequest,
     fingerprint :: !Text,
-    ordinal :: !(AttemptCount "selection-calls"),
+    ordinal :: !CallOrdinal,
     startedAt :: !UTCTime
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON)
-
-instance FromJSON CallReceipt where
-  parseJSON value = do
-    receipt <- Aeson.genericParseJSON Aeson.defaultOptions value
-    unless (attemptNumber receipt.ordinal > 0 && attemptNumber receipt.ordinal <= toInteger (maxBound :: Int64)) (fail "invalid selection call ordinal")
-    pure receipt
+  deriving anyclass (ToJSON, FromJSON)
 
 data CallPhase = CallTerminal | CallTransportUnknown | CallRefused
   deriving stock (Eq, Show, Generic)
@@ -162,8 +156,7 @@ reserveSelectionCallTx selection limits request fingerprint now = do
                       | maybe False (now >=) limits.cutoff -> pure (Left AssignmentCutoffReached)
                       | maybe False (attemptLimitReached assignment.active) limits.concurrency -> pure (Left AssignmentConcurrencyExceeded)
                       | maybe False (attemptLimitReached assignment.attempts) limits.calls -> pure (Left AssignmentCallLimitExceeded)
-                      | attemptNumber assignment.attempts >= toInteger (maxBound :: Int64) -> pure (Left AssignmentCallLimitExceeded)
-                      | otherwise -> do
+                      | Right ordinal <- nextCallOrdinal assignment.attempts -> do
                           previousNumber <- Tx.statement (assignmentId, operationKey request.operationId) countOperationCalls
                           let previous = parseAttemptCount previousNumber
                           admitted <- case admit (assignmentLimits limits) assignment.usage request.quantities of
@@ -189,10 +182,11 @@ reserveSelectionCallTx selection limits request fingerprint now = do
                           case admitted of
                             Left err -> pure (Left err)
                             Right usage -> do
-                              let receipt = CallReceipt assignmentId selection.rootId request fingerprint (nextAttempt assignment.attempts) now
-                              Tx.statement (assignmentId, assignment & #attempts .~ receipt.ordinal & #active .~ (nextAttempt assignment.active) & #usage .~ usage) updateAssignment
+                              let receipt = CallReceipt assignmentId selection.rootId request fingerprint ordinal now
+                              Tx.statement (assignmentId, assignment & #attempts .~ callOrdinalCount receipt.ordinal & #active .~ (nextAttempt assignment.active) & #usage .~ usage) updateAssignment
                               writeCall (SelectionCall receipt Nothing)
                               pure (Right (NewCall receipt))
+                      | otherwise -> pure (Left AssignmentCallLimitExceeded)
 
 finishSelectionCall :: (Store :> es) => CallReceipt -> CallOutcome -> Eff es (Either CallAdmissionFailure Admission)
 finishSelectionCall receipt outcome = runTransaction (finishSelectionCallTx receipt outcome)
@@ -331,7 +325,7 @@ getCall :: Statement Text (Maybe SelectionCall)
 getCall = preparable "SELECT state FROM shikigami.execution_selection_calls WHERE attempt_id=$1 FOR UPDATE" textParam (D.rowMaybe jsonRow)
 
 writeCall :: SelectionCall -> Transaction ()
-writeCall call = let AttemptId key = call.receipt.request.attemptId in Tx.statement (call.receipt.assignmentId, key, operationKey call.receipt.request.operationId, fromInteger (attemptNumber call.receipt.ordinal), call) putCall
+writeCall call = let AttemptId key = call.receipt.request.attemptId in Tx.statement (call.receipt.assignmentId, key, operationKey call.receipt.request.operationId, callOrdinalInt64 call.receipt.ordinal, call) putCall
 
 putCall :: Statement (AssignmentKey, Text, Text, Int64, SelectionCall) ()
 putCall = preparable "INSERT INTO shikigami.execution_selection_calls (assignment_id,attempt_id,operation_id,ordinal,state) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (attempt_id) DO UPDATE SET state=EXCLUDED.state" (contrazip5 assignmentParam textParam textParam (E.param (E.nonNullable E.int8)) jsonParam) D.noResult

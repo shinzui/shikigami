@@ -1,0 +1,27 @@
+Operation uncertainty and call ordinals — ExecPlan 107
+Source parent: 4a53e3c0b734a82657a720a0e45d3a5fb16bcb04 (master); current source/interface hashes are retained in domain-declarations.json.
+Compiler: selected GHC 9.12.4/frozen Cabal cohort, arm64 macOS.
+Decision: docs/adr/0091-operation-uncertainty-and-call-ordinals-retain-their-meanings.md.
+
+Contract
+OperationUncertainty has explicit NotMarkedUncertain/MarkedUncertain alternatives while retaining false/true in the persisted uncertain field. The first includes reserved/in-flight work and makes no successful-completion claim. Dispatch, recovery, late reconciliation and advancement retain their existing conditions and companion evidence.
+Private CallOrdinal retains positive signed-int64 receipt positions, separate from zero-based observed AttemptCount selection-calls. The next ordinal is checked before resource admission with the existing call-limit refusal and priority. SQL and the actual evidence SDK render at their boundaries; the counter owner explicitly converts a receipt ordinal into an observed count.
+Whole receipt JSON retains its fields and primitive numeric ordinal. Existing invalid ordinal JSON checks move into the private scalar reader. There is no new schema, allocated identity, workflow shape or valid codec change.
+
+Positive and negative controls
+Complete operation codecs preserve false/true and exact bytes. The real PostgreSQL concurrent accepted receipt uses primitive ordinal 1 in its complete byte control before zero/negative/overflow decode refusals. Scalar controls cover 1/int64-max bytes, initial-count-to-first-ordinal, checked overflow, fractional decode refusal and conversion back to the observed count.
+Positive-first compiler clients prove retained field/factory types, then reject Bool/cancellation substitution into uncertainty, observed-count substitution into ordinals, private ordinal construction, coercion, numeric literals and Generic bypasses.
+
+Acceptance
+cabal build all --enable-tests -j2: PASS, all enabled components including fixture source (no Linux runtime claim).
+Application suites PASS: 578 pure (5.79s), 390 serial PostgreSQL (109.19s), 262 worker (165.95s), 95 server (19.12s), 31 API, nine client and 37 agent cases.
+Selected-compiler checks: 101 nominal + 40 opaque = 141 PASS.
+just keiro-gate 4a53e3c: PASS, check/inspect/idempotent scaffold, zero findings and 156 native conformance rows. Native diff/replay and four unchanged generated transducer hashes/fingerprints are retained separately.
+Domain/diagram suites: 143 domain assertions and six diagrams PASS.
+just hurl: PASS, fresh task-owned database/server/worker; 4/2/1 files and 13/15/3 requests across three phases; zero failed files, including actual outage behavior.
+CLI contracts: 82 real-process checks PASS without database/vendor.
+Haskell conventions, 13 style/ownership mutation tests, formatter and whitespace checks PASS.
+Compiled audit worklist: 318 modules, 898 declarations (689 data, 172 newtypes, 37 aliases), 14 role entrypoints. Source/tool hashes and declaration uniqueness verified. It remains unclassified.
+
+Scope
+Complete scalar/allocated-identity review, including review/resource identity authority and other owners' decoder classifications, remains open. Plan95's exact packaged closure/Linux/runtime/inventory qualification has not started.

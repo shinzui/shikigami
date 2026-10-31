@@ -97,7 +97,7 @@ tests =
             execution = ExecutionId "summary-fixture"
             specification = OperationSpec (operationIdFor execution (fixtureRevision 0)) ModelSummary RepeatableObservation "summary" "policy" "scope" Nothing
             ref = fixturePayloadRef "payload" ("sha256:" <> Text.replicate 64 "a") 1
-            operation = Operation 1 execution (fixtureRevision 0) specification "fingerprint" ref (Just ref) (Just NeedModel) False Nothing
+            operation = Operation 1 execution (fixtureRevision 0) specification "fingerprint" ref (Just ref) (Just NeedModel) NotMarkedUncertain Nothing
         (kind, input) <- expectRight (prepareModelOperationInput policy ModelTurn source Nothing Nothing)
         kind @?= ModelSummary
         input.view.context.systemPrompt @?= source.systemPrompt
@@ -115,7 +115,7 @@ tests =
             execution = ExecutionId "summary-fixture"
             specification = OperationSpec (operationIdFor execution (fixtureRevision 0)) ModelSummary RepeatableObservation "summary" "policy" "scope" Nothing
             ref = fixturePayloadRef "payload" ("sha256:" <> Text.replicate 64 "a") 1
-            operation = Operation 1 execution (fixtureRevision 0) specification "fingerprint" ref (Just ref) (Just NeedModel) False Nothing
+            operation = Operation 1 execution (fixtureRevision 0) specification "fingerprint" ref (Just ref) (Just NeedModel) NotMarkedUncertain Nothing
         selected <- expectRight (selectContextView policy source)
         let old = ModelOperationInput 1 selected (Just 64) Nothing
         prepareModelOperationInput policy ModelTurn source Nothing (Just (operation, old, answer "accepted")) @?= Left UnsupportedReplay,

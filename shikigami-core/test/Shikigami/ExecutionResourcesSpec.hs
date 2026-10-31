@@ -6,7 +6,7 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Int (Int64)
 import Data.Map.Strict qualified as Map
 import Data.Time (UTCTime (..), fromGregorian)
-import Shikigami.Execution.Counter (AttemptCount, parseAttemptCount)
+import Shikigami.Execution.Counter
 import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
 import Shikigami.Execution.Resources
 import Shikigami.StateRevision (initialRevision)
@@ -42,6 +42,23 @@ tests =
               )
               ["revision", "active", "unknown"]
           _ -> assertFailure "resource root was not an object",
+      testCase "call ordinals are one-based bounded values distinct from observed counts" do
+        first <- either (assertFailure . show) pure (nextCallOrdinal (fixtureCount 0))
+        callOrdinalNumber first @?= 1
+        mapM_
+          ( \number -> do
+              ordinal <- either (assertFailure . show) pure (parseCallOrdinal number)
+              Aeson.encode ordinal @?= Aeson.encode number
+              Aeson.eitherDecode (Aeson.encode ordinal) @?= Right ordinal
+              attemptNumber (callOrdinalCount ordinal) @?= number
+              toInteger (callOrdinalInt64 ordinal) @?= number
+          )
+          [1, toInteger (maxBound :: Int64)]
+        mapM_
+          (\number -> assertBool "invalid ordinal" (case parseCallOrdinal number of Left _ -> True; Right _ -> False))
+          [-1, 0, toInteger (maxBound :: Int64) + 1]
+        assertBool "next ordinal refuses exhausted int64 range" (case nextCallOrdinal (fixtureCount (toInteger (maxBound :: Int64))) of Left _ -> True; Right _ -> False)
+        assertBool "fractional ordinal refuses JSON" (case Aeson.eitherDecode @CallOrdinal "1.5" of Left _ -> True; Right _ -> False),
       testCase "negative and overflowing quantities are refused" do
         mapM_
           (\n -> assertBool "invalid integer refused" (case parseResourceAmount n of Left _ -> True; _ -> False))

@@ -93,12 +93,19 @@ tests =
         Aeson.toJSON (operationIdFor execution (revision 7)) @?= Aeson.toJSON expected,
       testCase "operation codec retains numeric position and rejects another identity" do
         let specification = OperationSpec (operationIdFor execution (revision 7)) ModelTurn RepeatableObservation "model" "policy" "scope" Nothing
-            operation = Operation 1 execution (revision 7) specification "fingerprint" payload Nothing Nothing False Nothing
+            operation = Operation 1 execution (revision 7) specification "fingerprint" payload Nothing Nothing NotMarkedUncertain Nothing
             encoded = Aeson.toJSON operation
         Aeson.fromJSON encoded @?= Aeson.Success operation
         case encoded of
           Aeson.Object fields -> do
             fmap Aeson.encode (KeyMap.lookup "position" fields) @?= Just "7"
+            fmap Aeson.encode (KeyMap.lookup "uncertain" fields) @?= Just "false"
+            let uncertainWire = Aeson.Object (KeyMap.insert "uncertain" (Aeson.Bool True) fields)
+            case Aeson.fromJSON uncertainWire :: Aeson.Result Operation of
+              Aeson.Error failure -> assertFailure failure
+              Aeson.Success uncertain -> do
+                uncertain.uncertain @?= MarkedUncertain
+                Aeson.encode uncertain @?= Aeson.encode uncertainWire
             mapM_ (\number -> refusedOperation (Aeson.Object (KeyMap.insert "position" (Aeson.toJSON (number :: Integer)) fields))) [-1, 8]
           _ -> assertFailure "operation did not encode as an object"
     ]

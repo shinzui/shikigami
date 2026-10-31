@@ -13,6 +13,7 @@ import Control.Exception (SomeException, try)
 import Control.Monad (when)
 import Data.Aeson (Value, eitherDecode, encode, object, toJSON, (.=))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.IORef
@@ -308,9 +309,18 @@ tests fixture =
             (Right (Calls.NewCall r), Left _) -> pure r
             (Left _, Right (Calls.NewCall r)) -> pure r
             other -> assertFailure (show other)
-          let receiptWire = Aeson.object ["assignmentId" .= Aeson.String "ledger-assignment", "rootId" .= receipt.rootId, "request" .= receipt.request, "fingerprint" .= receipt.fingerprint, "ordinal" .= receipt.ordinal, "startedAt" .= receipt.startedAt]
+          let receiptWire = Aeson.object ["assignmentId" .= Aeson.String "ledger-assignment", "rootId" .= receipt.rootId, "request" .= receipt.request, "fingerprint" .= receipt.fingerprint, "ordinal" .= (1 :: Integer), "startedAt" .= receipt.startedAt]
           Aeson.eitherDecode (Aeson.encode receipt) @?= Right receipt
           Aeson.encode receipt @?= Aeson.encode receiptWire
+          case receiptWire of
+            Aeson.Object fields ->
+              mapM_
+                ( \number -> case Aeson.fromJSON (Aeson.Object (KeyMap.insert "ordinal" (Aeson.toJSON number) fields)) :: Aeson.Result Calls.CallReceipt of
+                    Aeson.Error _ -> pure ()
+                    Aeson.Success _ -> assertFailure "invalid complete receipt ordinal accepted"
+                )
+                [0, -1, toInteger (maxBound :: Int64) + 1]
+            _ -> assertFailure "receipt wire was not an object"
           run app (Calls.reserveSelectionCall selection limits receipt.request "digest" now) >>= (@?= Right (Calls.ExistingCall receipt))
           let terminal = Calls.CallOutcome Calls.CallTerminal (Map.singleton Tokens (fixtureAmount 3)) [CostMicroUsd] (Just "served") (Just "provider-call") Nothing
           run app (Calls.finishSelectionCall receipt terminal) >>= (@?= Right Accepted)
