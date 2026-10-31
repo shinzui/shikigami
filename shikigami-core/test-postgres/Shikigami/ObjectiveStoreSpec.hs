@@ -96,7 +96,7 @@ tests fixture =
         withObjective fixture \env _ objective -> do
           now <- getCurrentTime
           _ <- right =<< run env (O.executeCommand ownerHost objective 0 (OperationId "graph") (SetAssignments [draft now "a"]))
-          let input = Attestation "check" "human" "artifact" "reviewed integration" False
+          let input = Attestation (evidenceKey "check") (criterionKey "human") "artifact" "reviewed integration" False
           sql env "CREATE FUNCTION shikigami.reject_objective_receipt() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RAISE EXCEPTION ''injected receipt failure''; END'"
           sql env "CREATE TRIGGER reject_receipt BEFORE INSERT ON shikigami.objective_receipts FOR EACH ROW EXECUTE FUNCTION shikigami.reject_objective_receipt()"
           _ <- try @SomeException (run env (O.executeCommand ownerHost objective 1 (OperationId "evidence") (RecordEvidence (ObjectiveAssignmentId "a") input)))
@@ -145,10 +145,10 @@ tests fixture =
         withDatabase fixture \env -> do
           let agent = RecordedAgent (VerifiedIdentity (either (error . show) id (mkAgentPrincipal "agent_creator")))
               agentHost = host agent
-              granted = agentHost {O.settings = defaultObjectiveSettings {enabled = True, agentCreation = ["agent_creator"]}}
+              granted = (agentHost & #settings .~ ((defaultObjectiveSettings & #enabled .~ (True) & #agentCreation .~ (["agent_creator"]))))
           run env (O.createObjective agentHost (OperationId "create") Nothing request) >>= (@?= Left ObjectiveDenied)
-          run env (O.createObjective (ownerHost {O.settings = defaultObjectiveSettings}) (OperationId "create") Nothing request) >>= (@?= Left ObjectiveDenied)
-          run env (O.createObjective (granted {O.actions = denyAllActionAuthorizer}) (OperationId "create") Nothing request) >>= (@?= Left ObjectiveDenied)
+          run env (O.createObjective ((ownerHost & #settings .~ (defaultObjectiveSettings))) (OperationId "create") Nothing request) >>= (@?= Left ObjectiveDenied)
+          run env (O.createObjective ((granted & #actions .~ (denyAllActionAuthorizer))) (OperationId "create") Nothing request) >>= (@?= Left ObjectiveDenied)
           first <- right =<< run env (O.createObjective granted (OperationId "create") Nothing request)
           run env (O.readObjective ownerHost first.objectiveId) >>= (@?= Left ObjectiveDenied),
       testCase "graphs, stale epochs, assignment identity reuse and terminal progress fail without changing state" $
@@ -179,12 +179,12 @@ tests fixture =
           let missing = CompletionProposal 2 0 0 ["artifact"] [] []
           _ <- right =<< send 2 "propose-missing" (ProposeCompletion missing)
           send 3 "accept-missing" AcceptCompletion >>= (@?= Left ObjectiveInvalidEvidence)
-          _ <- right =<< send 3 "attest" (RecordEvidence a.assignmentId (Attestation "check" "human" "artifact" "reviewed integrated journey" False))
-          _ <- right =<< send 4 "propose" (ProposeCompletion (CompletionProposal 4 0 0 ["artifact"] ["check"] ["known limitation"]))
+          _ <- right =<< send 3 "attest" (RecordEvidence a.assignmentId (Attestation (evidenceKey "check") (criterionKey "human") "artifact" "reviewed integrated journey" False))
+          _ <- right =<< send 4 "propose" (ProposeCompletion (CompletionProposal 4 0 0 ["artifact"] [evidenceKey "check"] ["known limitation"]))
           _ <- right =<< send 5 "revise" (ReviseInstructions "new instructions")
           send 6 "stale-accept" AcceptCompletion >>= (@?= Left ObjectiveConflict)
-          _ <- right =<< send 6 "new-attest" (RecordEvidence a.assignmentId (Attestation "new-check" "human" "artifact" "reviewed again" False))
-          _ <- right =<< send 7 "new-proposal" (ProposeCompletion (CompletionProposal 7 1 0 ["artifact"] ["new-check"] []))
+          _ <- right =<< send 6 "new-attest" (RecordEvidence a.assignmentId (Attestation (evidenceKey "new-check") (criterionKey "human") "artifact" "reviewed again" False))
+          _ <- right =<< send 7 "new-proposal" (ProposeCompletion (CompletionProposal 7 1 0 ["artifact"] [evidenceKey "new-check"] []))
           _ <- right =<< send 8 "accept" AcceptCompletion
           current <- get env objective
           current.status @?= Completed
@@ -232,23 +232,23 @@ tests fixture =
           _ <- right =<< run env (O.executeCommand ownerHost objective 0 (OperationId "graph") (SetAssignments [own, other]))
           _ <- right =<< run env (O.executeCommand ownerHost objective 1 (OperationId "grant") (GrantMember (RecordedAgent identity) [Worker]))
           _ <- right =<< run env (O.executeCommand workerHost objective 2 (OperationId "own") (RecordProgress own.assignmentId Working [] []))
-          forM_ [RecordProgress other.assignmentId Done [] [], RecordEvidence own.assignmentId (Attestation "forged" "human" "artifact" "trust me" False), GrantMember (VerifiedCaller "friend") [Coordinator]] \command ->
+          forM_ [RecordProgress other.assignmentId Done [] [], RecordEvidence own.assignmentId (Attestation (evidenceKey "forged") (criterionKey "human") "artifact" "trust me" False), GrantMember (VerifiedCaller "friend") [Coordinator]] \command ->
             run env (O.executeCommand workerHost objective 3 (OperationId "denied") command) >>= (@?= Left ObjectiveDenied),
       testCase "automatic completion requires verifier-backed criterion and journey evidence" $
         withObjective fixture \env _ objective -> do
           now <- getCurrentTime
           let assignment = draft now "a"
               reference = RetainedResult "verifier-run" "verifier-execution" "sha256:retained-result" "artifact"
-              verifiedHost = ownerHost {O.verifyResult = \source -> pure (if source == reference then Right (EvidenceVerification CheckPassed (Just "auto") True) else Left ObjectiveInvalidEvidence)}
+              verifiedHost = (ownerHost & #verifyResult .~ (\source -> pure (if source == reference then Right (EvidenceVerification CheckPassed (Just (criterionKey "auto")) True) else Left ObjectiveInvalidEvidence)))
               send revision key command = run env (O.executeCommand verifiedHost objective revision (OperationId key) command)
-          _ <- right =<< send 0 "criteria" (ReviseCriteria [Criterion "auto" "verified journey" Automatic True])
+          _ <- right =<< send 0 "criteria" (ReviseCriteria [Criterion (criterionKey "auto") "verified journey" Automatic True])
           _ <- right =<< send 1 "graph" (SetAssignments [assignment & #state .~ Done])
           -- A fabricated result cannot acquire a verifier disposition.
-          send 2 "fake" (RecordEvidence assignment.assignmentId (ResultEvidence "fake" "auto" (RetainedResult "fake-run" "fake" "fake" "artifact") True)) >>= (@?= Left ObjectiveInvalidEvidence)
-          evidenceReceipt <- right =<< send 2 "verified" (RecordEvidence assignment.assignmentId (ResultEvidence "verified" "auto" reference True))
+          send 2 "fake" (RecordEvidence assignment.assignmentId (ResultEvidence (evidenceKey "fake") (criterionKey "auto") (RetainedResult "fake-run" "fake" "fake" "artifact") True)) >>= (@?= Left ObjectiveInvalidEvidence)
+          evidenceReceipt <- right =<< send 2 "verified" (RecordEvidence assignment.assignmentId (ResultEvidence (evidenceKey "verified") (criterionKey "auto") reference True))
           -- Recovery does not contact an unavailable evidence owner again.
-          run env (O.executeCommand ownerHost objective 2 (OperationId "verified") (RecordEvidence assignment.assignmentId (ResultEvidence "verified" "auto" reference True))) >>= (@?= Right evidenceReceipt)
-          _ <- right =<< send 3 "propose" (ProposeCompletion (CompletionProposal 3 0 1 ["artifact"] ["verified"] []))
+          run env (O.executeCommand ownerHost objective 2 (OperationId "verified") (RecordEvidence assignment.assignmentId (ResultEvidence (evidenceKey "verified") (criterionKey "auto") reference True))) >>= (@?= Right evidenceReceipt)
+          _ <- right =<< send 3 "propose" (ProposeCompletion (CompletionProposal 3 0 1 ["artifact"] [evidenceKey "verified"] []))
           _ <- right =<< send 4 "accept" AcceptCompletion
           current <- get env objective
           current.status @?= Completed,
@@ -275,8 +275,8 @@ tests fixture =
           _ <- right =<< run env (O.executeInternal ownerHost objective base (OperationId "checkpoint") (IngestCheckpoint a.assignmentId intent [input] [unresolved]))
           _ <- right =<< send (base + 1) "done-a" (RecordProgress a.assignmentId Done [] [])
           _ <- right =<< send (base + 2) "done-b" (RecordProgress b.assignmentId Done [] [])
-          _ <- right =<< send (base + 3) "attest" (RecordEvidence a.assignmentId (Attestation "human-check" "human" "artifact" "reviewed" False))
-          _ <- right =<< send (base + 4) "propose" (ProposeCompletion (CompletionProposal (base + 4) 0 0 ["artifact"] ["human-check"] []))
+          _ <- right =<< send (base + 3) "attest" (RecordEvidence a.assignmentId (Attestation (evidenceKey "human-check") (criterionKey "human") "artifact" "reviewed" False))
+          _ <- right =<< send (base + 4) "propose" (ProposeCompletion (CompletionProposal (base + 4) 0 0 ["artifact"] [evidenceKey "human-check"] []))
           send (base + 5) "accept" AcceptCompletion >>= (@?= Left ObjectiveUnresolved),
       testCase "terminal objectives reconcile authentic accepted results while refusing fresh public progress" $
         withObjective fixture \env admission objective -> do
@@ -299,7 +299,7 @@ tests fixture =
           version <- right (S.versionFor cancelled key)
           version.active @?= False
           (_, intent) <- right =<< run env (Sessions.prepareCheckpoint access 3 0 (OperationId "prepare") version 0 3)
-          let evidence = ResultEvidence "late" "human" (WorkerResult result "artifact") False
+          let evidence = ResultEvidence (evidenceKey "late") (criterionKey "human") (WorkerResult result "artifact") False
           _ <- right =<< run env (O.executeInternal ownerHost objective 3 (OperationId "reconcile") (IngestCheckpoint key intent [evidence] []))
           run env (O.executeCommand ownerHost objective 4 (OperationId "fresh-progress") (RecordProgress key Working [] [])) >>= assertLeft
           current <- get env objective
@@ -332,10 +332,10 @@ ownerHost :: O.ObjectiveHost
 ownerHost = host owner
 
 host :: AccessPrincipal -> O.ObjectiveHost
-host actor = O.ObjectiveHost (defaultObjectiveSettings {enabled = True}) (pure (Right actor)) allowAllActionAuthorizerForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Right ())) (\_ -> pure (Left ObjectiveInvalidEvidence))
+host actor = O.ObjectiveHost ((defaultObjectiveSettings & #enabled .~ (True))) (pure (Right actor)) allowAllActionAuthorizerForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Right ())) (\_ -> pure (Left ObjectiveInvalidEvidence))
 
 request :: CreateRequest
-request = CreateRequest "deliver" "integrated goal" "instructions" [Criterion "human" "review integration" HumanVerifiable False] []
+request = CreateRequest "deliver" "integrated goal" "instructions" [Criterion (criterionKey "human") "review integration" HumanVerifiable False] []
 
 origin :: CreationOrigin
 origin = ExecutionOrigin "recorded-run" "recorded-execution" (OperationId "accepted-operation")
@@ -388,7 +388,7 @@ checkpoint env actor _ current assignment key = do
   let result = WS.AssignmentResult 1 message.assignmentId WS.AssignmentSucceeded Nothing (Aeson.object []) ["artifact"]
   (_, receipt) <- right =<< run env (Sessions.recordResult access 2 0 (OperationId "result") result)
   (_, intent) <- right =<< run env (Sessions.prepareCheckpoint access 3 0 (OperationId "prepare") version 0 3)
-  pure (intent, ResultEvidence key "human" (WorkerResult receipt "artifact") False)
+  pure (intent, ResultEvidence (evidenceKey key) (criterionKey "human") (WorkerResult receipt "artifact") False)
 
 run :: AppEnv -> Eff AppEffects a -> IO a
 run env action = runAppIO env action >>= right
@@ -417,3 +417,9 @@ crashWriter = do
   created <- right =<< run env (O.createObjective ownerHost (OperationId "lost-create") (Just origin) request)
   _ <- right =<< run env (O.executeCommand ownerHost created.objectiveId 0 (OperationId "lost-edit") (ReviseInstructions "committed-before-exit"))
   exitWith (ExitFailure 91)
+
+criterionKey :: Text -> CriterionKey
+criterionKey = either (error . show) id . parseCriterionKey
+
+evidenceKey :: Text -> EvidenceKey
+evidenceKey = either (error . show) id . parseEvidenceKey

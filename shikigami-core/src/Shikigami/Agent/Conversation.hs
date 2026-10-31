@@ -147,6 +147,7 @@ data ConversationEnv = ConversationEnv
     grants :: !GrantSource,
     directory :: !DirectoryHandle
   }
+  deriving stock (Generic)
 
 conversationRunTimeout :: ConversationEnv -> NominalDiffTime
 conversationRunTimeout ConversationEnv {runTimeout = timeout} = timeout

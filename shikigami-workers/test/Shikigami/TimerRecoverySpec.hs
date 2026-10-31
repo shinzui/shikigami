@@ -1,7 +1,9 @@
 module Shikigami.TimerRecoverySpec (tests) where
 
 import Control.Concurrent (threadDelay)
+import Control.Lens ((&), (.~))
 import Data.Aeson (object, (.=))
+import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Time (UTCTime, addUTCTime, diffUTCTime, getCurrentTime)
@@ -117,7 +119,7 @@ tests fixture =
             assertEqual "payload survives recovery" request.payload recovered.timer.payload
             assertEqual "attempt survives recovery" 1 recovered.timer.attempts
 
-            replacement <- runAppIO appEnv (claimDeadTimer (claimRequest {leaseSeconds = 60}))
+            replacement <- runAppIO appEnv (claimDeadTimer ((claimRequest & #leaseSeconds .~ (60))))
             fresh <- case replacement of
               Right (Right (Just value)) -> pure value
               _ -> assertFailure "replacement claim failed"

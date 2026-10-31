@@ -2,10 +2,12 @@ module Shikigami.DecisionModelCatalogSpec (tests) where
 
 import Baikai.Model qualified as Model
 import Baikai.Options (emptyOptions)
+import Control.Lens ((&), (.~))
 import Data.Aeson (Value (Null, Object), eitherDecode, encode, object, toJSON, (.=))
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy qualified as LBS
 import Data.Either (isLeft)
+import Data.Generics.Labels ()
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -37,7 +39,7 @@ registry :: ProgramRegistry
 registry = mustRight (programRegistry [SomeProgram registered])
 
 binding :: Text -> Text -> ModelBinding
-binding alias exact = mustRight (modelBinding (ModelAlias alias) "1" "binding" "1" (stubModel {Model.modelId = exact}) emptyOptions Nothing)
+binding alias exact = mustRight (modelBinding (ModelAlias alias) "1" "binding" "1" ((stubModel & #modelId .~ (exact))) emptyOptions Nothing)
 
 catalog :: ModelCatalog
 catalog = mustRight (modelCatalog [binding "triage" "stub-triage", binding "investigate" "stub-investigate"])
@@ -55,20 +57,20 @@ tests =
             investigate = mustRight (resolveModel catalog declaration Nothing (ModelAlias "investigate"))
         assertBool "exact models differ" (triage.modelId /= investigate.modelId)
         assertBool "unknown aliases denied" (isLeft (resolveModel catalog declaration Nothing (ModelAlias "payload-model")))
-        assertBool "agent permission required" (isLeft (resolveModel catalog (declaration {decisionModels = []}) Nothing (ModelAlias "triage")))
+        assertBool "agent permission required" (isLeft (resolveModel catalog ((declaration & #decisionModels .~ ([]))) Nothing (ModelAlias "triage")))
         assertBool "duplicate operator aliases refused" (isLeft (modelCatalog [binding "triage" "stub-triage", binding "triage" "stub-investigate"])),
       testCase "whole-slot policy narrows to the pinned profile" do
         declaration <- allowedDeclaration
         let snapshot = mustRight (resolvePolicy registry [slot] catalog declaration (Just (profile "stub-triage")))
         map (\model -> model.modelId) snapshot.models @?= ["stub-triage"]
-        snapshot.slots @?= [(slot {models = [ModelAlias "triage"]} :: DecisionSlot)]
+        snapshot.slots @?= [((slot & #models .~ ([ModelAlias "triage"])) :: DecisionSlot)]
         assertBool "forbidden selected tuple" (isLeft (resolveModel catalog declaration (Just (profile "stub-triage")) (ModelAlias "investigate"))),
       testCase "slot contracts and aliases validate before a runtime exists" do
         declaration <- allowedDeclaration
         slotErrors registry declaration [slot] @?= []
         assertBool "duplicate slot labels" (not (null (slotErrors registry declaration [slot, slot])))
         assertBool "unknown contract" (not (null (slotErrors (mustRight (programRegistry [])) declaration [slot])))
-        assertBool "undeclared alias" (not (null (slotErrors registry (declaration {decisionModels = []}) [slot])))
+        assertBool "undeclared alias" (not (null (slotErrors registry ((declaration & #decisionModels .~ ([]))) [slot])))
         assertBool "existing flows have empty inventories" (all (\flow -> flow.name == "shikumi-decision-example" || null flow.decisionSlots) flowRegistry),
       testCase "historical declaration JSON defaults to no permission and keeps its bytes" do
         declaration <- mustRight <$> loadAgent "../agents/heartbeat.dhall"
@@ -80,7 +82,7 @@ tests =
       testCase "changed option identity cannot replace a pinned binding" do
         let wanted = modelDescriptor (binding "triage" "stub-triage")
         assertBool "retained binding found" (not (isLeft (pinnedBinding catalog wanted)))
-        assertBool "descriptor drift refused" (isLeft (pinnedBinding catalog (wanted {bindingVersion = "2"}))),
+        assertBool "descriptor drift refused" (isLeft (pinnedBinding catalog ((wanted & #bindingVersion .~ ("2"))))),
       testCase "Settei loads two finite aliases and rejects malformed selections" do
         let run = configRun [("behavior.decisionModels", specList ["stub-triage", "stub-investigate"])] NoDiagnostic
         run.exitCode @?= 0
@@ -99,7 +101,7 @@ tests =
 allowedDeclaration :: IO AgentDecl
 allowedDeclaration = do
   declaration <- mustRight <$> loadAgent "../agents/heartbeat.dhall"
-  pure (declaration {decisionModels = ["triage", "investigate"]})
+  pure ((declaration & #decisionModels .~ (["triage", "investigate"])))
 
 profile :: Text -> ResolvedProfile
 profile exact = ResolvedProfile content (Profile.SanctionedExecutionProfileRef (Profile.ProfileId "test") (Profile.ProfileVersion "1") (profileDigest content))
@@ -113,7 +115,7 @@ profile exact = ResolvedProfile content (Profile.SanctionedExecutionProfileRef (
           validFrom = UTCTime (fromGregorian 2026 1 1) 0,
           validUntil = Nothing,
           allowedCalls = Profile.AllowedCall "stub" "stub" "in-process" exact Profile.ThinkingHigh :| [],
-          prohibitions = Profile.defaultProhibitions {Profile.defaultedThinkingAllowed = True},
+          prohibitions = (Profile.defaultProhibitions & #defaultedThinkingAllowed .~ (True)),
           limits = Profile.unlimitedProfileLimits,
           minimumEvidenceStrength = Profile.EvidenceModelObserved,
           requiredCorrelationFields = [],

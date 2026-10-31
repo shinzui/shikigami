@@ -11,10 +11,12 @@
 -- did, and would therefore prove nothing.
 module Shikigami.AttestationContractsSpec (tests) where
 
+import Control.Lens ((&), (.~))
 import Data.Aeson (FromJSON, Result (..), ToJSON, Value (..), encode, fromJSON, toJSON)
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Lazy (ByteString)
+import Data.Generics.Labels ()
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -183,27 +185,29 @@ minimalProfile =
 -- test exercises the fields the minimal one omits.
 fullProfile :: SanctionedExecutionProfile
 fullProfile =
-  minimalProfile
-    { validUntil = Just (UTCTime (fromGregorian 2027 8 5) 0),
-      lifecycle = Withdrawn,
-      limits =
-        ProfileLimits
-          { maxCalls = Just 20,
-            maxRetries = Just 2,
-            maxDelegatedChildRuns = Just 1,
-            maxTokens = Just 400000,
-            maxCostMicroUsd = Just 2500000,
-            maxDurationSeconds = Just 900,
-            maxConcurrency = Just 4
-          },
-      signerRequirements =
-        SignerRequirements
-          { requiredIssuer = Just (Issuer "shinzui/shikigami"),
-            allowedKeyIds = ["key-2026-08"],
-            requiredAlgorithm = Just "ed25519",
-            retentionDays = Just 3650
-          }
-    }
+  ( minimalProfile
+      & #validUntil .~ (Just (UTCTime (fromGregorian 2027 8 5) 0))
+      & #lifecycle .~ (Withdrawn)
+      & #limits
+        .~ ( ProfileLimits
+               { maxCalls = Just 20,
+                 maxRetries = Just 2,
+                 maxDelegatedChildRuns = Just 1,
+                 maxTokens = Just 400000,
+                 maxCostMicroUsd = Just 2500000,
+                 maxDurationSeconds = Just 900,
+                 maxConcurrency = Just 4
+               }
+           )
+      & #signerRequirements
+        .~ ( SignerRequirements
+               { requiredIssuer = Just (Issuer "shinzui/shikigami"),
+                 allowedKeyIds = ["key-2026-08"],
+                 requiredAlgorithm = Just "ed25519",
+                 retentionDays = Just 3650
+               }
+           )
+  )
 
 sampleAllowedCall :: AllowedCall
 sampleAllowedCall =
@@ -277,7 +281,7 @@ agentTests =
       -- decoding to some default.
       testCase "a present digest and an absent one stay distinct" do
         let sparse = declarationOnlyArtifacts (DeclarationDigest "sha256:decl")
-            grounded = sparse {groundingDigest = Just (GroundingDigest "sha256:ground")}
+            grounded = (sparse & #groundingDigest .~ (Just (GroundingDigest "sha256:ground")))
         assertBool "sparse and grounded differ" (sparse /= grounded)
         roundTrips "grounded artifact set" grounded
     ]
@@ -362,7 +366,7 @@ reviewedTests =
       -- A pull request is decoration. Setting one changes nothing about the
       -- commits, which is the point: it can never be what a verdict rests on.
       testCase "a pull-request identity does not substitute for the commits" do
-        let withPr = sampleReviewedArtifact {pullRequest = Just "4173"}
+        let withPr = (sampleReviewedArtifact & #pullRequest .~ (Just "4173"))
         assertEqual "base is unchanged" ((.baseCommit) sampleReviewedArtifact) ((.baseCommit) withPr)
         assertEqual "head is unchanged" ((.headCommit) sampleReviewedArtifact) ((.headCommit) withPr)
         roundTrips "artifact with a pull request" withPr,
@@ -576,7 +580,7 @@ envelopeTests =
       -- A signature covers a payload and cannot cover itself. The split types
       -- make hashing the signature inexpressible; this checks the consequence.
       testCase "the digest ignores the signature and key" do
-        let signed = sampleAttestation {signature = Just "sig", keyId = Just "key-1"}
+        let signed = (sampleAttestation & #signature .~ (Just "sig") & #keyId .~ (Just "key-1"))
         assertEqual
           "signing does not change the payload digest"
           (attestationPayloadDigest ((.payload) sampleAttestation))
@@ -584,7 +588,7 @@ envelopeTests =
       -- Changing any covered field must change the digest, or the binding is
       -- worthless.
       testCase "changing a covered field changes the digest" do
-        let tampered = samplePayload {reviewClass = "something-else"}
+        let tampered = (samplePayload & #reviewClass .~ ("something-else"))
         assertBool
           "a different payload digests differently"
           (attestationPayloadDigest samplePayload /= attestationPayloadDigest tampered),

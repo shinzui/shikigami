@@ -111,6 +111,15 @@ pkgs.stdenv.mkDerivation {
       shikigami-agent-run shikigami-run-behavior shikigami-agent-launch shikigami-openapi shikigami-client \
       shikigami-workspace-collector shikigami-workspace-supervisor; do
       cp "$(cabal list-bin --offline exe:$executable)" "$out/bin/$executable"
+      case "$executable" in
+        shikigami-openapi|shikigami-workspace-collector|shikigami-workspace-supervisor) ;;
+        *)
+          mkdir -p "$out/share/bash-completion/completions" "$out/share/zsh/site-functions" "$out/share/fish/vendor_completions.d"
+          "$out/bin/$executable" --bash-completion-script "$out/bin/$executable" +RTS -N2 -RTS > "$out/share/bash-completion/completions/$executable"
+          "$out/bin/$executable" --zsh-completion-script "$out/bin/$executable" +RTS -N2 -RTS > "$out/share/zsh/site-functions/_$executable"
+          "$out/bin/$executable" --fish-completion-script "$out/bin/$executable" +RTS -N2 -RTS > "$out/share/fish/vendor_completions.d/$executable.fish"
+          ;;
+      esac
     done
     ${lib.optionalString (workspaceFixture != null) ''
       cp "$(cabal list-bin --offline exe:shikigami-workspace-prototype)" "$out/bin/shikigami-workspace-prototype"

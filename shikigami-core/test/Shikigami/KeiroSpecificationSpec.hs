@@ -26,13 +26,13 @@
 -- dependency on the toolchain it is checking.
 module Shikigami.KeiroSpecificationSpec (tests) where
 
-import Control.Monad (forM)
+import Control.Monad (forM, when)
 import Data.List (isSuffixOf, sort)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TIO
-import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
+import System.Directory (doesDirectoryExist, doesFileExist, listDirectory, pathIsSymbolicLink)
 import System.FilePath ((</>))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertFailure, testCase, (@?=))
@@ -133,11 +133,21 @@ manifestClauses root = do
       [keyword, value] | keyword /= "spec" -> Just (keyword, value)
       _ -> Nothing
 
--- | Every `.keiro` file actually sitting in `domain/`.
+-- | Every `.keiro` member under domain, relative to the manifest directory.
 domainMembers :: FilePath -> IO [Text]
-domainMembers root = do
-  entries <- listDirectory (root </> "domain")
-  pure [Text.pack entry | entry <- entries, ".keiro" `isSuffixOf` entry]
+domainMembers root = walk ""
+  where
+    walk relative = do
+      entries <- listDirectory (root </> "domain" </> relative)
+      fmap concat $ forM entries \entry -> do
+        let member = relative </> entry
+            path = root </> "domain" </> member
+        symbolic <- pathIsSymbolicLink path
+        when symbolic (assertFailure "domain members must not be symbolic links")
+        directory <- doesDirectoryExist path
+        if directory
+          then walk member
+          else pure [Text.pack member | ".keiro" `isSuffixOf` member]
 
 -- | A source's lines with comments and blanks removed, so the preamble can be
 -- asserted without pinning the comment block above it.

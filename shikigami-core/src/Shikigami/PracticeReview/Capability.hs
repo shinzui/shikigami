@@ -190,6 +190,7 @@ data PracticeReviewRuntime = PracticeReviewRuntime
     attention :: !(ValidatedPracticeReviewVerdict -> IO (Either Text AttentionReservationResult)),
     attentionRecipients :: !AttentionRecipientMap
   }
+  deriving stock (Generic)
 
 newtype AttentionRecipientMap = AttentionRecipientMap (Map Text Text)
   deriving stock (Eq, Show)

@@ -372,7 +372,7 @@ tests fixture =
           Just awakeable <- run app (lookupAwakeable tokenId)
           awakeable.status @?= Awakeable.Pending
           _ <- driveExecutionChild app (Agent.executionRuntime dependencies) (execution firstMessage) 20
-          let retired = env {Conversation.decisions = Decision.defaultDecisionServices (mustRight (modelCatalog []))}
+          let retired = (env & #decisions .~ (Decision.defaultDecisionServices (mustRight (modelCatalog []))))
           first <- expectRight =<< Conversation.runConversationTurnWithExecution retired declaration (compatibilityIdentity "router") (Just context) firstMessage
           Conversation.runConversationTurn retired declaration firstMessage >>= (@?= Right first)
           Conversation.submitConversationTurnWithExecution env declaration (compatibilityIdentity "router") Nothing secondMessage >>= (@?= Right Conversation.ConversationAccepted)
@@ -460,11 +460,13 @@ crashBeforeBehavior :: IO Agent.AgentRunHooks
 crashBeforeBehavior = do
   once <- newIORef True
   pure
-    Agent.defaultAgentRunHooks
-      { Agent.beforeStepBody = \(StepName name) -> when (name == "run-behavior-v2") do
-          crash <- atomicModifyIORef' once (\current -> (False, current))
-          when crash (ioError (userError "selection fixture crash"))
-      }
+    ( Agent.defaultAgentRunHooks
+        & #beforeStepBody
+        .~ ( \(StepName name) -> when (name == "run-behavior-v2") do
+               crash <- atomicModifyIORef' once (\current -> (False, current))
+               when crash (ioError (userError "selection fixture crash"))
+           )
+    )
 
 driveExecutionChild :: AppEnv -> Executor.ExecutionRuntime -> Replay.ExecutionId -> Int -> IO Driver.ExecutionDriverResult
 driveExecutionChild app executor execution remaining

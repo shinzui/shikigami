@@ -86,11 +86,11 @@ resolvePinnedEnv env selection = do
     DeclaredAlias -> either (const (Left PinnedBindingUnavailable)) Right (pinnedBinding env.catalog selection.descriptor)
   binding <- selectionBinding env.catalog fallback env.profile selection
   selected <- either (const (Left ExecutionOptionsIncompatible)) Right (withModelBinding binding env.baseEnv)
-  let effective = (effectiveBindingOptions env.profile binding) {Options.apiKey = Options.apiKey selected.options}
+  let effective = (effectiveBindingOptions env.profile binding & #apiKey .~ Options.apiKey selected.options)
   pure (binding, selected & #options .~ effective)
 
 requestFingerprint :: ExecutionSelection -> Context.Context -> Options.Options -> Text
-requestFingerprint selection context options = versionedDigest "shikigami.execution-model-request/1" (object ["assignment" .= selection.assignmentId, "selection" .= selection, "context" .= context, "options" .= options {Options.apiKey = Nothing, Options.evidence = Nothing, Options.metadata = Map.delete "shikigami_call_id" (Options.metadata options)}])
+requestFingerprint selection context options = versionedDigest "shikigami.execution-model-request/1" (object ["assignment" .= selection.assignmentId, "selection" .= selection, "context" .= context, "options" .= (options & #apiKey .~ (Nothing) & #evidence .~ (Nothing) & #metadata .~ (Map.delete "shikigami_call_id" (Options.metadata options)))])
 
 -- Preparation performs no reservation or external model IO. Its result is
 -- admitted with the queue entry by the execution owner's transaction.
@@ -118,7 +118,7 @@ narrowOutput options (Just wanted) = do
   unless (wanted > 0) (Left "requested output exceeds the pinned ceiling")
   let tokens = fromIntegral wanted
   unless (maybe True (tokens <=) (Options.maxTokens options)) (Left "requested output exceeds the pinned ceiling")
-  pure options {Options.maxTokens = Just tokens}
+  pure (options & #maxTokens .~ (Just tokens))
 
 buildExecutionEnvWith :: Maybe PreparedSelectionCall -> SelectionRuntime -> ExecutionSelection -> IO (Either ExecutionSelectionFailure BehaviorEnv)
 buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = case resolvePinnedEnv env selection of
@@ -147,46 +147,50 @@ buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = c
         )
 
     wrap consumed binding handler registry =
-      handler
-        { complete = \model context options -> do
-            fresh <- consume consumed
-            if not fresh
-              then errorResponseAt model "PreparedAttemptAlreadyConsumed"
-              else mask \restore -> do
-                prepared <- prepare binding handler model context options
-                case prepared of
-                  Left response -> do
-                    forM_ preparedCall \prepared -> prepared.commit prepared.receipt (Calls.CallOutcome Calls.CallRefused Map.empty [] Nothing Nothing Nothing) (Just response)
-                    pure response
-                  Right (receipt, effective) -> do
-                    response <-
-                      restore (completeRequestWith registry model context effective)
-                        `onException` finish receipt (unknownOutcome Nothing)
-                    finishTerminal receipt (isJust (responseError response)) response.evidence (Just response)
-                    pure response,
-          stream = \model context options -> Stream.concatEffect do
-            fresh <- consume consumed
-            if not fresh
-              then pure (liftCompleteToStream (\_ _ _ -> errorResponseAt model "PreparedAttemptAlreadyConsumed") model context options)
-              else do
-                prepared <- prepare binding handler model context options
-                case prepared of
-                  Left response -> do
-                    forM_ preparedCall \prepared -> prepared.commit prepared.receipt (Calls.CallOutcome Calls.CallRefused Map.empty [] Nothing Nothing Nothing) (Just response)
-                    pure (liftCompleteToStream (\_ _ _ -> pure response) model context options)
-                  Right (receipt, effective) -> do
-                    terminal <- newIORef False
-                    let record event = do
-                          case event of
-                            EventDone payload -> finishTerminal receipt False payload.evidence (terminalResponse model payload) >> writeIORef terminal True
-                            EventError payload -> finishTerminal receipt True payload.evidence (terminalResponse model payload) >> writeIORef terminal True
-                            _ -> pure ()
-                          pure event
-                        abandoned = do
-                          done <- readIORef terminal
-                          unless done (finish receipt (unknownOutcome Nothing))
-                    pure (Stream.finallyIO abandoned (Stream.mapM record (handler.stream model context effective)))
-        }
+      ( handler
+          & #complete
+          .~ ( \model context options -> do
+                 fresh <- consume consumed
+                 if not fresh
+                   then errorResponseAt model "PreparedAttemptAlreadyConsumed"
+                   else mask \restore -> do
+                     prepared <- prepare binding handler model context options
+                     case prepared of
+                       Left response -> do
+                         forM_ preparedCall \prepared -> prepared.commit prepared.receipt (Calls.CallOutcome Calls.CallRefused Map.empty [] Nothing Nothing Nothing) (Just response)
+                         pure response
+                       Right (receipt, effective) -> do
+                         response <-
+                           restore (completeRequestWith registry model context effective)
+                             `onException` finish receipt (unknownOutcome Nothing)
+                         finishTerminal receipt (isJust (responseError response)) response.evidence (Just response)
+                         pure response
+             )
+          & #stream
+          .~ ( \model context options -> Stream.concatEffect do
+                 fresh <- consume consumed
+                 if not fresh
+                   then pure (liftCompleteToStream (\_ _ _ -> errorResponseAt model "PreparedAttemptAlreadyConsumed") model context options)
+                   else do
+                     prepared <- prepare binding handler model context options
+                     case prepared of
+                       Left response -> do
+                         forM_ preparedCall \prepared -> prepared.commit prepared.receipt (Calls.CallOutcome Calls.CallRefused Map.empty [] Nothing Nothing Nothing) (Just response)
+                         pure (liftCompleteToStream (\_ _ _ -> pure response) model context options)
+                       Right (receipt, effective) -> do
+                         terminal <- newIORef False
+                         let record event = do
+                               case event of
+                                 EventDone payload -> finishTerminal receipt False payload.evidence (terminalResponse model payload) >> writeIORef terminal True
+                                 EventError payload -> finishTerminal receipt True payload.evidence (terminalResponse model payload) >> writeIORef terminal True
+                                 _ -> pure ()
+                               pure event
+                             abandoned = do
+                               done <- readIORef terminal
+                               unless done (finish receipt (unknownOutcome Nothing))
+                         pure (Stream.finallyIO abandoned (Stream.mapM record (handler.stream model context effective)))
+             )
+      )
 
     consume used = case preparedCall of
       Nothing -> pure True
@@ -195,7 +199,7 @@ buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = c
     prepare binding handler model context options = do
       let refuse detail = Left <$> errorResponseAt model detail
           base = effectiveBindingOptions env.profile binding
-          semantic value = toJSON value {Options.apiKey = Nothing, Options.evidence = Nothing, Options.maxTokens = Nothing, Options.timeoutMs = Nothing, Options.responseFormat = Nothing, Options.metadata = Map.delete "shikigami_call_id" (Options.metadata value)}
+          semantic value = toJSON (value & #apiKey .~ (Nothing) & #evidence .~ (Nothing) & #maxTokens .~ (Nothing) & #timeoutMs .~ (Nothing) & #responseFormat .~ (Nothing) & #metadata .~ (Map.delete "shikigami_call_id" (Options.metadata value)))
           within proposed ceiling = case ceiling of Nothing -> True; Just bound -> maybe False (<= bound) proposed
           compatible = do
             unless (Options.apiKey options == (ApiKeyLiteral . revealCredential <$> bindingCredential binding)) (Left "PinnedCredentialMismatch")
@@ -253,13 +257,13 @@ buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = c
                 [] -> Nothing
                 xs -> Just (max 1 (floor (diffUTCTime (minimum xs) current * 1000)))
               timeouts = maybe [] pure (Options.timeoutMs options) <> maybe [] pure remaining
-              boundedOptions = options {Options.timeoutMs = case timeouts of [] -> Nothing; xs -> Just (minimum xs)}
+              boundedOptions = (options & #timeoutMs .~ (case timeouts of [] -> Nothing; xs -> Just (minimum xs)))
               AttemptId attempt = receipt.request.attemptId
               strength = max (minimumStrength (bindingOptions binding)) (minimumStrength boundedOptions)
               correlated = configureEvidenceCall env.runId (callCorrelationId env.runId attempt 0) (fromInteger receipt.ordinal) Nothing strength boundedOptions
               effective = case Model.api model of
-                AnthropicMessages -> correlated {Options.metadata = Options.metadata options}
-                OpenAIChatCompletions -> correlated {Options.metadata = Options.metadata options}
+                AnthropicMessages -> (correlated & #metadata .~ (Options.metadata options))
+                OpenAIChatCompletions -> (correlated & #metadata .~ (Options.metadata options))
                 _ -> correlated
               compatible = case validateResponseRequest model effective context of Left _ -> False; Right () -> True
           if any (current >=) deadlines

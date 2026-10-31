@@ -25,13 +25,16 @@ import Baikai.Stream (requireEvidenceOnTerminal)
 import Baikai.Stream.Event (AssistantMessageEvent (..), TerminalPayload (..))
 import Control.Applicative ((<|>))
 import Control.Exception (Exception, SomeAsyncException, SomeException, catch, fromException, throwIO, try)
+import Control.Lens ((&), (.~))
 import Control.Monad (unless, when)
 import Data.Aeson (ToJSON, toJSON)
+import Data.Generics.Labels ()
 import Data.IORef (atomicModifyIORef', newIORef)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (catMaybes, fromMaybe, isJust)
 import Data.Text (Text)
 import Data.Typeable (Typeable)
+import GHC.Generics (Generic)
 import Handan.Runtime (Runtime (..), runProgramWith)
 import Numeric.Natural (Natural)
 import Shikigami.Attestation.Evidence (configureEvidenceCall)
@@ -61,6 +64,7 @@ data DecisionRuntime = DecisionRuntime
     timeoutMicros :: !Int,
     callLimit :: !Natural
   }
+  deriving stock (Generic)
 
 newtype DecisionAbort = DecisionAbort DecisionFailure
   deriving stock (Show)
@@ -107,8 +111,8 @@ runDecisionProgram env prepared ref input =
                 -- These APIs do not accept arbitrary application metadata. The
                 -- durable token/evidence association remains in finishCall.
                 options = case Model.api selected of
-                  AnthropicMessages -> correlated {Options.metadata = effective.metadata}
-                  OpenAIChatCompletions -> correlated {Options.metadata = effective.metadata}
+                  AnthropicMessages -> (correlated & #metadata .~ (effective.metadata))
+                  OpenAIChatCompletions -> (correlated & #metadata .~ (effective.metadata))
                   _ -> correlated
             case validateResponseRequest model options context of
               Left _ -> abort ForbiddenModel "final decision request is incompatible with its provider"
@@ -153,7 +157,7 @@ runDecisionProgram env prepared ref input =
               case fromException @SomeAsyncException err of
                 Just _ -> throwIO err
                 Nothing -> finish token CallFailed Nothing >> throwIO err
-          wrapper = handler {Baikai.Provider.Registry.complete = complete, Baikai.Provider.Registry.stream = stream}
+          wrapper = (handler & #complete .~ (complete) & #stream .~ (stream))
       privateRegistry <- newProviderRegistryFrom [wrapper]
       let config = env.runtime.runtimeConfig
           retry = config.retryPolicy
@@ -207,22 +211,27 @@ finalOptions env binding actual context node = do
       minCap values = case catMaybes values of [] -> Nothing; xs -> Just (minimum xs)
       profileTokens = (>>= (fmap fromIntegral . (\l -> l.maxTokens))) limits
       effective =
-        node
-          { Options.apiKey = ApiKeyLiteral . revealCredential <$> bindingCredential binding,
-            Options.thinking = base.thinking,
-            Options.maxTokens = minCap [node.maxTokens, base.maxTokens, profileTokens],
-            Options.timeoutMs = minCap [node.timeoutMs, base.timeoutMs, Just (max 1 (env.timeoutMicros `div` 1000))],
-            Options.temperature = node.temperature <|> base.temperature,
-            Options.topP = node.topP <|> base.topP,
-            Options.stopSequences = if null node.stopSequences then base.stopSequences else node.stopSequences,
-            Options.seed = node.seed <|> base.seed,
-            Options.frequencyPenalty = node.frequencyPenalty <|> base.frequencyPenalty,
-            Options.presencePenalty = node.presencePenalty <|> base.presencePenalty,
-            Options.cacheRetention = node.cacheRetention <|> base.cacheRetention,
-            Options.speed = node.speed <|> base.speed,
-            Options.headers = base.headers,
-            Options.evidence = Just ((Evidence.evidenceRequest "decision-preflight") {Evidence.strictness = Evidence.EvidenceRequired floorStrength})
-          }
+        ( node
+            & #apiKey .~ (ApiKeyLiteral . revealCredential <$> bindingCredential binding)
+            & #thinking .~ (base.thinking)
+            & #maxTokens .~ (minCap [node.maxTokens, base.maxTokens, profileTokens])
+            & #timeoutMs .~ (minCap [node.timeoutMs, base.timeoutMs, Just (max 1 (env.timeoutMicros `div` 1000))])
+            & #temperature .~ (node.temperature <|> base.temperature)
+            & #topP .~ (node.topP <|> base.topP)
+            & #stopSequences .~ (if null node.stopSequences then base.stopSequences else node.stopSequences)
+            & #seed .~ (node.seed <|> base.seed)
+            & #frequencyPenalty .~ (node.frequencyPenalty <|> base.frequencyPenalty)
+            & #presencePenalty .~ (node.presencePenalty <|> base.presencePenalty)
+            & #cacheRetention .~ (node.cacheRetention <|> base.cacheRetention)
+            & #speed .~ (node.speed <|> base.speed)
+            & #headers .~ (base.headers)
+            & #evidence
+              .~ ( Just
+                     ( Evidence.evidenceRequest "decision-preflight"
+                         & #strictness .~ Evidence.EvidenceRequired floorStrength
+                     )
+                 )
+        )
   unless (actual == selected) (abort ForbiddenModel "program attempted to change the selected model or endpoint")
   when (isJust node.apiKey || not (Map.null node.headers)) (abort ForbiddenModel "program attempted a credential override")
   when (isJust node.thinking && node.thinking /= base.thinking) (abort ForbiddenModel "program attempted a thinking override")

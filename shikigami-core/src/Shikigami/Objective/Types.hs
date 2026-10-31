@@ -1,6 +1,6 @@
 -- | Durable values are identities and evidence references, never authority.
 -- Authentication and fresh action decisions belong to Objective.Capability.
-module Shikigami.Objective.Types (module Shikigami.Objective.Types, ObjectiveId, parseObjectiveId, objectiveIdText) where
+module Shikigami.Objective.Types (module Shikigami.Objective.Types, module Shikigami.Objective.Keys, ObjectiveId, parseObjectiveId, objectiveIdText) where
 
 import Data.Aeson ((.!=), (.:?))
 import Data.Aeson qualified as Aeson
@@ -10,6 +10,7 @@ import Data.Text qualified as Text
 import Shikigami.Agent.Principal (AgentIdentity, identityText, mkAgentPrincipal)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Generated.Nominals (ObjectiveId, objectiveIdText, parseObjectiveId)
+import Shikigami.Objective.Keys
 import Shikigami.Prelude
 import Shikigami.WorkerSession.Types (AssignmentId, ResultReceipt, WorkerSessionId)
 
@@ -41,7 +42,7 @@ data CriterionKind = Automatic | HumanVerifiable
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data Criterion = Criterion {key :: !Text, description :: !Text, kind :: !CriterionKind, journeyRequired :: !Bool}
+data Criterion = Criterion {key :: !CriterionKey, description :: !Text, kind :: !CriterionKind, journeyRequired :: !Bool}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -76,7 +77,7 @@ data Assignment = Assignment
     revision :: !Integer,
     instructionsRevision :: !Integer,
     ownerEpoch :: !Integer,
-    acceptedResults :: ![Text]
+    acceptedResults :: ![EvidenceKey]
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -90,8 +91,8 @@ data ResultReference
   deriving anyclass (ToJSON, FromJSON)
 
 data EvidenceInput
-  = ResultEvidence {key :: !Text, criterion :: !Text, result :: !ResultReference, journey :: !Bool}
-  | Attestation {key :: !Text, criterion :: !Text, artifact :: !Text, statement :: !Text, journey :: !Bool}
+  = ResultEvidence {key :: !EvidenceKey, criterion :: !CriterionKey, result :: !ResultReference, journey :: !Bool}
+  | Attestation {key :: !EvidenceKey, criterion :: !CriterionKey, artifact :: !Text, statement :: !Text, journey :: !Bool}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -103,7 +104,7 @@ data CheckDisposition = CheckPassed | CheckFailed | ResultObserved
 -- is ResultObserved; only a verifier may attest a criterion or a user journey.
 data EvidenceVerification = EvidenceVerification
   { disposition :: !CheckDisposition,
-    criterion :: !(Maybe Text),
+    criterion :: !(Maybe CriterionKey),
     journey :: !Bool
   }
   deriving stock (Eq, Show, Generic)
@@ -127,7 +128,7 @@ data CompletionProposal = CompletionProposal
     instructionsRevision :: !Integer,
     criteriaRevision :: !Integer,
     artifacts :: ![Text],
-    checks :: ![Text],
+    checks :: ![EvidenceKey],
     limitations :: ![Text]
   }
   deriving stock (Eq, Show, Generic)
@@ -226,9 +227,6 @@ validateSettings settings = do
   forM_ settings.operator \identity -> unless (validKey identity) (Left "invalid local operator identity")
   when (settings.administration == AdministerAll && isNothing settings.operator) (Left "administration requires a local operator identity")
   forM_ settings.agentCreation (void . mkAgentPrincipal)
-
-validKey :: Text -> Bool
-validKey value = not (Text.null value) && Text.length value <= 256 && Text.all (\c -> c > ' ' && c /= '\DEL') value
 
 validPrincipal :: AccessPrincipal -> Bool
 validPrincipal = \case

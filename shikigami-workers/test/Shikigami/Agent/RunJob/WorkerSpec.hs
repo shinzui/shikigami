@@ -5,9 +5,11 @@ module Shikigami.Agent.RunJob.WorkerSpec (tests) where
 import Control.Concurrent (threadDelay)
 import Control.Exception (Exception)
 import Control.Exception qualified as Exception
+import Control.Lens ((&), (.~))
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Foldable (for_)
+import Data.Generics.Labels ()
 import Data.IORef (modifyIORef', newIORef, readIORef, writeIORef)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -124,29 +126,29 @@ tests databaseFixture =
       testCase "schedule job with addressed-looking payload routes to agent-run" do
         assertAgentRun
           "an explicit agent-run route ignores the payload's shape"
-          (routeRunJob sampleJob {triggerKind = TriggeredBySchedule, routeKind = AgentWorkflowRoute, triggerPayload = Aeson.toJSON sampleAddressed}),
+          (routeRunJob (sampleJob & #triggerKind .~ (TriggeredBySchedule) & #routeKind .~ (AgentWorkflowRoute) & #triggerPayload .~ (Aeson.toJSON sampleAddressed))),
       testCase "event job on the danwa event type routes to conversation" do
         assertConversation
           "a declared conversation route with a decodable payload"
-          (routeRunJob sampleJob {routeKind = ConversationWorkflowRoute, triggerPayload = Aeson.toJSON sampleAddressed}),
+          (routeRunJob (sampleJob & #routeKind .~ (ConversationWorkflowRoute) & #triggerPayload .~ (Aeson.toJSON sampleAddressed))),
       testCase "undecodable payload on a conversation route dead-letters" do
         assertRouteError
           "a declared conversation route with an undecodable payload"
-          (routeRunJob sampleJob {routeKind = ConversationWorkflowRoute}),
+          (routeRunJob (sampleJob & #routeKind .~ (ConversationWorkflowRoute))),
       testCase "trigger kind does not affect any route" do
         let kinds = [TriggeredBySchedule, TriggeredByStream, TriggeredByEvent, TriggeredByDelegation]
         for_ kinds \kind -> do
           assertAgentRun
             ("agent-run route under " <> show kind)
-            (routeRunJob sampleJob {triggerKind = kind, routeKind = AgentWorkflowRoute})
+            (routeRunJob (sampleJob & #triggerKind .~ (kind) & #routeKind .~ (AgentWorkflowRoute)))
           assertConversation
             ("conversation route under " <> show kind)
-            (routeRunJob sampleJob {triggerKind = kind, routeKind = ConversationWorkflowRoute, triggerPayload = Aeson.toJSON sampleAddressed}),
+            (routeRunJob (sampleJob & #triggerKind .~ (kind) & #routeKind .~ (ConversationWorkflowRoute) & #triggerPayload .~ (Aeson.toJSON sampleAddressed))),
       testCase "drain gate enforces every configured lifecycle decision" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \store -> do
             let pool = StoreConnection.pool store
-                jobWith suffix = sampleJob {identity = UnresolvedLegacyIdentity, idempotencyKey = RunKey ("codec-agent:event:" <> suffix)}
+                jobWith suffix = (sampleJob & #identity .~ (UnresolvedLegacyIdentity) & #idempotencyKey .~ (RunKey ("codec-agent:event:" <> suffix)))
             activeDirectory <- directoryWith [principalRecord Active]
             active <- admitRunJobWith pool activeDirectory [drainAgent] (jobWith "active")
             assertAllowedAs "active principal continues" "agent_codec" active
@@ -266,7 +268,7 @@ tests databaseFixture =
       testCase "a route error reaches the reconciled DLQ" do
         (withShikigamiFreshDatabase databaseFixture) \connStr -> do
           let tuning = requireTuning (mkJobTuning 2 1 (PollEvery 0.1))
-              misdeclared = sampleJob {routeKind = ConversationWorkflowRoute}
+              misdeclared = (sampleJob & #routeKind .~ (ConversationWorkflowRoute))
           reachedDlq <-
             runDb connStr \runtime ->
               runJobEff runtime do

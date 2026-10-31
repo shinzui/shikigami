@@ -241,7 +241,7 @@ outboxTests =
         conversationKey @?= Nothing
         triggeringActivityId @?= Nothing,
       testCase "an intent that resolved a recipient says so" do
-        let resolved = sampleSinkIntent {resolvedRecipient = Just "person:nadeem"}
+        let resolved = (sampleSinkIntent & #resolvedRecipient .~ (Just "person:nadeem"))
         decoded <- decodeOrFail @SinkIntent (LazyByteString.toStrict (encode resolved))
         toJSON decoded @?= toJSON resolved,
       testCase "the lifecycle skip outcome round-trips without changing old outcomes" do
@@ -382,7 +382,7 @@ identityBoundaryTests =
         let first = runJobWorkflowId sampleRunJob
         runJobWorkflowId sampleRunJob @?= first
         mkWorkflowId first.unWorkflowId @?= Right first
-        case runJobWorkflowId (sampleRunJob {idempotencyKey = RunKey "another:event"}) == first of
+        case runJobWorkflowId ((sampleRunJob & #idempotencyKey .~ (RunKey "another:event"))) == first of
           False -> pure ()
           True -> assertFailure "distinct run keys collided"
     ]

@@ -86,7 +86,7 @@ tests =
             assertBool "lifecycle is checked" (UnavailableSelection "paused-reviewer" Paused `elem` found)
             assertBool "fan-out is checked" (TooManySelections 2 1 `elem` found),
       testCase "validates advisory ambiguous alternatives but never turns them into matched" do
-        let alternative = selection {agent = "missing-reviewer"}
+        let alternative = (selection & #agent .~ ("missing-reviewer"))
             decision = RouteDecision 1 testCatalogVersion (Ambiguous (alternative :| []) "unclear")
         case validateRouteDecision policy catalog decision of
           Right _ -> assertFailure "expected undeclared alternative refusal"

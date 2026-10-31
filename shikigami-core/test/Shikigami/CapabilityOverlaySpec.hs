@@ -1,7 +1,9 @@
 module Shikigami.CapabilityOverlaySpec (tests) where
 
+import Control.Lens ((&), (.~))
 import Data.Aeson (eitherDecode, encode, object, toJSON, (.=))
 import Data.Foldable (traverse_)
+import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Shikigami.Agent.Decl (Behavior (..))
@@ -42,17 +44,18 @@ tests =
       testCase "rejects every malformed catalog boundary" do
         mkCapabilityCatalog [workspaceReadDescriptor, workspaceReadDescriptor]
           @?= Left DuplicateCapability {capability = workspaceReadId}
-        mkCapabilityCatalog [workspaceReadDescriptor {tools = []}]
+        mkCapabilityCatalog [(workspaceReadDescriptor & #tools .~ ([]))]
           @?= Left EmptyCapabilityToolSet {capability = workspaceReadId}
-        mkCapabilityCatalog [workspaceReadDescriptor {tools = [CapabilityToolDescriptor {name = "", operationClass = Observation}]}]
+        mkCapabilityCatalog [(workspaceReadDescriptor & #tools .~ ([CapabilityToolDescriptor {name = "", operationClass = Observation}]))]
           @?= Left EmptyCapabilityToolName {capability = workspaceReadId}
         mkCapabilityCatalog
-          [ workspaceReadDescriptor
-              { tools =
-                  [ CapabilityToolDescriptor {name = "same", operationClass = Observation},
-                    CapabilityToolDescriptor {name = "same", operationClass = Observation}
-                  ]
-              }
+          [ ( workspaceReadDescriptor
+                & #tools
+                  .~ ( [ CapabilityToolDescriptor {name = "same", operationClass = Observation},
+                         CapabilityToolDescriptor {name = "same", operationClass = Observation}
+                       ]
+                     )
+            )
           ]
           @?= Left DuplicateCapabilityToolName {capability = workspaceReadId, name = "same"},
       testCase "lists catalog entries deterministically and looks them up by id" do
@@ -72,8 +75,8 @@ tests =
       testCase "refuses duplicate, unknown, missing-identity, denied, and non-Skill requests" do
         let catalog = expectRight (mkCapabilityCatalog [workspaceReadDescriptor])
             unknown = expectRight (mkCapabilityId "unknown.capability")
-            noIdentity = durableSkillSubject {principal = Nothing}
-            nonSkill = durableSkillSubject {behavior = Deterministic {rule = "none", params = Map.empty}}
+            noIdentity = (durableSkillSubject & #principal .~ (Nothing))
+            nonSkill = (durableSkillSubject & #behavior .~ (Deterministic {rule = "none", params = Map.empty}))
             deny _ CapabilityDescriptor {capability} = Left CapabilityAuthorizationDenied {capability, reason = "policy denied"}
         resolveCapabilityOverlays catalog allow durableSkillSubject [workspaceReadId, workspaceReadId]
           @?= Left DuplicateCapabilityRequest {capability = workspaceReadId}
@@ -109,7 +112,7 @@ tests =
         let mutation = descriptorWithClass "workspace.write" IdempotentMutation
             mutationId = descriptorId mutation
             catalog = expectRight (mkCapabilityCatalog [mutation])
-        resolveCapabilityOverlays catalog allow (durableSkillSubject {mode = OneOff}) [mutationId]
+        resolveCapabilityOverlays catalog allow ((durableSkillSubject & #mode .~ (OneOff))) [mutationId]
           @?= Right (mkResolvedCapabilitySet [mutation]),
       testCase "request order cannot change resolved equality or JSON bytes" do
         let catalog = expectRight (mkCapabilityCatalog [workspaceReadDescriptor, repositorySearchDescriptor])

@@ -148,6 +148,7 @@ library
     Shikigami.Objective.Capability
     Shikigami.Objective.Catalog
     Shikigami.Objective.Command
+    Shikigami.Objective.Keys
     Shikigami.Objective.Live
     Shikigami.Objective.Store
     Shikigami.Objective.Types

@@ -2,6 +2,7 @@
 -- current principal/profile authority and exact retained workspace adapters.
 module Shikigami.Workspace.ConfiguredHost (configuredWorkspaceHost, configuredWorkspaceHostWithTransfers) where
 
+import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Time (getCurrentTime)
 import Hasql.Pool (Pool)

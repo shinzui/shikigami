@@ -351,7 +351,7 @@ agentRunSpecialistTests databaseFixture =
         recipients <- expectRight (mkAttentionRecipientMap [("architecture-council", "recipient_triage")])
         let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connectionString, tracer, metrics = Nothing, store = Nothing}
             baseRuntime = incompleteRuntime evidenceCalls evaluatorCalls legacyAttentionCalls
-            runtime = baseRuntime {attentionRecipients = recipients}
+            runtime = (baseRuntime & #attentionRecipients .~ (recipients))
             deps = specialistAgentRunDeps appEnv behaviorEnv runtime
             job =
               RunJob
@@ -718,20 +718,21 @@ countingEvidenceReader calls =
 
 proposalWithEvidence :: EvidenceBundle -> PracticeReviewVerdict -> PracticeReviewVerdict
 proposalWithEvidence EvidenceBundle {target, references, upstream} proposal =
-  proposal
-    { targetEvidence = [],
-      referenceEvidence = [],
-      upstreamEvidence = [],
-      claims =
-        [ PracticeReviewClaim
-            { claimId = ClaimId "claim-complete-orchestration",
-              kind = Fact,
-              statement = "The bounded evidence supports the proposed architecture-practice classification.",
-              material = True,
-              evidenceIds = citationIds
-            }
-        ]
-    }
+  ( proposal
+      & #targetEvidence .~ ([])
+      & #referenceEvidence .~ ([])
+      & #upstreamEvidence .~ ([])
+      & #claims
+        .~ ( [ PracticeReviewClaim
+                 { claimId = ClaimId "claim-complete-orchestration",
+                   kind = Fact,
+                   statement = "The bounded evidence supports the proposed architecture-practice classification.",
+                   material = True,
+                   evidenceIds = citationIds
+                 }
+             ]
+           )
+  )
   where
     citationIds =
       [evidenceId | EvidenceSource {citation = EvidenceItem {evidenceId}} <- target <> references <> upstream]

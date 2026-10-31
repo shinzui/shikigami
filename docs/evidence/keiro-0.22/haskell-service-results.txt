@@ -17,8 +17,18 @@ Success /Users/shinzui/Keikaku/bokuno/shikigami/shikigami-api/test/hurl/unavaila
 Executed requests: 3 (3000.0/s)
 Succeeded files:   1 (100.0%)
 Failed files:      0 (0.0%)
-CLI contracts: 40 real-process checks passed (no database or vendor).
-Haskell conventions: passed; 8 mutation/lexical baseline tests passed.
+CLI contracts: 70 real-process checks passed (no database or vendor).
+Haskell conventions: passed; 9 mutation/lexical baseline tests passed.
 Core pure suite: 541 tests passed after strict-field/operator/codec-preserving edits.
 Client suite: 9 tests passed. API suite: 30 tests passed.
 Final domain review and release qualification remain pending.
+
+Record/locator acceptance after workspace placement and lens conversion:
+All enabled application/test components compile.
+Core pure: all 543 tests passed (5.43s), including exact recursive workspace membership and checked locator JSON admission.
+API: 30 passed; agent: 37 passed; client: 9 passed; server: 94 passed (18.74s).
+Live Hurl default/perimeter/write/outage suites all passed again, including poisoned stdin ignored by a literal idempotent retry.
+70 offline CLI process checks passed; 9 style mutation/lexical checks passed.
+Packaged shell completion generation is implemented but awaits final artifact qualification in plan95.
+Core PostgreSQL: all 375 passed serially (106.31s). Workers: all 260 passed serially (168.42s), with actual fixture databases, no required database skips.
+just keiro-gate 0208d32: passed strict Language 6 checks, idempotent scaffold, all 151 generated conformance assertions and replay-neutral/non-breaking diff.

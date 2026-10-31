@@ -1,8 +1,10 @@
 module Main (main) where
 
+import Control.Lens ((&), (.~))
 import Data.Aeson (Value (..), eitherDecode, encode, object, (.=))
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy.Char8 qualified as LBS8
+import Data.Generics.Labels ()
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -512,7 +514,7 @@ traceHeaderTests =
               target = Just DanwaTarget {conversationId = "conv_target", parentMessageId = Just "msg_parent"}
               sink = DanwaConversation {topic = "support"}
           baseCtx <- ctxForDanwa (compatibilityIdentity "heartbeat") cfg target
-          _ <- Sink.dispatch (baseCtx {traceHeaders = sampleTraceHeaders}) sink sampleOutput
+          _ <- Sink.dispatch ((baseCtx & #traceHeaders .~ (sampleTraceHeaders))) sink sampleOutput
           assertCapturedTraceHeaders headers
     ]
 

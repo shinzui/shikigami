@@ -2,8 +2,10 @@ module Shikigami.Agent.Capability.WorkspaceSpec (tests) where
 
 import Baikai.Content (ToolCall (..), emptyToolCall)
 import Control.Exception (bracket)
+import Control.Lens ((&), (.~))
 import Data.Aeson (Value, object, (.=))
 import Data.ByteString qualified as BS
+import Data.Generics.Labels ()
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Effectful (runEff)
@@ -221,7 +223,7 @@ withWorkspaceEnv Fixture {repository} callback = do
 dispatch :: BehaviorEnv -> Text -> Value -> IO (Either ShikumiError (Either ToolError Text))
 dispatch BehaviorEnv {tools} name arguments =
   runEff . runErrorNoCallStack . runLLM $
-    runToolCall tools emptyToolCall {id_ = "test-call", name, arguments}
+    runToolCall tools (emptyToolCall & #id_ .~ ("test-call") & #name .~ (name) & #arguments .~ (arguments))
 
 assertObservationContains :: Text -> Either ShikumiError (Either ToolError Text) -> Assertion
 assertObservationContains needle = \case

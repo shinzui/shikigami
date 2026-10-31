@@ -10,9 +10,11 @@
 -- spawning, and the rendered help text is available to assert on.
 module Shikigami.Server.CommandSpec (tests) where
 
+import Control.Lens ((&), (.~))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy qualified as Lazy
+import Data.Generics.Labels ()
 import Data.List (isInfixOf)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (isNothing)
@@ -230,7 +232,7 @@ tests =
             environment = environmentSource environmentBindings (envSnapshot [("PG_CONNECTION_STRING", "postgresql:///shell-target")])
         case execParserPure adminPrefs adminInfo ["--database-url", target, "aggregate", "types"] of
           Success (Just (_, sources), options) -> do
-            let configured = options {namedSources = options.namedSources <> sources}
+            let configured = (options & #namedSources .~ (options.namedSources <> sources))
                 run = appConfigRun AdminRole configured (Right []) environment
             run.exitCode @?= 0
             case run.resolved of

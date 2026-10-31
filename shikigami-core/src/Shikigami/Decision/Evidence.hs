@@ -14,7 +14,9 @@ module Shikigami.Decision.Evidence
 where
 
 import Baikai.Evidence qualified as Baikai
+import Control.Lens ((&), (.~))
 import Data.Aeson (FromJSON, Result (..), ToJSON, Value (..), fromJSON, object, toJSON, (.=))
+import Data.Generics.Labels ()
 import Data.Int (Int64)
 import Data.Maybe (fromMaybe, isJust, isNothing)
 import Data.Text (Text)
@@ -157,7 +159,7 @@ decisionCallHooks store profile = DecisionCallHooks begin finish
                           ev
                     )
                       <$> evidence
-                  normalized = (\fact -> fact {relationshipKnown = False}) <$> facts
+                  normalized = (\fact -> (fact & #relationshipKnown .~ (False))) <$> facts
                   payload = object ["terminal" .= terminal, "facts" .= normalized, "evidence" .= (toJSON <$> evidence)]
               if fromIntegral ordinal /= attemptOrdinal token
                 then pure (refuse ContractMismatch "decision attempt ordinal differs")

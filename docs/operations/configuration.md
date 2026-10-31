@@ -698,4 +698,5 @@ exit 3, resolution failures exit 4 and usage errors exit 2.
 4 MiB. A literal `--payload` ignores stdin; omitted input remains `{}`. Invalid
 input diagnostics never print payload content. Use a private environment or
 configuration file for credentials. Version and native shell-completion actions
-need no service connection. See [ADR 72](../adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md).
+need no service connection. Nix installs Bash, Zsh and Fish completion files for all
+eleven public command-line executables. See [ADR 72](../adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md).

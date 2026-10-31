@@ -164,7 +164,7 @@ admitRunJobWith storePool directory declarations job =
         Right recorded -> do
           decision <- Directory.consultIdentityLifecycle directory recorded
           case lifecycleRefusal (principalText <$> meiboPrincipal recorded) decision of
-            Nothing -> pure (DrainAllowed (job {Shikigami.Agent.RunJob.identity = recorded}))
+            Nothing -> pure (DrainAllowed ((job & #identity .~ (recorded))))
             Just (resolvedPrincipalId, skipReason) -> recordRefusal resolvedPrincipalId skipReason
   where
     principalOf identityDecl = identityDecl ^. #principal

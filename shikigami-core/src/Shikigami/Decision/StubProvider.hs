@@ -21,7 +21,7 @@ import Shikigami.Behavior.StubProvider (stubApiProvider)
 import Shikigami.Prelude ((&), (.~))
 
 decisionStubProvider :: ApiProvider
-decisionStubProvider = stubApiProvider {complete = complete, stream = liftCompleteToStream complete}
+decisionStubProvider = (stubApiProvider & #complete .~ (complete) & #stream .~ (liftCompleteToStream complete))
   where
     complete model context options = do
       now <- getCurrentTime

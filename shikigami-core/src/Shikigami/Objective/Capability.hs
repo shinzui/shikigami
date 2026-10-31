@@ -38,6 +38,7 @@ data ObjectiveHost = ObjectiveHost
     verifyInternal :: !(AccessPrincipal -> InternalCommand -> IO (Either ObjectiveError ())),
     verifyResult :: !(ResultReference -> IO (Either ObjectiveError EvidenceVerification))
   }
+  deriving stock (Generic)
 
 admit :: ObjectiveHost -> Text -> Aeson.Value -> IO (Either ObjectiveError Access)
 admit host label semantic = do

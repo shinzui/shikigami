@@ -176,7 +176,7 @@ newBehaviorEnvFor logger selection traceSink = do
         BehaviorEnv
           { runtime,
             model,
-            options = options {Options.apiKey = Just (ApiKeyLiteral (revealSecretText credential))},
+            options = (options & #apiKey .~ (Just (ApiKeyLiteral (revealSecretText credential)))),
             traceSink,
             providerRegistry = Nothing,
             tools = mkRegistry [],
@@ -195,7 +195,7 @@ validateProviderSelection = \case
 withModelBinding :: ModelBinding -> BehaviorEnv -> Either ResponseCompatibilityError BehaviorEnv
 withModelBinding binding env = do
   validateResponseOptions (bindingModel binding) (bindingOptions binding)
-  let options = (bindingOptions binding) {Options.apiKey = ApiKeyLiteral . revealCredential <$> bindingCredential binding}
+  let options = (bindingOptions binding & #apiKey .~ (ApiKeyLiteral . revealCredential <$> bindingCredential binding))
   pure (env & #model .~ bindingModel binding & #options .~ options)
 
 -- | Lower a resolved credential into the per-call options baikai dispatches with.
@@ -213,7 +213,7 @@ withModelBinding binding env = do
 -- its content, so an accidental trace of this value cannot spill the key.
 credentialOptions :: SecretText -> Options
 credentialOptions credential =
-  emptyOptions {Options.apiKey = Just (ApiKeyLiteral (revealSecretText credential))}
+  (emptyOptions & #apiKey .~ (Just (ApiKeyLiteral (revealSecretText credential))))
 
 providerCall :: BehaviorEnv -> ProviderCall
 providerCall BehaviorEnv {model, options} = providerCallFor model options

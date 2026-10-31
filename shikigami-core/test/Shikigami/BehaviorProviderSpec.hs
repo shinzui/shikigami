@@ -57,9 +57,11 @@ import Baikai.Tool (ToolChoice (ToolChoiceNone), mkTool)
 import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Concurrent.MVar
 import Control.Exception (SomeException, bracket, finally, try)
+import Control.Lens ((&), (.~))
 import Control.Monad (unless, void)
 import Data.Aeson (Value, (.=))
 import Data.Aeson qualified as Aeson
+import Data.Generics.Labels ()
 import Data.IORef (newIORef, readIORef, writeIORef)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
@@ -232,9 +234,9 @@ profileConstraintTests =
                   call@(ProviderCall vendor api endpoint model _) = providerCall actual
                   allowed = Profile.AllowedCall vendor api endpoint model Profile.ThinkingHigh
                   profileFor permitsCli value =
-                    let template = stubProfile model (Profile.defaultProhibitions {Profile.cliTransportsAllowed = permitsCli})
-                        content = template.profile {Profile.allowedCalls = NonEmpty.singleton value}
-                     in template {profile = content, ref = template.ref {Profile.digest = profileDigest content}}
+                    let template = stubProfile model ((Profile.defaultProhibitions & #cliTransportsAllowed .~ (permitsCli)))
+                        content = (template.profile & #allowedCalls .~ (NonEmpty.singleton value))
+                     in (template & #profile .~ (content) & #ref .~ ((template.ref & #digest .~ (profileDigest content))))
               api @?= expectedApi
               endpoint @?= expectedEndpoint
               case constrainBehaviorEnv (profileFor True allowed) actual of
@@ -246,7 +248,7 @@ profileConstraintTests =
                     Left other -> assertFailure ("expected exact tuple refusal: " <> show other)
                     Right _ -> assertFailure "mismatched tuple was admitted"
                 )
-                [allowed {Profile.provider = "other"}, allowed {Profile.api = "other"}, allowed {Profile.endpointClass = "other"}, allowed {Profile.modelId = "other"}, allowed {Profile.thinking = Profile.ThinkingLow}]
+                [(allowed & #provider .~ ("other")), (allowed & #api .~ ("other")), (allowed & #endpointClass .~ ("other")), (allowed & #modelId .~ ("other")), (allowed & #thinking .~ (Profile.ThinkingLow))]
               if endpoint == "cli"
                 then case constrainBehaviorEnv (profileFor False allowed) actual of
                   Left (CliTransportForbidden attempted _) -> attempted @?= call
@@ -254,12 +256,12 @@ profileConstraintTests =
                 else pure ()
               if expectedEndpoint == "https"
                 then do
-                  let plaintext = actual {Behavior.model = actual.model {Model.baseUrl = "http://127.0.0.1:12345/v1"}}
+                  let plaintext = (actual & #model .~ ((actual.model & #baseUrl .~ ("http://127.0.0.1:12345/v1"))))
                   providerCall plaintext @?= ProviderCall vendor api "http" model (Just Profile.ThinkingHigh)
                   case constrainBehaviorEnv (profileFor True allowed) plaintext of
                     Left (ForbiddenCall _ _) -> pure ()
                     _ -> assertFailure "HTTPS-only profile admitted a plaintext endpoint"
-                  case constrainBehaviorEnv (profileFor True (allowed {Profile.endpointClass = "http"})) plaintext of
+                  case constrainBehaviorEnv (profileFor True ((allowed & #endpointClass .~ ("http")))) plaintext of
                     Right _ -> pure ()
                     Left violation -> assertFailure (show violation)
                 else pure ()
@@ -303,7 +305,7 @@ envWithThinking level BehaviorEnv {runtime, model, options, traceSink, providerR
   BehaviorEnv
     { runtime,
       model,
-      options = options {thinking = Just level},
+      options = (options & #thinking .~ (Just level)),
       traceSink,
       providerRegistry,
       tools,
@@ -411,12 +413,7 @@ repositoryRoot = go [".", ".."]
 
 textResponse :: Text -> Response
 textResponse reply =
-  emptyResponse
-    { message =
-        emptyPayload
-          { content = V.singleton (AssistantText (TextContent reply))
-          }
-    }
+  (emptyResponse & #message .~ ((emptyPayload & #content .~ (V.singleton (AssistantText (TextContent reply))))))
   where
     Response {message = emptyPayload} = emptyResponse
 
@@ -432,42 +429,42 @@ contractTests =
   testGroup
     "released batch contracts and promotion gate"
     [ testCase "Claude JSON response decodes through the public provider" $ withFake "printf '%s\\n' '{\"result\":\"marker\",\"is_error\":false}'\n" \dir exe -> do
-        resp <- (ClaudeCli.claudeCliProvider (ClaudeCli.defaultClaudeCliConfig {ClaudeCli.executable = exe, ClaudeCli.workingDir = Just dir})).complete (cliModel AnthropicMessagesCli) emptyContext emptyOptions
+        resp <- (ClaudeCli.claudeCliProvider ((ClaudeCli.defaultClaudeCliConfig & #executable .~ (exe) & #workingDir .~ (Just dir)))).complete (cliModel AnthropicMessagesCli) emptyContext emptyOptions
         responseError resp @?= Nothing
         flattenAssistantText (flattenAssistantBlocks resp) @?= "marker",
       testCase "Codex JSONL response decodes through the public provider" $ withFake "printf '%s\\n' '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"marker\"}}'\n" \dir exe -> do
-        resp <- (CodexCli.codexCliProvider (CodexCli.defaultCodexCliConfig {CodexCli.executable = exe, CodexCli.workingDir = Just dir})).complete (cliModel OpenAICompletionsCli) emptyContext emptyOptions
+        resp <- (CodexCli.codexCliProvider ((CodexCli.defaultCodexCliConfig & #executable .~ (exe) & #workingDir .~ (Just dir)))).complete (cliModel OpenAICompletionsCli) emptyContext emptyOptions
         responseError resp @?= Nothing
         flattenAssistantText (flattenAssistantBlocks resp) @?= "marker",
       testCase "malformed Claude output remains a classified failure" $ withFake "printf malformed\n" \_ exe -> do
-        resp <- (ClaudeCli.claudeCliProvider (ClaudeCli.defaultClaudeCliConfig {ClaudeCli.executable = exe})).complete (cliModel AnthropicMessagesCli) emptyContext emptyOptions
+        resp <- (ClaudeCli.claudeCliProvider ((ClaudeCli.defaultClaudeCliConfig & #executable .~ (exe)))).complete (cliModel AnthropicMessagesCli) emptyContext emptyOptions
         assertBool "malformed response refused" (responseError resp /= Nothing),
       testCase "nonzero Codex exit remains a classified failure" $ withFake "exit 7\n" \_ exe -> do
-        resp <- (CodexCli.codexCliProvider (CodexCli.defaultCodexCliConfig {CodexCli.executable = exe})).complete (cliModel OpenAICompletionsCli) emptyContext emptyOptions
+        resp <- (CodexCli.codexCliProvider ((CodexCli.defaultCodexCliConfig & #executable .~ (exe)))).complete (cliModel OpenAICompletionsCli) emptyContext emptyOptions
         assertBool "failed response refused" (responseError resp /= Nothing),
       testCase "released Codex cancellation gap keeps background CLI disabled" $ cancellationGap OpenAICompletionsCli,
       testCase "released Claude cancellation gap keeps background CLI disabled" $ cancellationGap AnthropicMessagesCli,
       testCase "CLI JsonObject refuses before calling a completion" do
-        validateResponseRequest (cliModel OpenAICompletionsCli) (emptyOptions {responseFormat = Just JsonObject}) emptyContext @?= Left UnsupportedFormat,
+        validateResponseRequest (cliModel OpenAICompletionsCli) ((emptyOptions & #responseFormat .~ (Just JsonObject))) emptyContext @?= Left UnsupportedFormat,
       testCase "Anthropic none cannot silently advertise tools" do
-        let model = emptyModel {Model.api = AnthropicMessages}
-            context = emptyContext {Context.tools = V.singleton (mkTool "inspect" "public tool" (Aeson.object []))}
-        validateResponseRequest model (emptyOptions {toolChoice = Just ToolChoiceNone}) context @?= Left (UnsupportedOption "behavior.options.tool_choice")
-        validateResponseRequest model (emptyOptions {toolChoice = Just ToolChoiceNone}) emptyContext @?= Right (),
+        let model = (emptyModel & #api .~ (AnthropicMessages))
+            context = (emptyContext & #tools .~ (V.singleton (mkTool "inspect" "public tool" (Aeson.object []))))
+        validateResponseRequest model ((emptyOptions & #toolChoice .~ (Just ToolChoiceNone))) context @?= Left (UnsupportedOption "behavior.options.tool_choice")
+        validateResponseRequest model ((emptyOptions & #toolChoice .~ (Just ToolChoiceNone))) emptyContext @?= Right (),
       testCase "Anthropic adaptive minimal cannot be clamped to low" do
         case [m | m <- allModels, Model.api m == AnthropicMessages, Model.reasoning m, (Model.anthropicMessagesCompatFor m).thinkingStyle == Compat.AnthropicThinkingAdaptive] of
-          model : _ -> validateResponseOptions model (emptyOptions {thinking = Just ThinkingMinimal}) @?= Left (UnsupportedOption "behavior.options.thinking")
+          model : _ -> validateResponseOptions model ((emptyOptions & #thinking .~ (Just ThinkingMinimal))) @?= Left (UnsupportedOption "behavior.options.thinking")
           [] -> assertFailure "adaptive Anthropic catalog is empty",
       testCase "invalid schema documents and blank names refuse before dispatch" do
-        let model = emptyModel {Model.api = OpenAIResponses}
+        let model = (emptyModel & #api .~ (OpenAIResponses))
         mapM_
-          (\format -> validateResponseOptions model (emptyOptions {responseFormat = Just format}) @?= Left (UnsupportedOption "behavior.options.response_format"))
+          (\format -> validateResponseOptions model ((emptyOptions & #responseFormat .~ (Just format))) @?= Left (UnsupportedOption "behavior.options.response_format"))
           [JsonSchema (jsonSchemaFormat "public" (Aeson.Number 42)), JsonSchema (jsonSchemaFormat "" (Aeson.object []))]
-        validateResponseOptions model (emptyOptions {responseFormat = Just (JsonSchema (jsonSchemaFormat "public" (Aeson.object [])))}) @?= Right ()
+        validateResponseOptions model ((emptyOptions & #responseFormat .~ (Just (JsonSchema (jsonSchemaFormat "public" (Aeson.object [])))))) @?= Right ()
     ]
 
 cliModel :: Api -> Model
-cliModel apiTag = emptyModel {Model.api = apiTag, Model.provider = if apiTag == AnthropicMessagesCli then "anthropic" else "openai", Model.modelId = "explicit-fake-model"}
+cliModel apiTag = (emptyModel & #api .~ (apiTag) & #provider .~ (if apiTag == AnthropicMessagesCli then "anthropic" else "openai") & #modelId .~ ("explicit-fake-model"))
 
 withFake :: String -> (FilePath -> FilePath -> IO a) -> IO a
 withFake body run = bracket acquire removeDirectoryRecursive \dir -> do
@@ -493,8 +490,8 @@ cancellationGap apiTag = withFake "sleep 5 &\necho $! > child\necho $$ > parent\
   finished <- newEmptyMVar
   let provider =
         if apiTag == AnthropicMessagesCli
-          then ClaudeCli.claudeCliProvider (ClaudeCli.defaultClaudeCliConfig {ClaudeCli.executable = exe, ClaudeCli.workingDir = Just dir})
-          else CodexCli.codexCliProvider (CodexCli.defaultCodexCliConfig {CodexCli.executable = exe, CodexCli.workingDir = Just dir})
+          then ClaudeCli.claudeCliProvider ((ClaudeCli.defaultClaudeCliConfig & #executable .~ (exe) & #workingDir .~ (Just dir)))
+          else CodexCli.codexCliProvider ((CodexCli.defaultCodexCliConfig & #executable .~ (exe) & #workingDir .~ (Just dir)))
   worker <- forkIO (void (try @SomeException (provider.complete (cliModel apiTag) emptyContext emptyOptions)) `finally` putMVar finished ())
   let cleanup = do
         mapM_

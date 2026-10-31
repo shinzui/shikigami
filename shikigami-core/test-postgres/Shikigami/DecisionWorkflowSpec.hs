@@ -65,7 +65,7 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 binding :: Text -> Text -> Text -> ModelBinding
-binding alias version exact = mustRight (modelBinding (ModelAlias alias) version alias "1" (stubModel {Model.modelId = exact}) Options.emptyOptions Nothing)
+binding alias version exact = mustRight (modelBinding (ModelAlias alias) version alias "1" ((stubModel & #modelId .~ (exact))) Options.emptyOptions Nothing)
 
 a, b, changedB :: ModelBinding
 a = binding "triage" "1" "stub-triage"
@@ -76,7 +76,7 @@ catalog :: ModelCatalog
 catalog = mustRight (modelCatalog [a, b])
 
 declaration :: AgentDecl
-declaration = Fixture.routerDecl {behavior = Flow {name = "shikumi-decision-example"}, decisionModels = ["triage", "investigate"]}
+declaration = (Fixture.routerDecl & #behavior .~ (Flow {name = "shikumi-decision-example"}) & #decisionModels .~ (["triage", "investigate"]))
 
 job :: Text -> RunJob
 job key = (Fixture.routerJob key) {triggerPayload = object ["request" .= ("Investigate the architecture practice" :: Text)]}
@@ -88,9 +88,9 @@ scriptedProvider triageAction investigation = do
         atomicModifyIORef' seen (\xs -> (xs <> [Model.modelId model], ()))
         response <- decisionStubProvider.complete model context options
         let reply = if Model.modelId model == "stub-triage" then toJSON (TriageResult triageAction "original triage facts" 0.82) else toJSON investigation
-            evidence = (\ev -> ev {B.responseCommitment = B.Observed (B.commitmentDigest reply)}) <$> response.evidence
+            evidence = (\ev -> (ev & #responseCommitment .~ (B.Observed (B.commitmentDigest reply)))) <$> response.evidence
         pure (response & #message . #content .~ V.singleton (AssistantText (TextContent (TE.decodeUtf8 (LBS.toStrict (encode reply))))) & #evidence .~ evidence)
-  pure (decisionStubProvider {complete = complete, stream = liftCompleteToStream complete}, readIORef seen)
+  pure ((decisionStubProvider & #complete .~ (complete) & #stream .~ (liftCompleteToStream complete)), readIORef seen)
 
 returned :: InvestigationResult
 returned = InvestigationResult ReturnResult "original investigation" "" 0.91
@@ -105,7 +105,7 @@ withRuntime fixture use = withShikigamiFreshDatabase fixture \connection ->
 deps :: AppEnv -> KirokuStore -> BehaviorEnv -> ApiProvider -> Decision.DecisionServices -> Agent.AgentRunDeps
 deps app store behavior handler services =
   (Fixture.routerDeps app behavior (Routing.RoutingRuntime (\_ -> pure Fixture.catalog) (\_ _ _ -> error "router evaluator must not run")) [declaration, Fixture.successSpecialist "first"])
-    { Agent.decisions = services {Decision.providers = [handler]},
+    { Agent.decisions = (services & #providers .~ ([handler])),
       Agent.deliveryPool = Just store.pool
     }
 
@@ -115,7 +115,7 @@ crashAt after label = do
   let hook (StepName name) = when (name == label) do
         crash <- atomicModifyIORef' once (\current -> (False, current))
         when crash (ioError (userError "decision fixture crash"))
-  pure (if after then Agent.defaultAgentRunHooks {Agent.afterStepBody = hook} else Agent.defaultAgentRunHooks {Agent.beforeStepBody = hook})
+  pure (if after then (Agent.defaultAgentRunHooks & #afterStepBody .~ (hook)) else (Agent.defaultAgentRunHooks & #beforeStepBody .~ (hook)))
 
 assertCompleted :: Either e (WorkflowOutcome (Either failure AgentRunResult)) -> IO Value
 assertCompleted = \case
@@ -180,15 +180,15 @@ tests fixture =
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned
           hooks <- crashAt False "record"
-          let withSink = declaration {sinks = [KizashiSignal "shinzui/shikigami" Reminder Normal 50 SubjectOwner (Just "recipient") "decision complete" []]}
+          let withSink = (declaration & #sinks .~ ([KizashiSignal "shinzui/shikigami" Reminder Normal 50 SubjectOwner (Just "recipient") "decision complete" []]))
               runtime = (deps app store behavior handler (Decision.defaultDecisionServices catalog)) {Agent.hooks = hooks, Agent.agents = [withSink, Fixture.successSpecialist "first"], Agent.grants = StaticGrants (Map.singleton "router" (Set.singleton SKizashiSignal))}
               request = job "decision-completed-replay"
           first <- try @SomeException (Agent.runAgentRunWorkflow runtime request)
           assertBool "crashed after decision commits" (either (const True) (const False) first)
           observed >>= (@?= ["stub-triage", "stub-investigate", "stub-investigate"])
           (changed, changedCalls) <- scriptedProvider ReturnNow (returned & #summary .~ "changed provider output")
-          let retained = Decision.emptyDecisionServices {Decision.programs = mustRight (programRegistry [SomeProgram derivedInvestigation])}
-              resumed = deps app store (behavior {model = stubModel {Model.modelId = "changed-default"}}) changed retained
+          let retained = (Decision.emptyDecisionServices & #programs .~ (mustRight (programRegistry [SomeProgram derivedInvestigation])))
+              resumed = deps app store ((behavior & #model .~ ((stubModel & #modelId .~ ("changed-default"))))) changed retained
           output <- assertCompleted =<< Agent.runAgentRunWorkflow resumed request
           assertBool "original confidence and branch survive" ("original investigation" `Text.isInfixOf` Text.pack (show output) && "0.82" `Text.isInfixOf` Text.pack (show output))
           _ <- assertCompleted =<< Agent.runAgentRunWorkflow resumed request
@@ -236,7 +236,7 @@ tests fixture =
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned
           let policy = profileFor ["stub-triage", "stub-investigate"]
-              declared = declaration {sanctionedProfile = Just (ProfileRequirement "decision-profile" (Just "1"))}
+              declared = (declaration & #sanctionedProfile .~ (Just (ProfileRequirement "decision-profile" (Just "1"))))
               runtime =
                 (deps app store behavior handler (Decision.defaultDecisionServices catalog))
                   { Agent.agents = [declared],
@@ -250,7 +250,7 @@ tests fixture =
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned
           let policy = profileFor ["stub-triage"]
-              declared = declaration {sanctionedProfile = Just (ProfileRequirement "decision-profile" (Just "1"))}
+              declared = (declaration & #sanctionedProfile .~ (Just (ProfileRequirement "decision-profile" (Just "1"))))
               runtime =
                 (deps app store behavior handler (Decision.defaultDecisionServices catalog))
                   { Agent.agents = [declared],
@@ -263,7 +263,7 @@ tests fixture =
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned
           let policy = profileFor ["stub-triage", "stub-investigate"]
-              declared = Fixture.routerDecl {sanctionedProfile = Just (ProfileRequirement "decision-profile" (Just "1"))}
+              declared = (Fixture.routerDecl & #sanctionedProfile .~ (Just (ProfileRequirement "decision-profile" (Just "1"))))
               runtime =
                 (deps app store behavior handler (Decision.defaultDecisionServices catalog))
                   { Agent.agents = [declared],
@@ -279,7 +279,7 @@ tests fixture =
                 response <- base.complete model context options
                 let invalid = toJSON (TriageResult Investigate "invalid confidence" 2.0)
                 pure (response & #message . #content .~ V.singleton (AssistantText (TextContent (TE.decodeUtf8 (LBS.toStrict (encode invalid))))))
-              handler = base {complete = complete, stream = liftCompleteToStream complete}
+              handler = (base & #complete .~ (complete) & #stream .~ (liftCompleteToStream complete))
               runtime = deps app store behavior handler (Decision.defaultDecisionServices catalog)
               request = job "decision-invalid-output"
           outcome <- Agent.runAgentRunWorkflow runtime request
@@ -319,7 +319,7 @@ tests fixture =
           let capture model context options = do
                 atomicModifyIORef' contexts (\xs -> (xs <> [show context], ()))
                 comparison.complete model context options
-              captured = comparison {complete = capture, stream = liftCompleteToStream capture}
+              captured = (comparison & #complete .~ (capture) & #stream .~ (liftCompleteToStream capture))
               input = InvestigationInput "Investigate the architecture practice" "original triage facts" (TE.decodeUtf8 (LBS.toStrict (encode Fixture.catalog)))
               prepare registered = PreparedDecision "compare" (runCorrelationId "compare") "compare" 0 "investigate" (descriptor (programRef registered)) (toJSON input) (modelDescriptor b) Nothing
           (callHooks, _) <- newMemoryCallHooks
@@ -412,7 +412,7 @@ profileFor models = ResolvedProfile content (Profile.SanctionedExecutionProfileR
           validFrom = UTCTime (fromGregorian 2026 1 1) 0,
           validUntil = Nothing,
           allowedCalls = case allowed of x : xs -> x :| xs; [] -> error "profile needs an allowed model",
-          prohibitions = Profile.defaultProhibitions {Profile.defaultedThinkingAllowed = True},
+          prohibitions = (Profile.defaultProhibitions & #defaultedThinkingAllowed .~ (True)),
           limits = Profile.unlimitedProfileLimits,
           minimumEvidenceStrength = Profile.EvidenceRequestedOnly,
           requiredCorrelationFields = [],

@@ -1,6 +1,8 @@
 module Shikigami.DirectoryStoreSpec (tests) where
 
 import Contravariant.Extras (contrazip2)
+import Control.Lens ((&), (.~))
+import Data.Generics.Labels ()
 import Data.Int (Int64)
 import Data.List (find)
 import Data.Text (Text)
@@ -55,7 +57,7 @@ tests databaseFixture =
                     reason = "principal lifecycle is paused",
                     idempotencyKey = "schedule:heartbeat:2026-08-23T00:00:00Z"
                   }
-              drainSkip = triggerSkip {stage = DrainStage, detail = "agent-run"}
+              drainSkip = (triggerSkip & #stage .~ (DrainStage) & #detail .~ ("agent-run"))
           expectRight "first trigger skip" =<< recordRunSkip pool triggerSkip
           expectRight "repeat trigger skip" =<< recordRunSkip pool triggerSkip
           countRunSkips pool TriggerStage (idempotencyKeyOf triggerSkip) >>= (@?= 1)

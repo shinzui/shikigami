@@ -17,6 +17,7 @@ where
 import Data.List (nub)
 import Data.Text (Text)
 import Data.Text qualified as Text
+import GHC.Generics (Generic)
 import System.FilePath (isAbsolute, normalise, splitDirectories)
 
 -- No JSON or Show instance: local source paths are operator configuration,
@@ -28,6 +29,7 @@ data RepositoryPolicy = RepositoryPolicy
     defaultRevision :: !Text,
     policyRevision :: !Text
   }
+  deriving stock (Generic)
 
 newtype WorkspaceCatalog = WorkspaceCatalog [RepositoryPolicy]
 

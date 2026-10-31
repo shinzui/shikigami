@@ -3,8 +3,10 @@ module Shikigami.DecisionEvidenceSpec (tests) where
 import Baikai.Evidence qualified as B
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
+import Control.Lens ((&), (.~))
 import Data.Aeson (Value (..), object, toJSON, (.=))
 import Data.Either (isLeft)
+import Data.Generics.Labels ()
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -76,7 +78,7 @@ profile limits = ResolvedProfile content (P.SanctionedExecutionProfileRef (P.Pro
           validFrom = epoch,
           validUntil = Nothing,
           allowedCalls = P.AllowedCall "stub" "stub" "in-process" "model-a" P.ThinkingHigh :| [],
-          prohibitions = P.defaultProhibitions {P.defaultedThinkingAllowed = True},
+          prohibitions = (P.defaultProhibitions & #defaultedThinkingAllowed .~ (True)),
           limits,
           minimumEvidenceStrength = P.EvidenceRequestedOnly,
           requiredCorrelationFields = [],
@@ -103,14 +105,14 @@ tests fixture =
             report.assessment @?= Nothing
             map (\call -> call.evidence) report.calls @?= [Just (toJSON (terminal "provider-1")), Just (toJSON (terminal "provider-2"))]
             assertBool "input payload is not in operational binding" (all (not . containsPrompt) report.invocations)
-            let changed = prepared {program = program {parameterDigest = "sha256:changed"}} :: PreparedDecision
+            let changed = (prepared & #program .~ ((program & #parameterDigest .~ ("sha256:changed")))) :: PreparedDecision
             ensureInvocation (postgresDecisionEvidenceStore pool) Nothing changed >>= (assertBool "changed state refused" . isLeft),
       testCase "a later decision keeps its own program label and different model" $
         withShikigamiFreshDatabase fixture \connection -> withPool connection \pool -> do
           let store = postgresDecisionEvidenceStore pool
               hooks = decisionCallHooks store Nothing
-              secondModel = model {modelId = "model-b", alias = ModelAlias "investigate"} :: ModelDescriptor
-              secondPrepared = prepared {identity = "invocation-b", label = "investigate", model = secondModel} :: PreparedDecision
+              secondModel = (model & #modelId .~ ("model-b") & #alias .~ (ModelAlias "investigate")) :: ModelDescriptor
+              secondPrepared = (prepared & #identity .~ ("invocation-b") & #label .~ ("investigate") & #model .~ (secondModel)) :: PreparedDecision
               secondEvidence = (terminal "provider-b") {B.requestedModel = "model-b"}
           first <- expectRight =<< hooks.beginCall context
           hooks.finishCall first CallSucceeded (Just (terminal "provider-a")) >>= (@?= Right ())
@@ -163,8 +165,8 @@ tests fixture =
           either (Right . failureCode) (const (Left ())) result @?= Right UnsupportedVersion,
       testCase "run-wide call ceilings survive store reconstruction" $
         withShikigamiFreshDatabase fixture \connection -> do
-          let policy = profile (P.unlimitedProfileLimits {P.maxCalls = Just 1})
-              pinned = prepared {policy = Just policy.ref} :: PreparedDecision
+          let policy = profile ((P.unlimitedProfileLimits & #maxCalls .~ (Just 1)))
+              pinned = (prepared & #policy .~ (Just policy.ref)) :: PreparedDecision
               pinnedContext = DecisionCallContext pinned model
           withPool connection \pool -> do
             _ <- expectRight =<< (decisionCallHooks (postgresDecisionEvidenceStore pool) (Just policy)).beginCall pinnedContext
@@ -174,8 +176,8 @@ tests fixture =
             hooks.beginCall pinnedContext >>= (assertBool "old expectation still consumes call capacity" . isLeft),
       testCase "concurrent admissions serialize against the same run ceiling" $
         withShikigamiFreshDatabase fixture \connection -> withPool connection \pool -> do
-          let policy = profile (P.unlimitedProfileLimits {P.maxCalls = Just 1})
-              pinned = prepared {policy = Just policy.ref} :: PreparedDecision
+          let policy = profile ((P.unlimitedProfileLimits & #maxCalls .~ (Just 1)))
+              pinned = (prepared & #policy .~ (Just policy.ref)) :: PreparedDecision
               hooks = decisionCallHooks (postgresDecisionEvidenceStore pool) (Just policy)
           a <- newEmptyMVar
           b <- newEmptyMVar
@@ -187,8 +189,8 @@ tests fixture =
           map (\call -> call.ordinal) report.calls @?= [1],
       testCase "unknown cost cannot become zero after a restart and live/resumed assessments agree" $
         withShikigamiFreshDatabase fixture \connection -> do
-          let policy = profile (P.unlimitedProfileLimits {P.maxCostMicroUsd = Just 1000})
-              pinned = prepared {policy = Just policy.ref} :: PreparedDecision
+          let policy = profile ((P.unlimitedProfileLimits & #maxCostMicroUsd .~ (Just 1000)))
+              pinned = (prepared & #policy .~ (Just policy.ref)) :: PreparedDecision
               pinnedContext = DecisionCallContext pinned model
           withPool connection \pool -> do
             let hooks = decisionCallHooks (postgresDecisionEvidenceStore pool) (Just policy)

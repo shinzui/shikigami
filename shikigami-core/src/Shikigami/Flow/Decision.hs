@@ -30,6 +30,7 @@ import Data.Typeable (Typeable)
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, liftIO, (:>))
 import Effectful.Dispatch.Dynamic (interpret, send)
 import Effectful.Exception (throwIO)
+import GHC.Generics (Generic)
 import Handan.Runtime (Runtime)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), currentRunGeneration, currentWorkflow, step)
 import Shikigami.Agent.Decl (AgentDecl)
@@ -71,6 +72,7 @@ data DecisionServices = DecisionServices
     codecs :: !ResultCodecRegistry,
     providers :: ![ApiProvider]
   }
+  deriving stock (Generic)
 
 defaultDecisionServices :: ModelCatalog -> DecisionServices
 defaultDecisionServices catalog = DecisionServices catalog examplePrograms exampleCodecs decisionProviders

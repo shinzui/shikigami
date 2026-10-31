@@ -19,6 +19,7 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy qualified as Lazy
+import Data.Generics.Labels ()
 import Data.List (nub, sortOn)
 import Data.Maybe (listToMaybe)
 import Data.Set qualified as Set

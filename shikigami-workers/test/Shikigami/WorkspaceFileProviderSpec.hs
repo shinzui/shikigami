@@ -330,6 +330,7 @@ tests fixture =
       testCase "substituted inputs and stale claim generations refuse before file IO" $ withEffect fixture \_ binding snapshot _ reference runtime input -> do
         let normal = executorFor runtime (pure ())
             protected =
+              -- The rank-n capability field cannot be represented by Generic.
               normal
                 { Executor.withTools = \accepted context requested use -> do
                     replaceWorkspaceFile runtime accepted (context & #generation .~ (context.generation + 1)) input >>= (@?= Left FileEffectRefused)

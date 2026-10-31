@@ -184,7 +184,7 @@ tests =
         env <- environment twoNodes handler hooks
         let prepared = preparedFor twoNodes bindingA
             changed :: PreparedDecision
-            changed = prepared {program = (prepared.program) {parameterDigest = "sha256:other"}}
+            changed = (prepared & #program .~ ((prepared.program) {parameterDigest = "sha256:other"}))
         runDecisionProgram env changed (programRef twoNodes) input >>= (assertBool "state refused" . isLeft)
         runDecisionProgram env prepared (programRef twoNodes) (Answer "changed" 0.1) >>= (assertBool "input refused" . isLeft)
         observed >>= (@?= []),
@@ -194,7 +194,7 @@ tests =
         env <- environment twoNodes handler hooks
         let policy = forbiddenProfile
             prepared = (preparedFor twoNodes bindingA) {policy = Just policy.ref} :: PreparedDecision
-        result <- runDecisionProgram (env {profile = Just policy}) prepared (programRef twoNodes) input
+        result <- runDecisionProgram ((env & #profile .~ (Just policy))) prepared (programRef twoNodes) input
         assertBool "profile refuses actual selected model" (isLeft result)
         observed >>= (@?= [])
         inspect >>= (\calls -> Map.size calls @?= 0),
@@ -202,14 +202,14 @@ tests =
         (hooks, inspect) <- newMemoryCallHooks
         (handler, observed) <- fixture 0 (\_ model options -> success model options input)
         env <- environment twoNodes handler hooks
-        result <- runDecisionProgram (env {callLimit = 1}) (preparedFor twoNodes bindingA) (programRef twoNodes) input
+        result <- runDecisionProgram ((env & #callLimit .~ (1))) (preparedFor twoNodes bindingA) (programRef twoNodes) input
         either (Right . failureCode) (const (Left ())) result @?= Right CallLimitExceeded
         observed >>= (\requests -> length requests @?= 1)
         inspect >>= (\calls -> Map.size calls @?= 1),
       testCase "evidence callback failure cannot become an internal retry" do
         (hooks, _) <- newMemoryCallHooks
         (handler, observed) <- fixture 0 (\_ model options -> success model options input)
-        let broken = hooks {finishCall = \_ _ _ -> ioError (userError "private callback error")}
+        let broken = (hooks & #finishCall .~ (\_ _ _ -> ioError (userError "private callback error")))
         env <- environment twoNodes handler broken
         result <- runDecisionProgram env (preparedFor twoNodes bindingA) (programRef twoNodes) input
         assertBool "failed" (isLeft result)
@@ -233,7 +233,7 @@ tests =
                 response <- success model options input
                 pure (response & #evidence .~ Nothing)
             )
-        absent <- runDecisionProgram (env {providers = [missingEvidence]}) (preparedFor twoNodes bindingA) (programRef twoNodes) input
+        absent <- runDecisionProgram ((env & #providers .~ ([missingEvidence]))) (preparedFor twoNodes bindingA) (programRef twoNodes) input
         assertBool "missing terminal refused" (isLeft absent),
       testCase "an explicit forbidden thinking override dispatches nothing" do
         let overridden =
@@ -241,7 +241,7 @@ tests =
                 "thinking"
                 ( Embed
                     ( \value -> do
-                        _ <- LLM.complete Model.emptyModel Context.emptyContext (Options.emptyOptions {Options.thinking = Just ThinkingHigh})
+                        _ <- LLM.complete Model.emptyModel Context.emptyContext ((Options.emptyOptions & #thinking .~ (Just ThinkingHigh)))
                         pure value
                     )
                 )
@@ -283,7 +283,7 @@ tests =
       testCase "admission callback refusal sends no request" do
         (hooks, _) <- newMemoryCallHooks
         (handler, observed) <- fixture 0 (\_ model options -> success model options input)
-        let denied = hooks {beginCall = \_ -> pure (Left (decisionFailure EvidenceFailure "persistence unavailable"))}
+        let denied = (hooks & #beginCall .~ (\_ -> pure (Left (decisionFailure EvidenceFailure "persistence unavailable"))))
         env <- environment twoNodes handler denied
         runDecisionProgram env (preparedFor twoNodes bindingA) (programRef twoNodes) input >>= (assertBool "refused" . isLeft)
         observed >>= (@?= []),
@@ -291,7 +291,7 @@ tests =
         (hooks, inspect) <- newMemoryCallHooks
         (handler, _) <- fixture 100_000 (\_ model options -> success model options input)
         env <- environment twoNodes handler hooks
-        result <- try @TransientBehaviorFailure (runDecisionProgram (env {timeoutMicros = 20_000}) (preparedFor twoNodes bindingA) (programRef twoNodes) input)
+        result <- try @TransientBehaviorFailure (runDecisionProgram ((env & #timeoutMicros .~ (20_000))) (preparedFor twoNodes bindingA) (programRef twoNodes) input)
         assertBool "timeout remains retryable" (isLeft result)
         calls <- inspect
         Map.size calls @?= 1
@@ -323,7 +323,7 @@ forbiddenProfile = ResolvedProfile content (Profile.SanctionedExecutionProfileRe
           validFrom = UTCTime (fromGregorian 2026 1 1) 0,
           validUntil = Nothing,
           allowedCalls = Profile.AllowedCall "anthropic" "messages" "https" "forbidden-selected-model" Profile.ThinkingHigh :| [],
-          prohibitions = Profile.defaultProhibitions {Profile.defaultedThinkingAllowed = True},
+          prohibitions = (Profile.defaultProhibitions & #defaultedThinkingAllowed .~ (True)),
           limits = Profile.unlimitedProfileLimits,
           minimumEvidenceStrength = Profile.EvidenceRequestedOnly,
           requiredCorrelationFields = [],

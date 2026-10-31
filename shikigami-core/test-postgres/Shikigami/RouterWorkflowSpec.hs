@@ -1,10 +1,12 @@
 module Shikigami.RouterWorkflowSpec (tests, routerDeps, routerJob, routerDecl, successSpecialist, catalog, runSuccessfulChild) where
 
 import Control.Exception (bracket, try)
+import Control.Lens ((&), (.~))
 import Control.Monad (filterM, void)
 import Data.Aeson (Value (..), object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
+import Data.Generics.Labels ()
 import Data.HashMap.Strict qualified as HashMap
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.List.NonEmpty (NonEmpty (..))
@@ -245,7 +247,7 @@ exhaustedBatchSpawnsNothing databaseFixture = do
     probe <- newProbe catalog (Aeson.toJSON (matchedDecision [selection "first" RoutingHigh "route"]))
     let job = routerJob "router:budget-exhausted"
         zeroBudget = either (error . Text.unpack) id (mkDelegationBudget 0)
-        constrainedRouter = routerDecl {delegationBudget = Just zeroBudget}
+        constrainedRouter = (routerDecl & #delegationBudget .~ (Just zeroBudget))
         deps = routerDeps appEnv behaviorEnv ((.runtime) probe) [constrainedRouter, successSpecialist "first"]
     refused <- try @DelegationError (AgentWorkflow.runAgentRunWorkflow deps job)
     assertEqual "budget exhaustion remains an operational failure" (Left DelegationBudgetExhausted) refused
@@ -481,7 +483,7 @@ catalog =
     }
 
 changedCatalog :: CandidateCatalog
-changedCatalog = catalog {version = CatalogVersion "changed-catalog", candidates = []}
+changedCatalog = (catalog & #version .~ (CatalogVersion "changed-catalog") & #candidates .~ ([]))
 
 candidate :: Text -> CandidateAvailability -> CandidateEntry
 candidate candidateName availability =

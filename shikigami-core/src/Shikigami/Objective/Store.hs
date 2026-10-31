@@ -290,7 +290,7 @@ validateTransition _now access expected mutation current = do
     withEvidence objective key inputs = do
       assignment <- maybe (Left ObjectiveMissing) Right (find ((== key) . (.definition.assignmentId)) objective.assignments)
       records <- forM inputs \input -> do
-        unless (validKey input.key && all ((/= input.key) . (.input.key)) objective.evidence && any ((== input.criterion) . (.key)) objective.criteria && validKey (evidenceArtifact input)) (Left ObjectiveInvalidEvidence)
+        unless (all ((/= input.key) . (.input.key)) objective.evidence && any ((== input.criterion) . (.key)) objective.criteria && validKey (evidenceArtifact input)) (Left ObjectiveInvalidEvidence)
         disposition <- maybe (Left ObjectiveInvalidEvidence) Right (lookup input access.checks)
         case input of
           Attestation {statement} -> unless (not (Text.null statement) && Text.length statement <= 4096 && any (\criterion -> criterion.key == input.criterion && criterion.kind == HumanVerifiable) objective.criteria) (Left ObjectiveInvalidEvidence)

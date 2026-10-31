@@ -35,14 +35,13 @@ with tempfile.TemporaryDirectory(prefix="shikigami-cli-contract-") as directory:
                    "shikigami-client", "shikigami-migrate"]:
         assert b"0.1.0.0" in run(binary, ["--version"], env=clean)
         assert b"Usage:" in run(binary, ["--help"], env=clean)
+        for shell in ["bash", "zsh", "fish"]:
+            assert binary.encode() in run(binary, [f"--{shell}-completion-script", binary], env=clean)
     for binary, prefix in [("shikigami", []), ("shikigami-client", []),
                            ("shikigami-agent-launch", ["interactive"])]:
         for flag in ["--describe-config", "--describe-config-json"]:
             output = run(binary, prefix + ["--config", str(poison), flag], env=clean)
             assert output
-    for shell in ["bash", "zsh", "fish"]:
-        output = run("shikigami", [f"--{shell}-completion-script", "shikigami"], env=clean)
-        assert b"shikigami" in output
     client = "shikigami-client"
     for flag in ["--check-config", "--explain-config", "--explain-config-json"]:
         run(client, [flag], env=clean)

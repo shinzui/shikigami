@@ -12,7 +12,7 @@ import Shikigami.Prelude
 validateCriteria :: [Criterion] -> Either ObjectiveError ()
 validateCriteria criteria = do
   unless (not (null criteria) && length criteria <= 64 && length (nub (map (.key) criteria)) == length criteria) (Left (ObjectiveInvalid "criteria must have distinct keys and contain 1..64 items"))
-  forM_ criteria \item -> unless (validKey item.key && not (Text.null item.description) && Text.length item.description <= 4096) (Left (ObjectiveInvalid "invalid criterion"))
+  forM_ criteria \item -> unless (not (Text.null item.description) && Text.length item.description <= 4096) (Left (ObjectiveInvalid "invalid criterion"))
 
 validateGraph :: [AssignmentDraft] -> Either ObjectiveError ()
 validateGraph graph = do

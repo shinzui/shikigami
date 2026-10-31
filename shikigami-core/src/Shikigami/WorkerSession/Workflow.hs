@@ -18,6 +18,7 @@ where
 import Control.Exception (fromException)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
+import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, raise, (:>))

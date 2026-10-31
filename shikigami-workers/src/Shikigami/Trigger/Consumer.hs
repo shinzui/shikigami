@@ -653,10 +653,10 @@ prepareTrigger directory detail agent job hit = do
   let declaredPrincipalId = principalIdOf agent
   decision <- Directory.consultLifecycle directory declaredPrincipalId (agent ^. #name)
   pure case decision of
-    Directory.AllowRun Nothing -> EnqueueTrigger (job {RunJob.identity = compatibilityIdentity (agent ^. #name)}) hit
+    Directory.AllowRun Nothing -> EnqueueTrigger ((job & #identity .~ (compatibilityIdentity (agent ^. #name)))) hit
     Directory.AllowRun (Just principal) ->
       case mkAgentPrincipal ((.principalId) principal) of
-        Right admittedPrincipal -> EnqueueTrigger (job {RunJob.identity = VerifiedIdentity admittedPrincipal}) hit
+        Right admittedPrincipal -> EnqueueTrigger ((job & #identity .~ (VerifiedIdentity admittedPrincipal))) hit
         Left reason -> refused (Just ((.principalId) principal)) reason
     Directory.SkipRun principal reason -> refused (Just ((.principalId) principal)) reason
     Directory.UnknownPrincipal identifier -> refused declaredPrincipalId ("unknown principal: " <> identifier)

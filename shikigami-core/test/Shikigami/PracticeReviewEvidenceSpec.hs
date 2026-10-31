@@ -8,7 +8,7 @@ module Shikigami.PracticeReviewEvidenceSpec
   )
 where
 
-import Control.Lens ((^.))
+import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (eitherDecode, encode, object, (.=))
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as ByteString8
@@ -311,21 +311,23 @@ completeOpenTelemetryReferenceChangeTrigger triggerKey prior =
   where
     original@PracticeReviewTrigger {adoptions} = completeOpenTelemetryTrigger triggerKey
     changed =
-      original
-        { triggerKind = ReferenceChange,
-          adoptions =
-            [ changedReferenceBinding binding
-            | binding <- adoptions
-            ],
-          referenceChange =
-            Just
-              ChangedReference
-                { project = practiceProject,
-                  range = RevisionRange {changeKind = Modified, before = Just (parseRevision practiceSha1), head = parseRevision practiceSha2},
-                  changedPaths = [relativePath "docs/practices/PRACTICE-1.md"]
-                },
-          priorReviewId = Just prior
-        }
+      ( original
+          & #triggerKind .~ (ReferenceChange)
+          & #adoptions
+            .~ ( [ changedReferenceBinding binding
+                 | binding <- adoptions
+                 ]
+               )
+          & #referenceChange
+            .~ ( Just
+                   ChangedReference
+                     { project = practiceProject,
+                       range = RevisionRange {changeKind = Modified, before = Just (parseRevision practiceSha1), head = parseRevision practiceSha2},
+                       changedPaths = [relativePath "docs/practices/PRACTICE-1.md"]
+                     }
+               )
+          & #priorReviewId .~ (Just prior)
+      )
 
     changedReferenceBinding PracticeAdoptionBinding {practice, claimedApplicability, mode, owners, upstreamProjects} =
       PracticeAdoptionBinding

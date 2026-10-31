@@ -1,10 +1,12 @@
 module Shikigami.SinkDeliverySpec (tests) where
 
 import Control.Exception (bracket)
+import Control.Lens ((&), (.~))
 import Control.Monad (filterM, void)
 import Data.Aeson (Result (..), eitherDecode, encode, fromJSON, object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy.Char8 qualified as LBS8
+import Data.Generics.Labels ()
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -208,7 +210,7 @@ pausedEnqueue :: DatabaseFixture -> IO ()
 pausedEnqueue databaseFixture =
   (withFixture databaseFixture) "paused-enqueue" [signalSink "paused"] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
     directory <- directoryWith Paused
-    rows <- runWorkflowAndRows (deps {AgentWorkflow.directory = directory}) appEnv (runJob {identity = verifiedHeartbeatAgentIdentity})
+    rows <- runWorkflowAndRows ((deps & #directory .~ (directory))) appEnv ((runJob & #identity .~ (verifiedHeartbeatAgentIdentity)))
     assertEqual "lifecycle refusal creates no outbox row" [] rows
     receipt <- Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey ((runKeyText ((.idempotencyKey) runJob)) <> ":sink:0"))
     assertEqual "lifecycle refusal creates no pending receipt" (Right Nothing) receipt
@@ -227,8 +229,8 @@ pauseBeforePublish databaseFixture = do
     (withFixture databaseFixture) "pause-before-publish" [signalSink "paused-after-enqueue"] (kizashiAt port) unreachableDanwa \deps appEnv pool runJob -> do
       directory <- mutableDirectory lifecycleRef
       _ <- expectRight "reconcile verified heartbeat grant" =<< GrantStore.reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat"
-      let gatedDeps = deps {AgentWorkflow.directory = directory}
-      [row] <- runWorkflowAndRows gatedDeps appEnv (runJob {identity = verifiedHeartbeatAgentIdentity})
+      let gatedDeps = (deps & #directory .~ (directory))
+      [row] <- runWorkflowAndRows gatedDeps appEnv ((runJob & #identity .~ (verifiedHeartbeatAgentIdentity)))
       case Integration.decodeJsonIntegrationEvent (rowEvent row) of
         Right AgentWorkflow.SinkIntent {AgentWorkflow.identity = intentIdentity} ->
           assertEqual "outbox intent carries canonical principal" verifiedHeartbeatAgentIdentity intentIdentity
@@ -271,7 +273,7 @@ egressIntentMetadata :: DatabaseFixture -> IO ()
 egressIntentMetadata databaseFixture =
   (withFixture databaseFixture) "egress-metadata" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
     _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" (compatibilityIdentity "heartbeat") SChannelEgress (Just "test")
-    [row] <- runWorkflowAndRows deps appEnv (runJob {triggerPayload = Aeson.toJSON triggeringActivity})
+    [row] <- runWorkflowAndRows deps appEnv ((runJob & #triggerPayload .~ (Aeson.toJSON triggeringActivity)))
     case Integration.decodeJsonIntegrationEvent (rowEvent row) of
       Right AgentWorkflow.SinkIntent {AgentWorkflow.conversationKey, AgentWorkflow.triggeringActivityId} -> do
         assertEqual "activity subject becomes the durable conversation key" (Just "conv_55012") conversationKey
@@ -300,11 +302,8 @@ egressReceiptRecording databaseFixture = do
       _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" (compatibilityIdentity "heartbeat") SChannelEgress (Just "test")
       authenticatedHttp <- expectRight "construct authenticated sink HTTP" =<< newSinkHttp testHttpLimits (credentialsFromConfig kanmonTestConfig) unreachableDanwa
       let configuredDeps =
-            deps
-              { AgentWorkflow.kanmon = KanmonConfig {baseUrl = localBaseUrl port},
-                AgentWorkflow.http = authenticatedHttp
-              }
-      [row] <- runWorkflowAndRows configuredDeps appEnv (runJob {triggerPayload = Aeson.toJSON triggeringActivity})
+            (deps & #kanmon .~ (KanmonConfig {baseUrl = localBaseUrl port}) & #http .~ (authenticatedHttp))
+      [row] <- runWorkflowAndRows configuredDeps appEnv ((runJob & #triggerPayload .~ (Aeson.toJSON triggeringActivity)))
       before <- lookupReceipt pool row
       assertEqual "enqueue atomically records pending" Delivery.Pending ((.status) before)
       index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (runJobWorkflowId runJob) 0)
@@ -332,8 +331,8 @@ egressPermanentRejection databaseFixture = do
   testWithApplication (pure (rejectingKanmonApp requests)) \port ->
     (withFixture databaseFixture) "egress-403" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
       _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" (compatibilityIdentity "heartbeat") SChannelEgress (Just "test")
-      let configuredDeps = deps {AgentWorkflow.kanmon = KanmonConfig {baseUrl = localBaseUrl port}}
-      [row] <- runWorkflowAndRows configuredDeps appEnv (runJob {triggerPayload = Aeson.toJSON triggeringActivity})
+      let configuredDeps = (deps & #kanmon .~ (KanmonConfig {baseUrl = localBaseUrl port}))
+      [row] <- runWorkflowAndRows configuredDeps appEnv ((runJob & #triggerPayload .~ (Aeson.toJSON triggeringActivity)))
       published <- runEff (AgentWorkflow.publishSinkIntent configuredDeps row)
       case published of
         Outbox.PublishRejected _ -> pure ()
@@ -347,8 +346,8 @@ egressDenied databaseFixture = do
   requests <- newIORef (0 :: Int)
   testWithApplication (pure (rejectingKanmonApp requests)) \port ->
     (withFixture databaseFixture) "egress-denied" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
-      let configuredDeps = deps {AgentWorkflow.kanmon = KanmonConfig {baseUrl = localBaseUrl port}}
-      rows <- runWorkflowAndRows configuredDeps appEnv (runJob {triggerPayload = Aeson.toJSON triggeringActivity})
+      let configuredDeps = (deps & #kanmon .~ (KanmonConfig {baseUrl = localBaseUrl port}))
+      rows <- runWorkflowAndRows configuredDeps appEnv ((runJob & #triggerPayload .~ (Aeson.toJSON triggeringActivity)))
       assertEqual "denied egress creates no outbox row" [] rows
       receipt <- Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey ((runKeyText ((.idempotencyKey) runJob)) <> ":sink:0"))
       assertEqual "denied egress creates no receipt" (Right Nothing) receipt
@@ -364,8 +363,8 @@ actionDeniedAtEnqueue databaseFixture = do
   (withFixture databaseFixture) "action-denied-enqueue" [signalSink "denied"] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
     _ <- expectRight "reconcile verified action grant" =<< GrantStore.reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat"
     directory <- directoryWith Active
-    let gatedDeps = deps {AgentWorkflow.actionAuthorizer = rejectingAuthorizer requests (ActionPolicyDenied "exact recipient denied"), AgentWorkflow.directory = directory}
-    rows <- runWorkflowAndRows gatedDeps appEnv (runJob {identity = verifiedHeartbeatAgentIdentity})
+    let gatedDeps = (deps & #actionAuthorizer .~ (rejectingAuthorizer requests (ActionPolicyDenied "exact recipient denied")) & #directory .~ (directory))
+    rows <- runWorkflowAndRows gatedDeps appEnv ((runJob & #identity .~ (verifiedHeartbeatAgentIdentity)))
     assertEqual "C13 denial creates no outbox" [] rows
     index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (runJobWorkflowId runJob) 0)
     case maybe (Error "missing dispatch-sinks") fromJSON (Map.lookup "dispatch-sinks" index) of
@@ -385,8 +384,8 @@ actionUnavailableAtEnqueue databaseFixture = do
   (withFixture databaseFixture) "action-unavailable-enqueue" [signalSink "unavailable"] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
     _ <- expectRight "reconcile verified action grant" =<< GrantStore.reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat"
     directory <- directoryWith Active
-    let gatedDeps = deps {AgentWorkflow.actionAuthorizer = rejectingAuthorizer requests (ActionServiceUnavailable "Kikan fixture outage"), AgentWorkflow.directory = directory}
-    rows <- runWorkflowAndRows gatedDeps appEnv (runJob {identity = verifiedHeartbeatAgentIdentity})
+    let gatedDeps = (deps & #actionAuthorizer .~ (rejectingAuthorizer requests (ActionServiceUnavailable "Kikan fixture outage")) & #directory .~ (directory))
+    rows <- runWorkflowAndRows gatedDeps appEnv ((runJob & #identity .~ (verifiedHeartbeatAgentIdentity)))
     assertEqual "authorization outage creates no outbox" [] rows
     index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (runJobWorkflowId runJob) 0)
     case maybe (Error "missing dispatch-sinks") fromJSON (Map.lookup "dispatch-sinks" index) of
@@ -415,8 +414,8 @@ actionRevokedBeforePublish databaseFixture = do
                     else allowFixture principal action,
                 kawaSource = "fixture"
               }
-          gatedDeps = deps {AgentWorkflow.actionAuthorizer = authorizer, AgentWorkflow.directory = directory}
-      [row] <- runWorkflowAndRows gatedDeps appEnv (runJob {identity = verifiedHeartbeatAgentIdentity})
+          gatedDeps = (deps & #actionAuthorizer .~ (authorizer) & #directory .~ (directory))
+      [row] <- runWorkflowAndRows gatedDeps appEnv ((runJob & #identity .~ (verifiedHeartbeatAgentIdentity)))
       writeIORef deny True
       result <- runEff (AgentWorkflow.publishSinkIntent gatedDeps row)
       assertEqual "publish-time policy denial is a terminal non-send" Outbox.PublishSucceeded result
@@ -805,7 +804,7 @@ receiptCommitGap databaseFixture = do
   posts <- newIORef (0 :: Int)
   testWithApplication (pure (\request respond -> modifyIORef' posts (+ 1) >> kawaDoorwayApplication remote request respond)) \port ->
     withFixture databaseFixture "receipt-gap" [KawaDigest {subjectType = "agent", verb = "completed"}] unreachableKizashi unreachableDanwa \base appEnv pool runJob -> do
-      let deps = base {AgentWorkflow.kawa = KawaConfig {baseUrl = "http://127.0.0.1:" <> Text.pack (show port), sourceSegment = "shinzui/shikigami"}}
+      let deps = (base & #kawa .~ (KawaConfig {baseUrl = "http://127.0.0.1:" <> Text.pack (show port), sourceSegment = "shinzui/shikigami"}))
       [row] <- runWorkflowAndRows deps appEnv runJob
       expectRight "inject receipt commit failure" =<< Pool.use pool (Session.statement () (preparable "ALTER TABLE shikigami.sink_deliveries ADD CONSTRAINT receipt_gap CHECK (status <> 'delivered') NOT VALID" Encoders.noParams Decoders.noResult))
       assertEqual "acknowledged downstream acceptance is terminal" Outbox.PublishSucceeded =<< runEff (AgentWorkflow.publishSinkIntent deps row)

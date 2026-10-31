@@ -17,7 +17,9 @@ import Baikai.Provider.Claude.Interactive qualified as Claude
 import Baikai.Provider.OpenAI.Interactive qualified as Codex
 import Baikai.ThinkingLevel (ThinkingLevel, parseThinkingLevel, renderThinkingLevel)
 import Control.Exception (IOException, try)
+import Control.Lens ((&), (.~))
 import Data.ByteString qualified as BS
+import Data.Generics.Labels ()
 import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -190,12 +192,12 @@ launchRequest config prompt system = do
 claudeConfig :: LaunchConfig -> Claude.ClaudeInteractiveConfig
 claudeConfig config = case config.executable of
   Nothing -> Claude.defaultClaudeInteractiveConfig
-  Just executable -> Claude.defaultClaudeInteractiveConfig {Claude.executable = executable}
+  Just executable -> (Claude.defaultClaudeInteractiveConfig & #executable .~ (executable))
 
 codexConfig :: LaunchConfig -> Codex.CodexInteractiveConfig
 codexConfig config = case config.executable of
   Nothing -> Codex.defaultCodexInteractiveConfig
-  Just executable -> Codex.defaultCodexInteractiveConfig {Codex.executable = executable}
+  Just executable -> (Codex.defaultCodexInteractiveConfig & #executable .~ (executable))
 
 -- | The terminal requirement is disabled only by deterministic fake tests.
 launchInteractive :: Bool -> LaunchConfig -> Text -> Maybe Text -> IO (ExitCode, Text)
@@ -218,7 +220,7 @@ launchInteractive requireTerminal config prompt system = case launchRequest conf
               if not (and existing)
                 then pure (ExitFailure 4, "launch directory does not exist")
                 else do
-                  let canonical = request {Interactive.workingDir = Just workingDirectory, Interactive.extraDirs = extraDirectories}
+                  let canonical = (request & #workingDir .~ (Just workingDirectory) & #extraDirs .~ (extraDirectories))
                   launched <- case config.provider of
                     Interactive.InteractiveClaude -> Claude.launchClaudeInteractive (claudeConfig config) canonical
                     Interactive.InteractiveCodex -> Codex.launchCodexInteractive (codexConfig config) canonical

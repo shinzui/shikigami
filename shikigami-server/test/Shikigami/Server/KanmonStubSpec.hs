@@ -1,8 +1,10 @@
 module Shikigami.Server.KanmonStubSpec (tests) where
 
+import Control.Lens ((&), (.~))
 import Data.Aeson (decode, encode)
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as LBS
+import Data.Generics.Labels ()
 import Data.IORef (readIORef)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -45,7 +47,7 @@ tests =
         state <- newStubKanmonState
         testWithApplication (pure (stubKanmonApplication state (Just expectedToken) allowed)) \port -> do
           malformed <- postAction port route (Just expectedAuthorization) "not-json"
-          forbidden <- postAction port route (Just expectedAuthorization) (encode (actionRequest {conversationKey = "conv_forbidden"}))
+          forbidden <- postAction port route (Just expectedAuthorization) (encode ((actionRequest & #conversationKey .~ ("conv_forbidden"))))
           missing <- postAction port "/channels/zendesk/actions/reply_to_conversation" (Just expectedAuthorization) (encode actionRequest)
           statusCode (Http.responseStatus malformed) @?= 400
           statusCode (Http.responseStatus forbidden) @?= 403
@@ -63,8 +65,8 @@ tests =
       testCase "requests without idempotency keys remain fresh effects" do
         state <- newStubKanmonState
         testWithApplication (pure (stubKanmonApplication state (Just expectedToken) allowed)) \port -> do
-          first <- postAction port route (Just expectedAuthorization) (encode (actionRequest {idempotencyKey = Nothing}))
-          second <- postAction port route (Just expectedAuthorization) (encode (actionRequest {idempotencyKey = Nothing}))
+          first <- postAction port route (Just expectedAuthorization) (encode ((actionRequest & #idempotencyKey .~ (Nothing))))
+          second <- postAction port route (Just expectedAuthorization) (encode ((actionRequest & #idempotencyKey .~ (Nothing))))
           assertBool "fresh requests receive different ids" ((.activityId) (decodeResponse first) /= (.activityId) (decodeResponse second))
           (.acceptedEffects) <$> readIORef state >>= (@?= 2)
     ]

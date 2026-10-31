@@ -74,7 +74,8 @@ coordinationTools (Just host) authorizer =
                   Right response ->
                     let value = toJSON response
                         output = textToolOutput (Text.decodeUtf8 (Lazy.toStrict (Aeson.encode value)))
-                     in Right (output {structuredContent = Just value})
+                     in -- The public upstream ToolOutput has no Generic instance.
+                        Right (output {structuredContent = Just value})
                   Left _ -> Left (ToolRunFailed name "worker command store unavailable")
         )
 

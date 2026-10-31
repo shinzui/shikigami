@@ -69,7 +69,7 @@ tests fixture =
         run env (reserveWorkspaceTx (root <> "-other") request repo) >>= (@?= Left WorkspaceBindingConflict),
       testCase "distinct assignments have private files, objects and indexes" $ withFixture fixture \env source root repo -> do
         (one, _) <- right =<< run env (reserveWorkspaceTx root request repo)
-        (two, _) <- right =<< run env (reserveWorkspaceTx root (request {assignment = Just (WorkerSessionId "session", AssignmentId "two")}) repo)
+        (two, _) <- right =<< run env (reserveWorkspaceTx root ((request & #assignment .~ (Just (WorkerSessionId "session", AssignmentId "two")))) repo)
         assertBool "different resources" (one.workspace /= two.workspace)
         before <- sourceSnapshot source
         allocateWorkspace root one Reserved >>= (@?= Right ())
@@ -105,7 +105,7 @@ tests fixture =
         -- next policy identity. The old private repository retains its bundle.
         writeFile (source </> "AGENTS.md") "PRIVATE_NEW_ROOT_POLICY"
         nextRepository <- commitRepository source
-        (nextBinding, _) <- right =<< run env (reserveWorkspaceTx root (request {assignment = Just (WorkerSessionId "session", AssignmentId "next")}) nextRepository)
+        (nextBinding, _) <- right =<< run env (reserveWorkspaceTx root ((request & #assignment .~ (Just (WorkerSessionId "session", AssignmentId "next")))) nextRepository)
         allocateWorkspace root nextBinding Reserved >>= (@?= Right ())
         nextBundle <- right =<< loadRepositoryInstructions nextBinding 65536
         assertBool "new assignment admits next instruction identity" (bundleDigest nextBundle /= bundleDigest bundle)
@@ -166,7 +166,7 @@ tests fixture =
         allocateWorkspace root binding Reserved >>= (@?= Left WorkspaceAllocationRefused)
         run env (inspectWorkspaceTx binding.workspace) >>= (@?= Just (binding, Reserved)),
       testCase "destination substitution and invalid request refuse" $ withFixture fixture \env _ root repo -> do
-        run env (reserveWorkspaceTx root (request {principal = UnresolvedLegacyIdentity}) repo) >>= (@?= Left InvalidWorkspaceRequest)
+        run env (reserveWorkspaceTx root ((request & #principal .~ (UnresolvedLegacyIdentity))) repo) >>= (@?= Left InvalidWorkspaceRequest)
         (binding, _) <- right =<< run env (reserveWorkspaceTx root request repo)
         createDirectory root
         createDirectory (root </> "elsewhere")

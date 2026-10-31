@@ -1,8 +1,10 @@
 module Shikigami.DirectorySpec (tests) where
 
 import Control.Exception (bracket)
+import Control.Lens ((&), (.~))
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
+import Data.Generics.Labels ()
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (secondsToNominalDiffTime)
@@ -126,7 +128,7 @@ heartbeat :: PrincipalRecord
 heartbeat = PrincipalRecord {principalId = heartbeatId, handle = "heartbeat", lifecycle = Active}
 
 heartbeatPaused :: PrincipalRecord
-heartbeatPaused = heartbeat {lifecycle = Paused}
+heartbeatPaused = (heartbeat & #lifecycle .~ (Paused))
 
 archive :: PrincipalRecord
 archive = PrincipalRecord {principalId = archiveId, handle = "archive", lifecycle = Deactivated}

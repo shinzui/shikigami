@@ -254,6 +254,7 @@ tests fixture =
           completed.phase @?= Succeeded
           run env countPendingAwakeables >>= (@?= 0)
           calls >>= (\values -> length values @?= 1)
+          -- ExecutionRuntime's rank-n withTools field prevents deriving Generic.
           let retiredBinding = executor {Executor.selectionRuntime = \_ -> error "completed result looked up a retired provider"}
           result <- expectRight =<< Start.readExecutionResult retiredBinding snapshot.identity completed
           assertBool "protected terminal result retained" (case result of Aeson.Object _ -> True; _ -> False)
@@ -994,7 +995,7 @@ driverRuntime env toolResponse = do
         ordinal <- atomicModifyIORef' observed (\values -> (values <> [context], length values))
         response <- Provider.complete stubApiProvider model context options
         pure (if toolResponse && ordinal == 0 then response & #message . #stopReason .~ ToolUse & #message . #content .~ Vector.fromList [Content.AssistantToolCall (Content.ToolCall "first" "observe" (object [])), Content.AssistantToolCall (Content.ToolCall "second" "observe" (object []))] else response)
-      provider = stubApiProvider {Provider.complete = complete, Provider.stream = liftCompleteToStream complete}
+      provider = (stubApiProvider & #complete .~ (complete) & #stream .~ (liftCompleteToStream complete))
       tool = mkDynTool "observe" "Observe fixture." (object []) \_ -> do
         unsafeEff_ (modifyIORef' toolCalls (+ 1))
         pure (Right (ToolOutput.textToolOutput "accepted observation"))

@@ -363,18 +363,22 @@ rootCancellationCase fixture stopAcknowledged = do
   let configure runtime =
         runtime
           & #backend
-          .~ ( runtime.backend
-                 { launch = \profile files scratch target record -> do
-                     result <- runtime.backend.launch profile files scratch target record
-                     writeIORef directory (Just target)
-                     removeFile (target </> "complete.json")
-                     pure result,
-                   stop = \_ -> do
-                     target <- readIORef directory >>= maybe (fail "missing fixture capture") pure
-                     Bytes.readFile (target </> "cancel") >>= (@?= "1\n")
-                     modifyIORef' stops (+ 1)
-                     pure (if stopAcknowledged then Right () else Left Systemd.SystemdUncertain)
-                 }
+          .~ ( ( runtime.backend
+                   & #launch
+                   .~ ( \profile files scratch target record -> do
+                          result <- runtime.backend.launch profile files scratch target record
+                          writeIORef directory (Just target)
+                          removeFile (target </> "complete.json")
+                          pure result
+                      )
+                   & #stop
+                   .~ ( \_ -> do
+                          target <- readIORef directory >>= maybe (fail "missing fixture capture") pure
+                          Bytes.readFile (target </> "cancel") >>= (@?= "1\n")
+                          modifyIORef' stops (+ 1)
+                          pure (if stopAcknowledged then Right () else Left Systemd.SystemdUncertain)
+                      )
+               )
              )
   withProcess fixture configure True \file runtime observed calls snapshot reference -> do
     Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)

@@ -81,6 +81,7 @@ data SinkContext = SinkContext
     -- and each of them owns its own logger.
     logger :: !Logger
   }
+  deriving stock (Generic)
 
 -- | The outcome of one sink dispatch. @DeniedOutcome@ is distinct from the permission
 -- gate's @Denied@ newtype.

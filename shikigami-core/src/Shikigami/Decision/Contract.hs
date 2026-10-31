@@ -30,9 +30,11 @@ where
 import Baikai.Evidence (ModelCallEvidence, commitmentDigest)
 import Baikai.ThinkingLevel (ThinkingLevel)
 import Control.Concurrent.MVar (modifyMVar, newMVar, readMVar)
+import Control.Lens ((&), (.~))
 import Data.Aeson (FromJSON (..), ToJSON (..), Value, object, withObject, (.:), (.=))
 import Data.Aeson.KeyMap (KeyMap)
 import Data.Aeson.Types (Parser)
+import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -242,6 +244,7 @@ data DecisionCallHooks = DecisionCallHooks
   { beginCall :: !(DecisionCallContext -> IO (Either DecisionFailure AttemptToken)),
     finishCall :: !(AttemptToken -> CallTerminal -> Maybe ModelCallEvidence -> IO (Either DecisionFailure ()))
   }
+  deriving stock (Generic)
 
 -- | Test implementation with the production convergence contract. Missing
 -- evidence and cancellation never become a successful terminal.
@@ -249,7 +252,7 @@ data MemoryCall = MemoryCall
   { context :: !DecisionCallContext,
     terminal :: !(Maybe (CallTerminal, Maybe Value))
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 newMemoryCallHooks :: IO (DecisionCallHooks, IO (Map.Map Text MemoryCall))
 newMemoryCallHooks = do
@@ -265,5 +268,5 @@ newMemoryCallHooks = do
           Just call
             | status == CallSucceeded && evidence == Nothing -> refuse
             | Just previous <- call.terminal, previous /= payload -> refuse
-            | otherwise -> pure (Map.insert (attemptId token) (call {terminal = Just payload}) current, Right ())
+            | otherwise -> pure (Map.insert (attemptId token) ((call & #terminal .~ (Just payload))) current, Right ())
   pure (DecisionCallHooks begin finish, readMVar calls)

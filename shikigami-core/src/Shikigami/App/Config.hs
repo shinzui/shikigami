@@ -154,6 +154,7 @@ import Baikai.Options qualified as Options
 import Baikai.Speed (Speed (..))
 import Baikai.ThinkingLevel (ThinkingLevel, parseThinkingLevel, renderThinkingLevel)
 import Baikai.Tool (ToolChoice (..))
+import Control.Lens ((&), (.~))
 import Data.Aeson ((.:), (.:?))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as AesonKey
@@ -162,6 +163,7 @@ import Data.Aeson.Types qualified as AesonTypes
 import Data.Bifunctor (first)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Char (isAlphaNum, isSpace)
+import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe, isJust)
 import Data.Set (Set)
@@ -589,7 +591,7 @@ behaviorProviderConfig =
     modelConfig AnthropicMessages _ = withDefault behaviorModelSetting (constant "default-model" "The current general-purpose Claude model" anthropic_claude_sonnet_4_6)
     modelConfig apiTag vendor = required (httpModelSetting apiTag vendor)
     assemble model endpoint options credential =
-      let selected = model {Model.baseUrl = fromMaybe (Model.baseUrl model) endpoint}
+      let selected = (model & #baseUrl .~ (fromMaybe (Model.baseUrl model) endpoint))
        in if Model.api selected == AnthropicMessages && options == Options.emptyOptions
             then UseAnthropic selected credential
             else UseHttp selected options credential
@@ -632,12 +634,12 @@ instance Aeson.FromJSON DecisionModelSpec where
           _ -> Nothing
         candidates = case surface of
           Just (apiTag, providerName) -> [m | m <- allModels, api m == apiTag, provider m == providerName]
-          Nothing | vendor == "stub" -> [stubModel {Model.modelId = "stub-triage"}, stubModel {Model.modelId = "stub-investigate"}]
+          Nothing | vendor == "stub" -> [(stubModel & #modelId .~ ("stub-triage")), (stubModel & #modelId .~ ("stub-investigate"))]
           _ -> []
     model <- maybe (fail "unknown exact catalog model") pure (lookup exact [(modelId m, m) | m <- candidates])
     maxTokens <- o .:? "max_tokens"
     timeoutMs <- o .:? "timeout_ms"
-    let options = Options.emptyOptions {Options.thinking = thinking, Options.maxTokens = maxTokens, Options.timeoutMs = timeoutMs}
+    let options = (Options.emptyOptions & #thinking .~ (thinking) & #maxTokens .~ (maxTokens) & #timeoutMs .~ (timeoutMs))
         validWord text = not (Text.null text) && Text.length text <= 128 && Text.all (\c -> isAlphaNum c || c `elem` ("-_." :: String)) text
     if all validWord [alias, version, bindingId, bindingVersion]
       then pure DecisionModelSpec {alias, version, bindingId, bindingVersion, model, options}
@@ -707,23 +709,7 @@ responseOptionsConfig =
   where
     option suffix description decode render = publicSettingWithRenderer (optionKey suffix) description decode render
     assemble thinking maxTokens temperature timeoutMs topP stopSequences seed frequencyPenalty presencePenalty cacheRetention speed responseFormat toolChoice headers metadata =
-      Options.emptyOptions
-        { Options.thinking = thinking,
-          Options.maxTokens = fromIntegral <$> maxTokens,
-          Options.temperature = temperature,
-          Options.timeoutMs = timeoutMs,
-          Options.topP = topP,
-          Options.stopSequences = fromMaybe [] stopSequences,
-          Options.seed = seed,
-          Options.frequencyPenalty = frequencyPenalty,
-          Options.presencePenalty = presencePenalty,
-          Options.cacheRetention = cacheRetention,
-          Options.speed = speed,
-          Options.responseFormat = responseFormat,
-          Options.toolChoice = toolChoice,
-          Options.headers = fromMaybe Map.empty headers,
-          Options.metadata = fromMaybe Map.empty metadata
-        }
+      (Options.emptyOptions & #thinking .~ (thinking) & #maxTokens .~ (fromIntegral <$> maxTokens) & #temperature .~ (temperature) & #timeoutMs .~ (timeoutMs) & #topP .~ (topP) & #stopSequences .~ (fromMaybe [] stopSequences) & #seed .~ (seed) & #frequencyPenalty .~ (frequencyPenalty) & #presencePenalty .~ (presencePenalty) & #cacheRetention .~ (cacheRetention) & #speed .~ (speed) & #responseFormat .~ (responseFormat) & #toolChoice .~ (toolChoice) & #headers .~ (fromMaybe Map.empty headers) & #metadata .~ (fromMaybe Map.empty metadata))
 
 optionKey :: Text -> Key
 optionKey suffix = stableKey ("behavior.options." <> suffix)

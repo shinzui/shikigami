@@ -1,8 +1,10 @@
 module Shikigami.DecisionContractSpec (tests) where
 
 import Baikai.Evidence qualified as Evidence
+import Control.Lens ((&), (.~))
 import Data.Aeson (FromJSON, ToJSON, Value (..), eitherDecode, encode, object, (.=))
 import Data.Either (isLeft)
+import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -53,10 +55,10 @@ tests =
             other = mustRight (registerProgram "example" "1" "sha256:implementation" "input/1" "result/1" "validator/1" "derive/1" Null (Embed (\_ -> pure True)) jsonResultCodec Right Right)
         assertBool "wrong witnesses never cast" (isLeft (lookupProgram registry (programRef other))),
       testCase "effective instruction and demonstrations change identity without changing shape" do
-        let changed = emptyParams {instructionOverride = Just "Changed instruction"}
+        let changed = (emptyParams & #instructionOverride .~ (Just "Changed instruction"))
         programShape (program emptyParams) @?= programShape (program changed)
         assertBool "parameters are bound" (descriptor (programRef original) /= descriptor (programRef (registration "1" changed)))
-        let withDemos = emptyParams {demos = [Demo (object ["request" .= ("example" :: Text)]) (object ["answer" .= ("return" :: Text), "confidence" .= (0.9 :: Double)])]}
+        let withDemos = (emptyParams & #demos .~ ([Demo (object ["request" .= ("example" :: Text)]) (object ["answer" .= ("return" :: Text), "confidence" .= (0.9 :: Double)])]))
         assertBool "demonstrations are bound" (descriptor (programRef original) /= descriptor (programRef (registration "1" withDemos)))
         assertBool "immutable registration collision" (isLeft (programRegistry [SomeProgram original, SomeProgram (registration "1" changed)])),
       testCase "pure derivation defaults change immutable identity" do

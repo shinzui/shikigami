@@ -114,6 +114,7 @@ data SupervisorBackend = SupervisorBackend
     collectorActive :: !(ProcessRecord -> IO (Either Systemd.SystemdError Bool)),
     stop :: !(ProcessRecord -> IO (Either Systemd.SystemdError ()))
   }
+  deriving stock (Generic)
 
 systemdSupervisorBackend :: SupervisorBackend
 systemdSupervisorBackend = SupervisorBackend Systemd.systemdBootIdentity Systemd.startCollector Systemd.startProcess Systemd.collectorActive Systemd.stopProcess

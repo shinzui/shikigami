@@ -11,6 +11,7 @@ import Data.Aeson (Value, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Generics.Labels ()
 import Data.List (find, sortOn)
 import Data.Maybe (listToMaybe)
 import Data.Set qualified as Set
@@ -299,22 +300,7 @@ trustedVerdict
   proposal@PracticeReviewVerdict {classification = proposalClassification, exceptionApproval = proposalApproval, reReviewCondition = proposalReReview} =
     firstProblem "invalid practice-review evaluator verdict" $
       validateVerdict
-        proposal
-          { schemaVersion = 1,
-            reviewId = deriveReviewId trigger adoptionPractice opentelemetrySpecialist,
-            triggerIdempotencyKey = triggerKey,
-            practice = adoptionPractice,
-            specialist = opentelemetrySpecialist,
-            lineage,
-            targetEvidence = citations evidenceTarget,
-            referenceEvidence = citations evidenceReferences,
-            upstreamEvidence = citations evidenceUpstream,
-            recommendedOwner = trustedOwner adoption proposalClassification proposalApproval,
-            reReviewCondition =
-              proposalReReview
-                { watches = [provenance | EvidenceItem {content = ContentReference {provenance}} <- allCitations evidence]
-                }
-          }
+        (proposal & #schemaVersion .~ (1) & #reviewId .~ (deriveReviewId trigger adoptionPractice opentelemetrySpecialist) & #triggerIdempotencyKey .~ (triggerKey) & #practice .~ (adoptionPractice) & #specialist .~ (opentelemetrySpecialist) & #lineage .~ (lineage) & #targetEvidence .~ (citations evidenceTarget) & #referenceEvidence .~ (citations evidenceReferences) & #upstreamEvidence .~ (citations evidenceUpstream) & #recommendedOwner .~ (trustedOwner adoption proposalClassification proposalApproval) & #reReviewCondition .~ ((proposalReReview & #watches .~ ([provenance | EvidenceItem {content = ContentReference {provenance}} <- allCitations evidence]))))
 
 incompleteVerdict ::
   PracticeReviewTrigger ->

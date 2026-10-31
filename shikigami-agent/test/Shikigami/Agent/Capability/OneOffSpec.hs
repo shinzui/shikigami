@@ -146,8 +146,8 @@ tests =
           registerApiProvider (apiProvider optedApi optedHandler)
           registerApiProvider (apiProvider emptyApi emptyHandler)
           base <- newBehaviorEnv
-          let optedBase = base {model = toolModel optedApi}
-              emptyBase = base {model = toolModel emptyApi}
+          let optedBase = (base & #model .~ (toolModel optedApi))
+              emptyBase = (base & #model .~ (toolModel emptyApi))
               optedDecl = (declFor [workspaceReadId]) {behavior = Skill {path = Text.pack (root </> "agents" </> "skills" </> "triage-note")}}
               emptyDecl = (declFor []) {behavior = Skill {path = Text.pack (root </> "agents" </> "skills" </> "triage-note")}}
           opted <-

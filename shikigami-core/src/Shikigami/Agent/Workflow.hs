@@ -248,6 +248,7 @@ data AgentRunHooks = AgentRunHooks
   { beforeStepBody :: !(StepName -> IO ()),
     afterStepBody :: !(StepName -> IO ())
   }
+  deriving stock (Generic)
 
 defaultAgentRunHooks :: AgentRunHooks
 defaultAgentRunHooks =

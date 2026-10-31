@@ -3,8 +3,8 @@
 -- "Shikigami.App.Config" declares what configuration exists. This module decides
 -- where candidate values come from, in what order they override one another,
 -- what a process prints when something is wrong, and with what status it exits.
--- Every Shikigami executable goes through 'runAppConfig'; none of them assemble
--- sources themselves.
+-- Every AppConfig consumer goes through 'runAppConfig'. The client and migration
+-- executables retain their separate leaf configuration boundaries.
 --
 -- == Precedence
 --
@@ -71,6 +71,8 @@ module Shikigami.App.Config.Load
   )
 where
 
+import Control.Lens ((&), (.~))
+import Data.Generics.Labels ()
 import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -275,7 +277,7 @@ appConfigRun role options fileSources environment =
                 missing@(_ : _) -> failed resolutionExitCode (renderMissing role missing)
                 [] -> case resolutionDiagnostic ((.diagnosticMode) options) result of
                   Just output -> succeeded output warnings
-                  Nothing -> (succeeded "" warnings) {resolved = Just config}
+                  Nothing -> (succeeded "" warnings & #resolved .~ Just config)
   where
     succeeded output warnings =
       ConfigRun {exitCode = 0, standardOutput = output, standardError = warnings, resolved = Nothing}

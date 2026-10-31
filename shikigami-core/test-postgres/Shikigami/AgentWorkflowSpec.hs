@@ -274,12 +274,14 @@ tests databaseFixture =
             attempts <- newIORef (0 :: Int)
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 hooks =
-                  defaultAgentRunHooks
-                    { beforeStepBody = \stepName ->
-                        when (unStepName stepName == "run-behavior-v2") do
-                          attempt <- atomicModifyIORef' attempts \count -> (count + 1, count)
-                          when (attempt == 0) (throwIO (TransientBehaviorFailure "simulated transient provider failure"))
-                    }
+                  ( defaultAgentRunHooks
+                      & #beforeStepBody
+                        .~ ( \stepName ->
+                               when (unStepName stepName == "run-behavior-v2") do
+                                 attempt <- atomicModifyIORef' attempts \count -> (count + 1, count)
+                                 when (attempt == 0) (throwIO (TransientBehaviorFailure "simulated transient provider failure"))
+                           )
+                  )
                 deps = testDeps appEnv behaviorEnv hooks
 
             firstAttempt <- try @SomeException (runAgentRunWorkflow deps transientRetryJob)
@@ -302,10 +304,12 @@ tests databaseFixture =
             attempts <- newIORef (0 :: Int)
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 hooks =
-                  defaultAgentRunHooks
-                    { beforeStepBody = \stepName ->
-                        when (unStepName stepName == "run-behavior-v2") (modifyIORef' attempts (+ 1))
-                    }
+                  ( defaultAgentRunHooks
+                      & #beforeStepBody
+                        .~ ( \stepName ->
+                               when (unStepName stepName == "run-behavior-v2") (modifyIORef' attempts (+ 1))
+                           )
+                  )
                 deps = testDepsWithAgents appEnv behaviorEnv hooks [missingTaskDecl]
 
             firstAttempt <- runAgentRunWorkflow deps permanentFailureJob
@@ -336,10 +340,7 @@ tests databaseFixture =
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [decl]
                 refusedJob =
-                  job
-                    { idempotencyKey = RunKey "heartbeat:test-refused-session",
-                      delegationDepth = Just (DelegationDepth 1)
-                    }
+                  (job & #idempotencyKey .~ (RunKey "heartbeat:test-refused-session") & #delegationDepth .~ (Just (DelegationDepth 1)))
 
             result <- runAgentRunWorkflow deps refusedJob
             case result of
@@ -363,7 +364,7 @@ tests databaseFixture =
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 neverDecl = withRecordPolicy Never decl
                 deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [neverDecl]
-                neverJob = job {idempotencyKey = RunKey "heartbeat:test-record-never"}
+                neverJob = (job & #idempotencyKey .~ (RunKey "heartbeat:test-record-never"))
 
             result <- runAgentRunWorkflow deps neverJob
             sid <- case result of
@@ -509,13 +510,15 @@ tests databaseFixture =
             shouldCrash <- newIORef True
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 hooks =
-                  defaultAgentRunHooks
-                    { beforeStepBody = \stepName -> do
-                        modifyIORef' counts (Map.insertWith (+) (unStepName stepName) (1 :: Int))
-                        when (unStepName stepName == "run-behavior-v2") do
-                          crashNow <- atomicModifyIORef' shouldCrash \current -> (False, current)
-                          when crashNow (ioError (userError "simulated crash in run-behavior"))
-                    }
+                  ( defaultAgentRunHooks
+                      & #beforeStepBody
+                        .~ ( \stepName -> do
+                               modifyIORef' counts (Map.insertWith (+) (unStepName stepName) (1 :: Int))
+                               when (unStepName stepName == "run-behavior-v2") do
+                                 crashNow <- atomicModifyIORef' shouldCrash \current -> (False, current)
+                                 when crashNow (ioError (userError "simulated crash in run-behavior"))
+                           )
+                  )
                 deps = testDeps appEnv behaviorEnv hooks
 
             crashedRun <- try (runAgentRunWorkflow deps crashJob)
@@ -587,12 +590,14 @@ tests databaseFixture =
                   now <- getCurrentTime
                   resolveProfile profileStore now profileId version
                 hooks =
-                  defaultAgentRunHooks
-                    { beforeStepBody = \stepName ->
-                        when (unStepName stepName == "run-behavior-v2") do
-                          crashNow <- atomicModifyIORef' shouldCrash \current -> (False, current)
-                          when crashNow (ioError (userError "simulated crash after resolve-profile"))
-                    }
+                  ( defaultAgentRunHooks
+                      & #beforeStepBody
+                        .~ ( \stepName ->
+                               when (unStepName stepName == "run-behavior-v2") do
+                                 crashNow <- atomicModifyIORef' shouldCrash \current -> (False, current)
+                                 when crashNow (ioError (userError "simulated crash after resolve-profile"))
+                           )
+                  )
                 deps =
                   (testDepsWithAgents appEnv behaviorEnv hooks [profiledDecl])
                     { resolveRunProfile = resolver
@@ -686,13 +691,15 @@ tests databaseFixture =
             shouldCrash <- newIORef True
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 hooks =
-                  defaultAgentRunHooks
-                    { beforeStepBody = \stepName -> do
-                        modifyIORef' counts (Map.insertWith (+) (unStepName stepName) (1 :: Int))
-                        when (unStepName stepName == "complete") do
-                          crashNow <- atomicModifyIORef' shouldCrash \current -> (False, current)
-                          when crashNow (ioError (userError "simulated crash before complete"))
-                    }
+                  ( defaultAgentRunHooks
+                      & #beforeStepBody
+                        .~ ( \stepName -> do
+                               modifyIORef' counts (Map.insertWith (+) (unStepName stepName) (1 :: Int))
+                               when (unStepName stepName == "complete") do
+                                 crashNow <- atomicModifyIORef' shouldCrash \current -> (False, current)
+                                 when crashNow (ioError (userError "simulated crash before complete"))
+                           )
+                  )
                 deps = testDeps appEnv behaviorEnv hooks
 
             crashedRun <- try (runAgentRunWorkflow deps recordBeforeCompleteCrashJob)
@@ -1380,7 +1387,7 @@ tests databaseFixture =
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-cycle"
                     parentWorkflowId = WorkflowId "delegate-cycle-parent"
-                    supervisor = decl {delegates = ["heartbeat"]}
+                    supervisor = (decl & #delegates .~ (["heartbeat"]))
                     ctx =
                       DelegateCtx
                         { identity = compatibilityIdentity "heartbeat",
@@ -1407,7 +1414,7 @@ tests databaseFixture =
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-exhausted"
                     parentWorkflowId = WorkflowId "delegate-exhausted-parent"
-                    supervisor = decl {delegates = ["heartbeat"]}
+                    supervisor = (decl & #delegates .~ (["heartbeat"]))
                     zeroBudget = either (error . Text.unpack) id (mkDelegationBudget 0)
                     ctx = (parentDelegateContext parentSession) {budgetLimit = zeroBudget}
                     parentBody = void (delegate [decl] disabledDirectoryHandle supervisor ctx "over-budget" "heartbeat" (object []))
@@ -1521,7 +1528,7 @@ tests databaseFixture =
                 behaviorEnv <- newBehaviorEnv
                 proofAgents <- loadProofAgents
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                    deniedDecl = flowDelegationDecl {delegates = []}
+                    deniedDecl = (flowDelegationDecl & #delegates .~ ([]))
                     deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks (deniedDecl : proofAgents)
                 refused <- try @DelegationError (runAgentRunWorkflow deps flowDelegationDeniedJob)
                 assertEqual "the capability applies the agent allow-list" (Left (DelegationNotAllowed "web-researcher")) refused,
@@ -1646,7 +1653,7 @@ tests databaseFixture =
                   -- Recreate the volatile behavior environment before resuming;
                   -- journals, queue and published token remain in PostgreSQL.
                   restartedBehavior <- newBehaviorEnv
-                  let restarted = deps {behaviorEnv = restartedBehavior}
+                  let restarted = (deps & #behaviorEnv .~ (restartedBehavior))
                   resolved <- resolveApproval appEnv awakeableId (Approved (object ["approved" .= True]))
                   assertBool "first CLI-shaped signal resolves" resolved
                   resolvedAgain <- resolveApproval appEnv awakeableId (Approved (object ["approved" .= True]))
@@ -1739,7 +1746,7 @@ tests databaseFixture =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                    runJob = approvalJob {idempotencyKey = RunKey "heartbeat:test-approval-notify-permanent"}
+                    runJob = (approvalJob & #idempotencyKey .~ (RunKey "heartbeat:test-approval-notify-permanent"))
                     deps =
                       (testDepsWithApproval appEnv behaviorEnv defaultAgentRunHooks defaultApprovalEnv)
                         { approvalWorkflow =
@@ -1769,7 +1776,7 @@ tests databaseFixture =
                 behaviorEnv <- newBehaviorEnv
                 posts <- newIORef (0 :: Int)
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                    runJob = approvalJob {idempotencyKey = RunKey "heartbeat:test-approval-notify-transient"}
+                    runJob = (approvalJob & #idempotencyKey .~ (RunKey "heartbeat:test-approval-notify-transient"))
                     deps =
                       (testDepsWithApproval appEnv behaviorEnv defaultAgentRunHooks defaultApprovalEnv)
                         { approvalWorkflow =
@@ -1807,7 +1814,7 @@ tests databaseFixture =
                 attemptsRef <- newIORef (0 :: Int)
                 posts <- newIORef []
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                    runJob = approvalJob {idempotencyKey = RunKey "heartbeat:test-approval-notify-crash-window"}
+                    runJob = (approvalJob & #idempotencyKey .~ (RunKey "heartbeat:test-approval-notify-crash-window"))
                     notifier =
                       ApprovalWorkflow.ApprovalNotifier
                         { ApprovalWorkflow.recordPark = \_ _ _ _ -> pure (),
@@ -1914,7 +1921,7 @@ parentDelegateWorkflow currentSession = do
     delegate
       [decl]
       disabledDirectoryHandle
-      (decl {delegates = ["heartbeat"]})
+      ((decl & #delegates .~ (["heartbeat"])))
       (parentDelegateContext currentSession)
       "heartbeat"
       "heartbeat"
@@ -2760,18 +2767,11 @@ flowDelegationDecl =
 
 collectionSupervisorDecl :: AgentDecl
 collectionSupervisorDecl =
-  decl
-    { name = "test-collection-supervisor",
-      sinks = [],
-      delegates = ["heartbeat", "missing-task-agent"]
-    }
+  (decl & #name .~ ("test-collection-supervisor") & #sinks .~ ([]) & #delegates .~ (["heartbeat", "missing-task-agent"]))
 
 conversationDecl :: AgentDecl
 conversationDecl =
-  decl
-    { trigger = Event {eventType = addressedMessageEventType},
-      sinks = [DanwaConversation {topic = "support"}]
-    }
+  (decl & #trigger .~ (Event {eventType = addressedMessageEventType}) & #sinks .~ ([DanwaConversation {topic = "support"}]))
 
 withRecordPolicy :: RecordPolicy -> AgentDecl -> AgentDecl
 withRecordPolicy recordPolicy = #memory . #recordPolicy .~ recordPolicy
@@ -3414,9 +3414,7 @@ flowDelegationJob =
 
 flowDelegationDeniedJob :: RunJob
 flowDelegationDeniedJob =
-  flowDelegationJob
-    { idempotencyKey = RunKey "flow-delegation-supervisor:test-denied"
-    }
+  (flowDelegationJob & #idempotencyKey .~ (RunKey "flow-delegation-supervisor:test-denied"))
 
 expectedWebFinding :: Value
 expectedWebFinding =

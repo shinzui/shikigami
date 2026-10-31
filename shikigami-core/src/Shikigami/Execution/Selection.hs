@@ -15,6 +15,7 @@ import Baikai.Model (Model)
 import Baikai.Options (Options)
 import Baikai.Options qualified as Options
 import Data.Aeson qualified as Aeson
+import Data.Generics.Labels ()
 import Data.List (find, nub)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (catMaybes)
@@ -72,7 +73,7 @@ defaultBinding model options = do
   either
     (const (Left ExecutionOptionsIncompatible))
     Right
-    (modelBinding (ModelAlias "__process_default__") "1" "behavior.default" "1" model (options {Options.apiKey = Nothing}) credential)
+    (modelBinding (ModelAlias "__process_default__") "1" "behavior.default" "1" model ((options & #apiKey .~ (Nothing))) credential)
 
 resolveExecutionSelection ::
   Text ->
@@ -153,7 +154,7 @@ effectiveBindingOptions :: Maybe ResolvedProfile -> ModelBinding -> Options
 effectiveBindingOptions profile binding =
   let base = bindingOptions binding
       caps = catMaybes [Options.maxTokens base, fromIntegral . max 0 <$> (profile >>= (\p -> p.profile.limits.maxTokens))]
-   in base {Options.maxTokens = case caps of [] -> Nothing; xs -> Just (minimum xs)}
+   in (base & #maxTokens .~ (case caps of [] -> Nothing; xs -> Just (minimum xs)))
 
 -- These settings are explicitly secret in the operator configuration. A
 -- durable selection must not serialize them into its snapshot or journal.

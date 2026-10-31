@@ -97,7 +97,7 @@ tests fixture =
           binding <- finishWorkspace env job deps
           writeFile (root </> "retained-sibling") "sibling"
           let runtime = maintenance env root
-              interrupted = runtime {afterFiles = throwIO (userError "fixture lost cleanup acknowledgement")}
+              interrupted = (runtime & #afterFiles .~ (throwIO (userError "fixture lost cleanup acknowledgement")))
           cleanupWorkspace interrupted job.identity binding.workspace >>= (@?= Left CleanupUnresolved)
           doesPathExist (workspaceFiles root binding) >>= (@?= False)
           doesPathExist (workspaceScratch root binding) >>= (@?= True)
@@ -162,7 +162,7 @@ tests fixture =
           Just (_, _, _) <- right =<< run env (Execution.inspectExecution execution)
           -- The retained snapshot must resume even when today's repository
           -- selector is unavailable; its base/instructions never reload.
-          let retired = deps {Agent.workspace = Just (host {load = \_ -> assertFailure "retained assignment reloaded source" >> fail "unreachable"})}
+          let retired = (deps & #workspace .~ (Just ((host & #load .~ (\_ -> assertFailure "retained assignment reloaded source" >> fail "unreachable")))))
           Agent.runAgentRunWorkflow retired job >>= assertSuspended
           result <- right =<< driveExecutionForeground (Agent.executionRuntime retired) (ExecutionStart execution) 30
           assertBool "execution child completed" (maybe False (const True) result)
@@ -199,7 +199,7 @@ tests fixture =
               process = WorkspaceProcessSettings "/run/shikigami/supervisor.sock" 0 5 60 (IdentityRange 64000 64031) (Map.singleton binding.repository policy)
               settings = WorkspaceSettings root [WorkspaceRepository binding.repository binding.source [WorkspaceRevision binding.base (bundleDigest admission.instructions)] binding.base "policy-1" [""] ["dependency.txt"]] [WorkspaceGrant "workspace-worker" principal binding.repository Nothing] (Just process)
           host <- right (configuredWorkspaceHost env store.pool disabledDirectoryHandle allowAllActionAuthorizerForTests settings)
-          let resumed = deps {Agent.capabilities = host.capabilities, Agent.workspace = Just (host {load = \_ -> assertFailure "old file assignment attempted process provisioning" >> fail "unreachable"})}
+          let resumed = (deps & #capabilities .~ (host.capabilities) & #workspace .~ (Just ((host & #load .~ (\_ -> assertFailure "old file assignment attempted process provisioning" >> fail "unreachable")))))
           _ <- right =<< driveExecutionForeground (Agent.executionRuntime resumed) (ExecutionStart execution) 30
           Agent.runAgentRunWorkflow resumed job >>= assertCompleted
           readFile (workspaceFiles root binding </> "dependency.txt") >>= (@?= "workflow replacement\n")
@@ -210,7 +210,7 @@ tests fixture =
           doesPathExist root >>= (@?= False)
           readIORef observed >>= (@?= []),
       testCase "unreviewed instruction digest refuses before protected execution or model dispatch" $
-        withWorkflowConfig (\settings -> settings & #repositories .~ [entry {revisions = [revision {instructionDigest = "sha256:" <> Text.replicate 64 "0"} | revision <- entry.revisions]} | entry <- settings.repositories]) fixture \env _ job _ deps observed -> do
+        withWorkflowConfig (\settings -> settings & #repositories .~ [(entry & #revisions .~ ([(revision & #instructionDigest .~ ("sha256:" <> Text.replicate 64 "0")) | revision <- entry.revisions])) | entry <- settings.repositories]) fixture \env _ job _ deps observed -> do
           Agent.runAgentRunWorkflow deps job >>= assertRefused
           let execution = executionIdFor (assignmentIdFor (runJobWorkflowId job).unWorkflowId)
           run env (Execution.inspectExecution execution) >>= (@?= Right Nothing)
@@ -270,7 +270,7 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
         ordinal <- atomicModifyIORef' observed (\values -> (values <> [context], length values))
         response <- Provider.complete stubApiProvider model context options
         pure (if ordinal == 0 then response & #message . #stopReason .~ ToolUse & #message . #content .~ Vector.singleton (Content.AssistantToolCall (Content.ToolCall "edit" "overlay__workspace-edit__replace" (Aeson.toJSON (Replacement "dependency.txt" (Just (contentDigest "old dependency\n")) "workflow replacement\n")))) else response)
-      provider = stubApiProvider {Provider.complete = complete, Provider.stream = liftCompleteToStream complete}
+      provider = (stubApiProvider & #complete .~ (complete) & #stream .~ (liftCompleteToStream complete))
   providers <- Provider.newProviderRegistryFrom [provider]
   expected <- right (mkInstructionBundle 65536 "mori://fixture/repo" (repositoryBase repository) [("AGENTS.md", "PRIVATE_WORKFLOW_POLICY: validate changes")])
   principal <- right (identityText (CompatibilityIdentity "workspace-worker"))

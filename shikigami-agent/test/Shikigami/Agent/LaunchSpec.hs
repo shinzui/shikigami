@@ -3,6 +3,8 @@ module Shikigami.Agent.LaunchSpec (tests) where
 import Baikai.Agent.Cli qualified as Agent
 import Baikai.Agent.Config (AgentConfigPaths (..), emptyAgentConfigPaths)
 import Control.Exception (bracket)
+import Control.Lens ((&), (.~))
+import Data.Generics.Labels ()
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Options.Applicative qualified as Opt
@@ -55,7 +57,7 @@ tests =
         let exe = dir </> "vendor"
             repo = dir </> "agents.kdl"
             user = operatorDir </> "operator.kdl"
-            paths = emptyAgentConfigPaths {userConfig = Just user, repoConfig = Just repo, repositoryRoot = dir}
+            paths = (emptyAgentConfigPaths & #userConfig .~ (Just user) & #repoConfig .~ (Just repo) & #repositoryRoot .~ (dir))
             job capability = "jobs {\n  inspect {\n    provider \"codex\"\n    working-dir \".\"\n    output \"capture\"\n    timeout \"2s\"\n    safety {\n      capability \"" <> capability <> "\"\n    }\n  }\n}\n"
         writeFile exe "#!/bin/sh\npwd > started\ncat >/dev/null\nexit 7\n"
         permissions <- getPermissions exe
@@ -78,7 +80,7 @@ tests =
       testCase "mounted unattended parser preserves Baikai's show result" $ withDirectory \dir -> do
         let repo = dir </> "agents.kdl"
         writeFile repo "jobs {\n  inspect {\n    provider \"codex\"\n    working-dir \".\"\n    safety {\n      capability \"read-only\"\n    }\n  }\n}\n"
-        let paths = emptyAgentConfigPaths {repoConfig = Just repo, repositoryRoot = dir}
+        let paths = (emptyAgentConfigPaths & #repoConfig .~ (Just repo) & #repositoryRoot .~ (dir))
         native <- parseNative ["agent", "show", "inspect"]
         mounted <- case Opt.execParserPure Opt.defaultPrefs launchParserInfo ["unattended", "agent", "show", "inspect"] of
           Opt.Success (UnattendedLaunch value) -> pure value

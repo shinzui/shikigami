@@ -16,6 +16,7 @@ where
 import Data.Aeson (eitherDecode, encode)
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as LBS
+import Data.Generics.Labels ()
 import Data.IORef (IORef, atomicModifyIORef', newIORef)
 import Data.KindID (genKindID, toText)
 import Data.Map.Strict (Map)
@@ -46,7 +47,7 @@ data StubKanmonState = StubKanmonState
   { idempotency :: !(Map (Text, Text) Text),
     acceptedEffects :: !Int
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 newStubKanmonState :: IO (IORef StubKanmonState)
 newStubKanmonState =
@@ -102,10 +103,7 @@ acceptEffect state channel EgressActionRequest {idempotencyKey} = do
               Nothing -> (.idempotency) current
               Just key -> Map.insert (channel, key) candidate ((.idempotency) current)
             updated =
-              current
-                { idempotency = updatedIdempotency,
-                  acceptedEffects = (.acceptedEffects) current + 1
-                }
+              (current & #idempotency .~ (updatedIdempotency) & #acceptedEffects .~ ((.acceptedEffects) current + 1))
          in (updated, (candidate, False))
 
 authorized :: Maybe BearerToken -> Maybe ByteString -> Bool

@@ -21,11 +21,14 @@
 -- because "no forbidden dependencies found" would otherwise be trivially true.
 module Shikigami.PackageArchitectureSpec (tests) where
 
+import Control.Lens ((&), (.~))
+import Data.Generics.Labels ()
 import Data.List (sort)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TIO
+import GHC.Generics (Generic)
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 import Test.Tasty (TestTree, testGroup)
@@ -238,7 +241,7 @@ data Stanza = Stanza
     name :: !Text,
     dependencies :: ![Text]
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 allStanzas :: IO [(Text, [Stanza])]
 allStanzas = do
@@ -292,7 +295,7 @@ parseStanzas contents = go (Text.lines contents) Nothing []
         Just (kind, name) -> go rest (Just (Stanza kind name [])) (maybe acc (: acc) current)
         Nothing -> case (current, dependencyName line) of
           (Just stanza, Just dependency) ->
-            go rest (Just stanza {dependencies = (.dependencies) stanza <> [dependency]}) acc
+            go rest (Just (stanza & #dependencies .~ ((.dependencies) stanza <> [dependency]))) acc
           _ -> go rest current acc
 
     stanzaHeader line

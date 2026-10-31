@@ -3,6 +3,7 @@ module Shikigami.InspectionHttpSpec (tests, withFixture, profile, readCredential
 import Control.Concurrent.Async qualified as Async
 import Control.Concurrent.MVar
 import Control.Exception (bracket, finally)
+import Control.Lens ((&), (.~))
 import Control.Monad (forM_, void)
 import Data.Aeson (Value (..), object, (.=))
 import Data.Aeson qualified as Aeson
@@ -11,6 +12,7 @@ import Data.Aeson.Types qualified as Aeson
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Either (isLeft)
+import Data.Generics.Labels ()
 import Data.IORef
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -198,7 +200,7 @@ tests fixture =
               engineMetrics <- newKeiroMetrics meter
               let base = runtimeConnectionSettings Log.silentLogger (Just engineMetrics) connection
                   settings :: ConnectionSettings
-                  settings = base {eventHandler = Just (\event -> maybe (pure ()) ($ event) base.eventHandler >> modifyIORef' seen (+ 1))}
+                  settings = (base & #eventHandler .~ (Just (\event -> maybe (pure ()) ($ event) base.eventHandler >> modifyIORef' seen (+ 1))))
               withObservedStore tracer settings \store metrics -> do
                 let emit event = maybe (assertFailure "observed event callback missing") ($ event) store.eventHandler
                 emit (KirokuEventSubscriptionStarted (SubscriptionName "inspection-fixture") (GlobalPosition 0) NonGroup)

@@ -79,6 +79,12 @@ data Good
         self.assertEqual([], self.rules('module Shikigami.Prelude where\nimport "text" Data.Text', path))
         self.assertIn("prelude-orphan", self.rules('module Shikigami.Prelude where\nimport Data.Generics.Labels ()', path))
 
+    def test_record_lenses_declare_their_local_orphan_dependency(self):
+        source = 'module Example where\nupdate value = value & #status .~ Ready'
+        self.assertIn("local-label-orphan", self.rules(source))
+        self.assertEqual([], self.rules(source.replace('where\n', 'where\nimport Data.Generics.Labels ()\n')))
+        self.assertEqual([], self.rules('module Example where\nread registers = registers ! #status'))
+
     def test_every_package_component_inherits_the_baseline(self):
         source = "common common\n  default-language: GHC2024\n  default-extensions:\n"
         source += "".join("    " + extension + "\n" for extension in sorted(BASELINE))

@@ -28,7 +28,7 @@ Review and fix every applicable Haskell and service-architecture guideline acros
 ## Progress
 
 - [ ] M1: Core/package/record/error/resource conventions have an explicit complete applicability review and fixes.
-- [ ] M2: Public HTTP, CLI, configuration and telemetry behaviors satisfy applicable current guide clauses.
+- [x] M2: Public HTTP, CLI, configuration and telemetry clauses implemented with explicit optional-interface decisions, 28 source rows and real process/live HTTP evidence. Final packaged/Linux qualification remains plan95.
 
 ## Surprises & Discoveries
 
@@ -40,7 +40,7 @@ The native Relay query formatter owns a public JSON error protocol. Rewriting it
 
 ## Outcomes & Retrospective
 
-Public API/CLI changes are implemented and the interim acceptance is in [haskell-service-results.txt](../evidence/keiro-0.22/haskell-service-results.txt): 94 server, 37 agent, 9 client and 30 API tests; live Hurl lifecycle; 40 real-process offline CLI checks. The language checker and eight mutation/lexical tests pass. M1 and final source dispositions remain open; this is not completion or packaged Linux qualification.
+Public API/CLI changes are implemented and the interim acceptance is in [haskell-service-results.txt](../evidence/keiro-0.22/haskell-service-results.txt): 94 server, 37 agent, 9 client and 30 API tests; live Hurl lifecycle; 70 real-process offline CLI checks. The language checker and nine mutation/lexical tests pass. ObjectiveId now has its checked TypeID-v7 domain, 543 pure and 375 serial PostgreSQL tests pass, and the strict breaking diff/fold change are retained. Workspace placement is strict-diff neutral. M1 and final source dispositions remain open; this is not completion or packaged Linux qualification.
 
 ## Context and Orientation
 

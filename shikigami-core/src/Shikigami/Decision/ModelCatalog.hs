@@ -26,7 +26,9 @@ import Baikai.Model (Model)
 import Baikai.Model qualified as Model
 import Baikai.Options (Options)
 import Baikai.Options qualified as Options
+import Control.Lens ((&), (.~))
 import Data.Aeson (object, (.=))
+import Data.Generics.Labels ()
 import Data.List (find, nub)
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -156,7 +158,7 @@ resolvePolicy programs slots catalog declaration profile = do
   let resolved = [descriptor | Just descriptor <- selections]
       admitted = map (\descriptor -> descriptor.alias) resolved
       narrowed :: [DecisionSlot]
-      narrowed = [slot {models = filter (`elem` admitted) slot.models} | slot <- slots]
+      narrowed = [(slot & #models .~ (filter (`elem` admitted) slot.models)) | slot <- slots]
   if any (null . (\slot -> slot.models)) narrowed
     then Left (decisionFailure ForbiddenModel "decision slot has no authorized available model")
     else Right (DecisionPolicySnapshot narrowed resolved ((\p -> p.ref) <$> profile))

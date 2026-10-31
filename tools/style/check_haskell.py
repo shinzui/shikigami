@@ -92,6 +92,9 @@ def check_source(path, source):
 
     module = re.search(r"\bmodule\s+([\w.]+)", code)
     module_name = module.group(1) if module else ""
+    uses_record_lens = re.search(r"#[a-zA-Z]\w*\s*(?:\.~|%~|\?~)|\^\.\s*#[a-zA-Z]", code)
+    if uses_record_lens and not re.search(r"(?m)^import\s+Data\.Generics\.Labels\s*\(\s*\)", code):
+        report(uses_record_lens.start(), "local-label-orphan", "import Data.Generics.Labels () in the module using record lenses")
     if module_name.endswith(".Prelude"):
         if re.search(r"(?m)^import\s+(?:\"[^\"]+\"\s+)?Data\.Generics\.Labels\b", code):
             report(0, "prelude-orphan", "the generic-lens orphan must not propagate through Prelude")

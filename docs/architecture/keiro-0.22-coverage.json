@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "scope": "Planning inventory; no compliance accepted",
+  "scope": "Implementation inventory; remaining domain/Haskell findings and final qualification are pending.",
   "sources": [
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-cross-cutting-modules",
@@ -118,9 +118,32 @@
       "sourcePath": "runtime-patterns/config/kubernetes-deployment.md",
       "sourceSha256": "012ea54764534424459de64bf5ebcacd96e96ed1e0f131f41c613c3879118f2a",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "kubernetes-resources",
+          "disposition": "not-applicable",
+          "rationale": "This repository has no selected Kubernetes Deployment/Helm/Kustomize consumer or cluster deployment. ADR-72 does not introduce one; the requested first-deployment profile is explicit role processes and Nix artifacts in plan95."
+        },
+        {
+          "id": "configuration-health-and-secrets",
+          "disposition": "existing",
+          "rationale": "The process boundary already supplies strict explicit environment bindings, secret redaction, distinct role health ports and live/ready probes. These are executed independently of Kubernetes."
+        },
+        {
+          "id": "cluster-qualification",
+          "disposition": "not-applicable",
+          "rationale": "No rollout/readiness claim about an unprovisioned Kubernetes cluster is made. Linux runtime/artifact qualification is separate and remains plan95; compilation does not certify runtime containment."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/config-overview",
@@ -128,9 +151,32 @@
       "sourcePath": "runtime-patterns/config/overview.md",
       "sourceSha256": "6ce12ea5fa9f0690f5b2325420ba3ef8786998ae7a8fc2845cebb5f2ff6e7796",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "single-declared-resolution",
+          "disposition": "existing",
+          "rationale": "App.Config/Load defines role requirements and explicit ordered sources. Client.Config owns a leaf Settei boundary; migration DATABASE_URL and SDK OTEL_* are the documented ADR-32/72 exceptions."
+        },
+        {
+          "id": "typed-secret-boundary",
+          "disposition": "existing",
+          "rationale": "Secret credentials have no Show/ToJSON and all winning/shadowed candidates are redacted. No downstream HTTP action reads an ambient fallback."
+        },
+        {
+          "id": "offline-and-runtime-checks",
+          "disposition": "implemented",
+          "rationale": "Static discovery precedes source IO. Pure config fixtures, 70 real-process checks and actual worker/server startup verify the boundary; final packaged deployment remains plan95."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/config-settei-cli-standard",
@@ -138,9 +184,42 @@
       "sourcePath": "runtime-patterns/config/settei-cli-standard.md",
       "sourceSha256": "26dcad18fd4194a8389cd6b483a9375c31a2978f80b253fac3e431d2fd331d96",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "five-ordered-layers",
+          "disposition": "implemented",
+          "rationale": "Built-ins, each YAML file occurrence, explicit environment bindings, named flags and each --set occurrence resolve in that order. Bad winners fail without fallback; unknown keys are rejected."
+        },
+        {
+          "id": "production-binding-cafs",
+          "disposition": "existing",
+          "rationale": "App.Config and client Config define checked environment bindings as CAFs; unrelated environment variables cannot redirect actions. Agent interactive launch uses its own declared launch keys."
+        },
+        {
+          "id": "five-diagnostics-and-exits",
+          "disposition": "implemented",
+          "rationale": "Describe text/JSON are static and FIFO-safe; explain text/JSON and check retain source origins and redact secrets. Usage/source/resolution failures exit 2/3/4; all diagnostics precede resource acquisition."
+        },
+        {
+          "id": "one-format-and-boundary",
+          "disposition": "existing",
+          "rationale": "Selected Settei 0.2 YAML sources are used directly; no second umbrella resolver, implicit local/user scan or optional multi-format loader changes the established order."
+        },
+        {
+          "id": "process-evidence",
+          "disposition": "implemented",
+          "rationale": "Client ConfigSpec qualifies every layer, repeated overrides and redaction; tests/cli/contracts.py exercises actual diagnostics, exits, malformed URLs and poison source paths."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/config-settei-gotchas",
@@ -148,9 +227,37 @@
       "sourcePath": "runtime-patterns/config/settei-gotchas.md",
       "sourceSha256": "85e6dfd9d3d46da87a4152cc15288a3443c34d4311b06efe1894684dbc0cc4fc",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "no-ambient-fallback",
+          "disposition": "implemented",
+          "rationale": "Client actions now consume resolved ClientConfig instead of lookupEnv. Agent launch/static schema and shared runAppConfig select static diagnostics before reading sources."
+        },
+        {
+          "id": "winning-value-and-occurrence-order",
+          "disposition": "existing",
+          "rationale": "Malformed winners never fall back; file occurrences and repeated --set values retain origins. Source failures and typed resolution failures have distinct exits."
+        },
+        {
+          "id": "redaction-at-boundaries",
+          "disposition": "existing",
+          "rationale": "Credentials stay secret through reports, native ops audit and provider selection. Client rejects credentials hidden in a public base URL; errors do not echo payloads or exception text."
+        },
+        {
+          "id": "api-and-version-discipline",
+          "disposition": "existing",
+          "rationale": "Selected released Settei 0.2 APIs are used directly and compiled. The unsupported umbrella source-format package is not added as a compatibility workaround."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/config-settei-service-standard",
@@ -158,9 +265,37 @@
       "sourcePath": "runtime-patterns/config/settei-service-standard.md",
       "sourceSha256": "6232a6ea9fe5e8900aa18144628a0e38f664e7e395df397168a242e337cff41e",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "role-config-and-requirements",
+          "disposition": "existing",
+          "rationale": "RoleInfo/runRole and App.Config select server, scheduler and consumer requirements before connecting. Shared declarations keep binary-specific default health ports and explicit downstream settings."
+        },
+        {
+          "id": "secret-and-native-adapters",
+          "disposition": "existing",
+          "rationale": "Settei secrets feed owning native connection/provider APIs; native ops databaseUrl participates in the same resolution without setEnv. Inspection settings validate credential roles and finite budgets before startup."
+        },
+        {
+          "id": "startup-and-shutdown-order",
+          "disposition": "existing",
+          "rationale": "Validation precedes migrations/store/queue/listeners. Brackets cancel and join workers, feeds and accepted clients before closing pools/stores; native fixtures verify cancellation and normal completion."
+        },
+        {
+          "id": "deployment-profile",
+          "disposition": "existing",
+          "rationale": "Process configuration behavior is covered by CLI and native runtime tests. Artifact export, Linux qualification and first-deployment ordering remain explicit plan95 gates."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/runtime-patterns-getting-started",
@@ -2764,9 +2899,32 @@
       "sourcePath": "patterns/api/health-endpoints.md",
       "sourceSha256": "5dcb1356deb0df5a7ee27222dedaeadfa22415dc244bf4a7eae2a7b32f997c2d",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "live-ready-separation",
+          "disposition": "existing",
+          "rationale": "Servant.Health owns /health/live and /health/ready. Readiness reflects only restart-relevant dependencies and actual worker progress; health is public under bearer mode."
+        },
+        {
+          "id": "lifecycle-and-privacy",
+          "disposition": "existing",
+          "rationale": "Native workers preserve Paused idle health and busy lastProgress semantics. Probe bodies expose bounded component/status data, not connection strings or payloads."
+        },
+        {
+          "id": "outage-and-shutdown",
+          "disposition": "implemented",
+          "rationale": "The Hurl orchestrator stops only its disposable database and verifies live 200/ready 503. Native runtime/consumer tests join workers and accepted inspection clients before resource teardown."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/api-hurl-integration-testing",
@@ -2774,9 +2932,37 @@
       "sourcePath": "patterns/api/hurl-integration-testing.md",
       "sourceSha256": "bbaa98a419dc1996574512c770c47d4f6d2d3d0269bb53d4f45316cdb277dfd0",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "api-owned-assets",
+          "disposition": "implemented",
+          "rationale": "Contract files and the explicit safe runner live in shikigami-api/test/hurl and are included in package sources and Nix installed assets."
+        },
+        {
+          "id": "explicit-safe-default",
+          "disposition": "implemented",
+          "rationale": "The safe runner requires base URL and private secrets file, lists read-only files explicitly, and provisions nothing. Independent files have their own fixtures/captures and can run in parallel."
+        },
+        {
+          "id": "opt-in-stateful-profiles",
+          "disposition": "implemented",
+          "rationale": "Authentication, writes and dependency outage are separate explicit profiles. README names exact catalog cardinality, reserved idempotency keys, freshness and secret/report handling."
+        },
+        {
+          "id": "actual-lifecycle",
+          "disposition": "implemented",
+          "rationale": "tests/hurl/run.sh provisions fresh PostgreSQL, migrates, starts actual server and worker, checks CLI stdin/literal replay and terminal exits, then stops only owned processes/database. Every file passes hurlfmt --check before execution."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/api-openapi-from-types",
@@ -2784,9 +2970,37 @@
       "sourcePath": "patterns/api/openapi-from-types.md",
       "sourceSha256": "6670d908100e8fc5225e78af1e5fc02ab14d65acfa2bbeef517e73902e23a4e2",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "one-proxy-and-generator",
+          "disposition": "implemented",
+          "rationale": "Shikigami.Api.OpenApi is the sole document generator and Relay schema-orphan import site. /openapi serves that same value; docs/api/openapi.json is regenerated by the executable."
+        },
+        {
+          "id": "wire-accurate-components",
+          "disposition": "existing",
+          "rationale": "Explicit additionalProperties, tagged unions, required fields, stable operation IDs and security exceptions are checked by OpenApiSpec against typed payloads."
+        },
+        {
+          "id": "all-response-bodies",
+          "disposition": "implemented",
+          "rationale": "Exact response/status/media checks caught and fixed the missing request-body 400 schema. Run status 500 is also declared; native Relay 400 is application/json."
+        },
+        {
+          "id": "live-document",
+          "disposition": "implemented",
+          "rationale": "openapi.hurl fetches the real service and checks version, operations, problem media and native Relay error media."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/api-opentelemetry-integration",
@@ -2794,9 +3008,37 @@
       "sourcePath": "patterns/api/opentelemetry-integration.md",
       "sourceSha256": "46dd8ca63ee768fec72da57a983455e9d788da37d769e1a329117bbc27d894e9",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "resource-lifetime",
+          "disposition": "existing",
+          "rationale": "One process-owned SDK/provider lifetime flushes queued traces and metrics before teardown; Server.TelemetrySpec asserts the order. Runtime providers stay outside core application/agent dependency arrows."
+        },
+        {
+          "id": "w3c-http-and-events",
+          "disposition": "existing",
+          "rationale": "Inbound W3C extraction and outbound allowlisted propagation preserve trace context. The observed native store composes collector, OTel subscription lifecycle and Keiro bridge without replacing native handlers."
+        },
+        {
+          "id": "real-collector-evidence",
+          "disposition": "existing",
+          "rationale": "InspectionSpec exports an actual dead-letter metric, subscription catch-up span and append context through the real SDK; no synthetic metrics-only claim substitutes for native store events."
+        },
+        {
+          "id": "secrets-and-semantic-limits",
+          "disposition": "existing",
+          "rationale": "Configuration and transport metadata keep credentials private. OTEL_* remains SDK-owned. No external collector deployment, live provider or unexecuted long-running containment profile is claimed."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/api-overview",
@@ -2804,9 +3046,32 @@
       "sourcePath": "patterns/api/overview.md",
       "sourceSha256": "5c9a2f722ea5993758419f5ed2c5029798c6aa66e42debadcedad27a067692b4",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "one-contract",
+          "disposition": "existing",
+          "rationale": "Shikigami.Api is the single NamedRoutes umbrella shared by the generated client, serveWithContext proxy and OpenAPI generator; API/server/client package arrows remain enforced."
+        },
+        {
+          "id": "application-status-and-error-bodies",
+          "disposition": "implemented",
+          "rationale": "MultiVerb and handwritten total AsUnion instances declare application outcomes; request-body 400 and corrupt-history 500 now have typed problem schemas. Native health, Relay pagination and the pure OpenAPI GET retain their documented protocols."
+        },
+        {
+          "id": "public-protocol-evidence",
+          "disposition": "implemented",
+          "rationale": "API OpenApiSpec exact response/media checks, all 94 server tests and the source-owned live Hurl suite qualify actual dispatch, auth, pagination, acceptance and outages."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/api-relay-pagination",
@@ -2814,9 +3079,37 @@
       "sourcePath": "patterns/api/relay-pagination.md",
       "sourceSha256": "2453bce79e63f237d5fa4cde9c29f5e524a79477a5e2054f21bc4ef55f1f43de",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "keyset-engine",
+          "disposition": "existing",
+          "rationale": "Agent catalog and run history use the released Relay keyset engine, stable composite ordering and opaque typed cursors; no offset pagination or hand-rolled cursor encoding is introduced."
+        },
+        {
+          "id": "native-servant-boundary",
+          "disposition": "implemented",
+          "rationale": "RelayPage and RelayPageError are the public query/response boundary. Invalid size, malformed arguments, mixed directions and foreign cursors retain native codes and parameters."
+        },
+        {
+          "id": "ordering-and-roundtrips",
+          "disposition": "existing",
+          "rationale": "Native handler fixtures page seven agents and accepted run history in both directions, including composite tie ordering and cursor refusal."
+        },
+        {
+          "id": "schema-and-hurl",
+          "disposition": "implemented",
+          "rationale": "The sole OpenAPI generator imports Relay schema instances. Typed 400 alternatives and Hurl assert the native JSON media; the obsolete private WAI response rewrite was removed."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/api-request-logging",
@@ -2824,9 +3117,32 @@
       "sourcePath": "patterns/api/request-logging.md",
       "sourceSha256": "2306702a4c5eacce8f2bdcecc6f82610b6ba1c3e400aa80399990d18f79ac7bb",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "bounded-json-lines",
+          "disposition": "existing",
+          "rationale": "Server.RequestLog emits one bounded JSON record with method/path/status/duration and bounded user-agent; it does not use logStdoutDev or wai-extra default JSON formatting."
+        },
+        {
+          "id": "privacy-and-probe-exclusion",
+          "disposition": "existing",
+          "rationale": "Query strings, bodies, bearer credentials and arbitrary headers are absent. RequestLogSpec plants sentinels, checks truncation/error logging and excludes health probes."
+        },
+        {
+          "id": "trace-correlation",
+          "disposition": "existing",
+          "rationale": "Middleware correlates valid W3C trace/span IDs with request completion and preserves exception/cancellation propagation. Live HTTP and telemetry fixtures exercise the real middleware."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/api-rfc9457-problem-details",
@@ -2834,9 +3150,42 @@
       "sourcePath": "patterns/api/rfc9457-problem-details.md",
       "sourceSha256": "714369bfbbb62045f58bac945db9dae003aa0441ead183fe9320620ccb031292",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "one-application-body",
+          "disposition": "existing",
+          "rationale": "ProblemDetails has exactly type/title/status/detail/code/retryable with explicit JSON mapping for the unprefixed typeUri field; titles/status/retryability come from one total catalog."
+        },
+        {
+          "id": "safe-classification",
+          "disposition": "implemented",
+          "rationale": "Internal corruption is non-retryable, unavailable and rate-limited failures are retryable. No stored malformed value, SQL, credential or exception is returned to clients."
+        },
+        {
+          "id": "perimeter-formatters",
+          "disposition": "existing",
+          "rationale": "The server uses the same renderer for authentication, route/method/body/header failures. Tests assert response status, media, exact keys, preserved auth headers and redaction."
+        },
+        {
+          "id": "native-protocol-exceptions",
+          "disposition": "implemented",
+          "rationale": "Relay pagination errors retain the native RelayPageError protocol declared by the route and document; health bodies remain status reports. ADR-46/49 and packages.md record these boundaries."
+        },
+        {
+          "id": "real-errors",
+          "disposition": "implemented",
+          "rationale": "Live Hurl covers 400,401,404,405,409,413,503 and readiness outage; the native public-journal fixture covers malformed retained history 500 without exposing its sentinel."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/api-servant-routes",
@@ -2844,9 +3193,52 @@
       "sourcePath": "patterns/api/servant-routes.md",
       "sourceSha256": "6649b60e402f385b2237cfa2fa9e2097059e3665d63a87cc03edd49d365fe88f",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "umbrella-named-routes",
+          "disposition": "existing",
+          "rationale": "Api and each Agent/AgentRun/Health vertical use records with NamedRoutes; the client consumes that exact contract rather than reconstructing endpoint paths."
+        },
+        {
+          "id": "domain-first-packages",
+          "disposition": "existing",
+          "rationale": "Agent.Api and AgentRun.Api stay in API; handlers stay in server. PackageArchitectureSpec enforces the seven-package dependency graph."
+        },
+        {
+          "id": "typed-multiverb",
+          "disposition": "implemented",
+          "rationale": "Application success, refusal and store-failure alternatives use shared response lists and manual AsUnion conversions. RunShow includes non-retryable history-invalid 500; RunRequest declares malformed-body 400."
+        },
+        {
+          "id": "status-selection",
+          "disposition": "implemented",
+          "rationale": "Store unavailability is 503, conflicts 409, accepted work 202/replay 200, missing resources 404, and corrupt retained history 500. Corrupt history never becomes an ordinary failed lifecycle or retryable outage."
+        },
+        {
+          "id": "protocol-exemptions",
+          "disposition": "existing",
+          "rationale": "Health status reports, native RelayPageError and the pure single-status OpenAPI document are explicit protocol exceptions; ordinary handlers and perimeter formatters use ProblemJSON."
+        },
+        {
+          "id": "framework-error-boundary",
+          "disposition": "implemented",
+          "rationale": "Authentication remains at protected vertical mounts. Body, query, header, unmatched-path and method errors retain bounded public diagnostics; Relay query errors are no longer rewritten through private WAI constructors."
+        },
+        {
+          "id": "client-and-schema-totality",
+          "disposition": "existing",
+          "rationale": "Generated client access follows the public record contract; API tests enumerate paths, methods, response statuses and media. Actual Hurl requests verify the served contract."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/cli-agent-assist-commands",
@@ -2854,9 +3246,27 @@
       "sourcePath": "patterns/cli/agents/agent-assist-commands.md",
       "sourceSha256": "f13d600e1762852380abe4ab430f22dfe9d027d5b8e2fb5f9d37eb9aa5065010",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "development-assistant-context",
+          "disposition": "not-applicable",
+          "rationale": "The foreground launcher is a prompt-driven Baikai terminal/job adapter, not a development assistant that assembles project registries, schemas or role-specific prompts. ADR-72 deliberately keeps durable declaration execution and foreground launches separate."
+        },
+        {
+          "id": "selected-interface-evidence",
+          "disposition": "existing",
+          "rationale": "ADR-72 records the concrete interface decision; command parser/source, package arrows and real process fixtures verify the selected surface. This is not a blanket exclusion of public CLI behavior."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/cli-per-command-agent-config",
@@ -2864,9 +3274,27 @@
       "sourcePath": "patterns/cli/agents/per-command-agent-config.md",
       "sourceSha256": "db1e6bd56fd444611b89450776d54622c19c9cef0c3ef2750aa128320b28a8ab",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "eight-tier-assistant-resolution",
+          "disposition": "not-applicable",
+          "rationale": "The guide says not to copy its eight-tier loader unless that hierarchy is the existing contract. Durable execution uses frozen declaration/profile bindings, interactive launch uses launch.* Settei and unattended jobs use the public Baikai resolver/capability ceiling; ADR-72 preserves all three authorities."
+        },
+        {
+          "id": "selected-interface-evidence",
+          "disposition": "existing",
+          "rationale": "ADR-72 records the concrete interface decision; command parser/source, package arrows and real process fixtures verify the selected surface. This is not a blanket exclusion of public CLI behavior."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/cli-skill-and-agent-registry",
@@ -2874,9 +3302,27 @@
       "sourcePath": "patterns/cli/agents/skill-and-agent-registry.md",
       "sourceSha256": "92d02a065f324a0d3d156e0947c8a782e83a2e12d015197467e0055748878e38",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "git-hosted-kit-distribution",
+          "disposition": "not-applicable",
+          "rationale": "Shikigami does not distribute a Git-hosted development skill/agent kit. Its runtime declaration catalog and Baikai jobs are separate surfaces, so installing baikai-kit or inventing sync/removal commands would create a new product contract (ADR-72)."
+        },
+        {
+          "id": "selected-interface-evidence",
+          "disposition": "existing",
+          "rationale": "ADR-72 records the concrete interface decision; command parser/source, package arrows and real process fixtures verify the selected surface. This is not a blanket exclusion of public CLI behavior."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/cli-command-aliases-kdl",
@@ -2884,9 +3330,27 @@
       "sourcePath": "patterns/cli/command-aliases-kdl.md",
       "sourceSha256": "280bcc96b5de3e631b5a9b9d7d95d00fcc308c1ea25f59c10c9ba60065c5e701",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "kdl-alias-layer",
+          "disposition": "not-applicable",
+          "rationale": "No command alias configuration layer is selected. Baikai unattended KDL describes native jobs and policy, not Shikigami command aliases. ADR-72 preserves that resolver and does not add a second KDL loader."
+        },
+        {
+          "id": "selected-interface-evidence",
+          "disposition": "existing",
+          "rationale": "ADR-72 records the concrete interface decision; command parser/source, package arrows and real process fixtures verify the selected surface. This is not a blanket exclusion of public CLI behavior."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/cli-command-aliases",
@@ -2894,9 +3358,27 @@
       "sourcePath": "patterns/cli/command-aliases.md",
       "sourceSha256": "4bdaaae293b9198ebff3dc98da90e523c9a073d3c19fb68cd03c92e9c968a4c3",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "yaml-alias-expansion",
+          "disposition": "not-applicable",
+          "rationale": "The operator API requires exact targets/revisions/epochs and has a fixed typed command tree. ADR-72 selects explicit commands without user alias expansion before configuration; the explicit execution model aliases remain domain selectors, not CLI token macros."
+        },
+        {
+          "id": "selected-interface-evidence",
+          "disposition": "existing",
+          "rationale": "ADR-72 records the concrete interface decision; command parser/source, package arrows and real process fixtures verify the selected surface. This is not a blanket exclusion of public CLI behavior."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/cli-copy-to-clipboard",
@@ -2904,9 +3386,27 @@
       "sourcePath": "patterns/cli/copy-to-clipboard.md",
       "sourceSha256": "183228ec9decb14b36665e20ce7a3e97efa6be29093040f555a6bf1bee7586d5",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "clipboard-effects",
+          "disposition": "not-applicable",
+          "rationale": "Commands emit composable multi-field reports, IDs and sometimes protected output; they do not promise clipboard mutation. ADR-72 selects stdout and explicit redirection rather than a clipboard side effect."
+        },
+        {
+          "id": "selected-interface-evidence",
+          "disposition": "existing",
+          "rationale": "ADR-72 records the concrete interface decision; command parser/source, package arrows and real process fixtures verify the selected surface. This is not a blanket exclusion of public CLI behavior."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/cli-fzf-integration",
@@ -2914,9 +3414,27 @@
       "sourcePath": "patterns/cli/fzf-integration.md",
       "sourceSha256": "f0b58f8362e0035984ae29d2da483da01a9a3dc35a26ea5493d65b613e613230",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "interactive-target-selection",
+          "disposition": "not-applicable",
+          "rationale": "Mutation targets and authority coordinates are explicit. ADR-72 does not introduce interactive fuzzy selection or fallback prompting for missing arguments; noninteractive parser behavior remains deterministic."
+        },
+        {
+          "id": "selected-interface-evidence",
+          "disposition": "existing",
+          "rationale": "ADR-72 records the concrete interface decision; command parser/source, package arrows and real process fixtures verify the selected surface. This is not a blanket exclusion of public CLI behavior."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/cli-help-topics",
@@ -2924,9 +3442,27 @@
       "sourcePath": "patterns/cli/help-topics.md",
       "sourceSha256": "982e6f3f61e5fff69db47be0784a3cd797283f9cc7dae5db96124b25957d08e2",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "embedded-topic-registry",
+          "disposition": "not-applicable",
+          "rationale": "Typed configuration discovery, command help and installed operation documents are the selected long-form guidance. ADR-72 does not add an embedded Markdown topic registry or workspace topic override loader."
+        },
+        {
+          "id": "selected-interface-evidence",
+          "disposition": "existing",
+          "rationale": "ADR-72 records the concrete interface decision; command parser/source, package arrows and real process fixtures verify the selected surface. This is not a blanket exclusion of public CLI behavior."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/cli-help-width",
@@ -2934,9 +3470,27 @@
       "sourcePath": "patterns/cli/help-width.md",
       "sourceSha256": "5f367d510d24ccc5ced78a8c748d07d5fe307396eb9121698c2bdf57e0962caf",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "topic-width-renderer",
+          "disposition": "not-applicable",
+          "rationale": "This pattern owns the long-form help-topic renderer. No such renderer is selected under ADR-72; ordinary optparse help retains native wrapping and is tested at the real command boundary."
+        },
+        {
+          "id": "selected-interface-evidence",
+          "disposition": "existing",
+          "rationale": "ADR-72 records the concrete interface decision; command parser/source, package arrows and real process fixtures verify the selected surface. This is not a blanket exclusion of public CLI behavior."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/cli-option-groups",
@@ -2944,9 +3498,27 @@
       "sourcePath": "patterns/cli/option-groups.md",
       "sourceSha256": "96d5d6b91a38a9f18dd7e171319f3a66707985220deea561cd609d6d17d23aba",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "logical-help-sections",
+          "disposition": "existing",
+          "rationale": "App.Config.Load.configOptionsWith wraps file/named/override sources in Configuration and static/effective modes in Diagnostics using the selected public parserOptionGroup API."
+        },
+        {
+          "id": "one-parser-and-semantics",
+          "disposition": "existing",
+          "rationale": "withConfigOptions shares those groups across actual roles; parsing and source order remain unchanged. CommandSpec and real process help checks cover the rendered parser tree."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/cli-overview",
@@ -2954,9 +3526,37 @@
       "sourcePath": "patterns/cli/overview.md",
       "sourceSha256": "4b3839933204b72ddec1ee376c7c347da6646a222b9e3f22fe5b7b5499753455",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "settei-and-explicit-input",
+          "disposition": "implemented",
+          "rationale": "All application-configured roles use typed Settei resolution, stable source precedence and offline diagnostics. JSON stdin is opt-in, bounded and redacted; literal arguments ignore stdin."
+        },
+        {
+          "id": "discoverable-parser",
+          "disposition": "existing",
+          "rationale": "Command/subcommand --help and native completion derive from the actual optparse tree; central configuration and diagnostics use parserOptionGroup. No duplicate hand command registry exists."
+        },
+        {
+          "id": "offline-identity",
+          "disposition": "implemented",
+          "rationale": "Public role, operator, agent, client and migration version actions work without service configuration; Git identity has checkout and injected Nix fallbacks."
+        },
+        {
+          "id": "optional-interfaces",
+          "disposition": "existing",
+          "rationale": "ADR-72 selects exact command targets, composable stdout and installed operations/schema documentation; optional aliases, fuzzy pickers, clipboard mutation and help-topic registries have no selected surface."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/cli-shell-completions",
@@ -2964,9 +3564,32 @@
       "sourcePath": "patterns/cli/shell-completions.md",
       "sourceSha256": "060580e2ba3e3bff61174b7791eaae4603b0e3495b78abedf2d6f5272f093259",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "native-parser-protocol",
+          "disposition": "existing",
+          "rationale": "All eleven public executables expose optparse native Bash/Zsh/Fish generation, verified by 33 actual process invocations. The same parser supplies nested command and flag completion."
+        },
+        {
+          "id": "no-duplicate-registry",
+          "disposition": "existing",
+          "rationale": "ADR-72 selects native completion flags instead of hand-written script/command registries. There is no second completion routing table to drift."
+        },
+        {
+          "id": "installed-assets",
+          "disposition": "implemented",
+          "rationale": "The Nix install phase generates all three shell assets for each public executable. Actual packaged generation and outside-checkout execution are consumed by plan95 and are not yet claimed here."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/cli-stdin-integration",
@@ -2974,9 +3597,37 @@
       "sourcePath": "patterns/cli/stdin-integration.md",
       "sourceSha256": "f3ffb85711375c99cccdde97972610a622d07b73e1c75c4cd06e788932f00e42",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "explicit-stdin-and-priority",
+          "disposition": "implemented",
+          "rationale": "enqueue-run, agent-run, run-behavior and client runs request select stdin only with --stdin or --payload -. A literal --payload never reads stdin; omission keeps each command default."
+        },
+        {
+          "id": "bounded-admission",
+          "disposition": "implemented",
+          "rationale": "Stdin is bounded to 4 MiB plus one sentinel byte before decoding. The client requires an object; agent commands retain their existing payload type/default. Invalid UTF-8/JSON and oversized data produce generic diagnostics without input echo."
+        },
+        {
+          "id": "real-pipe-roundtrip",
+          "disposition": "implemented",
+          "rationale": "The live fixture pipes a payload to the actual client, retries with a literal while poisoning stdin and observes replay of the same accepted work. Offline fixtures reject malformed and oversized stdin before any service connection."
+        },
+        {
+          "id": "usage-and-errors",
+          "disposition": "existing",
+          "rationale": "Parser conflicts retain reserved usage errors and stdin failures stop before provider or queue work. No implicit editor, picker or terminal read was introduced."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/cli-version-git-sha",
@@ -2984,9 +3635,32 @@
       "sourcePath": "patterns/cli/version-with-git-sha.md",
       "sourceSha256": "c9e6c873f3bcc0b1487400ba8559d5cfc9438668c1b7d73924e0dd520a800fd0",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "compile-time-identity",
+          "disposition": "implemented",
+          "rationale": "Core operational roles and local client/migration adapters use githash TH with CPP GIT_HASH fallback and package Paths version; Nix injects the selected revision for all three packages."
+        },
+        {
+          "id": "offline-and-portability",
+          "disposition": "implemented",
+          "rationale": "Version is a parser action before configuration or service IO. The 70-process fixture checks all eleven public binaries; source archives can honestly report the package version alone."
+        },
+        {
+          "id": "no-package-cycle",
+          "disposition": "existing",
+          "rationale": "Client and migration build-identity adapters remain local to their leaf packages, retaining the acyclic graph and ADR-32 migration boundary."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "docs/adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md",
+        "docs/architecture/packages.md",
+        "tests/cli/contracts.py",
+        "shikigami-api/test/hurl/README.md"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/core-custom-prelude",

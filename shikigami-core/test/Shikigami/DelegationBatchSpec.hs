@@ -1,6 +1,8 @@
 module Shikigami.DelegationBatchSpec (tests) where
 
+import Control.Lens ((&), (.~))
 import Data.Aeson (Value (Null))
+import Data.Generics.Labels ()
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
@@ -57,7 +59,7 @@ tests =
               expectedIds
               [childWorkflowId | PreparedDelegation {childWorkflowId} <- NonEmpty.toList prepared],
       testCase "preflight accumulates fan-out, duplicate-key, catalog, and governance failures" do
-        let constrained = routerDecl {routing = Just routerPolicy {maxSelections = 1}}
+        let constrained = (routerDecl & #routing .~ (Just (routerPolicy & #maxSelections .~ (1))))
             requests =
               batchRequest "same-key" "first"
                 :| [ batchRequest "same-key" "paused",
@@ -75,7 +77,7 @@ tests =
               "the declaration allow-list remains authoritative"
               (DelegationBatchGovernanceRejected (Just "intruder") (DelegationNotAllowed "intruder") `elem` found),
       testCase "preflight checks complete lineage, depth, and parent session before reservation" do
-        let blockedCtx = delegateCtx {depth = DelegationDepth 3, sessionId = Nothing, lineage = map AgentName ["root", "first"]}
+        let blockedCtx = (delegateCtx & #depth .~ (DelegationDepth 3) & #sessionId .~ (Nothing) & #lineage .~ (map AgentName ["root", "first"]))
         case preflightDelegationBatch routerDecl blockedCtx catalog parentWorkflowId (batchRequest "cycle" "first" :| []) of
           Right _ -> assertFailure "expected lineage, depth, and session rejection"
           Left errors -> do

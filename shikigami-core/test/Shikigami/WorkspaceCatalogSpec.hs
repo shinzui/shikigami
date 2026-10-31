@@ -1,8 +1,10 @@
 module Shikigami.WorkspaceCatalogSpec (tests) where
 
+import Control.Lens ((&), (.~))
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Either (isLeft)
+import Data.Generics.Labels ()
 import Data.Text qualified as Text
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.Settings
@@ -26,15 +28,15 @@ tests =
       testCase "branches, abbreviations and unapproved commits are refused" $ withCatalog [policy] $ \catalog ->
         mapM_ (\revision -> refused RevisionNotAdmitted (resolveRepository catalog policy.identity (Just revision))) ["HEAD", "main", Text.take 7 base, Text.replicate 40 "b"],
       testCase "duplicate identities cannot silently choose a source" $
-        refused DuplicateRepositoryIdentity (mkWorkspaceCatalog [policy, policy {source = "/operator/other"}]),
+        refused DuplicateRepositoryIdentity (mkWorkspaceCatalog [policy, (policy & #source .~ ("/operator/other"))]),
       testCase "catalog rejects invalid identity and path configuration" $ do
         mapM_ (\identity -> refused InvalidRepositoryIdentity (mkWorkspaceCatalog [policy {identity}])) ["/tmp/repo", "mori://fixture/..", "mori://fixture/repo/extra", "mori://fixture/repo?x"]
         mapM_ (\source -> refused InvalidRepositorySource (mkWorkspaceCatalog [policy {source}])) ["relative", "/operator/../repo", "/operator/\0repo"],
       testCase "catalog requires an approved immutable default" $ do
-        refused InvalidRepositoryRevisions (mkWorkspaceCatalog [policy {revisions = ["main"], defaultRevision = "main"}])
-        refused InvalidRepositoryRevisions (mkWorkspaceCatalog [policy {defaultRevision = Text.replicate 40 "b"}])
-        refused InvalidRepositoryPolicyRevision (mkWorkspaceCatalog [policy {policyRevision = ""}]),
-      testCase "SHA256 repositories can admit exact commits" $ withCatalog [policy {revisions = [sha256], defaultRevision = sha256}] $ \catalog ->
+        refused InvalidRepositoryRevisions (mkWorkspaceCatalog [(policy & #revisions .~ (["main"]) & #defaultRevision .~ ("main"))])
+        refused InvalidRepositoryRevisions (mkWorkspaceCatalog [(policy & #defaultRevision .~ (Text.replicate 40 "b"))])
+        refused InvalidRepositoryPolicyRevision (mkWorkspaceCatalog [(policy & #policyRevision .~ (""))]),
+      testCase "SHA256 repositories can admit exact commits" $ withCatalog [(policy & #revisions .~ ([sha256]) & #defaultRevision .~ (sha256))] $ \catalog ->
         case resolveRepository catalog policy.identity (Just sha256) of
           Left err -> assertFailure (show err)
           Right resolved -> repositoryBase resolved @?= sha256,
@@ -50,15 +52,15 @@ tests =
             WorkspaceSettings "relative" [repository] [grant] Nothing,
             WorkspaceSettings "/private/workspaces" [repository, repository] [grant] Nothing,
             WorkspaceSettings "/private/workspaces" [repository] [grant, grant] Nothing,
-            WorkspaceSettings "/private/workspaces" [repository {revisions = [WorkspaceRevision "main" revision.instructionDigest], defaultRevision = "main"}] [grant] Nothing,
-            WorkspaceSettings "/private/workspaces" [repository {revisions = [WorkspaceRevision base "unreviewed"]}] [grant] Nothing,
-            WorkspaceSettings "/private/workspaces" [repository {writePaths = ["../escape"]}] [grant] Nothing,
-            WorkspaceSettings "/private/workspaces" [repository] [grant {repository = "mori://fixture/other"}] Nothing
+            WorkspaceSettings "/private/workspaces" [(repository & #revisions .~ ([WorkspaceRevision "main" revision.instructionDigest]) & #defaultRevision .~ ("main"))] [grant] Nothing,
+            WorkspaceSettings "/private/workspaces" [(repository & #revisions .~ ([WorkspaceRevision base "unreviewed"]))] [grant] Nothing,
+            WorkspaceSettings "/private/workspaces" [(repository & #writePaths .~ (["../escape"]))] [grant] Nothing,
+            WorkspaceSettings "/private/workspaces" [repository] [(grant & #repository .~ ("mori://fixture/other"))] Nothing
           ]
         pathAdmitted ["src"] "src/file.hs" @?= True
         pathAdmitted ["src"] "src-other/file.hs" @?= False
         pathAdmitted [] "src/file.hs" @?= False
-        assertBool "retained policy identity binds path restrictions" (workspacePolicyIdentity repository /= workspacePolicyIdentity (repository {writePaths = [""]})),
+        assertBool "retained policy identity binds path restrictions" (workspacePolicyIdentity repository /= workspacePolicyIdentity ((repository & #writePaths .~ ([""])))),
       testCase "unknown nested operator settings are never silently ignored" $ do
         let value = Aeson.object ["storageRoot" .= ("/private/workspaces" :: Text.Text), "repositories" .= ([] :: [Aeson.Value]), "grants" .= ([] :: [Aeson.Value]), "allowEverything" .= True]
         assertBool "unknown field refuses" (case Aeson.fromJSON @WorkspaceSettings value of Aeson.Error _ -> True; _ -> False)
