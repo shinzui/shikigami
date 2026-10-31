@@ -180,8 +180,8 @@ underflow refusal cases. Full affected acceptance is 556 pure, 382 PostgreSQL,
 complete scalar/identity census remain open.
 
 The [compiled declaration worklist](domain-declarations.json) and
-[census acquisition results](domain-census-results.txt) enumerate 307 hand-owned
-modules, 868 declarations and 14 separately listed role entrypoints. The source
+[census acquisition results](domain-census-results.txt) enumerate 310 hand-owned
+modules, 882 declarations and 14 separately listed role entrypoints. The source
 and interface hashes preserve the actual candidate; the worklist does not assign
 automatic domain/boundary exemptions or certify the remaining review.
 
@@ -197,3 +197,10 @@ private checked constructors under ADR-79. [Worker-input acceptance](worker-inpu
 records exact valid numeric/Unicode bytes, invalid admission bounds, 37 compiler
 clients, neutral native reports and 559 pure/383 PostgreSQL/260 worker/95 server
 tests. The complete scalar/identity census remains open.
+
+Thirteen opaque types no longer expose Generic construction/serialization under
+ADR-80. [Opacity acceptance](opaque-values-results.txt) retains the actual earlier
+bypasses, fourteen positive-first compiler clients, exact core-library unit
+selection and current 559 pure/95 server cases. The preceding worker-input result
+owns full PostgreSQL/worker acceptance. The declaration worklist is refreshed;
+complete scalar/identity review and final exact-candidate qualification remain open.

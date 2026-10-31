@@ -159,6 +159,11 @@
           "rationale": "Private MaximumSessions, MaximumAssignments and MailboxLimit retain individual policies through scopes, admission and store APIs. Private protected InstructionText rejects blank/oversized UTF-8 without changing valid text. Complete admission/command/numeric wire controls precede invalid input; authority, full-payload and coupled transaction checks remain. ADR-79 and 559 pure/383 PostgreSQL/260 worker/95 server/37 compiler cases cover this clause. Native generation and replay are neutral. The complete scalar/identity census remains pending."
         },
         {
+          "id": "opaque-values-reject-generic-bypasses",
+          "disposition": "implemented",
+          "rationale": "Actual selected-compiler and runtime probes demonstrated thirteen opaque Generic parse/render bypasses, including zero ports, unpinned revisions and type-only credential disclosure paths. Remove those thirteen instances while preserving factories/codecs. Fourteen positive-first opaque clients and 37 nominal clients pass with exact main-library unit selection, all enabled components build, 559 pure/95 server tests pass, and native diff/replay is neutral under ADR-80. Refreshed worklist is 310 modules/882 declarations; complete scalar/identity review remains pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -183,7 +188,10 @@
         "docs/adr/0078-execution-policy-and-durable-progress-use-checked-distinct-values.md",
         "docs/evidence/keiro-0.22/policy-progress-results.txt",
         "docs/adr/0079-worker-admission-limits-and-instruction-text-refine-at-construction.md",
-        "docs/evidence/keiro-0.22/worker-input-results.txt"
+        "docs/evidence/keiro-0.22/worker-input-results.txt",
+        "docs/adr/0080-opaque-checked-values-do-not-expose-generic-construction.md",
+        "docs/evidence/keiro-0.22/opaque-values-results.txt",
+        "tests/types/opaque-values.py"
       ]
     },
     {

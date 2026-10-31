@@ -73,7 +73,7 @@ data RoutingError
 
 -- | Constructor intentionally hidden: validation is the only authority mint.
 newtype ValidatedRouteDecision = ValidatedRouteDecision RouteDecision
-  deriving stock (Eq, Show, Generic)
+  deriving stock (Eq, Show)
 
 validatedRouteDecision :: ValidatedRouteDecision -> RouteDecision
 validatedRouteDecision (ValidatedRouteDecision decision) = decision

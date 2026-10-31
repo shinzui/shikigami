@@ -29,7 +29,7 @@ newtype RepositoryId = RepositoryId {value :: Text}
 -- The constructor is private so a branch, tag, abbreviation, or differently
 -- cased spelling cannot enter through ordinary construction or JSON decoding.
 newtype Revision = Revision {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
+  deriving stock (Eq, Ord, Show)
 
 -- | Construct a pinned content-plane revision.
 mkRevision :: Text -> Either Text Revision
@@ -69,7 +69,7 @@ data RepoRef = RepoRef
 -- Empty segments and @.@ are removed. Absolute paths, backslashes, NUL bytes,
 -- and @..@ traversal are rejected before a value can be constructed.
 newtype RelativePath = RelativePath {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
+  deriving stock (Eq, Ord, Show)
 
 -- | Construct and normalize a safe repository-relative path.
 mkRelativePath :: Text -> Either Text RelativePath

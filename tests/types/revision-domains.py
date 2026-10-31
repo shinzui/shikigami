@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """Compile the positive boundary before checking rejected revision substitutions."""
 from pathlib import Path
+import json
 import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
+PLAN = json.loads((ROOT / "dist-newstyle/cache/plan.json").read_text())
+CORE_UNITS = [entry["id"] for entry in PLAN["install-plan"]
+              if entry["pkg-name"] == "shikigami-core" and entry.get("component-name") == "lib"]
+assert len(CORE_UNITS) == 1, CORE_UNITS
+CORE_UNIT = CORE_UNITS[0]
 HEADER = '''{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedRecordDot #-}
@@ -149,7 +155,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
         source = Path(directory) / "RevisionBoundary.hs"
         source.write_text(HEADER + body)
         result = subprocess.run(["cabal", "exec", "--", "ghc", "-fno-code",
-                                 "-package", "shikigami-core", str(source)],
+                                 "-package-id", CORE_UNIT, str(source)],
                                 cwd=ROOT, capture_output=True, text=True, timeout=45)
         assert (result.returncode == 0) == expected, (name, result.stdout, result.stderr)
         if not expected:

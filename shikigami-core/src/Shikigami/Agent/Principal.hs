@@ -29,7 +29,7 @@ import Shikigami.Prelude hiding ((.=))
 
 -- | An immutable Meibo agent principal, retaining its canonical rendered form.
 newtype AgentPrincipal = AgentPrincipal {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
+  deriving stock (Eq, Ord, Show)
 
 -- | Identity carried by queued work, workflow input, memory, grants, and
 -- outbound intents.

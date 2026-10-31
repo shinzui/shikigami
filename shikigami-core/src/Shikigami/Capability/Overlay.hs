@@ -33,7 +33,7 @@ import Dhall qualified
 import Shikigami.Prelude hiding ((.=))
 
 newtype CapabilityId = CapabilityId Text
-  deriving stock (Eq, Ord, Show, Generic)
+  deriving stock (Eq, Ord, Show)
 
 newtype CapabilityIdError = CapabilityIdError {message :: Text}
   deriving stock (Eq, Show, Generic)
@@ -94,7 +94,7 @@ instance FromJSON CapabilityId where
     either (fail . Text.unpack . capabilityIdErrorMessage) pure (mkCapabilityId value)
 
 newtype CapabilityRevision = CapabilityRevision Text
-  deriving stock (Eq, Ord, Show, Generic)
+  deriving stock (Eq, Ord, Show)
 
 newtype CapabilityRevisionError = CapabilityRevisionError {message :: Text}
   deriving stock (Eq, Show, Generic)
@@ -186,7 +186,7 @@ instance FromJSON CapabilityDescriptor where
 type ResolvedCapability = CapabilityDescriptor
 
 newtype ResolvedCapabilitySet = ResolvedCapabilitySet [ResolvedCapability]
-  deriving stock (Eq, Show, Generic)
+  deriving stock (Eq, Show)
 
 -- | Normalize a resolution snapshot by capability id so declaration order
 -- cannot affect equality or serialized bytes.

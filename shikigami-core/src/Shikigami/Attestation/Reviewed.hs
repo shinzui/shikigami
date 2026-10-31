@@ -82,7 +82,7 @@ newtype ResultDigest = ResultDigest {value :: Text}
 -- wrapping the text unchecked; a short hash in a payload is a decode failure,
 -- not a value.
 newtype FullCommit = FullCommit {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
+  deriving stock (Eq, Ord, Show)
 
 -- | The hash, lowercase.
 fullCommitText :: FullCommit -> Text

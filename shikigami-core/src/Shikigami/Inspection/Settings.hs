@@ -10,7 +10,7 @@ import GHC.Generics (Generic)
 import Network.URI (URI (..), URIAuth (..), parseURI)
 
 -- The constructor and automatic renderings stay private.
-newtype InspectionCredential = InspectionCredential Text deriving stock (Generic, Eq)
+newtype InspectionCredential = InspectionCredential Text deriving stock (Eq)
 
 revealInspectionCredential :: InspectionCredential -> Text
 revealInspectionCredential (InspectionCredential value) = value

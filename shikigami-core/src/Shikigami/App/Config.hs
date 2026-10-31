@@ -219,7 +219,7 @@ import Shikigami.Workspace.Settings (WorkspaceSettings, WorkspaceSupervisorSetti
 -- reports, and decode failures; this type extends the same guarantee to whatever
 -- the application does with the value afterwards.
 newtype SecretText = SecretText Text
-  deriving stock (Generic, Eq)
+  deriving stock (Eq)
 
 -- | Lower a secret to plaintext at the exact boundary that needs it.
 --
@@ -244,7 +244,7 @@ newtype CredentialRef = CredentialRef Text
 -- @0@ and anything above @65535@ are rejected during resolution, so
 -- @--check-config@ catches a bad port without opening a listener.
 newtype Port = Port Int
-  deriving stock (Generic, Eq, Ord)
+  deriving stock (Eq, Ord)
 
 -- | Build a port, rejecting anything outside 1–65535.
 mkPort :: Int -> Either Text Port
@@ -266,7 +266,7 @@ portExpectation = "a TCP port between 1 and 65535"
 -- allocation guard. The constructor stays private so HTTP code can rely on the
 -- invariant without checking it again.
 newtype ByteLimit = ByteLimit Int
-  deriving stock (Generic, Eq, Ord)
+  deriving stock (Eq, Ord)
 
 -- | Build a body-size limit between 1 KiB and 64 MiB, inclusive.
 mkByteLimit :: Int -> Either Text ByteLimit

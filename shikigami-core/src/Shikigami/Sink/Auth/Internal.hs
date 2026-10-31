@@ -15,11 +15,11 @@ import Data.ByteArray (constEq)
 import Data.ByteString (ByteString)
 import Data.Text.Encoding qualified as Text
 import Shikigami.App.Config (SecretText, revealSecretText)
-import Shikigami.Prelude (Generic, Text)
+import Shikigami.Prelude (Text)
 
 -- | An opaque bearer credential with no rendering or serialization instances.
 newtype BearerToken = BearerToken Text
-  deriving stock (Generic, Eq)
+  deriving stock (Eq)
 
 -- | Convert a resolved secret at the boundary where authentication owns it.
 credentialToken :: SecretText -> BearerToken

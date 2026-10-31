@@ -276,7 +276,8 @@ haskell-conventions:
     python3 tools/style/check_haskell.py
     python3 -m unittest discover -s tools/style -v
 
-# Check public nominal revision boundaries using the selected compiler/package.
+# Check nominal value scopes and opaque construction with the selected compiler.
 domain-value-types:
     cabal build shikigami-core
     python3 tests/types/revision-domains.py
+    python3 tests/types/opaque-values.py
