@@ -441,7 +441,7 @@ waitReady directory remaining = do
 validRequest :: SupervisorRequest -> Bool
 validRequest request = bounded request.executionId.value && bounded operation && bounded attempt && request.generation > initialRevision && revisionNumber request.generation < 9223372036854775808
   where
-    OperationId operation = request.operationId; AttemptId attempt = request.attemptId
+    OperationId operation = request.operationId; attempt = attemptIdText request.attemptId
 
 execute :: SupervisorRuntime -> Eff AppEffects (Either ExecutionError a) -> IO a
 execute runtime action = do

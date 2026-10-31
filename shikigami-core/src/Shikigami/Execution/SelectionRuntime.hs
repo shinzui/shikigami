@@ -27,8 +27,6 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Time (diffUTCTime)
-import Data.UUID qualified as UUID
-import Data.UUID.V4 qualified as UUID
 import Hasql.Pool (Pool)
 import Hasql.Pool qualified as Pool
 import Hasql.Transaction (Transaction)
@@ -233,8 +231,8 @@ buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = c
                           then pure (Right (Calls.NewCall receipt))
                           else pure (Left Calls.CallIdentityConflict)
                       Nothing -> do
-                        uuid <- UUID.nextRandom
-                        let request = Resources.AttemptRequest (AttemptId (UUID.toText uuid)) (OperationId ("model:" <> fingerprint)) quantities policy
+                        attemptId <- newAttemptId
+                        let request = Resources.AttemptRequest attemptId (OperationId ("model:" <> fingerprint)) quantities policy
                         admissionTime <- getCurrentTime
                         transaction (Calls.reserveSelectionCallTx selection limits request fingerprint admissionTime)
                     case admitted of
@@ -261,7 +259,7 @@ buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = c
                 xs -> Just (max 1 (floor (diffUTCTime (minimum xs) current * 1000)))
               timeouts = maybe [] pure (Options.timeoutMs options) <> maybe [] pure remaining
               boundedOptions = (options & #timeoutMs .~ (case timeouts of [] -> Nothing; xs -> Just (minimum xs)))
-              AttemptId attempt = receipt.request.attemptId
+              attempt = attemptIdText receipt.request.attemptId
               strength = max (minimumStrength (bindingOptions binding)) (minimumStrength boundedOptions)
               correlated = configureEvidenceCall env.runId (callCorrelationId env.runId attempt 0) (fromInteger (callOrdinalNumber receipt.ordinal)) Nothing strength boundedOptions
               effective = case Model.api model of
@@ -279,7 +277,7 @@ buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = c
     transaction :: Transaction a -> IO a
     transaction action = transact action >>= either (const (ioError (userError "execution call store unavailable"))) pure
     finishTerminal receipt failed evidence response =
-      let AttemptId attempt = receipt.request.attemptId
+      let attempt = attemptIdText receipt.request.attemptId
           ModelAlias alias = selection.descriptor.alias
           normalized = (\ev -> factsFromTerminal (callCorrelationId env.runId attempt 0) RootCall (fromMaybe selection.descriptor.modelId (Evidence.observedValue ev.observedModel)) (Just alias) ev & #relationshipKnown .~ False) <$> evidence
           outcome = outcomeFor failed evidence & #compliance .~ normalized

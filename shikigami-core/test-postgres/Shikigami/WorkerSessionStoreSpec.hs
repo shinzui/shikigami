@@ -27,10 +27,11 @@ import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
-import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
+import Shikigami.Execution.Identity (ExecutionRootId, OperationId (..))
 import Shikigami.Execution.Resources (Admission (..))
 import Shikigami.Execution.Resources qualified as R
 import Shikigami.Execution.ResourcesStore qualified as Roots
+import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
@@ -324,7 +325,7 @@ withConfiguredFixture fixture configure callback = withShikigamiFreshDatabase fi
   now <- getCurrentTime
   parent <- expectRight =<< loadAgent "../agents/heartbeat.dhall"
   let env = AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing
-      root = ExecutionRootId "session-root"
+      root = fixtureRootId "session-root"
       admission =
         configure $
           SessionAdmission

@@ -459,6 +459,7 @@ test-suite shikigami-core-test
     Shikigami.ExecutionPositionSpec
     Shikigami.ExecutionResourcesSpec
     Shikigami.ExecutionSelectionSpec
+    Shikigami.Fixture.ExecutionIdentity
     Shikigami.Fixture.KawaStub
     Shikigami.Fixture.SinkHttp
     Shikigami.KanmonClientSpec
@@ -562,6 +563,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.ExecutionResourcesSpec
     Shikigami.ExecutionSelectionWorkflowSpec
     Shikigami.ExecutionTranscriptSpec
+    Shikigami.Fixture.ExecutionIdentity
     Shikigami.Fixture.KawaStub
     Shikigami.Fixture.SinkHttp
     Shikigami.FlowLifecycleSpec

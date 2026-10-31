@@ -32,7 +32,7 @@ import Foreign.C
 import Network.Socket qualified as Socket
 import Network.Socket.ByteString qualified as SocketBytes
 import Shikigami.Agent.Principal (AgentIdentity)
-import Shikigami.Execution.Identity (AttemptId (..), OperationId (..))
+import Shikigami.Execution.Identity (AttemptId, OperationId (..), attemptIdText)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Transfer
@@ -223,7 +223,7 @@ validView value =
     Just receipt -> value.phase == ProcessSettled && receipt.operationId == value.operationId && receipt.attemptId == value.attemptId && receipt.generation == value.generation && receipt.bindingDigest == value.bindingDigest && digestText receipt.fingerprint && receipt.unit == processUnit value.operationId receipt.fingerprint && hostIdentity receipt.bootId && hostIdentity receipt.invocationId && receipt.descendantsEmpty && receipt.outputComplete && maybe (receipt.termination /= ProcessExited) (\code -> code >= 0 && code <= 255) receipt.exitCode && all validOutput [receipt.stdout, receipt.stderr] && receipt.stdout.bytes + receipt.stderr.bytes <= 1048576
   where
     OperationId operation = value.operationId
-    AttemptId attempt = value.attemptId
+    attempt = attemptIdText value.attemptId
     validOutput output = bounded output.artifact && output.artifact `notElem` [".", ".."] && Text.all (\c -> (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c `elem` ("._-" :: String)) output.artifact && digestText output.digest && output.bytes >= 0
 
 validPath :: FilePath -> Bool

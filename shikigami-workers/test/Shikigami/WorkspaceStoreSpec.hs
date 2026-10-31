@@ -19,7 +19,8 @@ import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
-import Shikigami.Execution.Identity (ExecutionRootId (..))
+import Shikigami.Execution.Identity (ExecutionRootId)
+import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision (StateRevision, parseRevision)
@@ -64,7 +65,7 @@ tests fixture =
         _ <- right =<< run env (reserveWorkspaceTx root request repo)
         mapM_
           (\changed -> run env (reserveWorkspaceTx root changed repo) >>= (@?= Left WorkspaceBindingConflict))
-          [request & #runId .~ "different", request & #owner .~ CompatibilityIdentity (fixtureAgentName "other"), request & #epoch .~ (fixtureRevision 1), request & #rootId .~ ExecutionRootId "other"]
+          [request & #runId .~ "different", request & #owner .~ CompatibilityIdentity (fixtureAgentName "other"), request & #epoch .~ (fixtureRevision 1), request & #rootId .~ fixtureRootId "other"]
         changed <- resolved (repositorySource repo) (repositoryBase repo) "policy-2"
         run env (reserveWorkspaceTx root request changed) >>= (@?= Left WorkspaceBindingConflict)
         changedSource <- resolved (repositorySource repo <> "-other") (repositoryBase repo) "policy-1"
@@ -182,7 +183,7 @@ tests fixture =
     takeDirectoryOfFiles root binding = takeDirectory (workspaceFiles root binding)
 
 request :: WorkspaceRequest
-request = WorkspaceRequest "run" (Just (WorkerSessionId "session", AssignmentId "one")) (ExecutionRootId "root") (CompatibilityIdentity (fixtureAgentName "parent")) (CompatibilityIdentity (fixtureAgentName "worker")) (fixtureRevision 0)
+request = WorkspaceRequest "run" (Just (WorkerSessionId "session", AssignmentId "one")) (fixtureRootId "root") (CompatibilityIdentity (fixtureAgentName "parent")) (CompatibilityIdentity (fixtureAgentName "worker")) (fixtureRevision 0)
 
 resolved :: FilePath -> Text.Text -> Text.Text -> IO ResolvedRepository
 resolved source base policy = do

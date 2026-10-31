@@ -36,7 +36,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Numeric.Natural (Natural)
 import Shikigami.Agent.Decl (DelegationBudget, delegationBudgetInt)
 import Shikigami.Agent.Delegate.Context (DelegationBudgetId (..))
-import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
+import Shikigami.Execution.Identity (ExecutionRootId, OperationId (..), executionRootIdText, parseExecutionRootId)
 import Shikigami.Execution.Quantity (oneAmount)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Resources
@@ -119,7 +119,8 @@ reserveDelegationSlotsTx enrolled budgetId seed childWorkflowIds now = do
   traverse_ (\(rootWorkflowId, limit) -> Tx.statement (budgetId, rootWorkflowId, limit, now) insertBudgetStatement) seed
   Tx.statement budgetId lockBudgetStatement >>= \case
     Nothing -> pure (Left (DelegationBudgetLedgerMissing budgetId))
-    Just (_, _, Just bound) | enrolled /= Just (ExecutionRootId bound) -> pure (Left (DelegationResourceRefused Resources.IdentityConflict))
+    Just (_, _, Just (Left _)) -> pure (Left (DelegationResourceRefused Resources.ResourceStateCorrupt))
+    Just (_, _, Just (Right bound)) | enrolled /= Just bound -> pure (Left (DelegationResourceRefused Resources.IdentityConflict))
     Just (_, _, Nothing) | isJust enrolled && isNothing seed -> pure (Left (DelegationResourceRefused Resources.IdentityConflict))
     Just (limit, consumed, _) -> do
       reservationStates <-
@@ -145,7 +146,7 @@ reserveDelegationSlotsTx enrolled budgetId seed childWorkflowIds now = do
 -- | Acquire the resource root first, then the historical ledger. Failure at
 -- either ceiling rolls both owners back before any child can be spawned.
 reserveEnrolledDelegationSlots :: (Store :> es) => ExecutionRootId -> DelegationBudgetId -> Maybe (WorkflowId, DelegationBudget) -> NonEmpty WorkflowId -> UTCTime -> Eff es (Either BudgetReservationError BatchReservationResult)
-reserveEnrolledDelegationSlots root@(ExecutionRootId rootKey) budgetId seed childIds now = runTransaction do
+reserveEnrolledDelegationSlots root budgetId seed childIds now = runTransaction do
   inspected <- Resources.inspectRootTx root
   case inspected of
     Left err -> pure (Left (DelegationResourceRefused err))
@@ -159,7 +160,7 @@ reserveEnrolledDelegationSlots root@(ExecutionRootId rootKey) budgetId seed chil
             Left _ -> Tx.condemn >> pure result
             Right DelegationBatchExhausted -> Tx.condemn >> pure result
             Right _ -> do
-              bound <- Tx.statement (budgetId, rootKey, isJust seed) bindRootStatement
+              bound <- Tx.statement (budgetId, executionRootIdText root, isJust seed) bindRootStatement
               if bound
                 then pure result
                 else Tx.condemn >> pure (Left (DelegationResourceRefused Resources.IdentityConflict))
@@ -195,7 +196,7 @@ insertBudgetStatement =
     )
     Decoders.noResult
 
-lockBudgetStatement :: Statement DelegationBudgetId (Maybe (Int, Int, Maybe Text))
+lockBudgetStatement :: Statement DelegationBudgetId (Maybe (Int, Int, Maybe (Either Text ExecutionRootId)))
 lockBudgetStatement =
   preparable
     """
@@ -209,7 +210,7 @@ lockBudgetStatement =
         ( (,,)
             <$> Decoders.column (Decoders.nonNullable (fromIntegral <$> Decoders.int4))
             <*> Decoders.column (Decoders.nonNullable (fromIntegral <$> Decoders.int4))
-            <*> Decoders.column (Decoders.nullable Decoders.text)
+            <*> Decoders.column (Decoders.nullable (parseExecutionRootId <$> Decoders.text))
         )
     )
 

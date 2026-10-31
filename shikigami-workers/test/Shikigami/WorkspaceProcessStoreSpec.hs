@@ -28,6 +28,7 @@ import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Execution.Transcript (ExecutionId (..))
+import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureRootId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision (StateRevision, parseRevision)
@@ -89,7 +90,7 @@ tests fixture =
         (a, b) <- concurrently (run env (requestProcessLaunchTx binding proposed boot)) (run env (requestProcessLaunchTx binding proposed boot))
         granted <- traverse right [a, b]
         sort granted @?= [False, True]
-        let replacement = proposed & #attemptId .~ AttemptId "replacement" & #generation .~ (fixtureGeneration 2) & #deadline .~ addUTCTime 3600 proposed.deadline
+        let replacement = proposed & #attemptId .~ fixtureAttemptId "replacement" & #generation .~ (fixtureGeneration 2) & #deadline .~ addUTCTime 3600 proposed.deadline
         retained <- right =<< run env (reserveProcessTx binding replacement)
         retained.attemptId @?= proposed.attemptId
         retained.deadline @?= proposed.deadline
@@ -251,7 +252,7 @@ writeCollector directory record changed = do
 withProcess :: DatabaseFixture -> (AppEnv -> WorkspaceBinding -> ProcessRecord -> IO a) -> IO a
 withProcess fixture use = Fixture.withFixture fixture \env _ root repository -> do
   let owner = CompatibilityIdentity (fixtureAgentName "process-worker")
-      request = WorkspaceRequest "process-run" Nothing (ExecutionRootId "process-root") owner owner (fixtureRevision 0)
+      request = WorkspaceRequest "process-run" Nothing (fixtureRootId "process-root") owner owner (fixtureRevision 0)
   (binding, _) <- right =<< run env (Store.reserveWorkspaceTx root request repository)
   allocateWorkspace root binding Reserved >>= (@?= Right ())
   run env (Store.markWorkspaceReadyTx binding) >>= (@?= Right ())
@@ -260,7 +261,7 @@ withProcess fixture use = Fixture.withFixture fixture \env _ root repository -> 
       operation = OperationId "process-operation"
       logical = OperationContext (ExecutionId "process-execution") operation "process-operation" "input-fingerprint" "scope"
       fingerprint = processFingerprint binding digest logical command
-      record = ProcessRecord operation (AttemptId "original-attempt") (fixtureOwner "original-claim") (fixtureGeneration 1) (workspaceBindingDigest binding) digest fingerprint command (addUTCTime 30 now) (processUnit operation fingerprint) Nothing Nothing ProcessReserved Nothing Nothing
+      record = ProcessRecord operation (fixtureAttemptId "original-attempt") (fixtureOwner "original-claim") (fixtureGeneration 1) (workspaceBindingDigest binding) digest fingerprint command (addUTCTime 30 now) (processUnit operation fingerprint) Nothing Nothing ProcessReserved Nothing Nothing
   use env binding record
 
 receiptFor :: ProcessRecord -> ProcessReceipt

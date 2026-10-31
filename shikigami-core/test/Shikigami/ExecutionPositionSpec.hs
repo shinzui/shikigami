@@ -13,13 +13,15 @@ import Data.Time (UTCTime (..), fromGregorian)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Claim
-import Shikigami.Execution.Identity (AttemptId (..), OperationId (..))
+import Shikigami.Execution.Identity (AttemptId, OperationId (..))
+import Shikigami.Execution.Identity qualified as Entity
 import Shikigami.Execution.Payload (parsePayloadByteCount, parsePayloadDigest, parsePayloadId)
 import Shikigami.Execution.Policy.Types (RecoveryClass (RepeatableObservation), ToolInvoiceCost (NoInvoiceCost))
 import Shikigami.Execution.Progress
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
+import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId)
 import Shikigami.StateRevision
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -28,10 +30,17 @@ tests :: TestTree
 tests =
   testGroup
     "execution revision and operation positions"
-    [ testCase "attempt claim owners and generations preserve complete retained bytes" do
+    [ testCase "accounting entities allocate distinct checked UUIDv7 domains" do
+        assertEntityDomain Entity.parseExecutionRootId Entity.executionRootIdText Entity.newExecutionRootId "shikigami_execution_root"
+        assertEntityDomain Entity.parseAttemptId Entity.attemptIdText Entity.newAttemptId "shikigami_execution_attempt"
+        assertEntityDomain Entity.parseAllocationId Entity.allocationIdText Entity.newAllocationId "shikigami_execution_allocation"
+        actual <- Entity.newAttemptId
+        assertBool "attempt accepted as root" (isLeft (Entity.parseExecutionRootId (Entity.attemptIdText actual)))
+        assertBool "attempt accepted as allocation" (isLeft (Entity.parseAllocationId (Entity.attemptIdText actual))),
+      testCase "attempt claim owners and generations preserve complete retained bytes" do
         let owner = either (error . show) id (parseClaimOwner "fixture")
             generation = revision 3
-            reference = Attempt.JobReference 1 execution (OperationId "operation") (AttemptId "attempt")
+            reference = Attempt.JobReference 1 execution (OperationId "operation") (fixtureAttemptId "attempt")
             request = Resources.AttemptRequest reference.attemptId reference.operationId Map.empty Resources.AdmittedUnknownUsage
             now = UTCTime (fromGregorian 2026 10 30) 0
             claim = Attempt.AttemptClaim reference owner generation
@@ -139,3 +148,15 @@ fixturePayloadRef locator digest size =
     (either (error . show) id (parsePayloadId locator))
     (either (error . show) id (parsePayloadDigest digest))
     (either (error . show) id (parsePayloadByteCount size))
+
+assertEntityDomain :: forall a. (Eq a, Show a, Aeson.FromJSON a, Aeson.ToJSON a) => (Text -> Either Text a) -> (a -> Text) -> IO a -> Text -> IO ()
+assertEntityDomain parse render allocate prefix = do
+  first <- allocate
+  second <- allocate
+  assertBool "allocation reused an identity" (first /= second)
+  parse (render first) @?= Right first
+  Aeson.encode first @?= Aeson.encode (render first)
+  Aeson.eitherDecode (Aeson.encode first) @?= Right first
+  mapM_
+    (\raw -> assertBool "invalid entity domain accepted" (isLeft (parse raw)))
+    [prefix <> "_5q2yqxm4kkaka84gadcrsgwfyk", "not-an-entity", " " <> render first, Text.toUpper (render first)]

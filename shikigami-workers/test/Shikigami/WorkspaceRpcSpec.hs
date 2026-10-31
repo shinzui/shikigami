@@ -17,7 +17,8 @@ import Network.Socket qualified as Socket
 import Network.Socket.ByteString qualified as SocketBytes
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
-import Shikigami.Execution.Identity (AttemptId (..), ExecutionRootId (..), OperationId (..))
+import Shikigami.Execution.Identity (AttemptId, ExecutionRootId, OperationId (..))
+import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureRootId)
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.StateRevision qualified as Generation
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
@@ -39,7 +40,7 @@ tests =
     "workspace Unix RPC"
     [ testCase "version 2 fence replies bind the exact request and reject cross-protocol success" $ withListener \path listener uid -> do
         let owner = compatibilityIdentity (fixtureAgentName "old")
-            root = ExecutionRootId "root"
+            root = fixtureRootId "root"
             workspace = WorkspaceRef "shikigami.workspace/1" "resource"
             intent = TransferIntent 1 (WorkerSessionId "session") (ObjectiveRef "provider" "objective") (compatibilityIdentity (fixtureAgentName "parent")) operation (ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) owner True root (read "2026-10-30 20:00:00 UTC")) owner (compatibilityIdentity (fixtureAgentName "new")) (fixtureAgentName "new") (fixtureRevision 0) (fixtureRevision 1) root workspace
             proof = FenceProof 1 workspace operation (transferFingerprint intent) (fixtureRevision 0) (fixtureRevision 1) "retained-fence"
@@ -109,8 +110,8 @@ tests =
           assertBool "timed-out handlers provide no completion proof" (all isLeft results)
           readIORef counts >>= (@?= (4, 0)),
       testCase "client refuses unrelated operation and invalid settled evidence" $ withListener \path listener uid -> do
-        let wrong = RpcView (ProcessView (OperationId "other") (AttemptId "actual") (fixtureGeneration 1) digest ProcessReserved Nothing)
-            incomplete = RpcView (ProcessView operation (AttemptId "actual") (fixtureGeneration 1) digest ProcessSettled Nothing)
+        let wrong = RpcView (ProcessView (OperationId "other") (fixtureAttemptId "actual") (fixtureGeneration 1) digest ProcessReserved Nothing)
+            incomplete = RpcView (ProcessView operation (fixtureAttemptId "actual") (fixtureGeneration 1) digest ProcessSettled Nothing)
         mapM_ (\value -> withAsync (serveRpc (RpcPolicy [uid] 1 2) listener (const (pure value))) \_ -> callRpc path uid 3 request >>= (@?= Left RpcMalformed)) [wrong, incomplete],
       testCase "TCP listeners cannot enter peer-credential transport" $
         bracket (Socket.socket Socket.AF_INET Socket.Stream Socket.defaultProtocol) Socket.close \listener -> do
@@ -167,7 +168,7 @@ request :: RpcRequest
 request = RpcObserve operation
 
 reply :: RpcReply
-reply = RpcView (ProcessView operation (AttemptId "actual") (fixtureGeneration 1) digest ProcessReserved Nothing)
+reply = RpcView (ProcessView operation (fixtureAttemptId "actual") (fixtureGeneration 1) digest ProcessReserved Nothing)
 
 digest :: Text.Text
 digest = "sha256:" <> Text.replicate 64 "a"

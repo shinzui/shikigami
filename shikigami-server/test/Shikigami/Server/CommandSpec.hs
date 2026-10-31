@@ -83,7 +83,7 @@ tests =
           Failure _ -> pure ()
           _ -> assertBool "replacement root admitted" False,
       testCase "resources inspect accepts a root and JSON output" do
-        case execParserPure adminPrefs adminInfo ["resources", "inspect", "root-1", "--json"] of
+        case execParserPure adminPrefs adminInfo ["resources", "inspect", "shikigami_execution_root_3380yeg7akfr6t0vrqkd5t3vhy", "--json"] of
           Success (chosen, _) -> assertBool "resources action selected" (not (isNothing chosen))
           _ -> assertBool "resources did not parse" False,
       testCase "resource JSON distinguishes held unknown usage from measured consumption" do

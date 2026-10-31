@@ -18,6 +18,7 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
 import Data.Time (addUTCTime, getCurrentTime)
 import Effectful (Eff)
+import FixtureIdentity (fixtureRootId)
 import GHC.Generics (Generic)
 import GHC.Stack (HasCallStack, callStack, prettyCallStack)
 import Kioku.Id (genSessionId)
@@ -143,7 +144,7 @@ resultValue q prepared = do
 
 integrationCase :: FilePath -> FilePath -> IO ()
 integrationCase config prefix = withQualification config prefix \q -> do
-  let root = ExecutionRootId "integration-qualification-root"
+  let root = fixtureRootId "integration-qualification-root"
       owner = q.initial.binding.request.owner
       edit path before after = ("overlay__workspace-edit__replace", Aeson.toJSON (Replacement path (Just (contentDigest before)) after))
       validate = ("overlay__workspace-exec__validate", Aeson.object ["rule" Aeson..= ("validate" :: Text.Text)])

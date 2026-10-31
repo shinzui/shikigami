@@ -22,6 +22,7 @@ import Shikigami.Execution.Identity
 import Shikigami.Execution.Payload (PayloadDigest, parsePayloadDigest)
 import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (NeedModel))
+import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureRootId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision (StateRevision, parseRevision)
@@ -44,7 +45,7 @@ tests fixture =
         (a, b) <- concurrently (run env (reserveGitTx binding proposed)) (run env (reserveGitTx binding proposed))
         a @?= Right proposed
         b @?= a
-        let duplicate = proposed & #createdAt .~ addUTCTime 1 proposed.createdAt & #attemptId .~ AttemptId "replacement" & #generation .~ (fixtureGeneration 2) & #claimOwner .~ (fixtureOwner "new-claim")
+        let duplicate = proposed & #createdAt .~ addUTCTime 1 proposed.createdAt & #attemptId .~ fixtureAttemptId "replacement" & #generation .~ (fixtureGeneration 2) & #claimOwner .~ (fixtureOwner "new-claim")
         run env (reserveGitTx binding duplicate) >>= (@?= Right proposed)
         let changed = proposed & #target .~ "other-target"
         run env (reserveGitTx binding (changed & #fingerprint .~ gitFingerprint binding changed)) >>= (@?= Left WorkspaceBindingConflict)
@@ -87,7 +88,7 @@ tests fixture =
         let operation = proposed.operation.operationId
         run env (Store.reserveWorkspaceEffectTx binding binding.request.owner (fixtureRevision 0) operation digest) >>= (@?= Right Nothing)
         run env (reserveGitTx binding proposed) >>= (@?= Left WorkspaceBindingConflict)
-        let receipt = FileReceipt operation (AttemptId "file-attempt") (fixtureGeneration 1) digest (workspaceBindingDigest binding) digest "dependency.txt" "device:parent" Nothing digest EditRefused
+        let receipt = FileReceipt operation (fixtureAttemptId "file-attempt") (fixtureGeneration 1) digest (workspaceBindingDigest binding) digest "dependency.txt" "device:parent" Nothing digest EditRefused
         run env (Store.recordWorkspaceReceiptTx binding receipt) >>= (@?= Right ())
         run env (Store.reserveWorkspaceEffectTx binding binding.request.owner (fixtureRevision 0) operation digest) >>= (@?= Right (Just receipt))
         run env (inspectGitTx operation) >>= (@?= Nothing)
@@ -122,13 +123,13 @@ tests fixture =
 withGit :: DatabaseFixture -> (AppEnv -> WorkspaceBinding -> GitRecord -> IO a) -> IO a
 withGit fixture use = Fixture.withFixture fixture \env _ root repository -> do
   let owner = CompatibilityIdentity (fixtureAgentName "git-worker")
-      request = WorkspaceRequest "git-run" Nothing (ExecutionRootId "git-root") owner owner (fixtureRevision 0)
+      request = WorkspaceRequest "git-run" Nothing (fixtureRootId "git-root") owner owner (fixtureRevision 0)
   (binding, _) <- right =<< run env (Store.reserveWorkspaceTx root request repository)
   allocateWorkspace root binding Reserved >>= (@?= Right ())
   run env (Store.markWorkspaceReadyTx binding) >>= (@?= Right ())
   now <- getCurrentTime
   let logical = OperationContext (ExecutionId "git-execution") (OperationId "git-operation") "git-operation" digest digest
-      record = GitRecord 1 logical (AttemptId "original-attempt") (fixtureOwner "original-claim") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest "device:parent" candidate.parent digest now (GitRouting logical.executionId owner (fixturePayloadDigest digest) NeedModel) GitReserved Nothing
+      record = GitRecord 1 logical (fixtureAttemptId "original-attempt") (fixtureOwner "original-claim") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest "device:parent" candidate.parent digest now (GitRouting logical.executionId owner (fixturePayloadDigest digest) NeedModel) GitReserved Nothing
   use env binding (record & #fingerprint .~ gitFingerprint binding record)
 
 candidate :: GitCandidate

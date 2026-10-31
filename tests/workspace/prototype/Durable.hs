@@ -22,6 +22,7 @@ import Data.Text.Encoding qualified as Encoding
 import Data.Time (addUTCTime, getCurrentTime)
 import Data.Vector qualified as Vector
 import Effectful (Eff)
+import FixtureIdentity (fixtureRootId)
 import GHC.Generics (Generic)
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
@@ -140,7 +141,7 @@ workflowCase configFile prefix stage = do
     now <- getCurrentTime
     http <- right =<< newSinkHttp (HttpLimits config.httpRequestMaxBytes config.httpResponseMaxBytes) (credentialsFromConfig config) (DanwaConfig "http://localhost:1" "fixture")
     let declaration = original & #name .~ fixtureAgentName "workspace-upgrade" & #behavior .~ Skill (Text.pack skill) & #identity .~ Just (IdentityDecl principal) & #capabilityOverlays .~ map (.capability) [supervisedWorkspaceEditDescriptor, workspaceExecDescriptor, workspaceGitDescriptor] & #sinks .~ []
-        rootId = ExecutionRootId "workflow-upgrade-root"
+        rootId = fixtureRootId "workflow-upgrade-root"
         job = RunJob (fixtureAgentName "workspace-upgrade") initial.binding.request.owner TriggeredBySchedule now Aeson.Null (fixtureRunKey "workspace-durable-upgrade") Nothing Nothing Nothing [] Nothing Nothing (Just rootId) Nothing AgentWorkflowRoute
         deps =
           Agent.AgentRunDeps

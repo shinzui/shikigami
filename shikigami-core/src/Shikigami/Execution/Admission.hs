@@ -3,26 +3,21 @@
 module Shikigami.Execution.Admission (enrollRootRun) where
 
 import Data.Generics.Labels ()
-import Data.UUID qualified as UUID
-import Data.UUID.V5 qualified as UUID
-import Effectful (Eff, (:>))
-import Keiro.Workflow.Types (WorkflowId (..))
+import Effectful (Eff, IOE, (:>))
 import Kiroku.Store.Effect (Store)
 import Shikigami.Agent.Delegate.Depth (depthInt)
+import Shikigami.Agent.Principal (resolveAgentIdentity)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
-import Shikigami.Execution.Identity (ExecutionRootId (..))
 import Shikigami.Execution.Resources (Envelope, ResourceError (..))
-import Shikigami.Execution.ResourcesStore (enrollRoot)
+import Shikigami.Execution.ResourcesStore (allocateRootForWorkflow)
 import Shikigami.Prelude
 
-enrollRootRun :: (Store :> es) => Envelope -> RunJob -> Eff es (Either ResourceError RunJob)
+enrollRootRun :: (Store :> es, IOE :> es) => Envelope -> RunJob -> Eff es (Either ResourceError RunJob)
 enrollRootRun envelope job
   | isJust job.parentRunWorkflowId || isJust job.parentSessionId || isJust job.delegationBudgetId || maybe False ((/= 0) . depthInt) job.delegationDepth =
       pure (Left (InvalidResourceRequest "descendants cannot enroll a resource root"))
-  | maybe False (/= rootId) job.executionRootId = pure (Left IdentityConflict)
-  | otherwise = do
-      admitted <- enrollRoot rootId envelope
-      pure ((\_ -> job & #executionRootId .~ Just rootId) <$> admitted)
-  where
-    WorkflowId workflow = runJobWorkflowId job
-    rootId = ExecutionRootId (UUID.toText (UUID.generateNamed UUID.namespaceURL (nameBytes ("shikigami:execution-root:" <> workflow))))
+  | otherwise = case resolveAgentIdentity job.identity of
+      Left _ -> pure (Left (InvalidResourceRequest "resource root requires a resolved creator"))
+      Right creator -> do
+        admitted <- allocateRootForWorkflow creator job.agentName (runJobWorkflowId job) job.executionRootId envelope
+        pure ((\root -> job & #executionRootId .~ Just root) <$> admitted)

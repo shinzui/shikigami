@@ -21,8 +21,6 @@ import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Map.Strict qualified as Map
 import Data.Maybe (listToMaybe)
 import Data.Time (diffUTCTime)
-import Data.UUID qualified as UUID
-import Data.UUID.V4 qualified as UUID
 import Effectful (Eff, IOE, runEff)
 import Effectful.Error.Static (Error, runErrorNoCallStack, throwError, tryError)
 import Effectful.Exception (throwIO)
@@ -41,7 +39,7 @@ import Shikigami.App (AppEffects)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Executor (ExecutionRuntime (..), modelContext, runExecutionStore)
-import Shikigami.Execution.Identity (AttemptId (..))
+import Shikigami.Execution.Identity (newAttemptId)
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Policy.Limits (policyNumber)
 import Shikigami.Execution.Progress (repairLimitReached)
@@ -281,7 +279,7 @@ decide runtime start wake = do
           permission <- checked (owned (Store.parkOperationPermission access state.revision operation.specification.operationId))
           pure (ReviewTool snapshot.sessionId operation.specification.name permission)
       | otherwise = do
-          attemptId <- AttemptId . ("attempt:" <>) . UUID.toText <$> liftIO UUID.nextRandom
+          attemptId <- liftIO newAttemptId
           (request, prepared) <-
             if operation.specification.kind == ToolOperation
               then do

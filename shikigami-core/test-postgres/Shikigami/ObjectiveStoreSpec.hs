@@ -24,7 +24,8 @@ import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
-import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
+import Shikigami.Execution.Identity (ExecutionRootId, OperationId (..))
+import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Objective.Capability qualified as O
 import Shikigami.Objective.Command
@@ -343,7 +344,7 @@ origin :: CreationOrigin
 origin = ExecutionOrigin "recorded-run" "recorded-execution" (OperationId "accepted-operation")
 
 draft :: UTCTime -> Text -> AssignmentDraft
-draft now key = AssignmentDraft (objectiveAssignment key) (instructions "work") [] (compatibilityIdentity (fixtureAgentName "worker")) Pending Nothing (Just (ExecutionRootId "session-root")) (Just (addUTCTime 3600 now))
+draft now key = AssignmentDraft (objectiveAssignment key) (instructions "work") [] (compatibilityIdentity (fixtureAgentName "worker")) Pending Nothing (Just (fixtureRootId "session-root")) (Just (addUTCTime 3600 now))
 
 withDatabase :: DatabaseFixture -> (AppEnv -> IO a) -> IO a
 withDatabase fixture callback = withShikigamiFreshDatabase fixture \connection -> do

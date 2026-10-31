@@ -105,7 +105,7 @@ import Shikigami.Directory (PrincipalRecord (..), disabledDirectoryHandle, newDi
 import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Admission (enrollRootRun)
 import Shikigami.Execution.Driver (ExecutionDriverResult (..))
-import Shikigami.Execution.Identity (ExecutionRootId (..))
+import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
 import Shikigami.Execution.Resources qualified as Resources
@@ -113,6 +113,7 @@ import Shikigami.Execution.ResourcesStore qualified as Resources
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.ExecutionSelectionWorkflowSpec qualified as ExecutionFixture
+import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Fixture.SinkHttp (testSinkHttp, testSinkHttpFor)
 import Shikigami.Flow.Decision qualified as FlowDecision
@@ -1346,7 +1347,7 @@ tests databaseFixture =
               parentSession <- genSessionId
               now <- getCurrentTime
               let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                  root = ExecutionRootId "delegation-resource-root"
+                  root = fixtureRootId "delegation-resource-root"
                   envelope = Resources.Envelope (Map.singleton Resources.LifetimeDescendants (Resources.Limited (fixtureAmount 1))) (addUTCTime 3600 now)
                   parentName = WorkflowName "shikigami.test-resource-parent"
                   parentId = WorkflowId "resource-parent"

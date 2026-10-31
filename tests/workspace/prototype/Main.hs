@@ -28,6 +28,7 @@ import En.Check (CheckDecision (Allowed))
 import En.Revision qualified as En
 import En.Schema (ObjectType (..), RelationName (..))
 import En.Tuple (ObjectRef (..), Subject (SubjectId))
+import FixtureIdentity (fixtureRootId)
 import GHC.Generics (Generic)
 import GHC.Stack (HasCallStack, callStack, prettyCallStack)
 import Hasql.Transaction (Transaction)
@@ -49,7 +50,7 @@ import Shikigami.Directory (DirectoryRuntime (..), identityLifecycleAdmission, s
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Counter (noAttempts)
-import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
+import Shikigami.Execution.Identity (ExecutionRootId, OperationId (..))
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Store qualified as Execution
@@ -195,7 +196,7 @@ nativeProvision configFile specFile = do
   base <- Text.strip . Encoding.decodeUtf8 <$> git ["-C", source, "rev-parse", "HEAD"]
   properties <- Systemd.systemdPropertiesIdentity
   let policy = ProcessPolicy 1 spec.image properties [CommandRule "validate" "/bin/probe" ["validate"] "" (Map.singleton "HOME" "/scratch") 30 1024] [""] ["src"]
-      request = WorkspaceRequest "native-fixture" Nothing (ExecutionRootId "native-fixture-root") principal principal (fixtureRevision 0)
+      request = WorkspaceRequest "native-fixture" Nothing (fixtureRootId "native-fixture-root") principal principal (fixtureRevision 0)
   catalog <- requireRight (mkWorkspaceCatalog [RepositoryPolicy "mori://fixture/repo" source [base] base (processPolicyIdentity policy)])
   repository <- requireRight (resolveRepository catalog "mori://fixture/repo" Nothing)
   (binding, state) <- requireRight =<< transact env (Workspaces.reserveWorkspaceTx storage request repository)
@@ -291,7 +292,7 @@ prepareCase config prefix name mode = do
   initial <- requireRight . Aeson.eitherDecodeStrict @ReadyProfile =<< Bytes.readFile (prefix </> "native-ready.json")
   withRuntime config \env authorizer current client -> do
     let owner = initial.binding.request.owner
-        request = WorkspaceRequest ("case-" <> Text.pack name) Nothing (ExecutionRootId ("case-root-" <> Text.pack name)) owner owner (fixtureRevision 0)
+        request = WorkspaceRequest ("case-" <> Text.pack name) Nothing (fixtureRootId ("case-root-" <> Text.pack name)) owner owner (fixtureRevision 0)
         base = initial.binding.base
         policy = initial.profile.policy
     catalog <- requireRight (mkWorkspaceCatalog [RepositoryPolicy initial.binding.repository initial.binding.source [base] base (processPolicyIdentity policy)])

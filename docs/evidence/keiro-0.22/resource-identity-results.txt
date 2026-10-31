@@ -1,0 +1,26 @@
+Allocated accounting entities — ExecPlan 107
+Source parent: ab847d7 (master). Selected GHC 9.12.4/frozen Cabal cohort, arm64 macOS and real PostgreSQL 18 fixtures.
+Decision: docs/adr/0094-accounting-entities-use-allocated-identities-and-root-origin-receipts.md.
+
+Contract
+ExecutionRootId, AttemptId and AllocationId use private KindID-backed UUIDv7 domains with full singular prefixes. Prefix, canonical encoding and UUID version/variant are checked; replay imposes no current-clock condition. Actual dispatch producers allocate in IO. SQL, evidence, RPC and cryptographic-preimage adapters render explicitly. Syntactically valid IDs do not authorize a request, replace ownership or refund allowance.
+Native-run admission binds resolved creator, agent and immutable envelope to the opaque native workflow coordinate in the new root origin table. Receipt-first insertion arbitrates concurrency; the deferred FK requires root publication at commit. Origin/root failures condemn the transaction, concurrent losers publish no unused root, retries recover one entity, and changed bindings/supplied references refuse. Origins outlive native journal collection. Descendants still inherit one root and cannot create replacement allowance. Explicit low-level accounting APIs accept allocated IDs; no resource policy or process-tool activation is added.
+Delegation's stored root reference restores to the checked type with a captured corruption result. Root-first accounting, immutable envelopes, finite suballocations, fencing, irreversible cancellation and settlement remain authoritative. Logical OperationId coordinate construction and other decoder owners remain open census work.
+Operator root arguments refine before configuration IO. Fixture selectors use explicit synthetic fixed-timestamp UUIDv7 data and checked parsers; they are test data, not application allocators.
+
+Acceptance
+Focused resource/execution run: 27 real PostgreSQL and 15 pure cases PASS. Three new origin cases cover eight concurrent identical requests, missing-response recovery, supplied-reference recovery, creator/agent/envelope binding, unexpected references, exactly one root/origin, and rollback to zero rows after an injected root publication failure followed by successful retry. Real allocator/domain cases cover uniqueness, complete string/JSON round trips, same-prefix UUIDv5, wrong entity prefix, whitespace and uppercase refusals.
+The initial accounting poison controls used the retired literal SQL root key. Their three failures were fixture misses; parameterized typed IDs and an explicit pre-refusal state check restore all three overflow/underflow controls. No accounting predicate was weakened.
+Full core: 581 pure (5.96s) and 397 serial PostgreSQL (121.95s) PASS, including root admission, descendant inheritance, actual retries, cancellation, late settlement, same-build recovery, coupled refusal atomicity, workspace ownership and all five workflow families.
+Compiler clients: 147 nominal + 53 opaque = 200 PASS. Positive factories/fields precede rejected underlying KindID construction/coercion, literals, cross-entity substitution and Generic conversion.
+All enabled components build, including inspection and workspace fixture. Fixture modules are registered in their owning test components.
+Remaining suites: 262 worker (169.52s), 95 server (17.55s), 31 API, nine client and 37 agent PASS. The first server run correctly rejects the obsolete bare-root positive fixture; replacing that test input with a checked TypeID yields all 95 without production changes.
+Migration composition/integrity: nine PASS; native live-schema/startup/idempotence/isolation/drift smoke: eleven PASS (2.64s). Released Schema.snapshotSchema captures exactly twelve added origin-table objects and no removals. The old embedded snapshot refuses the new table until the reviewed capture is rebuilt; subsequent injected drift remains refused. Only disposable task-owned fixtures are changed.
+just keiro-gate ab847d7: PASS, check/inspect/idempotent scaffold, zero findings and 156 native rows. Four transducer hashes/fingerprints remain unchanged. Exact diff/replay/fold records are retained. This is helper-reference/aggregate neutrality; ADR-27/94 explicitly reset the unreleased opaque identity domain, without an old-reader or UUIDv4 attempt fallback.
+Domain: 143 assertions PASS; diagrams: six PASS.
+Hurl: all three fresh database/server/worker profiles PASS, 4/2/1 files and 13/15/3 requests with zero failed files, including outage checks. CLI: 83 real-process checks PASS; invalid root syntax refuses before a poisoned FIFO configuration source is opened.
+Haskell conventions, thirteen style/ownership mutation cases, formatter (zero final changes) and whitespace checks PASS.
+Compiled worklist: 320 modules/902 declarations (692 data, 173 newtypes, 37 aliases) and fourteen entrypoints. Current source/tool hashes and declaration uniqueness are verified. All 124 frozen guide hashes remain unchanged. This remains an unclassified worklist.
+
+Scope
+Complete scalar/identity and remaining owned-row decoder review remain open in plan107. Plan95's frozen closure, packaged roles, Linux containment/restart and inventory gates are unstarted. No populated historical upgrade or Linux runtime qualification is claimed.

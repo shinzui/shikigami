@@ -31,6 +31,7 @@ import Shikigami.Capability.Overlay qualified as Overlay
 import Shikigami.AgentRun.RequestKey qualified as Request
 import Shikigami.Agent.Run.Key qualified as FullKey
 import Shikigami.Trigger.RequestKey qualified as Addressed
+import Shikigami.Execution.Identity qualified as Entity
 import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Counter qualified as Counter
 import Shikigami.Execution.Payload qualified as Payload
@@ -48,7 +49,13 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''reviewId :: Text -> Either Text Review.ReviewId
+POSITIVE = '''root :: Text -> Either Text Entity.ExecutionRootId
+root = Entity.parseExecutionRootId
+attempt :: Text -> Either Text Entity.AttemptId
+attempt = Entity.parseAttemptId
+allocation :: Text -> Either Text Entity.AllocationId
+allocation = Entity.parseAllocationId
+reviewId :: Text -> Either Text Review.ReviewId
 reviewId = Review.parseReviewId
 resolutionId :: Text -> Either Text Review.ResolutionId
 resolutionId = Review.parseResolutionId
@@ -140,6 +147,9 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('Entity.ExecutionRootId', 'generic'),
+    ('Entity.AttemptId', 'generic'),
+    ('Entity.AllocationId', 'generic'),
     ('ReviewIdentity.ReviewIdentityRef', 'generic'),
     ('Review.ValidatedResolutionRequest', 'generic'),
     ('Review.ReviewId', 'parse'),

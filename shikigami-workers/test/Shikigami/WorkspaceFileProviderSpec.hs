@@ -55,6 +55,7 @@ import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.ToolPosition (ToolPosition, parseToolPosition)
 import Shikigami.Execution.Tools qualified as Tools
 import Shikigami.Execution.Transcript
+import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureRootId)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
@@ -118,7 +119,7 @@ tests fixture =
       testCase "independent file recovery settles a superseded actual without replacement IO" $ withEffect fixture \env binding snapshot access reference runtime _ -> do
         Executor.executeAcceptedAttempt (executorFor runtime (throwIO (userError "lost publication acknowledgement"))) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         (_, uncertain) <- right =<< run env (Execution.loadExecution access)
-        let next = reference & #attemptId .~ AttemptId "independent-replacement"
+        let next = reference & #attemptId .~ fixtureAttemptId "independent-replacement"
             tool = head snapshot.toolBindings
             submission = Attempt.AttemptSubmission (Execution.toolAttemptRequest next.attemptId next.operationId tool) Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)
         _ <- right =<< run env (Execution.recoverExecutionAttemptWith access uncertain.revision reference.attemptId submission (\_ -> pure ()))
@@ -183,7 +184,7 @@ tests fixture =
         let operation = OperationId "pending-validation"
             digest = profile.instructionDigest
             command = commandFor digest (head profile.policy.rules)
-            record = ProcessRecord operation (AttemptId "pending-attempt") (fixtureOwner "pending-owner") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest command (addUTCTime 30 now) (processUnit operation digest) Nothing Nothing ProcessReserved Nothing Nothing
+            record = ProcessRecord operation (fixtureAttemptId "pending-attempt") (fixtureOwner "pending-owner") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest command (addUTCTime 30 now) (processUnit operation digest) Nothing Nothing ProcessReserved Nothing Nothing
         _ <- right =<< run env (runTransaction (Processes.reserveProcessTx binding record))
         Executor.executeAcceptedAttempt (executorForAdapter supervisedWorkspaceEditAdapter runtime) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         Just observed <- right =<< run env (Execution.inspectOperation reference.operationId)
@@ -226,7 +227,7 @@ tests fixture =
         published <- getModificationTime path
         Just old <- right =<< run env (Execution.inspectExecutionAttempt reference.attemptId)
         old.phase @?= Attempt.AttemptUncertain
-        let next = reference & #attemptId .~ AttemptId "file-attempt-recovery"
+        let next = reference & #attemptId .~ fixtureAttemptId "file-attempt-recovery"
             tool = head snapshot.toolBindings
             replacementRequest = Execution.toolAttemptRequest next.attemptId next.operationId tool
             submission = Attempt.AttemptSubmission replacementRequest Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)
@@ -256,7 +257,7 @@ tests fixture =
         (_, uncertain) <- right =<< run env (Execution.loadExecution access)
         uncertain.phase @?= Unresolved
         readFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") >>= (@?= "old dependency\n")
-        let next = reference & #attemptId .~ AttemptId "prepared-recovery"
+        let next = reference & #attemptId .~ fixtureAttemptId "prepared-recovery"
             tool = head snapshot.toolBindings
             submission = Attempt.AttemptSubmission (Execution.toolAttemptRequest next.attemptId next.operationId tool) Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)
         _ <- right =<< run env (Execution.recoverExecutionAttemptWith access uncertain.revision reference.attemptId submission (\_ -> pure ()))
@@ -390,7 +391,7 @@ withEffectAdapterPolicyInput processPolicy toolCount qualify install wire logica
       catalog <- right (mkWorkspaceCatalog [RepositoryPolicy (repositoryIdentity originalRepository) source [base] base (processPolicyIdentity policy)])
       right (resolveRepository catalog (repositoryIdentity originalRepository) Nothing)
   let identity = CompatibilityIdentity (fixtureAgentName "worker")
-      rootId = ExecutionRootId "file-root"
+      rootId = fixtureRootId "file-root"
       request = WorkspaceRequest "file-run" Nothing rootId identity identity (fixtureRevision 0)
       runtime = FileRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ _ _ -> pure (Right ()))
       assignment = fixtureAssignment "file-execution"
@@ -430,7 +431,7 @@ withAcceptedWorkspaceTool toolCount install agent wire token env admission runti
   access <- right =<< run env (Execution.authorizeReplay snapshot.executionId identity (pure (Right ())))
   (_, operation) <- right =<< run env (Execution.acceptOperation access (fixtureRevision 0) model (Aeson.object []))
   let OperationId operationKey = operation.specification.operationId
-      modelRequest = Resources.AttemptRequest (AttemptId ("model:" <> operationKey)) operation.specification.operationId (Map.fromList [(Resources.ActiveWork, (fixtureAmount 1)), (Resources.ModelAttempts, (fixtureAmount 1)), (Resources.Tokens, (fixtureAmount 10)), (Resources.CostMicroUsd, (fixtureAmount 0))]) Resources.EnforcedCeiling
+      modelRequest = Resources.AttemptRequest (fixtureAttemptId ("model:" <> operationKey)) operation.specification.operationId (Map.fromList [(Resources.ActiveWork, (fixtureAmount 1)), (Resources.ModelAttempts, (fixtureAmount 1)), (Resources.Tokens, (fixtureAmount 10)), (Resources.CostMicroUsd, (fixtureAmount 0))]) Resources.EnforcedCeiling
   reservation <- right =<< run env (Calls.reserveSelectionCall selection (Calls.CallLimits Nothing Nothing Nothing Nothing Nothing) modelRequest "fixture-model" now)
   call <- case reservation of Calls.NewCall value -> pure value; _ -> fail "new fixture call required"
   let assistant = ReplayAssistant 1 ([ToolBlock (ToolInvocation "replace-call" tool.name input)] <> [ToolBlock (ToolInvocation ("additional-call-" <> Text.pack (show index)) tool.name input) | index <- [1 .. toolCount - 1]]) ToolUse Nothing Nothing (Aeson.object []) Nothing
@@ -439,7 +440,7 @@ withAcceptedWorkspaceTool toolCount install agent wire token env admission runti
   run env (Execution.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId outcome (NeedTool response (fixtureToolPosition 0)) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.singleton Resources.Tokens (fixtureAmount 1)) [Resources.CostMicroUsd] Nothing Nothing Nothing))) >>= (@?= Right Resources.Accepted)
   let toolInput = ToolOperationInput response (fixtureToolPosition 0) (ToolInvocation "replace-call" tool.name input) tool
       specification = OperationSpec (operationIdFor snapshot.executionId (fixtureRevision 1)) ToolOperation tool.recovery tool.name (versionedDigest "shikigami.harness-policy/1" (Aeson.toJSON snapshot.policy)) (toolScopeDigest tool) (Just (fixtureToolPosition 0))
-      reference = Attempt.JobReference 1 snapshot.executionId specification.operationId (AttemptId ("file-tool:" <> case specification.operationId of OperationId key -> key))
+      reference = Attempt.JobReference 1 snapshot.executionId specification.operationId (fixtureAttemptId ("file-tool:" <> case specification.operationId of OperationId key -> key))
       submission = Attempt.AttemptSubmission (Execution.toolAttemptRequest reference.attemptId reference.operationId tool) Nothing (Attempt.ExecutionWake (AwakeableId token) 0)
   _ <- right =<< run env (Execution.acceptOperation access (fixtureRevision 2) specification (Aeson.toJSON toolInput))
   run env (runTransaction (registerAwakeableTx token "shikigami.execution" (executionWorkflowId snapshot.executionId).unWorkflowId))

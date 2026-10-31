@@ -40,13 +40,14 @@ import Shikigami.Capability.Overlay (CapabilityDescriptor (..))
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Driver (ExecutionStart (..))
 import Shikigami.Execution.Foreground (driveExecutionForeground)
-import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
+import Shikigami.Execution.Identity (ExecutionRootId, OperationId (..))
 import Shikigami.Execution.Policy.Types (defaultHarnessPolicy)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript (ExecutionSnapshot (..), executionIdFor)
+import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
@@ -173,7 +174,7 @@ tests fixture =
             access <- right =<< run env (Execution.authorizeReplay execution job.identity (pure (Right ())))
             right =<< run env (Execution.loadExecution access)
           admission <- maybe (fail "workspace admission missing") pure snapshot.workspace
-          let request = WorkspaceRequest snapshot.runId Nothing (ExecutionRootId "workflow-root") job.identity job.identity (fixtureRevision 0)
+          let request = WorkspaceRequest snapshot.runId Nothing (fixtureRootId "workflow-root") job.identity job.identity (fixtureRevision 0)
               -- The binding itself is authoritative, never a model-selected path.
               storage = root
           Just (binding, _) <- run env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
@@ -281,7 +282,7 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
   host <- right (configuredWorkspaceHost env store.pool disabledDirectoryHandle authorizer (configure settings))
   let declaration = original & #name .~ fixtureAgentName "workspace-worker" & #behavior .~ Skill (Text.pack skill) & #identity .~ Just (IdentityDecl "workspace-principal") & #capabilityOverlays .~ [workspaceEditDescriptor.capability] & #sinks .~ []
       identity = CompatibilityIdentity (fixtureAgentName "workspace-worker")
-      rootId = ExecutionRootId "workflow-root"
+      rootId = fixtureRootId "workflow-root"
       job = RunJob (fixtureAgentName "workspace-worker") identity TriggeredBySchedule now Aeson.Null (fixtureRunKey "workspace-workflow-fixture") Nothing Nothing Nothing [] Nothing Nothing (Just rootId) Nothing AgentWorkflowRoute
       deps =
         Agent.AgentRunDeps

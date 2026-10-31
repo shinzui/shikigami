@@ -320,3 +320,16 @@ Exactly one native AgentRun body break is retained under ADR-27. The updated
 worklist has 320 modules/902 declarations and fourteen entrypoints; it remains
 unclassified. Complete scalar/identity and other decoder-owner review remain
 open before plan95.
+
+Accounting roots, allocations and actual attempts now use private UUIDv7 domains.
+Native-run admission publishes its origin receipt and root atomically; races,
+missing responses, creator/agent/envelope conflicts and injected publication
+rollback are qualified. Accounting, fencing, inherited roots and settlement
+remain authoritative. [ADR-94](../../adr/0094-accounting-entities-use-allocated-identities-and-root-origin-receipts.md)
+and [acceptance](resource-identity-results.txt) retain 581 pure/397 PostgreSQL/
+262 worker/95 server, 200 compiler, nine composition/eleven schema smoke,
+156 native, 143 domain/six diagram and 83 CLI/live HTTP results. Twelve reviewed
+schema objects are added. Neutral native helper/fold reports do not assert old
+opaque-payload compatibility. The 320-module/902-declaration worklist remains
+unclassified; logical operation locators, complete scalar/identity and other
+owner decoder review remain open.

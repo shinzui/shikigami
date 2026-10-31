@@ -15,7 +15,7 @@ import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Decision.Contract (versionedDigest)
-import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
+import Shikigami.Execution.Identity (OperationId (..), executionRootIdText)
 import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Prelude
 import Shikigami.StateRevision
@@ -40,7 +40,7 @@ reserveWorkspaceTx storageRoot request repository
           pure (Right pair)
         _ -> pure (Left WorkspaceBindingConflict)
   where
-    ExecutionRootId root = request.rootId
+    root = executionRootIdText request.rootId
     validKey value = not (Text.null value) && Text.length value <= 256 && not (Text.any (== '\0') value)
     validIdentity = either (const False) validKey . identityText
     valid = storageRoot /= "/" && ".." `notElem` splitDirectories storageRoot && isAbsolute storageRoot && normalise storageRoot == storageRoot && not ('\0' `elem` storageRoot) && validKey request.runId && validKey root && validIdentity request.principal && validIdentity request.owner && revisionNumber request.epoch < 9223372036854775808 && maybe True (\(session, assignment) -> validKey session.value && validKey assignment.value) request.assignment

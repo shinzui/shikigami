@@ -79,6 +79,7 @@ import Shikigami.Execution.SelectionStore qualified as Calls
 import Shikigami.Execution.Store qualified as Durable
 import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as DriverGenerated
+import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureRootId)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Integration.Danwa (AddressedMessage (..))
@@ -173,7 +174,7 @@ tests fixture =
           run app (Durable.admitExecution snapshot) >>= (@?= Right Accepted)
           access <- expectRight =<< run app (Durable.authorizeReplay execution snapshot.identity (pure (Right ())))
           _ <- expectRight =<< run app (Durable.acceptOperation access (fixtureRevision 0) specification (toJSON context))
-          (request, preparedCall) <- expectRight =<< preparePinnedExecutionCall selectedRuntime selection operationId (AttemptId "prepared-http-attempt") context Nothing
+          (request, preparedCall) <- expectRight =<< preparePinnedExecutionCall selectedRuntime selection operationId (fixtureAttemptId "prepared-http-attempt") context Nothing
           let submission = Attempt.AttemptSubmission request (Just preparedCall) (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)
               reference = Attempt.JobReference 1 execution operationId request.attemptId
           (_, attempt) <- expectRight =<< run app (Durable.submitExecutionAttemptWith access (fixtureRevision 1) submission (\_ -> pure ()))
@@ -222,7 +223,7 @@ tests fixture =
           let input = ModelOperationInput 1 view Nothing Nothing
           (_, operation) <- expectRight =<< run app (Durable.acceptOperation access (fixtureRevision 0) specification (toJSON input))
           context <- expectRight (Executor.modelContext snapshot operation input)
-          (request, preparedCall) <- expectRight =<< preparePinnedExecutionCall selectedRuntime selection operationId (AttemptId "executor-http-attempt") context Nothing
+          (request, preparedCall) <- expectRight =<< preparePinnedExecutionCall selectedRuntime selection operationId (fixtureAttemptId "executor-http-attempt") context Nothing
           let reference = Attempt.JobReference 1 execution operationId request.attemptId
           _ <- expectRight =<< run app (Durable.submitExecutionAttemptWith access (fixtureRevision 1) (Attempt.AttemptSubmission request (Just preparedCall) (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)) (\_ -> pure ()))
           Executor.executeAcceptedAttempt (executor (pure (Right ()))) snapshot.identity reference >>= (@?= Left (Replay.ExecutionPolicyRefused "execution wake is unavailable"))
@@ -302,7 +303,7 @@ tests fixture =
               fallback = mustRight (defaultBinding stubModel Options.emptyOptions)
               selection = mustRight (resolveExecutionSelection (fixtureAssignment "ledger-assignment") catalog (Right fallback) Nothing Nothing Nothing Nothing (Just root) now)
               limits = Calls.CallLimits (Just (fixtureLimit 3)) (Just (fixtureLimit 1)) (Just (fixtureLimit 1)) Nothing Nothing
-              request key = AttemptRequest (AttemptId key) (OperationId "logical") (Map.fromList [(ActiveWork, (fixtureAmount 1)), (ModelAttempts, (fixtureAmount 1))]) AdmittedUnknownUsage
+              request key = AttemptRequest (fixtureAttemptId key) (OperationId "logical") (Map.fromList [(ActiveWork, (fixtureAmount 1)), (ModelAttempts, (fixtureAmount 1))]) AdmittedUnknownUsage
               reserve key = run app (Calls.reserveSelectionCall selection limits (request key) "digest" now)
           (a, b) <- concurrently (reserve "one") (reserve "two")
           receipt <- case (a, b) of
@@ -468,7 +469,7 @@ select now root catalog alias = mustRight (resolveExecutionSelection (fixtureAss
 
 seed :: AppEnv -> UTCTime -> [(Dimension, Limit)] -> IO ExecutionRootId
 seed app now overrides = do
-  let root = ExecutionRootId "selection-root"
+  let root = fixtureRootId "selection-root"
       limits = Map.union (Map.fromList overrides) (Map.fromList [(d, ExplicitlyUnbounded) | d <- [minBound .. maxBound]])
   run app (Roots.enrollRoot root (Envelope limits (addUTCTime 3600 now))) >>= (@?= Right Accepted)
   pure root
@@ -598,7 +599,7 @@ refusedAssignmentSettlement fixture reconcile = withRuntime fixture \app _ _ -> 
       fallback = mustRight (defaultBinding stubModel Options.emptyOptions)
       selection = mustRight (resolveExecutionSelection (fixtureAssignment "counter-refusal") catalog (Right fallback) Nothing Nothing Nothing Nothing (Just root) now)
       limits = mustRight (Calls.callLimitsFor selection Nothing)
-      request = AttemptRequest (AttemptId "counter-refusal") (OperationId "counter-operation") (Map.fromList [(ActiveWork, fixtureAmount 1), (ModelAttempts, fixtureAmount 1), (Tokens, fixtureAmount 10), (CostMicroUsd, fixtureAmount 0)]) EnforcedCeiling
+      request = AttemptRequest (fixtureAttemptId "counter-refusal") (OperationId "counter-operation") (Map.fromList [(ActiveWork, fixtureAmount 1), (ModelAttempts, fixtureAmount 1), (Tokens, fixtureAmount 10), (CostMicroUsd, fixtureAmount 0)]) EnforcedCeiling
       terminal = Calls.CallOutcome Calls.CallTerminal (Map.fromList [(Tokens, fixtureAmount 3), (CostMicroUsd, fixtureAmount 0)]) [] Nothing Nothing Nothing
   admitted <- expectRight =<< run app (Calls.reserveSelectionCall selection limits request "counter-fingerprint" now)
   receipt <- case admitted of Calls.NewCall value -> pure value; _ -> assertFailure "new admitted call expected"

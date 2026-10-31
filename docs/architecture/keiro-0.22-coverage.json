@@ -234,6 +234,11 @@
           "rationale": "Private KindID-v7 ReviewId/ResolutionId replace entity derivations. Creator/request-bound receipts retain concurrent, lost-response and cross-workflow recovery; current owner/metadata are rechecked before publication. The declared allocation step precedes model work. ID-free resolution authorization binds the full canonical command before enqueue; owner allocation precedes candidate recording and complete allocated results feed history. Migration integrity, live schema drift refusal, record-before-retire and loser cleanup remain qualified. ADR-93, 580 pure/394 PostgreSQL/262 worker/95 server, 184 compiler clients, native/domain/diagram/82 CLI/live HTTP acceptance cover this clause. Exactly one retained AgentRun WorkflowBodyChanged finding establishes the intentional unused first-release reset; complete scalar/identity review remains pending."
         },
         {
+          "id": "allocated-accounting-entities-and-native-root-origins",
+          "disposition": "implemented",
+          "rationale": "Private KindID-v7 ExecutionRootId/AttemptId/AllocationId replace arbitrary-text/UUIDv4/derived-root identity. Native-run origin receipts bind creator, agent and immutable envelope and publish atomically with roots; real races, lost-response recovery, binding refusals, zero-row rollback and retry pass. Existing conservation, fencing, inheritance and settlement retain their rules. Delegation captures checked root restoration; operator arguments refine before configuration IO. ADR-94, 581 pure/397 PostgreSQL/262 worker/95 server, 200 compiler clients, native/domain/diagram/83 CLI/live HTTP and twelve reviewed schema additions cover this clause. Native neutrality does not establish old opaque-payload compatibility. Logical operation locators, complete scalar/identity and remaining decoder-owner review remain pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -322,7 +327,14 @@
         "docs/evidence/keiro-0.22/review-identity-fold-identities.json",
         "shikigami-core/src/Shikigami/PracticeReview/IdentityStore.hs",
         "docs/evidence/keiro-0.22/review-identity-current-native-diff.json",
-        "docs/evidence/keiro-0.22/review-identity-current-native-replay.json"
+        "docs/evidence/keiro-0.22/review-identity-current-native-replay.json",
+        "docs/adr/0094-accounting-entities-use-allocated-identities-and-root-origin-receipts.md",
+        "docs/evidence/keiro-0.22/resource-identity-results.txt",
+        "docs/evidence/keiro-0.22/resource-identity-native-diff.json",
+        "docs/evidence/keiro-0.22/resource-identity-native-replay.json",
+        "docs/evidence/keiro-0.22/resource-identity-fold-identities.json",
+        "shikigami-core/src/Shikigami/Execution/Identity.hs",
+        "shikigami-core/src/Shikigami/Execution/ResourcesStore.hs"
       ]
     },
     {

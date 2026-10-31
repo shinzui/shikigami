@@ -93,7 +93,7 @@ import Shikigami.Execution.AssignmentKey (AssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Catalog (withLiveExecution)
 import Shikigami.Execution.Claim
-import Shikigami.Execution.Identity (AttemptId (..), ExecutionRootId, OperationId (..))
+import Shikigami.Execution.Identity (AttemptId, ExecutionRootId, OperationId (..), attemptIdText)
 import Shikigami.Execution.Payload
 import Shikigami.Execution.Policy (ContextView (..), ModelOperationInput (..), validateTerminalOutput, validateToolInvocation)
 import Shikigami.Execution.Policy.Limits (policyNumber)
@@ -1102,7 +1102,7 @@ saveAttempt :: Attempt.ExecutionAttempt -> Transaction ()
 saveAttempt attempt = Tx.statement (attemptKey attempt.request.attemptId, operationKey attempt.operationId, attempt) updateExecutionAttempt
 
 attemptKey :: AttemptId -> Text
-attemptKey (AttemptId key) = key
+attemptKey = attemptIdText
 
 recordOutcomeAndAdvance :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> OperationId -> OperationOutcome -> NextWork -> Maybe (Calls.CallReceipt, Calls.CallOutcome) -> Eff es (Either ExecutionError Admission)
 recordOutcomeAndAdvance access revision operation outcome next accounting = recordOutcomeAndAdvanceWith access revision operation outcome next accounting (pure (Right ()))

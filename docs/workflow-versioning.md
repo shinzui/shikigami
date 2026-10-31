@@ -55,6 +55,15 @@ first-release exception and establish the committed current baseline. No old ID
 reader or patch false branch is introduced.
 
 
+[ADR-94](adr/0094-accounting-entities-use-allocated-identities-and-root-origin-receipts.md)
+changes resource-root, allocation and actual-attempt identity domains to checked
+UUIDv7 values. The native workflow coordinate has a separate atomic origin
+receipt. This is an intentional unused first-release change to opaque queued and
+retained records; unchanged native helper references do not assert old-payload
+compatibility. Current allocation, accounting, settlement and fencing remain
+qualified independently of the native diff.
+
+
 ## What a durable workflow is, and why editing one is not like editing ordinary code
 
 Shikigami runs each agent run and each Danwa conversation as a **durable

@@ -68,6 +68,9 @@ column	execution_payloads.bytes	bigint not null
 column	execution_payloads.digest	text not null
 column	execution_payloads.execution_id	text not null
 column	execution_payloads.payload_id	text not null
+column	execution_root_origins.binding	jsonb not null
+column	execution_root_origins.root_id	text not null
+column	execution_root_origins.workflow_id	text not null
 column	execution_roots.root_id	text not null
 column	execution_roots.state	jsonb not null
 column	execution_selection_calls.assignment_id	text not null
@@ -366,6 +369,12 @@ constraint	execution_payloads.execution_payloads_execution_id_fkey	FOREIGN KEY (
 constraint	execution_payloads.execution_payloads_execution_id_not_null	NOT NULL execution_id
 constraint	execution_payloads.execution_payloads_payload_id_not_null	NOT NULL payload_id
 constraint	execution_payloads.execution_payloads_pkey	PRIMARY KEY (execution_id, payload_id)
+constraint	execution_root_origins.execution_root_origins_binding_not_null	NOT NULL binding
+constraint	execution_root_origins.execution_root_origins_pkey	PRIMARY KEY (workflow_id)
+constraint	execution_root_origins.execution_root_origins_root_id_fkey	FOREIGN KEY (root_id) REFERENCES shikigami.execution_roots(root_id) DEFERRABLE INITIALLY DEFERRED
+constraint	execution_root_origins.execution_root_origins_root_id_key	UNIQUE (root_id)
+constraint	execution_root_origins.execution_root_origins_root_id_not_null	NOT NULL root_id
+constraint	execution_root_origins.execution_root_origins_workflow_id_not_null	NOT NULL workflow_id
 constraint	execution_roots.execution_roots_pkey	PRIMARY KEY (root_id)
 constraint	execution_roots.execution_roots_root_id_check	CHECK (((length(root_id) >= 1) AND (length(root_id) <= 256)))
 constraint	execution_roots.execution_roots_root_id_not_null	NOT NULL root_id
@@ -692,6 +701,8 @@ index	execution_assignment_lookup	CREATE INDEX execution_assignment_lookup ON sh
 index	execution_attempts_pkey	CREATE UNIQUE INDEX execution_attempts_pkey ON shikigami.execution_attempts USING btree (root_id, attempt_id)
 index	execution_operations_pkey	CREATE UNIQUE INDEX execution_operations_pkey ON shikigami.execution_operations USING btree (root_id, operation_id)
 index	execution_payloads_pkey	CREATE UNIQUE INDEX execution_payloads_pkey ON shikigami.execution_payloads USING btree (execution_id, payload_id)
+index	execution_root_origins_pkey	CREATE UNIQUE INDEX execution_root_origins_pkey ON shikigami.execution_root_origins USING btree (workflow_id)
+index	execution_root_origins_root_id_key	CREATE UNIQUE INDEX execution_root_origins_root_id_key ON shikigami.execution_root_origins USING btree (root_id)
 index	execution_roots_pkey	CREATE UNIQUE INDEX execution_roots_pkey ON shikigami.execution_roots USING btree (root_id)
 index	execution_selection_calls_assignment	CREATE INDEX execution_selection_calls_assignment ON shikigami.execution_selection_calls USING btree (assignment_id)
 index	execution_selection_calls_assignment_id_ordinal_key	CREATE UNIQUE INDEX execution_selection_calls_assignment_id_ordinal_key ON shikigami.execution_selection_calls USING btree (assignment_id, ordinal)
@@ -775,6 +786,7 @@ table	execution_allocations	kind=r
 table	execution_attempts	kind=r
 table	execution_operations	kind=r
 table	execution_payloads	kind=r
+table	execution_root_origins	kind=r
 table	execution_roots	kind=r
 table	execution_selection_calls	kind=r
 table	execution_selections	kind=r

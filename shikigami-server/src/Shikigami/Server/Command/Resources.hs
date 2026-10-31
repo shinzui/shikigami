@@ -10,19 +10,19 @@ import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Effect (runStoreIO)
 import Shikigami.App.Config (AppConfig, revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
-import Shikigami.Execution.Identity (ExecutionRootId (..))
+import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Execution.Quantity (zeroAmount)
 import Shikigami.Execution.Resources
 import Shikigami.Execution.ResourcesStore (inspectRoot)
 import Shikigami.Migrations (verifyShikigamiMigrations)
 import System.Exit (die)
 
-runResourcesInspect :: Text -> Bool -> AppConfig -> IO ()
+runResourcesInspect :: ExecutionRootId -> Bool -> AppConfig -> IO ()
 runResourcesInspect key _asJson config = do
   connection <- revealSecretText <$> requireDatabaseUrl "resources inspect" config
   verifyShikigamiMigrations connection
   withStore (defaultConnectionSettings connection) \store -> do
-    result <- runStoreIO store (inspectRoot (ExecutionRootId key))
+    result <- runStoreIO store (inspectRoot key)
     case result of
       Left _ -> die "resource store is unavailable"
       Right (Left _) -> die "resource root was not found"

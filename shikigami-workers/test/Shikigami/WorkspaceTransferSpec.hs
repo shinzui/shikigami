@@ -32,7 +32,7 @@ import Shikigami.Decision.ModelCatalog (modelCatalog)
 import Shikigami.Execution.Attempt (JobReference (..))
 import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Executor qualified as Executor
-import Shikigami.Execution.Identity (AttemptId (..), ExecutionRootId (..), OperationId (..))
+import Shikigami.Execution.Identity (AttemptId, ExecutionRootId, OperationId (..))
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
@@ -41,6 +41,7 @@ import Shikigami.Execution.SelectionRuntime qualified as Selection
 import Shikigami.Execution.Start (SkillAssignment (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
+import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureRootId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
@@ -121,7 +122,7 @@ tests fixture =
           -- writes remain qualified separately by the Linux handoff fixture.
           writeFile (workspaceFiles binding.storageRoot binding </> "dependency.txt") "ACCEPTED_PRIOR_CHANGE\n"
           let operation = OperationId "uncertain-prior-effect"
-              prepared = FileReceipt operation (AttemptId "prior-actual") (fixtureGeneration 1) digest (workspaceBindingDigest binding) (bundleDigest original.instructions) "dependency.txt" "1:2" Nothing digest EditPrepared
+              prepared = FileReceipt operation (fixtureAttemptId "prior-actual") (fixtureGeneration 1) digest (workspaceBindingDigest binding) (bundleDigest original.instructions) "dependency.txt" "1:2" Nothing digest EditPrepared
           _ <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceEffectTx binding binding.request.owner (fixtureRevision 0) operation digest))
           run env (runTransaction (Workspaces.recordWorkspaceReceiptTx binding prepared)) >>= (@?= Right ())
           host.load assignment >>= \case Left _ -> pure (); Right _ -> assertFailure "unknown effect was bypassed"
@@ -298,7 +299,7 @@ withWorkspacePolicy transferring policy fixture callback = Fixture.withFixture f
   now <- getCurrentTime
   parentSession <- genSessionId
   parent <- right =<< loadAgent "../agents/heartbeat.dhall"
-  let root = ExecutionRootId "transfer-root"
+  let root = fixtureRootId "transfer-root"
       old = compatibilityIdentity (fixtureAgentName "worker")
       successor = compatibilityIdentity (fixtureAgentName "successor")
       actor = compatibilityIdentity (fixtureAgentName "coordinator")
@@ -329,7 +330,7 @@ reserveProcess env binding = do
   let digest = "sha256:" <> Text.replicate 64 "a"
       operation = OperationId "retained-process"
       command = ProcessCommand "validate" digest "/bin/validate" [] "" Map.empty 30 1024
-      record = ProcessRecord operation (AttemptId "original-process-actual") (fixtureOwner "actual-owner") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest command (addUTCTime 30 now) (processUnit operation digest) Nothing Nothing ProcessReserved Nothing Nothing
+      record = ProcessRecord operation (fixtureAttemptId "original-process-actual") (fixtureOwner "actual-owner") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest command (addUTCTime 30 now) (processUnit operation digest) Nothing Nothing ProcessReserved Nothing Nothing
   right =<< run env (runTransaction (Processes.reserveProcessTx binding record))
 
 withTransferProcess :: DatabaseFixture -> (AppEnv -> WorkspaceBinding -> TransferIntent -> SupervisorRuntime -> ProcessRecord -> IORef Int -> IO a) -> IO a

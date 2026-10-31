@@ -319,13 +319,13 @@ updateAssignment :: Statement (AssignmentKey, Assignment) ()
 updateAssignment = preparable "UPDATE shikigami.execution_selections SET state=$2 WHERE assignment_id=$1" (contrazip2 assignmentParam jsonParam) D.noResult
 
 readCall :: AttemptId -> Transaction (Maybe SelectionCall)
-readCall (AttemptId key) = Tx.statement key getCall
+readCall identifier = Tx.statement (attemptIdText identifier) getCall
 
 getCall :: Statement Text (Maybe SelectionCall)
 getCall = preparable "SELECT state FROM shikigami.execution_selection_calls WHERE attempt_id=$1 FOR UPDATE" textParam (D.rowMaybe jsonRow)
 
 writeCall :: SelectionCall -> Transaction ()
-writeCall call = let AttemptId key = call.receipt.request.attemptId in Tx.statement (call.receipt.assignmentId, key, operationKey call.receipt.request.operationId, callOrdinalInt64 call.receipt.ordinal, call) putCall
+writeCall call = Tx.statement (call.receipt.assignmentId, attemptIdText call.receipt.request.attemptId, operationKey call.receipt.request.operationId, callOrdinalInt64 call.receipt.ordinal, call) putCall
 
 putCall :: Statement (AssignmentKey, Text, Text, Int64, SelectionCall) ()
 putCall = preparable "INSERT INTO shikigami.execution_selection_calls (assignment_id,attempt_id,operation_id,ordinal,state) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (attempt_id) DO UPDATE SET state=EXCLUDED.state" (contrazip5 assignmentParam textParam textParam (E.param (E.nonNullable E.int8)) jsonParam) D.noResult

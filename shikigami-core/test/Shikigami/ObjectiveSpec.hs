@@ -9,7 +9,8 @@ import Data.Text qualified
 import Data.Time (UTCTime (..), fromGregorian)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
-import Shikigami.Execution.Identity (ExecutionRootId (..))
+import Shikigami.Execution.Identity (ExecutionRootId)
+import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
 import Shikigami.Objective.Acceptance
 import Shikigami.Objective.Command
 import Shikigami.Objective.Types
@@ -93,7 +94,7 @@ tests =
     objective = Objective (either (error . show) id (parseObjectiveId "shikigami_objective_01h455vb4pex5vsknk084sn02q")) actor [Member actor [Owner]] (title "title") (goal "goal") (instructions "instructions") (revision 1) initialRevision initialRevision [criterion] Open [assignment] [evidence] [] [] [] [] [] (Just (proposal, actor)) Nothing
 
 draft :: Text -> [ObjectiveAssignmentId] -> AssignmentDraft
-draft key dependencies = AssignmentDraft (objectiveAssignment key) (instructions "work") dependencies (compatibilityIdentity (fixtureAgentName "worker")) Pending Nothing (Just (ExecutionRootId "root")) (Just (UTCTime (fromGregorian 2027 1 1) 0))
+draft key dependencies = AssignmentDraft (objectiveAssignment key) (instructions "work") dependencies (compatibilityIdentity (fixtureAgentName "worker")) Pending Nothing (Just (fixtureRootId "root")) (Just (UTCTime (fromGregorian 2027 1 1) 0))
 
 showText :: Int -> Text
 showText = Data.Text.pack . show

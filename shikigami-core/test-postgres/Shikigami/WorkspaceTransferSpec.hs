@@ -15,8 +15,9 @@ import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
-import Shikigami.Execution.Identity (AttemptId (..), OperationId (..))
+import Shikigami.Execution.Identity (AttemptId, OperationId (..))
 import Shikigami.Execution.SelectionRuntime qualified as Selection
+import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude
 import Shikigami.StateRevision (StateRevision, advanceRevision, parseRevision)
@@ -70,7 +71,7 @@ tests fixture =
       testCase "prepared file effects preserve uncertainty until factual settlement after freeze" $ withWorkspace fixture \env session access binding original -> do
         let operation = OperationId "pending-file"
             digest = "sha256:" <> Text.replicate 64 "a"
-            prepared = FileReceipt operation (AttemptId "original-actual") (fixtureGeneration 1) digest (workspaceBindingDigest binding) (bundleDigest original.instructions) "dependency.txt" "1:2" Nothing digest EditPrepared
+            prepared = FileReceipt operation (fixtureAttemptId "original-actual") (fixtureGeneration 1) digest (workspaceBindingDigest binding) (bundleDigest original.instructions) "dependency.txt" "1:2" Nothing digest EditPrepared
         _ <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceEffectTx binding session.identity (fixtureRevision 0) operation digest))
         run env (runTransaction (Workspaces.recordWorkspaceReceiptTx binding prepared)) >>= (@?= Right ())
         intent <- request env session access binding

@@ -146,6 +146,7 @@ data Admission = Accepted | AlreadyAccepted
 
 data ResourceError
   = RootMissing
+  | ResourceStateCorrupt
   | IdentityConflict
   | RevisionConflict
   | ResourceExhausted !Dimension
@@ -218,11 +219,9 @@ validateKey key = unless (not (Text.null key) && Text.length key <= 256) (Left (
 
 validateAttempt :: Limits -> OperationRequest -> AttemptRequest -> Either ResourceError ()
 validateAttempt limits operation request = do
-  let AttemptId key = request.attemptId
-      amounts = request.quantities
+  let amounts = request.quantities
       count = if operation.kind == ModelOperation then ModelAttempts else ToolAttempts
       forbidden = if operation.kind == ModelOperation then ToolAttempts else ModelAttempts
-  validateKey key
   when (operation.kind == ChildOperation || request.operationId /= operation.operationId) invalid
   unless (Map.lookup count amounts == Just oneAmount && Map.lookup ActiveWork amounts == Just oneAmount) invalid
   when (Map.findWithDefault zeroAmount forbidden amounts /= zeroAmount || Map.findWithDefault zeroAmount LifetimeDescendants amounts /= zeroAmount) invalid

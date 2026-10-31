@@ -85,12 +85,21 @@ cleanup protocol remain. The declared allocation step and complete resolution
 result intentionally break the unused first-release workflow contract; the exact
 native finding is retained. Authentication material remains opaque and actual
 ingress authorizes an ID-free command before enqueue.
-ADR-51 also states that root resource reservations, deduplication and actual
-attempts survive terminal workflow garbage collection. Resource-root, allocation
-and actual-attempt identity authority still requires review; a private hash
-namespace alone does not establish the native-runtime exception.
+ADR-94 separates allocated accounting entities from their native run coordinate.
+Root origins publish atomically with roots, while actual attempt producers use
+private UUIDv7 allocation. Real races, missing-response recovery, creator/envelope
+binding and zero-row publication rollback pass. Conservation, inherited roots,
+unknown holds and settlement remain their own authorities. Logical operation
+coordinate construction and other decoder-owner classifications remain open.
 
 ## Decision Log
+
+2026-10-31: Resource roots, exclusive allocations and actual transport attempts
+are application-owned accounting entities under ADR-51. Continue M1 with private
+UUIDv7 domains, an atomic native-workflow-to-root origin receipt, and unchanged
+conservation/fencing/settlement behavior. Logical operation coordinates remain a
+separate locator authority review; the existing execution/session coordinate
+exceptions do not automatically cover accounting entities.
 
 2026-10-31: Continue review identity adoption inside its existing memory owner.
 Use durable allocation receipts and ID-free authorized resolution requests. This
@@ -109,21 +118,20 @@ cases. The language checker and thirteen style/ownership mutation tests pass.
 [The adoption record](../evidence/keiro-0.22/haskell-service-adoption.md) links each
 implemented domain-value wave and its exact candidate/evidence.
 
-Latest review-identity acceptance passed 580 pure, 394 serial PostgreSQL,
-262 worker, 95 server, 31 API, nine client and 37 agent cases, plus 184 compiler
+Latest accounting-identity acceptance passed 581 pure, 397 serial PostgreSQL,
+262 worker, 95 server, 31 API, nine client and 37 agent cases; 200 compiler
 clients, nine migration composition and eleven live migration smoke cases,
-143 domain assertions, six diagrams, 156 native rows, 82 CLI checks and live
-HTTP. All 38 affected practice cases pass after adding permanent decorated-v5
-refusals. [Acceptance](../evidence/keiro-0.22/review-identity-results.txt) records
-phase boundaries, controls and the intentional single native workflow break.
-The reviewed application schema gains exactly sixteen receipt-table objects.
-The ordinary strict gate against committed baseline 4f031e7 passes with zero
-findings and 156 native rows; reset and current reports remain separate.
-The 320-module/902-declaration worklist, source/tool hashes and all 124 frozen
-guide hashes are verified. Forty-two of 46 assigned sources have implemented
-dispositions. Complete scalar/allocated-identity, other owners' decoder review
-and three final-profile clauses remain open. M1 is incomplete; this is not
-packaged Linux qualification.
+143 domain assertions, six diagrams, 156 native rows, 83 CLI checks and live
+HTTP also pass. [Acceptance](../evidence/keiro-0.22/resource-identity-results.txt)
+records phase boundaries, fixture controls and the explicit ADR-27/94 identity
+reset. Exactly twelve origin-table schema objects are added with no removals.
+The strict gate against ab847d7 has zero findings and unchanged transducers;
+that does not make old opaque identity payloads compatible. The current
+320-module/902-declaration worklist and all 124 frozen source hashes are
+verified. Forty-two of 46 assigned sources have implemented dispositions.
+Logical operation locators, complete scalar/identity and remaining decoder-owner
+review keep M1 incomplete. Three final-profile clauses and plan95's packaged
+Linux/runtime qualification remain open.
 
 ## Context and Orientation
 

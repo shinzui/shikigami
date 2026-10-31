@@ -9,6 +9,7 @@ executable shikigami-workspace-prototype
     Accepted
     Continuing
     Durable
+    FixtureIdentity
     Qualification
 
   main-is: Main.hs

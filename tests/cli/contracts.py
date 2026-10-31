@@ -42,6 +42,8 @@ with tempfile.TemporaryDirectory(prefix="shikigami-cli-contract-") as directory:
         for flag in ["--describe-config", "--describe-config-json"]:
             output = run(binary, prefix + ["--config", str(poison), flag], env=clean)
             assert output
+    output = run("shikigami", ["--config", str(poison), "resources", "inspect", "root"], 2, env=clean)
+    assert b"ExecutionRootId" in output
     client = "shikigami-client"
     for flag in ["--check-config", "--explain-config", "--explain-config-json"]:
         run(client, [flag], env=clean)

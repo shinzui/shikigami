@@ -37,8 +37,9 @@ import Shikigami.Capability.Overlay
     mkCapabilityRevision,
     mkResolvedCapabilitySet,
   )
-import Shikigami.Execution.Identity (ExecutionRootId (..))
+import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Execution.Request (ExecutionRequest (..))
+import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Sink.Intent (SinkIntent (..))
 import Shikigami.Sink.Permission (SinkKind (SKizashiSignal, SReiAction))
@@ -146,7 +147,7 @@ queueTests =
             job = sampleRunJob & #triggerPayload .~ input
         RunJobs.decodeRunJob (RunJobs.encodeRunJob job) @?= Right job,
       testCase "current jobs retain root and typed selection constraints" do
-        let enrolled = sampleRunJob & #executionRootId .~ Just (ExecutionRootId "root-1") & #executionRequest .~ Just (ExecutionRequest (Just "worker") Nothing Nothing) & #executionPermissions .~ Just ["worker"]
+        let enrolled = sampleRunJob & #executionRootId .~ Just (fixtureRootId "root-1") & #executionRequest .~ Just (ExecutionRequest (Just "worker") Nothing Nothing) & #executionPermissions .~ Just ["worker"]
         RunJobs.decodeRunJob (RunJobs.encodeRunJob enrolled) @?= Right enrolled,
       testCase "lineage list order survives the real queue boundary" do
         let job = sampleRunJob & #lineage .~ [fixtureAgentName "first", fixtureAgentName "second"]

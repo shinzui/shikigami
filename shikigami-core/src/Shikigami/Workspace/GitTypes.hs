@@ -12,7 +12,7 @@ import Data.Text qualified as Text
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Claim
-import Shikigami.Execution.Identity (AttemptId (..), OperationId (..))
+import Shikigami.Execution.Identity (AttemptId, OperationId (..), attemptIdText)
 import Shikigami.Execution.Payload (PayloadDigest)
 import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Execution.ToolPosition
@@ -82,7 +82,7 @@ validGitRecord record = record.format == 1 && bounded operation && bounded execu
   where
     OperationId operation = record.operation.operationId
     ExecutionId execution = record.operation.executionId
-    AttemptId attempt = record.attemptId
+    attempt = attemptIdText record.attemptId
     validRouting = either (const False) bounded (identityText record.routing.identity) && validNext record.routing.next && Bytes.length (Aeson.encode record.routing) <= 4096
     validNext NeedModel = True
     validNext (NeedTool _ position) = position > firstToolPosition

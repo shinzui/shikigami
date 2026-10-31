@@ -39,6 +39,7 @@ import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Runner (DispatchContext (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
+import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision (StateRevision, parseRevision)
@@ -169,7 +170,7 @@ tests fixture =
             executor = Fixture.executorForAdapter (workspaceGitAdapterWithBackend interrupted) runtime
         execute executor snapshot reference
         (_, uncertain) <- right =<< run env (Execution.loadExecution access)
-        let replacement = reference & #attemptId .~ AttemptId "git-replacement"
+        let replacement = reference & #attemptId .~ fixtureAttemptId "git-replacement"
             tool = head snapshot.toolBindings
             submission = Attempt.AttemptSubmission (Execution.toolAttemptRequest replacement.attemptId replacement.operationId tool) Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)
         _ <- right =<< run env (Execution.recoverExecutionAttemptWith access uncertain.revision reference.attemptId submission (\_ -> pure ()))
@@ -231,7 +232,7 @@ tests fixture =
               let operation = OperationId "pending-validation"
                   digest = profile.instructionDigest
                   command = commandFor digest (head profile.policy.rules)
-                  record = ProcessRecord operation (AttemptId "pending-attempt") (fixtureOwner "pending-owner") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest command (addUTCTime 30 now) (processUnit operation digest) Nothing Nothing ProcessReserved Nothing Nothing
+                  record = ProcessRecord operation (fixtureAttemptId "pending-attempt") (fixtureOwner "pending-owner") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest command (addUTCTime 30 now) (processUnit operation digest) Nothing Nothing ProcessReserved Nothing Nothing
               _ <- right =<< run env (runTransaction (Processes.reserveProcessTx binding record))
               captured <- newIORef (0 :: Int)
               let counting = backend & #capture .~ (\b p target policy -> modifyIORef' captured (+ 1) >> backend.capture b p target policy)

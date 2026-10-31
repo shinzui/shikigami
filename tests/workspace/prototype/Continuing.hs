@@ -13,6 +13,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
+import FixtureIdentity (fixtureRootId)
 import GHC.Generics (Generic)
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (genSessionId)
@@ -176,7 +177,7 @@ openNativeSession q name = do
   parentMemory <- genSessionId
   original <- right =<< loadAgent "/var/lib/shikigami-workspace-fixture-code/agents/triage-note.dhall"
   actor <- VerifiedIdentity <$> right (mkAgentPrincipal "agent_01h000000000000000coordinator")
-  let root = ExecutionRootId ("continuing-" <> name <> "-root")
+  let root = fixtureRootId ("continuing-" <> name <> "-root")
       owner = q.initial.binding.request.owner
       admission = SessionAdmission 1 (SessionScope ("native-" <> name) "fixture") (ObjectiveRef "uninstalled-objective-provider" name) (original & #name .~ fixtureAgentName "coordinator" & #delegates .~ map fixtureAgentName ["fixture", "successor"]) (DelegateCtx (fixtureDelegationDepth 0) actor (Just parentMemory) Nothing (Just (WorkflowId ("continuing-parent-" <> name))) [fixtureAgentName "coordinator"] Nothing (Just root) Nothing defaultDelegationBudget) (fixtureAgentName "fixture") owner (fixtureLimit 10) (fixtureLimit 4)
   void (right =<< run q.env Catalog.registerProjectionCatalog)

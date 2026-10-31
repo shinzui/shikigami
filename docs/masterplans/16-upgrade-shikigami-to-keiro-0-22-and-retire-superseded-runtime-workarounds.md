@@ -90,18 +90,18 @@ a checked allocated TypeID; objective content, worker/workspace ownership,
 execution policies, counters, decisions and assignment locators retain their
 nominal checked meanings.
 
-Latest review-identity acceptance passed 580 pure, 394 serial PostgreSQL,
-262 worker, 95 server, all API/client/agent suites, 184 compiler clients, nine
-migration composition and eleven live migration smoke cases, 82 CLI checks and
-live HTTP. ADR-93 adds owner-allocated UUIDv7 review entities and durable logical
-request receipts while preserving cross-workflow memory recovery and competing
-candidate cleanup. The exact single AgentRun WorkflowBodyChanged finding is
-retained under the unused first-release policy. Native/domain/diagram checks
-pass; four transducer hashes remain unchanged. The current unclassified census
-has 320 modules and 902 declarations. Full scalar/allocated-identity and other
-owners' decoder review keep EP-5 In Progress. Three rows retain final-profile
-clauses owned by EP-6; its frozen closure, Linux/runtime and inventory gates have
-not started.
+Latest accounting-identity acceptance passed 581 pure, 397 serial PostgreSQL,
+262 worker, 95 server, all API/client/agent suites, 200 compiler clients, nine
+migration composition and eleven live migration smoke cases, 83 CLI checks and
+live HTTP. ADR-94 adopts allocated resource-root, allocation and actual-attempt
+IDs with atomic native-run origin receipts, preserving conservation, fencing,
+inherited roots and settlement. Twelve reviewed schema additions and real
+concurrency/rollback/recovery controls pass. Native/domain/diagram checks pass
+with zero findings against ab847d7 and unchanged transducers; the unused opaque
+identity reset remains explicit. The unclassified census has 320 modules and
+902 declarations. Logical operation locators, full scalar/identity and remaining
+decoder-owner review keep EP-5 In Progress. EP-6's frozen closure, packaged
+Linux/runtime and inventory gates have not started.
 
 ## Surprises & Discoveries
 

@@ -1,7 +1,8 @@
 -- | Every mutation locks the root before any operation/allocation/attempt.
 -- Transaction-level hooks let an executor commit its outcome and usage together.
 module Shikigami.Execution.ResourcesStore
-  ( enrollRoot,
+  ( allocateRootForWorkflow,
+    enrollRoot,
     reserveOperation,
     reserveOperationsTx,
     beginAttempt,
@@ -22,25 +23,67 @@ module Shikigami.Execution.ResourcesStore
 where
 
 import Contravariant.Extras (contrazip2, contrazip3)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
-import Effectful (Eff, (:>))
+import Effectful (Eff, IOE, liftIO, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
+import Shikigami.Agent.Name (AgentName)
+import Shikigami.Agent.Principal (ResolvedAgentIdentity, resolvedIdentity)
 import Shikigami.Execution.Counter
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Quantity
 import Shikigami.Execution.Resources
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.StateRevision
+
+-- | Allocate once for the native run coordinate. The origin and root publish
+-- together; a lost response or concurrent producer recovers the same entity.
+allocateRootForWorkflow :: (Store :> es, IOE :> es) => ResolvedAgentIdentity -> AgentName -> WorkflowId -> Maybe ExecutionRootId -> Envelope -> Eff es (Either ResourceError ExecutionRootId)
+allocateRootForWorkflow creator agent (WorkflowId workflow) supplied envelope = do
+  candidate <- liftIO newExecutionRootId
+  let binding = Aeson.object ["format" .= (1 :: Int), "creator" .= resolvedIdentity creator, "agent" .= agent, "envelope" .= envelope]
+  runTransaction do
+    existing <- Tx.statement workflow selectOrigin
+    result <- case (existing, supplied) of
+      (Nothing, Just _) -> pure (Left IdentityConflict)
+      _ -> do
+        Tx.statement (workflow, executionRootIdText candidate, binding) insertOrigin
+        Tx.statement workflow selectOrigin >>= \case
+          Nothing -> pure (Left ResourceStateCorrupt)
+          Just (raw, storedBinding) -> case parseExecutionRootId raw of
+            Left _ -> pure (Left ResourceStateCorrupt)
+            Right identifier
+              | storedBinding /= binding || maybe False (/= identifier) supplied -> pure (Left IdentityConflict)
+              | otherwise -> fmap (const identifier) <$> enrollRootTx identifier envelope
+    case result of Left _ -> Tx.condemn; Right _ -> pure ()
+    pure result
+
+-- The deferred FK permits receipt-first concurrency without publishing an
+-- orphan origin or an unused losing candidate root.
+insertOrigin :: Statement (Text, Text, Aeson.Value) ()
+insertOrigin =
+  preparable
+    "INSERT INTO shikigami.execution_root_origins (workflow_id, root_id, binding) VALUES ($1,$2,$3) ON CONFLICT (workflow_id) DO NOTHING"
+    (contrazip3 textParam textParam (E.param (E.nonNullable E.jsonb)))
+    D.noResult
+
+selectOrigin :: Statement Text (Maybe (Text, Aeson.Value))
+selectOrigin =
+  preparable
+    "SELECT root_id, binding FROM shikigami.execution_root_origins WHERE workflow_id=$1"
+    textParam
+    (D.rowMaybe ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.jsonb)))
 
 enrollRoot :: (Store :> es) => ExecutionRootId -> Envelope -> Eff es (Either ResourceError Admission)
 enrollRoot root envelope = runTransaction (enrollRootTx root envelope)
@@ -48,15 +91,14 @@ enrollRoot root envelope = runTransaction (enrollRootTx root envelope)
 -- | Only an admitted new-root boundary calls this. Descendant commands never
 -- create a row; the immutable envelope is compared even after policy changes.
 enrollRootTx :: ExecutionRootId -> Envelope -> Transaction (Either ResourceError Admission)
-enrollRootTx (ExecutionRootId key) envelope = case validateKey key of
-  Left err -> pure (Left err)
-  Right () -> do
-    let initial = Root envelope initialRevision ContinueWork Nothing NoOverage noAttempts noAttempts Map.empty emptyUsage
-    inserted <- Tx.statement (key, initial) insertRoot
-    stored <- Tx.statement key lockRoot
-    pure case stored of
-      Just root | root.envelope == envelope -> Right (if inserted then Accepted else AlreadyAccepted)
-      _ -> Left IdentityConflict
+enrollRootTx identifier envelope = do
+  let key = executionRootIdText identifier
+      initial = Root envelope initialRevision ContinueWork Nothing NoOverage noAttempts noAttempts Map.empty emptyUsage
+  inserted <- Tx.statement (key, initial) insertRoot
+  stored <- Tx.statement key lockRoot
+  pure case stored of
+    Just root | root.envelope == envelope -> Right (if inserted then Accepted else AlreadyAccepted)
+    _ -> Left IdentityConflict
 
 reserveOperation :: (Store :> es) => ExecutionRootId -> StateRevision "execution-root" -> OperationRequest -> UTCTime -> Eff es (Either ResourceError Admission)
 reserveOperation root revision request now = reserveOperations root revision [request] now
@@ -225,11 +267,11 @@ recordSettlement reconcile root attemptId outcome = withRoot root \state -> do
 -- | Creating an allocation holds its entire finite ceiling in its parent.
 -- Later narrowing returns only unused capacity; consumption is never refunded.
 narrowAllocation :: (Store :> es) => ExecutionRootId -> StateRevision "execution-root" -> AllocationId -> Maybe AllocationId -> Envelope -> UTCTime -> Eff es (Either ResourceError Admission)
-narrowAllocation root expected allocationId@(AllocationId key) parent envelope now = runTransaction $ withRoot root \state -> do
+narrowAllocation root expected allocationId parent envelope now = runTransaction $ withRoot root \state -> do
   existing <- readAllocation root allocationId
   case existing of
     Just allocation | allocation.parent == parent && allocation.current == envelope -> pure (Right AlreadyAccepted)
-    _ -> case checkRoot now expected state >> validateKey key >> finiteLimits envelope of
+    _ -> case checkRoot now expected state >> finiteLimits envelope of
       Left err -> pure (Left err)
       Right quantities -> do
         parentScope <- loadScope root state parent
@@ -303,7 +345,7 @@ inspectAttempt :: (Store :> es) => ExecutionRootId -> AttemptId -> Eff es (Eithe
 inspectAttempt root attempt = runTransaction (withRoot root (\_ -> Right <$> readAttempt root attempt))
 
 withRoot :: ExecutionRootId -> (Root -> Transaction (Either ResourceError a)) -> Transaction (Either ResourceError a)
-withRoot (ExecutionRootId key) action = Tx.statement key lockRoot >>= maybe (pure (Left RootMissing)) action
+withRoot identifier action = Tx.statement (executionRootIdText identifier) lockRoot >>= maybe (pure (Left RootMissing)) action
 
 loadScope :: ExecutionRootId -> Root -> Maybe AllocationId -> Transaction (Either ResourceError (Limits, UTCTime, Usage))
 loadScope _ state Nothing = pure (Right (effectiveLimits state, state.envelope.cutoff, state.usage))
@@ -361,43 +403,43 @@ lockRoot :: Statement Text (Maybe Root)
 lockRoot = preparable "SELECT state FROM shikigami.execution_roots WHERE root_id=$1 FOR UPDATE" textParam (D.rowMaybe jsonRow)
 
 saveRoot :: ExecutionRootId -> Root -> Transaction ()
-saveRoot (ExecutionRootId key) state = Tx.statement (key, state) updateRoot
+saveRoot identifier state = Tx.statement (executionRootIdText identifier, state) updateRoot
 
 updateRoot :: Statement (Text, Root) ()
 updateRoot = preparable "UPDATE shikigami.execution_roots SET state=$2 WHERE root_id=$1" (contrazip2 textParam jsonParam) D.noResult
 
 readOperation :: ExecutionRootId -> OperationId -> Transaction (Maybe OperationRequest)
-readOperation (ExecutionRootId root) (OperationId key) = flip Tx.statement getOperation (root, key)
+readOperation root (OperationId key) = Tx.statement (executionRootIdText root, key) getOperation
 
 getOperation :: Statement (Text, Text) (Maybe OperationRequest)
 getOperation = preparable "SELECT request FROM shikigami.execution_operations WHERE root_id=$1 AND operation_id=$2" (contrazip2 textParam textParam) (D.rowMaybe jsonRow)
 
 writeOperation :: ExecutionRootId -> OperationRequest -> Transaction ()
-writeOperation (ExecutionRootId root) request = let OperationId key = request.operationId in Tx.statement (root, key, request) putOperation
+writeOperation root request = let OperationId key = request.operationId in Tx.statement (executionRootIdText root, key, request) putOperation
 
 putOperation :: Statement (Text, Text, OperationRequest) ()
 putOperation = preparable "INSERT INTO shikigami.execution_operations (root_id,operation_id,request) VALUES ($1,$2,$3)" (contrazip3 textParam textParam jsonParam) D.noResult
 
 readAttempt :: ExecutionRootId -> AttemptId -> Transaction (Maybe Attempt)
-readAttempt (ExecutionRootId root) (AttemptId key) = flip Tx.statement getAttempt (root, key)
+readAttempt root identifier = Tx.statement (executionRootIdText root, attemptIdText identifier) getAttempt
 
 getAttempt :: Statement (Text, Text) (Maybe Attempt)
 getAttempt = preparable "SELECT state FROM shikigami.execution_attempts WHERE root_id=$1 AND attempt_id=$2" (contrazip2 textParam textParam) (D.rowMaybe jsonRow)
 
 writeAttempt :: ExecutionRootId -> Attempt -> Transaction ()
-writeAttempt (ExecutionRootId root) attempt = let AttemptId key = attempt.request.attemptId in Tx.statement (root, key, attempt) putAttempt
+writeAttempt root attempt = Tx.statement (executionRootIdText root, attemptIdText attempt.request.attemptId, attempt) putAttempt
 
 putAttempt :: Statement (Text, Text, Attempt) ()
 putAttempt = preparable "INSERT INTO shikigami.execution_attempts (root_id,attempt_id,state) VALUES ($1,$2,$3) ON CONFLICT (root_id,attempt_id) DO UPDATE SET state=EXCLUDED.state" (contrazip3 textParam textParam jsonParam) D.noResult
 
 readAllocation :: ExecutionRootId -> AllocationId -> Transaction (Maybe Allocation)
-readAllocation (ExecutionRootId root) (AllocationId key) = flip Tx.statement getAllocation (root, key)
+readAllocation root identifier = Tx.statement (executionRootIdText root, allocationIdText identifier) getAllocation
 
 getAllocation :: Statement (Text, Text) (Maybe Allocation)
 getAllocation = preparable "SELECT state FROM shikigami.execution_allocations WHERE root_id=$1 AND allocation_id=$2" (contrazip2 textParam textParam) (D.rowMaybe jsonRow)
 
 writeAllocation :: ExecutionRootId -> AllocationId -> Allocation -> Transaction ()
-writeAllocation (ExecutionRootId root) (AllocationId key) allocation = Tx.statement (root, key, allocation) putAllocation
+writeAllocation root identifier allocation = Tx.statement (executionRootIdText root, allocationIdText identifier, allocation) putAllocation
 
 putAllocation :: Statement (Text, Text, Allocation) ()
 putAllocation = preparable "INSERT INTO shikigami.execution_allocations (root_id,allocation_id,state) VALUES ($1,$2,$3) ON CONFLICT (root_id,allocation_id) DO UPDATE SET state=EXCLUDED.state" (contrazip3 textParam textParam jsonParam) D.noResult

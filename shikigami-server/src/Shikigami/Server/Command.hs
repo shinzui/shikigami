@@ -56,6 +56,7 @@ import Shikigami.App.Config.Load
     usageExitCode,
   )
 import Shikigami.App.Version (versionOption)
+import Shikigami.Execution.Identity (parseExecutionRootId)
 import Shikigami.Server.Command.Agents (runAgentsList, runAgentsSync)
 import Shikigami.Server.Command.DanwaSpike (runDanwaSpike)
 import Shikigami.Server.Command.EnqueueRun (runEnqueueRun)
@@ -215,7 +216,7 @@ resourcesInfo = info (subparser (command "inspect" inspectInfo) <**> helper) (pr
     inspectInfo = info (parser <**> helper) (progDesc "Show limits, held and unknown usage, cutoff and refusal categories")
     parser =
       (\root asJson -> (runResourcesInspect root asJson, []))
-        <$> strArgument (metavar "ROOT" <> help "Admitted execution root id")
+        <$> argument (eitherReader (either (Left . Text.unpack) Right . parseExecutionRootId . Text.pack)) (metavar "ROOT" <> help "Admitted execution root TypeID")
         <*> switch (long "json" <> help "Emit machine-readable JSON")
 
 -- | @runs@ is the join across keiro and kioku that neither library can perform.

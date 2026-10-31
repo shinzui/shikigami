@@ -22,7 +22,6 @@ import Shikigami.Capability.Provider
 import Shikigami.Capability.Tools (namespaceCapabilityTools, overlayToolName)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Executor (BoundTool (..))
-import Shikigami.Execution.Identity (AttemptId (..))
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Execution.Transcript
@@ -128,7 +127,7 @@ prepareGovernedTools registry snapshot context requested descriptors = do
       raw <- case context of
         Nothing -> pure (Right (mkDynTool contract.name contract.description contract.schema (\_ -> pure (Left (ToolRunFailed contract.name "description cannot execute")))))
         Just dispatch
-          | dispatch.operation.executionId /= snapshot.executionId || dispatch.generation <= initialRevision || emptyAttempt dispatch.attemptId -> pure refused
+          | dispatch.operation.executionId /= snapshot.executionId || dispatch.generation <= initialRevision -> pure refused
           | otherwise -> adapter.prepare snapshot dispatch contract.name
       pure do
         tool <- raw
@@ -137,4 +136,3 @@ prepareGovernedTools registry snapshot context requested descriptors = do
         case namespaced of
           [actual] -> Right (BoundTool (ToolBinding (someToolName actual) (capabilityIdText descriptor.capability <> ":" <> capabilityRevisionText descriptor.revision) (versionedDigest "shikigami.tool-schema/1" contract.schema) contract.recovery contract.invoiceCost) actual)
           _ -> refused
-    emptyAttempt (AttemptId value) = Text.null value
