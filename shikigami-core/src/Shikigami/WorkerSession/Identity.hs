@@ -10,7 +10,7 @@ where
 
 import Keiro.Workflow.Types (WorkflowId (..), WorkflowName (..))
 import Shikigami.Agent.Delegate (delegatedWorkflowIdV2)
-import Shikigami.Agent.Name (AgentName, agentNameText)
+import Shikigami.Agent.Name (AgentName)
 import Shikigami.Prelude
 import Shikigami.WorkerSession.Types (AssignmentId (..), WorkerSessionId (..))
 
@@ -25,4 +25,4 @@ assignmentDelegationKey assignment = assignment.value
 
 assignmentChildWorkflowIdV2 :: WorkerSessionId -> AgentName -> AssignmentId -> WorkflowId
 assignmentChildWorkflowIdV2 session target assignment =
-  delegatedWorkflowIdV2 (sessionWorkflowId session) (agentNameText target) (assignmentDelegationKey assignment)
+  delegatedWorkflowIdV2 (sessionWorkflowId session) target (assignmentDelegationKey assignment)

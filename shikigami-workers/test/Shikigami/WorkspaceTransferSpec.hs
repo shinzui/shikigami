@@ -20,9 +20,9 @@ import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization
 import Shikigami.Agent.Decl (defaultDelegationBudget)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
-import Shikigami.Agent.Delegate.Depth (DelegationDepth (..))
+import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
 import Shikigami.Agent.Loader (loadAgent)
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Behavior.Skill (SkillDir (..))
@@ -97,7 +97,7 @@ tests fixture =
           let runtime = FileRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ _ _ -> pure (Right ()))
               input = Aeson.object ["path" .= ("dependency.txt" :: Text)]
           token <- UUID4.nextRandom
-          execution <- FileFixture.withAcceptedWorkspaceTool 1 transferredWorkspaceEditAdapter (AgentName "worker") "overlay__workspace-edit__read" token env original runtime input \snapshot access reference -> do
+          execution <- FileFixture.withAcceptedWorkspaceTool 1 transferredWorkspaceEditAdapter (fixtureAgentName "worker") "overlay__workspace-edit__read" token env original runtime input \snapshot access reference -> do
             Executor.executeAcceptedAttempt (FileFixture.executorForAdapter transferredWorkspaceEditAdapter runtime) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
             (_, state) <- right =<< run env (Execution.loadExecution access)
             _ <- right =<< run env (Execution.stopExecution snapshot.identity snapshot.executionId state.revision StopAsFailure (ExecutionPolicyRefused "fixture terminal"))
@@ -113,7 +113,7 @@ tests fixture =
           now <- getCurrentTime
           memory <- genSessionId
           selection <- right (resolveExecutionSelection (Selection.assignmentIdFor child) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just context.rootId) now)
-          let assignment = SkillAssignment child (AgentName "worker") binding.request.owner memory selection Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host cannot dispatch models")
+          let assignment = SkillAssignment child (fixtureAgentName "worker") binding.request.owner memory selection Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host cannot dispatch models")
           catalog <- right (mkWorkspaceCatalog [RepositoryPolicy binding.repository binding.source [binding.base] binding.base binding.policyRevision])
           repository <- right (resolveRepository catalog binding.repository Nothing)
           host <- right (governedWorkspaceHostWithTransfers runtime [transferredWorkspaceEditAdapter runtime] [] (\_ _ admission -> pure (Right admission)) binding.storageRoot (const (pure (Right repository))) (const (pure (Right ()))))
@@ -133,7 +133,7 @@ tests fixture =
           admission.epoch @?= (fixtureRevision 0)
           host.load assignment >>= (@?= Right admission)
           nextToken <- UUID4.nextRandom
-          latest <- FileFixture.withAcceptedWorkspaceTool 1 transferredWorkspaceEditAdapter (AgentName "worker") "overlay__workspace-edit__read" nextToken env admission runtime input \snapshot access reference -> do
+          latest <- FileFixture.withAcceptedWorkspaceTool 1 transferredWorkspaceEditAdapter (fixtureAgentName "worker") "overlay__workspace-edit__read" nextToken env admission runtime input \snapshot access reference -> do
             Executor.executeAcceptedAttempt (FileFixture.executorForAdapter transferredWorkspaceEditAdapter runtime) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
             Just operation <- right =<< run env (Execution.inspectOperation reference.operationId)
             result <- maybe (fail "missing follow-up result") pure operation.outcome
@@ -299,10 +299,10 @@ withWorkspacePolicy transferring policy fixture callback = Fixture.withFixture f
   parentSession <- genSessionId
   parent <- right =<< loadAgent "../agents/heartbeat.dhall"
   let root = ExecutionRootId "transfer-root"
-      old = compatibilityIdentity "worker"
-      successor = compatibilityIdentity "successor"
-      actor = compatibilityIdentity "coordinator"
-      session = SessionAdmission 1 (SessionScope "fixture-parent" "worker") (ObjectiveRef "fixture-checkpoints" "objective") (parent & #name .~ "coordinator" & #delegates .~ ["worker", "successor"]) (DelegateCtx (DelegationDepth 0) actor (Just parentSession) Nothing (Just (WorkflowId "parent")) [AgentName "coordinator"] Nothing (Just root) Nothing defaultDelegationBudget) (AgentName "worker") old (fixtureLimit 10) (fixtureLimit 4)
+      old = compatibilityIdentity (fixtureAgentName "worker")
+      successor = compatibilityIdentity (fixtureAgentName "successor")
+      actor = compatibilityIdentity (fixtureAgentName "coordinator")
+      session = SessionAdmission 1 (SessionScope "fixture-parent" "worker") (ObjectiveRef "fixture-checkpoints" "objective") (parent & #name .~ fixtureAgentName "coordinator" & #delegates .~ map fixtureAgentName ["worker", "successor"]) (DelegateCtx (fixtureDelegationDepth 0) actor (Just parentSession) Nothing (Just (WorkflowId "parent")) [fixtureAgentName "coordinator"] Nothing (Just root) Nothing defaultDelegationBudget) (fixtureAgentName "worker") old (fixtureLimit 10) (fixtureLimit 4)
   _ <- right =<< run env Catalog.registerProjectionCatalog
   run env (Roots.enrollRoot root (Resources.Envelope (Map.fromList [(dimension, Resources.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now))) >>= (@?= Right Resources.Accepted)
   _ <- right =<< run env (Sessions.openSession session)
@@ -316,8 +316,8 @@ withWorkspacePolicy transferring policy fixture callback = Fixture.withFixture f
   let version = ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) old True root (addUTCTime 3600 now)
   intent <-
     if transferring
-      then snd <$> (right =<< run env (Sessions.requestTransfer access (fixtureRevision 2) (fixtureRevision 0) (OperationId "transfer") version binding.workspace (AgentName "successor") successor))
-      else pure (TransferIntent 1 (sessionIdFor session) session.objective actor (OperationId "not-requested") version old successor (AgentName "successor") (fixtureRevision 0) (fixtureRevision 1) root binding.workspace)
+      then snd <$> (right =<< run env (Sessions.requestTransfer access (fixtureRevision 2) (fixtureRevision 0) (OperationId "transfer") version binding.workspace (fixtureAgentName "successor") successor))
+      else pure (TransferIntent 1 (sessionIdFor session) session.objective actor (OperationId "not-requested") version old successor (fixtureAgentName "successor") (fixtureRevision 0) (fixtureRevision 1) root binding.workspace)
   stopped <- newIORef 0
   let backend = SupervisorBackend (pure (Right boot)) (\_ _ _ -> fail "transfer cannot capture") (\_ _ _ _ _ -> fail "transfer cannot launch") (const (pure (Right True))) (\_ -> modifyIORef' stopped (+ 1) >> pure (Right ()))
       runtime = SupervisorRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ -> fail "transfer cannot select new commands") backend
@@ -386,3 +386,9 @@ fixtureGeneration value = either (error . show) id (Generation.parseRevision val
 
 fixtureOwner :: ClaimText.Text -> Claim.ClaimOwner
 fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureDelegationDepth :: Int -> DelegationDepth
+fixtureDelegationDepth = either (error . show) id . parseDelegationDepth . toInteger

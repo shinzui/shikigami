@@ -7,6 +7,7 @@ import Data.List (sort)
 import Data.Text (Text)
 import Shikigami.Agent.ApiSpec qualified as AgentApiSpec
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.AgentRun.ApiSpec qualified as AgentRunApiSpec
 import Shikigami.Api.OpenApiSpec qualified as OpenApiSpec
 import Shikigami.Api.Problem
@@ -49,12 +50,12 @@ packageBoundaryTests =
     [ testCase "api can consume core's domain declarations" do
         let decl =
               AgentDecl
-                { name = "boundary-probe",
+                { name = fixtureAgentName "boundary-probe",
                   description = "proves shikigami-api may import shikigami-core",
                   trigger = Schedule {cron = "* * * * *"},
                   behavior = Skill {path = "skills/none"},
                   sinks = [],
-                  delegates = [],
+                  delegates = map fixtureAgentName [],
                   delegationBudget = Nothing,
                   sanctionedProfile = Nothing,
                   execution = Nothing,
@@ -68,7 +69,7 @@ packageBoundaryTests =
                   routing = Nothing
                 }
         let AgentDecl {name = declaredName} = decl
-        declaredName @?= ("boundary-probe" :: Text)
+        agentNameText declaredName @?= ("boundary-probe" :: Text)
     ]
 
 -- ── RFC 9457 problem details ────────────────────────────────────────────────
@@ -122,3 +123,6 @@ problemTests =
     ]
   where
     dedupe = foldr (\x acc -> if x `elem` acc then acc else x : acc) []
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

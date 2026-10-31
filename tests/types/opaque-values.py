@@ -19,6 +19,10 @@ import Data.Coerce (coerce)
 import Data.ByteString (ByteString)
 import Data.Text (Text)
 import GHC.Generics qualified as Generic
+import Shikigami.Agent.Delegate.Depth qualified as Depth
+import Shikigami.Agent.ExpertiseKey qualified as Expertise
+import Shikigami.Agent.Name qualified as Name
+import Shikigami.Router.SelectionLimit qualified as Limit
 import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Agent.Principal qualified as Principal
 import Shikigami.App.Config qualified as Config
@@ -38,7 +42,15 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''principal :: Text -> Either Text Principal.AgentPrincipal
+POSITIVE = '''agentName :: Text -> Either Text Name.AgentName
+agentName = Name.mkAgentName
+expertise :: Text -> Either Text Expertise.ExpertiseKey
+expertise = Expertise.parseExpertiseKey
+depth :: Integer -> Either Text Depth.DelegationDepth
+depth = Depth.parseDelegationDepth
+limit :: Limit.SelectionLimit -> Int
+limit = Limit.selectionLimitInt
+principal :: Text -> Either Text Principal.AgentPrincipal
 principal = Principal.mkAgentPrincipal
 port :: Int -> Either Text Config.Port
 port = Config.mkPort
@@ -94,6 +106,10 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('Name.AgentName', 'parse'),
+    ('Expertise.ExpertiseKey', 'parse'),
+    ('Depth.DelegationDepth', 'parse'),
+    ('Limit.SelectionLimit', 'parse'),
     ('Principal.AgentPrincipal', 'parse'),
     ('Config.Port', 'parse'),
     ('Config.ByteLimit', 'parse'),

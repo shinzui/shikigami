@@ -5,9 +5,11 @@ module Shikigami.WorkspaceProcessProfileSpec (tests, withProfiles) where
 import Control.Concurrent.Async (concurrently)
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Hasql.Transaction (Transaction)
 import Kiroku.Store.Transaction (runTransaction)
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (CompatibilityIdentity))
 import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
@@ -104,7 +106,7 @@ withProfiles fixture use = Fixture.withFixture fixture \env source root reposito
   catalog <- right (mkWorkspaceCatalog [RepositoryPolicy (repositoryIdentity repository) source [base] base (processPolicyIdentity policy)])
   selected <- right (resolveRepository catalog (repositoryIdentity repository) Nothing)
   let create name = do
-        let owner = CompatibilityIdentity "profile-worker"
+        let owner = CompatibilityIdentity (fixtureAgentName "profile-worker")
             request = WorkspaceRequest name Nothing (ExecutionRootId ("profile-root-" <> name)) owner owner (fixtureRevision 0)
         (binding, state) <- right =<< run env (Workspaces.reserveWorkspaceTx root request selected)
         allocateWorkspace root binding state >>= (@?= Right ())
@@ -135,3 +137,6 @@ fixtureRevision value = either (error . show) id (parseRevision value)
 
 fixtureAssignment :: Text.Text -> AssignmentKey
 fixtureAssignment = either (error . show) id . parseAssignmentKey
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

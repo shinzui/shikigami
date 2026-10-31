@@ -41,7 +41,9 @@ import Effectful.Exception (catchSync, throwIO)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), currentWorkflow, step)
 import Shibuya.Telemetry.Effect (Span, Tracing, addAttribute, defaultSpanArguments, withSpan')
 import Shikigami.Agent.Decl (AgentDecl (..), RouterConfidence (..))
+import Shikigami.Agent.ExpertiseKey (expertiseKeyText)
 import Shikigami.Agent.Loader (AgentLoadReport)
+import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Behavior.Compatibility
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest)
 import Shikigami.Directory (DirectoryHandle, readDirectorySnapshot, renderDirectorySourceKind)
@@ -111,7 +113,7 @@ runRouting RoutingEnv {agent = routerDecl@AgentDecl {name = routerAgent}, sessio
         addAttribute traceSpan "routing.parent.session_id" sessionId
         addAttribute traceSpan "routing.parent.workflow" parentWorkflowName
         addAttribute traceSpan "routing.parent.workflow_id" parentWorkflowId
-        addAttribute traceSpan "router.agent" routerAgent
+        addAttribute traceSpan "router.agent" (agentNameText routerAgent)
         routeAction traceSpan label payload `catchSync` \err -> do
           forM_ (fromException @RoutingFailure err) \failure ->
             addAttribute traceSpan "routing.error.category" (routingFailureCategory failure)
@@ -144,15 +146,15 @@ runRouting RoutingEnv {agent = routerDecl@AgentDecl {name = routerAgent}, sessio
 
 recordCatalogAttributes :: (Tracing :> es, IOE :> es) => Span -> CandidateCatalog -> Eff es ()
 recordCatalogAttributes traceSpan CandidateCatalog {router, version = CatalogVersion catalogVersion, lifecycleSource, candidates} = do
-  addAttribute traceSpan "router.agent" router
+  addAttribute traceSpan "router.agent" (agentNameText router)
   addAttribute traceSpan "routing.catalog.version" catalogVersion
   addAttribute traceSpan "routing.lifecycle.source" (renderDirectorySourceKind lifecycleSource)
-  addAttribute traceSpan "routing.candidates.available" (boundedList [name | CandidateEntry {name, availability = Available} <- candidates])
+  addAttribute traceSpan "routing.candidates.available" (boundedList [agentNameText name | CandidateEntry {name, availability = Available} <- candidates])
   addAttribute
     traceSpan
     "routing.candidates.excluded"
     ( boundedList
-        [ name <> ":" <> boundedText 64 (Text.pack (show reason))
+        [ agentNameText name <> ":" <> boundedText 64 (Text.pack (show reason))
         | CandidateEntry {name, availability = Excluded reason} <- candidates
         ]
     )
@@ -174,8 +176,8 @@ recordDecisionAttributes traceSpan RouteDecision {outcome} =
 recordSelections :: (Tracing :> es, IOE :> es) => Span -> Text -> NonEmpty RouteSelection -> Eff es ()
 recordSelections traceSpan prefix selections = do
   let values = NonEmpty.toList selections
-  addAttribute traceSpan (prefix <> ".agents") (boundedList [agent | RouteSelection {agent} <- values])
-  addAttribute traceSpan (prefix <> ".expertise") (boundedList (concat [expertise | RouteSelection {expertise} <- values]))
+  addAttribute traceSpan (prefix <> ".agents") (boundedList [agentNameText agent | RouteSelection {agent} <- values])
+  addAttribute traceSpan (prefix <> ".expertise") (boundedList (concat [map expertiseKeyText expertise | RouteSelection {expertise} <- values]))
   addAttribute traceSpan (prefix <> ".confidence") (boundedList [confidenceText confidence | RouteSelection {confidence} <- values])
   addAttribute traceSpan (prefix <> ".rationale") (boundedRationales [rationale | RouteSelection {rationale} <- values])
 

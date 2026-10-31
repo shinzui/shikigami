@@ -9,12 +9,13 @@ import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as Bytes
 import Data.ByteString.Lazy qualified as Lazy
 import Data.IORef
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.UUID qualified as UUID
 import Data.UUID.V4 (nextRandom)
 import Network.Socket qualified as Socket
 import Network.Socket.ByteString qualified as SocketBytes
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Execution.Identity (AttemptId (..), ExecutionRootId (..), OperationId (..))
 import Shikigami.StateRevision (StateRevision, parseRevision)
@@ -37,10 +38,10 @@ tests =
   testGroup
     "workspace Unix RPC"
     [ testCase "version 2 fence replies bind the exact request and reject cross-protocol success" $ withListener \path listener uid -> do
-        let owner = compatibilityIdentity "old"
+        let owner = compatibilityIdentity (fixtureAgentName "old")
             root = ExecutionRootId "root"
             workspace = WorkspaceRef "shikigami.workspace/1" "resource"
-            intent = TransferIntent 1 (WorkerSessionId "session") (ObjectiveRef "provider" "objective") (compatibilityIdentity "parent") operation (ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) owner True root (read "2026-10-30 20:00:00 UTC")) owner (compatibilityIdentity "new") (AgentName "new") (fixtureRevision 0) (fixtureRevision 1) root workspace
+            intent = TransferIntent 1 (WorkerSessionId "session") (ObjectiveRef "provider" "objective") (compatibilityIdentity (fixtureAgentName "parent")) operation (ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) owner True root (read "2026-10-30 20:00:00 UTC")) owner (compatibilityIdentity (fixtureAgentName "new")) (fixtureAgentName "new") (fixtureRevision 0) (fixtureRevision 1) root workspace
             proof = FenceProof 1 workspace operation (transferFingerprint intent) (fixtureRevision 0) (fixtureRevision 1) "retained-fence"
             request = RpcFence intent
         Aeson.eitherDecode (Aeson.encode request) @?= Right request
@@ -183,3 +184,6 @@ fixtureRevision value = either (error . show) id (parseRevision value)
 
 fixtureGeneration :: Integer -> Generation.StateRevision "execution-attempt"
 fixtureGeneration value = either (error . show) id (Generation.parseRevision value)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

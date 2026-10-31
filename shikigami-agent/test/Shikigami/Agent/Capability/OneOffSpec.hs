@@ -41,6 +41,7 @@ import Shikigami.Agent.Decl
     defaultMemoryPolicy,
   )
 import Shikigami.Agent.Loader (loadAgent)
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv, runBehavior, triggerOnly)
 import Shikigami.Capability.Catalog (CapabilityResolutionError (MissingCapabilityIdentity))
@@ -193,12 +194,12 @@ declFor = declForIdentity (Just IdentityDecl {principal = "principal_workspace_s
 declForIdentity :: Maybe IdentityDecl -> [CapabilityId] -> AgentDecl
 declForIdentity identity capabilityOverlays =
   AgentDecl
-    { name = "workspace-scripted-agent",
+    { name = fixtureAgentName "workspace-scripted-agent",
       description = "workspace scripted agent",
       trigger = Event {eventType = "test"},
       behavior = Skill {path = "unused"},
       sinks = [],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays,
@@ -293,3 +294,6 @@ namespacedGrep = "overlay__workspace-read__grep"
 
 namespacedGlob :: Text
 namespacedGlob = "overlay__workspace-read__glob"
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

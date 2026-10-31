@@ -18,11 +18,13 @@ import Shikigami.Agent.Decl
     Trigger (..),
     defaultMemoryPolicy,
   )
+import Shikigami.Agent.ExpertiseKey (ExpertiseKey, parseExpertiseKey)
 import Shikigami.Agent.Loader
   ( AgentLoadEntry (AgentLoadFailed, AgentLoaded),
     AgentLoadReport (..),
     LoadError (..),
   )
+import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Directory
   ( DirectorySnapshot,
     DirectorySourceKind (..),
@@ -38,6 +40,7 @@ import Shikigami.Directory qualified as Directory
 import Shikigami.Prelude
 import Shikigami.Router.Catalog
 import Shikigami.Router.Declaration (ValidatedRouterDeclaration, validateRouterDeclaration)
+import Shikigami.Router.SelectionLimit (SelectionLimit, parseSelectionLimit)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -131,7 +134,7 @@ tests =
                 ["reviewer"]
         (.candidates) catalog
           @?= [ CandidateEntry
-                  { name = "reviewer",
+                  { name = fixtureAgentName "reviewer",
                     description = Nothing,
                     expertise = [],
                     availability = Excluded DuplicateDeclaration
@@ -183,12 +186,12 @@ validatedRouter delegates =
 routerDeclarationFixture :: [Text] -> AgentDecl
 routerDeclarationFixture delegates =
   AgentDecl
-    { name = "architecture-practice-router",
+    { name = fixtureAgentName "architecture-practice-router",
       description = "Routes architecture practice reviews",
       trigger = Event {eventType = "proof.architecture-practice"},
       behavior = Deterministic {rule = "route", params = Map.empty},
       sinks = [],
-      delegates,
+      delegates = map fixtureAgentName delegates,
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -202,7 +205,7 @@ routerDeclarationFixture delegates =
       routing =
         Just
           RouterPolicy
-            { maxSelections = 1,
+            { maxSelections = fixtureSelectionLimit 1,
               minimumConfidence = RoutingMedium,
               onNoMatch = ReturnNoMatch,
               onAmbiguous = ReturnAmbiguous
@@ -215,12 +218,12 @@ specialist name = specialistWithDescription ("Reviews " <> name) name
 specialistWithDescription :: Text -> Text -> Bool -> Maybe Text -> AgentDecl
 specialistWithDescription description name enabled declaredPrincipal =
   AgentDecl
-    { name,
+    { name = fixtureAgentName name,
       description,
       trigger = Event {eventType = "proof.specialist"},
       behavior = Deterministic {rule = "review", params = Map.empty},
       sinks = [],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -229,7 +232,7 @@ specialistWithDescription description name enabled declaredPrincipal =
       enabled,
       expertise =
         [ ExpertiseDecl
-            { key = name,
+            { key = fixtureExpertiseKey name,
               description = "Expertise for " <> name,
               aliases = [],
               evidenceHints = []
@@ -268,10 +271,19 @@ failed :: FilePath -> Text -> AgentLoadEntry
 failed path problem = AgentLoadFailed path (LoadError problem)
 
 candidateNames :: CandidateCatalog -> [Text]
-candidateNames CandidateCatalog {candidates} = [name | CandidateEntry {name} <- candidates]
+candidateNames CandidateCatalog {candidates} = [agentNameText name | CandidateEntry {name} <- candidates]
 
 candidateAvailabilities :: CandidateCatalog -> [CandidateAvailability]
 candidateAvailabilities CandidateCatalog {candidates} = [availability | CandidateEntry {availability} <- candidates]
 
 renderCatalog :: CandidateCatalog -> Text
 renderCatalog = Text.Encoding.decodeUtf8 . LBS.toStrict . encode
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureSelectionLimit :: Integer -> SelectionLimit
+fixtureSelectionLimit = either (error . show) id . parseSelectionLimit . fromInteger
+
+fixtureExpertiseKey :: Text -> ExpertiseKey
+fixtureExpertiseKey = either (error . show) id . parseExpertiseKey

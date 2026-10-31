@@ -72,6 +72,7 @@ import Kioku.Memory qualified as Memory
 import Kioku.Memory.Domain (RecordMemoryData (..), SupersedeMemoryData (..))
 import Kioku.Memory.ReadModel (MemoryRow (..))
 import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity)
 import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
@@ -515,7 +516,7 @@ recordCandidate PracticeReviewMemoryEnv {appEnv, agent = AgentDecl {name = agent
             memorySpaceId = shikigamiMemorySpace,
             actorPrincipal = agentActor identity,
             ownerPrincipal = Nothing,
-            agentId = agentName,
+            agentId = agentNameText agentName,
             sessionId,
             scope = practiceReviewScope practice,
             memoryType,

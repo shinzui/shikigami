@@ -25,6 +25,8 @@ import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Numeric.Natural (Natural)
 import Shikigami.Agent.Decl (ExpertiseDecl (..), RouterConfidence (..), RouterPolicy (..))
+import Shikigami.Agent.ExpertiseKey (ExpertiseKey, expertiseKeyText)
+import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Router.Catalog
   ( CandidateAvailability (..),
@@ -33,11 +35,12 @@ import Shikigami.Router.Catalog
     CatalogVersion,
     ExclusionReason,
   )
+import Shikigami.Router.SelectionLimit (selectionLimitNatural)
 
 -- | One specialist proposed by a route evaluator.
 data RouteSelection = RouteSelection
-  { agent :: !Text,
-    expertise :: ![Text],
+  { agent :: !AgentName,
+    expertise :: ![ExpertiseKey],
     confidence :: !RouterConfidence,
     rationale :: !Text
   }
@@ -63,11 +66,11 @@ data RouteDecision = RouteDecision
 data RoutingError
   = UnsupportedDecisionVersion !Natural
   | StaleCatalogVersion !CatalogVersion !CatalogVersion
-  | DuplicateSelection !Text
-  | UndeclaredSelection !Text
-  | UnavailableSelection !Text !ExclusionReason
-  | UnknownExpertise !Text !Text
-  | ConfidenceBelowMinimum !Text !RouterConfidence !RouterConfidence
+  | DuplicateSelection !AgentName
+  | UndeclaredSelection !AgentName
+  | UnavailableSelection !AgentName !ExclusionReason
+  | UnknownExpertise !AgentName !ExpertiseKey
+  | ConfidenceBelowMinimum !AgentName !RouterConfidence !RouterConfidence
   | TooManySelections !Natural !Natural
   deriving stock (Eq, Show, Generic)
 
@@ -162,16 +165,16 @@ validateRouteDecision policy catalog decision =
         <> [StaleCatalogVersion expectedCatalogVersion decisionCatalogVersion | decisionCatalogVersion /= expectedCatalogVersion]
         <> validateOutcome policy (Map.fromList [(name, candidate) | candidate@CandidateEntry {name} <- candidates]) outcome
 
-validateOutcome :: RouterPolicy -> Map.Map Text CandidateEntry -> RouteOutcome -> [RoutingError]
+validateOutcome :: RouterPolicy -> Map.Map AgentName CandidateEntry -> RouteOutcome -> [RoutingError]
 validateOutcome policy catalogByName = \case
   Matched selections -> validateSelections policy catalogByName (NonEmpty.toList selections)
   NoMatch _ -> []
   Ambiguous alternatives _ -> validateSelections policy catalogByName (NonEmpty.toList alternatives)
 
-validateSelections :: RouterPolicy -> Map.Map Text CandidateEntry -> [RouteSelection] -> [RoutingError]
+validateSelections :: RouterPolicy -> Map.Map AgentName CandidateEntry -> [RouteSelection] -> [RoutingError]
 validateSelections RouterPolicy {maxSelections, minimumConfidence} catalogByName selections =
-  [ TooManySelections (fromIntegral (length selections)) maxSelections
-  | fromIntegral (length selections) > maxSelections
+  [ TooManySelections (fromIntegral (length selections)) (selectionLimitNatural maxSelections)
+  | fromIntegral (length selections) > selectionLimitNatural maxSelections
   ]
     <> (DuplicateSelection <$> duplicatesInOrder [agent | RouteSelection {agent} <- selections])
     <> concatMap validateSelection selections
@@ -195,14 +198,14 @@ renderRoutingError = \case
     "unsupported route decision version " <> tshow decisionVersion
   StaleCatalogVersion expected actual ->
     "route decision catalog version " <> tshow actual <> " does not match journaled catalog " <> tshow expected
-  DuplicateSelection agent -> "route decision selects agent more than once: " <> agent
-  UndeclaredSelection agent -> "route decision names an undeclared candidate: " <> agent
+  DuplicateSelection agent -> "route decision selects agent more than once: " <> agentNameText agent
+  UndeclaredSelection agent -> "route decision names an undeclared candidate: " <> agentNameText agent
   UnavailableSelection agent reason ->
-    "route decision names unavailable candidate " <> agent <> ": " <> tshow reason
+    "route decision names unavailable candidate " <> agentNameText agent <> ": " <> tshow reason
   UnknownExpertise agent key ->
-    "route decision claims undeclared expertise " <> key <> " for " <> agent
+    "route decision claims undeclared expertise " <> expertiseKeyText key <> " for " <> agentNameText agent
   ConfidenceBelowMinimum agent actual required ->
-    "route decision confidence for " <> agent <> " is " <> confidenceText actual <> "; minimum is " <> confidenceText required
+    "route decision confidence for " <> agentNameText agent <> " is " <> confidenceText actual <> "; minimum is " <> confidenceText required
   TooManySelections actual selectionMaximum ->
     "route decision selects " <> tshow actual <> " candidates; maximum is " <> tshow selectionMaximum
 

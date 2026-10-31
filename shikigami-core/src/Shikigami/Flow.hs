@@ -17,6 +17,7 @@ where
 import Data.Aeson (Value, (.=))
 import Data.Aeson qualified as Aeson
 import Data.List (find)
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -26,6 +27,7 @@ import Keiro.Workflow (Workflow)
 import Shikigami.Agent.Approval (ApprovalEnv)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.Delegate (DelegationRequest (..))
+import Shikigami.Agent.Name (agentNameFromNonEmpty, agentNameText)
 import Shikigami.Decision.Contract (DecisionSlot)
 import Shikigami.Decision.ModelCatalog (slotErrors)
 import Shikigami.Flow.Acknowledgement (Acknowledgement)
@@ -196,7 +198,7 @@ flowRegistry =
 -- static durable vocabulary; the triggering payload remains the child's input.
 delegationProofFlow :: (FlowEffects es) => Value -> Eff es Value
 delegationProofFlow payload = do
-  child <- Delegate.delegate "web-researcher" "web-researcher" payload
+  child <- Delegate.delegate "web-researcher" (agentNameFromNonEmpty ('w' :| "eb-researcher")) payload
   Delegate.awaitOne child
 
 -- | First registered routing call site.  A matched decision reserves every
@@ -222,7 +224,7 @@ architecturePracticeRouterFlow payload = do
   where
     toRequest RouteSelection {agent} =
       DelegationRequest
-        { key = "architecture-practice-" <> agent,
+        { key = "architecture-practice-" <> agentNameText agent,
           target = agent,
           payload
         }

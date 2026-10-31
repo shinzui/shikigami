@@ -23,6 +23,7 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import GHC.Generics (Generic)
+import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity (..), principalText)
 import Shikigami.Prelude (FromJSON, ToJSON)
 
@@ -91,5 +92,5 @@ checkGrantStatic table identity kind =
   where
     nm = case identity of
       VerifiedIdentity principal -> principalText principal
-      CompatibilityIdentity agentName -> agentName
+      CompatibilityIdentity agentName -> agentNameText agentName
       UnresolvedLegacyIdentity -> "unresolved-legacy"

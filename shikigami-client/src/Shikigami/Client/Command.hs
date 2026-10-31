@@ -25,7 +25,6 @@ import GHC.Clock (getMonotonicTimeNSec)
 import Options.Applicative
 import Relay.Pagination (Connection (..), Edge (..), PageInfo (..), cursorFromText, cursorToText)
 import Relay.Pagination.Servant (forwardPage)
-import Servant.API (parseUrlPiece)
 import Servant.Health (ProbeResult (..), ProbeStatus (..))
 import Settei.Optparse (namedOption, setteiOptions)
 import Settei.Source (Source)
@@ -129,8 +128,7 @@ agentsInfo =
           ( \config -> do
               let credential = config.credential
                   url = config.server
-              agentName <- either (fail . Text.unpack) pure (parseUrlPiece name)
-              callServer url ((.show) (agentsClient credential) agentName) >>= \case
+              callServer url ((.show) (agentsClient credential) name) >>= \case
                 Right (Agent.AgentFound view) ->
                   mapM_ (putStrLn . Text.unpack) ["name         " <> view.name, "enabled      " <> boolText view.enabled, "trigger      " <> view.trigger, "behavior     " <> view.behavior, "sinks        " <> Text.intercalate "," view.sinks, "lifecycle    " <> view.lifecycle, "runnable     " <> boolText view.runnable]
                 Right result -> hPutStrLn stderr (show result) >> exitFailure
@@ -139,7 +137,7 @@ agentsInfo =
           )
       )
         <$> serverOption
-        <*> strArgument (metavar "NAME")
+        <*> argument agentReader (metavar "NAME")
 
 boolText :: Bool -> Text
 boolText True = "true"
@@ -163,7 +161,7 @@ runsInfo =
           ( \config -> do
               let credential = config.credential
                   url = config.server
-              name <- either (fail . Text.unpack) pure (parseUrlPiece agent)
+              let name = agent
               body <- readPayload payload
               callServer url ((.request) ((.runs) (agentsClient credential) name) (Run.AgentRunRequest key body)) >>= \case
                 Right (Run.RunAccepted (accepted, location)) -> reportRun "accepted" accepted location
@@ -174,7 +172,7 @@ runsInfo =
           )
       )
         <$> serverOption
-        <*> strArgument (metavar "AGENT")
+        <*> argument agentReader (metavar "AGENT")
         <*> option (eitherReader (either (Left . Text.unpack) Right . Run.parseRequestKey . Text.pack)) (long "key" <> metavar "KEY")
         <*> payloadArgument
     showParser =
@@ -182,7 +180,7 @@ runsInfo =
           ( \config -> do
               let credential = config.credential
                   url = config.server
-              name <- either (fail . Text.unpack) pure (parseUrlPiece agent)
+              let name = agent
               callServer url ((.show) ((.runs) (agentsClient credential) name) runId) >>= \case
                 Right (Run.RunFound view) -> printStatus view
                 Right result -> hPutStrLn stderr (show result) >> exitFailure
@@ -191,14 +189,14 @@ runsInfo =
           )
       )
         <$> serverOption
-        <*> strArgument (metavar "AGENT")
+        <*> argument agentReader (metavar "AGENT")
         <*> strArgument (metavar "RUN_ID")
     listParser =
       ( \named agent size after ->
           ( \config -> do
               let credential = config.credential
                   url = config.server
-              name <- either (fail . Text.unpack) pure (parseUrlPiece agent)
+              let name = agent
               cursor <- traverse (either (fail . Text.unpack) pure . cursorFromText) after
               callServer url ((.list) ((.runs) (agentsClient credential) name) (forwardPage size cursor)) >>= \case
                 Right (Run.RunPage page) -> do
@@ -210,7 +208,7 @@ runsInfo =
           )
       )
         <$> serverOption
-        <*> strArgument (metavar "AGENT")
+        <*> argument agentReader (metavar "AGENT")
         <*> option auto (long "first" <> value 50)
         <*> optional (strOption (long "after" <> metavar "CURSOR"))
     waitParser =
@@ -219,7 +217,7 @@ runsInfo =
               whenInvalid (timeout < 0 || interval <= 0) "Timeout must be nonnegative and interval positive."
               let credential = config.credential
                   url = config.server
-              name <- either (fail . Text.unpack) pure (parseUrlPiece agent)
+              let name = agent
               started <- getMonotonicTimeNSec
               let deadline = toInteger started + toInteger timeout * 1000000000
                   poll previous = do
@@ -244,7 +242,7 @@ runsInfo =
           )
       )
         <$> serverOption
-        <*> strArgument (metavar "AGENT")
+        <*> argument agentReader (metavar "AGENT")
         <*> strArgument (metavar "RUN_ID")
         <*> option auto (long "timeout" <> value (600 :: Int))
         <*> option auto (long "interval" <> value (5 :: Int))
@@ -262,3 +260,6 @@ printStatus view =
 
 whenInvalid :: Bool -> String -> IO ()
 whenInvalid condition message = if condition then hPutStrLn stderr message >> exitFailure else pure ()
+
+agentReader :: ReadM Agent.AgentName
+agentReader = eitherReader (either (Left . Text.unpack) Right . Agent.mkAgentName . Text.pack)

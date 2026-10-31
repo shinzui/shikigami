@@ -74,6 +74,7 @@ import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Transaction
 import Hasql.Transaction.Sessions qualified as Transaction.Sessions
 import Shikigami.Action.Authorization (ActionAuthorizer, allowAllActionAuthorizerForTests, denyAllActionAuthorizer)
+import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity (..), principalText)
 import Shikigami.Prelude
 import Shikigami.Sink.Permission
@@ -139,7 +140,7 @@ checkGrant source identity kind = case source of
   where
     label = case identity of
       VerifiedIdentity principal -> principalText principal
-      CompatibilityIdentity agentName -> agentName
+      CompatibilityIdentity agentName -> agentNameText agentName
       UnresolvedLegacyIdentity -> "unresolved-legacy"
 
 -- | One row of @shikigami.sink_grants@.
@@ -240,7 +241,7 @@ lookupGrant pool identity kind = case identity of
   VerifiedIdentity principal ->
     renderUsage <$> Pool.use pool (Session.statement (principalText principal, sinkKindText kind) lookupVerifiedStatement)
   CompatibilityIdentity agentName ->
-    renderUsage <$> Pool.use pool (Session.statement (agentName, sinkKindText kind) lookupCompatibilityStatement)
+    renderUsage <$> Pool.use pool (Session.statement (agentNameText agentName, sinkKindText kind) lookupCompatibilityStatement)
   UnresolvedLegacyIdentity -> pure (Left "cannot check a grant for unresolved legacy identity")
 
 lookupVerifiedStatement :: Statement (Text, Text) (Maybe Bool)
@@ -364,7 +365,7 @@ upsertGrant pool agent identity kind by = case identity of
   VerifiedIdentity principal ->
     renderUsage <$> Pool.use pool (Session.statement (agent, principalText principal, sinkKindText kind, by) upsertVerifiedStatement)
   CompatibilityIdentity compatibilityName
-    | compatibilityName == agent ->
+    | agentNameText compatibilityName == agent ->
         renderUsage <$> Pool.use pool (Session.statement (agent, sinkKindText kind, by) upsertCompatibilityStatement)
     | otherwise -> pure (Left "compatibility identity does not match the selected agent")
   UnresolvedLegacyIdentity -> pure (Left "cannot grant an unresolved legacy identity")
@@ -423,7 +424,7 @@ revokeGrant pool identity kind by = case identity of
   VerifiedIdentity principal ->
     affected <$> Pool.use pool (Session.statement (principalText principal, sinkKindText kind, by) revokeVerifiedStatement)
   CompatibilityIdentity agent ->
-    affected <$> Pool.use pool (Session.statement (agent, sinkKindText kind, by) revokeCompatibilityStatement)
+    affected <$> Pool.use pool (Session.statement (agentNameText agent, sinkKindText kind, by) revokeCompatibilityStatement)
   UnresolvedLegacyIdentity -> pure (Left "cannot revoke an unresolved legacy identity")
   where
     affected = fmap (> 0) . renderUsage

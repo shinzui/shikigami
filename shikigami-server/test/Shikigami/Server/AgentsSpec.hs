@@ -6,6 +6,7 @@ import Data.Text (Text)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (loadAgentsReport)
+import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Principal (mkAgentPrincipal)
 import Shikigami.Directory
   ( Lifecycle (..),
@@ -160,7 +161,7 @@ findDeclared wanted inventory =
     Just entry -> pure entry
     Nothing -> assertFailure ("missing declaration " <> show wanted)
   where
-    matches AgentInventoryEntry {declaration = Just decl} = (.name) decl == wanted
+    matches AgentInventoryEntry {declaration = Just decl} = agentNameText ((.name) decl) == wanted
     matches _ = False
 
 isFailure :: AgentInventoryEntry -> Bool

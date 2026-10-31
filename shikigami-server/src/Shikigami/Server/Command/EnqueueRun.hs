@@ -10,6 +10,7 @@ import Data.Text.Encoding qualified as TE
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
 import Shikigami.Agent.Loader (loadAgentsReport, loadedAgents)
+import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Payload (readPayloadArgument)
 import Shikigami.Agent.RunJob (RunRouteKind (..))
 import Shikigami.App.Config (AppConfig (agentsDirectory, directorySettings), revealSecretText)
@@ -40,8 +41,9 @@ import System.IO (hPutStrLn, stderr)
 -- @database.connection_string@. It is demanded here rather than by the whole
 -- @shikigami@ command line because sibling subcommands such as @validate@ run
 -- entirely offline.
-runEnqueueRun :: String -> Maybe String -> Bool -> Maybe String -> AppConfig -> IO ()
-runEnqueueRun agent mpayload conversation mkey config = do
+runEnqueueRun :: AgentName -> Maybe String -> Bool -> Maybe String -> AppConfig -> IO ()
+runEnqueueRun target mpayload conversation mkey config = do
+  let agent = Text.unpack (agentNameText target)
   supplied <- readPayloadArgument mpayload
   payload <- case supplied of
     Nothing -> pure (Aeson.object [])
@@ -52,7 +54,7 @@ runEnqueueRun agent mpayload conversation mkey config = do
         exitFailure
   report <- loadAgentsReport ((.agentsDirectory) config)
   decl <-
-    case find ((== Text.pack agent) . (.name)) (loadedAgents report) of
+    case find ((== target) . (.name)) (loadedAgents report) of
       Nothing -> die ("unknown or unloadable agent " <> agent)
       Just found -> pure found
   directoryRuntime <-
@@ -77,8 +79,8 @@ runEnqueueRun agent mpayload conversation mkey config = do
         exitFailure
       Right () -> pure ()
     let route = if conversation then ConversationWorkflowRoute else AgentWorkflowRoute
-        key = maybe (addressedRunKey (Text.pack agent) payload) Text.pack mkey
-    res <- enqueueAddressedRunWithKey (pool st) admittedIdentity (Text.pack agent) route payload key
+        key = maybe (addressedRunKey target payload) Text.pack mkey
+    res <- enqueueAddressedRunWithKey (pool st) admittedIdentity target route payload key
     case res of
       Left e -> do
         hPutStrLn stderr ("enqueue-run: " <> show e)

@@ -35,6 +35,7 @@ import Kioku.Recall qualified as Recall
 import Kioku.Recall.Capability qualified as RecallCapability
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), RecallLimit, recallLimitInt)
+import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (..))
 import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiReadContext, shikigamiWriteContext)
@@ -75,7 +76,7 @@ recordActivityAsMemory appEnv AgentDecl {name = agentName'} env = do
             memorySpaceId = shikigamiMemorySpace,
             actorPrincipal = agentActor recordedIdentity,
             ownerPrincipal = Nothing,
-            agentId = agentName',
+            agentId = agentNameText agentName',
             sessionId = Nothing,
             scope = scope',
             memoryType = MemoryPattern,
@@ -196,7 +197,7 @@ recallActiveByScope appEnv limit scope' = do
 -- a long payload should not push the agent's own description out of the query.
 recallQuery :: AgentDecl -> Text -> Value -> Text
 recallQuery AgentDecl {name = agentName', description = desc} focusTxt payload =
-  Text.take 512 (Text.unwords (agentName' : focusTxt : desc : payloadTerms payload))
+  Text.take 512 (Text.unwords (agentNameText agentName' : focusTxt : desc : payloadTerms payload))
 
 -- | The string leaves of a trigger payload: the top level and one level below
 -- it, in encounter order.

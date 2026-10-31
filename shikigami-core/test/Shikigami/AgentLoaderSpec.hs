@@ -23,6 +23,7 @@ import Shikigami.Agent.Decl
     delegationBudgetNatural,
     recallLimitNatural,
   )
+import Shikigami.Agent.ExpertiseKey (expertiseKeyText)
 import Shikigami.Agent.Loader
   ( AgentLoadEntry (..),
     AgentLoadReport (..),
@@ -33,8 +34,10 @@ import Shikigami.Agent.Loader
     loadAgentsReport,
     loadedAgents,
   )
+import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Capability.Overlay (capabilityIdText)
 import Shikigami.Log qualified as Log
+import Shikigami.Router.SelectionLimit (selectionLimitInt)
 import System.Directory (doesDirectoryExist, listDirectory)
 import System.Exit (ExitCode (ExitFailure))
 import System.FilePath (takeExtension, (</>))
@@ -80,21 +83,21 @@ tests =
               enabled @?= True,
       testCase "decodes a declared delegation allow-list and budget" do
         AgentDecl {delegates, delegationBudget} <- expectLoaded "../agents/proof/research-supervisor.dhall"
-        delegates @?= ["web-researcher", "code-researcher"]
+        map agentNameText delegates @?= ["web-researcher", "code-researcher"]
         fmap delegationBudgetNatural delegationBudget @?= Just 8,
       testCase "decodes the router policy proof declaration" do
         decl <- expectLoaded "../agents/proof/architecture-practice-router.dhall"
         case decl of
           AgentDecl {delegates, routing = Just RouterPolicy {maxSelections, minimumConfidence}} -> do
-            delegates @?= ["opentelemetry-practice-reviewer", "code-researcher"]
-            maxSelections @?= 2
+            map agentNameText delegates @?= ["opentelemetry-practice-reviewer", "code-researcher"]
+            selectionLimitInt maxSelections @?= 2
             minimumConfidence @?= RoutingMedium
           other -> assertFailure ("unexpected router declaration: " <> show other),
       testCase "decodes the specialist expertise proof declaration" do
         decl <- expectLoaded "../agents/proof/opentelemetry-practice-reviewer.dhall"
         case decl of
           AgentDecl {expertise = [ExpertiseDecl {key, aliases, evidenceHints}]} -> do
-            key @?= "opentelemetry"
+            expertiseKeyText key @?= "opentelemetry"
             aliases @?= ["otel", "telemetry"]
             evidenceHints @?= ["traceparent", "service.name", "instrumentation scope"]
           other -> assertFailure ("unexpected specialist declaration: " <> show other),
@@ -247,7 +250,7 @@ isFailure AgentLoadFailed {} = True
 isFailure AgentLoaded {} = False
 
 agentName :: AgentDecl -> Text
-agentName AgentDecl {name} = name
+agentName AgentDecl {name} = agentNameText name
 
 dhallFilesRecursively :: FilePath -> IO [FilePath]
 dhallFilesRecursively directory = do

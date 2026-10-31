@@ -105,7 +105,7 @@ gatherRunFacts store agent runId = do
         Right (Right Nothing) -> pure (Right Nothing)
         Right (Right (Just facts)) -> do
           let key = (.runKey) <$> facts.request <|> (runKeyText . (.idempotencyKey) <$> recordedJob facts.steps)
-          skipped <- maybe (pure (Right Nothing)) (lookupDrainSkip store.pool (agentNameText agent)) key
+          skipped <- maybe (pure (Right Nothing)) (lookupDrainSkip store.pool agent) key
           -- Only requests with no workflow/refusal need queue reconciliation.
           -- Existing terminal receipts avoid touching the queue on repeated reads.
           refreshed <- case (facts.instance_, skipped, facts.request) of

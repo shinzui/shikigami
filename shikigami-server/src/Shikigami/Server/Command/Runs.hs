@@ -76,7 +76,6 @@ import Keiro.Workflow
     WorkflowName (WorkflowName),
     loadStepIndex,
   )
-import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.RunJob (RunJob (..))
 import Shikigami.AgentRun.Ledger qualified as Ledger
 import Shikigami.AgentRun.Status qualified as Status
@@ -141,7 +140,7 @@ runRunsShow wfName wfId asJson config = do
               Left _ -> die "run lifecycle store is unavailable"
               Right Nothing -> die ("no workflow instance named " <> wfName <> " with id " <> wfId)
               Right (Just request) -> do
-                result <- Status.deriveRunStatus store (AgentName request.agentName) wfId
+                result <- Status.deriveRunStatus store request.agentName wfId
                 case result of
                   Left failure -> die (Status.runStatusFailureText failure)
                   Right status -> LazyChar8.putStrLn (Aeson.encode (withLifecycle status (object ["workflow" .= Aeson.Null, "session" .= Aeson.Null])))

@@ -15,6 +15,7 @@ import Keiro.Workflow.Gc (WorkflowGcPolicy (..), gcWorkflowsOnce)
 import Kioku.Id (genSessionId)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.RunFailure (AgentRunFailure)
 import Shikigami.Agent.RunJob (RunJob (..))
@@ -55,7 +56,7 @@ tests fixture =
         withFixture fixture \env admission access -> do
           version <- checkpointVersion admission
           (provider, _) <- fixtureCheckpoints version False
-          let runtime = Session.SessionRuntime env [admission.delegator & #name .~ "worker" & #delegates .~ []] disabledDirectoryHandle (const (pure (Right ()))) (Just provider)
+          let runtime = Session.SessionRuntime env [admission.delegator & #name .~ fixtureAgentName "worker" & #delegates .~ map fixtureAgentName []] disabledDirectoryHandle (const (pure (Right ()))) (Just provider)
               session = sessionIdFor admission
               options = shikigamiWorkflowRunOptions env
               drive initial = run env (runWorkflowWith options sessionWorkflowName (sessionWorkflowId session) (Session.sessionWorkflow runtime initial))
@@ -226,3 +227,6 @@ fixtureAmount amount = either (error . show) id (parseResourceAmount amount)
 
 fixtureInstruction :: Text -> InstructionText
 fixtureInstruction value = either (error . show) id (parseInstructionText value)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

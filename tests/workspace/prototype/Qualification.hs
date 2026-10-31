@@ -13,6 +13,7 @@ import Data.ByteString qualified as Bytes
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
 import Data.Time (addUTCTime, getCurrentTime)
@@ -24,7 +25,7 @@ import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, wit
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig (..), Role (AdminRole), revealSecretText)
@@ -106,7 +107,7 @@ loadAssignment q root runId owner = do
   now <- getCurrentTime
   session <- genSessionId
   selection <- right (resolveExecutionSelection (assignmentIdFor runId) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just root) now)
-  let assignment = SkillAssignment runId (AgentName "fixture") owner session selection Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host cannot dispatch a model")
+  let assignment = SkillAssignment runId (fixtureAgentName "fixture") owner session selection Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host cannot dispatch a model")
   let awaitAdmission remaining = do
         result <- q.host.load assignment
         case result of
@@ -211,3 +212,6 @@ right = either (const (fail ("qualification boundary refused\n" <> prettyCallSta
 
 executeConfigured :: Qualification -> Prepared -> IO ()
 executeConfigured q = executeWithProviders q.host.capabilities.providers q.env q.authorizer q.current
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

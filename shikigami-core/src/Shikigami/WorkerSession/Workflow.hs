@@ -33,7 +33,6 @@ import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
 import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Agent.Delegate (Delegated (..), delegateAssignment)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError)
-import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.RunFailure (AgentRunFailure)
@@ -154,7 +153,7 @@ sessionWorkflow runtime initial = do
             (existing, Nothing) -> existing
             (Just existing, Just additional) -> Just (filter (`elem` existing) additional)
           context = admission.context & #executionPermissions .~ permissions
-      spawned <- trySync (delegateAssignment state.owner instruction.selection runtime.agents runtime.directory admission.delegator context (assignmentDelegationKey message.assignmentId) (agentNameText (fromMaybe admission.worker state.worker)) (Aeson.object ["instruction" .= instruction.text, "assignmentId" .= message.assignmentId, "objective" .= admission.objective, "retainedFindings" .= findings]))
+      spawned <- trySync (delegateAssignment state.owner instruction.selection runtime.agents runtime.directory admission.delegator context (assignmentDelegationKey message.assignmentId) (fromMaybe admission.worker state.worker) (Aeson.object ["instruction" .= instruction.text, "assignmentId" .= message.assignmentId, "objective" .= admission.objective, "retainedFindings" .= findings]))
       case spawned of
         Right (Delegated handle) -> finish accepted message access handle
         Left err

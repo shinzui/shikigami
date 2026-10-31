@@ -21,10 +21,12 @@ import Shikigami.Agent.Decl
     ExpertiseDecl (..),
     IdentityDecl (..),
   )
+import Shikigami.Agent.ExpertiseKey (expertiseKeyText)
 import Shikigami.Agent.Loader
   ( AgentLoadEntry (..),
     AgentLoadReport (..),
   )
+import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Directory
   ( DirectorySnapshot (..),
     DirectorySnapshotVersion (..),
@@ -92,7 +94,7 @@ instance FromJSON CandidateAvailability where
       other -> fail ("unknown candidate availability: " <> Text.unpack other)
 
 data CandidateEntry = CandidateEntry
-  { name :: !Text,
+  { name :: !AgentName,
     description :: !(Maybe Text),
     expertise :: ![ExpertiseDecl],
     availability :: !CandidateAvailability
@@ -101,7 +103,7 @@ data CandidateEntry = CandidateEntry
   deriving anyclass (ToJSON, FromJSON)
 
 data CandidateCatalog = CandidateCatalog
-  { router :: !Text,
+  { router :: !AgentName,
     version :: !CatalogVersion,
     lifecycleSource :: !DirectorySourceKind,
     lifecycleSourceVersion :: !DirectorySnapshotVersion,
@@ -146,14 +148,14 @@ indexSnapshot DirectoryConfiguredSnapshot {principals} =
     (Map.fromList [(principalId, principal) | principal@PrincipalRecord {principalId} <- principals])
     (Map.fromList [(normalizeHandle handle, principal) | principal@PrincipalRecord {handle} <- principals])
 
-loadedDeclarationsByName :: [AgentLoadEntry] -> Map Text [AgentDecl]
+loadedDeclarationsByName :: [AgentLoadEntry] -> Map AgentName [AgentDecl]
 loadedDeclarationsByName = foldl' addEntry Map.empty
   where
     addEntry grouped AgentLoadFailed {} = grouped
     addEntry grouped AgentLoaded {declaration = declaration@AgentDecl {name}} =
       Map.insertWith (flip (<>)) name [declaration] grouped
 
-resolveCandidate :: Map Text [AgentDecl] -> LifecycleIndex -> Text -> CandidateEntry
+resolveCandidate :: Map AgentName [AgentDecl] -> LifecycleIndex -> AgentName -> CandidateEntry
 resolveCandidate declarationsByName lifecycleIndex candidateName =
   case Map.findWithDefault [] candidateName declarationsByName of
     [] -> unavailableCandidate candidateName MissingDeclaration
@@ -161,7 +163,7 @@ resolveCandidate declarationsByName lifecycleIndex candidateName =
     _first : _second : _rest -> unavailableCandidate candidateName DuplicateDeclaration
     [declaration] -> resolvedCandidate lifecycleIndex declaration
 
-unavailableCandidate :: Text -> ExclusionReason -> CandidateEntry
+unavailableCandidate :: AgentName -> ExclusionReason -> CandidateEntry
 unavailableCandidate candidateName reason =
   CandidateEntry
     { name = candidateName,
@@ -182,7 +184,7 @@ resolvedCandidate lifecycleIndex AgentDecl {name, description, expertise, enable
           else Excluded Disabled
     }
 
-lifecycleAvailability :: LifecycleIndex -> Maybe IdentityDecl -> Text -> CandidateAvailability
+lifecycleAvailability :: LifecycleIndex -> Maybe IdentityDecl -> AgentName -> CandidateAvailability
 lifecycleAvailability LocalEnabled _ _ = Available
 lifecycleAvailability ConfiguredUnavailable _ _ = Excluded LifecycleUnavailable
 lifecycleAvailability (ConfiguredPrincipals byPrincipalId byHandle) declaredIdentity agentName =
@@ -194,14 +196,14 @@ lifecycleAvailability (ConfiguredPrincipals byPrincipalId byHandle) declaredIden
   where
     foundPrincipal = case declaredIdentity of
       Just IdentityDecl {principal} -> Map.lookup principal byPrincipalId
-      Nothing -> Map.lookup (normalizeHandle agentName) byHandle
+      Nothing -> Map.lookup (normalizeHandle (agentNameText agentName)) byHandle
 
 snapshotIdentity :: DirectorySnapshot -> (DirectorySourceKind, DirectorySnapshotVersion)
 snapshotIdentity DirectoryDisabledSnapshot {version} = (DirectoryDisabledSource, version)
 snapshotIdentity DirectoryConfiguredSnapshot {source, version} = (source, version)
 snapshotIdentity DirectoryUnavailableSnapshot {source, version} = (source, version)
 
-catalogVersionFor :: Text -> DirectorySourceKind -> DirectorySnapshotVersion -> [CandidateEntry] -> Natural -> CatalogVersion
+catalogVersionFor :: AgentName -> DirectorySourceKind -> DirectorySnapshotVersion -> [CandidateEntry] -> Natural -> CatalogVersion
 catalogVersionFor routerName sourceKind (DirectorySnapshotVersion sourceVersion) candidateEntries failureCount =
   CatalogVersion
     ( Text.pack
@@ -211,7 +213,7 @@ catalogVersionFor routerName sourceKind (DirectorySnapshotVersion sourceVersion)
                 ( nameBytes
                     ( canonicalValues
                         [ "shikigami-router-catalog-v1",
-                          routerName,
+                          agentNameText routerName,
                           renderDirectorySourceKind sourceKind,
                           sourceVersion,
                           tshow failureCount,
@@ -225,7 +227,7 @@ catalogVersionFor routerName sourceKind (DirectorySnapshotVersion sourceVersion)
 
 candidateValues :: CandidateEntry -> [Text]
 candidateValues CandidateEntry {name, description, expertise, availability} =
-  [ name,
+  [ agentNameText name,
     canonicalMaybe description,
     canonicalList expertiseValues expertise,
     renderAvailability availability
@@ -233,7 +235,7 @@ candidateValues CandidateEntry {name, description, expertise, availability} =
 
 expertiseValues :: ExpertiseDecl -> [Text]
 expertiseValues ExpertiseDecl {key, description, aliases, evidenceHints} =
-  [ key,
+  [ expertiseKeyText key,
     description,
     canonicalList pure aliases,
     canonicalList pure evidenceHints

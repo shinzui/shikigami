@@ -15,6 +15,7 @@ import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Agent.Loader (AgentLoadReport (..), loadAgentsReport)
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Directory.Store
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Test.Tasty (TestTree, testGroup)
@@ -50,7 +51,7 @@ tests databaseFixture =
         (withPool databaseFixture) \pool -> do
           let triggerSkip =
                 RunSkip
-                  { agentName = "heartbeat",
+                  { agentName = fixtureAgentName "heartbeat",
                     principalId = Just "agent_heartbeat",
                     stage = TriggerStage,
                     detail = "schedule",
@@ -151,3 +152,6 @@ expectRight label = either (assertFailure . ((label <> ": ") <>) . Text.unpack) 
 
 expectPoolRight :: String -> Either Pool.UsageError a -> IO a
 expectPoolRight label = either (assertFailure . ((label <> ": ") <>) . show) pure
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

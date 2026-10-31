@@ -32,6 +32,7 @@ import GHC.Generics (Generic)
 import Kikan.En.Action (AgentAction (InvokeCapabilityTool))
 import Shikigami.Action.Authorization (ActionAuthorizationFailure (ActionPolicyDenied), ActionAuthorizer (..), allowAllActionAuthorizerForTests)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (Event), defaultMemoryPolicy)
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Behavior.Error (FailureClass (Permanent), RunError (..), classifyRunError)
 import Shikigami.Behavior.Input (triggerOnly)
 import Shikigami.Behavior.Run (BehaviorEnv (..), defaultToolTurnLimit, newBehaviorEnv, runBehavior, withCapabilityTools)
@@ -496,12 +497,12 @@ resolvedRead = mkResolvedCapabilitySet [readDescriptor]
 declFor :: [CapabilityId] -> Behavior -> AgentDecl
 declFor capabilityOverlays behavior =
   AgentDecl
-    { name = "behavior-tool-test",
+    { name = fixtureAgentName "behavior-tool-test",
       description = "exercise run-local model tools",
       trigger = Event "test",
       behavior,
       sinks = [],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays,
@@ -544,3 +545,6 @@ repositoryRoot = go [".", ".."]
 
 fixturePolicy :: (PolicyNumber a) => Integer -> a
 fixturePolicy number = either (error . show) id (parsePolicyNumber number)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

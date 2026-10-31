@@ -18,7 +18,7 @@ import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, wit
 import Kiroku.Store.Effect (runStoreIO)
 import Pgmq qualified
 import Shikigami.Agent.Loader (loadAgent)
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), runJobWorkflowId)
 import Shikigami.Agent.RunJob.Worker (admitRunJobWith, recordRunJobOutcome)
@@ -140,7 +140,7 @@ tests fixture =
                 )
           view <- getStatus store job
           view.lifecycle @?= Succeeded
-          deriveRunStatus store (AgentName "other") (runJobWorkflowId job).unWorkflowId >>= (@?= Right Nothing),
+          deriveRunStatus store (fixtureAgentName "other") (runJobWorkflowId job).unWorkflowId >>= (@?= Right Nothing),
       testCase "a normally completed workflow without complete is a behavior failure" $
         withFixture fixture \store job _connection -> do
           _ <- right =<< runStoreIO store (runWorkflow agentRunWorkflowName (runJobWorkflowId job) (pure ()))
@@ -160,7 +160,7 @@ tests fixture =
           view.lifecycle @?= Failed
           fmap (.kind) view.failure @?= Just DeadLettered
           assertBool "terminal disposition has a completion time" (isJust view.completedAt)
-          let unrelated = job & #idempotencyKey .~ Ledger.httpRunKey (AgentName "heartbeat") (fixtureRequestKey "not-http-accepted")
+          let unrelated = job & #idempotencyKey .~ Ledger.httpRunKey (fixtureAgentName "heartbeat") (fixtureRequestKey "not-http-accepted")
           recordRunJobOutcome Log.silentLogger store.pool unrelated (Dead "unrelated")
           Ledger.lookupRunRequest store.pool unrelated.agentName (runJobWorkflowId unrelated).unWorkflowId >>= (@?= Right Nothing),
       testCase "drain lifecycle refusal is terminal and storage failure stays an error" $
@@ -192,7 +192,7 @@ withFixture :: DatabaseFixture -> (KirokuStore -> RunJob -> Text -> IO a) -> IO 
 withFixture fixture body = withShikigamiFreshDatabase fixture \connection -> withStore (defaultConnectionSettings connection) \store -> do
   _ <- right =<< ensureRunQueue store.pool
   now <- getCurrentTime
-  let job = addressedRunJob now (compatibilityIdentity "heartbeat") "heartbeat" AgentWorkflowRoute (Aeson.object []) (Ledger.httpRunKey (AgentName "heartbeat") (fixtureRequestKey "status-test"))
+  let job = addressedRunJob now (compatibilityIdentity (fixtureAgentName "heartbeat")) (fixtureAgentName "heartbeat") AgentWorkflowRoute (Aeson.object []) (Ledger.httpRunKey (fixtureAgentName "heartbeat") (fixtureRequestKey "status-test"))
   _ <- right =<< Ledger.acceptRunRequest store.pool job (fixtureRequestKey "status-test") "test"
   body store job connection
 
@@ -212,3 +212,6 @@ sendDeadLetter store originalId reason =
 
 fixtureRequestKey :: Text -> RequestKey
 fixtureRequestKey = either (error . show) id . parseRequestKey
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

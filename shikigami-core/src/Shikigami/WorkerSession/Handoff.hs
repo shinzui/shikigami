@@ -9,7 +9,7 @@ import Data.List (find)
 import Effectful (Eff)
 import Effectful.Exception (trySync)
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
-import Shikigami.Agent.Name (AgentName, agentNameText)
+import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.App (AppEffects)
 import Shikigami.Decision.Contract (versionedDigest)
@@ -51,10 +51,10 @@ requestHandoff services session revision epoch operation workspace target =
     begin access = case (services.workspaces, services.ownership, services.sessions.checkpoints) of
       (Just _, Just _, Just checkpoints) ->
         Store.inspectSession session >>= \case
-          Right (Just (_, binding)) -> case find (\decl -> decl.name == agentNameText target && decl.enabled) services.sessions.agents of
+          Right (Just (_, binding)) -> case find (\decl -> decl.name == target && decl.enabled) services.sessions.agents of
             Nothing -> pure (Left SessionOwnerRefused)
             Just declaration -> do
-              identity <- liftIO (Directory.identityAdmission services.sessions.directory ((.principal) <$> declaration.identity) (agentNameText target))
+              identity <- liftIO (Directory.identityAdmission services.sessions.directory ((.principal) <$> declaration.identity) target)
               current <- trySync (liftIO (checkpoints.current binding.objective))
               now <- liftIO getCurrentTime
               case (identity, current) of

@@ -17,6 +17,7 @@ import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Data.List (find)
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Map.Strict qualified as Map
 import Data.Maybe (listToMaybe)
 import Data.Time (diffUTCTime)
@@ -33,7 +34,7 @@ import Kioku.Id (SessionId)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa), ApprovalDecision (..), ApprovalRequest (..))
 import Shikigami.Agent.Approval.Workflow qualified as Approval
-import Shikigami.Agent.Name (agentNameText)
+import Shikigami.Agent.Name (agentNameFromNonEmpty)
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunRouteKind (ExecutionOperationRoute))
 import Shikigami.App (AppEffects)
@@ -250,7 +251,7 @@ decide runtime start wake = do
           -- admitted actual attempt; executor claim/start supplies deduplication.
           when (attempt.phase == Attempt.AwaitingDispatch || maybe False (now >=) attempt.expiresAt) do
             (_, binding, _) <- metadata
-            checked (owned (Right <$> runTransaction (enqueue now binding.identity "execution" reference)))
+            checked (owned (Right <$> runTransaction (enqueue now binding.identity (agentNameFromNonEmpty ('e' :| "xecution")) reference)))
           pure (ObserveExecution reference)
     recover reference identity attempt = do
       proposed <- tryError @ExecutionError do
@@ -293,7 +294,7 @@ decide runtime start wake = do
                 (request, prepared) <- either (throwError . ExecutionPolicyRefused) pure result
                 pure (request, Just prepared)
           now <- liftIO getCurrentTime
-          (_, accepted) <- checked (owned ((case retired of Nothing -> Store.submitExecutionAttemptWith; Just old -> \permit revision -> Store.recoverExecutionAttemptWith permit revision old) access state.revision (Attempt.AttemptSubmission request prepared wake) (enqueue now snapshot.identity (agentNameText snapshot.agent))))
+          (_, accepted) <- checked (owned ((case retired of Nothing -> Store.submitExecutionAttemptWith; Just old -> \permit revision -> Store.recoverExecutionAttemptWith permit revision old) access state.revision (Attempt.AttemptSubmission request prepared wake) (enqueue now snapshot.identity snapshot.agent)))
           pure (ObserveExecution (Attempt.JobReference 1 start.executionId accepted.operationId accepted.request.attemptId))
     enqueue now identity agent reference = void (enqueueRunJobTx (addressedRunJob now identity agent ExecutionOperationRoute (toJSON reference) (RunKey ("execution:" <> versionedDigest "shikigami.execution-job/1" (toJSON reference)))))
     policyDigest snapshot = versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)

@@ -24,7 +24,7 @@ import Relay.Pagination.Servant (RelayPageError (..))
 import Servant.Health (ProbeVerdict (Healthy))
 import Shikigami.Agent.Catalog (AgentCatalog (..))
 import Shikigami.Agent.Loader (loadAgent)
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
 import Shikigami.AgentRun.Api
 import Shikigami.AgentRun.Ledger qualified as Ledger
@@ -62,7 +62,7 @@ tests fixture =
           _ <- right =<< Job.runJobEff runtime (Job.purgeDlq RunJobs.runJob)
           repeated <- request "GET" ("/agents/heartbeat/runs/" <> Text.unpack accepted.runId) Aeson.Null
           Http.responseBody repeated @?= Http.responseBody result
-          Ledger.lookupRunRequest store.pool (AgentName "heartbeat") accepted.runId >>= \case
+          Ledger.lookupRunRequest store.pool (fixtureAgentName "heartbeat") accepted.runId >>= \case
             Right (Just row) -> row.disposition @?= "dead_lettered"
             _ -> assertFailure "terminal receipt was not persisted",
       testCase "corrupt stored run history is a non-retryable typed internal failure" $
@@ -172,7 +172,7 @@ withRunServerStore fixture directory body =
   withShikigamiFreshDatabase fixture \connection -> withStore (defaultConnectionSettings connection) \store -> do
     _ <- right =<< ensureRunQueue store.pool
     declaration <- loadAgent "../agents/heartbeat.dhall" >>= right
-    let catalog = AgentCatalog (Map.fromList [("heartbeat", declaration), ("disabled-heartbeat", declaration & #name .~ "disabled-heartbeat" & #enabled .~ False)]) 0
+    let catalog = AgentCatalog (Map.fromList [(fixtureAgentName "heartbeat", declaration), (fixtureAgentName "disabled-heartbeat", declaration & #name .~ fixtureAgentName "disabled-heartbeat" & #enabled .~ False)]) 0
     provider <- Trace.createTracerProvider [] Trace.emptyTracerProviderOptions
     let tracer = Trace.makeTracer provider "run-test" Trace.tracerOptions
         env = newServerEnvWith tracer defaultAppConfig store.pool Log.silentLogger catalog directory (pure Healthy) (pure Healthy) & #readRunStatus .~ deriveRunStatus store
@@ -188,3 +188,6 @@ assertPageError expected response = do
   error <- right (Aeson.eitherDecode (Http.responseBody response) :: Either String RelayPageError)
   error.code @?= expected
   error.retryable @?= False
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

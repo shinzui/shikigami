@@ -21,24 +21,20 @@ import Shikigami.Agent.Decl
     ExpertiseDecl (..),
     RouterPolicy (..),
   )
+import Shikigami.Agent.ExpertiseKey (ExpertiseKey, duplicateExpertiseKeys, expertiseKeyText)
+import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Prelude
+import Shikigami.Router.SelectionLimit (SelectionLimit, selectionLimitInt, selectionLimitNatural)
 
 -- | A router declaration is decoded before these semantic invariants are
 -- checked, so every refusal can name the authoring mistake directly.
 data RouterDeclarationError
-  = EmptyExpertiseKey !Int
-  | DuplicateExpertiseKey !Text
-  | DuplicateDelegate !Text
+  = DuplicateExpertiseKey !ExpertiseKey
+  | DuplicateDelegate !AgentName
   | RouterPolicyMissing
   | RouterHasNoDelegates
-  | InvalidMaxSelections !Natural
   | MaxSelectionsExceedsDelegates !Natural !Natural
   deriving stock (Eq, Show)
-
--- | A positive, deliberately small fan-out bound. The constructor stays
--- private so downstream routing code cannot bypass declaration validation.
-newtype SelectionLimit = SelectionLimit Natural
-  deriving stock (Eq, Ord, Show)
 
 newtype ValidatedRouterDeclaration = ValidatedRouterDeclaration RouterDeclarationView
   deriving stock (Eq, Show)
@@ -53,13 +49,6 @@ data RouterDeclarationView = RouterDeclarationView
   }
   deriving stock (Eq, Show, Generic)
 
-selectionLimitNatural :: SelectionLimit -> Natural
-selectionLimitNatural (SelectionLimit value) = value
-
--- | Total because declaration validation admits only values from 1 through 16.
-selectionLimitInt :: SelectionLimit -> Int
-selectionLimitInt = fromIntegral . selectionLimitNatural
-
 -- | Validate the invariants common to specialist metadata and optional router
 -- policy. An ordinary specialist may omit @routing@; if it is present, all
 -- router-specific bounds are checked together so one CLI run reports every
@@ -72,9 +61,8 @@ routerDeclarationErrors AgentDecl {expertise, delegates, routing} =
       Nothing -> []
       Just RouterPolicy {maxSelections} ->
         [RouterHasNoDelegates | null delegates]
-          <> [InvalidMaxSelections maxSelections | maxSelections < 1 || maxSelections > 16]
-          <> [ MaxSelectionsExceedsDelegates maxSelections distinctDelegateCount
-             | maxSelections > distinctDelegateCount
+          <> [ MaxSelectionsExceedsDelegates (selectionLimitNatural maxSelections) distinctDelegateCount
+             | selectionLimitNatural maxSelections > distinctDelegateCount
              ]
   where
     distinctDelegateCount = fromIntegral (Set.size (Set.fromList delegates))
@@ -87,22 +75,18 @@ validateRouterDeclaration declaration@AgentDecl {routing} =
     (Nothing, errors) -> Left (errors <> [RouterPolicyMissing])
     (Just _, errors@(_ : _)) -> Left errors
     (Just policy@RouterPolicy {maxSelections}, []) ->
-      Right (ValidatedRouterDeclaration (RouterDeclarationView declaration policy (SelectionLimit maxSelections)))
+      Right (ValidatedRouterDeclaration (RouterDeclarationView declaration policy maxSelections))
 
 renderRouterDeclarationError :: RouterDeclarationError -> Text
 renderRouterDeclarationError = \case
-  EmptyExpertiseKey position ->
-    "expertise key at position " <> tshow position <> " must not be empty"
   DuplicateExpertiseKey key ->
-    "expertise key is duplicated after trimming and case-folding: " <> key
+    "expertise key is duplicated after trimming and case-folding: " <> expertiseKeyText key
   DuplicateDelegate delegate ->
-    "delegate name is duplicated: " <> delegate
+    "delegate name is duplicated: " <> agentNameText delegate
   RouterPolicyMissing ->
     "router declaration requires routing policy"
   RouterHasNoDelegates ->
     "routing policy requires at least one declared delegate"
-  InvalidMaxSelections value ->
-    "maxSelections must be between 1 and 16 inclusive; got " <> tshow value
   MaxSelectionsExceedsDelegates maximumSelection delegateCount ->
     "maxSelections "
       <> tshow maximumSelection
@@ -110,16 +94,7 @@ renderRouterDeclarationError = \case
       <> tshow delegateCount
 
 expertiseErrors :: [ExpertiseDecl] -> [RouterDeclarationError]
-expertiseErrors entries =
-  [EmptyExpertiseKey position | (position, key) <- indexedKeys, Text.null key]
-    <> (DuplicateExpertiseKey <$> duplicatesInOrder nonEmptyKeys)
-  where
-    indexedKeys = zip [1 ..] (normaliseExpertiseKey . keyOf <$> entries)
-    nonEmptyKeys = [key | (_, key) <- indexedKeys, not (Text.null key)]
-    keyOf ExpertiseDecl {key} = key
-
-normaliseExpertiseKey :: Text -> Text
-normaliseExpertiseKey = Text.toCaseFold . Text.strip
+expertiseErrors entries = DuplicateExpertiseKey <$> duplicateExpertiseKeys [key | ExpertiseDecl {key} <- entries]
 
 duplicatesInOrder :: (Ord a) => [a] -> [a]
 duplicatesInOrder = go Set.empty Set.empty

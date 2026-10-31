@@ -39,8 +39,8 @@ import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), RecordPolicy (Never), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
-import Shikigami.Agent.Delegate.Depth (DelegationDepth (..))
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent), compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.Run.Key (RunKey (..))
@@ -355,8 +355,8 @@ agentRunSpecialistTests databaseFixture =
             deps = specialistAgentRunDeps appEnv behaviorEnv runtime
             job =
               RunJob
-                { agentName = AgentName reviewerAgent,
-                  identity = compatibilityIdentity reviewerAgent,
+                { agentName = fixtureAgentName reviewerAgent,
+                  identity = compatibilityIdentity (fixtureAgentName reviewerAgent),
                   triggerKind = TriggeredByEvent,
                   routeKind = AgentWorkflowRoute,
                   occurredAt = UTCTime (fromGregorian 2026 8 26) 0,
@@ -364,8 +364,8 @@ agentRunSpecialistTests databaseFixture =
                   idempotencyKey = RunKey "agent-run-practice-review-incomplete",
                   parentSessionId = Just parentSession,
                   parentRunWorkflowId = Just (WorkflowId "architecture-practice-router-parent"),
-                  delegationDepth = Just (DelegationDepth 1),
-                  lineage = map AgentName ["architecture-practice-router", reviewerAgent],
+                  delegationDepth = Just (fixtureDelegationDepth 1),
+                  lineage = map fixtureAgentName ["architecture-practice-router", reviewerAgent],
                   executionRequest = Nothing,
                   executionPermissions = Nothing,
                   executionRootId = Nothing,
@@ -436,7 +436,7 @@ replayTests databaseFixture =
                             PracticeReviewMemoryEnv
                               { appEnv,
                                 agent = reviewerDecl,
-                                identity = CompatibilityAgent reviewerAgent,
+                                identity = CompatibilityAgent (fixtureAgentName reviewerAgent),
                                 sessionId = Just session
                               }
                           . runPracticeReviewAttention True runtime
@@ -575,7 +575,7 @@ attentionEnv :: AttentionRecipientMap -> Text -> PracticeReviewAttentionEnv
 attentionEnv recipients runIdentifier =
   PracticeReviewAttentionEnv
     { agent = reviewerAgent,
-      identity = compatibilityIdentity reviewerAgent,
+      identity = compatibilityIdentity (fixtureAgentName reviewerAgent),
       runId = runIdentifier,
       occurredAt = Nothing,
       activity = Just reviewActivity,
@@ -680,7 +680,7 @@ runPracticeReviewInput appEnv behaviorEnv session runtime workflowId input =
             PracticeReviewMemoryEnv
               { appEnv,
                 agent = reviewerDecl,
-                identity = CompatibilityAgent reviewerAgent,
+                identity = CompatibilityAgent (fixtureAgentName reviewerAgent),
                 sessionId = Just session
               }
           . runPracticeReviewAttention True runtime
@@ -826,7 +826,7 @@ assertRunRefused (Right (Right _)) = pure ()
 executionContextFixture :: PracticeReviewExecutionContext
 executionContextFixture =
   PracticeReviewExecutionContext
-    { identity = compatibilityIdentity reviewerAgent,
+    { identity = compatibilityIdentity (fixtureAgentName reviewerAgent),
       parentWorkflowId = Just (WorkflowId "architecture-practice-parent"),
       parentSessionId = Just nominalSessionFixture,
       childWorkflowId = WorkflowId "practice-review-child",
@@ -843,18 +843,18 @@ sinkEnvFixture session =
       activity = Just reviewActivity,
       grants = StaticGrants (Map.singleton reviewerAgent (Set.fromList [SKawaDigest, SKizashiSignal])),
       directory = disabledDirectoryHandle,
-      identity = compatibilityIdentity reviewerAgent
+      identity = compatibilityIdentity (fixtureAgentName reviewerAgent)
     }
 
 reviewerDecl :: AgentDecl
 reviewerDecl =
   AgentDecl
-    { name = reviewerAgent,
+    { name = fixtureAgentName reviewerAgent,
       description = "practice-review orchestration fixture",
       trigger = Event {eventType = "practice-review.requested"},
       behavior = Flow {name = "opentelemetry-practice-review"},
       sinks = [],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -961,3 +961,9 @@ repositoryRoot = go [".", ".."]
 
 nominalSessionFixture :: NominalId.SessionId
 nominalSessionFixture = either (error . show) id (NominalId.parseId "kioku_session_01kvxa7d2cezhs874g3n8dfgme")
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureDelegationDepth :: Int -> DelegationDepth
+fixtureDelegationDepth = either (error . show) id . parseDelegationDepth . toInteger

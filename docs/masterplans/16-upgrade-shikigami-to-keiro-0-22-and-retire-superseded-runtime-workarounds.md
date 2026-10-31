@@ -90,16 +90,17 @@ a checked allocated TypeID; objective content, worker/workspace ownership,
 execution policies, counters, decisions and assignment locators retain their
 nominal checked meanings.
 
-Latest coordinate-key acceptance rebuilt all enabled components and passed 563
-pure, 385 serial PostgreSQL, 260 worker and 95 server cases, plus 90 compiler
-clients, all API/client/agent suites, 73 CLI checks and live Hurl. Two deliberate
-workflow-body breaks are retained for structured child identities under ADR-86;
-aggregate folds remain unchanged. The ordinary gate passes against the accepted
-5ed5adf baseline. The remaining
-scalar/identity census keeps EP-5 In Progress. Three further source rows retain
-only final-profile clauses owned by EP-6. EP-6's exact frozen artifacts,
-Linux/runtime integration and final inventory gate have not started; all five
-implementation children must complete before that qualification.
+Latest agent-value acceptance rebuilt all enabled components and passed 569 pure,
+386 serial PostgreSQL, 260 worker and 95 server cases, plus 107 compiler clients,
+all API/client/agent suites, 81 CLI checks and live Hurl. Private agent/routing
+values retain their checked meaning. Distinct stored compatibility scopes fix a
+reproduced name collision under ADR-87's intentional first-release namespace
+reset; verified-principal authority remains. The native gate passes against
+b940359 with no findings and unchanged aggregate folds. ADR-86's earlier deliberate
+child-identity body breaks remain retained. The complete scalar/identity census
+keeps EP-5 In Progress. Three source rows retain only final-profile clauses owned
+by EP-6. Its exact frozen artifacts, Linux/runtime integration and final inventory
+gate have not started; all implementation children must complete first.
 
 ## Surprises & Discoveries
 

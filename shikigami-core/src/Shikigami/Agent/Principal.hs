@@ -24,7 +24,11 @@ where
 import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Text qualified as Text
+import Data.UUID qualified as UUID
+import Data.UUID.V5 qualified as UUID
 import Kioku.Api.Access (PrincipalRef, mkPrincipalRef)
+import Shikigami.Agent.Name (AgentName)
+import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Prelude hiding ((.=))
 
 -- | An immutable Meibo agent principal, retaining its canonical rendered form.
@@ -38,14 +42,14 @@ newtype AgentPrincipal = AgentPrincipal {value :: Text}
 -- be admitted to one of the other constructors before it can perform an effect.
 data AgentIdentity
   = VerifiedIdentity !AgentPrincipal
-  | CompatibilityIdentity !Text
+  | CompatibilityIdentity !AgentName
   | UnresolvedLegacyIdentity
   deriving stock (Eq, Ord, Show, Generic)
 
 -- | An identity proven suitable for a fresh effect.
 data ResolvedAgentIdentity
   = VerifiedAgent !AgentPrincipal
-  | CompatibilityAgent !Text
+  | CompatibilityAgent !AgentName
   deriving stock (Eq, Ord, Show, Generic)
 
 instance ToJSON AgentIdentity where
@@ -87,7 +91,7 @@ principalText :: AgentPrincipal -> Text
 principalText (AgentPrincipal raw) = raw
 
 -- | Construct the explicit identity used only when the directory is disabled.
-compatibilityIdentity :: Text -> AgentIdentity
+compatibilityIdentity :: AgentName -> AgentIdentity
 compatibilityIdentity = CompatibilityIdentity
 
 -- | The stable text used for attribution and scope keys.
@@ -108,14 +112,8 @@ resolvedIdentity = \case
 resolvedIdentityText :: ResolvedAgentIdentity -> Text
 resolvedIdentityText = \case
   VerifiedAgent principal -> principalText principal
-  CompatibilityAgent agentName -> "shikigami.agent." <> sanitize agentName
-  where
-    sanitize = Text.map \case
-      ':' -> '.'
-      '#' -> '.'
-      '%' -> '.'
-      '/' -> '.'
-      character -> character
+  CompatibilityAgent agentName ->
+    "shikigami.agent.v2." <> UUID.toText (UUID.generateNamed UUID.namespaceURL (nameBytes (versionedDigest "shikigami.compatibility-principal/2" (Aeson.toJSON agentName))))
 
 meiboPrincipal :: AgentIdentity -> Maybe AgentPrincipal
 meiboPrincipal = \case

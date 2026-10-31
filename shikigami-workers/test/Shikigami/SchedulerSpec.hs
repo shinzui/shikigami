@@ -22,7 +22,7 @@ import Kiroku.Store.Connection qualified as StoreConnection
 import Pgmq (Message (..), MessageBody (..), ReadMessage (..), readMessage)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
@@ -83,11 +83,11 @@ tests databaseFixture =
         assertEqual "next due minute" (Just expected) (nextDue cron now),
       testCase "payload round-trips" do
         let dueAt = atMinute 5
-            payload = scheduleTimerPayload "heartbeat" dueAt
-        assertEqual "recognized payload" (Just ("heartbeat", dueAt)) (parseSchedulePayload payload),
+            payload = scheduleTimerPayload (fixtureAgentName "heartbeat") dueAt
+        assertEqual "recognized payload" (Just (fixtureAgentName "heartbeat", dueAt)) (parseSchedulePayload payload),
       testCase "timer id is deterministic" do
         let dueAt = atMinute 5
-        assertEqual "same agent and due time produce same id" (scheduleTimerId "heartbeat" dueAt) (scheduleTimerId "heartbeat" dueAt),
+        assertEqual "same agent and due time produce same id" (scheduleTimerId (fixtureAgentName "heartbeat") dueAt) (scheduleTimerId (fixtureAgentName "heartbeat") dueAt),
       testCase "fire action enqueues a run job and re-arms" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
@@ -96,13 +96,13 @@ tests databaseFixture =
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 pool = StoreConnection.pool kirokuStore
                 firstDue = atMinute 1
-                env = testSchedulerEnv pool (Map.singleton "heartbeat" cron) FireAll Log.silentLogger
+                env = testSchedulerEnv pool (Map.singleton (fixtureAgentName "heartbeat") cron) FireAll Log.silentLogger
 
             -- enqueueRunJob no longer reconciles the queue on every send, so the
             -- startup step every real producer now performs happens here too.
             ensureQueue pool
 
-            armed <- runAppIO appEnv (armNextRun cron "heartbeat" (atSecond 30))
+            armed <- runAppIO appEnv (armNextRun cron (fixtureAgentName "heartbeat") (atSecond 30))
             assertEqual "initial arm succeeds" (Right ()) armed
 
             fired <- runAppIO appEnv (runSchedulerTimerWorker appEnv env firstDue)
@@ -111,11 +111,11 @@ tests databaseFixture =
             messages <- readRunJobs pool
             case messages of
               [RunJob {agentName, triggerKind, occurredAt, idempotencyKey, triggerPayload}] -> do
-                assertEqual "agent name" (AgentName "heartbeat") agentName
+                assertEqual "agent name" (fixtureAgentName "heartbeat") agentName
                 assertEqual "trigger kind" TriggeredBySchedule triggerKind
                 assertEqual "occurred at due minute" firstDue occurredAt
                 assertEqual "stable schedule idempotency key" (RunKey "heartbeat:sched:2026-06-20T00:01:00Z") idempotencyKey
-                assertEqual "payload parses as schedule" (Just ("heartbeat", firstDue)) (parseSchedulePayload triggerPayload)
+                assertEqual "payload parses as schedule" (Just (fixtureAgentName "heartbeat", firstDue)) (parseSchedulePayload triggerPayload)
               other -> assertFailure ("expected one run job, got " <> show other)
 
             refired <- runAppIO appEnv (runSchedulerTimerWorker appEnv env (atMinute 2))
@@ -129,8 +129,8 @@ tests databaseFixture =
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 pool = StoreConnection.pool kirokuStore
                 env =
-                  (testSchedulerEnv pool (Map.singleton "heartbeat" cron) FireAll Log.silentLogger)
-                    { principalIds = Map.singleton "heartbeat" (Just "agent_heartbeat"),
+                  (testSchedulerEnv pool (Map.singleton (fixtureAgentName "heartbeat") cron) FireAll Log.silentLogger)
+                    { principalIds = Map.singleton (fixtureAgentName "heartbeat") (Just "agent_heartbeat"),
                       directory
                     }
             ensureQueue pool
@@ -140,7 +140,7 @@ tests databaseFixture =
             skips <- either (assertFailure . Text.unpack) pure =<< DirectoryStore.listRunSkips pool
             case skips of
               [runSkip] -> do
-                assertEqual "agent" "heartbeat" ((.agentName) runSkip)
+                assertEqual "agent" (fixtureAgentName "heartbeat") ((.agentName) runSkip)
                 assertEqual "principal" (Just "agent_heartbeat") ((.principalId) runSkip)
                 assertEqual "trigger boundary" DirectoryStore.TriggerStage ((.stage) runSkip)
                 assertEqual "source" "schedule" ((.detail) runSkip)
@@ -157,7 +157,7 @@ tests databaseFixture =
             cron <- parseCronOrFail "* * * * *"
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 pool = StoreConnection.pool kirokuStore
-                env = testSchedulerEnv pool (Map.singleton "heartbeat" cron) SkipMissed Log.silentLogger
+                env = testSchedulerEnv pool (Map.singleton (fixtureAgentName "heartbeat") cron) SkipMissed Log.silentLogger
 
             ensureQueue pool
             fired <- runAppIO appEnv (scheduleFireAction env aDayLater (staleScheduleRow staleDue))
@@ -171,9 +171,9 @@ tests databaseFixture =
 
             staleNext <- expectedNext cron staleDue
             skippedNext <- expectedNext cron aDayLater
-            stale <- runAppIO appEnv (lookupTimer (scheduleTimerId "heartbeat" staleNext))
+            stale <- runAppIO appEnv (lookupTimer (scheduleTimerId (fixtureAgentName "heartbeat") staleNext))
             assertEqual "no timer is armed for the next stale minute" (Right Nothing) (fmap (fmap fireAt) stale)
-            armed <- runAppIO appEnv (lookupTimer (scheduleTimerId "heartbeat" skippedNext))
+            armed <- runAppIO appEnv (lookupTimer (scheduleTimerId (fixtureAgentName "heartbeat") skippedNext))
             case armed of
               Right (Just TimerRow {fireAt}) ->
                 assertBool
@@ -187,14 +187,14 @@ tests databaseFixture =
             cron <- parseCronOrFail "* * * * *"
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 pool = StoreConnection.pool kirokuStore
-                env = testSchedulerEnv pool (Map.singleton "heartbeat" cron) FireAll Log.silentLogger
+                env = testSchedulerEnv pool (Map.singleton (fixtureAgentName "heartbeat") cron) FireAll Log.silentLogger
 
             ensureQueue pool
             fired <- runAppIO appEnv (scheduleFireAction env aDayLater (staleScheduleRow staleDue))
             assertEqual "the stale tick fired" (Right True) (fmap (maybe False (const True)) fired)
 
             staleNext <- expectedNext cron staleDue
-            armed <- runAppIO appEnv (lookupTimer (scheduleTimerId "heartbeat" staleNext))
+            armed <- runAppIO appEnv (lookupTimer (scheduleTimerId (fixtureAgentName "heartbeat") staleNext))
             case armed of
               Right (Just TimerRow {fireAt}) ->
                 assertBool
@@ -213,7 +213,7 @@ tests databaseFixture =
               cron <- parseCronOrFail "* * * * *"
               (logger, captured) <- capturingLogger
               let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                  env = testSchedulerEnv brokenPool (Map.singleton "heartbeat" cron) SkipMissed logger
+                  env = testSchedulerEnv brokenPool (Map.singleton (fixtureAgentName "heartbeat") cron) SkipMissed logger
 
               fired <- runAppIO appEnv (scheduleFireAction env aDayLater (staleScheduleRow staleDue))
               assertEqual "a failed enqueue does not report the timer as fired" (Right Nothing) (fmap (fmap (const ())) fired)
@@ -227,7 +227,7 @@ tests databaseFixture =
                 (any (ByteString.Char8.isInfixOf "\"agent\":\"heartbeat\"") lines')
 
               -- Nothing was enqueued anywhere, so the good pool's queue stays empty.
-              skipped <- runAppIO appEnv (lookupTimer (scheduleTimerId "heartbeat" (atMinute 1441)))
+              skipped <- runAppIO appEnv (lookupTimer (scheduleTimerId (fixtureAgentName "heartbeat") (atMinute 1441)))
               assertEqual "no next tick was armed after the failure" (Right Nothing) (fmap (fmap fireAt) skipped),
       -- Both payloads this runtime writes are kind-guarded, so the old
       -- try-then-fall-through never actually mis-fired an approval. What it did
@@ -258,7 +258,7 @@ tests databaseFixture =
       testCase "an unparseable cron is reported, not dropped" do
         (logger, captured) <- capturingLogger
         schedules <- schedulerSchedules logger False [scheduledAgent "good-agent" "* * * * *", scheduledAgent "bad-agent" "not a cron"]
-        assertEqual "only the parseable agent is scheduled" ["good-agent"] (Map.keys schedules)
+        assertEqual "only the parseable agent is scheduled" [fixtureAgentName "good-agent"] (Map.keys schedules)
         lines' <- readIORef captured
         assertBool
           ("expected scheduler.cron.invalid in " <> show lines')
@@ -279,7 +279,7 @@ tests databaseFixture =
       testCase "a parseable cron under strict mode still starts" do
         (logger, _captured) <- capturingLogger
         schedules <- schedulerSchedules logger True [scheduledAgent "good-agent" "*/5 * * * *"]
-        assertEqual "the agent is scheduled" ["good-agent"] (Map.keys schedules),
+        assertEqual "the agent is scheduled" [fixtureAgentName "good-agent"] (Map.keys schedules),
       testCase "an approval-timeout payload still reaches the approval action" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
@@ -310,12 +310,12 @@ tests databaseFixture =
 scheduledAgent :: Text -> Text -> AgentDecl
 scheduledAgent agentName cron =
   AgentDecl
-    { name = agentName,
+    { name = fixtureAgentName agentName,
       description = "scheduler spec fixture",
       trigger = Schedule {cron},
       behavior = Deterministic {rule = "test", params = Map.empty},
       sinks = [],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -330,7 +330,7 @@ scheduledAgent agentName cron =
     }
 
 -- | A 'SchedulerEnv' with the two fields every case below varies made explicit.
-testSchedulerEnv :: Pool.Pool -> Map.Map Text CronSchedule -> CatchUpPolicy -> Log.Logger -> SchedulerEnv
+testSchedulerEnv :: Pool.Pool -> Map.Map AgentName CronSchedule -> CatchUpPolicy -> Log.Logger -> SchedulerEnv
 testSchedulerEnv pool schedules catchUpPolicy logger =
   SchedulerEnv {pool, schedules, principalIds = Map.empty, directory = disabledDirectoryHandle, catchUpPolicy, logger}
 
@@ -356,11 +356,11 @@ aDayLater = addUTCTime (24 * 60 * 60) staleDue
 staleScheduleRow :: UTCTime -> TimerRow
 staleScheduleRow dueAt =
   TimerRow
-    { timerId = scheduleTimerId "heartbeat" dueAt,
+    { timerId = scheduleTimerId (fixtureAgentName "heartbeat") dueAt,
       processManagerName = "shikigami.scheduler",
       correlationId = "heartbeat",
       fireAt = dueAt,
-      payload = scheduleTimerPayload "heartbeat" dueAt,
+      payload = scheduleTimerPayload (fixtureAgentName "heartbeat") dueAt,
       status = Firing,
       attempts = 1,
       firedEventId = Nothing
@@ -441,3 +441,6 @@ atMinute minute =
 atSecond :: Integer -> UTCTime
 atSecond second =
   UTCTime (fromGregorian 2026 6 20) (secondsToDiffTime second)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

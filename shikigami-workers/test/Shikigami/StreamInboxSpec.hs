@@ -18,6 +18,7 @@ import Pgmq (Message (..), MessageBody (..), QueueName, ReadMessage (..), dropQu
 import Shibuya.Core.Ack (AckDecision (..))
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), StreamMatch (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..))
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
@@ -290,7 +291,7 @@ directoryWith lifecycle = do
 streamAgent :: AgentDecl
 streamAgent =
   AgentDecl
-    { name = "risk-agent",
+    { name = fixtureAgentName "risk-agent",
       description = "atomic stream inbox test agent",
       trigger =
         Stream
@@ -304,7 +305,7 @@ streamAgent =
           },
       behavior = Deterministic {rule = "test", params = Map.empty},
       sinks = [],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -375,3 +376,6 @@ deadLetterQueueName =
   case parseQueueName "shikigami_stream_dead_letters_test" of
     Left err -> Prelude.error (show err)
     Right queue -> queue
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

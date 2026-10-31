@@ -11,7 +11,7 @@ import Effectful (Eff)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
@@ -55,7 +55,7 @@ tests fixture =
         (a, b) <- concurrently begin begin
         a @?= Right Nothing
         b @?= Right Nothing
-        run env (runTransaction (beginTransferTx binding (intent & #newOwner .~ compatibilityIdentity "intruder"))) >>= (@?= Left WorkspaceBindingConflict)
+        run env (runTransaction (beginTransferTx binding (intent & #newOwner .~ compatibilityIdentity (fixtureAgentName "intruder")))) >>= (@?= Left WorkspaceBindingConflict)
         run env (runTransaction (Workspaces.checkWorkspaceOwnerTx binding intent.oldOwner (fixtureRevision 0))) >>= (@?= Left WorkspaceBindingConflict)
         run env (runTransaction (Workspaces.checkWorkspaceOwnerTx binding intent.newOwner (fixtureRevision 1))) >>= (@?= Left WorkspaceBindingConflict)
         proof <- right =<< run env (runTransaction (retainFenceTx binding intent))
@@ -64,7 +64,7 @@ tests fixture =
         run env (runTransaction (retainFenceTx binding intent)) >>= (@?= Right proof),
       testCase "an invented unretained transfer cannot freeze the allocation" $ withWorkspace fixture \env session _ binding _ -> do
         version <- Fixture.checkpointVersion session
-        let intent = TransferIntent 1 (sessionIdFor session) session.objective session.context.identity (OperationId "invented") version session.identity successor (AgentName "successor") (fixtureRevision 0) (fixtureRevision 1) binding.request.rootId binding.workspace
+        let intent = TransferIntent 1 (sessionIdFor session) session.objective session.context.identity (OperationId "invented") version session.identity successor (fixtureAgentName "successor") (fixtureRevision 0) (fixtureRevision 1) binding.request.rootId binding.workspace
         run env (runTransaction (beginTransferTx binding intent)) >>= (@?= Left WorkspaceBindingConflict)
         run env (runTransaction (Workspaces.checkWorkspaceOwnerTx binding session.identity (fixtureRevision 0))) >>= (@?= Right ()),
       testCase "prepared file effects preserve uncertainty until factual settlement after freeze" $ withWorkspace fixture \env session access binding original -> do
@@ -118,13 +118,13 @@ tests fixture =
     ]
 
 successor :: AgentIdentity
-successor = compatibilityIdentity "successor"
+successor = compatibilityIdentity (fixtureAgentName "successor")
 
 instruction :: Instruction
 instruction = Instruction 1 FollowUp (fixtureInstruction "bounded fixture assignment") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing
 
 withWorkspace :: DatabaseFixture -> (AppEnv -> SessionAdmission -> Sessions.SessionAccess -> WorkspaceBinding -> WorkspaceAdmission -> IO a) -> IO a
-withWorkspace fixture callback = Fixture.withConfiguredFixture fixture (\admission -> admission & #delegator . #delegates .~ ["worker", "successor"]) \env session access -> do
+withWorkspace fixture callback = Fixture.withConfiguredFixture fixture (\admission -> admission & #delegator . #delegates .~ map fixtureAgentName ["worker", "successor"]) \env session access -> do
   (_, message) <- right =<< run env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "initial-message") instruction)
   (_, started) <- right =<< run env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (OperationId "initial-start") message.assignmentId)
   runId <- maybe (fail "missing original child") pure started.childWorkflowId
@@ -142,7 +142,7 @@ request :: AppEnv -> SessionAdmission -> Sessions.SessionAccess -> WorkspaceBind
 request env session access binding = do
   current <- sessionState env session
   version <- Fixture.checkpointVersion session
-  snd <$> (right =<< run env (Sessions.requestTransfer access current.revision (fixtureRevision 0) (OperationId "transfer") version binding.workspace (AgentName "successor") successor))
+  snd <$> (right =<< run env (Sessions.requestTransfer access current.revision (fixtureRevision 0) (OperationId "transfer") version binding.workspace (fixtureAgentName "successor") successor))
 
 sessionState :: AppEnv -> SessionAdmission -> IO SessionState
 sessionState env session = do
@@ -166,3 +166,6 @@ fixtureAssignment = either (error . show) id . parseAssignmentKey
 
 fixtureGeneration :: Integer -> Generation.StateRevision "execution-attempt"
 fixtureGeneration value = either (error . show) id (Generation.parseRevision value)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

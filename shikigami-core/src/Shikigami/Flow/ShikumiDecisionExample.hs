@@ -6,6 +6,7 @@ import Data.List.NonEmpty qualified as NE
 import Data.Text.Encoding qualified as TE
 import Effectful (Eff, (:>))
 import Shikigami.Agent.Delegate (DelegationRequest (..))
+import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Decision.Contract
 import Shikigami.Flow.Decision
 import Shikigami.Flow.Delegate (Delegate)
@@ -49,7 +50,7 @@ shikumiDecisionExample payload = do
               children <-
                 Delegate.delegateBatch
                   catalog
-                  (fmap (\selection -> DelegationRequest ("decision-investigate-" <> selection.agent) selection.agent payload) selections)
+                  (fmap (\selection -> DelegationRequest ("decision-investigate-" <> agentNameText selection.agent) selection.agent payload) selections)
               NE.toList <$> traverse Delegate.awaitOne children
             NoMatch _ -> pure []
             Ambiguous _ _ -> pure []

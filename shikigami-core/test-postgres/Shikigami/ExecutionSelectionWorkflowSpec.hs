@@ -46,7 +46,7 @@ import Network.Wai qualified as Wai
 import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
@@ -164,7 +164,7 @@ tests fixture =
               selection = select now root catalog "coordinator"
               selectedRuntime = runtime app store base catalog
               execution = Replay.executionIdFor selection.assignmentId
-              snapshot = Replay.ExecutionSnapshot 1 execution "prepared-http" (AgentName "worker") (compatibilityIdentity "worker") session selection Nothing (Replay.SkillInstructions "fixture" "system" "body") (Replay.ReplayContext 1 (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
+              snapshot = Replay.ExecutionSnapshot 1 execution "prepared-http" (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (Replay.SkillInstructions "fixture" "system" "body") (Replay.ReplayContext 1 (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
               operationId = Replay.operationIdFor execution (fixtureRevision 0)
               specification = Replay.OperationSpec operationId Replay.ModelTurn RepeatableObservation "model" (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) "scope" Nothing
               context = systemUser "system" "marker"
@@ -210,7 +210,7 @@ tests fixture =
               selection = select now root catalog "coordinator"
               selectedRuntime = runtime app store base catalog
               execution = Replay.executionIdFor selection.assignmentId
-              snapshot = Replay.ExecutionSnapshot 1 execution "executor-http" (AgentName "worker") (compatibilityIdentity "worker") session selection Nothing (Replay.SkillInstructions "fixture" "system" "body") (Replay.ReplayContext 1 (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
+              snapshot = Replay.ExecutionSnapshot 1 execution "executor-http" (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (Replay.SkillInstructions "fixture" "system" "body") (Replay.ReplayContext 1 (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
               operationId = Replay.operationIdFor execution (fixtureRevision 0)
               specification = Replay.OperationSpec operationId Replay.ModelTurn RepeatableObservation "model" (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) "scope" Nothing
               executor authority = Executor.ExecutionRuntime app (const authority) (const authority) (const selectedRuntime) (\_ _ _ use -> Right <$> use []) 5
@@ -402,10 +402,10 @@ tests fixture =
               secondMessage = message (2 :: Int)
               workflowId = Conversation.conversationWorkflowId 0 firstMessage
               execution msg = Replay.executionIdFor (conversationAssignmentIdFor workflowId.unWorkflowId msg.messageId)
-          Conversation.submitConversationTurnWithExecution env declaration (compatibilityIdentity "router") (Just context) firstMessage >>= (@?= Right Conversation.ConversationAccepted)
+          Conversation.submitConversationTurnWithExecution env declaration (compatibilityIdentity (fixtureAgentName "router")) (Just context) firstMessage >>= (@?= Right Conversation.ConversationAccepted)
           -- Repeated delivery observes its accepted turn and leaves the
           -- successor's input promise pending, without another model attempt.
-          Conversation.submitConversationTurnWithExecution env declaration (compatibilityIdentity "router") (Just context) firstMessage >>= (@?= Right Conversation.ConversationAccepted)
+          Conversation.submitConversationTurnWithExecution env declaration (compatibilityIdentity (fixtureAgentName "router")) (Just context) firstMessage >>= (@?= Right Conversation.ConversationAccepted)
           observed >>= (@?= [])
           index <- run app (loadStepIndex Conversation.conversationWorkflowName workflowId 0)
           token <- case Map.lookup "awkid:next-message" index >>= (\value -> case Aeson.fromJSON value of Aeson.Success token -> Just token; _ -> Nothing) of
@@ -416,9 +416,9 @@ tests fixture =
           awakeable.status @?= Awakeable.Pending
           _ <- driveExecutionChild app (Agent.executionRuntime dependencies) (execution firstMessage) 20
           let retired = (env & #decisions .~ (Decision.defaultDecisionServices (mustRight (modelCatalog []))))
-          first <- expectRight =<< Conversation.runConversationTurnWithExecution retired declaration (compatibilityIdentity "router") (Just context) firstMessage
+          first <- expectRight =<< Conversation.runConversationTurnWithExecution retired declaration (compatibilityIdentity (fixtureAgentName "router")) (Just context) firstMessage
           Conversation.runConversationTurn retired declaration firstMessage >>= (@?= Right first)
-          Conversation.submitConversationTurnWithExecution env declaration (compatibilityIdentity "router") Nothing secondMessage >>= (@?= Right Conversation.ConversationAccepted)
+          Conversation.submitConversationTurnWithExecution env declaration (compatibilityIdentity (fixtureAgentName "router")) Nothing secondMessage >>= (@?= Right Conversation.ConversationAccepted)
           _ <- driveExecutionChild app (Agent.executionRuntime dependencies) (execution secondMessage) 20
           second <- expectRight =<< Conversation.runConversationTurn env declaration secondMessage
           Conversation.runConversationTurn env declaration firstMessage >>= (@?= Right first)
@@ -430,7 +430,7 @@ tests fixture =
           case bodies of
             [_, secondBody] -> assertBool "prior accepted turns are frozen in the next assignment" ("request-1" `Text.isInfixOf` TextEncoding.decodeUtf8 (Lazy.toStrict (encode secondBody)))
             _ -> assertFailure "conversation repeated provider work"
-          refused <- Conversation.runConversationTurnWithExecution env declaration (compatibilityIdentity "router") (Just (context & #request .~ Just (ExecutionRequest (Just "worker-b") Nothing Nothing))) (message (3 :: Int))
+          refused <- Conversation.runConversationTurnWithExecution env declaration (compatibilityIdentity (fixtureAgentName "router")) (Just (context & #request .~ Just (ExecutionRequest (Just "worker-b") Nothing Nothing))) (message (3 :: Int))
           assertBool "context cannot change within epoch" (either (const True) (const False) refused)
           observed >>= (\after -> length after @?= 2)
           snapshot <- expectRight =<< run app (Roots.inspectRoot root)
@@ -441,7 +441,7 @@ aliases :: [Text]
 aliases = ["coordinator", "worker-a", "worker-b"]
 
 workerDecl :: AgentDecl
-workerDecl = Fixture.routerDecl & #behavior .~ Skill "../agents/skills/triage-note" & #routing .~ Nothing & #delegates .~ [] & #execution .~ Just (ExecutionPolicy "coordinator" aliases)
+workerDecl = Fixture.routerDecl & #behavior .~ Skill "../agents/skills/triage-note" & #routing .~ Nothing & #delegates .~ map fixtureAgentName [] & #execution .~ Just (ExecutionPolicy "coordinator" aliases)
 
 workflowDeps :: AppEnv -> KirokuStore -> BehaviorEnv -> ModelCatalog -> AgentDecl -> Agent.AgentRunDeps
 workflowDeps app store base catalog declaration =
@@ -621,3 +621,6 @@ fixtureAssignment = either (error . show) id . parseAssignmentKey
 
 fixtureOwner :: ClaimText.Text -> Claim.ClaimOwner
 fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

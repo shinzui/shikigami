@@ -24,6 +24,13 @@ evidence. The aggregate replay-impact verdict covers stored-data folds and does
 not make those changed child identities compatible. This remains part of the
 confirmed unused first-release reset; no old-identity fallback is introduced.
 
+[ADR-87](adr/0087-agent-values-retain-checked-meaning-and-separate-compatibility-scopes.md)
+also versions the directory-disabled compatibility scope after reproducing a
+sanitizer collision. Its attribution/scope meaning changes intentionally under
+this exception. Nominal agent values and the explicit unbound seed retain valid
+wire values and existing labels; a neutral native helper-reference diff is not a
+claim that the old compatibility namespace is preserved.
+
 
 ## What a durable workflow is, and why editing one is not like editing ordinary code
 

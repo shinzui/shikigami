@@ -20,6 +20,7 @@ import Shikigami.Agent.Decl
     Trigger (..),
     defaultMemoryPolicy,
   )
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv)
 import Shikigami.Capability.Overlay (CapabilityId)
 import Shikigami.Log qualified as Log
@@ -239,12 +240,12 @@ assertToolRefusal = \case
 testDecl :: [CapabilityId] -> AgentDecl
 testDecl capabilityOverlays =
   AgentDecl
-    { name = "workspace-capability-test",
+    { name = fixtureAgentName "workspace-capability-test",
       description = "workspace capability test",
       trigger = Event {eventType = "test"},
       behavior = Skill {path = "unused"},
       sinks = [],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays,
@@ -316,3 +317,6 @@ isSymlink _ = False
 isExcluded :: WorkspaceError -> Bool
 isExcluded WorkspaceExcludedPath {} = True
 isExcluded _ = False
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

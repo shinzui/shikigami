@@ -82,7 +82,7 @@ import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
 import Shikigami.Agent.Decl qualified as Agent
-import Shikigami.Agent.Name (AgentName (..), agentNameText)
+import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Agent.Principal
   ( AgentIdentity (..),
     ResolvedAgentIdentity,
@@ -286,7 +286,7 @@ data ConversationWake
 -- it instead. @lastMessageId@ is the message the previous generation finished,
 -- which lets a generation recognise a redelivery before doing any work.
 data ConversationSeed = ConversationSeed
-  { agentName :: !AgentName,
+  { agentName :: !(Maybe AgentName),
     identity :: !AgentIdentity,
     turnsSoFar :: !Int,
     pendingMessage :: !(Maybe AddressedMessage),
@@ -296,7 +296,9 @@ data ConversationSeed = ConversationSeed
   deriving stock (Eq, Show, Generic)
 
 instance ToJSON ConversationSeed where
-  toJSON value = omitExecutionContext value.executionContext (Aeson.genericToJSON Aeson.defaultOptions value)
+  toJSON value = omitExecutionContext value.executionContext case Aeson.genericToJSON Aeson.defaultOptions value of
+    Aeson.Object fields -> Aeson.Object (KeyMap.insert "agentName" (toJSON (maybe "" agentNameText value.agentName)) fields)
+    other -> other
 
 omitExecutionContext :: Maybe ExecutionContext -> Aeson.Value -> Aeson.Value
 omitExecutionContext Nothing (Aeson.Object fields) = Aeson.Object (KeyMap.delete "executionContext" fields)
@@ -314,15 +316,17 @@ instance FromJSON ConversationSeed where
     lastMessageId <- obj .: "lastMessageId"
     executionContext <- obj .:? "executionContext"
     let initial = identity == UnresolvedLegacyIdentity && turnsSoFar == 0 && pendingMessage == Nothing && lastMessageId == Nothing && executionContext == Nothing
-    if Text.null rawName && not initial
-      then fail "a carried conversation seed requires an agent name"
-      else pure ConversationSeed {agentName = AgentName rawName, identity, turnsSoFar, pendingMessage, lastMessageId, executionContext}
+    agentName <-
+      if Text.null rawName
+        then if initial then pure Nothing else fail "a carried conversation seed requires an agent name"
+        else Just <$> either (fail . Text.unpack) pure (mkAgentName rawName)
+    pure ConversationSeed {agentName, identity, turnsSoFar, pendingMessage, lastMessageId, executionContext}
 
 -- | The seed generation 0 starts from, before any rotation has happened.
 emptyConversationSeed :: ConversationSeed
 emptyConversationSeed =
   ConversationSeed
-    { agentName = AgentName "",
+    { agentName = Nothing,
       identity = UnresolvedLegacyIdentity,
       turnsSoFar = 0,
       pendingMessage = Nothing,
@@ -430,7 +434,7 @@ runConversationTurnWithExecution env decl identity executionContext msg@Addresse
                         ("conversation is mid-turn; redelivering " <> (.messageId) msg)
                     )
                 )
-            else driveConversationTurn env epoch msg conversationDriveBudget (Just ConversationStart {agentName = AgentName ((.name) decl), identity, initialMessage = msg, executionContext})
+            else driveConversationTurn env epoch msg conversationDriveBudget (Just ConversationStart {agentName = ((.name) decl), identity, initialMessage = msg, executionContext})
 
 -- A redelivery of the running turn must observe it, not complete the wake that
 -- belongs to its successor. This remains a bounded current-generation read.
@@ -623,17 +627,18 @@ resolveConversationIdentity env decl recorded =
 -- state the runtime can invent an answer for.
 ingestStart :: (IOE :> es) => ConversationSeed -> Maybe ConversationStart -> Eff es ConversationStart
 ingestStart ConversationSeed {agentName = seedAgentName, identity = seedIdentity, pendingMessage, executionContext} mStart =
-  case (pendingMessage, mStart) of
-    (Just carried, _) -> pure ConversationStart {agentName = seedAgentName, identity = seedIdentity, initialMessage = carried, executionContext}
-    (Nothing, Just start) -> pure start
-    (Nothing, Nothing) ->
+  case (pendingMessage, seedAgentName, mStart) of
+    (Just carried, Just agentName, _) -> pure ConversationStart {agentName, identity = seedIdentity, initialMessage = carried, executionContext}
+    (Just _, Nothing, _) -> liftIO (ioError (userError "carried conversation seed has no agent name"))
+    (Nothing, _, Just start) -> pure start
+    (Nothing, _, Nothing) ->
       liftIO (ioError (userError "danwa conversation workflow resumed before ingest-start was journaled"))
 
 -- | The seed the next generation starts from.
 nextConversationSeed :: ConversationSeed -> ConversationStart -> AddressedMessage -> ConversationSeed
 nextConversationSeed ConversationSeed {turnsSoFar} ConversationStart {agentName = startAgentName, identity, initialMessage = finished, executionContext} next =
   ConversationSeed
-    { agentName = startAgentName,
+    { agentName = Just startAgentName,
       identity,
       turnsSoFar = turnsSoFar + 1,
       pendingMessage = Just next,
@@ -797,7 +802,7 @@ conversationIdleTimeoutFireAction row = case parseConversationIdleTimeoutPayload
 resolveDeclStep :: ConversationEnv -> ConversationStart -> Eff (Workflow : AppEffects) AgentDecl
 resolveDeclStep env ConversationStart {agentName} =
   step (StepName "lookup-agent") do
-    case find ((== agentNameText agentName) . (.name)) ((.agents) env) of
+    case find ((== agentName) . (.name)) ((.agents) env) of
       Just decl -> pure decl
       Nothing -> liftIO (ioError (userError ("unknown conversation agent " <> Text.unpack (agentNameText agentName))))
 
@@ -924,7 +929,7 @@ runConversationSkillStep env recordedIdentity decl msg sid userTurn profile sele
       assignment =
         ExecutionStart.SkillAssignment
           { runId = workflowId.unWorkflowId,
-            agent = AgentName decl.name,
+            agent = decl.name,
             identity = resolvedIdentity recordedIdentity,
             sessionId = sid,
             selection,
@@ -1405,7 +1410,7 @@ prepareConversationReplySinkIntent directoryHandle grantSource recordedIdentity 
     (resolvedIdentity recordedIdentity)
     (conversationWorkflowId 0 msg)
     (replySinkStepName msgMessageId)
-    ((.name) decl)
+    (agentNameText ((.name) decl))
     (idText sid)
     0
     Nothing

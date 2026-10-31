@@ -48,6 +48,7 @@ import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), DelegationBudget, IdentityDecl (..), Trigger (..))
 import Shikigami.Agent.Loader (AgentLoadReport)
+import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App (AppEnv (..))
 import Shikigami.Attestation.Resolve qualified as Profile
@@ -119,7 +120,7 @@ data WorkerEnv = WorkerEnv
     -- | Every scheduled agent whose declared cron parsed, resolved once at boot
     -- by 'schedulerSchedules' so that an unparseable cron is reported there
     -- rather than dropped silently on every timer pass.
-    schedules :: !(Map Text CronSchedule),
+    schedules :: !(Map AgentName CronSchedule),
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
     kanmon :: !KanmonConfig,
@@ -267,7 +268,7 @@ conversationEnv env =
 -- where a deploy can see it, so each offender is named and — under
 -- @agents.strict@, the same switch that governs a manifest that will not load —
 -- the process refuses to start after reporting all of them.
-schedulerSchedules :: Log.Logger -> Bool -> [AgentDecl] -> IO (Map Text CronSchedule)
+schedulerSchedules :: Log.Logger -> Bool -> [AgentDecl] -> IO (Map AgentName CronSchedule)
 schedulerSchedules logger strictMode declarations = do
   let scheduled =
         [ (agentName, cron)
@@ -306,10 +307,10 @@ schedulerEnv env =
 
 -- | Named for the same reason as 'envLogger': 'Scheduler.SchedulerEnv' also
 -- carries a @schedules@ field.
-envSchedules :: WorkerEnv -> Map Text CronSchedule
+envSchedules :: WorkerEnv -> Map AgentName CronSchedule
 envSchedules WorkerEnv {schedules = s} = s
 
-principalIdsByAgent :: [AgentDecl] -> Map Text (Maybe Text)
+principalIdsByAgent :: [AgentDecl] -> Map AgentName (Maybe Text)
 principalIdsByAgent =
   Map.fromList . fmap (\AgentDecl {name, identity} -> (name, declaredPrincipal <$> identity))
   where

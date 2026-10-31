@@ -4,7 +4,10 @@
 -- | The declaration catalog's HTTP contract. AgentName's HTTP instances live
 -- here to keep HTTP dependencies out of the domain package.
 module Shikigami.Agent.Api
-  ( AgentApi (..),
+  ( AgentName,
+    mkAgentName,
+    agentNameText,
+    AgentApi (..),
     AgentView (..),
     AgentPageResponses,
     AgentPageResult (..),
@@ -22,7 +25,7 @@ import Relay.Pagination.Servant (RelayPage, RelayPageError)
 import Servant.API
 import Servant.API.Generic ((:-))
 import Servant.API.MultiVerb
-import Shikigami.Agent.Name (AgentName (..), agentNameText)
+import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.AgentRun.Api (AgentRunApi)
 import Shikigami.Api.Problem
 import Shikigami.Prelude
@@ -46,9 +49,7 @@ instance ToSchema AgentView where
   declareNamedSchema = genericDeclareNamedSchema (fromAesonOptions defaultOptions)
 
 instance FromHttpApiData AgentName where
-  parseUrlPiece value
-    | Text.null value = Left "agent name must not be empty"
-    | otherwise = Right (AgentName value)
+  parseUrlPiece = mkAgentName
 
 instance ToHttpApiData AgentName where
   toUrlPiece = agentNameText

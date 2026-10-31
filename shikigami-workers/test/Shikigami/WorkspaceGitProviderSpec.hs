@@ -11,6 +11,7 @@ import Data.ByteString qualified as Bytes
 import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
+import Data.Text (Text)
 import Data.Text qualified as AssignmentText
 import Data.Text qualified as ClaimText
 import Data.Text qualified as Text
@@ -22,7 +23,7 @@ import Effectful (Eff)
 import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Capability.Provider (DurableAdapter (..))
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
@@ -323,7 +324,7 @@ withIntegration fixture conflicting use = withGitVersion True fixture "commit" \
   let secondPath = if conflicting then "src/dependency.txt" else "src/AGENTS.md"
   Bytes.writeFile (workspaceFiles second.storageRoot second </> Text.unpack secondPath) "worker two\n"
   token <- UUID.nextRandom
-  Fixture.withAcceptedWorkspaceTool 1 (transferredWorkspaceGitAdapterWithBackend backend) (AgentName "worker") "overlay__workspace-git__commit" token env secondAdmission runtime (Aeson.toJSON (GitCommitRequest second.base "Worker two")) \secondSnapshot _ secondReference -> do
+  Fixture.withAcceptedWorkspaceTool 1 (transferredWorkspaceGitAdapterWithBackend backend) (fixtureAgentName "worker") "overlay__workspace-git__commit" token env secondAdmission runtime (Aeson.toJSON (GitCommitRequest second.base "Worker two")) \secondSnapshot _ secondReference -> do
     execute (Fixture.executorForAdapter (transferredWorkspaceGitAdapterWithBackend backend) runtime) secondSnapshot secondReference
     secondArtifact <- artifact env secondReference
     (target, admission) <- sibling env first profile "integrator"
@@ -352,7 +353,7 @@ withIntegrationTool :: AppEnv -> WorkspaceAdmission -> FileRuntime -> GitBackend
 withIntegrationTool env admission runtime backend input use = do
   token <- UUID.nextRandom
   let adapter = workspaceIntegrationAdapterWithBackend backend
-  Fixture.withAcceptedWorkspaceTool 1 adapter (AgentName "worker") integrationBinding.name token env admission runtime input \snapshot access reference -> do
+  Fixture.withAcceptedWorkspaceTool 1 adapter (fixtureAgentName "worker") integrationBinding.name token env admission runtime input \snapshot access reference -> do
     execute (Fixture.executorForAdapter adapter runtime) snapshot reference
     Just operation <- right =<< run env (Execution.inspectOperation reference.operationId)
     result <- maybe (fail "missing integration result") pure operation.outcome
@@ -398,3 +399,6 @@ fixtureGeneration value = either (error . show) id (Generation.parseRevision val
 
 fixtureOwner :: ClaimText.Text -> Claim.ClaimOwner
 fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

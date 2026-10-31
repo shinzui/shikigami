@@ -194,6 +194,16 @@
           "rationale": "Actual before probes, admitted delegation preflight and a real PostgreSQL acceptance case reproduced delimiter collisions. Versioned structured commitments distinguish child and HTTP run coordinates; original caller keys are retained explicitly as private RequestKey through API, CLI, SQL and response adapters. Ninety compiler clients, 563 pure/385 PostgreSQL/260 worker/95 server/31 API/9 client/37 agent, 73 offline CLI checks and live Hurl pass under ADR-86. Exactly two native WorkflowBodyChanged findings are retained as the ADR-27 first-release reset; aggregate replay neutrality does not assert child-history compatibility. The full scalar/identity census remains pending."
         },
         {
+          "id": "retained-agent-routing-values",
+          "disposition": "implemented",
+          "rationale": "Private AgentName, ExpertiseKey, SelectionLimit and DelegationDepth retain their scalar invariants through declarations, routing, delegation, scheduling, lifecycle admission, SQL and HTTP/CLI adapters. Valid string/numeric codecs and complete conversation seeds retain their wire values; the unbound seed uses Maybe AgentName. JSON/Dhall/model inputs refine at admission. Positive-first compiler clients reject constructors, representation coercion, literals and Generic bypasses. ADR-87, six scalar cases, 569 pure/386 PostgreSQL/260 worker/95 server acceptance and 107 compiler clients cover this clause. The complete census remains pending."
+        },
+        {
+          "id": "distinct-compatibility-attribution-scopes",
+          "disposition": "implemented",
+          "rationale": "The retained before probe reproduces sanitizer aliasing for valid a:b/a.b names. ADR-87 versions exact-name compatibility attribution/scopes with deterministic UUIDv5 rendering accepted by Kioku. An actual PostgreSQL regression writes and independently restores both session scopes; valid whitespace/Unicode names retain valid principal references. Verified-principal authority and name-keyed compatibility grants remain. The namespace/derived attribution change is an intentional unused first-release reset, not a neutral old-history claim or a TypeID allocation."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -235,7 +245,14 @@
         "docs/adr/0086-versioned-structured-coordinates-identify-delegated-and-http-runs.md",
         "docs/evidence/keiro-0.22/coordinate-key-results.txt",
         "docs/evidence/keiro-0.22/coordinate-key-before-probe.json",
-        "docs/evidence/keiro-0.22/coordinate-key-reset-diff.json"
+        "docs/evidence/keiro-0.22/coordinate-key-reset-diff.json",
+        "docs/adr/0087-agent-values-retain-checked-meaning-and-separate-compatibility-scopes.md",
+        "docs/evidence/keiro-0.22/agent-values-results.txt",
+        "docs/evidence/keiro-0.22/agent-values-before-probe.json",
+        "docs/evidence/keiro-0.22/agent-values-identity-vectors.json",
+        "docs/evidence/keiro-0.22/agent-values-native-diff.json",
+        "docs/evidence/keiro-0.22/agent-values-native-replay.json",
+        "shikigami-core/test/Shikigami/AgentValueSpec.hs"
       ]
     },
     {

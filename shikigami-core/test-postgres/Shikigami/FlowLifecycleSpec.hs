@@ -32,9 +32,9 @@ import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
-import Shikigami.Agent.Delegate.Depth (DelegationDepth (..))
+import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..))
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent), compatibilityIdentity)
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Behavior.Run (newBehaviorEnv)
@@ -233,7 +233,7 @@ tests databaseFixture =
           withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
             tracer <- noopTracer
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl "at-risk-customer", identity = CompatibilityAgent "at-risk-customer", aliasPool = Nothing, sessionId = Nothing}
+                memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl "at-risk-customer", identity = CompatibilityAgent (fixtureAgentName "at-risk-customer"), aliasPool = Nothing, sessionId = Nothing}
                 mid = deterministicFlowMemoryId (WorkflowName "shikigami.flow.spike") (WorkflowId "flow-crash-window") 0 "acknowledged"
                 note = object ["summary" .= ("at-risk customer alert acknowledged" :: Text)]
 
@@ -264,7 +264,7 @@ tests databaseFixture =
             tracer <- noopTracer
             session <- genSessionId
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl "at-risk-customer", identity = CompatibilityAgent "at-risk-customer", aliasPool = Nothing, sessionId = Nothing}
+                memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl "at-risk-customer", identity = CompatibilityAgent (fixtureAgentName "at-risk-customer"), aliasPool = Nothing, sessionId = Nothing}
                 replayedId = WorkflowId "flow-recall-replay"
                 freshId = WorkflowId "flow-recall-fresh"
                 runCount workflowId = runFlowBody appEnv (spikeRuntime session) "at-risk-customer" recallCountFlow workflowId (object [])
@@ -550,7 +550,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
             . runSink sinkEnv
             . FlowDecision.runDecisionDisabled
             . FlowDelegate.runDelegate delegateEnv
-            . FlowWorkers.runWorkers Nothing denyAllActionAuthorizer (CoordinatorRun "disabled-flow-fixture" (compatibilityIdentity flowAgent) runtime.approval.currentSession Nothing Nothing) (Right Nothing)
+            . FlowWorkers.runWorkers Nothing denyAllActionAuthorizer (CoordinatorRun "disabled-flow-fixture" (compatibilityIdentity (fixtureAgentName flowAgent)) runtime.approval.currentSession Nothing Nothing) (Right Nothing)
             . Routing.runRouting
               Routing.RoutingEnv
                 { Routing.agent = flowDecl,
@@ -571,10 +571,10 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
         )
   where
     flowDecl = flowAgentDecl flowAgent
-    memoryEnv = MemoryEnv {appEnv, agent = flowDecl, identity = CompatibilityAgent flowAgent, aliasPool = Nothing, sessionId = Nothing}
+    memoryEnv = MemoryEnv {appEnv, agent = flowDecl, identity = CompatibilityAgent (fixtureAgentName flowAgent), aliasPool = Nothing, sessionId = Nothing}
     practiceReviewExecutionContext =
       PracticeReview.PracticeReviewExecutionContext
-        { PracticeReview.identity = compatibilityIdentity flowAgent,
+        { PracticeReview.identity = compatibilityIdentity (fixtureAgentName flowAgent),
           PracticeReview.parentWorkflowId = Nothing,
           PracticeReview.parentSessionId = Nothing,
           PracticeReview.childWorkflowId = WorkflowId "flow-test-workflow",
@@ -584,7 +584,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
       PracticeReviewMemory.PracticeReviewMemoryEnv
         { PracticeReviewMemory.appEnv = appEnv,
           PracticeReviewMemory.agent = flowDecl,
-          PracticeReviewMemory.identity = CompatibilityAgent flowAgent,
+          PracticeReviewMemory.identity = CompatibilityAgent (fixtureAgentName flowAgent),
           PracticeReviewMemory.sessionId = Nothing
         }
     delegateEnv =
@@ -592,12 +592,12 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
         { FlowDelegate.agent = flowDecl,
           FlowDelegate.context =
             DelegateCtx
-              { identity = compatibilityIdentity flowAgent,
-                depth = DelegationDepth 0,
+              { identity = compatibilityIdentity (fixtureAgentName flowAgent),
+                depth = fixtureDelegationDepth 0,
                 sessionId = Just ((.currentSession) ((.approval) runtime)),
                 parentSessionId = Nothing,
                 parentRunWorkflowId = Nothing,
-                lineage = map AgentName [flowAgent],
+                lineage = map fixtureAgentName [flowAgent],
                 executionPermissions = Nothing,
                 executionRootId = Nothing,
                 delegationBudgetId = Nothing,
@@ -617,7 +617,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
           activity = Just sampleActivity,
           grants = StaticGrants defaultGrantTable,
           directory = disabledDirectoryHandle,
-          identity = compatibilityIdentity flowAgent
+          identity = compatibilityIdentity (fixtureAgentName flowAgent)
         }
 
 -- | The runtime is handed to the test rather than consumed by 'lookupFlow',
@@ -670,7 +670,7 @@ fireDueApprovalTimer appEnv = do
 -- field, which @Shikigami.Agent.Run.renderLearning@ stores verbatim.
 acknowledgedMemoryCount :: AppEnv -> IO Int
 acknowledgedMemoryCount appEnv =
-  runAppIO appEnv (Memory.getActiveRowsByScope shikigamiMemorySpace (agentScope (CompatibilityAgent "at-risk-customer"))) >>= \case
+  runAppIO appEnv (Memory.getActiveRowsByScope shikigamiMemorySpace (agentScope (CompatibilityAgent (fixtureAgentName "at-risk-customer")))) >>= \case
     Right (Right rows) -> pure (length (filter isAcknowledgedNote rows))
     Right (Left err) -> assertFailure ("memory rows should be readable, got " <> show err)
     Left _ -> assertFailure "memory rows should be readable, got a store error"
@@ -694,7 +694,7 @@ assertRecordedId label expected = \case
 -- | Every active memory in the test agent's scope.
 scopeRows :: AppEnv -> IO [MemoryRow]
 scopeRows appEnv =
-  runAppIO appEnv (Memory.getActiveRowsByScope shikigamiMemorySpace (agentScope (CompatibilityAgent "at-risk-customer"))) >>= \case
+  runAppIO appEnv (Memory.getActiveRowsByScope shikigamiMemorySpace (agentScope (CompatibilityAgent (fixtureAgentName "at-risk-customer")))) >>= \case
     Right (Right rows) -> pure rows
     Right (Left err) -> assertFailure ("memory rows should be readable, got " <> show err)
     Left _ -> assertFailure "memory rows should be readable, got a store error"
@@ -747,7 +747,7 @@ flowBehaviorAgent behavior = (flowAgentDecl "declaration-test") {behavior}
 flowAgentDecl :: Text -> AgentDecl
 flowAgentDecl flowAgent =
   AgentDecl
-    { name = flowAgent,
+    { name = fixtureAgentName flowAgent,
       description = "flow capability test agent",
       trigger = Event {eventType = "customer.risk_detected"},
       behavior =
@@ -756,7 +756,7 @@ flowAgentDecl flowAgent =
             params = mempty
           },
       sinks = [],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -809,3 +809,9 @@ escalatedOutput =
 
 nominalSessionFixture :: NominalId.SessionId
 nominalSessionFixture = either (error . show) id (NominalId.parseId "kioku_session_01kvxa7d2cezhs874g3n8dfgme")
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureDelegationDepth :: Int -> DelegationDepth
+fixtureDelegationDepth = either (error . show) id . parseDelegationDepth . toInteger

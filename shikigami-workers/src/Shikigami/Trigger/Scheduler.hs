@@ -30,6 +30,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Conversation qualified as Conversation
+import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.App (AppEnv (..))
 import Shikigami.Directory qualified as Directory
@@ -42,9 +43,9 @@ import Shikigami.Trigger.Schedule (CatchUpPolicy (..), CronSchedule, nextDue)
 
 data SchedulerEnv = SchedulerEnv
   { pool :: !Pool,
-    schedules :: !(Map Text CronSchedule),
+    schedules :: !(Map AgentName CronSchedule),
     -- | Declaration principal ids keyed by scheduled agent name.
-    principalIds :: !(Map Text (Maybe Text)),
+    principalIds :: !(Map AgentName (Maybe Text)),
     directory :: !Directory.DirectoryHandle,
     -- | What to do about cron minutes that passed while the process was down.
     catchUpPolicy :: !CatchUpPolicy,
@@ -54,7 +55,7 @@ data SchedulerEnv = SchedulerEnv
 
 data ScheduleTimerPayload = ScheduleTimerPayload
   { kind :: !Text,
-    agent :: !Text,
+    agent :: !AgentName,
     dueAt :: !UTCTime
   }
   deriving stock (Eq, Show, Generic)
@@ -63,11 +64,11 @@ data ScheduleTimerPayload = ScheduleTimerPayload
 scheduleTimerKind :: Text
 scheduleTimerKind = "shikigami.schedule"
 
-scheduleTimerPayload :: Text -> UTCTime -> Value
+scheduleTimerPayload :: AgentName -> UTCTime -> Value
 scheduleTimerPayload agent dueAt =
   Aeson.toJSON ScheduleTimerPayload {kind = scheduleTimerKind, agent, dueAt}
 
-parseSchedulePayload :: Value -> Maybe (Text, UTCTime)
+parseSchedulePayload :: Value -> Maybe (AgentName, UTCTime)
 parseSchedulePayload value = do
   ScheduleTimerPayload {kind, agent, dueAt} <- parseMaybe Aeson.parseJSON value
   if kind == scheduleTimerKind
@@ -80,21 +81,21 @@ parseSchedulePayload value = do
 timerPayloadKind :: Value -> Maybe Text
 timerPayloadKind = parseMaybe (Aeson.withObject "timer payload" (.: "kind"))
 
-scheduleTimerId :: Text -> UTCTime -> TimerId
+scheduleTimerId :: AgentName -> UTCTime -> TimerId
 scheduleTimerId agent dueAt =
   TimerId $
     UUID.V5.generateNamed UUID.V5.namespaceURL $
       nameBytes $
-        Text.intercalate ":" ["shikigami", "schedule", agent, Text.pack (iso8601Show dueAt)]
+        Text.intercalate ":" ["shikigami", "schedule", agentNameText agent, Text.pack (iso8601Show dueAt)]
 
-scheduleFiredEventId :: Text -> UTCTime -> EventId
+scheduleFiredEventId :: AgentName -> UTCTime -> EventId
 scheduleFiredEventId agent dueAt =
   EventId $
     UUID.V5.generateNamed UUID.V5.namespaceURL $
       nameBytes $
-        Text.intercalate ":" ["shikigami", "schedule-fired", agent, Text.pack (iso8601Show dueAt)]
+        Text.intercalate ":" ["shikigami", "schedule-fired", agentNameText agent, Text.pack (iso8601Show dueAt)]
 
-armNextRun :: (Store :> es, IOE :> es) => CronSchedule -> Text -> UTCTime -> Eff es ()
+armNextRun :: (Store :> es, IOE :> es) => CronSchedule -> AgentName -> UTCTime -> Eff es ()
 armNextRun cron agent now =
   for_ (nextDue cron now) \dueAt ->
     runTransaction $
@@ -102,7 +103,7 @@ armNextRun cron agent now =
         TimerRequest
           { timerId = scheduleTimerId agent dueAt,
             processManagerName = "shikigami.scheduler",
-            correlationId = agent,
+            correlationId = agentNameText agent,
             fireAt = dueAt,
             payload = scheduleTimerPayload agent dueAt
           }
@@ -123,7 +124,7 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
     Nothing -> pure Nothing
     Just (agent, dueAt) -> do
       let declaredPrincipalId = Map.findWithDefault Nothing agent ((.principalIds) env)
-      decision <- liftIO (Directory.consultLifecycle ((.directory) env) declaredPrincipalId agent)
+      decision <- liftIO (Directory.consultLifecycle ((.directory) env) declaredPrincipalId (agentNameText agent))
       let advance = do
             let armFrom = case (.catchUpPolicy) env of
                   SkipMissed -> now
@@ -183,7 +184,7 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
                   ]
               advance
 
-admittedIdentity :: Text -> Maybe Text -> Directory.LifecycleDecision -> Either (Maybe Text, Text) AgentIdentity
+admittedIdentity :: AgentName -> Maybe Text -> Directory.LifecycleDecision -> Either (Maybe Text, Text) AgentIdentity
 admittedIdentity agent declaredPrincipalId = \case
   Directory.AllowRun Nothing -> Right (compatibilityIdentity agent)
   Directory.AllowRun (Just principal) ->

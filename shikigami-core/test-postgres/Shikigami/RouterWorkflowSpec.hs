@@ -41,7 +41,8 @@ import Shikigami.Agent.Decl
   )
 import Shikigami.Agent.Delegate (delegatedWorkflowIdV2)
 import Shikigami.Agent.Delegate.Context (DelegationError (..))
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.ExpertiseKey (ExpertiseKey, parseExpertiseKey)
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.Run.Key (RunKey (..))
@@ -72,6 +73,7 @@ import Shikigami.Router.Decision
     RouteSelection (..),
     RoutingError (..),
   )
+import Shikigami.Router.SelectionLimit (SelectionLimit, parseSelectionLimit)
 import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Test.Tasty (TestTree, testGroup)
@@ -111,15 +113,15 @@ semanticAndAuthorizationMatrix databaseFixture =
       let invalidCases =
             [ ( "undeclared",
                 RouteDecision 1 testCatalogVersion (Matched (selection "ghost" RoutingHigh "invented" :| [])),
-                UndeclaredSelection "ghost"
+                UndeclaredSelection (fixtureAgentName "ghost")
               ),
               ( "paused",
                 RouteDecision 1 testCatalogVersion (Matched (selection "paused" RoutingHigh "paused" :| [])),
-                UnavailableSelection "paused" Paused
+                UnavailableSelection (fixtureAgentName "paused") Paused
               ),
               ( "low-confidence",
                 RouteDecision 1 testCatalogVersion (Matched (selection "first" RoutingLow "weak" :| [])),
-                ConfidenceBelowMinimum "first" RoutingLow RoutingMedium
+                ConfidenceBelowMinimum (fixtureAgentName "first") RoutingLow RoutingMedium
               ),
               ( "fanout",
                 RouteDecision
@@ -157,8 +159,8 @@ matchedReplayProof databaseFixture =
               )
           job = routerJob "router:matched-replay"
           parentWorkflowId = runJobWorkflowId job
-          firstChildId = delegatedWorkflowIdV2 parentWorkflowId "first" "architecture-practice-first"
-          secondChildId = delegatedWorkflowIdV2 parentWorkflowId "second" "architecture-practice-second"
+          firstChildId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "first") "architecture-practice-first"
+          secondChildId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "second") "architecture-practice-second"
       originalProbe <- newProbe catalog (Aeson.toJSON decision)
       let deps = routerDeps appEnv behaviorEnv ((.runtime) originalProbe) [routerDecl, successSpecialist "first", successSpecialist "second"]
 
@@ -261,7 +263,7 @@ childFailureEscapes databaseFixture = do
     let decision = matchedDecision [selection "failing" RoutingHigh "route"]
         job = routerJob "router:child-failure"
         parentWorkflowId = runJobWorkflowId job
-        childWorkflowId = delegatedWorkflowIdV2 parentWorkflowId "failing" "architecture-practice-failing"
+        childWorkflowId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "failing") "architecture-practice-failing"
     probe <- newProbe catalog (Aeson.toJSON decision)
     let deps = routerDeps appEnv behaviorEnv ((.runtime) probe) [routerDecl, failingSpecialist]
     parked <- AgentWorkflow.runAgentRunWorkflow deps job
@@ -370,8 +372,8 @@ runSuccessfulChild appEnv deps childWorkflowId = do
 routerJob :: Text -> RunJob
 routerJob key =
   RunJob
-    { agentName = AgentName "router",
-      identity = compatibilityIdentity "router",
+    { agentName = fixtureAgentName "router",
+      identity = compatibilityIdentity (fixtureAgentName "router"),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = fixedTime,
@@ -380,7 +382,7 @@ routerJob key =
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
-      lineage = map AgentName ["router"],
+      lineage = map fixtureAgentName ["router"],
       executionRequest = Nothing,
       executionPermissions = Nothing,
       executionRootId = Nothing,
@@ -390,12 +392,12 @@ routerJob key =
 routerDecl :: AgentDecl
 routerDecl =
   AgentDecl
-    { name = "router",
+    { name = fixtureAgentName "router",
       description = "routes architecture practice work",
       trigger = Event {eventType = "test.router"},
       behavior = Flow {name = "architecture-practice-router"},
       sinks = [],
-      delegates = ["first", "second", "third", "paused", "failing"],
+      delegates = map fixtureAgentName ["first", "second", "third", "paused", "failing"],
       delegationBudget = Just defaultDelegationBudget,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -434,12 +436,12 @@ failingSpecialist =
 specialist :: Text -> Behavior -> AgentDecl
 specialist specialistName specialistBehavior =
   AgentDecl
-    { name = specialistName,
+    { name = fixtureAgentName specialistName,
       description = "router specialist",
       trigger = Event {eventType = "test.specialist"},
       behavior = specialistBehavior,
       sinks = [],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -456,7 +458,7 @@ specialist specialistName specialistBehavior =
 routerPolicy :: RouterPolicy
 routerPolicy =
   RouterPolicy
-    { maxSelections = 2,
+    { maxSelections = fixtureSelectionLimit 2,
       minimumConfidence = RoutingMedium,
       onNoMatch = ReturnNoMatch,
       onAmbiguous = ReturnAmbiguous
@@ -468,7 +470,7 @@ testCatalogVersion = CatalogVersion "catalog-v1"
 catalog :: CandidateCatalog
 catalog =
   CandidateCatalog
-    { router = "router",
+    { router = fixtureAgentName "router",
       version = testCatalogVersion,
       lifecycleSource = DirectoryDisabledSource,
       lifecycleSourceVersion = DirectorySnapshotVersion "directory-v1",
@@ -488,7 +490,7 @@ changedCatalog = (catalog & #version .~ (CatalogVersion "changed-catalog") & #ca
 candidate :: Text -> CandidateAvailability -> CandidateEntry
 candidate candidateName availability =
   CandidateEntry
-    { name = candidateName,
+    { name = fixtureAgentName candidateName,
       description = Just secretDescription,
       expertise = [expertiseEntry],
       availability
@@ -497,7 +499,7 @@ candidate candidateName availability =
 expertiseEntry :: ExpertiseDecl
 expertiseEntry =
   ExpertiseDecl
-    { key = "observability",
+    { key = fixtureExpertiseKey "observability",
       description = "trace architecture",
       aliases = ["otel"],
       evidenceHints = ["traceparent"]
@@ -506,8 +508,8 @@ expertiseEntry =
 selection :: Text -> RouterConfidence -> Text -> RouteSelection
 selection agent confidence rationale =
   RouteSelection
-    { agent,
-      expertise = ["observability"],
+    { agent = fixtureAgentName agent,
+      expertise = map fixtureExpertiseKey ["observability"],
       confidence,
       rationale
     }
@@ -585,3 +587,12 @@ showRoutingTry :: Either Routing.RoutingFailure (Either StoreError (WorkflowOutc
 showRoutingTry = \case
   Left failure -> show failure
   Right outcome -> outcomeShape outcome
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureExpertiseKey :: Text -> ExpertiseKey
+fixtureExpertiseKey = either (error . show) id . parseExpertiseKey
+
+fixtureSelectionLimit :: Integer -> SelectionLimit
+fixtureSelectionLimit = either (error . show) id . parseSelectionLimit . fromInteger

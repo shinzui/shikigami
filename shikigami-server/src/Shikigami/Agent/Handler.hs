@@ -11,6 +11,7 @@ import Servant.Server.Generic (AsServerT)
 import Shikigami.Agent.Api
 import Shikigami.Agent.Catalog qualified as Catalog
 import Shikigami.Agent.Decl qualified as Decl
+import Shikigami.Agent.Name (agentNameText)
 import Shikigami.AgentRun.Handler (agentRunServer)
 import Shikigami.Api.Problem
 import Shikigami.Caller.Api (ApiCaller)
@@ -64,7 +65,7 @@ agentView env decl = do
   lifecycle <- Catalog.agentLifecycle configured env.directory decl
   pure
     AgentView
-      { name = decl.name,
+      { name = agentNameText decl.name,
         description = decl.description,
         enabled = decl.enabled,
         trigger = case decl.trigger of
@@ -78,7 +79,7 @@ agentView env decl = do
           Decl.CoordinatingSkill {} -> "coordinating_skill"
           Decl.Flow {} -> "flow",
         sinks = fmap sinkKind decl.sinks,
-        delegates = decl.delegates,
+        delegates = map agentNameText decl.delegates,
         principalId = (.principal) <$> decl.identity,
         lifecycle = case lifecycle of
           Catalog.LifecycleActive -> "active"

@@ -18,6 +18,13 @@ module RevisionBoundary where
 import Data.Coerce (coerce)
 import Data.String (fromString)
 import Data.Text (Text)
+import Numeric.Natural (Natural)
+import Shikigami.Agent.Name qualified as Name
+import Shikigami.Agent.ExpertiseKey qualified as Expertise
+import Shikigami.Agent.Delegate.Depth qualified as Depth
+import Shikigami.Router.SelectionLimit qualified as Limit
+import Shikigami.Agent.Decl qualified as Agent
+import Shikigami.Router.Decision qualified as Route
 import Shikigami.Agent.Run.Key (RunKey)
 import Shikigami.AgentRun.Ledger qualified as Ledger
 import Shikigami.AgentRun.RequestKey
@@ -43,6 +50,27 @@ import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ("retained-agent-values", '''name :: Agent.AgentDecl -> Name.AgentName
+name decl = decl.name
+expertise :: Agent.ExpertiseDecl -> Expertise.ExpertiseKey
+expertise decl = decl.key
+limit :: Agent.RouterPolicy -> Limit.SelectionLimit
+limit policy = policy.maxSelections
+target :: Route.RouteSelection -> Name.AgentName
+target choice = choice.agent
+''', True),
+    ('unchecked-AgentName-coercion', 'value :: Text -> Name.AgentName\nvalue = coerce\n', False),
+    ('unchecked-AgentName-constructor', 'value :: Text -> Name.AgentName\nvalue = Name.AgentName\n', False),
+    ('unchecked-AgentName-literal', 'value :: Name.AgentName\nvalue = fromString "fixture"\n', False),
+    ('unchecked-ExpertiseKey-coercion', 'value :: Text -> Expertise.ExpertiseKey\nvalue = coerce\n', False),
+    ('unchecked-ExpertiseKey-constructor', 'value :: Text -> Expertise.ExpertiseKey\nvalue = Expertise.ExpertiseKey\n', False),
+    ('unchecked-ExpertiseKey-literal', 'value :: Expertise.ExpertiseKey\nvalue = fromString "fixture"\n', False),
+    ('unchecked-DelegationDepth-coercion', 'value :: Int -> Depth.DelegationDepth\nvalue = coerce\n', False),
+    ('unchecked-DelegationDepth-constructor', 'value :: Int -> Depth.DelegationDepth\nvalue = Depth.DelegationDepth\n', False),
+    ('unchecked-DelegationDepth-numeric', 'value :: Depth.DelegationDepth\nvalue = 1\n', False),
+    ('unchecked-SelectionLimit-coercion', 'value :: Natural -> Limit.SelectionLimit\nvalue = coerce\n', False),
+    ('unchecked-SelectionLimit-constructor', 'value :: Natural -> Limit.SelectionLimit\nvalue = Limit.SelectionLimit\n', False),
+    ('unchecked-SelectionLimit-numeric', 'value :: Limit.SelectionLimit\nvalue = 1\n', False),
     ("http-request-key", '''key :: Ledger.RunRequestRow -> RequestKey
 key row = row.idempotencyKey
 ''', True),
@@ -286,5 +314,11 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
                 "representation-coercion": ["StateRevision", "Integer"],
                 "unchecked-arithmetic": ["StateRevision", "Num"],
             }
+            for kind, raw in [("AgentName", "Text"), ("ExpertiseKey", "Text"), ("DelegationDepth", "Int"), ("SelectionLimit", "Natural")]:
+                fragments["unchecked-" + kind + "-coercion"] = [kind, raw]
+                fragments["unchecked-" + kind + "-constructor"] = [kind]
+                fragments["unchecked-" + kind + ("-literal" if raw == "Text" else "-numeric")] = [kind, "IsString" if raw == "Text" else "Num"]
+            if name.endswith("-constructor"):
+                assert any(marker in result.stderr.lower() for marker in ["not in scope", "does not export", "illegal term-level"]), (name, result.stderr)
             assert all(fragment in result.stderr for fragment in fragments[name]), (name, result.stderr)
         print(f"revision boundary: {name}: passed")

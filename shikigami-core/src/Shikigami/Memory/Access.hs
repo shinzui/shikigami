@@ -12,7 +12,7 @@
 --
 -- The actor is a @KnownPrincipal@ over the identity admitted for the durable
 -- run. Verified work uses its Meibo principal verbatim. Directory-disabled
--- work uses the visibly self-asserted @shikigami.agent.<name>@ form.
+-- work uses the visibly self-asserted @shikigami.agent.v2.<digest>@ form.
 --
 -- That is the second answer this module has given, and the first one was wrong. It originally
 -- recorded 'Kioku.Api.Access.LegacyPrincipal', reasoning that @KnownPrincipal@ claims a directory
@@ -27,7 +27,7 @@
 -- So the honest label for an unvouched-but-real attribution is not a weaker constructor; it is a
 -- ref that says what it is. The kind prefix is where ADR-5 puts self-assertion, because
 -- 'Kioku.Api.Access.PrincipalRef' names /what a principal is/ while @RecordedPrincipal@ names
--- /how much history knows/. Hence @shikigami.agent.\<name\>@: legible, stable, and obviously not
+-- /how much history knows/. Hence @shikigami.agent.v2.\<digest\>@: stable, and obviously not
 -- directory-issued to anyone reading the stream.
 --
 -- Existing name-scoped rows are not rewritten. Shikigami owns explicit

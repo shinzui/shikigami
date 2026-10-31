@@ -8,6 +8,7 @@ import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Kiroku.Store.Connection (KirokuStore (..))
 import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
+import Shikigami.Agent.Name (agentNameText)
 import Shikigami.App (AppEnv (..))
 import Shikigami.App.Config (AppConfig, Role (EventConsumerRole, StreamConsumerRole))
 import Shikigami.App.Config qualified as Config
@@ -158,7 +159,7 @@ runConsumeEvents config = do
                     "topic" .= topic
                   ]
             Log.logInfo logger "events.record.matched" matched
-            Log.logDebug logger "events.job.enqueued" (matched <> [Log.runIdKey .= (agentName <> ":" <> integrationMessageId)])
+            Log.logDebug logger "events.job.enqueued" (matched <> [Log.runIdKey .= (agentNameText agentName <> ":" <> integrationMessageId)])
       registry <-
         newHeartbeatsWithStaleness
           ((ConsumerLoop, loopStaleAfter ConsumerLoop) : directoryLoopRegistration ((.directorySettings) config))

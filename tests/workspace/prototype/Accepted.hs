@@ -10,6 +10,7 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (getCurrentTime)
 import Data.UUID.V4 qualified as UUID
@@ -24,7 +25,7 @@ import Kioku.Id (genSessionId)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Agent.Decl (Behavior (Skill))
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Capability.Catalog
@@ -76,7 +77,7 @@ preparePlan upgrade env authorizer current client binding admission mode = do
       descriptors = [supervisedWorkspaceEditDescriptor, (workspaceExecAdapter client).descriptor] <> [workspaceGitDescriptor | upgrade]
   catalog <- right (mkCapabilityCatalog descriptors)
   capabilities <- right (resolveGovernedCapabilityOverlays (durableAdapterInstalled providers) catalog (\_ _ -> Right ()) (ResolutionSubject (Just "fixture") Durable (Skill "fixture") Nothing) (map (.capability) descriptors))
-  let initial = ExecutionSnapshot 1 (executionIdFor admission.assignmentId) binding.request.runId (AgentName "fixture") admission.owner session selection Nothing (SkillInstructions "fixture" "system" "body") (ReplayContext 2 (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "fixture edit and validation"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
+  let initial = ExecutionSnapshot 1 (executionIdFor admission.assignmentId) binding.request.runId (fixtureAgentName "fixture") admission.owner session selection Nothing (SkillInstructions "fixture" "system" "body") (ReplayContext 2 (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "fixture edit and validation"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
   menu <- right =<< Tools.describeExecutionTools Log.silentLogger authorizer providers native initial
   let edit = only (filter (\tool -> tool.name == "overlay__workspace-edit__replace") menu.toolBindings)
       validate = only (filter (\tool -> tool.name == "overlay__workspace-exec__validate") menu.toolBindings)
@@ -189,7 +190,7 @@ prepareTools env authorizer current client admission calls = do
       descriptors = map (.descriptor) adapters
   catalog <- right (mkCapabilityCatalog descriptors)
   capabilities <- right (resolveGovernedCapabilityOverlays (durableAdapterInstalled providers) catalog (\_ _ -> Right ()) (ResolutionSubject (Just "fixture") Durable (Skill "fixture") Nothing) (map (.capability) descriptors))
-  let initial = ExecutionSnapshot 1 (executionIdFor admission.assignmentId) admission.runId (AgentName "fixture") admission.owner session selection Nothing (SkillInstructions "fixture" "system" "body") (ReplayContext 2 (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "qualified workspace operation"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
+  let initial = ExecutionSnapshot 1 (executionIdFor admission.assignmentId) admission.runId (fixtureAgentName "fixture") admission.owner session selection Nothing (SkillInstructions "fixture" "system" "body") (ReplayContext 2 (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "qualified workspace operation"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
   menu <- right =<< Tools.describeExecutionTools Log.silentLogger authorizer providers native initial
   let snapshot = initial & #offeredTools .~ menu.offeredTools & #toolBindings .~ menu.toolBindings
   void (right =<< run env Catalog.registerProjectionCatalog)
@@ -254,3 +255,6 @@ fixtureAmount amount = either (error . show) id (parseResourceAmount amount)
 
 fixtureToolPosition :: Integer -> ToolPosition
 fixtureToolPosition value = either (error . show) id (parseToolPosition value)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

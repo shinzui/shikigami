@@ -33,7 +33,7 @@ import Pgmq (MessageBody (..), MessageId, QueueName, SendMessage (..), createQue
 import Pgmq.Hasql.Statements.Message qualified as PgmqStatements
 import Shikigami.Activity (ActivityEnvelope (..))
 import Shikigami.Agent.Decl (AgentDecl (..))
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
@@ -71,17 +71,17 @@ runJobFromEnvelope resolvedOccurredAt decl =
 runJobFromEnvelopeWithIdentity :: UTCTime -> AgentIdentity -> AgentDecl -> ActivityEnvelope -> RunJob
 runJobFromEnvelopeWithIdentity resolvedOccurredAt identity decl env =
   RunJob
-    { agentName = AgentName ((.name) decl),
+    { agentName = ((.name) decl),
       identity,
       triggerKind = TriggeredByStream,
       routeKind = AgentWorkflowRoute,
       occurredAt = resolvedOccurredAt,
       triggerPayload = toJSON env,
-      idempotencyKey = RunKey ((.name) decl <> ":" <> envActivityId),
+      idempotencyKey = RunKey (agentNameText ((.name) decl) <> ":" <> envActivityId),
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
-      lineage = [AgentName ((.name) decl)],
+      lineage = [((.name) decl)],
       executionRequest = Nothing,
       executionPermissions = Nothing,
       executionRootId = Nothing,
@@ -134,30 +134,30 @@ enqueueRunJob pool job =
 -- replaced was built from 'getCurrentTime', which made the addressed producer
 -- the one producer in the runtime that could not deduplicate anything: retrying
 -- @shikigami enqueue-run@ after a timeout ran the agent twice.
-addressedRunKey :: Text -> Value -> Text
+addressedRunKey :: AgentName -> Value -> Text
 addressedRunKey agent payload =
-  agent
+  agentNameText agent
     <> ":evt:"
     <> UUID.toText
       ( UUID.V5.generateNamed
           UUID.V5.namespaceURL
-          (nameBytes (agent <> ":" <> Text.Encoding.decodeUtf8Lenient (LazyByteString.toStrict (Aeson.encode payload))))
+          (nameBytes (agentNameText agent <> ":" <> Text.Encoding.decodeUtf8Lenient (LazyByteString.toStrict (Aeson.encode payload))))
       )
 
 -- | Enqueue an addressed run with a caller-supplied stable idempotency key.
 --
 -- The route is a parameter rather than an inference: an event-triggered job can
 -- mean either workflow, and only the caller knows which one it meant.
-enqueueAddressedRunWithKey :: Pool -> AgentIdentity -> Text -> RunRouteKind -> Value -> Text -> IO (Either UsageError MessageId)
+enqueueAddressedRunWithKey :: Pool -> AgentIdentity -> AgentName -> RunRouteKind -> Value -> Text -> IO (Either UsageError MessageId)
 enqueueAddressedRunWithKey pool identity agent route payload key = do
   now <- getCurrentTime
   enqueueRunJob pool (addressedRunJob now identity agent route payload (RunKey key))
 
 -- | The CLI and HTTP producers share this exact queue payload constructor.
-addressedRunJob :: UTCTime -> AgentIdentity -> Text -> RunRouteKind -> Value -> RunKey -> RunJob
+addressedRunJob :: UTCTime -> AgentIdentity -> AgentName -> RunRouteKind -> Value -> RunKey -> RunJob
 addressedRunJob now identity agent route payload key =
   RunJob
-    { agentName = AgentName agent,
+    { agentName = agent,
       identity,
       triggerKind = TriggeredByEvent,
       routeKind = route,
@@ -167,7 +167,7 @@ addressedRunJob now identity agent route payload key =
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
-      lineage = [AgentName agent],
+      lineage = [agent],
       executionRequest = Nothing,
       executionPermissions = Nothing,
       executionRootId = Nothing,
@@ -175,12 +175,12 @@ addressedRunJob now identity agent route payload key =
     }
 
 -- | Enqueue a schedule-triggered run for a deterministic due minute.
-enqueueScheduledRun :: Pool -> AgentIdentity -> Text -> UTCTime -> IO (Either UsageError MessageId)
+enqueueScheduledRun :: Pool -> AgentIdentity -> AgentName -> UTCTime -> IO (Either UsageError MessageId)
 enqueueScheduledRun pool identity agent dueAt =
   enqueueRunJob
     pool
     RunJob
-      { agentName = AgentName agent,
+      { agentName = agent,
         identity,
         triggerKind = TriggeredBySchedule,
         routeKind = AgentWorkflowRoute,
@@ -195,7 +195,7 @@ enqueueScheduledRun pool identity agent dueAt =
         parentSessionId = Nothing,
         parentRunWorkflowId = Nothing,
         delegationDepth = Nothing,
-        lineage = [AgentName agent],
+        lineage = [agent],
         executionRequest = Nothing,
         executionPermissions = Nothing,
         executionRootId = Nothing,
@@ -203,6 +203,6 @@ enqueueScheduledRun pool identity agent dueAt =
       }
 
 -- | The producer and lifecycle-audit key for one deterministic cron tick.
-scheduleRunIdempotencyKey :: Text -> UTCTime -> Text
+scheduleRunIdempotencyKey :: AgentName -> UTCTime -> Text
 scheduleRunIdempotencyKey agent dueAt =
-  agent <> ":sched:" <> Text.pack (iso8601Show dueAt)
+  agentNameText agent <> ":sched:" <> Text.pack (iso8601Show dueAt)

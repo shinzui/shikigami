@@ -35,7 +35,7 @@ import Kioku.Id (SessionId)
 import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill), IdentityDecl (..))
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), assertMayDelegate)
-import Shikigami.Agent.Name (AgentName, agentNameText)
+import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.App (AppEffects)
 import Shikigami.Decision.Contract (versionedDigest)
@@ -286,7 +286,7 @@ executeAdmittedCommand host authorizer (CoordinationGrant scope) operation comma
                     (existing, Nothing) -> existing
                     (Just existing, Just narrowed) -> Just (filter (`elem` existing) narrowed)
                   sameRole = admitted.context.depth == scope.context.depth && admitted.context.lineage == scope.context.lineage && admitted.context.delegationBudgetId == scope.context.delegationBudgetId && admitted.context.budgetLimit == scope.context.budgetLimit
-                  target = agentNameText (fromMaybe admitted.worker state.worker)
+                  target = fromMaybe admitted.worker state.worker
               current <- trySync (liftIO (currentAssignmentAuthority host.services.sessions admitted state instruction))
               case current of
                 Right (Right ()) | sameRole && permissions /= Just [] && either (const False) (const True) (assertMayDelegate scope.agent target) -> fmap (uncurry MessageAcceptedReply) <$> Store.acceptScopedMessage access expected epoch operation permissions instruction
@@ -295,9 +295,9 @@ executeAdmittedCommand host authorizer (CoordinationGrant scope) operation comma
             (Left err, _) -> pure (Left err)
             (_, Left err) -> pure (Left err)
             _ -> pure (Left SessionMissing)
-    currentSlot slot = case (host.services.sessions.checkpoints, find (\decl -> decl.name == agentNameText slot.target && decl.enabled) host.services.sessions.agents) of
+    currentSlot slot = case (host.services.sessions.checkpoints, find (\decl -> decl.name == slot.target && decl.enabled) host.services.sessions.agents) of
       (Just provider, Just decl) -> do
-        actual <- liftIO (Directory.identityAdmission host.services.sessions.directory ((.principal) <$> decl.identity) (agentNameText slot.target))
+        actual <- liftIO (Directory.identityAdmission host.services.sessions.directory ((.principal) <$> decl.identity) slot.target)
         version <- trySync (liftIO (provider.current slot.objective))
         now <- liftIO getCurrentTime
         pure case (actual, version) of

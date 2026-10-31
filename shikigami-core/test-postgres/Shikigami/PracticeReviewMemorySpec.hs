@@ -37,6 +37,7 @@ import Shikigami.Agent.Decl
     Trigger (..),
     defaultMemoryPolicy,
   )
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent))
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
@@ -461,7 +462,7 @@ runReviewOperationWith runOptions appEnv session workflowId operation =
       PracticeReviewMemoryEnv
         { appEnv,
           agent = reviewAgentDecl,
-          identity = CompatibilityAgent "opentelemetry-practice-reviewer",
+          identity = CompatibilityAgent (fixtureAgentName "opentelemetry-practice-reviewer"),
           sessionId = Just session
         }
 
@@ -471,12 +472,12 @@ reviewRunOptions = defaultWorkflowRunOptions
 reviewAgentDecl :: AgentDecl
 reviewAgentDecl =
   AgentDecl
-    { name = "opentelemetry-practice-reviewer",
+    { name = fixtureAgentName "opentelemetry-practice-reviewer",
       description = "practice-review memory integration test agent",
       trigger = Event {eventType = "architecture.practice-review.test"},
       behavior = Deterministic {rule = "practice-review-memory-test", params = mempty},
       sinks = [],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -593,7 +594,7 @@ seedReviewContent appEnv session practice content = do
   memoryId <- genMemoryId
   recordedAt <- getCurrentTime
   let agentName = "opentelemetry-practice-reviewer"
-      recordedIdentity = CompatibilityAgent agentName
+      recordedIdentity = CompatibilityAgent (fixtureAgentName agentName)
       command =
         RecordMemoryData
           { memoryId,
@@ -709,3 +710,6 @@ isLeft :: Either left right -> Bool
 isLeft = \case
   Left _ -> True
   Right _ -> False
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

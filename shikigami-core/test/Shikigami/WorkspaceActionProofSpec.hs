@@ -7,6 +7,7 @@ import Data.Aeson (toJSON)
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
+import Data.Text (Text)
 import Data.Text qualified as AssignmentText
 import Data.Text qualified as ClaimText
 import Data.Text qualified as Text
@@ -21,7 +22,7 @@ import En.Schema (ObjectType (..), RelationName (..))
 import En.Tuple (ObjectRef (..), Subject (SubjectId))
 import Kikan.En.Action qualified as Kikan
 import Kikan.En.Client (newActionProofVerifier, verifyIssuedAction)
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Claim qualified as Claim
@@ -284,7 +285,7 @@ tests =
         observation provisionAdmission gitDispatch profile "commit" command.profile "device:files" @?= Left FileEffectRefused
         let workerSession = WorkerSessionId "retained-session"
             transferBinding = provisionBinding & #request . #assignment .~ Just (workerSession, AssignmentId "retained-assignment")
-            intent = TransferIntent 1 workerSession (ObjectiveRef "checkpoints" "objective") owner (OperationId "handoff") (ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) owner True transferBinding.request.rootId expiry) owner (CompatibilityIdentity "successor") (AgentName "successor") (fixtureRevision 0) (fixtureRevision 1) transferBinding.request.rootId transferBinding.workspace
+            intent = TransferIntent 1 workerSession (ObjectiveRef "checkpoints" "objective") owner (OperationId "handoff") (ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) owner True transferBinding.request.rootId expiry) owner (CompatibilityIdentity (fixtureAgentName "successor")) (fixtureAgentName "successor") (fixtureRevision 0) (fixtureRevision 1) transferBinding.request.rootId transferBinding.workspace
         fenceAction <- right (workspaceTransferAction transferBinding intent)
         let fenceRequest = commitRequest & #action .~ fenceAction
             fenceGrant = commitGrant & #object .~ ObjectRef (ObjectType (Kikan.actionObjectType fenceAction)) (Kikan.actionObjectId fenceAction)
@@ -296,9 +297,9 @@ tests =
           mapM
             (right . workspaceTransferAction transferBinding)
             [ intent & #operationId .~ OperationId "other-transfer",
-              intent & #actor .~ CompatibilityIdentity "other-parent",
-              intent & #newOwner .~ CompatibilityIdentity "other-successor",
-              intent & #newWorker .~ AgentName "other-worker",
+              intent & #actor .~ CompatibilityIdentity (fixtureAgentName "other-parent"),
+              intent & #newOwner .~ CompatibilityIdentity (fixtureAgentName "other-successor"),
+              intent & #newWorker .~ fixtureAgentName "other-worker",
               intent & #objective . #key .~ "other-objective",
               intent & #expected . #revision .~ (fixtureRevision 2),
               intent & #expected . #cutoff .~ addUTCTime 1 expiry,
@@ -325,7 +326,7 @@ tests =
           mapM
             right
             [ workspaceTransferredFileAction retainedProfile transferBinding (successorAdmission & #epoch .~ (fixtureRevision 2)) dispatch "replace" "src/file" "device:parent" "input-hash",
-              workspaceTransferredFileAction retainedProfile transferBinding (successorAdmission & #owner .~ CompatibilityIdentity "other-successor") dispatch "replace" "src/file" "device:parent" "input-hash",
+              workspaceTransferredFileAction retainedProfile transferBinding (successorAdmission & #owner .~ CompatibilityIdentity (fixtureAgentName "other-successor")) dispatch "replace" "src/file" "device:parent" "input-hash",
               workspaceTransferredFileAction retainedProfile transferBinding (successorAdmission & #runId .~ "other-run") dispatch "replace" "src/file" "device:parent" "input-hash",
               workspaceTransferredFileAction retainedProfile transferBinding successorAdmission dispatch "replace" "src/file" "device:other-parent" "input-hash"
             ]
@@ -383,3 +384,6 @@ fixtureGeneration value = either (error . show) id (Generation.parseRevision val
 
 fixtureOwner :: ClaimText.Text -> Claim.ClaimOwner
 fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

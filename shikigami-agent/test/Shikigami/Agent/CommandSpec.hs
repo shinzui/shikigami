@@ -16,6 +16,7 @@
 module Shikigami.Agent.CommandSpec (tests) where
 
 import Data.List (isInfixOf)
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Options.Applicative
 import Shikigami.Agent.Command
@@ -27,6 +28,7 @@ import Shikigami.Agent.Command
 import Shikigami.Agent.Command.RunBehavior (profileRequirementRefusal)
 import Shikigami.Agent.Decl (AgentDecl (..), ProfileRequirement (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.Decl qualified as Agent
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.App.Config (Role (..))
 import System.Exit (ExitCode (ExitSuccess))
 import Test.Tasty (TestTree, testGroup)
@@ -83,12 +85,12 @@ tests =
 testDecl :: Maybe ProfileRequirement -> AgentDecl
 testDecl sanctionedProfile =
   AgentDecl
-    { name = "profile-command-test",
+    { name = fixtureAgentName "profile-command-test",
       description = "profile command test",
       trigger = Event {eventType = "test"},
       behavior = Agent.Skill {path = "agents/skills/triage-note"},
       sinks = [],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile,
       capabilityOverlays = [],
@@ -134,3 +136,6 @@ assertVersion info =
       exitCode @?= ExitSuccess
       assertBool ("version does not name the executable: " <> message) ((.binaryName) info `isInfixOf` message)
     _ -> assertBool "--version did not exit through optparse-applicative" False
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

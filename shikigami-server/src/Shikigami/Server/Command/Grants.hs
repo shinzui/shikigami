@@ -25,6 +25,7 @@ import Data.Text.IO qualified as TextIO
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Hasql.Pool (Pool)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.App.Config (AppConfig (directorySettings), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
@@ -69,34 +70,34 @@ runGrantsList mlimit mafter config = do
             putStrLn ("-- more: --after " <> Text.unpack a <> ":" <> Text.unpack k)
 
 -- | @grants grant <agent> <kind> [--by WHO]@.
-runGrantsGrant :: String -> String -> Maybe String -> AppConfig -> IO ()
+runGrantsGrant :: AgentName -> String -> Maybe String -> AppConfig -> IO ()
 runGrantsGrant agent kindArg by config = do
   kind <- requireKind "grants grant" kindArg
-  withResolvedIdentity config "grants grant" (Text.pack agent) \identity ->
+  withResolvedIdentity config "grants grant" agent \identity ->
     withPool config "grants grant" \pool ->
-      upsertGrant pool (Text.pack agent) identity kind (Text.pack <$> by) >>= \case
+      upsertGrant pool (agentNameText agent) identity kind (Text.pack <$> by) >>= \case
         Left err -> die "grants grant" err
         Right () ->
-          putStrLn ("granted " <> agent <> " " <> Text.unpack (sinkKindText kind))
+          putStrLn ("granted " <> Text.unpack (agentNameText agent) <> " " <> Text.unpack (sinkKindText kind))
 
 -- | @grants revoke <agent> <kind> [--by WHO]@.
 --
 -- Revoking something that was never granted is reported rather than silently
 -- succeeding: an operator who mistyped an agent name should find out here, not
 -- when the sink they meant to stop keeps being delivered.
-runGrantsRevoke :: String -> String -> Maybe String -> AppConfig -> IO ()
+runGrantsRevoke :: AgentName -> String -> Maybe String -> AppConfig -> IO ()
 runGrantsRevoke agent kindArg by config = do
   kind <- requireKind "grants revoke" kindArg
-  withResolvedIdentity config "grants revoke" (Text.pack agent) \identity ->
+  withResolvedIdentity config "grants revoke" agent \identity ->
     withPool config "grants revoke" \pool ->
       revokeGrant pool identity kind (Text.pack <$> by) >>= \case
         Left err -> die "grants revoke" err
         Right True ->
-          putStrLn ("revoked " <> agent <> " " <> Text.unpack (sinkKindText kind))
+          putStrLn ("revoked " <> Text.unpack (agentNameText agent) <> " " <> Text.unpack (sinkKindText kind))
         Right False ->
           putStrLn
             ( "no grant row for "
-                <> agent
+                <> Text.unpack (agentNameText agent)
                 <> " "
                 <> Text.unpack (sinkKindText kind)
                 <> " (nothing to revoke)"
@@ -151,11 +152,11 @@ withPool config ctx use = do
   verifyShikigamiMigrations connStr
   withStore (defaultConnectionSettings connStr) (use . pool)
 
-withResolvedIdentity :: AppConfig -> String -> Text -> (AgentIdentity -> IO a) -> IO a
-withResolvedIdentity config context selector use = do
+withResolvedIdentity :: AppConfig -> String -> AgentName -> (AgentIdentity -> IO a) -> IO a
+withResolvedIdentity config context agent use = do
   runtime <- Directory.startDirectory Log.silentLogger ((.directorySettings) config) >>= either (die context) pure
   let cleanup = maybe (pure ()) id ((.refresher) runtime)
-  (Directory.identityAdmission ((.handle) runtime) Nothing selector >>= either (die context) use) `finally` cleanup
+  (Directory.identityAdmission ((.handle) runtime) Nothing agent >>= either (die context) use) `finally` cleanup
 
 die :: String -> Text -> IO a
 die ctx msg = do

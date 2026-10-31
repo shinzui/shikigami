@@ -6,6 +6,7 @@ import Control.Exception (bracket)
 import Data.ByteString qualified as Bytes
 import Data.Generics.Labels ()
 import Data.List (sort)
+import Data.Text (Text)
 import Data.Text qualified as AssignmentText
 import Data.Text qualified as Text
 import Data.Time (UTCTime)
@@ -14,6 +15,7 @@ import Data.UUID.V4 qualified as UUID
 import Hasql.Transaction (Transaction)
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Kiroku.Store.Transaction (runTransaction)
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
@@ -62,7 +64,7 @@ tests fixture =
         _ <- right =<< run env (reserveWorkspaceTx root request repo)
         mapM_
           (\changed -> run env (reserveWorkspaceTx root changed repo) >>= (@?= Left WorkspaceBindingConflict))
-          [request & #runId .~ "different", request & #owner .~ CompatibilityIdentity "other", request & #epoch .~ (fixtureRevision 1), request & #rootId .~ ExecutionRootId "other"]
+          [request & #runId .~ "different", request & #owner .~ CompatibilityIdentity (fixtureAgentName "other"), request & #epoch .~ (fixtureRevision 1), request & #rootId .~ ExecutionRootId "other"]
         changed <- resolved (repositorySource repo) (repositoryBase repo) "policy-2"
         run env (reserveWorkspaceTx root request changed) >>= (@?= Left WorkspaceBindingConflict)
         changedSource <- resolved (repositorySource repo <> "-other") (repositoryBase repo) "policy-1"
@@ -180,7 +182,7 @@ tests fixture =
     takeDirectoryOfFiles root binding = takeDirectory (workspaceFiles root binding)
 
 request :: WorkspaceRequest
-request = WorkspaceRequest "run" (Just (WorkerSessionId "session", AssignmentId "one")) (ExecutionRootId "root") (CompatibilityIdentity "parent") (CompatibilityIdentity "worker") (fixtureRevision 0)
+request = WorkspaceRequest "run" (Just (WorkerSessionId "session", AssignmentId "one")) (ExecutionRootId "root") (CompatibilityIdentity (fixtureAgentName "parent")) (CompatibilityIdentity (fixtureAgentName "worker")) (fixtureRevision 0)
 
 resolved :: FilePath -> Text.Text -> Text.Text -> IO ResolvedRepository
 resolved source base policy = do
@@ -256,3 +258,6 @@ fixtureRevision value = either (error . show) id (parseRevision value)
 
 fixtureAssignment :: AssignmentText.Text -> AssignmentKey
 fixtureAssignment = either (error . show) id . parseAssignmentKey
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

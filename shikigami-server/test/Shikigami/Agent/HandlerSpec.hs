@@ -4,6 +4,7 @@ import Data.Aeson (eitherDecode)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Hasql.Pool qualified as Pool
 import Hasql.Pool.Config qualified as PoolConfig
@@ -19,6 +20,7 @@ import Shikigami.Agent.Api (AgentView (..))
 import Shikigami.Agent.Catalog (AgentCatalog (..))
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (loadAgent)
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Api.Problem qualified
 import Shikigami.App.Config (defaultAppConfig)
 import Shikigami.Directory qualified as Directory
@@ -86,7 +88,7 @@ decodeBody = either (assertFailure . show) pure . eitherDecode
 withCatalog :: Directory.DirectoryHandle -> ((String -> IO (Int, LBS.ByteString)) -> IO a) -> IO a
 withCatalog directory body = do
   declaration <- loadAgent "../agents/heartbeat.dhall" >>= either (assertFailure . show) pure
-  let declarations = Map.fromList [(name, declaration & #name .~ name & #enabled .~ (name /= "g")) | name <- ["a", "b", "c", "d", "e", "f", "g"]]
+  let declarations = Map.fromList [(fixtureAgentName name, declaration & #name .~ fixtureAgentName name & #enabled .~ (name /= "g")) | name <- ["a", "b", "c", "d", "e", "f", "g"]]
   pool <- Pool.acquire (PoolConfig.settings [])
   provider <- Trace.createTracerProvider [] Trace.emptyTracerProviderOptions
   let tracer = Trace.makeTracer provider "catalog-test" Trace.tracerOptions
@@ -97,3 +99,6 @@ withCatalog directory body = do
       request <- Http.parseRequest ("http://127.0.0.1:" <> show port <> path)
       response <- Http.httpLbs request manager
       pure (statusCode (Http.responseStatus response), Http.responseBody response)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

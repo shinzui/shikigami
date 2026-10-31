@@ -46,6 +46,7 @@ import Kiroku.Store.Effect (Store)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl (..), MemoryPolicy (..))
 import Shikigami.Agent.Decl qualified as Agent
+import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity, ResolvedAgentIdentity)
 import Shikigami.Agent.Run (behaviorKindText, recallAgentLearnings, renderLearning)
 import Shikigami.App (AppEnv, runAppIO)
@@ -305,7 +306,7 @@ recordFlowMemory
               memorySpaceId = shikigamiMemorySpace,
               actorPrincipal = agentActor identity,
               ownerPrincipal = Nothing,
-              agentId = (.name) decl,
+              agentId = agentNameText ((.name) decl),
               sessionId,
               scope = agentScope identity,
               memoryType,

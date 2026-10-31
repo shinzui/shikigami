@@ -11,6 +11,7 @@ import Data.Aeson.KeyMap qualified as AesonKeyMap
 import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
+import Data.Text (Text)
 import Data.Text qualified as AssignmentText
 import Data.Text qualified as ClaimText
 import Data.Text qualified as Text
@@ -27,7 +28,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization
 import Shikigami.Action.Authorization qualified as Action
 import Shikigami.Agent.Decl (Behavior (Skill))
-import Shikigami.Agent.Name (AgentName (..), agentNameText)
+import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Behavior.StubProvider (stubModel)
@@ -388,7 +389,7 @@ withEffectAdapterPolicyInput processPolicy toolCount qualify install wire logica
       let base = repositoryBase originalRepository
       catalog <- right (mkWorkspaceCatalog [RepositoryPolicy (repositoryIdentity originalRepository) source [base] base (processPolicyIdentity policy)])
       right (resolveRepository catalog (repositoryIdentity originalRepository) Nothing)
-  let identity = CompatibilityIdentity "worker"
+  let identity = CompatibilityIdentity (fixtureAgentName "worker")
       rootId = ExecutionRootId "file-root"
       request = WorkspaceRequest "file-run" Nothing rootId identity identity (fixtureRevision 0)
       runtime = FileRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ _ _ -> pure (Right ()))
@@ -401,7 +402,7 @@ withEffectAdapterPolicyInput processPolicy toolCount qualify install wire logica
   now <- getCurrentTime
   _ <- right =<< run env Catalog.registerProjectionCatalog
   run env (Roots.enrollRoot rootId (Resources.Envelope (Map.fromList [(dimension, Resources.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now))) >>= (@?= Right Resources.Accepted)
-  withAcceptedWorkspaceTool toolCount install (AgentName "worker") wire UUID.nil env admission runtime input \snapshot access reference -> use env binding snapshot access reference runtime input
+  withAcceptedWorkspaceTool toolCount install (fixtureAgentName "worker") wire UUID.nil env admission runtime input \snapshot access reference -> use env binding snapshot access reference runtime input
 
 -- Accept real model/tool state against an already allocated workspace. This
 -- enables successive owners in one database without substituting dispatch ids.
@@ -508,3 +509,6 @@ fixtureGeneration value = either (error . show) id (Generation.parseRevision val
 
 fixtureOwner :: ClaimText.Text -> Claim.ClaimOwner
 fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

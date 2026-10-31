@@ -243,3 +243,15 @@ package suites, 73 offline CLI checks and live Hurl. The two retained native
 WorkflowBodyChanged findings establish a deliberate first-release baseline; the
 aggregate replay-impact verdict does not classify the changed child histories as
 compatible. The complete scalar/identity review remains open.
+
+Agent names, expertise keys, selection ceilings and delegation depths now retain
+private checked meanings through their domain consumers under ADR-87. The unbound
+conversation seed uses an explicit optional name and retains complete valid wire
+values. A public probe reproduced compatibility-scope aliasing for valid names;
+the versioned exact-name scope fixes that collision while preserving verified
+principal authority. [Agent-value acceptance](agent-values-results.txt) records
+569 pure, 386 PostgreSQL, 260 worker and 95 server cases, all other package suites,
+107 compiler clients, 81 offline CLI checks, live Hurl and passing native/domain/
+diagram gates. The compatibility namespace change is an intentional first-release
+reset; a neutral helper-reference diff does not assert old-scope compatibility.
+The complete scalar/identity census remains open.

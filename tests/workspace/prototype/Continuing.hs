@@ -10,6 +10,7 @@ import Data.ByteString qualified as Bytes
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
 import GHC.Generics (Generic)
@@ -19,9 +20,9 @@ import Kiroku.Store.Transaction (runTransaction)
 import Qualification
 import Shikigami.Agent.Decl (defaultDelegationBudget)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
-import Shikigami.Agent.Delegate.Depth (DelegationDepth (..))
+import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
 import Shikigami.Agent.Loader (loadAgent)
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Identity
@@ -79,7 +80,7 @@ continuingCase config prefix stage = withQualification config prefix \q -> case 
     successor <- VerifiedIdentity <$> right (mkAgentPrincipal "agent_01h000000000000000successor")
     now <- getCurrentTime
     let expected = ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) item.admission.owner True item.admission.rootId (addUTCTime 3600 now)
-    (_, intent) <- right =<< run q.env (Sessions.requestTransfer access state.revision (fixtureRevision 0) (OperationId "native-freeze") expected item.binding.workspace (AgentName "successor") successor)
+    (_, intent) <- right =<< run q.env (Sessions.requestTransfer access state.revision (fixtureRevision 0) (OperationId "native-freeze") expected item.binding.workspace (fixtureAgentName "successor") successor)
     Lazy.writeFile (prefix </> "continuing-intent.json") (Aeson.encode intent)
     outcome <- (workspaceTransferClient q.client).reconcile intent
     unless (outcome == FenceUnresolved) (fail "held collector unexpectedly established a fence")
@@ -177,7 +178,7 @@ openNativeSession q name = do
   actor <- VerifiedIdentity <$> right (mkAgentPrincipal "agent_01h000000000000000coordinator")
   let root = ExecutionRootId ("continuing-" <> name <> "-root")
       owner = q.initial.binding.request.owner
-      admission = SessionAdmission 1 (SessionScope ("native-" <> name) "fixture") (ObjectiveRef "uninstalled-objective-provider" name) (original & #name .~ "coordinator" & #delegates .~ ["fixture", "successor"]) (DelegateCtx (DelegationDepth 0) actor (Just parentMemory) Nothing (Just (WorkflowId ("continuing-parent-" <> name))) [AgentName "coordinator"] Nothing (Just root) Nothing defaultDelegationBudget) (AgentName "fixture") owner (fixtureLimit 10) (fixtureLimit 4)
+      admission = SessionAdmission 1 (SessionScope ("native-" <> name) "fixture") (ObjectiveRef "uninstalled-objective-provider" name) (original & #name .~ fixtureAgentName "coordinator" & #delegates .~ map fixtureAgentName ["fixture", "successor"]) (DelegateCtx (fixtureDelegationDepth 0) actor (Just parentMemory) Nothing (Just (WorkflowId ("continuing-parent-" <> name))) [fixtureAgentName "coordinator"] Nothing (Just root) Nothing defaultDelegationBudget) (fixtureAgentName "fixture") owner (fixtureLimit 10) (fixtureLimit 4)
   void (right =<< run q.env Catalog.registerProjectionCatalog)
   void (right =<< run q.env (Roots.enrollRoot root (Resources.Envelope (Map.fromList [(dimension, Resources.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now))))
   void (right =<< run q.env (Sessions.openSession admission))
@@ -204,3 +205,9 @@ fixtureInstruction value = either (error . show) id (parseInstructionText value)
 
 fixtureLimit :: (SessionLimit a) => Integer -> a
 fixtureLimit value = either (error . show) id (parseSessionLimit value)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureDelegationDepth :: Int -> DelegationDepth
+fixtureDelegationDepth = either (error . show) id . parseDelegationDepth . toInteger

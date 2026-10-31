@@ -16,6 +16,7 @@ import Data.ByteString qualified as Bytes
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
 import Data.Time (addUTCTime, getCurrentTime)
@@ -30,7 +31,7 @@ import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as Approval
 import Shikigami.Agent.Decl
 import Shikigami.Agent.Loader (loadAgent)
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (identityText)
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob
@@ -138,9 +139,9 @@ workflowCase configFile prefix stage = do
     providers <- Provider.newProviderRegistryFrom [provider]
     now <- getCurrentTime
     http <- right =<< newSinkHttp (HttpLimits config.httpRequestMaxBytes config.httpResponseMaxBytes) (credentialsFromConfig config) (DanwaConfig "http://localhost:1" "fixture")
-    let declaration = original & #name .~ "workspace-upgrade" & #behavior .~ Skill (Text.pack skill) & #identity .~ Just (IdentityDecl principal) & #capabilityOverlays .~ map (.capability) [supervisedWorkspaceEditDescriptor, workspaceExecDescriptor, workspaceGitDescriptor] & #sinks .~ []
+    let declaration = original & #name .~ fixtureAgentName "workspace-upgrade" & #behavior .~ Skill (Text.pack skill) & #identity .~ Just (IdentityDecl principal) & #capabilityOverlays .~ map (.capability) [supervisedWorkspaceEditDescriptor, workspaceExecDescriptor, workspaceGitDescriptor] & #sinks .~ []
         rootId = ExecutionRootId "workflow-upgrade-root"
-        job = RunJob (AgentName "workspace-upgrade") initial.binding.request.owner TriggeredBySchedule now Aeson.Null (RunKey "workspace-durable-upgrade") Nothing Nothing Nothing [] Nothing Nothing (Just rootId) Nothing AgentWorkflowRoute
+        job = RunJob (fixtureAgentName "workspace-upgrade") initial.binding.request.owner TriggeredBySchedule now Aeson.Null (RunKey "workspace-durable-upgrade") Nothing Nothing Nothing [] Nothing Nothing (Just rootId) Nothing AgentWorkflowRoute
         deps =
           Agent.AgentRunDeps
             { appEnv = env,
@@ -258,3 +259,6 @@ run env action = right =<< runAppIO env action
 
 right :: (Show e) => Either e a -> IO a
 right = either (fail . show) pure
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

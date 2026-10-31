@@ -23,7 +23,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizationFailure (..), ActionAuthorizer (..), allowAllActionAuthorizerForTests)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill, Flow))
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
@@ -210,7 +210,7 @@ tests fixture =
               job key =
                 Fixture.routerJob key
                   & #agentName
-                  .~ AgentName declaration.name
+                  .~ declaration.name
                   & #identity
                   .~ admission.context.identity
                   & #lineage
@@ -278,7 +278,7 @@ withCapabilityFixture fixture callback = withFixture fixture \env admission _ ->
   (checkpoints, _) <- fixtureCheckpoints version False
   let run = CoordinatorRun "capability-parent" admission.context.identity memory admission.context.executionRootId admission.context.executionPermissions
       scope = CoordinationScope 1 run admission.scope.parent (admission.delegator & #behavior .~ CoordinatingSkill "fixture-coordinator") admission.context [WorkerSlot admission.scope.workerKey admission.worker admission.identity admission.objective (Just (Session.sessionIdFor admission))] (fixtureLimit 8) admission.maximumAssignments admission.mailboxLimit
-      sessions = SessionRuntime env [admission.delegator & #name .~ "worker" & #delegates .~ []] disabledDirectoryHandle (const (pure (Right ()))) (Just checkpoints)
+      sessions = SessionRuntime env [admission.delegator & #name .~ fixtureAgentName "worker" & #delegates .~ map fixtureAgentName []] disabledDirectoryHandle (const (pure (Right ()))) (Just checkpoints)
   current <- newIORef (Just scope)
   revoked <- newIORef False
   let authority = CoordinationAuthority (\requested -> readIORef current <&> \value -> if requested == run then Right value else Left "foreign run") (\requested pinned -> pure (if requested == run && pinned == scopeFingerprint scope then Right scope else Left "retained scope unavailable"))
@@ -297,7 +297,7 @@ snapshotFor scope = do
   now <- getCurrentTime
   let descriptor = ModelDescriptor (ModelAlias "worker-model") "1" "fixture-model" "fixture" "fixture" "fixture" "fixture" Nothing "fixture" "1"
       selection = ExecutionSelection (fixtureAssignment "coordination-assignment") descriptor (Aeson.object []) ["worker-model"] Nothing scope.run.rootId ProcessDefault now
-  pure (Replay.ExecutionSnapshot 1 (Replay.executionIdFor selection.assignmentId) scope.run.runId (AgentName "coordinator") scope.run.identity scope.run.sessionId selection Nothing (Replay.SkillInstructions "fixture" "fixture" "fixture") (Replay.ReplayContext 2 Nothing [Replay.RequestTurn [Replay.TextBlock "coordinate"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] Nothing)
+  pure (Replay.ExecutionSnapshot 1 (Replay.executionIdFor selection.assignmentId) scope.run.runId (fixtureAgentName "coordinator") scope.run.identity scope.run.sessionId selection Nothing (Replay.SkillInstructions "fixture" "fixture" "fixture") (Replay.ReplayContext 2 Nothing [Replay.RequestTurn [Replay.TextBlock "coordinate"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] Nothing)
 
 executeTool :: BoundTool -> Aeson.Value -> IO ToolOutput
 executeTool tool arguments = expectRight =<< (expectRight =<< runEff (runErrorNoCallStack @ShikumiError (runLLM (runErasedOutput tool.tool arguments))))
@@ -327,3 +327,6 @@ fixtureLimit value = either (error . show) id (parseSessionLimit value)
 
 fixtureAssignment :: AssignmentText.Text -> AssignmentKey
 fixtureAssignment = either (error . show) id . parseAssignmentKey
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

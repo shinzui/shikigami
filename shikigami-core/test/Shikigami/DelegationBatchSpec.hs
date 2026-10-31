@@ -28,8 +28,8 @@ import Shikigami.Agent.Delegate
     preflightDelegationBatch,
   )
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..))
-import Shikigami.Agent.Delegate.Depth (DelegationDepth (..))
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Directory (DirectorySnapshotVersion (..), DirectorySourceKind (DirectoryDisabledSource))
 import Shikigami.Router.Catalog
@@ -39,6 +39,7 @@ import Shikigami.Router.Catalog
     CatalogVersion (..),
     ExclusionReason (Paused),
   )
+import Shikigami.Router.SelectionLimit (SelectionLimit, parseSelectionLimit)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
@@ -47,7 +48,7 @@ tests =
   testGroup
     "DelegationBatch"
     [ testCase "separator-bearing delegation coordinates retain distinct child identities" do
-        let declaration = routerDecl & #delegates .~ ["a:b", "a"]
+        let declaration = routerDecl & #delegates .~ map fixtureAgentName ["a:b", "a"]
             admitted = catalog & #candidates .~ [candidate "a:b" Available, candidate "a" Available]
             requests = batchRequest "c" "a:b" :| [batchRequest "b:c" "a"]
         case preflightDelegationBatch declaration delegateCtx admitted parentWorkflowId requests of
@@ -59,8 +60,8 @@ tests =
       testCase "preflight computes every deterministic child id in selection order" do
         let requests = batchRequest "first-key" "first" :| [batchRequest "second-key" "second"]
             expectedIds =
-              [ delegatedWorkflowIdV2 parentWorkflowId "first" "first-key",
-                delegatedWorkflowIdV2 parentWorkflowId "second" "second-key"
+              [ delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "first") "first-key",
+                delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "second") "second-key"
               ]
         case preflightDelegationBatch routerDecl delegateCtx catalog parentWorkflowId requests of
           Left errors -> assertFailure ("expected valid batch, got " <> show errors)
@@ -70,7 +71,7 @@ tests =
               expectedIds
               [childWorkflowId | PreparedDelegation {childWorkflowId} <- NonEmpty.toList prepared],
       testCase "preflight accumulates fan-out, duplicate-key, catalog, and governance failures" do
-        let constrained = (routerDecl & #routing .~ (Just (routerPolicy & #maxSelections .~ (1))))
+        let constrained = (routerDecl & #routing .~ (Just (routerPolicy & #maxSelections .~ (fixtureSelectionLimit 1))))
             requests =
               batchRequest "same-key" "first"
                 :| [ batchRequest "same-key" "paused",
@@ -82,13 +83,13 @@ tests =
             let found = NonEmpty.toList errors
             assertBool "fan-out is checked" (DelegationBatchSelectionLimitExceeded 3 1 `elem` found)
             assertBool "stable keys are distinct" (DelegationBatchDuplicateKey "same-key" `elem` found)
-            assertBool "recorded availability is checked" (DelegationBatchCatalogTargetUnavailable "paused" Paused `elem` found)
-            assertBool "missing catalog targets are checked" (DelegationBatchCatalogTargetMissing "intruder" `elem` found)
+            assertBool "recorded availability is checked" (DelegationBatchCatalogTargetUnavailable (fixtureAgentName "paused") Paused `elem` found)
+            assertBool "missing catalog targets are checked" (DelegationBatchCatalogTargetMissing (fixtureAgentName "intruder") `elem` found)
             assertBool
               "the declaration allow-list remains authoritative"
-              (DelegationBatchGovernanceRejected (Just "intruder") (DelegationNotAllowed "intruder") `elem` found),
+              (DelegationBatchGovernanceRejected (Just (fixtureAgentName "intruder")) (DelegationNotAllowed (fixtureAgentName "intruder")) `elem` found),
       testCase "preflight checks complete lineage, depth, and parent session before reservation" do
-        let blockedCtx = (delegateCtx & #depth .~ (DelegationDepth 3) & #sessionId .~ (Nothing) & #lineage .~ (map AgentName ["root", "first"]))
+        let blockedCtx = (delegateCtx & #depth .~ (fixtureDelegationDepth 3) & #sessionId .~ (Nothing) & #lineage .~ (map fixtureAgentName ["root", "first"]))
         case preflightDelegationBatch routerDecl blockedCtx catalog parentWorkflowId (batchRequest "cycle" "first" :| []) of
           Right _ -> assertFailure "expected lineage, depth, and session rejection"
           Left errors -> do
@@ -99,11 +100,11 @@ tests =
               (DelegationBatchGovernanceRejected Nothing (DelegationDepthExceeded 4) `elem` found)
             assertBool
               "the complete ancestor lineage is checked"
-              (DelegationBatchGovernanceRejected (Just "first") (DelegationCycleDetected "first") `elem` found)
+              (DelegationBatchGovernanceRejected (Just (fixtureAgentName "first")) (DelegationCycleDetected (fixtureAgentName "first")) `elem` found)
     ]
 
 batchRequest :: Text -> Text -> DelegationRequest
-batchRequest key target = DelegationRequest {key, target, payload = Null}
+batchRequest key target = DelegationRequest {key, target = fixtureAgentName target, payload = Null}
 
 parentWorkflowId :: WorkflowId
 parentWorkflowId = WorkflowId "router-parent"
@@ -111,12 +112,12 @@ parentWorkflowId = WorkflowId "router-parent"
 delegateCtx :: DelegateCtx
 delegateCtx =
   DelegateCtx
-    { identity = compatibilityIdentity "router",
-      depth = DelegationDepth 0,
+    { identity = compatibilityIdentity (fixtureAgentName "router"),
+      depth = fixtureDelegationDepth 0,
       sessionId = Just nominalSessionFixture,
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      lineage = map AgentName ["router"],
+      lineage = map fixtureAgentName ["router"],
       executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing,
@@ -126,12 +127,12 @@ delegateCtx =
 routerDecl :: AgentDecl
 routerDecl =
   AgentDecl
-    { name = "router",
+    { name = fixtureAgentName "router",
       description = "batch routing fixture",
       trigger = Event {eventType = "test"},
       behavior = Deterministic {rule = "test", params = mempty},
       sinks = [],
-      delegates = ["first", "second", "paused"],
+      delegates = map fixtureAgentName ["first", "second", "paused"],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -148,7 +149,7 @@ routerDecl =
 routerPolicy :: RouterPolicy
 routerPolicy =
   RouterPolicy
-    { maxSelections = 2,
+    { maxSelections = fixtureSelectionLimit 2,
       minimumConfidence = RoutingMedium,
       onNoMatch = ReturnNoMatch,
       onAmbiguous = ReturnAmbiguous
@@ -157,7 +158,7 @@ routerPolicy =
 catalog :: CandidateCatalog
 catalog =
   CandidateCatalog
-    { router = "router",
+    { router = fixtureAgentName "router",
       version = CatalogVersion "catalog-v1",
       lifecycleSource = DirectoryDisabledSource,
       lifecycleSourceVersion = DirectorySnapshotVersion "directory-v1",
@@ -172,7 +173,7 @@ catalog =
 candidate :: Text -> CandidateAvailability -> CandidateEntry
 candidate name availability =
   CandidateEntry
-    { name,
+    { name = fixtureAgentName name,
       description = Just name,
       expertise = [],
       availability
@@ -180,3 +181,12 @@ candidate name availability =
 
 nominalSessionFixture :: NominalId.SessionId
 nominalSessionFixture = either (error . show) id (NominalId.parseId "kioku_session_01kvxa7d2cezhs874g3n8dfgme")
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureDelegationDepth :: Int -> DelegationDepth
+fixtureDelegationDepth = either (error . show) id . parseDelegationDepth . toInteger
+
+fixtureSelectionLimit :: Integer -> SelectionLimit
+fixtureSelectionLimit = either (error . show) id . parseSelectionLimit . fromInteger

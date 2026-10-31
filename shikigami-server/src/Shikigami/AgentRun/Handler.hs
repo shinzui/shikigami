@@ -54,7 +54,7 @@ agentRunServer env caller agent = AgentRunApi {request = requestRun, show = show
       Nothing -> pure (RunAgentMissing (problem AgentNotFound "No declared agent has this name."))
       Just decl | not decl.enabled -> pure (RunAgentNotRunnable (problem AgentNotRunnable "The agent is disabled in its declaration."))
       Just decl -> do
-        admission <- liftIO (Directory.identityAdmission env.directory ((.principal) <$> decl.identity) (agentNameText agent))
+        admission <- liftIO (Directory.identityAdmission env.directory ((.principal) <$> decl.identity) agent)
         case admission of
           Left reason
             | "directory unavailable" `Text.isPrefixOf` reason -> pure (RunRequestUnavailable unavailable)
@@ -63,7 +63,7 @@ agentRunServer env caller agent = AgentRunApi {request = requestRun, show = show
             | LBS.length (Aeson.encode body.payload) > 65536 -> pure (RunPayloadTooLarge (problem PayloadTooLarge "The encoded payload exceeds 65536 bytes."))
             | otherwise -> do
                 now <- liftIO getCurrentTime
-                let job = addressedRunJob now identity (agentNameText agent) AgentWorkflowRoute body.payload (Ledger.httpRunKey agent body.idempotencyKey)
+                let job = addressedRunJob now identity agent AgentWorkflowRoute body.payload (Ledger.httpRunKey agent body.idempotencyKey)
                 outcome <- liftIO (Ledger.acceptRunRequest env.pool job body.idempotencyKey caller.callerId)
                 case outcome of
                   Left _ -> pure (RunRequestUnavailable unavailable)
@@ -72,8 +72,8 @@ agentRunServer env caller agent = AgentRunApi {request = requestRun, show = show
                   Right (Ledger.Conflicting row) -> logOutcome "server.run.conflict" row >> pure (RunConflict (problem IdempotencyKeyConflict "This key was already accepted with a different payload."))
     unavailable = problem Unavailable "The run store or lifecycle directory is unavailable."
     logOutcome event row = Log.logInfo env.logger event ["agent" .= row.agentName, "run_id" .= row.runId, "caller" .= caller.callerId]
-    accepted row = AgentRunAccepted row.runId row.agentName (requestKeyText row.idempotencyKey) "accepted" row.acceptedAt
-    location row = Text.decodeUtf8 . LBS.toStrict . toLazyByteString $ encodePathSegments ["agents", row.agentName, "runs", row.runId]
+    accepted row = AgentRunAccepted row.runId (agentNameText row.agentName) (requestKeyText row.idempotencyKey) "accepted" row.acceptedAt
+    location row = Text.decodeUtf8 . LBS.toStrict . toLazyByteString $ encodePathSegments ["agents", agentNameText row.agentName, "runs", row.runId]
 
 statusView :: Status.RunStatusView -> AgentRunStatus
 statusView view =

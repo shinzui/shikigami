@@ -11,6 +11,7 @@ import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
 import Data.Vector qualified as Vector
@@ -23,9 +24,9 @@ import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as Approval
 import Shikigami.Agent.Decl
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
-import Shikigami.Agent.Delegate.Depth (DelegationDepth (..))
+import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
 import Shikigami.Agent.Loader (loadAgent)
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), identityText)
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob
@@ -135,8 +136,8 @@ tests fixture =
           parent <- right =<< loadAgent "../agents/heartbeat.dhall"
           access <- right =<< run env (Execution.authorizeReplay (executionIdFor (assignmentIdFor (runJobWorkflowId job).unWorkflowId)) job.identity (pure (Right ())))
           (snapshot, _) <- right =<< run env (Execution.loadExecution access)
-          let coordinator = CompatibilityIdentity "cleanup-coordinator"
-              admission = Sessions.SessionAdmission 1 (Sessions.SessionScope parentSession "worker") (Sessions.ObjectiveRef "fixture" "objective") (parent & #name .~ "cleanup-coordinator" & #delegates .~ ["workspace-worker"]) (DelegateCtx (DelegationDepth 0) coordinator (Just snapshot.sessionId) Nothing (Just (WorkflowId "cleanup-parent")) [AgentName "cleanup-coordinator"] Nothing (Just binding.request.rootId) Nothing defaultDelegationBudget) (AgentName "workspace-worker") job.identity (fixtureLimit 10) (fixtureLimit 4)
+          let coordinator = CompatibilityIdentity (fixtureAgentName "cleanup-coordinator")
+              admission = Sessions.SessionAdmission 1 (Sessions.SessionScope parentSession "worker") (Sessions.ObjectiveRef "fixture" "objective") (parent & #name .~ fixtureAgentName "cleanup-coordinator" & #delegates .~ map fixtureAgentName ["workspace-worker"]) (DelegateCtx (fixtureDelegationDepth 0) coordinator (Just snapshot.sessionId) Nothing (Just (WorkflowId "cleanup-parent")) [fixtureAgentName "cleanup-coordinator"] Nothing (Just binding.request.rootId) Nothing defaultDelegationBudget) (fixtureAgentName "workspace-worker") job.identity (fixtureLimit 10) (fixtureLimit 4)
           _ <- right =<< run env (Sessions.openSession admission)
           cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
           run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Nothing)
@@ -275,13 +276,13 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
       provider = (stubApiProvider & #complete .~ (complete) & #stream .~ (liftCompleteToStream complete))
   providers <- Provider.newProviderRegistryFrom [provider]
   expected <- right (mkInstructionBundle 65536 "mori://fixture/repo" (repositoryBase repository) [("AGENTS.md", "PRIVATE_WORKFLOW_POLICY: validate changes")])
-  principal <- right (identityText (CompatibilityIdentity "workspace-worker"))
+  principal <- right (identityText (CompatibilityIdentity (fixtureAgentName "workspace-worker")))
   let settings = WorkspaceSettings root [WorkspaceRepository "mori://fixture/repo" source [WorkspaceRevision (repositoryBase repository) (bundleDigest expected)] (repositoryBase repository) "policy-1" [""] ["dependency.txt"]] [WorkspaceGrant "workspace-worker" principal "mori://fixture/repo" Nothing] Nothing
   host <- right (configuredWorkspaceHost env store.pool disabledDirectoryHandle authorizer (configure settings))
-  let declaration = original & #name .~ "workspace-worker" & #behavior .~ Skill (Text.pack skill) & #identity .~ Just (IdentityDecl "workspace-principal") & #capabilityOverlays .~ [workspaceEditDescriptor.capability] & #sinks .~ []
-      identity = CompatibilityIdentity "workspace-worker"
+  let declaration = original & #name .~ fixtureAgentName "workspace-worker" & #behavior .~ Skill (Text.pack skill) & #identity .~ Just (IdentityDecl "workspace-principal") & #capabilityOverlays .~ [workspaceEditDescriptor.capability] & #sinks .~ []
+      identity = CompatibilityIdentity (fixtureAgentName "workspace-worker")
       rootId = ExecutionRootId "workflow-root"
-      job = RunJob (AgentName "workspace-worker") identity TriggeredBySchedule now Aeson.Null (RunKey "workspace-workflow-fixture") Nothing Nothing Nothing [] Nothing Nothing (Just rootId) Nothing AgentWorkflowRoute
+      job = RunJob (fixtureAgentName "workspace-worker") identity TriggeredBySchedule now Aeson.Null (RunKey "workspace-workflow-fixture") Nothing Nothing Nothing [] Nothing Nothing (Just rootId) Nothing AgentWorkflowRoute
       deps =
         Agent.AgentRunDeps
           { appEnv = env,
@@ -360,3 +361,9 @@ fixtureRevision value = either (error . show) id (parseRevision value)
 
 fixtureLimit :: (SessionLimit a) => Integer -> a
 fixtureLimit value = either (error . show) id (parseSessionLimit value)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureDelegationDepth :: Int -> DelegationDepth
+fixtureDelegationDepth = either (error . show) id . parseDelegationDepth . toInteger

@@ -26,6 +26,7 @@ import Data.Text qualified as Text
 import Network.HTTP.Types (hContentType, status200, status404, status503)
 import Network.Wai (Application, pathInfo, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 
 -- Qualified: @Actor@ names both an activity's actor and the routing strategy
 -- that reads it.
@@ -204,7 +205,7 @@ recipientOf resolved declared =
       KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient_default"}
       resolved
       (signalWith Actor declared)
-      (compatibilityIdentity "triage-note")
+      (compatibilityIdentity (fixtureAgentName "triage-note"))
       sampleOutput
 
 -- | A declaration carrying the given sinks; every other field is irrelevant to
@@ -212,12 +213,12 @@ recipientOf resolved declared =
 agentWith :: [Sink] -> AgentDecl
 agentWith sinks =
   AgentDecl
-    { name = "triage-note",
+    { name = fixtureAgentName "triage-note",
       description = "a declaration used only for its sinks",
       trigger = Schedule {cron = "*/5 * * * *"},
       behavior = Skill {path = "agents/skills/triage-note"},
       sinks,
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -309,7 +310,7 @@ reiActionTests =
               -- The deterministic dedup key: an outbox retry or a workflow
               -- replay re-POSTs this exact value, so a future rei can dedup the
               -- way kawa's doorway already does.
-              sourceEventId @?= "shikigami.agent.heartbeat:run-1:0"
+              sourceEventId @?= "shikigami.agent.v2.d17d72cd-aca1-5113-a70d-6c739e2164f5:run-1:0"
             other -> assertFailure ("expected exactly one recorded action, got " <> show (length other)),
       -- A reachable endpoint that refuses is a different failure from no
       -- endpoint at all, and both must be failures.
@@ -323,7 +324,7 @@ reiActionTests =
       testCase "a denied agent never reaches the handler at all" do
         recorded <- newIORef []
         testWithApplication (pure (stubReiApp recorded)) \port -> do
-          let ctx = ctxWithIdentity (compatibilityIdentity "intruder") (ReiConfig {baseUrl = Just (localBaseUrl port)})
+          let ctx = ctxWithIdentity (compatibilityIdentity (fixtureAgentName "intruder")) (ReiConfig {baseUrl = Just (localBaseUrl port)})
           result <- dispatch ctx sampleReiSink sampleOutput
           case (.outcome) result of
             DeniedOutcome _ -> pure ()
@@ -377,7 +378,7 @@ publicationDisposition = \case
 -- | @heartbeat@ is granted @SReiAction@ in the static grant table, so the
 -- permission gate is not what these cases are measuring.
 ctxWith :: ReiConfig -> SinkContext
-ctxWith = ctxWithIdentity (compatibilityIdentity "heartbeat")
+ctxWith = ctxWithIdentity (compatibilityIdentity (fixtureAgentName "heartbeat"))
 
 ctxWithIdentity :: AgentIdentity -> ReiConfig -> SinkContext
 ctxWithIdentity agentIdentity rei =
@@ -440,3 +441,6 @@ refusingReiApp _ref _req respond =
 
 kindOf :: SinkResult -> SinkKind
 kindOf SinkResult {kind} = kind
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

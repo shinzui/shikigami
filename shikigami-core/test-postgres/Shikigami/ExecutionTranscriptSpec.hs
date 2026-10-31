@@ -64,7 +64,7 @@ import Pgmq.Hasql.Statements.QueueObservability qualified as PgmqQueue
 import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalRequest (..), approvalWorkflowId, resolveApproval)
 import Shikigami.Agent.Approval.Workflow qualified as Approval
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunRouteKind (..))
@@ -413,7 +413,7 @@ tests fixture =
           withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
           now <- getCurrentTime
           let submission = modelSubmission operation
-              enqueue reference = void (enqueueRunJobTx (addressedRunJob now snapshot.identity "worker" ExecutionOperationRoute (toJSON reference) (RunKey "accepted-attempt-job")))
+              enqueue reference = void (enqueueRunJobTx (addressedRunJob now snapshot.identity (fixtureAgentName "worker") ExecutionOperationRoute (toJSON reference) (RunKey "accepted-attempt-job")))
               failAfterQueue reference = enqueue reference >> Tx.statement () (preparable "SELECT 1/0" E.noParams (D.singleRow (D.column (D.nonNullable D.int4)))) >> pure ()
           refused <- run env (Store.submitExecutionAttemptWith access (fixtureRevision 1) submission failAfterQueue)
           case refused of Left ExecutionStorageUnavailable -> pure (); other -> assertFailure (show other)
@@ -760,7 +760,7 @@ tests fixture =
           run env (Store.loadExecution access) >>= (@?= Right (snapshot, state)),
       testCase "wrong identity and revoked runtime cannot obtain replay access" $
         withFixture fixture \env snapshot _ -> do
-          wrong <- run env (Store.authorizeReplay snapshot.executionId (compatibilityIdentity "other") (pure (Right ())))
+          wrong <- run env (Store.authorizeReplay snapshot.executionId (compatibilityIdentity (fixtureAgentName "other")) (pure (Right ())))
           assertBool "wrong identity refused" (case wrong of Left ReplayReadRefused -> True; _ -> False)
           revoked <- run env (Store.authorizeReplay snapshot.executionId snapshot.identity (pure (Left "revoked")))
           assertBool "revoked identity refused" (case revoked of Left ReplayReadRefused -> True; _ -> False),
@@ -1359,7 +1359,7 @@ withConfiguredResourceFixture fixture configure editLimits use = withShikigamiFr
   let env = AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing
       limits = editLimits (Map.insert R.Tokens (R.Limited (fixtureAmount 1000)) (Map.fromList [(dimension, R.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]))
       selection = mustRight (resolveExecutionSelection (fixtureAssignment "transcript-assignment") (mustRight (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just rootId) now)
-      snapshot = configure (ExecutionSnapshot 1 (executionIdFor selection.assignmentId) "transcript-run" (AgentName "worker") (compatibilityIdentity "worker") session selection Nothing (SkillInstructions "fixture" "system" "PRIVATE_REPLAY_MARKER") (ReplayContext 1 (Just "system") [UserTurn [TextBlock "PRIVATE_REPLAY_MARKER"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing)
+      snapshot = configure (ExecutionSnapshot 1 (executionIdFor selection.assignmentId) "transcript-run" (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (SkillInstructions "fixture" "system" "PRIVATE_REPLAY_MARKER") (ReplayContext 1 (Just "system") [UserTurn [TextBlock "PRIVATE_REPLAY_MARKER"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing)
   _ <- expectRight =<< run env Catalog.registerProjectionCatalog
   run env (Roots.enrollRoot rootId (R.Envelope limits (addUTCTime 3600 now))) >>= (@?= Right R.Accepted)
   run env (Store.admitExecution snapshot) >>= (@?= Right R.Accepted)
@@ -1467,3 +1467,6 @@ fixtureGeneration value = either (error . show) id (Generation.parseRevision val
 
 fixtureOwner :: ClaimText.Text -> Claim.ClaimOwner
 fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

@@ -25,6 +25,7 @@ import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
 import Hasql.Pool (Pool)
 import Pgmq (MessageId)
+import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Agent.RunJob (RunRouteKind (AgentWorkflowRoute))
 import Shikigami.PracticeReview
@@ -215,8 +216,11 @@ enqueueAuthorizedPracticeReviewResolution pool identity agent ReviewResolutionAu
                           }
                       PracticeReviewResolution {resolutionId = ResolutionId resolutionId} = validatedResolutionValue validated
                       key = agent <> ":resolution:" <> resolutionId
-                  enqueueAddressedRunWithKey pool identity agent AgentWorkflowRoute (Aeson.toJSON envelope) key
-                    <&> first (ResolutionEnqueueFailed . Text.pack . show)
+                  case mkAgentName agent of
+                    Left problem -> pure (Left (ResolutionAuthorizerRefused problem))
+                    Right target ->
+                      enqueueAddressedRunWithKey pool identity target AgentWorkflowRoute (Aeson.toJSON envelope) key
+                        <&> first (ResolutionEnqueueFailed . Text.pack . show)
 
 authorizationEnvelopeSchemaVersion :: Int
 authorizationEnvelopeSchemaVersion = 1

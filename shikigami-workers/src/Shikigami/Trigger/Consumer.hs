@@ -79,7 +79,7 @@ import Shibuya.Policy (Concurrency (Serial), OrderingPolicy (StrictInOrder))
 import Shibuya.Telemetry.Effect (runTracing)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), StreamMatch, Trigger (..))
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.Agent.Run.Key (RunKey (..), runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByEvent))
@@ -106,13 +106,13 @@ data StreamConfig = StreamConfig
   }
 
 data StreamHit = StreamHit
-  { agentName :: !Text,
+  { agentName :: !AgentName,
     envelope :: !ActivityEnvelope
   }
   deriving stock (Eq, Show)
 
 data EventHit = EventHit
-  { agentName :: !Text,
+  { agentName :: !AgentName,
     eventType :: !Text,
     integrationMessageId :: !Text,
     payload :: !Value
@@ -620,17 +620,17 @@ prepareEventHits directory receivedAt agents payloadValue event =
     prepare agent = do
       let job =
             RunJob
-              { agentName = AgentName (agent ^. #name),
+              { agentName = (agent ^. #name),
                 identity = UnresolvedLegacyIdentity,
                 triggerKind = TriggeredByEvent,
                 routeKind = eventRouteOf agent,
                 occurredAt = receivedAt,
                 triggerPayload = payloadValue,
-                idempotencyKey = RunKey (agent ^. #name <> ":" <> event ^. #messageId),
+                idempotencyKey = RunKey (agentNameText (agent ^. #name) <> ":" <> event ^. #messageId),
                 parentSessionId = Nothing,
                 parentRunWorkflowId = Nothing,
                 delegationDepth = Nothing,
-                lineage = [AgentName (agent ^. #name)],
+                lineage = [(agent ^. #name)],
                 executionRequest = Nothing,
                 executionPermissions = Nothing,
                 executionRootId = Nothing,
@@ -651,7 +651,7 @@ eventInboxHandler prepared _event = traverse commitTrigger prepared
 prepareTrigger :: Directory.DirectoryHandle -> Text -> AgentDecl -> RunJob -> hit -> IO (PreparedTrigger hit)
 prepareTrigger directory detail agent job hit = do
   let declaredPrincipalId = principalIdOf agent
-  decision <- Directory.consultLifecycle directory declaredPrincipalId (agent ^. #name)
+  decision <- Directory.consultLifecycle directory declaredPrincipalId (agentNameText (agent ^. #name))
   pure case decision of
     Directory.AllowRun Nothing -> EnqueueTrigger ((job & #identity .~ (compatibilityIdentity (agent ^. #name)))) hit
     Directory.AllowRun (Just principal) ->

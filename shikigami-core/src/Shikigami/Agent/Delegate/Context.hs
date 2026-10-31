@@ -16,8 +16,8 @@ import Data.Aeson qualified as Aeson
 import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
 import Kioku.Id (SessionId)
 import Shikigami.Agent.Decl (AgentDecl (..), DelegationBudget)
-import Shikigami.Agent.Delegate.Depth (DelegationDepth (..), depthInt)
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Delegate.Depth (DelegationDepth, depthInt, parseDelegationDepth)
+import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Prelude hiding ((.=))
@@ -77,8 +77,7 @@ instance FromJSON DelegateCtx where
       <*> fields .: "delegationBudgetId"
       <*> fields .: "budgetLimit"
 
--- | Maximum allowed delegation depth. This mirrors Flue's four-level bound:
--- supervisor -> lead -> worker -> helper.
+-- | Exclusive depth bound for supervisor, lead, worker and helper levels.
 maxDelegationDepth :: Int
 maxDelegationDepth = 4
 
@@ -86,10 +85,10 @@ maxDelegationDepth = 4
 data DelegationError
   = DelegationDepthExceeded !Integer
   | DelegationMissingSessionId
-  | DelegationCycleDetected !Text
+  | DelegationCycleDetected !AgentName
   | DelegationBudgetExhausted
   | DelegationBudgetUnavailable !Text
-  | DelegationNotAllowed !Text
+  | DelegationNotAllowed !AgentName
   | DelegationIdentityRefused !Text
   | DelegatedChildCancelled
   | DelegatedChildFailed !Text
@@ -99,15 +98,15 @@ data DelegationError
 instance Exception DelegationError
 
 -- | Refuse any target the delegating agent did not declare explicitly.
-assertMayDelegate :: AgentDecl -> Text -> Either DelegationError ()
+assertMayDelegate :: AgentDecl -> AgentName -> Either DelegationError ()
 assertMayDelegate AgentDecl {delegates} target
   | target `elem` delegates = Right ()
   | otherwise = Left (DelegationNotAllowed target)
 
 -- | Refuse an edge back to the current agent or any of its ancestors.
-checkCycle :: DelegateCtx -> Text -> Either DelegationError ()
+checkCycle :: DelegateCtx -> AgentName -> Either DelegationError ()
 checkCycle DelegateCtx {lineage} target
-  | AgentName target `elem` lineage = Left (DelegationCycleDetected target)
+  | target `elem` lineage = Left (DelegationCycleDetected target)
   | otherwise = Right ()
 
 -- | Validate that a child can be created and return the child's depth context.
@@ -115,10 +114,11 @@ checkDepth :: DelegateCtx -> Either DelegationError DelegateCtx
 checkDepth DelegateCtx {depth, identity, sessionId, parentSessionId, parentRunWorkflowId, lineage, delegationBudgetId, executionRootId, executionPermissions, budgetLimit} =
   let attemptedDepth = toInteger (depthInt depth) + 1
    in if attemptedDepth < toInteger maxDelegationDepth
-        then
+        then do
+          childDepth <- either (const (Left (DelegationDepthExceeded attemptedDepth))) Right (parseDelegationDepth attemptedDepth)
           Right
             DelegateCtx
-              { depth = DelegationDepth (fromInteger attemptedDepth),
+              { depth = childDepth,
                 identity,
                 sessionId,
                 parentSessionId,

@@ -4,9 +4,11 @@ import Control.Concurrent (newEmptyMVar, takeMVar)
 import Control.Exception (AsyncException (ThreadKilled), throwIO, try)
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (secondsToNominalDiffTime)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Behavior.Error
   ( FailureClass (..),
     RunError (..),
@@ -81,7 +83,7 @@ tests =
 missingTaskAgent :: AgentDecl
 missingTaskAgent =
   AgentDecl
-    { name = "missing-task-agent",
+    { name = fixtureAgentName "missing-task-agent",
       description = "Exercises permanent behavior classification",
       trigger = Schedule {cron = "* * * * *"},
       behavior =
@@ -92,7 +94,7 @@ missingTaskAgent =
             enabledBy = Nothing
           },
       sinks = [],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -105,3 +107,6 @@ missingTaskAgent =
       decisionModels = [],
       routing = Nothing
     }
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

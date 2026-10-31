@@ -44,6 +44,7 @@ import Keiro.Workflow.Gc qualified as Gc
 import Keiro.Workflow.Instance (lookupInstance)
 import Keiro.Workflow.Resume (ResumeSummary (..), defaultWorkflowResumeOptions, resumeWorkflowsOnce)
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
+import Keiro.Workflow.Types (continueSeedStepName)
 import Kioku.Api.Types (Confidence (MediumConfidence), MemoryRecord (..), MemoryType (MemoryPattern))
 import Kioku.Id (SessionId, genMemoryId, genSessionId, idText)
 import Kioku.Memory qualified as Memory
@@ -67,9 +68,9 @@ import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), ProfileRequirement (..), RecordPolicy (..), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy, mkDelegationBudget, mkRecallLimit)
 import Shikigami.Agent.Delegate (awaitAllDelegated, awaitDelegated, cancelSiblingsOnFailure, delegate, delegatedWorkflowIdV2)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..))
-import Shikigami.Agent.Delegate.Depth (DelegationDepth (..))
+import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..), loadAgent)
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), ResolvedAgentIdentity (CompatibilityAgent, VerifiedAgent), compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.Agent.Run (AgentRunResult (..), recallAgentLearnings, recallPriorLearnings)
 import Shikigami.Agent.Run.Key (RunKey (..), runKeyText)
@@ -144,7 +145,16 @@ tests :: DatabaseFixture -> TestTree
 tests databaseFixture =
   testGroup
     "AgentWorkflow"
-    [ testCase "the current baseline journals v2 and capability resolution without patch activation" do
+    [ testCase "compatibility names with colliding old punctuation retain separate stored sessions" do
+        withShikigamiFreshDatabase databaseFixture \connStr -> do
+          tracer <- noopTracer
+          let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
+          colon <- startDecoyConversationSession appEnv "a:b" "same-subject"
+          dot <- startDecoyConversationSession appEnv "a.b" "same-subject"
+          assertBool "allocated sessions are independent" (colon /= dot)
+          runningSessionsFor appEnv "a:b" "same-subject" >>= assertEqual "colon scope restores its own row" [idText colon]
+          runningSessionsFor appEnv "a.b" "same-subject" >>= assertEqual "dot scope restores its own row" [idText dot],
+      testCase "the current baseline journals v2 and capability resolution without patch activation" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
             tracer <- noopTracer
@@ -341,7 +351,7 @@ tests databaseFixture =
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [decl]
                 refusedJob =
-                  (job & #idempotencyKey .~ (RunKey "heartbeat:test-refused-session") & #delegationDepth .~ (Just (DelegationDepth 1)))
+                  (job & #idempotencyKey .~ (RunKey "heartbeat:test-refused-session") & #delegationDepth .~ (Just (fixtureDelegationDepth 1)))
 
             result <- runAgentRunWorkflow deps refusedJob
             case result of
@@ -397,7 +407,7 @@ tests databaseFixture =
               Right (Completed (Left _)) -> pure ()
               other -> assertFailure ("Always run should fail permanently, got " <> show other)
 
-            memories <- runAppIO appEnv (Memory.getActiveRowsByScope shikigamiMemorySpace (agentScope (CompatibilityAgent "missing-task-agent")))
+            memories <- runAppIO appEnv (Memory.getActiveRowsByScope shikigamiMemorySpace (agentScope (CompatibilityAgent (fixtureAgentName "missing-task-agent"))))
             case memories of
               Right (Right [MemoryRow {content, tags}]) -> do
                 assertBool "failure content is explicit" ("run failed: " `Text.isPrefixOf` content)
@@ -410,7 +420,7 @@ tests databaseFixture =
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
             forM_ [1 .. 5 :: Int] (recordRecallFixture appEnv)
             limit <- either (assertFailure . Text.unpack) pure (mkRecallLimit 3)
-            recalled <- recallPriorLearnings appEnv limit (agentScope (CompatibilityAgent "recall-limit-agent")) "recall fixture"
+            recalled <- recallPriorLearnings appEnv limit (agentScope (CompatibilityAgent (fixtureAgentName "recall-limit-agent"))) "recall fixture"
             assertEqual "declared bound caps fallback rows" 3 (length recalled),
       testCase "verified recall composes the principal scope with an accepted legacy alias" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
@@ -493,7 +503,7 @@ tests databaseFixture =
               assertEqual "the granted run enqueued one outbox row" (Right 1) (length <$> outboxBefore)
 
               -- Now revoke, and drive the publisher exactly as the worker does.
-              _ <- revokeGrant pool' (compatibilityIdentity "heartbeat") SKawaDigest (Just "test") >>= either (assertFailure . show) pure
+              _ <- revokeGrant pool' (compatibilityIdentity (fixtureAgentName "heartbeat")) SKawaDigest (Just "test") >>= either (assertFailure . show) pure
               let publishBatch rows =
                     traverse (\row -> (outboxId row,) <$> publishSinkIntent deps row) rows
               published <- runAppIO appEnv (publishClaimedOutbox publishBatch defaultPublishOptions Nothing)
@@ -568,7 +578,7 @@ tests databaseFixture =
                 assertBool ("failure should name the profile: " <> show err) ("sanctioned-review" `Text.isInfixOf` agentRunFailureDetail err)
               other -> assertFailure ("expected a permanent profile refusal, got " <> show other)
 
-            sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope (CompatibilityAgent "heartbeat")))
+            sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope (CompatibilityAgent (fixtureAgentName "heartbeat"))))
             case sessions of
               Right (Right rows) -> assertEqual "no session was opened" 0 (length rows)
               other -> assertFailure ("session query should succeed, got " <> show (first (const ("store-error" :: String)) other))
@@ -653,7 +663,7 @@ tests databaseFixture =
                 assertBool ("violation should name the pinned digest: " <> Text.unpack detail) (profileDigestText digest `Text.isInfixOf` detail)
               other -> assertFailure ("expected a permanent provider-profile refusal, got " <> show other)
 
-            sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope (CompatibilityAgent "profiled-skill")))
+            sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope (CompatibilityAgent (fixtureAgentName "profiled-skill"))))
             case sessions of
               Right (Right rows) -> assertEqual "the provider seam was refused before session creation" 0 (length rows)
               other -> assertFailure ("session query should succeed, got " <> show (first (const ("store-error" :: String)) other)),
@@ -679,7 +689,7 @@ tests databaseFixture =
                 assertBool ("Flow violation should name the pinned digest: " <> Text.unpack detail) (profileDigestText digest `Text.isInfixOf` detail)
               other -> assertFailure ("expected a permanent Flow profile refusal, got " <> show other)
 
-            sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope (CompatibilityAgent "profiled-flow")))
+            sessions <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope (CompatibilityAgent (fixtureAgentName "profiled-flow"))))
             case sessions of
               Right (Right rows) -> assertEqual "the profiled Flow was refused before session creation" 0 (length rows)
               other -> assertFailure ("session query should succeed, got " <> show (first (const ("store-error" :: String)) other)),
@@ -860,6 +870,15 @@ tests databaseFixture =
                     -- twice in one under two different computed suffixes.
                     firstKeys <- conversationStepKeys appEnv firstAddressedMessage 0
                     secondKeys <- conversationStepKeys appEnv firstAddressedMessage 1
+
+                    assertEqual
+                      "unbound initial seed retains its complete wire value"
+                      (Just (object ["agentName" .= ("" :: Text), "identity" .= object ["kind" .= ("unresolved-legacy" :: Text)], "turnsSoFar" .= (0 :: Int), "pendingMessage" .= Null, "lastMessageId" .= Null]))
+                      (Map.lookup continueSeedStepName firstKeys)
+                    assertEqual
+                      "carried seed retains its complete wire value"
+                      (Just (object ["agentName" .= ("heartbeat" :: Text), "identity" .= compatibilityIdentity (fixtureAgentName "heartbeat"), "turnsSoFar" .= (1 :: Int), "pendingMessage" .= secondAddressedMessage, "lastMessageId" .= firstAddressedMessage.messageId]))
+                      (Map.lookup continueSeedStepName secondKeys)
 
                     assertBool "the first turn's result is journaled in generation 0" (Map.member "turn-result" firstKeys)
                     assertBool "the second turn's result is journaled in generation 1" (Map.member "turn-result" secondKeys)
@@ -1331,11 +1350,11 @@ tests databaseFixture =
                   envelope = Resources.Envelope (Map.singleton Resources.LifetimeDescendants (Resources.Limited (fixtureAmount 1))) (addUTCTime 3600 now)
                   parentName = WorkflowName "shikigami.test-resource-parent"
                   parentId = WorkflowId "resource-parent"
-                  childId = delegatedWorkflowIdV2 parentId "heartbeat" "first"
-                  deniedId = delegatedWorkflowIdV2 (WorkflowId "other-parent") "heartbeat" "second"
-                  supervisor = decl & #delegates .~ ["heartbeat"]
+                  childId = delegatedWorkflowIdV2 parentId (fixtureAgentName "heartbeat") "first"
+                  deniedId = delegatedWorkflowIdV2 (WorkflowId "other-parent") (fixtureAgentName "heartbeat") "second"
+                  supervisor = decl & #delegates .~ map fixtureAgentName ["heartbeat"]
                   ctx = parentDelegateContext parentSession & #executionRootId .~ Just root
-                  body key = void (delegate [decl] disabledDirectoryHandle supervisor ctx key "heartbeat" (object []))
+                  body key = void (delegate [decl] disabledDirectoryHandle supervisor ctx key (fixtureAgentName "heartbeat") (object []))
               runAppIO appEnv (Resources.enrollRoot root envelope) >>= assertEqual "explicit root admitted" (Right (Right Resources.Accepted))
               runAppIO appEnv (runWorkflow parentName parentId (body "first")) >>= assertEqual "child spawned" (Right (Completed ()))
               recorded <- runAppIO appEnv (loadStepIndex agentRunWorkflowName childId 0)
@@ -1360,7 +1379,7 @@ tests databaseFixture =
                     deps = testDeps appEnv behaviorEnv defaultAgentRunHooks
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-parent"
                     parentWorkflowId = WorkflowId "delegate-parent-1"
-                    childWorkflowId = delegatedWorkflowIdV2 parentWorkflowId "heartbeat" "heartbeat"
+                    childWorkflowId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "heartbeat") "heartbeat"
                     parentBody = parentDelegateWorkflow parentSession
 
                 parked <- runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody)
@@ -1388,24 +1407,24 @@ tests databaseFixture =
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-cycle"
                     parentWorkflowId = WorkflowId "delegate-cycle-parent"
-                    supervisor = (decl & #delegates .~ (["heartbeat"]))
+                    supervisor = (decl & #delegates .~ ([(fixtureAgentName "heartbeat")]))
                     ctx =
                       DelegateCtx
-                        { identity = compatibilityIdentity "heartbeat",
-                          depth = DelegationDepth 0,
+                        { identity = compatibilityIdentity (fixtureAgentName "heartbeat"),
+                          depth = fixtureDelegationDepth 0,
                           sessionId = Just parentSession,
                           parentSessionId = Nothing,
                           parentRunWorkflowId = Nothing,
-                          lineage = map AgentName ["test-parent", "heartbeat"],
+                          lineage = map fixtureAgentName ["test-parent", "heartbeat"],
                           executionPermissions = Nothing,
                           executionRootId = Nothing,
                           delegationBudgetId = Nothing,
                           budgetLimit = defaultDelegationBudget
                         }
-                    parentBody = void (delegate [decl] disabledDirectoryHandle supervisor ctx "cycle" "heartbeat" (object []))
+                    parentBody = void (delegate [decl] disabledDirectoryHandle supervisor ctx "cycle" (fixtureAgentName "heartbeat") (object []))
                 refused <- try @DelegationError (runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody))
                 case refused of
-                  Left err -> assertEqual "the ancestor target is rejected" (DelegationCycleDetected "heartbeat") err
+                  Left err -> assertEqual "the ancestor target is rejected" (DelegationCycleDetected (fixtureAgentName "heartbeat")) err
                   Right outcome -> assertFailure ("cyclic delegation should fail before spawning, got " <> show outcome),
           testCase "an exhausted root budget is refused before child spawn" do
             (withShikigamiFreshDatabase databaseFixture) \connStr ->
@@ -1415,10 +1434,10 @@ tests databaseFixture =
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-exhausted"
                     parentWorkflowId = WorkflowId "delegate-exhausted-parent"
-                    supervisor = (decl & #delegates .~ (["heartbeat"]))
+                    supervisor = (decl & #delegates .~ ([(fixtureAgentName "heartbeat")]))
                     zeroBudget = either (error . Text.unpack) id (mkDelegationBudget 0)
                     ctx = (parentDelegateContext parentSession) {budgetLimit = zeroBudget}
-                    parentBody = void (delegate [decl] disabledDirectoryHandle supervisor ctx "over-budget" "heartbeat" (object []))
+                    parentBody = void (delegate [decl] disabledDirectoryHandle supervisor ctx "over-budget" (fixtureAgentName "heartbeat") (object []))
                 refused <- try @DelegationError (runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody))
                 case refused of
                   Left err -> assertEqual "the zero budget is exhausted" DelegationBudgetExhausted err
@@ -1432,8 +1451,8 @@ tests databaseFixture =
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks proofAgents
                     parentWorkflowId = runJobWorkflowId researchSupervisorJob
-                    webWorkflowId = delegatedWorkflowIdV2 parentWorkflowId "web-researcher" "delegate-0"
-                    codeWorkflowId = delegatedWorkflowIdV2 parentWorkflowId "code-researcher" "delegate-1"
+                    webWorkflowId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "web-researcher") "delegate-0"
+                    codeWorkflowId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "code-researcher") "delegate-1"
                     WorkflowId webWorkflowIdText = webWorkflowId
                     WorkflowId codeWorkflowIdText = codeWorkflowId
                     expectedRunningChildLinks =
@@ -1490,8 +1509,8 @@ tests databaseFixture =
                     assertEqual
                       "kioku records both delegated child sessions"
                       ( Set.fromList
-                          [ ("shikigami.agent.web-researcher", Just (idText parentSession), 1),
-                            ("shikigami.agent.code-researcher", Just (idText parentSession), 1)
+                          [ ("shikigami.agent.v2.759d78a7-1085-5bd2-b52b-8e01209c3711", Just (idText parentSession), 1),
+                            ("shikigami.agent.v2.0f861389-9eef-5ffc-8643-7382fc4b2bc7", Just (idText parentSession), 1)
                           ]
                       )
                       (lineageSummary rows)
@@ -1505,7 +1524,7 @@ tests databaseFixture =
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks (flowDelegationDecl : proofAgents)
                     parentWorkflowId = runJobWorkflowId flowDelegationJob
-                    childWorkflowId = delegatedWorkflowIdV2 parentWorkflowId "web-researcher" "web-researcher"
+                    childWorkflowId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "web-researcher") "web-researcher"
 
                 parked <- runAgentRunWorkflow deps flowDelegationJob
                 assertEqual "delegating Flow parks on its child" (Right Suspended) parked
@@ -1532,7 +1551,7 @@ tests databaseFixture =
                     deniedDecl = (flowDelegationDecl & #delegates .~ ([]))
                     deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks (deniedDecl : proofAgents)
                 refused <- try @DelegationError (runAgentRunWorkflow deps flowDelegationDeniedJob)
-                assertEqual "the capability applies the agent allow-list" (Left (DelegationNotAllowed "web-researcher")) refused,
+                assertEqual "the capability applies the agent allow-list" (Left (DelegationNotAllowed (fixtureAgentName "web-researcher"))) refused,
           testCase "awaitAllDelegated retains successes beside a failed child" do
             (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
@@ -1544,8 +1563,8 @@ tests databaseFixture =
                     supervisor = collectionSupervisorDecl
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-collect"
                     parentWorkflowId = WorkflowId "delegate-collect-parent"
-                    successId = delegatedWorkflowIdV2 parentWorkflowId "heartbeat" "success"
-                    failureId = delegatedWorkflowIdV2 parentWorkflowId "missing-task-agent" "failure"
+                    successId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "heartbeat") "success"
+                    failureId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "missing-task-agent") "failure"
                     parentBody = parentCollectWorkflow parentSession supervisor
 
                 parked <- runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody)
@@ -1570,8 +1589,8 @@ tests databaseFixture =
                     supervisor = collectionSupervisorDecl
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-cancel"
                     parentWorkflowId = WorkflowId "delegate-cancel-parent"
-                    failureId = delegatedWorkflowIdV2 parentWorkflowId "missing-task-agent" "failure-first"
-                    siblingId = delegatedWorkflowIdV2 parentWorkflowId "heartbeat" "cancelled-sibling"
+                    failureId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "missing-task-agent") "failure-first"
+                    siblingId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "heartbeat") "cancelled-sibling"
                     parentBody = parentCancellationWorkflow parentSession supervisor
 
                 parked <- runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody)
@@ -1922,34 +1941,34 @@ parentDelegateWorkflow currentSession = do
     delegate
       [decl]
       disabledDirectoryHandle
-      ((decl & #delegates .~ (["heartbeat"])))
+      ((decl & #delegates .~ (map fixtureAgentName ["heartbeat"])))
       (parentDelegateContext currentSession)
       "heartbeat"
-      "heartbeat"
+      (fixtureAgentName "heartbeat")
       (object ["source" .= ("delegate-test" :: Text)])
   awaitDelegated delegated
 
 parentCollectWorkflow :: SessionId -> AgentDecl -> Eff (Workflow : AppEffects) [Either Text Value]
 parentCollectWorkflow currentSession supervisor = do
-  success <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) "success" "heartbeat" (object [])
-  failure <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) "failure" "missing-task-agent" (object [])
+  success <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) "success" (fixtureAgentName "heartbeat") (object [])
+  failure <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) "failure" (fixtureAgentName "missing-task-agent") (object [])
   awaitAllDelegated [success, failure]
 
 parentCancellationWorkflow :: SessionId -> AgentDecl -> Eff (Workflow : AppEffects) [Either Text Value]
 parentCancellationWorkflow currentSession supervisor = do
-  failure <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) "failure-first" "missing-task-agent" (object [])
-  sibling <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) "cancelled-sibling" "heartbeat" (object [])
+  failure <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) "failure-first" (fixtureAgentName "missing-task-agent") (object [])
+  sibling <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) "cancelled-sibling" (fixtureAgentName "heartbeat") (object [])
   cancelSiblingsOnFailure [failure, sibling]
 
 parentDelegateContext :: SessionId -> DelegateCtx
 parentDelegateContext currentSession =
   DelegateCtx
-    { identity = compatibilityIdentity "test-parent",
-      depth = DelegationDepth 0,
+    { identity = compatibilityIdentity (fixtureAgentName "test-parent"),
+      depth = fixtureDelegationDepth 0,
       sessionId = Just currentSession,
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      lineage = map AgentName ["test-parent"],
+      lineage = map fixtureAgentName ["test-parent"],
       executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing,
@@ -2186,7 +2205,7 @@ startDecoyConversationSession :: AppEnv -> Text -> Text -> IO SessionId
 startDecoyConversationSession appEnv agentName decoyConversationId = do
   now <- getCurrentTime
   sid <- genSessionId
-  let recordedIdentity = CompatibilityAgent agentName
+  let recordedIdentity = CompatibilityAgent (fixtureAgentName agentName)
   result <-
     runAppIO appEnv $
       Session.start
@@ -2212,7 +2231,7 @@ startDecoyConversationSession appEnv agentName decoyConversationId = do
 -- conversation.
 runningSessionsFor :: AppEnv -> Text -> Text -> IO [Text]
 runningSessionsFor appEnv agentName wantedConversationId = do
-  rows <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope (CompatibilityAgent agentName)))
+  rows <- runAppIO appEnv (Session.getByScope shikigamiMemorySpace (agentScope (CompatibilityAgent (fixtureAgentName agentName))))
   case rows of
     Right (Right allRows) ->
       pure
@@ -2523,12 +2542,12 @@ overlayIdentity = IdentityDecl {principal = "principal_overlay_test"}
 capabilityDecl :: Text -> Behavior -> [CapabilityOverlay.CapabilityId] -> Maybe IdentityDecl -> [Sink] -> AgentDecl
 capabilityDecl agentName agentBehavior overlays agentIdentity agentSinks =
   AgentDecl
-    { name = agentName,
+    { name = fixtureAgentName agentName,
       description = "capability overlay workflow test agent",
       trigger = Event {eventType = "test"},
       behavior = agentBehavior,
       sinks = agentSinks,
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = overlays,
@@ -2543,13 +2562,13 @@ capabilityDecl agentName agentBehavior overlays agentIdentity agentSinks =
     }
 
 agentDeclNameForTest :: AgentDecl -> Text
-agentDeclNameForTest AgentDecl {name = agentName} = agentName
+agentDeclNameForTest AgentDecl {name = agentName} = agentNameText agentName
 
 capabilityJob :: Text -> Text -> RunJob
 capabilityJob agentName key =
   RunJob
-    { agentName = AgentName agentName,
-      identity = compatibilityIdentity agentName,
+    { agentName = fixtureAgentName agentName,
+      identity = compatibilityIdentity (fixtureAgentName agentName),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2598,7 +2617,7 @@ isCompleted _ = False
 decl :: AgentDecl
 decl =
   AgentDecl
-    { name = "heartbeat",
+    { name = fixtureAgentName "heartbeat",
       description = "workflow test agent",
       trigger = Event {eventType = "test"},
       behavior =
@@ -2609,7 +2628,7 @@ decl =
             enabledBy = Nothing
           },
       sinks = [KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -2626,7 +2645,7 @@ decl =
 missingTaskDecl :: AgentDecl
 missingTaskDecl =
   AgentDecl
-    { name = "missing-task-agent",
+    { name = fixtureAgentName "missing-task-agent",
       description = "workflow test agent with a permanent program-input failure",
       trigger = Event {eventType = "test"},
       behavior =
@@ -2637,7 +2656,7 @@ missingTaskDecl =
             enabledBy = Nothing
           },
       sinks = [],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -2654,7 +2673,7 @@ missingTaskDecl =
 profiledDecl :: AgentDecl
 profiledDecl =
   AgentDecl
-    { name = "heartbeat",
+    { name = fixtureAgentName "heartbeat",
       description = "workflow test agent with a sanctioned profile",
       trigger = Event {eventType = "test"},
       behavior =
@@ -2665,7 +2684,7 @@ profiledDecl =
             enabledBy = Nothing
           },
       sinks = [KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile =
         Just
@@ -2687,12 +2706,12 @@ profiledDecl =
 profiledSkillDecl :: AgentDecl
 profiledSkillDecl =
   AgentDecl
-    { name = "profiled-skill",
+    { name = fixtureAgentName "profiled-skill",
       description = "workflow test skill with a sanctioned profile",
       trigger = Event {eventType = "test"},
       behavior = Skill {path = "agents/skills/triage-note"},
       sinks = [],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile =
         Just
@@ -2714,12 +2733,12 @@ profiledSkillDecl =
 flowDecl :: AgentDecl
 flowDecl =
   AgentDecl
-    { name = "at-risk-customer",
+    { name = fixtureAgentName "at-risk-customer",
       description = "workflow flow test agent",
       trigger = Event {eventType = "test"},
       behavior = Flow {name = "at-risk-customer"},
       sinks = [],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -2736,7 +2755,7 @@ flowDecl =
 profiledFlowDecl :: AgentDecl
 profiledFlowDecl =
   flowDecl
-    & #name .~ "profiled-flow"
+    & #name .~ fixtureAgentName "profiled-flow"
     & #sanctionedProfile
       .~ Just
         ProfileRequirement
@@ -2747,12 +2766,12 @@ profiledFlowDecl =
 flowDelegationDecl :: AgentDecl
 flowDelegationDecl =
   AgentDecl
-    { name = "flow-delegation-supervisor",
+    { name = fixtureAgentName "flow-delegation-supervisor",
       description = "workflow Flow delegation test agent",
       trigger = Event {eventType = "test"},
       behavior = Flow {name = "delegation-proof"},
       sinks = [],
-      delegates = ["web-researcher"],
+      delegates = map fixtureAgentName ["web-researcher"],
       delegationBudget = Just (either (error . Text.unpack) id (mkDelegationBudget 1)),
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -2768,7 +2787,7 @@ flowDelegationDecl =
 
 collectionSupervisorDecl :: AgentDecl
 collectionSupervisorDecl =
-  (decl & #name .~ ("test-collection-supervisor") & #sinks .~ ([]) & #delegates .~ (["heartbeat", "missing-task-agent"]))
+  (decl & #name .~ (fixtureAgentName "test-collection-supervisor") & #sinks .~ ([]) & #delegates .~ (map fixtureAgentName ["heartbeat", "missing-task-agent"]))
 
 conversationDecl :: AgentDecl
 conversationDecl =
@@ -2852,8 +2871,8 @@ permanentConversationMessage =
 job :: RunJob
 job =
   RunJob
-    { agentName = AgentName "heartbeat",
-      identity = compatibilityIdentity "heartbeat",
+    { agentName = fixtureAgentName "heartbeat",
+      identity = compatibilityIdentity (fixtureAgentName "heartbeat"),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2872,8 +2891,8 @@ job =
 retryVersioningJob :: Text -> RunJob
 retryVersioningJob key =
   RunJob
-    { agentName = AgentName "heartbeat",
-      identity = compatibilityIdentity "heartbeat",
+    { agentName = fixtureAgentName "heartbeat",
+      identity = compatibilityIdentity (fixtureAgentName "heartbeat"),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2895,8 +2914,8 @@ transientRetryJob = retryVersioningJob "heartbeat:test-transient-retry"
 permanentFailureJob :: RunJob
 permanentFailureJob =
   RunJob
-    { agentName = AgentName "missing-task-agent",
-      identity = compatibilityIdentity "missing-task-agent",
+    { agentName = fixtureAgentName "missing-task-agent",
+      identity = compatibilityIdentity (fixtureAgentName "missing-task-agent"),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2915,8 +2934,8 @@ permanentFailureJob =
 crashJob :: RunJob
 crashJob =
   RunJob
-    { agentName = AgentName "heartbeat",
-      identity = compatibilityIdentity "heartbeat",
+    { agentName = fixtureAgentName "heartbeat",
+      identity = compatibilityIdentity (fixtureAgentName "heartbeat"),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2935,8 +2954,8 @@ crashJob =
 profileRefusalJob :: RunJob
 profileRefusalJob =
   RunJob
-    { agentName = AgentName "heartbeat",
-      identity = compatibilityIdentity "heartbeat",
+    { agentName = fixtureAgentName "heartbeat",
+      identity = compatibilityIdentity (fixtureAgentName "heartbeat"),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2955,8 +2974,8 @@ profileRefusalJob =
 profilePinningJob :: RunJob
 profilePinningJob =
   RunJob
-    { agentName = AgentName "heartbeat",
-      identity = compatibilityIdentity "heartbeat",
+    { agentName = fixtureAgentName "heartbeat",
+      identity = compatibilityIdentity (fixtureAgentName "heartbeat"),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2975,8 +2994,8 @@ profilePinningJob =
 profileViolationJob :: RunJob
 profileViolationJob =
   RunJob
-    { agentName = AgentName "profiled-skill",
-      identity = compatibilityIdentity "profiled-skill",
+    { agentName = fixtureAgentName "profiled-skill",
+      identity = compatibilityIdentity (fixtureAgentName "profiled-skill"),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -2995,8 +3014,8 @@ profileViolationJob =
 profiledFlowViolationJob :: RunJob
 profiledFlowViolationJob =
   profileViolationJob
-    & #agentName .~ AgentName "profiled-flow"
-    & #identity .~ compatibilityIdentity "profiled-flow"
+    & #agentName .~ fixtureAgentName "profiled-flow"
+    & #identity .~ compatibilityIdentity (fixtureAgentName "profiled-flow")
     & #idempotencyKey .~ RunKey "profiled-flow:test-profile-violation"
 
 sampleWorkflowProfileId :: ProfileId
@@ -3142,8 +3161,8 @@ issuerText (Issuer value) = value
 recordBeforeCompleteCrashJob :: RunJob
 recordBeforeCompleteCrashJob =
   RunJob
-    { agentName = AgentName "heartbeat",
-      identity = compatibilityIdentity "heartbeat",
+    { agentName = fixtureAgentName "heartbeat",
+      identity = compatibilityIdentity (fixtureAgentName "heartbeat"),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -3162,8 +3181,8 @@ recordBeforeCompleteCrashJob =
 flowJob :: RunJob
 flowJob =
   RunJob
-    { agentName = AgentName "at-risk-customer",
-      identity = compatibilityIdentity "at-risk-customer",
+    { agentName = fixtureAgentName "at-risk-customer",
+      identity = compatibilityIdentity (fixtureAgentName "at-risk-customer"),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -3184,8 +3203,8 @@ flowJob =
 flowMemoryJob :: RunJob
 flowMemoryJob =
   RunJob
-    { agentName = AgentName "at-risk-customer",
-      identity = compatibilityIdentity "at-risk-customer",
+    { agentName = fixtureAgentName "at-risk-customer",
+      identity = compatibilityIdentity (fixtureAgentName "at-risk-customer"),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -3214,11 +3233,11 @@ recordPriorEscalation appEnv ticket = do
         RecordMemoryData
           { memoryId = mid,
             memorySpaceId = shikigamiMemorySpace,
-            actorPrincipal = agentActor (CompatibilityAgent "at-risk-customer"),
+            actorPrincipal = agentActor (CompatibilityAgent (fixtureAgentName "at-risk-customer")),
             ownerPrincipal = Nothing,
             agentId = "at-risk-customer",
             sessionId = Nothing,
-            scope = agentScope (CompatibilityAgent "at-risk-customer"),
+            scope = agentScope (CompatibilityAgent (fixtureAgentName "at-risk-customer")),
             memoryType = MemoryPattern,
             content = ticket <> " escalated after acknowledgement timeout",
             priority = 100,
@@ -3241,11 +3260,11 @@ recordRecallFixture appEnv ordinal = do
         RecordMemoryData
           { memoryId = mid,
             memorySpaceId = shikigamiMemorySpace,
-            actorPrincipal = agentActor (CompatibilityAgent "recall-limit-agent"),
+            actorPrincipal = agentActor (CompatibilityAgent (fixtureAgentName "recall-limit-agent")),
             ownerPrincipal = Nothing,
             agentId = "recall-limit-agent",
             sessionId = Nothing,
-            scope = agentScope (CompatibilityAgent "recall-limit-agent"),
+            scope = agentScope (CompatibilityAgent (fixtureAgentName "recall-limit-agent")),
             memoryType = MemoryPattern,
             content = "recall fixture " <> Text.pack (show ordinal),
             priority = 100,
@@ -3268,7 +3287,7 @@ recordLegacyRecallFixture appEnv legacyName = do
         RecordMemoryData
           { memoryId = mid,
             memorySpaceId = shikigamiMemorySpace,
-            actorPrincipal = agentActor (CompatibilityAgent legacyName),
+            actorPrincipal = agentActor (CompatibilityAgent (fixtureAgentName legacyName)),
             ownerPrincipal = Nothing,
             agentId = legacyName,
             sessionId = Nothing,
@@ -3296,8 +3315,8 @@ expectedFlowOutput =
 approvalJob :: RunJob
 approvalJob =
   RunJob
-    { agentName = AgentName "heartbeat",
-      identity = compatibilityIdentity "heartbeat",
+    { agentName = fixtureAgentName "heartbeat",
+      identity = compatibilityIdentity (fixtureAgentName "heartbeat"),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -3316,8 +3335,8 @@ approvalJob =
 rejectedJob :: RunJob
 rejectedJob =
   RunJob
-    { agentName = AgentName "heartbeat",
-      identity = compatibilityIdentity "heartbeat",
+    { agentName = fixtureAgentName "heartbeat",
+      identity = compatibilityIdentity (fixtureAgentName "heartbeat"),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -3336,8 +3355,8 @@ rejectedJob =
 timeoutJob :: RunJob
 timeoutJob =
   RunJob
-    { agentName = AgentName "heartbeat",
-      identity = compatibilityIdentity "heartbeat",
+    { agentName = fixtureAgentName "heartbeat",
+      identity = compatibilityIdentity (fixtureAgentName "heartbeat"),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -3356,8 +3375,8 @@ timeoutJob =
 answeredBeforeDeadlineJob :: RunJob
 answeredBeforeDeadlineJob =
   RunJob
-    { agentName = AgentName "heartbeat",
-      identity = compatibilityIdentity "heartbeat",
+    { agentName = fixtureAgentName "heartbeat",
+      identity = compatibilityIdentity (fixtureAgentName "heartbeat"),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -3376,8 +3395,8 @@ answeredBeforeDeadlineJob =
 researchSupervisorJob :: RunJob
 researchSupervisorJob =
   RunJob
-    { agentName = AgentName "research-supervisor",
-      identity = compatibilityIdentity "research-supervisor",
+    { agentName = fixtureAgentName "research-supervisor",
+      identity = compatibilityIdentity (fixtureAgentName "research-supervisor"),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -3386,7 +3405,7 @@ researchSupervisorJob =
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
-      lineage = map AgentName ["research-supervisor"],
+      lineage = map fixtureAgentName ["research-supervisor"],
       executionRequest = Nothing,
       executionPermissions = Nothing,
       executionRootId = Nothing,
@@ -3396,8 +3415,8 @@ researchSupervisorJob =
 flowDelegationJob :: RunJob
 flowDelegationJob =
   RunJob
-    { agentName = AgentName "flow-delegation-supervisor",
-      identity = compatibilityIdentity "flow-delegation-supervisor",
+    { agentName = fixtureAgentName "flow-delegation-supervisor",
+      identity = compatibilityIdentity (fixtureAgentName "flow-delegation-supervisor"),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
@@ -3406,7 +3425,7 @@ flowDelegationJob =
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
-      lineage = map AgentName ["flow-delegation-supervisor"],
+      lineage = map fixtureAgentName ["flow-delegation-supervisor"],
       executionRequest = Nothing,
       executionPermissions = Nothing,
       executionRootId = Nothing,
@@ -3438,3 +3457,9 @@ expectedSupervisorOutput =
 
 fixtureAmount :: Integer -> ResourceAmount
 fixtureAmount amount = either (error . show) id (parseResourceAmount amount)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureDelegationDepth :: Int -> DelegationDepth
+fixtureDelegationDepth = either (error . show) id . parseDelegationDepth . toInteger

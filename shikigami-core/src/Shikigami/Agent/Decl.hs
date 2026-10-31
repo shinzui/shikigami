@@ -40,10 +40,13 @@ import Data.Text qualified as Text
 import Dhall (Decoder (..), FromDhall (..))
 import Dhall qualified
 import Numeric.Natural (Natural)
+import Shikigami.Agent.ExpertiseKey (ExpertiseKey)
+import Shikigami.Agent.Name (AgentName)
 import Shikigami.Capability.Overlay (CapabilityId)
 import Shikigami.Execution.Policy.Types (HarnessOverrides)
 import Shikigami.Execution.Request (ExecutionPolicy)
 import Shikigami.Prelude
+import Shikigami.Router.SelectionLimit (SelectionLimit)
 
 data IdentityDecl = IdentityDecl {principal :: !Text}
   deriving stock (Eq, Show, Generic)
@@ -164,7 +167,7 @@ defaultMemoryPolicy =
     }
 
 data ExpertiseDecl = ExpertiseDecl
-  { key :: !Text,
+  { key :: !ExpertiseKey,
     description :: !Text,
     aliases :: ![Text],
     evidenceHints :: ![Text]
@@ -185,7 +188,7 @@ data AmbiguousPolicy = ReturnAmbiguous | SelectAllWithinBound
   deriving anyclass (FromDhall, ToJSON, FromJSON)
 
 data RouterPolicy = RouterPolicy
-  { maxSelections :: !Natural,
+  { maxSelections :: !SelectionLimit,
     minimumConfidence :: !RouterConfidence,
     onNoMatch :: !NoMatchPolicy,
     onAmbiguous :: !AmbiguousPolicy
@@ -274,12 +277,12 @@ data ProfileRequirement = ProfileRequirement
   deriving anyclass (FromDhall, ToJSON, FromJSON)
 
 data AgentDecl = AgentDecl
-  { name :: !Text,
+  { name :: !AgentName,
     description :: !Text,
     trigger :: !Trigger,
     behavior :: !Behavior,
     sinks :: ![Sink],
-    delegates :: ![Text],
+    delegates :: ![AgentName],
     execution :: !(Maybe ExecutionPolicy),
     harness :: !(Maybe HarnessOverrides),
     decisionModels :: ![Text],

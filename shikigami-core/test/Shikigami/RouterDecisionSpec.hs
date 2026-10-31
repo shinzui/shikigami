@@ -11,6 +11,8 @@ import Shikigami.Agent.Decl
     RouterConfidence (..),
     RouterPolicy (..),
   )
+import Shikigami.Agent.ExpertiseKey (ExpertiseKey, parseExpertiseKey)
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Directory (DirectorySnapshotVersion (..), DirectorySourceKind (DirectoryDisabledSource))
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Router.Catalog
@@ -27,6 +29,7 @@ import Shikigami.Router.Decision
     RoutingError (..),
     validateRouteDecision,
   )
+import Shikigami.Router.SelectionLimit (SelectionLimit, parseSelectionLimit)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -65,8 +68,8 @@ tests =
       testCase "accumulates stale, duplicate, unavailable, expertise, confidence, and fan-out refusals" do
         let badSelection =
               RouteSelection
-                { agent = "paused-reviewer",
-                  expertise = ["invented"],
+                { agent = fixtureAgentName "paused-reviewer",
+                  expertise = map fixtureExpertiseKey ["invented"],
                   confidence = RoutingLow,
                   rationale = "bad"
                 }
@@ -76,21 +79,21 @@ tests =
                   catalogVersion = CatalogVersion "stale",
                   outcome = Matched (badSelection :| [badSelection])
                 }
-        case validateRouteDecision (policy & #maxSelections .~ 1) catalog decision of
+        case validateRouteDecision (policy & #maxSelections .~ (fixtureSelectionLimit 1)) catalog decision of
           Right _ -> assertFailure "expected invalid decision"
           Left errors -> do
             let found = NonEmpty.toList errors
             assertBool "version is checked" (UnsupportedDecisionVersion 2 `elem` found)
             assertBool "catalog is checked" (StaleCatalogVersion testCatalogVersion (CatalogVersion "stale") `elem` found)
-            assertBool "duplicates are checked" (DuplicateSelection "paused-reviewer" `elem` found)
-            assertBool "lifecycle is checked" (UnavailableSelection "paused-reviewer" Paused `elem` found)
+            assertBool "duplicates are checked" (DuplicateSelection (fixtureAgentName "paused-reviewer") `elem` found)
+            assertBool "lifecycle is checked" (UnavailableSelection (fixtureAgentName "paused-reviewer") Paused `elem` found)
             assertBool "fan-out is checked" (TooManySelections 2 1 `elem` found),
       testCase "validates advisory ambiguous alternatives but never turns them into matched" do
-        let alternative = (selection & #agent .~ ("missing-reviewer"))
+        let alternative = (selection & #agent .~ (fixtureAgentName "missing-reviewer"))
             decision = RouteDecision 1 testCatalogVersion (Ambiguous (alternative :| []) "unclear")
         case validateRouteDecision policy catalog decision of
           Right _ -> assertFailure "expected undeclared alternative refusal"
-          Left errors -> assertBool "alternative is checked" (UndeclaredSelection "missing-reviewer" `elem` NonEmpty.toList errors),
+          Left errors -> assertBool "alternative is checked" (UndeclaredSelection (fixtureAgentName "missing-reviewer") `elem` NonEmpty.toList errors),
       testCase "no-match is a valid semantic outcome with no selections" do
         let decision = RouteDecision 1 testCatalogVersion (NoMatch "nothing relevant")
         case validateRouteDecision policy catalog decision of
@@ -104,8 +107,8 @@ matchedDecision = RouteDecision 1 testCatalogVersion (Matched (selection :| []))
 selection :: RouteSelection
 selection =
   RouteSelection
-    { agent = "reviewer",
-      expertise = ["opentelemetry"],
+    { agent = fixtureAgentName "reviewer",
+      expertise = map fixtureExpertiseKey ["opentelemetry"],
       confidence = RoutingMedium,
       rationale = "The payload changes trace propagation."
     }
@@ -116,19 +119,19 @@ testCatalogVersion = CatalogVersion "catalog-v1"
 catalog :: CandidateCatalog
 catalog =
   CandidateCatalog
-    { router = "router",
+    { router = fixtureAgentName "router",
       version = testCatalogVersion,
       lifecycleSource = DirectoryDisabledSource,
       lifecycleSourceVersion = DirectorySnapshotVersion "directory-v1",
       candidates =
         [ CandidateEntry
-            { name = "reviewer",
+            { name = fixtureAgentName "reviewer",
               description = Just "Reviews telemetry",
               expertise = [expertiseEntry],
               availability = Available
             },
           CandidateEntry
-            { name = "paused-reviewer",
+            { name = fixtureAgentName "paused-reviewer",
               description = Just "Paused reviewer",
               expertise = [expertiseEntry],
               availability = Excluded Paused
@@ -140,7 +143,7 @@ catalog =
 expertiseEntry :: ExpertiseDecl
 expertiseEntry =
   ExpertiseDecl
-    { key = "opentelemetry",
+    { key = fixtureExpertiseKey "opentelemetry",
       description = "OpenTelemetry",
       aliases = ["otel"],
       evidenceHints = ["traceparent"]
@@ -149,7 +152,7 @@ expertiseEntry =
 policy :: RouterPolicy
 policy =
   RouterPolicy
-    { maxSelections = 2,
+    { maxSelections = fixtureSelectionLimit 2,
       minimumConfidence = RoutingMedium,
       onNoMatch = ReturnNoMatch,
       onAmbiguous = ReturnAmbiguous
@@ -159,3 +162,12 @@ isLeft :: Either a b -> Bool
 isLeft = \case
   Left _ -> True
   Right _ -> False
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureExpertiseKey :: Text -> ExpertiseKey
+fixtureExpertiseKey = either (error . show) id . parseExpertiseKey
+
+fixtureSelectionLimit :: Integer -> SelectionLimit
+fixtureSelectionLimit = either (error . show) id . parseSelectionLimit . fromInteger

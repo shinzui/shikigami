@@ -16,6 +16,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Hasql.Pool (Pool)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), AgentPrincipal, compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.Memory.AliasStore
   ( AliasReconciliation (..),
@@ -67,15 +68,15 @@ withPool databaseFixture use =
 -- @granted@ field, which @DuplicateRecordFields@ makes ambiguous.
 verdict :: Pool -> Text -> SinkKind -> IO (Either Text ())
 verdict pool agent kind =
-  checkGrant (DbGrants pool) (compatibilityIdentity agent) kind >>= \case
+  checkGrant (DbGrants pool) (compatibilityIdentity (fixtureAgentName agent)) kind >>= \case
     Right () -> pure (Right ())
     Left (Denied reason) -> pure (Left reason)
 
 compatGrant :: Pool -> Text -> SinkKind -> Maybe Text -> IO (Either Text ())
-compatGrant pool agent = upsertGrant pool agent (compatibilityIdentity agent)
+compatGrant pool agent = upsertGrant pool agent (compatibilityIdentity (fixtureAgentName agent))
 
 compatRevoke :: Pool -> Text -> SinkKind -> Maybe Text -> IO (Either Text Bool)
-compatRevoke pool agent = revokeGrant pool (compatibilityIdentity agent)
+compatRevoke pool agent = revokeGrant pool (compatibilityIdentity (fixtureAgentName agent))
 
 agentPrincipal :: Text -> AgentPrincipal
 agentPrincipal raw = either (error . Text.unpack) id (mkAgentPrincipal raw)
@@ -340,3 +341,6 @@ expectRight label = either (\e -> assertFailure (label <> " failed: " <> show e)
 
 isInfixOfT :: Text -> Text -> Bool
 isInfixOfT = Text.isInfixOf
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

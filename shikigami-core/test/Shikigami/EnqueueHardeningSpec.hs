@@ -14,6 +14,7 @@ import Data.Time (UTCTime (..), diffUTCTime, fromGregorian, getCurrentTime)
 import Pgmq (parseQueueName, queueNameToText)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), StreamMatch (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.RunJob (RunJob)
 import Shikigami.Agent.RunJob qualified as RunJob
 import Shikigami.Prelude (nameBytes)
@@ -53,17 +54,17 @@ tests =
       -- The key this replaced was built from getCurrentTime, so retrying
       -- `shikigami enqueue-run` after a timeout ran the agent a second time.
       testCase "the same logical event enqueues one stable idempotency key" do
-        let first = addressedRunKey "triage-note" samplePayload
-            again = addressedRunKey "triage-note" samplePayload
+        let first = addressedRunKey (fixtureAgentName "triage-note") samplePayload
+            again = addressedRunKey (fixtureAgentName "triage-note") samplePayload
         assertEqual "two calls for one event agree" first again
         assertBool "the key names the agent" ("triage-note:evt:" `Text.isPrefixOf` first),
       testCase "different agents and payloads get different keys" do
         assertBool
           "a different agent is a different key"
-          (addressedRunKey "triage-note" samplePayload /= addressedRunKey "other-agent" samplePayload)
+          (addressedRunKey (fixtureAgentName "triage-note") samplePayload /= addressedRunKey (fixtureAgentName "other-agent") samplePayload)
         assertBool
           "a different payload is a different key"
-          (addressedRunKey "triage-note" samplePayload /= addressedRunKey "triage-note" (object ["ticket" .= ("t-2" :: Text)])),
+          (addressedRunKey (fixtureAgentName "triage-note") samplePayload /= addressedRunKey (fixtureAgentName "triage-note") (object ["ticket" .= ("t-2" :: Text)])),
       -- Every deterministic id in the runtime hashed names with
       -- @fromIntegral . fromEnum@ over Chars, which truncates to the low byte.
       testCase "UUIDv5 name bytes separate names that differ above U+00FF" do
@@ -96,7 +97,7 @@ samplePayload = object ["ticket" .= ("t-1" :: Text)]
 streamAgent :: AgentDecl
 streamAgent =
   AgentDecl
-    { name = "triage-note",
+    { name = fixtureAgentName "triage-note",
       description = "enqueue hardening fixture",
       trigger =
         Stream
@@ -110,7 +111,7 @@ streamAgent =
           },
       behavior = Deterministic {rule = "test", params = mempty},
       sinks = [],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -123,3 +124,6 @@ streamAgent =
       decisionModels = [],
       routing = Nothing
     }
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

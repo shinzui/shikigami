@@ -1,0 +1,47 @@
+{
+  "sourceParent": "b940359271653a3b752154d3fb5a7b8885c9416f",
+  "compiler": "ghc-9.12.4",
+  "principalSourcePath": "shikigami-core/src/Shikigami/Agent/Principal.hs",
+  "principalSourceSha256": "5fbf36dcdf74b6ba755c303f97aebe895d2c91c7c6f6ec42752efb39f747ead0",
+  "probeSource": "{-# LANGUAGE OverloadedStrings #-}\nimport Shikigami.Agent.Name (mkAgentName)\nimport Shikigami.Agent.Principal (compatibilityIdentity,identityText)\nimport Data.Text (Text)\nmain :: IO ()\nmain = mapM_ (\\name -> print (name, mkAgentName name >>= identityText . compatibilityIdentity)) ([\"a:b\",\"a.b\",\"heartbeat\",\"channel-reply\",\"web-researcher\",\"code-researcher\",\" \u540d \u524d \",\" \"] :: [Text])\n",
+  "vectors": [
+    {
+      "name": "a:b",
+      "scope": "shikigami.agent.v2.641ea5cf-9fd6-519f-ac21-7f05af376cac"
+    },
+    {
+      "name": "a.b",
+      "scope": "shikigami.agent.v2.1e755af6-d41e-5a50-9287-2df6ddf0d822"
+    },
+    {
+      "name": "heartbeat",
+      "scope": "shikigami.agent.v2.d17d72cd-aca1-5113-a70d-6c739e2164f5"
+    },
+    {
+      "name": "channel-reply",
+      "scope": "shikigami.agent.v2.57c8f321-a02c-5978-aee9-ed2efc3fbfe6"
+    },
+    {
+      "name": "web-researcher",
+      "scope": "shikigami.agent.v2.759d78a7-1085-5bd2-b52b-8e01209c3711"
+    },
+    {
+      "name": "code-researcher",
+      "scope": "shikigami.agent.v2.0f861389-9eef-5ffc-8643-7382fc4b2bc7"
+    },
+    {
+      "name": " ",
+      "scope": "shikigami.agent.v2.cf05d39b-9954-5a37-bfd0-49e51f28fd20"
+    }
+  ],
+  "rawProgramOutput": [
+    "(\"a:b\",Right \"shikigami.agent.v2.641ea5cf-9fd6-519f-ac21-7f05af376cac\")",
+    "(\"a.b\",Right \"shikigami.agent.v2.1e755af6-d41e-5a50-9287-2df6ddf0d822\")",
+    "(\"heartbeat\",Right \"shikigami.agent.v2.d17d72cd-aca1-5113-a70d-6c739e2164f5\")",
+    "(\"channel-reply\",Right \"shikigami.agent.v2.57c8f321-a02c-5978-aee9-ed2efc3fbfe6\")",
+    "(\"web-researcher\",Right \"shikigami.agent.v2.759d78a7-1085-5bd2-b52b-8e01209c3711\")",
+    "(\"code-researcher\",Right \"shikigami.agent.v2.0f861389-9eef-5ffc-8643-7382fc4b2bc7\")",
+    "(\" \\21517 \\21069 \",Right \"shikigami.agent.v2.c442dbd8-bcf0-5568-8500-a438ad8fafe3\")",
+    "(\" \",Right \"shikigami.agent.v2.cf05d39b-9954-5a37-bfd0-49e51f28fd20\")"
+  ]
+}

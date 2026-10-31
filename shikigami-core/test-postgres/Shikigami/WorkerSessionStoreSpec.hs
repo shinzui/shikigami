@@ -22,9 +22,9 @@ import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types qualified as StoreTypes
 import Shikigami.Agent.Decl (defaultDelegationBudget)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
-import Shikigami.Agent.Delegate.Depth (DelegationDepth (..))
+import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
 import Shikigami.Agent.Loader (loadAgent)
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
@@ -146,7 +146,7 @@ tests fixture =
       testCase "only admitted actors read payloads and only the parent controls messages" $
         withFixture fixture \env admission access -> do
           (_, first) <- accept env access 0 "send" (instruction "PRIVATE_SESSION_INSTRUCTION")
-          refused <- run env (Store.authorizeSession (sessionIdFor admission) (compatibilityIdentity "intruder") (pure (Right ())))
+          refused <- run env (Store.authorizeSession (sessionIdFor admission) (compatibilityIdentity (fixtureAgentName "intruder")) (pure (Right ())))
           case refused of Left SessionOwnerRefused -> pure (); _ -> assertFailure "foreign reader admitted"
           revoked <- run env (Store.authorizeSession (sessionIdFor admission) admission.context.identity (pure (Left "revoked")))
           case revoked of Left SessionOwnerRefused -> pure (); _ -> assertFailure "revoked reader admitted"
@@ -314,10 +314,10 @@ withConfiguredFixture fixture configure callback = withShikigamiFreshDatabase fi
             1
             (SessionScope "fixture-coordinator" "logical-worker")
             (ObjectiveRef "fixture-checkpoint-provider" "objective-1")
-            (parent & #name .~ "coordinator" & #delegates .~ ["worker"])
-            (DelegateCtx (DelegationDepth 0) (compatibilityIdentity "coordinator") (Just parentSession) Nothing (Just (WorkflowId "original-parent")) [AgentName "coordinator"] (Just ["worker-model"]) (Just root) Nothing defaultDelegationBudget)
-            (AgentName "worker")
-            (compatibilityIdentity "worker")
+            (parent & #name .~ fixtureAgentName "coordinator" & #delegates .~ map fixtureAgentName ["worker"])
+            (DelegateCtx (fixtureDelegationDepth 0) (compatibilityIdentity (fixtureAgentName "coordinator")) (Just parentSession) Nothing (Just (WorkflowId "original-parent")) [fixtureAgentName "coordinator"] (Just ["worker-model"]) (Just root) Nothing defaultDelegationBudget)
+            (fixtureAgentName "worker")
+            (compatibilityIdentity (fixtureAgentName "worker"))
             (fixtureLimit 10)
             (fixtureLimit 4)
   _ <- expectRight =<< run env Catalog.registerProjectionCatalog
@@ -344,3 +344,9 @@ fixtureInstruction value = either (error . show) id (parseInstructionText value)
 
 fixtureLimit :: (SessionLimit a) => Integer -> a
 fixtureLimit value = either (error . show) id (parseSessionLimit value)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureDelegationDepth :: Int -> DelegationDepth
+fixtureDelegationDepth = either (error . show) id . parseDelegationDepth . toInteger

@@ -52,7 +52,7 @@ import Shikigami.Agent.Decl
     defaultMemoryPolicy,
   )
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..))
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), ResolvedAgentIdentity (VerifiedAgent), compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.Agent.Run.Key (RunKey (..), runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent), runJobWorkflowId)
@@ -272,7 +272,7 @@ journalTruth databaseFixture =
 egressIntentMetadata :: DatabaseFixture -> IO ()
 egressIntentMetadata databaseFixture =
   (withFixture databaseFixture) "egress-metadata" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
-    _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" (compatibilityIdentity "heartbeat") SChannelEgress (Just "test")
+    _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" (compatibilityIdentity (fixtureAgentName "heartbeat")) SChannelEgress (Just "test")
     [row] <- runWorkflowAndRows deps appEnv ((runJob & #triggerPayload .~ (Aeson.toJSON triggeringActivity)))
     case Integration.decodeJsonIntegrationEvent (rowEvent row) of
       Right AgentWorkflow.SinkIntent {AgentWorkflow.conversationKey, AgentWorkflow.triggeringActivityId} -> do
@@ -299,7 +299,7 @@ egressReceiptRecording databaseFixture = do
   requests <- newIORef []
   testWithApplication (pure (kanmonApp requests)) \port ->
     (withFixture databaseFixture) "egress-receipt" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
-      _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" (compatibilityIdentity "heartbeat") SChannelEgress (Just "test")
+      _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" (compatibilityIdentity (fixtureAgentName "heartbeat")) SChannelEgress (Just "test")
       authenticatedHttp <- expectRight "construct authenticated sink HTTP" =<< newSinkHttp testHttpLimits (credentialsFromConfig kanmonTestConfig) unreachableDanwa
       let configuredDeps =
             (deps & #kanmon .~ (KanmonConfig {baseUrl = localBaseUrl port}) & #http .~ (authenticatedHttp))
@@ -330,7 +330,7 @@ egressPermanentRejection databaseFixture = do
   requests <- newIORef (0 :: Int)
   testWithApplication (pure (rejectingKanmonApp requests)) \port ->
     (withFixture databaseFixture) "egress-403" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
-      _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" (compatibilityIdentity "heartbeat") SChannelEgress (Just "test")
+      _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" (compatibilityIdentity (fixtureAgentName "heartbeat")) SChannelEgress (Just "test")
       let configuredDeps = (deps & #kanmon .~ (KanmonConfig {baseUrl = localBaseUrl port}))
       [row] <- runWorkflowAndRows configuredDeps appEnv ((runJob & #triggerPayload .~ (Aeson.toJSON triggeringActivity)))
       published <- runEff (AgentWorkflow.publishSinkIntent configuredDeps row)
@@ -616,7 +616,7 @@ lookupReceipt pool row = do
 agentDeclaration :: [Sink] -> AgentDecl
 agentDeclaration sinks =
   AgentDecl
-    { name = "heartbeat",
+    { name = fixtureAgentName "heartbeat",
       description = "sink delivery test agent",
       trigger = Event {eventType = "test"},
       behavior =
@@ -627,7 +627,7 @@ agentDeclaration sinks =
             enabledBy = Nothing
           },
       sinks,
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -644,8 +644,8 @@ agentDeclaration sinks =
 testJob :: Text -> RunJob
 testJob label =
   RunJob
-    { agentName = AgentName "heartbeat",
-      identity = compatibilityIdentity "heartbeat",
+    { agentName = fixtureAgentName "heartbeat",
+      identity = compatibilityIdentity (fixtureAgentName "heartbeat"),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 8 21) 0,
@@ -822,3 +822,6 @@ receiptCommitGap databaseFixture = do
       assertEqual "receipt eventually proves delivery" Delivery.Delivered delivered.status
       assertEqual "proved delivery suppresses subsequent sends" Outbox.PublishSucceeded =<< runEff (AgentWorkflow.publishSinkIntent deps row)
       assertEqual "no third HTTP attempt" 2 =<< readIORef posts
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

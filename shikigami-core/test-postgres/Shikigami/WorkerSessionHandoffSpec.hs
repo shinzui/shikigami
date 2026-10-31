@@ -10,7 +10,7 @@ import Keiro.Workflow.Child (runChildWorkflow)
 import Keiro.Workflow.Types (WorkflowId (..))
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.Workflow qualified as Agent
@@ -71,7 +71,7 @@ tests fixture =
           established <- current env admission
           established.phase @?= Idle
           established.epoch @?= (fixtureRevision 1)
-          established.worker @?= Just (AgentName "successor")
+          established.worker @?= Just (fixtureAgentName "successor")
           run env (Store.loadAdmission old) >>= (@?= Left SessionOwnerRefused)
           run env (Store.acceptMessage access established.revision (fixtureRevision 0) (OperationId "stale-epoch") (instruction 2)) >>= (@?= Left SessionOwnerRefused)
           owner.workspace.admitWrite workspaceRef intent.sessionId admission.identity (fixtureRevision 0) (OperationId "late-old") >>= assertLeft
@@ -80,7 +80,7 @@ tests fixture =
           readIORef owner.writes >>= (@?= [OperationId "successor-write"])
           readIORef owner.ownershipUpdates >>= (@?= 1)
           request env admission owner >>= (@?= Right intent)
-          run env (Handoff.requestHandoff owner.services intent.sessionId (fixtureRevision 0) (fixtureRevision 0) (OperationId "transfer") workspaceRef (AgentName "worker")) >>= (@?= Left MessageConflict)
+          run env (Handoff.requestHandoff owner.services intent.sessionId (fixtureRevision 0) (fixtureRevision 0) (OperationId "transfer") workspaceRef (fixtureAgentName "worker")) >>= (@?= Left MessageConflict)
           -- A stale checkpoint cannot restore the previous owner.
           stale <- checkpointVersion admission
           let obsolete = Checkpoint.CheckpointIntent 1 intent.sessionId admission.objective (OperationId "stale-checkpoint") admission.context.identity (fixtureRevision 0) stale (fixtureRevision 0) (fixtureRevision 1) []
@@ -89,7 +89,7 @@ tests fixture =
           latest.owner @?= successor
           (_, follow) <- expectRight =<< run env (Store.acceptMessage access established.revision (fixtureRevision 1) (OperationId "new-assignment") (instruction 2))
           (_, started) <- expectRight =<< run env (Store.startAssignment access (advanceRevision established.revision) (fixtureRevision 1) (OperationId "new-start") follow.assignmentId)
-          started.childWorkflowId @?= Just (assignmentChildWorkflowIdV2 intent.sessionId (AgentName "successor") follow.assignmentId).unWorkflowId,
+          started.childWorkflowId @?= Just (assignmentChildWorkflowIdV2 intent.sessionId (fixtureAgentName "successor") follow.assignmentId).unWorkflowId,
       testCase "a fenced workspace cannot establish ownership while an accepted assignment remains active" $
         withTransferFixture fixture False \env admission access owner -> do
           (_, message) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "send") (instruction 1))
@@ -170,7 +170,7 @@ tests fixture =
       testCase "absent real adapters refuse before a transfer request changes state" $
         withTransferFixture fixture False \env admission _ owner -> do
           let unavailable = owner.services & #workspaces .~ Nothing
-          run env (Handoff.requestHandoff unavailable (sessionIdFor admission) (fixtureRevision 0) (fixtureRevision 0) (OperationId "transfer") workspaceRef (AgentName "successor")) >>= assertLeft
+          run env (Handoff.requestHandoff unavailable (sessionIdFor admission) (fixtureRevision 0) (fixtureRevision 0) (OperationId "transfer") workspaceRef (fixtureAgentName "successor")) >>= assertLeft
           state <- current env admission
           state.revision @?= (fixtureRevision 0)
           state.handoff @?= Nothing
@@ -190,7 +190,7 @@ workspaceRef :: WorkspaceRef
 workspaceRef = WorkspaceRef "fixture-workspace-owner" "retained-workspace"
 
 successor :: AgentIdentity
-successor = compatibilityIdentity "successor"
+successor = compatibilityIdentity (fixtureAgentName "successor")
 
 instruction :: Integer -> Instruction
 instruction revision = Instruction 1 FollowUp (fixtureInstruction "retained assignment") (fixtureRevision revision) (fixtureRevision 1) (fixtureRevision 1) Nothing
@@ -199,13 +199,13 @@ request :: AppEnv -> SessionAdmission -> Owners -> IO (Either SessionError Trans
 request env admission owners = requestAt env admission owners (fixtureRevision 0)
 
 requestAt :: AppEnv -> SessionAdmission -> Owners -> StateRevision "worker-session" -> IO (Either SessionError TransferIntent)
-requestAt env admission owners revision = run env (Handoff.requestHandoff owners.services (sessionIdFor admission) revision (fixtureRevision 0) (OperationId "transfer") workspaceRef (AgentName "successor"))
+requestAt env admission owners revision = run env (Handoff.requestHandoff owners.services (sessionIdFor admission) revision (fixtureRevision 0) (OperationId "transfer") workspaceRef (fixtureAgentName "successor"))
 
 refusedWrite :: Owners -> SessionAdmission -> AgentIdentity -> Integer -> IO ()
 refusedWrite owner admission actor epoch = owner.workspace.admitWrite workspaceRef (sessionIdFor admission) actor (fixtureRevision epoch) (OperationId "refused") >>= assertLeft
 
 withTransferFixture :: DatabaseFixture -> Bool -> (AppEnv -> SessionAdmission -> Store.SessionAccess -> Owners -> IO a) -> IO a
-withTransferFixture fixture loseAcknowledgement callback = withConfiguredFixture fixture (\admission -> admission & #delegator . #delegates .~ ["worker", "successor"]) \env admission access -> do
+withTransferFixture fixture loseAcknowledgement callback = withConfiguredFixture fixture (\admission -> admission & #delegator . #delegates .~ map fixtureAgentName ["worker", "successor"]) \env admission access -> do
   initial <- checkpointVersion admission
   objective <- newIORef (initial, Map.empty)
   inFlight <- newIORef True
@@ -274,3 +274,6 @@ fixtureRevision value = either (error . show) id (parseRevision value)
 
 fixtureInstruction :: Text -> InstructionText
 fixtureInstruction value = either (error . show) id (parseInstructionText value)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

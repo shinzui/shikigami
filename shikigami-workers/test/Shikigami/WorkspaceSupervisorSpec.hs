@@ -12,6 +12,7 @@ import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
+import Data.Text (Text)
 import Data.Text qualified as ClaimText
 import Data.Text qualified as Text
 import Effectful (Eff)
@@ -19,6 +20,7 @@ import Effectful.Dispatch.Static (unsafeEff_)
 import Hasql.Transaction (Transaction)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (CompatibilityIdentity))
 import Shikigami.App (AppEffects, runAppIO)
 import Shikigami.Capability.Provider (DurableAdapter (..), DurableToolContract (..))
@@ -167,7 +169,7 @@ tests fixture =
         Just (waiting, _, _) <- stored file (Execution.inspectExecution snapshot.executionId)
         let claim = Attempt.AttemptClaim reference request.owner request.generation
             invalid = Attempt.AttemptResult (OperationDenied "not a retained tool result") NeedModel Nothing
-        runAppIO file.appEnv (Execution.recordIndependentToolReceipt (CompatibilityIdentity "other-principal") waiting.revision claim invalid) >>= (\value -> right value >>= (@?= Left ExecutionIdentityConflict))
+        runAppIO file.appEnv (Execution.recordIndependentToolReceipt (CompatibilityIdentity (fixtureAgentName "other-principal")) waiting.revision claim invalid) >>= (\value -> right value >>= (@?= Left ExecutionIdentityConflict))
         runAppIO file.appEnv (Execution.recordIndependentToolReceipt snapshot.identity waiting.revision (claim & #generation .~ (Generation.advanceRevision claim.generation)) invalid) >>= (\value -> right value >>= (@?= Left AttemptConflict))
         runAppIO file.appEnv (Execution.recordIndependentToolReceipt snapshot.identity waiting.revision claim invalid) >>= (\value -> right value >>= (@?= Left AttemptConflict))
         publishProcessReceipt revoked reference.operationId >>= (@?= Right ProcessReceiptAcknowledged)
@@ -413,3 +415,6 @@ fixtureToolPosition value = either (error . show) id (parseToolPosition value)
 
 fixtureOwner :: ClaimText.Text -> Claim.ClaimOwner
 fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

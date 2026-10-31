@@ -42,7 +42,7 @@ import Pgmq (Message (..), MessageBody (..), MessageId (..), ReadMessage (..))
 import Pgmq.Hasql.Statements.Message qualified as PgmqStatements
 import Relay.Pagination (Connection, CursorError, PageRequest)
 import Relay.Pagination.Hasql qualified as Relay
-import Shikigami.Agent.Name (AgentName, agentNameText)
+import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Agent.Run.Key (RunKey (..), runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.AgentRun.RequestKey
@@ -60,7 +60,7 @@ payloadFingerprint :: Value -> Text
 payloadFingerprint = UUID.toText . UUID.generateNamed UUID.namespaceURL . BS.unpack . LBS.toStrict . encode
 
 data RunRequestRow = RunRequestRow
-  { agentName :: !Text,
+  { agentName :: !AgentName,
     idempotencyKey :: !RequestKey,
     runId :: !Text,
     runKey :: !Text,
@@ -94,7 +94,7 @@ acceptRunRequest pool job key caller
             Right Nothing -> Left "The accepted request could not be read."
             Left err -> Left err
   where
-    agent = agentNameText job.agentName
+    agent = job.agentName
     fingerprint = payloadFingerprint job.triggerPayload
     accept = do
       MessageId message <- enqueueRunJobTx job
@@ -105,7 +105,7 @@ acceptRunRequest pool job key caller
         Nothing -> Tx.condemn >> pure Nothing
 
 lookupRunRequest :: Pool -> AgentName -> Text -> IO (Either Text (Maybe RunRequestRow))
-lookupRunRequest pool agent runId = safeUse pool (Session.statement (agentNameText agent, runId) lookupIdStatement)
+lookupRunRequest pool agent runId = safeUse pool (Session.statement (agent, runId) lookupIdStatement)
 
 -- | The operator knows the workflow UUID before a journal can name its agent.
 -- Refuse ambiguous ids rather than selecting an arbitrary agent's request.
@@ -129,7 +129,7 @@ columns = "agent_name, idempotency_key, run_id, run_key, payload_fingerprint, re
 rowDecoder :: D.Row RunRequestRow
 rowDecoder =
   RunRequestRow
-    <$> text
+    <$> D.column (D.nonNullable (D.refine mkAgentName D.text))
     <*> D.column (D.nonNullable (D.refine parseRequestKey D.text))
     <*> text
     <*> text
@@ -146,17 +146,17 @@ rowDecoder =
 keyEncoder :: E.Params (Text, Text)
 keyEncoder = (fst >$< E.param (E.nonNullable E.text)) <> (snd >$< E.param (E.nonNullable E.text))
 
-lookupKeyStatement :: Statement (Text, RequestKey) (Maybe RunRequestRow)
-lookupKeyStatement = preparable ("SELECT " <> columns <> " FROM shikigami.agent_run_requests WHERE agent_name=$1 AND idempotency_key=$2") ((fst >$< E.param (E.nonNullable E.text)) <> ((requestKeyText . snd) >$< E.param (E.nonNullable E.text))) (D.rowMaybe rowDecoder)
+lookupKeyStatement :: Statement (AgentName, RequestKey) (Maybe RunRequestRow)
+lookupKeyStatement = preparable ("SELECT " <> columns <> " FROM shikigami.agent_run_requests WHERE agent_name=$1 AND idempotency_key=$2") (((agentNameText . fst) >$< E.param (E.nonNullable E.text)) <> ((requestKeyText . snd) >$< E.param (E.nonNullable E.text))) (D.rowMaybe rowDecoder)
 
-lookupIdStatement :: Statement (Text, Text) (Maybe RunRequestRow)
-lookupIdStatement = preparable ("SELECT " <> columns <> " FROM shikigami.agent_run_requests WHERE agent_name=$1 AND run_id=$2") keyEncoder (D.rowMaybe rowDecoder)
+lookupIdStatement :: Statement (AgentName, Text) (Maybe RunRequestRow)
+lookupIdStatement = preparable ("SELECT " <> columns <> " FROM shikigami.agent_run_requests WHERE agent_name=$1 AND run_id=$2") (((agentNameText . fst) >$< E.param (E.nonNullable E.text)) <> (snd >$< E.param (E.nonNullable E.text))) (D.rowMaybe rowDecoder)
 
 insertStatement :: Statement RunRequestRow (Maybe UTCTime)
 insertStatement =
   preparable
     "INSERT INTO shikigami.agent_run_requests (agent_name,idempotency_key,run_id,run_key,payload_fingerprint,requested_by,queue_message_id) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (agent_name,idempotency_key) DO NOTHING RETURNING accepted_at"
-    ( ((.agentName) >$< E.param (E.nonNullable E.text))
+    ( ((agentNameText . (.agentName)) >$< E.param (E.nonNullable E.text))
         <> ((requestKeyText . (.idempotencyKey)) >$< E.param (E.nonNullable E.text))
         <> ((.runId) >$< E.param (E.nonNullable E.text))
         <> ((.runKey) >$< E.param (E.nonNullable E.text))

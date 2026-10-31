@@ -96,8 +96,8 @@ import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, IdentityDecl (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..))
 import Shikigami.Agent.Delegate (awaitAllDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
-import Shikigami.Agent.Delegate.Depth (DelegationDepth (..), depthInt)
-import Shikigami.Agent.Name (agentNameText)
+import Shikigami.Agent.Delegate.Depth (depthInt, initialDepth)
+import Shikigami.Agent.Name (agentNameText, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity), ResolvedAgentIdentity, identityText, resolveAgentIdentity, resolvedIdentityText)
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallAgentLearnings, recallQuery, renderLearning)
 import Shikigami.Agent.Run.Key (runKeyText)
@@ -258,7 +258,7 @@ defaultAgentRunHooks =
     }
 
 agentDeclName :: AgentDecl -> Text
-agentDeclName AgentDecl {name} = name
+agentDeclName AgentDecl {name} = agentNameText name
 
 jobIdempotencyKey :: RunJob -> Text
 jobIdempotencyKey RunJob {idempotencyKey} = runKeyText idempotencyKey
@@ -1157,7 +1157,7 @@ runDeclaredSupervisor ::
 runDeclaredSupervisor deps decl@AgentDecl {delegates = delegateTargets} currentSession job@RunJob {triggerPayload} = do
   let ctx = delegateContext deps decl currentSession job
       delegationKey ordinal = "delegate-" <> Text.pack (show ordinal)
-      resultLabel target = fromMaybe target (Text.stripSuffix "-researcher" target)
+      resultLabel target = let raw = agentNameText target in fromMaybe raw (Text.stripSuffix "-researcher" raw)
       childPayload target =
         Aeson.object
           [ (.=) "role" (resultLabel target),
@@ -1181,7 +1181,7 @@ runDeclaredSupervisor deps decl@AgentDecl {delegates = delegateTargets} currentS
 delegateContext :: AgentRunDeps -> AgentDecl -> SessionId -> RunJob -> DelegateCtx
 delegateContext deps decl currentSession RunJob {agentName, identity, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, executionRootId, executionPermissions} =
   DelegateCtx
-    { depth = fromMaybe (DelegationDepth 0) delegationDepth,
+    { depth = fromMaybe initialDepth delegationDepth,
       identity,
       sessionId = Just currentSession,
       parentSessionId,
@@ -1263,7 +1263,10 @@ publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa
                   Otel.addAttribute traceSpan "sink.kind" (Otel.toAttribute (sinkKindText kind))
                   currentTraceContext <- traceContextFromCurrentSpan
                   admittedIdentity <- case recordedIdentity of
-                    UnresolvedLegacyIdentity -> Directory.identityAdmission intentDirectory Nothing agent
+                    UnresolvedLegacyIdentity ->
+                      case mkAgentName agent of
+                        Left problem -> pure (Left problem)
+                        Right name -> Directory.identityAdmission intentDirectory Nothing name
                     _ -> pure (Right recordedIdentity)
                   let sinkContext =
                         SinkContext

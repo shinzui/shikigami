@@ -152,7 +152,7 @@ admitRunJob env = admitRunJobWith ((.pool) env) (envDirectory env) ((.agents) en
 -- | The drain gate with its concrete dependencies exposed for focused tests.
 admitRunJobWith :: Hasql.Pool.Pool -> Directory.DirectoryHandle -> [AgentDecl] -> RunJob -> IO DrainAdmission
 admitRunJobWith storePool directory declarations job =
-  case find ((== (agentNameText ((.agentName) job))) . (.name)) declarations of
+  case find ((== ((.agentName) job)) . (.name)) declarations of
     Nothing -> recordRefusal Nothing "unknown agent declaration"
     Just AgentDecl {name, identity} -> do
       let declaredPrincipalId = principalOf <$> identity
@@ -172,7 +172,7 @@ admitRunJobWith storePool directory declarations job =
     recordRefusal resolvedPrincipalId skipReason = do
       let runSkip =
             DirectoryStore.RunSkip
-              { DirectoryStore.agentName = (agentNameText ((.agentName) job)),
+              { DirectoryStore.agentName = ((.agentName) job),
                 DirectoryStore.principalId = resolvedPrincipalId,
                 DirectoryStore.stage = DirectoryStore.DrainStage,
                 DirectoryStore.detail = routeKindText ((.routeKind) job),
@@ -280,7 +280,7 @@ routeErrorJobOutcome = deadOutcome "invalid_route_payload"
 -- | Drive one turn of a conversation agent.
 runConversationAgent :: WorkerEnv -> RunJob -> AddressedMessage -> IO JobOutcome
 runConversationAgent env job addressed =
-  case find ((== (agentNameText ((.agentName) job))) . (.name)) ((.agents) env) of
+  case find ((== ((.agentName) job)) . (.name)) ((.agents) env) of
     Nothing -> do
       let detail = "unknown agent " <> (agentNameText ((.agentName) job))
       runMetric Metrics.recordRunFailed env job

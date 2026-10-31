@@ -53,6 +53,7 @@ import Data.Time (NominalDiffTime, UTCTime, getCurrentTime, nominalDiffTimeToSec
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
 import GHC.Generics (Generic)
+import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal
   ( AgentIdentity (..),
     compatibilityIdentity,
@@ -307,7 +308,7 @@ lifecycleAdmission directoryHandle declaredPrincipalId agentHandle =
 -- Disabled mode never upgrades a declaration's unverified text into a Meibo
 -- assertion. Configured mode records the exact active principal returned by the
 -- validated snapshot.
-identityAdmission :: DirectoryHandle -> Maybe Text -> Text -> IO (Either Text AgentIdentity)
+identityAdmission :: DirectoryHandle -> Maybe Text -> AgentName -> IO (Either Text AgentIdentity)
 identityAdmission directoryHandle declaredPrincipalId agentHandle =
   fmap
     ( \case
@@ -317,7 +318,7 @@ identityAdmission directoryHandle declaredPrincipalId agentHandle =
         UnknownPrincipal identifier -> Left ("unknown principal: " <> identifier)
         DirectoryUnavailable problem -> Left ("directory unavailable: " <> problem)
     )
-    (consultLifecycle directoryHandle declaredPrincipalId agentHandle)
+    (consultLifecycle directoryHandle declaredPrincipalId (agentNameText agentHandle))
 
 -- | Recheck the lifecycle of a previously recorded identity without resolving
 -- through a mutable name or handle.
@@ -330,7 +331,7 @@ consultIdentityLifecycle DisabledDirectory UnresolvedLegacyIdentity =
 consultIdentityLifecycle directoryHandle@(ConfiguredDirectory {}) recordedIdentity =
   case recordedIdentity of
     VerifiedIdentity principal -> consultLifecycle directoryHandle (Just (principalText principal)) (principalText principal)
-    CompatibilityIdentity agentName -> pure (UnknownPrincipal ("compatibility identity " <> agentName))
+    CompatibilityIdentity agentName -> pure (UnknownPrincipal ("compatibility identity " <> agentNameText agentName))
     UnresolvedLegacyIdentity -> pure (UnknownPrincipal "unresolved legacy identity")
 
 -- | Require an already-recorded identity to remain active. This is the exact

@@ -17,8 +17,10 @@ import Network.Wai (Application, Request, Response, ResponseReceived, pathInfo, 
 import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), ContextRef (..), Subject (..))
 import Shikigami.Agent.Decl (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.AgentLoaderSpec qualified as AgentLoaderSpec
+import Shikigami.AgentValueSpec qualified as AgentValueSpec
 import Shikigami.AppConfigSpec qualified as AppConfigSpec
 import Shikigami.ApprovalNotificationSpec qualified as ApprovalNotificationSpec
 import Shikigami.AttestationContractsSpec qualified as AttestationContractsSpec
@@ -92,6 +94,7 @@ main =
         "shikigami"
         [ testGroup "Sink" [kizashiTests, kawaTests, danwaTests, traceHeaderTests],
           testGroup "Trigger" [scheduleTests, streamTests, danwaIntegrationTests],
+          AgentValueSpec.tests,
           WorkspaceCatalogSpec.tests,
           WorkspaceInstructionsSpec.tests,
           WorkspaceProcessPolicySpec.tests,
@@ -306,7 +309,7 @@ kizashiTests =
         ref <- newIORef []
         testWithApplication (pure (stubKizashiApp ref)) $ \port -> do
           let kz = KizashiConfig {baseUrl = testBaseUrl port, defaultRecipient = "recipient_default"}
-              ctx = ctxFor (compatibilityIdentity "heartbeat") kz dummyKawa
+              ctx = ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) kz dummyKawa
           r <- Sink.dispatch ctx sampleKizashiSink sampleOutput
           (.outcome) r @?= Delivered "sig_stub"
           reqs <- readIORef ref
@@ -318,7 +321,7 @@ kizashiTests =
         ref <- newIORef []
         testWithApplication (pure (stubKizashiApp ref)) $ \port -> do
           let kz = KizashiConfig {baseUrl = testBaseUrl port, defaultRecipient = "recipient_default"}
-              ctx = ctxFor (compatibilityIdentity "intruder") kz dummyKawa
+              ctx = ctxFor (compatibilityIdentity (fixtureAgentName "intruder")) kz dummyKawa
           r <- Sink.dispatch ctx sampleKizashiSink sampleOutput
           case (.outcome) r of
             DeniedOutcome _ -> pure ()
@@ -336,7 +339,7 @@ kawaTests =
         testWithApplication (pure (kawaDoorwayApplication store)) $ \port -> do
           let kw = KawaConfig {baseUrl = testBaseUrl port, sourceSegment = "shinzui/shikigami"}
               dummyKz = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "r"}
-              ctx = ctxFor (compatibilityIdentity "heartbeat") dummyKz kw
+              ctx = ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) dummyKz kw
               sink = KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}
           r1 <- Sink.dispatch ctx sink sampleOutput
           r2 <- Sink.dispatch ctx sink sampleOutput
@@ -348,7 +351,7 @@ kawaTests =
           m <- readIORef store
           assertEqual "exactly one stored (source, source_event_id)" 1 (Map.size m),
       testCase "context refs are bounded to closed schemes and deduplicated before ingest" do
-        let ctx = ctxFor (compatibilityIdentity "heartbeat") dummyKizashi dummyKawa
+        let ctx = ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) dummyKizashi dummyKawa
             sink = KawaDigest {subjectType = "practice-review", verb = "practice-review.completed"}
             output =
               object
@@ -369,7 +372,7 @@ kawaTests =
         store <- newIORef (Map.empty :: Map (Text, Text) Text)
         testWithApplication (pure (kawaDoorwayApplication store)) $ \port -> do
           let kw = KawaConfig {baseUrl = testBaseUrl port, sourceSegment = "shinzui/shikigami"}
-              ctx = ctxFor (compatibilityIdentity "heartbeat") dummyKizashi kw
+              ctx = ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) dummyKizashi kw
               sink = KawaDigest {subjectType = "practice-review", verb = "practice-review.completed"}
               output = object ["context_refs" .= [object ["scheme" .= ("https://" :: Text), "ref" .= ("example.invalid" :: Text)]]]
           result <- Sink.dispatch ctx sink output
@@ -444,7 +447,7 @@ danwaTests =
           let cfg = DanwaConfig {baseUrl = testBaseUrl port, agentParticipant = "part_agent_test"}
               target = Just DanwaTarget {conversationId = "conv_target", parentMessageId = Just "msg_parent"}
               sink = DanwaConversation {topic = "support"}
-          ctx <- ctxForDanwa (compatibilityIdentity "heartbeat") cfg target
+          ctx <- ctxForDanwa (compatibilityIdentity (fixtureAgentName "heartbeat")) cfg target
           r <- Sink.dispatch ctx sink (object ["reply" .= ("reply text" :: Text)])
           (.outcome) r @?= Delivered "msg_reply"
           reqs <- readIORef ref
@@ -458,7 +461,7 @@ danwaTests =
         testWithApplication (pure (stubDanwaApp ref)) \port -> do
           let cfg = DanwaConfig {baseUrl = testBaseUrl port, agentParticipant = "part_agent_test"}
               sink = DanwaConversation {topic = "support"}
-          ctx <- ctxForDanwa (compatibilityIdentity "heartbeat") cfg Nothing
+          ctx <- ctxForDanwa (compatibilityIdentity (fixtureAgentName "heartbeat")) cfg Nothing
           r <- Sink.dispatch ctx sink (object ["summary" .= ("fresh thread text" :: Text)])
           (.outcome) r @?= Delivered "msg_stub"
           reqs <- readIORef ref
@@ -469,7 +472,7 @@ danwaTests =
         testWithApplication (pure (stubDanwaApp ref)) \port -> do
           let cfg = DanwaConfig {baseUrl = testBaseUrl port, agentParticipant = "part_agent_test"}
               sink = DanwaConversation {topic = ""}
-          ctx <- ctxForDanwa (compatibilityIdentity "heartbeat") cfg Nothing
+          ctx <- ctxForDanwa (compatibilityIdentity (fixtureAgentName "heartbeat")) cfg Nothing
           result <- Sink.dispatch ctx sink (object ["summary" .= ("fresh thread text" :: Text)])
           case (.outcome) result of
             AuthorizationFailed reason -> assertBool "the missing exact target is explicit" ("invalid coordinates" `Text.isInfixOf` reason)
@@ -487,7 +490,7 @@ traceHeaderTests =
         store <- newIORef (Map.empty :: Map (Text, Text) Text)
         testWithApplication (pure (captureHeaders headers (kawaDoorwayApplication store))) \port -> do
           let kw = KawaConfig {baseUrl = testBaseUrl port, sourceSegment = "shinzui/shikigami"}
-              ctx = (ctxFor (compatibilityIdentity "heartbeat") dummyKizashi kw) {traceHeaders = sampleTraceHeaders}
+              ctx = (ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) dummyKizashi kw) {traceHeaders = sampleTraceHeaders}
               sink = KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}
           _ <- Sink.dispatch ctx sink sampleOutput
           assertCapturedTraceHeaders headers,
@@ -496,14 +499,14 @@ traceHeaderTests =
         signals <- newIORef []
         testWithApplication (pure (captureHeaders headers (stubKizashiApp signals))) \port -> do
           let kz = KizashiConfig {baseUrl = testBaseUrl port, defaultRecipient = "recipient_default"}
-              ctx = (ctxFor (compatibilityIdentity "heartbeat") kz dummyKawa) {traceHeaders = sampleTraceHeaders}
+              ctx = (ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) kz dummyKawa) {traceHeaders = sampleTraceHeaders}
           _ <- Sink.dispatch ctx sampleKizashiSink sampleOutput
           assertCapturedTraceHeaders headers,
       testCase "rei receives only the generated W3C trace headers" do
         headers <- newIORef []
         testWithApplication (pure (captureHeaders headers acceptingReiApp)) \port -> do
           let ctx =
-                (ctxFor (compatibilityIdentity "heartbeat") dummyKizashi dummyKawa)
+                (ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) dummyKizashi dummyKawa)
                   { rei = Sink.ReiConfig {baseUrl = Just (testBaseUrl port)},
                     traceHeaders = sampleTraceHeaders
                   }
@@ -517,7 +520,7 @@ traceHeaderTests =
           let cfg = DanwaConfig {baseUrl = testBaseUrl port, agentParticipant = "part_agent_test"}
               target = Just DanwaTarget {conversationId = "conv_target", parentMessageId = Just "msg_parent"}
               sink = DanwaConversation {topic = "support"}
-          baseCtx <- ctxForDanwa (compatibilityIdentity "heartbeat") cfg target
+          baseCtx <- ctxForDanwa (compatibilityIdentity (fixtureAgentName "heartbeat")) cfg target
           _ <- Sink.dispatch ((baseCtx & #traceHeaders .~ (sampleTraceHeaders))) sink sampleOutput
           assertCapturedTraceHeaders headers
     ]
@@ -562,3 +565,6 @@ sampleOutput = object ["summary" .= ("heartbeat ok" :: Text), "activity_ref" .= 
 
 testBaseUrl :: Int -> Text
 testBaseUrl port = "http://localhost:" <> Text.pack (show port)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

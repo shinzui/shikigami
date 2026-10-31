@@ -18,6 +18,7 @@ import Effectful (Eff)
 import Kiroku.Store.Connection qualified as StoreConnection
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
+import Shikigami.Agent.Name (AgentName)
 import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
 import Shikigami.App.Config (AppConfig, Role (SchedulerRole))
 import Shikigami.App.Config qualified as Config
@@ -114,7 +115,7 @@ runSchedulerCmd config = do
           registry
           (superviseLoops logger ((SchedulerLoop, schedulerLoop) : directoryLoops))
 
-armAll :: Log.Logger -> AppEnv -> [(Text, CronSchedule)] -> IO ()
+armAll :: Log.Logger -> AppEnv -> [(AgentName, CronSchedule)] -> IO ()
 armAll logger appEnv schedules =
   forM_ schedules \(agentName, cron) -> do
     now <- getCurrentTime

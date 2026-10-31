@@ -50,6 +50,7 @@ import Shikigami.Agent.Loader
     LoadError (..),
     loadAgentsReport,
   )
+import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Principal (AgentPrincipal, mkAgentPrincipal, principalText)
 import Shikigami.Agent.Run (behaviorKindText)
 import Shikigami.App.Config (AppConfig (agentsDirectory, directorySettings), revealSecretText)
@@ -686,7 +687,7 @@ declaredPrincipalId AgentDecl {identity} = declared <$> identity
     declared IdentityDecl {principal} = principal
 
 declName :: AgentDecl -> Text
-declName AgentDecl {name} = name
+declName AgentDecl {name} = agentNameText name
 
 principalHandle :: PrincipalRecord -> Text
 principalHandle PrincipalRecord {handle} = handle

@@ -20,7 +20,7 @@ import Shikigami.Directory qualified as Directory
 import Shikigami.Prelude
 
 data AgentCatalog = AgentCatalog
-  {declarations :: !(Map Text AgentDecl), failedManifests :: !Int}
+  {declarations :: !(Map AgentName AgentDecl), failedManifests :: !Int}
 
 catalogFromReport :: AgentLoadReport -> AgentCatalog
 catalogFromReport report =
@@ -32,7 +32,7 @@ emptyCatalog :: AgentCatalog
 emptyCatalog = AgentCatalog Map.empty 0
 
 lookupAgent :: AgentCatalog -> AgentName -> Maybe AgentDecl
-lookupAgent catalog name = Map.lookup (agentNameText name) catalog.declarations
+lookupAgent catalog name = Map.lookup name catalog.declarations
 
 data AgentLifecycleView
   = LifecycleActive
@@ -44,7 +44,7 @@ data AgentLifecycleView
 
 agentLifecycle :: Bool -> DirectoryHandle -> AgentDecl -> IO AgentLifecycleView
 agentLifecycle configured directory decl = do
-  principal <- Directory.lookupPrincipal directory ((.principal) <$> decl.identity) decl.name
+  principal <- Directory.lookupPrincipal directory ((.principal) <$> decl.identity) (agentNameText decl.name)
   pure $ case principal of
     Just record -> case record.lifecycle of
       Active -> LifecycleActive

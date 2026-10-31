@@ -36,7 +36,7 @@ import Kiroku.Store.Effect (Store)
 import Numeric.Natural (Natural)
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), RouterPolicy (..))
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..), assertMayDelegate, checkCycle, checkDepth)
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.Run.Key (RunKey (..))
@@ -58,6 +58,7 @@ import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Request (ExecutionRequest)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Router.Catalog (CandidateAvailability (..), CandidateCatalog (..), CandidateEntry (..), ExclusionReason)
+import Shikigami.Router.SelectionLimit (selectionLimitNatural)
 
 -- | A pending delegated child run. The phantom @a@ is the value expected from
 -- the child's behavior output.
@@ -67,7 +68,7 @@ newtype Delegated a = Delegated (ChildHandle (Either AgentRunFailure AgentRunRes
 -- never an ordinal derived from evaluation order.
 data DelegationRequest = DelegationRequest
   { key :: !Text,
-    target :: !Text,
+    target :: !AgentName,
     payload :: !Aeson.Value
   }
   deriving stock (Eq, Show)
@@ -85,10 +86,10 @@ data DelegationBatchPreflightError
   = DelegationBatchRoutingPolicyMissing
   | DelegationBatchSelectionLimitExceeded !Natural !Natural
   | DelegationBatchDuplicateKey !Text
-  | DelegationBatchCatalogRouterMismatch !Text !Text
-  | DelegationBatchCatalogTargetMissing !Text
-  | DelegationBatchCatalogTargetUnavailable !Text !ExclusionReason
-  | DelegationBatchGovernanceRejected !(Maybe Text) !DelegationError
+  | DelegationBatchCatalogRouterMismatch !AgentName !AgentName
+  | DelegationBatchCatalogTargetMissing !AgentName
+  | DelegationBatchCatalogTargetUnavailable !AgentName !ExclusionReason
+  | DelegationBatchGovernanceRejected !(Maybe AgentName) !DelegationError
   | DelegationBatchSessionMissing
   deriving stock (Eq, Show)
 
@@ -105,7 +106,7 @@ delegate ::
   AgentDecl ->
   DelegateCtx ->
   Text ->
-  Text ->
+  AgentName ->
   Aeson.Value ->
   Eff es (Delegated Aeson.Value)
 delegate = delegateWith Nothing Nothing
@@ -114,19 +115,19 @@ delegate = delegateWith Nothing Nothing
 -- explicit model requirements through the existing child admission boundary.
 delegateAssignment ::
   (Workflow :> es, Store :> es, IOE :> es) =>
-  AgentIdentity -> Maybe ExecutionRequest -> [AgentDecl] -> DirectoryHandle -> AgentDecl -> DelegateCtx -> Text -> Text -> Aeson.Value -> Eff es (Delegated Aeson.Value)
+  AgentIdentity -> Maybe ExecutionRequest -> [AgentDecl] -> DirectoryHandle -> AgentDecl -> DelegateCtx -> Text -> AgentName -> Aeson.Value -> Eff es (Delegated Aeson.Value)
 delegateAssignment identity request = delegateWith (Just identity) request
 
 delegateWith ::
   (Workflow :> es, Store :> es, IOE :> es) =>
-  Maybe AgentIdentity -> Maybe ExecutionRequest -> [AgentDecl] -> DirectoryHandle -> AgentDecl -> DelegateCtx -> Text -> Text -> Aeson.Value -> Eff es (Delegated Aeson.Value)
+  Maybe AgentIdentity -> Maybe ExecutionRequest -> [AgentDecl] -> DirectoryHandle -> AgentDecl -> DelegateCtx -> Text -> AgentName -> Aeson.Value -> Eff es (Delegated Aeson.Value)
 delegateWith expectedIdentity executionRequest declarations directory decl ctx delegationKey childAgent payload = do
   either throwIO pure (assertMayDelegate decl childAgent)
   either throwIO pure (checkCycle ctx childAgent)
   childCtx <- either throwIO pure (checkDepth ctx)
   childDecl <-
     maybe
-      (throwIO (DelegationIdentityRefused ("unknown agent declaration: " <> childAgent)))
+      (throwIO (DelegationIdentityRefused ("unknown agent declaration: " <> agentNameText childAgent)))
       pure
       (find (\AgentDecl {name = declaredName} -> declaredName == childAgent) declarations)
   childIdentity <-
@@ -166,7 +167,7 @@ delegateWith expectedIdentity executionRequest declarations directory decl ctx d
     Right DelegationSlotAlreadyReserved -> pure ()
   let childJob =
         RunJob
-          { agentName = AgentName childAgent,
+          { agentName = childAgent,
             identity = childIdentity,
             triggerKind = TriggeredByDelegation,
             routeKind = AgentWorkflowRoute,
@@ -176,7 +177,7 @@ delegateWith expectedIdentity executionRequest declarations directory decl ctx d
             parentSessionId = Just currentSession,
             parentRunWorkflowId = Just parentWorkflowId,
             delegationDepth = Just childDepth,
-            lineage = currentLineage <> [AgentName childAgent],
+            lineage = currentLineage <> [childAgent],
             delegationBudgetId = Just budgetId,
             executionRootId = ctx.executionRootId,
             executionRequest,
@@ -231,8 +232,8 @@ preflightDelegationBatch decl@AgentDecl {name = delegatingAgent, routing} ctx@De
     selectionLimitErrors = case routing of
       Nothing -> []
       Just RouterPolicy {maxSelections} ->
-        [ DelegationBatchSelectionLimitExceeded (fromIntegral (length requestList)) maxSelections
-        | fromIntegral (length requestList) > maxSelections
+        [ DelegationBatchSelectionLimitExceeded (fromIntegral (length requestList)) (selectionLimitNatural maxSelections)
+        | fromIntegral (length requestList) > selectionLimitNatural maxSelections
         ]
 
     duplicateKeys = duplicatesInOrder [key | DelegationRequest {key} <- requestList]
@@ -385,7 +386,7 @@ awaitDelegatedEither delegated =
         Just failure -> pure (Left (Text.pack (show failure)))
         Nothing -> throwIO err
 
-delegatedWorkflowIdV2 :: WorkflowId -> Text -> Text -> WorkflowId
+delegatedWorkflowIdV2 :: WorkflowId -> AgentName -> Text -> WorkflowId
 delegatedWorkflowIdV2 (WorkflowId parentWorkflowId) childAgent delegationKey =
   WorkflowId $
     Text.pack $

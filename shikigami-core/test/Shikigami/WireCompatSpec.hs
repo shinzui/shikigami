@@ -22,7 +22,7 @@ import Shikigami.Agent.Decl
     SignalType (Alert),
     Sink (..),
   )
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity), compatibilityIdentity)
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByStream), runJobWorkflowId)
@@ -149,7 +149,7 @@ queueTests =
         let enrolled = sampleRunJob & #executionRootId .~ Just (ExecutionRootId "root-1") & #executionRequest .~ Just (ExecutionRequest (Just "worker") Nothing Nothing) & #executionPermissions .~ Just ["worker"]
         RunJobs.decodeRunJob (RunJobs.encodeRunJob enrolled) @?= Right enrolled,
       testCase "lineage list order survives the real queue boundary" do
-        let job = sampleRunJob & #lineage .~ [AgentName "first", AgentName "second"]
+        let job = sampleRunJob & #lineage .~ [fixtureAgentName "first", fixtureAgentName "second"]
         RunJobs.decodeRunJob (RunJobs.encodeRunJob job) @?= Right job,
       testCase "omitted authority fields refuse at the current journal boundary" do
         for_ ["executionRootId", "executionRequest", "executionPermissions"] \field -> do
@@ -176,8 +176,8 @@ queueTests =
 sampleRunJob :: RunJob
 sampleRunJob =
   RunJob
-    { agentName = AgentName "at-risk-watch",
-      identity = compatibilityIdentity "at-risk-watch",
+    { agentName = fixtureAgentName "at-risk-watch",
+      identity = compatibilityIdentity (fixtureAgentName "at-risk-watch"),
       triggerKind = TriggeredByStream,
       routeKind = AgentWorkflowRoute,
       occurredAt = sampleTime,
@@ -398,3 +398,6 @@ preResourceRunJobEnvelope = "{\"data\":{\"agentName\":\"at-risk-watch\",\"delega
 
 preSelectionRunJobEnvelope :: ByteString
 preSelectionRunJobEnvelope = "{\"data\":{\"agentName\":\"at-risk-watch\",\"delegationBudgetId\":null,\"delegationDepth\":null,\"idempotencyKey\":\"at-risk-watch:act_1\",\"identity\":{\"agentName\":\"at-risk-watch\",\"kind\":\"compatibility\"},\"lineage\":[],\"occurredAt\":\"2026-07-15T12:00:00Z\",\"parentRunWorkflowId\":null,\"parentSessionId\":null,\"routeKind\":\"AgentWorkflowRoute\",\"triggerKind\":\"TriggeredByStream\",\"triggerPayload\":{\"executionRootId\":null,\"input\":{\"activityId\":\"act_1\"}}},\"t\":\"RunJobMessage\",\"v\":2}"
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

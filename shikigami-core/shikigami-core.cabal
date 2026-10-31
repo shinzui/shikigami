@@ -45,6 +45,7 @@ library
     Shikigami.Agent.Delegate
     Shikigami.Agent.Delegate.Context
     Shikigami.Agent.Delegate.Depth
+    Shikigami.Agent.ExpertiseKey
     Shikigami.Agent.Loader
     Shikigami.Agent.Name
     Shikigami.Agent.Payload
@@ -188,6 +189,7 @@ library
     Shikigami.Router.Catalog
     Shikigami.Router.Decision
     Shikigami.Router.Declaration
+    Shikigami.Router.SelectionLimit
     Shikigami.RunEvidence.Catalog
     Shikigami.RunEvidence.Conformance
     Shikigami.RunJobs
@@ -432,6 +434,7 @@ test-suite shikigami-core-test
   main-is: Main.hs
   other-modules:
     Shikigami.AgentLoaderSpec
+    Shikigami.AgentValueSpec
     Shikigami.AppConfigSpec
     Shikigami.ApprovalNotificationSpec
     Shikigami.AttestationContractsSpec
@@ -492,6 +495,7 @@ test-suite shikigami-core-test
     containers,
     danwa-api,
     danwa-client,
+    dhall,
     directory,
     effectful,
     en-biscuit,

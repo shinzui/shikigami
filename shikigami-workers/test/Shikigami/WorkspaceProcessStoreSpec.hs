@@ -15,11 +15,13 @@ import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.List (sort)
 import Data.Map.Strict qualified as Map
+import Data.Text (Text)
 import Data.Text qualified as ClaimText
 import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
 import Hasql.Transaction (Transaction)
 import Kiroku.Store.Transaction (runTransaction)
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Execution.Claim qualified as Claim
@@ -248,7 +250,7 @@ writeCollector directory record changed = do
 
 withProcess :: DatabaseFixture -> (AppEnv -> WorkspaceBinding -> ProcessRecord -> IO a) -> IO a
 withProcess fixture use = Fixture.withFixture fixture \env _ root repository -> do
-  let owner = CompatibilityIdentity "process-worker"
+  let owner = CompatibilityIdentity (fixtureAgentName "process-worker")
       request = WorkspaceRequest "process-run" Nothing (ExecutionRootId "process-root") owner owner (fixtureRevision 0)
   (binding, _) <- right =<< run env (Store.reserveWorkspaceTx root request repository)
   allocateWorkspace root binding Reserved >>= (@?= Right ())
@@ -286,3 +288,6 @@ fixtureGeneration value = either (error . show) id (Generation.parseRevision val
 
 fixtureOwner :: ClaimText.Text -> Claim.ClaimOwner
 fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

@@ -35,6 +35,7 @@ import Hasql.Transaction qualified as Transaction
 import Hasql.Transaction.Sessions qualified as Transaction.Sessions
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
 import Shikigami.Agent.Loader (AgentLoadEntry (..), AgentLoadReport (..), LoadError (..))
+import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 
 -- | Admission boundary that refused a run.
 data SkipStage = TriggerStage | DrainStage
@@ -42,7 +43,7 @@ data SkipStage = TriggerStage | DrainStage
 
 -- | One idempotent trigger or queue-drain refusal.
 data RunSkip = RunSkip
-  { agentName :: !Text,
+  { agentName :: !AgentName,
     principalId :: !(Maybe Text),
     stage :: !SkipStage,
     detail :: !Text,
@@ -57,7 +58,7 @@ data LoadStatus = Loaded | Failed
 data LoadState = LoadState
   { manifestPath :: !FilePath,
     manifestDirectory :: !FilePath,
-    agentName :: !(Maybe Text),
+    agentName :: !(Maybe AgentName),
     principalId :: !(Maybe Text),
     status :: !LoadStatus,
     enabled :: !(Maybe Bool),
@@ -171,7 +172,7 @@ upsertLoadStateStatement =
     """
     ( (Text.pack . view #manifestPath >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> (Text.pack . view #manifestDirectory >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> (view #agentName >$< Encoders.param (Encoders.nullable Encoders.text))
+        <> (fmap agentNameText . view #agentName >$< Encoders.param (Encoders.nullable Encoders.text))
         <> (view #principalId >$< Encoders.param (Encoders.nullable Encoders.text))
         <> (renderLoadStatus . view #status >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> (view #enabled >$< Encoders.param (Encoders.nullable Encoders.bool))
@@ -189,7 +190,7 @@ recordRunSkipStatement =
     VALUES ($1, $2, $3, $4, $5, $6)
     ON CONFLICT (stage, idempotency_key) DO NOTHING
     """
-    ( (view #agentName >$< Encoders.param (Encoders.nonNullable Encoders.text))
+    ( (agentNameText . view #agentName >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> (view #principalId >$< Encoders.param (Encoders.nullable Encoders.text))
         <> (renderSkipStage . view #stage >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> (view #detail >$< Encoders.param (Encoders.nonNullable Encoders.text))
@@ -212,7 +213,7 @@ listRunSkipsStatement =
 runSkipRow :: Decoders.Row RunSkip
 runSkipRow =
   RunSkip
-    <$> Decoders.column (Decoders.nonNullable Decoders.text)
+    <$> Decoders.column (Decoders.nonNullable (Decoders.refine mkAgentName Decoders.text))
     <*> Decoders.column (Decoders.nullable Decoders.text)
     <*> Decoders.column (Decoders.nonNullable (Decoders.refine parseSkipStage Decoders.text))
     <*> Decoders.column (Decoders.nonNullable Decoders.text)
@@ -239,11 +240,11 @@ renderUsage :: Either Pool.UsageError a -> Either Text a
 renderUsage = first (Text.pack . show)
 
 -- | Indexed lookup of the drain refusal for one accepted run.
-lookupDrainSkip :: Pool -> Text -> Text -> IO (Either Text (Maybe RunSkip))
+lookupDrainSkip :: Pool -> AgentName -> Text -> IO (Either Text (Maybe RunSkip))
 lookupDrainSkip pool agent key = renderUsage <$> Pool.use pool (Session.statement (agent, key) statement)
   where
     statement =
       preparable
         "SELECT agent_name,principal_id,stage,detail,reason,idempotency_key FROM shikigami.run_skips WHERE agent_name=$1 AND stage='drain' AND idempotency_key=$2"
-        ((fst >$< Encoders.param (Encoders.nonNullable Encoders.text)) <> (snd >$< Encoders.param (Encoders.nonNullable Encoders.text)))
+        ((agentNameText . fst >$< Encoders.param (Encoders.nonNullable Encoders.text)) <> (snd >$< Encoders.param (Encoders.nonNullable Encoders.text)))
         (Decoders.rowMaybe runSkipRow)

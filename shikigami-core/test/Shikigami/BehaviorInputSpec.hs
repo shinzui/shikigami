@@ -37,6 +37,7 @@ import Handan.Task (EvalHandle, Task (..), TaskKind (KEffect))
 import Kioku.Api.Types (MemoryRecord (..))
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent))
 import Shikigami.Agent.Run (recallQuery)
 import Shikigami.Behavior.Input (BehaviorInput (..), triggerOnly)
@@ -293,7 +294,7 @@ memoryWith prose =
     { memoryId = priorMemoryId,
       agentId = "triage-note",
       sessionId = Nothing,
-      scope = agentScope (CompatibilityAgent "triage-note"),
+      scope = agentScope (CompatibilityAgent (fixtureAgentName "triage-note")),
       memoryType = "pattern",
       content = prose,
       priority = 100,
@@ -306,12 +307,12 @@ memoryWith prose =
 triageDecl :: AgentDecl
 triageDecl =
   AgentDecl
-    { name = "triage-note",
+    { name = fixtureAgentName "triage-note",
       description = "triage inbound tickets into a short note",
       trigger = Event {eventType = "ticket.received"},
       behavior = Skill {path = "agents/skills/triage-note"},
       sinks = [],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -328,7 +329,7 @@ triageDecl =
 heartbeatDecl :: AgentDecl
 heartbeatDecl =
   AgentDecl
-    { name = "heartbeat",
+    { name = fixtureAgentName "heartbeat",
       description = "",
       trigger = Schedule {cron = "* * * * *"},
       behavior =
@@ -339,7 +340,7 @@ heartbeatDecl =
             enabledBy = Nothing
           },
       sinks = [],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -365,3 +366,6 @@ repositoryRoot = go [".", ".."]
     go (candidate : rest) = do
       exists <- doesFileExist (candidate </> "cabal.project")
       if exists then pure candidate else go rest
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

@@ -49,7 +49,7 @@ import Kiroku.Store.Connection qualified as StoreConnection
 import Shibuya.App (ShutdownConfig (..), SupervisionStrategy (IgnoreFailures), stopAppGracefully)
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), Trigger (..), defaultMemoryPolicy)
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, meiboPrincipal, principalText)
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
@@ -370,8 +370,8 @@ assertDeadWith label prefix = \case
 sampleJob :: RunJob
 sampleJob =
   RunJob
-    { agentName = AgentName "codec-agent",
-      identity = compatibilityIdentity "codec-agent",
+    { agentName = fixtureAgentName "codec-agent",
+      identity = compatibilityIdentity (fixtureAgentName "codec-agent"),
       triggerKind = TriggeredByEvent,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 8 19) 0,
@@ -390,12 +390,12 @@ sampleJob =
 drainAgent :: AgentDecl
 drainAgent =
   AgentDecl
-    { name = "codec-agent",
+    { name = fixtureAgentName "codec-agent",
       description = "drain lifecycle fixture",
       trigger = Event {eventType = "fixture.event"},
       behavior = Deterministic {rule = "test", params = Map.empty},
       sinks = [],
-      delegates = [],
+      delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -447,3 +447,6 @@ waitUntil predicate =
       if ready
         then pure True
         else threadDelay 100_000 >> loop
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName

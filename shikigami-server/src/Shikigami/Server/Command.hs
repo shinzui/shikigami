@@ -39,13 +39,14 @@ module Shikigami.Server.Command
 where
 
 import Control.Lens ((&), (.~))
+import Data.Bifunctor (first)
 import Data.Generics.Labels ()
 import Data.Maybe (catMaybes)
 import Data.Text qualified as Text
 import Options.Applicative hiding (action)
 import Settei.Optparse (namedOption)
 import Settei.Source (Source)
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Payload (payloadArgument)
 import Shikigami.App.Config (AppConfig, Role (AdminRole), kafkaActivityTopicKey, kafkaBrokerKey, sinksDanwaBaseUrlKey)
 import Shikigami.App.Config.Load
@@ -192,7 +193,7 @@ workersInfo = info (subparser commands <**> helper) (progDesc "Inspect continuin
     send = (\key op rev owner input -> action (runWorkersSend key op rev owner input)) <$> session <*> operation <*> revision <*> epoch <*> instruction
     interrupt = (\key op rev owner assignment input -> action (runWorkersInterrupt key op rev owner assignment input)) <$> session <*> operation <*> revision <*> epoch <*> strOption (long "assignment" <> metavar "ASSIGNMENT") <*> instruction
     cancel = (\key op rev owner -> action (runWorkersControl op (CancelWorker (WorkerSessionId key) rev owner))) <$> session <*> operation <*> revision <*> epoch
-    transfer = (\key op rev owner provider resource target -> action (runWorkersControl op (TransferWorker (WorkerSessionId key) rev owner (WorkspaceRef provider resource) (AgentName target)))) <$> session <*> operation <*> revision <*> epoch <*> strOption (long "workspace-provider" <> metavar "PROVIDER") <*> strOption (long "workspace-resource" <> metavar "RESOURCE") <*> strOption (long "target" <> metavar "AGENT")
+    transfer = (\key op rev owner provider resource target -> action (runWorkersControl op (TransferWorker (WorkerSessionId key) rev owner (WorkspaceRef provider resource) target))) <$> session <*> operation <*> revision <*> epoch <*> strOption (long "workspace-provider" <> metavar "PROVIDER") <*> strOption (long "workspace-resource" <> metavar "RESOURCE") <*> option agentReader (long "target" <> metavar "AGENT")
     reconcile = (\key op -> action (runWorkersControl op (ReconcileWorker (WorkerSessionId key)))) <$> session <*> operation
     integrate = (\key op -> action (runWorkersControl op (IntegrateWorkerEvents (WorkerSessionId key)))) <$> session <*> operation
 
@@ -340,7 +341,7 @@ grantsGrantInfo =
   where
     parser =
       (\agent kind by -> (runGrantsGrant agent kind by, []))
-        <$> argument str (metavar "AGENT")
+        <$> argument agentReader (metavar "AGENT")
         <*> argument str (metavar "KIND")
         <*> optional (strOption (long "by" <> metavar "WHO" <> help "recorded in granted_by"))
 
@@ -352,7 +353,7 @@ grantsRevokeInfo =
   where
     parser =
       (\agent kind by -> (runGrantsRevoke agent kind by, []))
-        <$> argument str (metavar "AGENT")
+        <$> argument agentReader (metavar "AGENT")
         <*> argument str (metavar "KIND")
         <*> optional (strOption (long "by" <> metavar "WHO" <> help "recorded in revoked_by"))
 
@@ -380,7 +381,7 @@ enqueueRunInfo =
   where
     parser =
       (\agent payload conversation key -> (runEnqueueRun agent payload conversation key, []))
-        <$> argument str (metavar "AGENT")
+        <$> argument agentReader (metavar "AGENT")
         <*> payloadArgument
         <*> switch (long "conversation" <> help "Route the job as a danwa conversation turn instead of an agent run")
         <*> optional (strOption (long "key" <> metavar "TEXT" <> help "Idempotency key; defaults to one derived from the agent and payload"))
@@ -478,3 +479,6 @@ messagePositionReader :: ReadM MessagePosition
 messagePositionReader = eitherReader \raw -> case reads raw of
   [(value, "")] -> either (Left . Text.unpack) Right (parseMessagePosition value)
   _ -> Left "expected a message position (-1 before the first message)"
+
+agentReader :: ReadM AgentName
+agentReader = eitherReader (first Text.unpack . mkAgentName . Text.pack)

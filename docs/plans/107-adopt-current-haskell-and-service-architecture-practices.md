@@ -67,6 +67,12 @@ correctly reports AgentRun and ContinuingWorker body breaks under the unused
 first-release exception. Their aggregate replay-impact report is a separate
 stored-data verdict and does not assert child-history compatibility.
 
+ADR-87 closes private agent names, expertise keys, routing ceilings and delegation
+depths across their domain consumers. The initial conversation name is explicitly
+unbound. A compiled probe reproduced compatibility-scope aliasing for valid names;
+versioned exact-name scopes separate actual stored sessions. This intentional
+first-release attribution change preserves verified directory authority.
+
 ## Decision Log
 
 2026-10-30: Apply the user's first-release policy and exhaustive current-guide adoption. Replace old-history qualification with fresh provisioning and same-build recovery. Preserve real transaction, authority and privacy invariants.
@@ -79,17 +85,19 @@ cases. The language checker and thirteen style/ownership mutation tests pass.
 [The adoption record](../evidence/keiro-0.22/haskell-service-adoption.md) links each
 implemented domain-value wave and its exact candidate/evidence.
 
-Latest coordinate-key acceptance rebuilt all enabled components and passed 563
-pure, 385 serial PostgreSQL, 260 worker, 95 server, 31 API, nine client and 37 agent
-cases, with 90 positive-first compiler clients, 143 domain-driver assertions, six
-diagrams and 156 native conformance rows. All 73 offline CLI checks and the live
-Hurl fixture pass. Two deliberate native WorkflowBodyChanged findings remain
-retained for the reviewed first-release identity reset; all four aggregate folds
-are unchanged. The reset is committed at 5ed5adf and its subsequent ordinary native
-gate passes with no findings and all 156 conformance rows. Forty-two of the 46 assigned sources have implemented dispositions.
-One local review remains: the complete scalar and identity census. Three sources
-retain only final-profile clauses owned by plan95. M1 and final source dispositions
-remain open; this is not completion or packaged Linux qualification.
+Latest agent-value acceptance rebuilt all enabled components and passed 569 pure,
+386 serial PostgreSQL, 260 worker, 95 server, 31 API, nine client and 37 agent
+cases. All 107 positive-first compiler clients, 143 domain assertions, six diagrams,
+156 native conformance rows, 81 offline CLI checks and live Hurl pass. Complete
+conversation seed values and distinct stored compatibility scopes have actual
+workflow/database controls. The native gate has no findings against b940359;
+ADR-87 separately records the intentional compatibility namespace meaning change.
+ADR-86's two native workflow-body breaks and their accepted baseline remain
+retained. Forty-two of 46 assigned sources have implemented dispositions. The
+compiled worklist is 316 modules/892 declarations, with current source/interface
+hashes; it remains unclassified. Complete scalar/identity review and three
+final-profile source clauses remain open. M1 is incomplete, and this is not
+packaged Linux qualification.
 
 ## Context and Orientation
 

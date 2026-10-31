@@ -1,10 +1,11 @@
 module Shikigami.DelegateContextSpec (tests) where
 
 import Data.Foldable (traverse_)
+import Data.Text (Text)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..), assertMayDelegate, checkCycle, checkDepth)
-import Shikigami.Agent.Delegate.Depth (DelegationDepth (..))
-import Shikigami.Agent.Name (AgentName (..))
+import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
+import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertEqual, testCase)
@@ -36,22 +37,22 @@ tests =
           (Left (DelegationDepthExceeded (toInteger (maxBound :: Int) + 1)))
           (checkDepth (ctxAt maxBound)),
       testCase "allow-list refuses undeclared targets" do
-        assertEqual "declared target is admitted" (Right ()) (assertMayDelegate delegatingAgent "worker")
-        assertEqual "undeclared target is refused" (Left (DelegationNotAllowed "intruder")) (assertMayDelegate delegatingAgent "intruder"),
+        assertEqual "declared target is admitted" (Right ()) (assertMayDelegate delegatingAgent (fixtureAgentName "worker"))
+        assertEqual "undeclared target is refused" (Left (DelegationNotAllowed (fixtureAgentName "intruder"))) (assertMayDelegate delegatingAgent (fixtureAgentName "intruder")),
       testCase "cycle detection checks the complete ancestor chain" do
-        assertEqual "an ancestor is refused" (Left (DelegationCycleDetected "root")) (checkCycle (ctxAt 0) "root")
-        assertEqual "a new descendant is admitted" (Right ()) (checkCycle (ctxAt 0) "worker")
+        assertEqual "an ancestor is refused" (Left (DelegationCycleDetected (fixtureAgentName "root"))) (checkCycle (ctxAt 0) (fixtureAgentName "root"))
+        assertEqual "a new descendant is admitted" (Right ()) (checkCycle (ctxAt 0) (fixtureAgentName "worker"))
     ]
 
 ctxAt :: Int -> DelegateCtx
 ctxAt depth =
   DelegateCtx
-    { identity = compatibilityIdentity "lead",
-      depth = DelegationDepth depth,
+    { identity = compatibilityIdentity (fixtureAgentName "lead"),
+      depth = fixtureDelegationDepth depth,
       sessionId = Nothing,
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
-      lineage = map AgentName ["root", "lead"],
+      lineage = map fixtureAgentName ["root", "lead"],
       executionPermissions = Nothing,
       executionRootId = Nothing,
       delegationBudgetId = Nothing,
@@ -61,12 +62,12 @@ ctxAt depth =
 delegatingAgent :: AgentDecl
 delegatingAgent =
   AgentDecl
-    { name = "lead",
+    { name = fixtureAgentName "lead",
       description = "delegation guard fixture",
       trigger = Event {eventType = "test"},
       behavior = Deterministic {rule = "test", params = mempty},
       sinks = [],
-      delegates = ["worker"],
+      delegates = map fixtureAgentName ["worker"],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
@@ -86,3 +87,9 @@ assertAccepted (current, expectedChild) =
     ("depth " <> show current <> " creates child depth " <> show expectedChild)
     (Right (ctxAt expectedChild))
     (checkDepth (ctxAt current))
+
+fixtureAgentName :: Text -> AgentName
+fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureDelegationDepth :: Int -> DelegationDepth
+fixtureDelegationDepth = either (error . show) id . parseDelegationDepth . toInteger
