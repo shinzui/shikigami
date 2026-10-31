@@ -90,16 +90,17 @@ a checked allocated TypeID; objective content, worker/workspace ownership,
 execution policies, counters, decisions and assignment locators retain their
 nominal checked meanings.
 
-Latest payload-value acceptance rebuilt all enabled components and passed 577
-pure, 388 serial PostgreSQL, 262 worker and 95 server cases, plus 133 compiler
-clients, all API/client/agent suites, 82 CLI checks and live Hurl. Private payload
-units retain their meanings and valid bytes while body-table corruption retains
-explicit domain refusals under ADR-89. Native generation/diff is neutral against
-28e31ea; all four aggregate transducer hashes remain unchanged. Earlier deliberate
-baseline resets remain retained. Complete scalar/allocated-identity and remaining
-owned JSON-row classification review keep EP-5 In Progress. Three source rows
-retain only final-profile clauses owned by EP-6. Its exact frozen artifacts,
-Linux/runtime integration and final inventory gate have not started.
+Latest retained-JSON acceptance rebuilt all enabled components and passed 577
+pure, 390 serial PostgreSQL, 262 worker and 95 server cases, all API/client/agent
+suites, 82 CLI checks and live HTTP including outages. Two real corruption controls
+previously masqueraded as storage failures; ADR-90 moves typed JSON decoding into
+owner transactions and preserves refused-mutation/stream invariants. Native
+generation/diff is neutral against 5feaf08; four transducer hashes are unchanged.
+ADR-89's 133 compiler clients remain the unchanged public construction baseline.
+Earlier deliberate resets remain retained. Complete scalar/allocated-identity and
+other owners' decoder review keep EP-5 In Progress. Three rows retain final-profile
+clauses owned by EP-6; its frozen closure, Linux/runtime and inventory gates have
+not started.
 
 ## Surprises & Discoveries
 

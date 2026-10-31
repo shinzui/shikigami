@@ -276,3 +276,13 @@ and [payload acceptance](payload-values-results.txt) record 577 pure, 388 Postgr
 262 worker, 95 server and 133 compiler cases. Native/domain/diagram, 82 CLI and live
 Hurl checks pass. The 318-module/896-declaration worklist remains unclassified; the
 complete scalar/identity and remaining owned JSON-row classification review stay open.
+
+The retained-reference controls then exposed a separate JSON-row boundary: invalid
+execution/session references were storage-unavailability errors. Both owners now
+capture typed decode failures and abort them as domain corruption inside the
+transaction. The two failed and three passing controls, mutation/stream invariants
+and full 577 pure/390 PostgreSQL/262 worker/95 server acceptance are retained in
+[JSON-row acceptance](json-row-results.txt) and
+[ADR-90](../../adr/0090-execution-and-session-json-corruption-is-a-transactional-domain-refusal.md).
+Native/domain/diagram, 82 CLI and live HTTP including outage checks pass. Public
+construction types are unchanged; other owners and the full census remain open.

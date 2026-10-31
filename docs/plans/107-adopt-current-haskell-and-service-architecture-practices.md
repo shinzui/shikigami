@@ -84,6 +84,10 @@ workflow instances. Existing ReviewId/ResolutionId UUIDv5 derivations cannot be
 exempted merely because Kioku memory rows use deterministic lookup coordinates.
 Any allocation change must retain logical-key receipts, record-before-retire and
 losing-candidate cleanup; that work remains open.
+ADR-51 also states that root resource reservations, deduplication and actual
+attempts survive terminal workflow garbage collection. Resource-root, allocation
+and actual-attempt identity authority still requires review; a private hash
+namespace alone does not establish the native-runtime exception.
 
 ## Decision Log
 
@@ -97,18 +101,18 @@ cases. The language checker and thirteen style/ownership mutation tests pass.
 [The adoption record](../evidence/keiro-0.22/haskell-service-adoption.md) links each
 implemented domain-value wave and its exact candidate/evidence.
 
-Latest payload-value acceptance rebuilt all enabled components and passed 577
-pure, 388 serial PostgreSQL, 262 worker, 95 server, 31 API, nine client and 37 agent
-cases. All 133 positive-first compiler clients, 143 domain assertions, six diagrams,
-156 native conformance rows, 82 offline CLI checks and live Hurl pass. ADR-89 keeps
-checked payload units through stores and retained routing with exact valid bytes.
-Real body-table corruption controls retain explicit domain refusals; the initially
-failed session classification control and corrected branch are retained. The native
-gate has no findings against 28e31ea and all four aggregate transducer hashes remain
-unchanged. Earlier deliberate baseline resets remain retained. Forty-two of 46
-assigned sources have implemented dispositions. Complete scalar/allocated-identity
-and remaining owned JSON-row classification review plus three final-profile clauses
-remain open. M1 is incomplete; this is not packaged Linux qualification.
+Latest retained-JSON acceptance rebuilt all enabled components and passed 577
+pure, 390 serial PostgreSQL, 262 worker, 95 server, 31 API, nine client and 37 agent
+cases. All 143 domain assertions, six diagrams, 156 native conformance rows, 82 CLI
+checks and live HTTP including outages pass. ADR-90 fixes two real retained-row
+corruption cases that reported storage unavailability. Typed SQL decode results
+become domain refusals inside transactions; mutation and native-stream invariants
+pass. Native generation/diff is neutral against 5feaf08 and all four transducer
+hashes are unchanged. Public construction types are unchanged; ADR-89's 133
+compiler clients remain their baseline. Earlier resets remain retained. Forty-two
+of 46 assigned sources have implemented dispositions. Complete scalar/allocated-
+identity, other owners' decoder review and three final-profile clauses remain
+open. M1 is incomplete; this is not packaged Linux qualification.
 
 ## Context and Orientation
 

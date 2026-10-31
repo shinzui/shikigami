@@ -1,0 +1,27 @@
+Transactional owned JSON decoding — ExecPlan 107
+Source parent: 5feaf08744d7346a5855b87104419173c8a307eb (master); current source/interface hashes are retained in domain-declarations.json.
+Compiler: selected GHC 9.12.4/frozen Cabal cohort, arm64 macOS.
+Decision: docs/adr/0090-execution-and-session-json-corruption-is-a-transactional-domain-refusal.md.
+
+Observed failures
+Five real PostgreSQL malformed-data cases selected against parent production sources: two new retained-reference cases fail with ExecutionStorageUnavailable/SessionStorageUnavailable instead of CorruptReplay/SessionBindingConflict; three existing malformed-data controls pass. Exact failures are retained in json-row-before-regressions.txt. A prior whitespace-containing filter did not parse and is excluded.
+The corrected focused run passes all five cases. The full cases additionally attempt mutations and verify unchanged native execution/session streams and session message/command/payload counts.
+
+Resulting boundary
+Execution.Store and WorkerSession.Store SQL rows capture FromJSON failure as Either () domainValue. Statement signatures retain their actual domain types. Owner transaction traversal maps invalid rows to explicit corruption refusals before commit; no deferred throwing value escapes a successful SQL decoder.
+Optional/list results preserve missing rows, ordering, limits and locks. Native guards, authorization, command preconditions, protected-body checks and genuine transport-error mapping remain. Session command receipts retain their existing explicit raw-JSON decoder; payload-body metadata retains ADR-89's boundary.
+Valid codecs, native command values and persisted bytes remain unchanged. No identity allocation, workflow body or schema change is introduced. Other owners' decoder classifications remain under the complete census.
+
+Acceptance
+cabal build all --enable-tests -j2: PASS, all enabled components including the Linux fixture source (no Linux runtime claim).
+Application suites PASS: 577 pure (5.88s), 390 serial PostgreSQL (108.31s), 262 worker (165.58s), 95 server (18.90s), 31 API, nine client and 37 agent cases.
+just keiro-gate 5feaf08: PASS, check/inspect/idempotent scaffold, zero findings and 156 native conformance rows. Native diff/replay and four unchanged generated transducer hashes/fingerprints are retained separately.
+Domain/diagram suites: 143 domain assertions and six diagrams PASS.
+just hurl: PASS, fresh task-owned database/server/worker; 4/2/1 files and 13/15/3 requests across three phases, zero failed files. The actual outage phase preserves transport-failure behavior.
+CLI contracts: 82 real-process checks PASS without database/vendor.
+Haskell conventions, 13 style/ownership mutation tests, formatter and whitespace checks PASS.
+Public field/factory types are unchanged by this wave. ADR-89's 94 nominal + 39 opaque positive-first compiler checks remain the unchanged public construction baseline; they were not rerun for private statement-result changes.
+Compiled audit worklist: 318 modules, 896 declarations, 14 role entrypoints; source/tool hashes and per-module declaration uniqueness verified. It remains unclassified.
+
+Scope
+The complete scalar/allocated-identity census, including review/resource identity authority and other owners' decoder classifications, remains open. This does not start plan95's exact packaged closure/Linux/runtime/inventory qualification.

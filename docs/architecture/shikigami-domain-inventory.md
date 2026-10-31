@@ -63,6 +63,12 @@ corruption refusal, distinct from transport unavailability. Persistent owners
 retain their 1 MiB policy; ephemeral inputs retain their own size policy.
 [ADR-89](../adr/0089-protected-payload-references-retain-checked-units.md)
 records this boundary; the complete scalar/identity census remains open.
+Execution/session JSON rows also capture typed refinement failures as data and
+abort inside their owning transaction. Malformed retained references are domain
+corruption, distinct from transport unavailability; refused mutations preserve
+native streams and session receipts. [ADR-90](../adr/0090-execution-and-session-json-corruption-is-a-transactional-domain-refusal.md)
+and [the failed/passing controls](../evidence/keiro-0.22/json-row-results.txt)
+cover this separate boundary. Other owners' classifications remain under review.
 
 Resource vectors now retain private checked ResourceAmount values, indexed by
 Dimension, through finite limits, reservations, usage and settlement. Numeric

@@ -169,23 +169,23 @@ openSessionWithLimit maximumSessions admission = guarded do
         Just (state, existing) | existing == binding -> Right (AlreadyAccepted, state)
         Just _ -> Left SessionBindingConflict
         Nothing -> Left SessionRevisionConflict
-  existing <- metadata (Tx.statement session.value selectSession)
+  existing <- metadata (readRows session.value selectSession)
   case existing of
     Just _ -> pure (matching existing)
     Nothing -> do
       result <- persist session (Generated.AdmitWorkerSession (Generated.AdmitWorkerSessionData session (payloadDigestText ref.digest))) do
         validateRoot True root
         void (Tx.statement (versionedDigest "shikigami.worker-session-scope-lock/1" (toJSON (admission.scope.parent, admission.context.identity))) lockScope)
-        existingScope <- Tx.statement (admission.scope.parent, toJSON admission.context.identity) selectScopeBinding
+        existingScope <- readRows (admission.scope.parent, toJSON admission.context.identity) selectScopeBinding
         when (maybe False ((/= root) . (.rootId)) existingScope) (abort SessionBindingConflict)
         count <- Tx.statement (admission.scope.parent, toJSON admission.context.identity) countScopeSessions
         when (count >= fromIntegral (sessionLimit maximumSessions)) (abort SessionLimitExceeded)
-        collision <- Tx.statement session.value selectSession
+        collision <- readRows session.value selectSession
         when (isJust collision) (abort SessionBindingConflict)
         Tx.statement (session.value, scopeDigestFor admission, initial, binding) insertSession
         actual <- writePayload session encoded
         unless (actual == ref) (abort SessionBindingConflict)
-      stored <- metadata (Tx.statement session.value selectSession)
+      stored <- metadata (readRows session.value selectSession)
       pure $ case (result, stored) of
         (Right (), _) -> fmap (\(_, state) -> (Accepted, state)) (matching stored)
         (_, Just _) -> matching stored
@@ -212,7 +212,7 @@ ensureSessionDriver access@(SessionAccess session _ _) = guarded do
 
 authorizeSession :: (SessionReadEffects es) => WorkerSessionId -> AgentIdentity -> IO (Either Text ()) -> Eff es (Either SessionError SessionAccess)
 authorizeSession session actor authorize = guarded do
-  current <- metadata (Tx.statement session.value selectSession) >>= maybe (throwIO (SessionAbort SessionMissing)) pure
+  current <- metadata (readRows session.value selectSession) >>= maybe (throwIO (SessionAbort SessionMissing)) pure
   checked <- liftIO authorize
   now <- liftIO getCurrentTime
   pure $ case checked of
@@ -220,16 +220,16 @@ authorizeSession session actor authorize = guarded do
     _ -> Left SessionOwnerRefused
 
 inspectSession :: (SessionReadEffects es) => WorkerSessionId -> Eff es (Either SessionError (Maybe (SessionState, SessionBinding)))
-inspectSession session = protected (Tx.statement session.value selectSession)
+inspectSession session = protected (readRows session.value selectSession)
 
 inspectSessionPage :: (SessionReadEffects es) => WorkerSessionId -> MessagePosition -> Int -> Eff es (Either SessionError (Maybe SessionInspection))
 inspectSessionPage session after limit
   | messagePositionNumber after >= 10000 || limit < 1 || limit > 20 = pure (Left (SessionInputRefused "invalid assignment cursor or page limit"))
   | otherwise = protected do
-      Tx.statement session.value selectSession >>= traverse \(state, binding) -> do
-        messages <- Tx.statement (session.value, fromInteger (messagePositionNumber after), fromIntegral limit) pageMessages
+      readRows session.value selectSession >>= traverse \(state, binding) -> do
+        messages <- readRows (session.value, fromInteger (messagePositionNumber after), fromIntegral limit) pageMessages
         active <- traverse (getAssignment session) state.activeAssignment
-        results <- catMaybes <$> traverse (\message -> Tx.statement (session.value, message.assignmentId.value) selectResult) messages
+        results <- catMaybes <$> traverse (\message -> readRows (session.value, message.assignmentId.value) selectResult) messages
         let next = maybe after (afterMessage . (.sequence)) (listToMaybe (reverse messages))
         pure (SessionInspection state binding messages active results next (messagePositionNumber next + 1 < revisionNumber state.nextSequence))
 
@@ -263,7 +263,7 @@ nextAssignment :: (SessionReadEffects es) => SessionAccess -> Eff es (Either Ses
 nextAssignment access@(SessionAccess session _ _) = protected do
   (state, binding) <- getSession session
   checkAccess access state binding
-  Tx.statement session.value firstQueued
+  readRows session.value firstQueued
 
 -- Expected assignment revision is immutable input. Optimistic session revision
 -- is not part of the fingerprint, so a refused race can retry the same key.
@@ -330,9 +330,9 @@ startAssignment access expected epoch operation assignment = guarded do
     \state _ admission -> do
       unless (state.phase == Idle && isNothing state.activeAssignment) (abort AssignmentStillActive)
       message <- getAssignment state.sessionId assignment
-      first <- Tx.statement state.sessionId.value firstQueued
+      first <- readRows state.sessionId.value firstQueued
       unless (message.phase == Queued && ((.assignmentId) <$> first) == Just assignment) (abort AssignmentConflict)
-      prior <- Tx.statement (state.sessionId.value, fromInteger (revisionNumber message.sequence)) priorResults
+      prior <- readRows (state.sessionId.value, fromInteger (revisionNumber message.sequence)) priorResults
       findings <- forM (reverse prior) \receipt -> do
         result <- readPayload state.sessionId "assignment-result" receipt.output
         let bounded = if Lazy.length (Aeson.encode (result :: AssignmentResult).output) <= 8192 then Just result.output else Nothing
@@ -427,7 +427,7 @@ recordResult access expected epoch operation result = guarded do
       unless (state.phase `elem` [Active, Transferring] && state.activeAssignment == Just result.assignmentId) (abort AssignmentConflict)
       message <- getAssignment state.sessionId result.assignmentId
       unless (message.phase == Running && message.epoch == epoch) (abort AssignmentConflict)
-      existing <- Tx.statement (state.sessionId.value, result.assignmentId.value) selectResult
+      existing <- readRows (state.sessionId.value, result.assignmentId.value) selectResult
       when (isJust existing) (abort MessageConflict)
       actual <- writePayload state.sessionId encoded
       unless (actual == ref) (abort SessionBindingConflict)
@@ -443,7 +443,7 @@ readResult :: (SessionReadEffects es) => SessionAccess -> AssignmentId -> Eff es
 readResult access@(SessionAccess session _ _) assignment = protected do
   (state, binding) <- getSession session
   checkAccess access state binding
-  stored <- Tx.statement (session.value, assignment.value) selectResult
+  stored <- readRows (session.value, assignment.value) selectResult
   traverse (\receipt -> (receipt,) <$> readPayload session "assignment-result" receipt.output) stored
 
 readEvents :: (SessionReadEffects es) => SessionAccess -> StateRevision "worker-event" -> Int -> Eff es (Either SessionError [EventReceipt])
@@ -452,7 +452,7 @@ readEvents access@(SessionAccess session _ _) after limit
   | otherwise = protected do
       (state, binding) <- getSession session
       checkAccess access state binding
-      Tx.statement (session.value, fromInteger (revisionNumber after), fromIntegral limit) listEvents
+      readRows (session.value, fromInteger (revisionNumber after), fromIntegral limit) listEvents
 
 -- The caller's local integration update shares the cursor transaction. A
 -- cross-store checkpoint owner must first converge its durable pending intent.
@@ -489,7 +489,7 @@ prepareCheckpoint access expected epoch operation version previous through = gua
     \state binding _ -> do
       unless (isNothing state.checkpointIntent && state.consumedCursor == previous && through > previous && through <= state.eventCursor && revisionNumber through - revisionNumber previous <= 100) (abort AssignmentConflict)
       unless (version.rootId == binding.rootId && version.ownerEpoch == epoch && version.owner == state.owner) (abort SessionBindingConflict)
-      events <- Tx.statement (state.sessionId.value, fromInteger (revisionNumber previous), fromInteger (revisionNumber through - revisionNumber previous)) listEvents
+      events <- readRows (state.sessionId.value, fromInteger (revisionNumber previous), fromInteger (revisionNumber through - revisionNumber previous)) listEvents
       unless (map (revisionNumber . (.cursor)) events == [revisionNumber previous + 1 .. revisionNumber through]) (abort SessionBindingConflict)
       let intent = CheckpointIntent 1 state.sessionId binding.objective operation binding.parentIdentity epoch version previous through events
       pure (intent, state & #checkpointIntent .~ Just operation)
@@ -727,7 +727,7 @@ assignmentExecutions :: (SessionReadEffects es) => SessionAccess -> Eff es (Eith
 assignmentExecutions access@(SessionAccess session _ _) = protected do
   (state, binding) <- getSession session
   checkAccess access state binding
-  messages <- Tx.statement session.value completedAssignments
+  messages <- readRows session.value completedAssignments
   pure (mapMaybe (.executionId) messages)
 
 validateWake :: (SessionReadEffects es) => WorkerSessionId -> SessionWake -> Eff es AwakeableRow
@@ -779,7 +779,7 @@ prepareNotification access@(SessionAccess session _ _) = do
 mutate :: (SessionEffects es, ToJSON a, FromJSON a) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> Text -> Aeson.Value -> Bool -> (WorkerSessionId -> Int -> Generated.WorkerSessionLifecycleCommand) -> (SessionState -> SessionBinding -> SessionAdmission -> Transaction (a, SessionState)) -> Eff es (Either SessionError (Admission, a))
 mutate access@(SessionAccess session actor _) expected epoch operation kind input fresh command action = do
   requireKey operation
-  (_, binding) <- metadata (Tx.statement session.value selectSession) >>= maybe (throwIO (SessionAbort SessionMissing)) pure
+  (_, binding) <- metadata (readRows session.value selectSession) >>= maybe (throwIO (SessionAbort SessionMissing)) pure
   unless (actor == binding.parentIdentity) (throwIO (SessionAbort SessionOwnerRefused))
   let fingerprint = commandFingerprint kind input
       decodeStored = \case
@@ -834,10 +834,10 @@ appendEvent state event = do
   Tx.statement (state.sessionId.value, fromInteger (revisionNumber (advanceRevision state.eventCursor)), EventReceipt (advanceRevision state.eventCursor) event) insertEvent
 
 getSession :: WorkerSessionId -> Transaction (SessionState, SessionBinding)
-getSession session = Tx.statement session.value lockSession >>= maybe (abort SessionMissing) pure
+getSession session = readRows session.value lockSession >>= maybe (abort SessionMissing) pure
 
 getAssignment :: WorkerSessionId -> AssignmentId -> Transaction MessageReceipt
-getAssignment session assignment = Tx.statement (session.value, assignment.value) selectMessage >>= maybe (abort AssignmentMissing) pure
+getAssignment session assignment = readRows (session.value, assignment.value) selectMessage >>= maybe (abort AssignmentMissing) pure
 
 saveSession :: SessionState -> Transaction ()
 saveSession state = Tx.statement (state.sessionId.value, state) updateSession
@@ -882,12 +882,16 @@ textParam = E.param (E.nonNullable E.text)
 jsonParam :: (ToJSON a) => E.Params a
 jsonParam = toJSON >$< E.param (E.nonNullable E.jsonb)
 
-jsonRow :: (FromJSON a) => D.Row a
-jsonRow = D.column (D.nonNullable (D.refine (\value -> case Aeson.fromJSON value of Aeson.Success answer -> Right answer; Aeson.Error _ -> Left "unsupported session metadata") D.jsonb))
+jsonRow :: (FromJSON a) => D.Row (Either () a)
+jsonRow = capture <$> D.column (D.nonNullable D.jsonb)
+  where
+    capture value = case Aeson.fromJSON value of
+      Aeson.Success result -> Right result
+      Aeson.Error _ -> Left ()
 
-selectSession, lockSession :: Statement Text (Maybe (SessionState, SessionBinding))
-selectSession = preparable "SELECT state,binding FROM shikigami.worker_sessions WHERE session_id=$1" textParam (D.rowMaybe ((,) <$> jsonRow <*> jsonRow))
-lockSession = preparable "SELECT state,binding FROM shikigami.worker_sessions WHERE session_id=$1 FOR UPDATE" textParam (D.rowMaybe ((,) <$> jsonRow <*> jsonRow))
+selectSession, lockSession :: Statement Text (Maybe (Either () (SessionState, SessionBinding)))
+selectSession = preparable "SELECT state,binding FROM shikigami.worker_sessions WHERE session_id=$1" textParam (D.rowMaybe ((\state binding -> (,) <$> state <*> binding) <$> jsonRow <*> jsonRow))
+lockSession = preparable "SELECT state,binding FROM shikigami.worker_sessions WHERE session_id=$1 FOR UPDATE" textParam (D.rowMaybe ((\state binding -> (,) <$> state <*> binding) <$> jsonRow <*> jsonRow))
 
 countScopeSessions :: Statement (Text, Aeson.Value) Int64
 countScopeSessions = preparable "SELECT count(*) FROM shikigami.worker_sessions WHERE binding->'scope'->>'parent'=$1 AND binding->'parentIdentity'=$2" (contrazip2 textParam jsonParam) (D.singleRow (D.column (D.nonNullable D.int8)))
@@ -895,10 +899,10 @@ countScopeSessions = preparable "SELECT count(*) FROM shikigami.worker_sessions 
 lockScope :: Statement Text Int
 lockScope = preparable "SELECT 1::int4 FROM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1,0))" textParam (D.singleRow (fromIntegral <$> D.column (D.nonNullable D.int4)))
 
-selectScopeBinding :: Statement (Text, Aeson.Value) (Maybe SessionBinding)
+selectScopeBinding :: Statement (Text, Aeson.Value) (Maybe (Either () SessionBinding))
 selectScopeBinding = preparable "SELECT binding FROM shikigami.worker_sessions WHERE binding->'scope'->>'parent'=$1 AND binding->'parentIdentity'=$2 ORDER BY session_id LIMIT 1" (contrazip2 textParam jsonParam) (D.rowMaybe jsonRow)
 
-pageMessages :: Statement (Text, Int64, Int64) [MessageReceipt]
+pageMessages :: Statement (Text, Int64, Int64) [Either () MessageReceipt]
 pageMessages = preparable "SELECT state FROM shikigami.worker_session_messages WHERE session_id=$1 AND sequence>$2 ORDER BY sequence LIMIT $3" (contrazip3 textParam (E.param (E.nonNullable E.int8)) (E.param (E.nonNullable E.int8))) (D.rowList jsonRow)
 
 insertSession :: Statement (Text, Text, SessionState, SessionBinding) ()
@@ -926,13 +930,13 @@ payloadRow = capture <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNull
 insertMessage :: Statement (Text, Int64, Text, Text, MessageReceipt) ()
 insertMessage = preparable "INSERT INTO shikigami.worker_session_messages(session_id,sequence,assignment_id,operation_id,state) VALUES ($1,$2,$3,$4,$5)" (contrazip5 textParam (E.param (E.nonNullable E.int8)) textParam textParam jsonParam) D.noResult
 
-selectMessage :: Statement (Text, Text) (Maybe MessageReceipt)
+selectMessage :: Statement (Text, Text) (Maybe (Either () MessageReceipt))
 selectMessage = preparable "SELECT state FROM shikigami.worker_session_messages WHERE session_id=$1 AND assignment_id=$2" (contrazip2 textParam textParam) (D.rowMaybe jsonRow)
 
-firstQueued :: Statement Text (Maybe MessageReceipt)
+firstQueued :: Statement Text (Maybe (Either () MessageReceipt))
 firstQueued = preparable "SELECT state FROM shikigami.worker_session_messages WHERE session_id=$1 AND state->>'phase'='Queued' ORDER BY sequence LIMIT 1" textParam (D.rowMaybe jsonRow)
 
-completedAssignments :: Statement Text [MessageReceipt]
+completedAssignments :: Statement Text [Either () MessageReceipt]
 completedAssignments = preparable "SELECT state FROM shikigami.worker_session_messages WHERE session_id=$1 AND state->>'phase'='AssignmentFinished' ORDER BY sequence LIMIT 1000" textParam (D.rowList jsonRow)
 
 countQueued :: Statement Text Int64
@@ -944,16 +948,16 @@ updateMessage = preparable "UPDATE shikigami.worker_session_messages SET state=$
 insertResult :: Statement (Text, Text, ResultReceipt) ()
 insertResult = preparable "INSERT INTO shikigami.worker_session_results(session_id,assignment_id,state) VALUES ($1,$2,$3)" (contrazip3 textParam textParam jsonParam) D.noResult
 
-selectResult :: Statement (Text, Text) (Maybe ResultReceipt)
+selectResult :: Statement (Text, Text) (Maybe (Either () ResultReceipt))
 selectResult = preparable "SELECT state FROM shikigami.worker_session_results WHERE session_id=$1 AND assignment_id=$2" (contrazip2 textParam textParam) (D.rowMaybe jsonRow)
 
-priorResults :: Statement (Text, Int64) [ResultReceipt]
+priorResults :: Statement (Text, Int64) [Either () ResultReceipt]
 priorResults = preparable "SELECT r.state FROM shikigami.worker_session_results r JOIN shikigami.worker_session_messages m ON m.assignment_id=r.assignment_id AND m.session_id=r.session_id WHERE r.session_id=$1 AND m.sequence<$2 ORDER BY m.sequence DESC LIMIT 3" (contrazip2 textParam (E.param (E.nonNullable E.int8))) (D.rowList jsonRow)
 
 insertEvent :: Statement (Text, Int64, EventReceipt) ()
 insertEvent = preparable "INSERT INTO shikigami.worker_session_events(session_id,cursor,state) VALUES ($1,$2,$3)" (contrazip3 textParam (E.param (E.nonNullable E.int8)) jsonParam) D.noResult
 
-listEvents :: Statement (Text, Int64, Int64) [EventReceipt]
+listEvents :: Statement (Text, Int64, Int64) [Either () EventReceipt]
 listEvents = preparable "SELECT state FROM shikigami.worker_session_events WHERE session_id=$1 AND cursor>$2 ORDER BY cursor LIMIT $3" (contrazip3 textParam (E.param (E.nonNullable E.int8)) (E.param (E.nonNullable E.int8))) (D.rowList jsonRow)
 
 selectCommand :: Statement (Text, Text) (Maybe (Text, Aeson.Value))
@@ -964,3 +968,8 @@ insertCommand = preparable "INSERT INTO shikigami.worker_session_commands(sessio
 
 currentTime :: Statement () UTCTime
 currentTime = preparable "SELECT clock_timestamp()" E.noParams (D.singleRow (D.column (D.nonNullable D.timestamptz)))
+
+-- Decode owned JSON inside the transaction. Invalid domain values abort before
+-- commit; Hasql transport errors retain their separate store classification.
+readRows :: (Traversable rows) => parameters -> Statement parameters (rows (Either () a)) -> Transaction (rows a)
+readRows parameters statement = Tx.statement parameters statement >>= traverse (either (const (abort SessionBindingConflict)) pure)

@@ -214,6 +214,11 @@
           "rationale": "Private PayloadId, PayloadDigest and PayloadByteCount retain locator, canonical hash and positive int64 byte units through references, execution bindings, stores and retained Git/process routing. Complete valid JSON bytes remain unchanged; owner body/scope/kind/access checks remain authoritative and persistent size policy stays separate from ephemeral inputs. Real body-table corruption regressions preserve CorruptReplay/SessionBindingConflict. ADR-89, 577 pure/388 PostgreSQL/262 worker/95 server cases and 133 compiler clients cover this clause; complete scalar/identity and other JSON-row corruption review remain pending."
         },
         {
+          "id": "transactional-execution-and-session-json-refinement",
+          "disposition": "implemented",
+          "rationale": "Two new PostgreSQL controls reproduce stored-reference corruption disguised as storage unavailability, with three existing malformed-data controls passing. Execution/session statement results now capture Either () typed values; owner transaction traversal produces CorruptReplay/SessionBindingConflict before commit. Native guards and true transport failures retain their behavior. The focused five and full 577 pure/390 PostgreSQL/262 worker/95 server plus native/domain/diagram/82 CLI/live HTTP checks pass under ADR-90. Other owners and complete scalar/identity review remain pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -276,7 +281,13 @@
         "docs/evidence/keiro-0.22/payload-values-native-diff.json",
         "docs/evidence/keiro-0.22/payload-values-native-replay.json",
         "docs/evidence/keiro-0.22/payload-values-fold-identities.json",
-        "shikigami-core/test/Shikigami/PayloadValueSpec.hs"
+        "shikigami-core/test/Shikigami/PayloadValueSpec.hs",
+        "docs/adr/0090-execution-and-session-json-corruption-is-a-transactional-domain-refusal.md",
+        "docs/evidence/keiro-0.22/json-row-results.txt",
+        "docs/evidence/keiro-0.22/json-row-before-regressions.txt",
+        "docs/evidence/keiro-0.22/json-row-native-diff.json",
+        "docs/evidence/keiro-0.22/json-row-native-replay.json",
+        "docs/evidence/keiro-0.22/json-row-fold-identities.json"
       ]
     },
     {

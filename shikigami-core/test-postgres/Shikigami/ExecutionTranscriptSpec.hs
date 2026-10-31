@@ -979,6 +979,13 @@ tests fixture =
           run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput) >>= (@?= Left ProjectionUnavailable)
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
           root.usage @?= R.emptyUsage,
+      testCase "malformed reference JSON remains a domain corruption refusal" $
+        withFixture fixture \env snapshot access -> do
+          before <- lifecycleVersion env snapshot.executionId
+          run env (runTransaction (Tx.statement snapshot.executionId.value corruptSnapshotReference))
+          run env (Store.loadExecution access) >>= (@?= Left CorruptReplay)
+          run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput) >>= (@?= Left CorruptReplay)
+          lifecycleVersion env snapshot.executionId >>= (@?= before),
       testCase "malformed protected payload metadata remains corruption before context access" do
         mapM_
           ( \corrupt -> withFixture fixture \env snapshot access -> do
@@ -1486,3 +1493,6 @@ corruptPayloadDigest = preparable "UPDATE shikigami.execution_payloads SET diges
 
 zeroPayloadBytes :: Statement Text ()
 zeroPayloadBytes = preparable "UPDATE shikigami.execution_payloads SET bytes=0 WHERE execution_id=$1" (E.param (E.nonNullable E.text)) D.noResult
+
+corruptSnapshotReference :: Statement Text ()
+corruptSnapshotReference = preparable "UPDATE shikigami.executions SET state=jsonb_set(state,'{snapshot,digest}','\"invalid\"'::jsonb) WHERE execution_id=$1" (E.param (E.nonNullable E.text)) D.noResult

@@ -1,0 +1,27 @@
+Owned execution/session JSON corruption controls
+Source parent: 5feaf08744d7346a5855b87104419173c8a307eb
+The new tests run against unchanged parent production sources.
+Five selected real PostgreSQL cases: both retained-reference controls fail, three existing malformed-data controls pass.
+An earlier command failed to parse a whitespace-containing test pattern and ran no tests; it is excluded.
+
+Test suite shikigami-core-postgres-test: RUNNING...
+shikigami postgres
+  ExecutionTranscript
+    malformed reference JSON remains a domain corruption refusal:                  FAIL (0.24s)
+      test-postgres/Shikigami/ExecutionTranscriptSpec.hs:985:
+      expected: Left CorruptReplay
+       but got: Left ExecutionStorageUnavailable
+      Use -p '/malformed/&&/ExecutionTranscript.malformed reference JSON remains a domain corruption refusal/' to rerun this test only.
+    malformed protected payload metadata remains corruption before context access: OK (0.46s)
+  WorkerSessionStore
+    malformed reference JSON remains a domain corruption refusal:                  FAIL (0.23s)
+      test-postgres/Shikigami/WorkerSessionStoreSpec.hs:54:
+      expected: Left SessionBindingConflict
+       but got: Left SessionStorageUnavailable
+      Use -p '/malformed/&&/WorkerSessionStore.malformed reference JSON remains a domain corruption refusal/' to rerun this test only.
+    malformed protected session metadata remains a binding refusal:                OK (0.44s)
+  PracticeReviewMemory
+    PostgreSQL transitions
+      malformed active content is diagnostic and never guidance:                   OK (0.20s)
+
+2 out of 5 tests failed (1.57s)

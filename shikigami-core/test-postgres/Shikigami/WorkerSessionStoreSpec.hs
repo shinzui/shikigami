@@ -47,7 +47,16 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "WorkerSessionStore"
-    [ testCase "malformed protected session metadata remains a binding refusal" do
+    [ testCase "malformed reference JSON remains a domain corruption refusal" $
+        withFixture fixture \env admission access -> do
+          let statement = preparable "UPDATE shikigami.worker_sessions SET binding=jsonb_set(binding,'{admission,digest}','\"invalid\"'::jsonb) WHERE session_id=$1" (E.param (E.nonNullable E.text)) D.noResult
+          run env (runTransaction (Tx.statement (sessionIdFor admission).value statement))
+          run env (Store.loadAdmission access) >>= (@?= Left SessionBindingConflict)
+          run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "corrupt-binding-command") (instruction "must not be retained")) >>= (@?= Left SessionBindingConflict)
+          let count = run env (runTransaction (Tx.statement () (preparable "SELECT (SELECT count(*) FROM shikigami.worker_session_messages),(SELECT count(*) FROM shikigami.worker_session_commands),(SELECT count(*) FROM shikigami.worker_session_payloads)" E.noParams (D.singleRow ((,,) <$> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8))))))
+          count >>= (@?= (0, 0, 1))
+          run env (length <$> StoreRead.readCategory (StoreTypes.CategoryName "workerSessionLifecycle") (StoreTypes.GlobalPosition 0) 100) >>= (@?= 1),
+      testCase "malformed protected session metadata remains a binding refusal" do
         mapM_
           ( \assignment -> withFixture fixture \env admission access -> do
               let statement = preparable ("UPDATE shikigami.worker_session_payloads SET " <> assignment <> " WHERE session_id=$1") (E.param (E.nonNullable E.text)) D.noResult
