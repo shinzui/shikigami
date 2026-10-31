@@ -20,6 +20,7 @@ import Hasql.Pool (Pool)
 import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
+import Hasql.Transaction.Sessions qualified as Transactions
 import Keiro.Integration.Event qualified as Integration
 import Keiro.Outbox qualified as Outbox
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
@@ -81,13 +82,14 @@ import Shikigami.Sink.Http (credentialsFromConfig, newSinkHttp)
 import Shikigami.Sink.Wire qualified as Wire
 import Shikigami.Telemetry.TraceContext qualified as TraceContext
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
+import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase, (@?=))
 
 tests :: DatabaseFixture -> TestTree
 tests databaseFixture =
   testGroup
     "SinkDelivery"
-    [ testCase "workflow journals Enqueued (not Delivered) at enqueue time" (journalTruth databaseFixture),
+    [ testCase "corrupt delivery truth refuses retry and rolls back ignored refusal" (corruptDelivery databaseFixture),
+      testCase "workflow journals Enqueued (not Delivered) at enqueue time" (journalTruth databaseFixture),
       testCase "ChannelEgress enqueue snapshots minimal activity metadata" (egressIntentMetadata databaseFixture),
       testCase "paused enqueue journals a lifecycle skip without outbox or receipt" (pausedEnqueue databaseFixture),
       testCase "pause before publish records a terminal non-send without HTTP" (pauseBeforePublish databaseFixture),
@@ -828,3 +830,52 @@ fixtureAgentName = either (error . show) id . mkAgentName
 
 fixtureRunKey :: Text -> RunKey
 fixtureRunKey = either (error . show) id . parseRunKey
+
+corruptDelivery :: DatabaseFixture -> IO ()
+corruptDelivery fixture = do
+  posts <- newIORef (0 :: Int)
+  remote <- newIORef Map.empty
+  testWithApplication (pure (\request respond -> modifyIORef' posts (+ 1) >> kawaDoorwayApplication remote request respond)) \port ->
+    withFixture fixture "corrupt-delivery" [KawaDigest {subjectType = "agent", verb = "completed"}] unreachableKizashi unreachableDanwa \base env pool job -> do
+      let deps = base & #kawa .~ (KawaConfig {baseUrl = localBaseUrl port, sourceSegment = "shinzui/shikigami"})
+          sql query = expectRight "SQL" =<< Pool.use pool (Session.statement () (preparable query Encoders.noParams Decoders.noResult))
+      Delivery.lookupDelivery pool "absent-receipt" >>= (@?= Right Nothing)
+      [row] <- runWorkflowAndRows deps env job
+      pending <- lookupReceipt pool row
+      pending.status @?= Delivery.Pending
+      assertEqual "initial send succeeds" Outbox.PublishSucceeded =<< runEff (AgentWorkflow.publishSinkIntent deps row)
+      original <- lookupReceipt pool row
+      original.status @?= Delivery.Delivered
+      readIORef posts >>= (@?= 1)
+      sql "ALTER TABLE shikigami.sink_deliveries DROP CONSTRAINT sink_deliveries_status_check"
+      sql "UPDATE shikigami.sink_deliveries SET status='broken'"
+      Delivery.lookupDelivery pool original.receiptKey >>= (@?= Left "corrupt retained sink delivery receipt")
+      ignored <-
+        expectRight "transaction"
+          =<< Pool.use
+            pool
+            ( Transactions.transaction Transactions.ReadCommitted Transactions.Write do
+                Delivery.recordDeliveryTx (original & #receiptKey .~ "must-rollback")
+                result <- Delivery.lookupDeliveryTx original.receiptKey
+                Delivery.recordDeliveryTx (original & #receiptKey .~ "also-rollback")
+                pure result
+            )
+      ignored @?= Left "corrupt retained sink delivery receipt"
+      Delivery.lookupDelivery pool "must-rollback" >>= (@?= Right Nothing)
+      Delivery.lookupDelivery pool "also-rollback" >>= (@?= Right Nothing)
+      outcome <- runEff (AgentWorkflow.publishSinkIntent deps row)
+      case outcome of
+        Outbox.PublishFailed err -> assertBool "owning refusal" ("corrupt retained sink delivery receipt" `Text.isInfixOf` err)
+        other -> assertFailure ("corrupt receipt authorized publication: " <> show other)
+      readIORef posts >>= (@?= 1)
+      sql "UPDATE shikigami.sink_deliveries SET status='delivered'"
+      Delivery.lookupDelivery pool original.receiptKey >>= (@?= Right (Just original))
+      assertEqual "repair recovers retained delivery" Outbox.PublishSucceeded =<< runEff (AgentWorkflow.publishSinkIntent deps row)
+      readIORef posts >>= (@?= 1)
+      sql "ALTER TABLE shikigami.sink_deliveries RENAME TO sink_deliveries_unavailable"
+      unavailable <- Delivery.lookupDelivery pool original.receiptKey
+      case unavailable of
+        Left err -> assertBool "SQL failure remains distinct" (err /= "corrupt retained sink delivery receipt")
+        Right _ -> assertFailure "SQL failure was hidden"
+      sql "ALTER TABLE shikigami.sink_deliveries_unavailable RENAME TO sink_deliveries"
+      Delivery.lookupDelivery pool original.receiptKey >>= (@?= Right (Just original))

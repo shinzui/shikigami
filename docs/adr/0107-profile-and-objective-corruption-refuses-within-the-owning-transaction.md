@@ -57,6 +57,22 @@ SQL failures retain `CleanupUnavailable`. Historical plans without ownership
 retain their exact encoding. Cleanup's terminal eligibility query and the other
 workspace stores remain separate audit obligations.
 
+Directory skip and sink delivery readers now retain parsed row results as
+`Either Text value` until their owning transaction checks them. A malformed
+member refuses the whole skip list. Both pool and composable transaction readers
+return a fixed owner-specific corruption diagnostic and condemn the transaction;
+genuine SQL failures keep their existing store diagnostics. Existing public
+`Either Text` APIs and stored representations remain unchanged. The indexed
+skip lookup constrains every parsed field (agent, drain stage and run key) by
+already checked query parameters; it shares the same row checker without
+inventing validation for free-form refusal details or invalid principal claims.
+
+A corrupt delivery status cannot become missing delivery truth or authorize a
+new transport call. The existing publisher handles the read refusal before
+updating the receipt or sending, and repair recovers the original delivered
+receipt with its downstream ID. This boundary covers status decoding; remaining
+receipt scalar and identity distinctions stay explicit audit violations.
+
 ## Alternatives rejected
 
 Mapping every database failure to corruption hides outages. Refining owned JSON
@@ -83,6 +99,15 @@ refusal rolls back an earlier control change. Scratch remains present until the
 original plan is restored and resumed. A valid listing member beside a corrupt
 binding proves whole-page refusal, rollback and recovery; absence and a renamed
 table distinguish missing metadata from SQL failure.
+
+Directory controls additionally mutate the agent name, run key and stage of a
+complete public skip beside a valid sibling. Whole-list refusal rolls back both
+earlier and later tentative writes even when ignored; repair recovers both
+members. An invalid external principal claim remains reportable under the
+existing refusal contract. Sink controls publish a real delivery, corrupt its
+status, prove rollback and no additional HTTP send, then repair the exact receipt
+and recover the send guard. Missing rows and renamed tables distinguish absence
+from SQL failure in both owners.
 
 These results qualify the selected macOS metadata boundaries. They do not certify
 the remaining stores, the exhaustive scalar classification, native Linux process

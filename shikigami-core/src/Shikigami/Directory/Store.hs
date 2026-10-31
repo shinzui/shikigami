@@ -11,7 +11,9 @@ module Shikigami.Directory.Store
     recordRunSkip,
     recordRunSkipTx,
     listRunSkips,
+    listRunSkipsTx,
     lookupDrainSkip,
+    lookupDrainSkipTx,
   )
 where
 
@@ -28,7 +30,6 @@ import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
 import Hasql.Pool (Pool)
 import Hasql.Pool qualified as Pool
-import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Transaction
@@ -112,7 +113,11 @@ recordRunSkipTx runSkip = Transaction.statement runSkip recordRunSkipStatement
 -- | Read lifecycle refusals in insertion order for operator inspection.
 listRunSkips :: Pool -> IO (Either Text [RunSkip])
 listRunSkips pool =
-  renderUsage <$> Pool.use pool (Session.statement () listRunSkipsStatement)
+  runRead pool listRunSkipsTx
+
+-- | A corrupt member refuses the entire list and rolls back caller writes.
+listRunSkipsTx :: Transaction (Either Text [RunSkip])
+listRunSkipsTx = Transaction.statement () listRunSkipsStatement >>= checkedRead . sequence
 
 loadStateRows :: FilePath -> UTCTime -> AgentLoadReport -> [LoadState]
 loadStateRows directory observedAt AgentLoadReport {entries} = fmap toRow entries
@@ -200,7 +205,7 @@ recordRunSkipStatement =
     )
     Decoders.noResult
 
-listRunSkipsStatement :: Statement () [RunSkip]
+listRunSkipsStatement :: Statement () [Either Text RunSkip]
 listRunSkipsStatement =
   preparable
     """
@@ -211,15 +216,28 @@ listRunSkipsStatement =
     Encoders.noParams
     (Decoders.rowList runSkipRow)
 
-runSkipRow :: Decoders.Row RunSkip
+runSkipRow :: Decoders.Row (Either Text RunSkip)
 runSkipRow =
-  RunSkip
-    <$> Decoders.column (Decoders.nonNullable (Decoders.refine mkAgentName Decoders.text))
+  assemble
+    <$> Decoders.column (Decoders.nonNullable Decoders.text)
     <*> Decoders.column (Decoders.nullable Decoders.text)
-    <*> Decoders.column (Decoders.nonNullable (Decoders.refine parseSkipStage Decoders.text))
     <*> Decoders.column (Decoders.nonNullable Decoders.text)
     <*> Decoders.column (Decoders.nonNullable Decoders.text)
-    <*> Decoders.column (Decoders.nonNullable (Decoders.refine parseRunKey Decoders.text))
+    <*> Decoders.column (Decoders.nonNullable Decoders.text)
+    <*> Decoders.column (Decoders.nonNullable Decoders.text)
+  where
+    assemble agent principal stage detail reason key =
+      RunSkip <$> mkAgentName agent <*> pure principal <*> parseSkipStage stage <*> pure detail <*> pure reason <*> parseRunKey key
+
+checkedRead :: Either Text a -> Transaction (Either Text a)
+checkedRead = \case
+  Left _ -> Transaction.condemn >> pure (Left "corrupt retained directory run skip")
+  Right value -> pure (Right value)
+
+runRead :: Pool -> Transaction (Either Text a) -> IO (Either Text a)
+runRead pool transaction = do
+  result <- Pool.use pool (Transaction.Sessions.transaction Transaction.Sessions.ReadCommitted Transaction.Sessions.Write transaction)
+  pure (renderUsage result >>= id)
 
 renderLoadStatus :: LoadStatus -> Text
 renderLoadStatus = \case
@@ -242,7 +260,10 @@ renderUsage = first (Text.pack . show)
 
 -- | Indexed lookup of the drain refusal for one accepted run.
 lookupDrainSkip :: Pool -> AgentName -> RunKey -> IO (Either Text (Maybe RunSkip))
-lookupDrainSkip pool agent key = renderUsage <$> Pool.use pool (Session.statement (agent, key) statement)
+lookupDrainSkip pool agent key = runRead pool (lookupDrainSkipTx agent key)
+
+lookupDrainSkipTx :: AgentName -> RunKey -> Transaction (Either Text (Maybe RunSkip))
+lookupDrainSkipTx agent key = Transaction.statement (agent, key) statement >>= checkedRead . sequence
   where
     statement =
       preparable

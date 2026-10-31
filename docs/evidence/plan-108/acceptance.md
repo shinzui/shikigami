@@ -1,6 +1,6 @@
 # Plan 108 acceptance evidence
 
-Implementation is in progress. Two decoder boundaries and one policy scalar have
+Implementation is in progress. Five decoder boundaries and one policy scalar have
 focused acceptance below. No complete milestone or exhaustive semantic compliance
 is accepted yet. The frozen domain guide remains deferred.
 
@@ -202,3 +202,61 @@ audit. Neither failure is reported as milestone acceptance.
 
 `nix develop --no-write-lock-file -c just keiro-upgrade-audit` also passes with
 21 mutation tests, preserving the frozen inventory and its existing deferral.
+
+A fourth batch implements Directory skip and Sink delivery retained-row checks;
+`directory-sink-source.json` binds its four implementation/test files against
+parent `bacd466`. These owners store scalar columns rather than JSON. Their
+existing `Either Text` pool APIs now execute the same checked transaction readers
+as composable clients. Malformed names, run keys or closed statuses return fixed
+owner-specific refusals and condemn the transaction. SQL failures retain the
+existing store diagnostic; missing rows remain `Right Nothing` or an empty list.
+Wire formats, enum spellings, identity domains and public pool signatures remain
+unchanged.
+
+The Directory test persists two complete public skips, then mutates one agent
+name, run key or stage. Every malformed member refuses the entire list; ignored
+refusal rolls back public writes both before and after the read. Repair restores
+both original members. An empty reported principal remains admissible diagnostic
+evidence under the existing contract; this batch introduces no principal
+validation. The indexed drain lookup constrains every parsed field by checked
+query parameters and has positive/missing/SQL-failure controls, rather than an
+invented corrupt-matching-row case.
+
+The Sink test creates a pending receipt through the workflow and publishes a real
+Kawa effect before corrupting its delivered status. Lookup refuses, ignored
+refusal rolls back both earlier and later receipt writes, and the publisher
+returns `PublishFailed` without another HTTP call or replacement receipt.
+Repairing only the status restores the exact original receipt, downstream detail
+and send guard. Missing receipts and renamed tables distinguish absence and SQL
+failure. Existing Danwa sub-receipt recovery, lifecycle, authorization, receipt
+gap and send-suppression cases remain passing.
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/directory store/||/SinkDelivery/'
+```
+
+All 24 selected cases pass (four Directory and twenty SinkDelivery). This uses
+the suite-owned disposable PostgreSQL fixture with serial execution; no database
+cases are skipped. The 24 domain-tool mutation tests, Haskell style check,
+whitespace check and upgrade inventory audit with 21 mutation tests also pass.
+[ADR-107](../../adr/0107-profile-and-objective-corruption-refuses-within-the-owning-transaction.md)
+records this extension of the owner boundary.
+
+The review adds 29 declaration/member classifications: nine explicit unresolved
+scalar/identity violations, three exclusions and seventeen compliant entries.
+There are now 292 reviewed keys (223 compliant, 23 not applicable, 46 violations)
+and 3,697 unreviewed keys. Receipt keys, message/run identity, agent name, ordinal,
+sink kind and overloaded downstream detail remain distinct remediation work;
+Directory reported-principal/context values also remain explicit violations.
+None are exempted merely because they are persisted. M1, M2 and M3 remain open.
+No workflow body, generated domain specification, migration, dependency bound or
+HTTP representation changed in this batch.
+
+The full `cabal build all --enable-tests -j1` passes on the formatted source,
+followed by census refresh: 322 modules, 914 declarations and fourteen role
+entrypoints, retaining 3,989 audit keys. Independent `expected_keys` validation
+passes current source, compiled-source fingerprints, interfaces and tool hashes.
+The classification census hash and the two reviewed source hashes are refreshed;
+unrelated semantic verdicts are unchanged. Both checker modes still exit 1 with
+`missing 3697 classification keys`. This is intentional refusal of incomplete
+audit coverage, not milestone acceptance or final M3 suite evidence.

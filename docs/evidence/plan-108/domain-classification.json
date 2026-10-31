@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "censusSha256": "d9b4c64597e044a063810e5e6aca4b7e1e80dc2c0eb891f6960e3e36521a3397",
+  "censusSha256": "5b328b1bff5c91a118937d5aa0a19ddf5f7079337ecb6bcbb633d0893e18fe91",
   "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
   "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
   "sourcePath": "runtime-patterns/architecture/domain-newtypes-and-typeids.md",
@@ -3540,6 +3540,312 @@
       ]
     },
     {
+      "sourcePath": "shikigami-core/src/Shikigami/Directory/Store.hs",
+      "module": "Shikigami.Directory.Store",
+      "declaration": "LoadState",
+      "member": "$self",
+      "sourceSha256": "8a0702651d2982532635d4663aeaffa9a3ecf28c0012dcfe28d0ad9b88b9d265",
+      "classification": "structural",
+      "disposition": "compliant",
+      "invariant": "Product composition only; each field has a separate reviewed obligation.",
+      "authority": "LoadState constructors",
+      "boundaryOwner": "Shikigami.Directory.Store",
+      "rationale": "The distinct record does not certify its scalar members.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Directory/Store.hs#LoadState",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs#corruptSkips"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Directory/Store.hs",
+      "module": "Shikigami.Directory.Store",
+      "declaration": "LoadState",
+      "member": "LoadState.agentName",
+      "sourceSha256": "8a0702651d2982532635d4663aeaffa9a3ecf28c0012dcfe28d0ad9b88b9d265",
+      "classification": "domain-value",
+      "disposition": "compliant",
+      "invariant": "Optional checked AgentName from an admitted declaration.",
+      "authority": "AgentDecl.name -> loadStateRows",
+      "boundaryOwner": "Shikigami.Directory.Store",
+      "rationale": "Keeps the existing nominal checked name until SQL rendering.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Directory/Store.hs#LoadState",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs#corruptSkips"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Directory/Store.hs",
+      "module": "Shikigami.Directory.Store",
+      "declaration": "LoadState",
+      "member": "LoadState.enabled",
+      "sourceSha256": "8a0702651d2982532635d4663aeaffa9a3ecf28c0012dcfe28d0ad9b88b9d265",
+      "classification": "boundary-dto",
+      "disposition": "compliant",
+      "invariant": "Optional manifest enabled flag, absent for loader failures.",
+      "authority": "AgentDecl.enabled -> loadStateRows",
+      "boundaryOwner": "Shikigami.Directory.Store",
+      "rationale": "Private output-only SQL adapter preserves the source Boolean; no lifecycle permission is derived here.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Directory/Store.hs#LoadState",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs#corruptSkips"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Directory/Store.hs",
+      "module": "Shikigami.Directory.Store",
+      "declaration": "LoadState",
+      "member": "LoadState.error",
+      "sourceSha256": "8a0702651d2982532635d4663aeaffa9a3ecf28c0012dcfe28d0ad9b88b9d265",
+      "classification": "incidental",
+      "disposition": "not-applicable",
+      "invariant": "Verbatim loader diagnostic, absent on success.",
+      "authority": "LoadError -> loadStateRows -> upsertLoadStateStatement",
+      "boundaryOwner": "Shikigami.Directory.Store",
+      "rationale": "Unstructured diagnostic text is not identity or an authorization scalar.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Directory/Store.hs#LoadState",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs#corruptSkips"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Directory/Store.hs",
+      "module": "Shikigami.Directory.Store",
+      "declaration": "LoadState",
+      "member": "LoadState.manifestDirectory",
+      "sourceSha256": "8a0702651d2982532635d4663aeaffa9a3ecf28c0012dcfe28d0ad9b88b9d265",
+      "classification": "boundary-dto",
+      "disposition": "compliant",
+      "invariant": "Configured report directory used verbatim as reconciliation scope.",
+      "authority": "recordLoadStates directory -> deleteDirectoryStatement / upsertLoadStateStatement",
+      "boundaryOwner": "Shikigami.Directory.Store",
+      "rationale": "Private adapter column groups a complete report; this record never authorizes filesystem access.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Directory/Store.hs#LoadState",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs#corruptSkips"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Directory/Store.hs",
+      "module": "Shikigami.Directory.Store",
+      "declaration": "LoadState",
+      "member": "LoadState.manifestPath",
+      "sourceSha256": "8a0702651d2982532635d4663aeaffa9a3ecf28c0012dcfe28d0ad9b88b9d265",
+      "classification": "boundary-dto",
+      "disposition": "compliant",
+      "invariant": "Exact loader-reported manifest path; no canonical-root or entity claim.",
+      "authority": "AgentLoadEntry.path -> loadStateRows -> upsertLoadStateStatement",
+      "boundaryOwner": "Shikigami.Directory.Store",
+      "rationale": "Private SQL parameter record only; the manifest loader owns path interpretation.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Directory/Store.hs#LoadState",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs#corruptSkips"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Directory/Store.hs",
+      "module": "Shikigami.Directory.Store",
+      "declaration": "LoadState",
+      "member": "LoadState.observedAt",
+      "sourceSha256": "8a0702651d2982532635d4663aeaffa9a3ecf28c0012dcfe28d0ad9b88b9d265",
+      "classification": "runtime-opaque",
+      "disposition": "compliant",
+      "invariant": "Native UTC observation timestamp captured once for a complete report.",
+      "authority": "getCurrentTime -> recordLoadStates -> loadStateRows",
+      "boundaryOwner": "Shikigami.Directory.Store",
+      "rationale": "Retains UTCTime without introducing a wrapper around the native time representation.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Directory/Store.hs#LoadState",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs#corruptSkips"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Directory/Store.hs",
+      "module": "Shikigami.Directory.Store",
+      "declaration": "LoadState",
+      "member": "LoadState.principalId",
+      "sourceSha256": "8a0702651d2982532635d4663aeaffa9a3ecf28c0012dcfe28d0ad9b88b9d265",
+      "classification": "boundary-dto",
+      "disposition": "compliant",
+      "invariant": "Verbatim optional manifest identity claim, including invalid claims in diagnostic reports.",
+      "authority": "IdentityDecl.principal -> declaredPrincipal -> loadStateRows",
+      "boundaryOwner": "Shikigami.Directory.Store",
+      "rationale": "This private SQL parameter is a reported claim, not verified principal authority.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Directory/Store.hs#LoadState",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs#corruptSkips"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Directory/Store.hs",
+      "module": "Shikigami.Directory.Store",
+      "declaration": "LoadState",
+      "member": "LoadState.status",
+      "sourceSha256": "8a0702651d2982532635d4663aeaffa9a3ecf28c0012dcfe28d0ad9b88b9d265",
+      "classification": "domain-value",
+      "disposition": "compliant",
+      "invariant": "Only Loaded or Failed according to loader result constructor.",
+      "authority": "AgentLoaded / AgentLoadFailed -> loadStateRows -> renderLoadStatus",
+      "boundaryOwner": "Shikigami.Directory.Store",
+      "rationale": "A closed local enum distinguishes load result from skip and delivery status.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Directory/Store.hs#LoadState",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs#corruptSkips"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Directory/Store.hs",
+      "module": "Shikigami.Directory.Store",
+      "declaration": "LoadStatus",
+      "member": "$self",
+      "sourceSha256": "8a0702651d2982532635d4663aeaffa9a3ecf28c0012dcfe28d0ad9b88b9d265",
+      "classification": "domain-value",
+      "disposition": "compliant",
+      "invariant": "Closed constructor set for this owner lifecycle.",
+      "authority": "LoadStatus constructors and owner render/parse functions",
+      "boundaryOwner": "Shikigami.Directory.Store",
+      "rationale": "A separate nominal enum prevents mixing load, skip and delivery lifecycles.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Directory/Store.hs#LoadStatus",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs#corruptSkips"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Directory/Store.hs",
+      "module": "Shikigami.Directory.Store",
+      "declaration": "RunSkip",
+      "member": "$self",
+      "sourceSha256": "8a0702651d2982532635d4663aeaffa9a3ecf28c0012dcfe28d0ad9b88b9d265",
+      "classification": "structural",
+      "disposition": "compliant",
+      "invariant": "Product composition only; each field has a separate reviewed obligation.",
+      "authority": "RunSkip constructors",
+      "boundaryOwner": "Shikigami.Directory.Store",
+      "rationale": "The distinct record does not certify its scalar members.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Directory/Store.hs#RunSkip",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs#corruptSkips"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Directory/Store.hs",
+      "module": "Shikigami.Directory.Store",
+      "declaration": "RunSkip",
+      "member": "RunSkip.agentName",
+      "sourceSha256": "8a0702651d2982532635d4663aeaffa9a3ecf28c0012dcfe28d0ad9b88b9d265",
+      "classification": "domain-value",
+      "disposition": "compliant",
+      "invariant": "Checked agent catalog name, including on retained reads.",
+      "authority": "Trigger.Consumer / Trigger.Scheduler -> RunSkip; runSkipRow -> mkAgentName",
+      "boundaryOwner": "Shikigami.Directory.Store",
+      "rationale": "The public record preserves AgentName; malformed persisted names refuse the whole read.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Directory/Store.hs#RunSkip",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs#corruptSkips"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Directory/Store.hs",
+      "module": "Shikigami.Directory.Store",
+      "declaration": "RunSkip",
+      "member": "RunSkip.detail",
+      "sourceSha256": "8a0702651d2982532635d4663aeaffa9a3ecf28c0012dcfe28d0ad9b88b9d265",
+      "classification": "domain-value",
+      "disposition": "violation",
+      "invariant": "Boundary context such as schedule, event or agent-run.",
+      "authority": "Trigger.Scheduler / Trigger.Consumer / run drain -> RunSkip.detail",
+      "boundaryOwner": "Shikigami.Directory.Store",
+      "rationale": "Raw Text does not distinguish admission context from reason diagnostics; review a nominal context before remediation.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Directory/Store.hs#RunSkip",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs#corruptSkips"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Directory/Store.hs",
+      "module": "Shikigami.Directory.Store",
+      "declaration": "RunSkip",
+      "member": "RunSkip.idempotencyKey",
+      "sourceSha256": "8a0702651d2982532635d4663aeaffa9a3ecf28c0012dcfe28d0ad9b88b9d265",
+      "classification": "domain-value",
+      "disposition": "compliant",
+      "invariant": "Nonempty retained workflow deduplication coordinate, scoped by stage.",
+      "authority": "RunJob.idempotencyKey -> recordRunSkipTx; runSkipRow -> parseRunKey",
+      "boundaryOwner": "Shikigami.Directory.Store",
+      "rationale": "Keeps the checked RunKey; unique stage/key and ON CONFLICT retain first evidence.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Directory/Store.hs#RunSkip",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs#corruptSkips"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Directory/Store.hs",
+      "module": "Shikigami.Directory.Store",
+      "declaration": "RunSkip",
+      "member": "RunSkip.principalId",
+      "sourceSha256": "8a0702651d2982532635d4663aeaffa9a3ecf28c0012dcfe28d0ad9b88b9d265",
+      "classification": "external-identity",
+      "disposition": "violation",
+      "invariant": "Optional reported principal claim, which may itself be invalid and explain refusal.",
+      "authority": "IdentityDecl.principal / Directory.PrincipalRecord.principalId -> trigger refusal -> RunSkip",
+      "boundaryOwner": "Shikigami.Directory.Store",
+      "rationale": "Raw Text conflates reported identity claims and other text. Preserve invalid claims while introducing a nominal representation in a subsequent batch.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Directory/Store.hs#RunSkip",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs#corruptSkips"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Directory/Store.hs",
+      "module": "Shikigami.Directory.Store",
+      "declaration": "RunSkip",
+      "member": "RunSkip.reason",
+      "sourceSha256": "8a0702651d2982532635d4663aeaffa9a3ecf28c0012dcfe28d0ad9b88b9d265",
+      "classification": "incidental",
+      "disposition": "not-applicable",
+      "invariant": "Human-readable lifecycle refusal diagnostic.",
+      "authority": "Directory.SkipRun / admission validation -> RunSkip -> operator list",
+      "boundaryOwner": "Shikigami.Directory.Store",
+      "rationale": "Free-form error explanation is not used as an identity or permission token.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Directory/Store.hs#RunSkip",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs#corruptSkips"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Directory/Store.hs",
+      "module": "Shikigami.Directory.Store",
+      "declaration": "RunSkip",
+      "member": "RunSkip.stage",
+      "sourceSha256": "8a0702651d2982532635d4663aeaffa9a3ecf28c0012dcfe28d0ad9b88b9d265",
+      "classification": "domain-value",
+      "disposition": "compliant",
+      "invariant": "TriggerStage and DrainStage remain distinct closed outcomes.",
+      "authority": "trigger and drain admission -> renderSkipStage; runSkipRow -> parseSkipStage",
+      "boundaryOwner": "Shikigami.Directory.Store",
+      "rationale": "Unknown retained stages refuse within the transaction; stage is not inferred from other data.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Directory/Store.hs#RunSkip",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs#corruptSkips"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Directory/Store.hs",
+      "module": "Shikigami.Directory.Store",
+      "declaration": "SkipStage",
+      "member": "$self",
+      "sourceSha256": "8a0702651d2982532635d4663aeaffa9a3ecf28c0012dcfe28d0ad9b88b9d265",
+      "classification": "domain-value",
+      "disposition": "compliant",
+      "invariant": "Closed constructor set for this owner lifecycle.",
+      "authority": "SkipStage constructors and owner render/parse functions",
+      "boundaryOwner": "Shikigami.Directory.Store",
+      "rationale": "A separate nominal enum prevents mixing load, skip and delivery lifecycles.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Directory/Store.hs#SkipStage",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs#corruptSkips"
+      ]
+    },
+    {
       "sourcePath": "shikigami-core/src/Shikigami/Objective/Store.hs",
       "module": "Shikigami.Objective.Store",
       "declaration": "Abort",
@@ -3586,6 +3892,193 @@
       "rationale": "This synonym describes required effects rather than weakening a key scalar domain.",
       "evidence": [
         "shikigami-core/src/Shikigami/Objective/Store.hs#ObjectiveEffects"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Sink/Delivery.hs",
+      "module": "Shikigami.Sink.Delivery",
+      "declaration": "DeliveryReceipt",
+      "member": "$self",
+      "sourceSha256": "d129446f6af156161541efcc973948a67144dcfb224814ab938cda73d3fd0f75",
+      "classification": "structural",
+      "disposition": "compliant",
+      "invariant": "Product composition only; each field has a separate reviewed obligation.",
+      "authority": "DeliveryReceipt constructors",
+      "boundaryOwner": "Shikigami.Sink.Delivery",
+      "rationale": "The distinct record does not certify its scalar members.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Sink/Delivery.hs#DeliveryReceipt",
+        "shikigami-core/test-postgres/Shikigami/SinkDeliverySpec.hs#corruptDelivery"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Sink/Delivery.hs",
+      "module": "Shikigami.Sink.Delivery",
+      "declaration": "DeliveryReceipt",
+      "member": "DeliveryReceipt.agent",
+      "sourceSha256": "d129446f6af156161541efcc973948a67144dcfb224814ab938cda73d3fd0f75",
+      "classification": "domain-value",
+      "disposition": "violation",
+      "invariant": "Name rendered from the retained sink agent.",
+      "authority": "SinkIntent.agent -> deliveryReceiptFor -> receipt row",
+      "boundaryOwner": "Shikigami.Sink.Delivery",
+      "rationale": "Existing AgentName meaning is flattened to Text across the durable boundary.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Sink/Delivery.hs#DeliveryReceipt",
+        "shikigami-core/test-postgres/Shikigami/SinkDeliverySpec.hs#corruptDelivery"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Sink/Delivery.hs",
+      "module": "Shikigami.Sink.Delivery",
+      "declaration": "DeliveryReceipt",
+      "member": "DeliveryReceipt.detail",
+      "sourceSha256": "d129446f6af156161541efcc973948a67144dcfb224814ab938cda73d3fd0f75",
+      "classification": "external-identity",
+      "disposition": "violation",
+      "invariant": "Downstream identifier for successful effects, otherwise a bounded diagnostic.",
+      "authority": "SinkResult / Danwa conversation guard -> deliveryReceiptFor / sub-receipts",
+      "boundaryOwner": "Shikigami.Sink.Delivery",
+      "rationale": "An overloaded Maybe Text erases downstream identity versus diagnostic meaning; preserve actual downstream authority and historical representation when fixing.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Sink/Delivery.hs#DeliveryReceipt",
+        "shikigami-core/test-postgres/Shikigami/SinkDeliverySpec.hs#corruptDelivery"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Sink/Delivery.hs",
+      "module": "Shikigami.Sink.Delivery",
+      "declaration": "DeliveryReceipt",
+      "member": "DeliveryReceipt.ordinal",
+      "sourceSha256": "d129446f6af156161541efcc973948a67144dcfb224814ab938cda73d3fd0f75",
+      "classification": "domain-value",
+      "disposition": "violation",
+      "invariant": "Nonnegative position of a sink in the retained intent.",
+      "authority": "SinkIntent.ordinal -> deliveryReceiptFor; sink_deliveries ordinal CHECK",
+      "boundaryOwner": "Shikigami.Sink.Delivery",
+      "rationale": "Int does not distinguish ordinal from other counts; decoder currently relies on the schema range constraint, and public construction permits negative values.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Sink/Delivery.hs#DeliveryReceipt",
+        "shikigami-core/test-postgres/Shikigami/SinkDeliverySpec.hs#corruptDelivery"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Sink/Delivery.hs",
+      "module": "Shikigami.Sink.Delivery",
+      "declaration": "DeliveryReceipt",
+      "member": "DeliveryReceipt.outboxMessageId",
+      "sourceSha256": "d129446f6af156161541efcc973948a67144dcfb224814ab938cda73d3fd0f75",
+      "classification": "external-identity",
+      "disposition": "violation",
+      "invariant": "The retained Keiro integration message ID for this sink intent.",
+      "authority": "mori://shinzui/keiro \u2014 keiro-core/src/Keiro/Integration/Event.hs#messageId (symbol-level URI pending); deliveryReceiptFor -> recordDelivery",
+      "boundaryOwner": "Shikigami.Sink.Delivery",
+      "rationale": "External message authority is retained but erased to interchangeable Text; use its actual native representation or a checked nominal coordinate after source review.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Sink/Delivery.hs#DeliveryReceipt",
+        "shikigami-core/test-postgres/Shikigami/SinkDeliverySpec.hs#corruptDelivery"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Sink/Delivery.hs",
+      "module": "Shikigami.Sink.Delivery",
+      "declaration": "DeliveryReceipt",
+      "member": "DeliveryReceipt.receiptKey",
+      "sourceSha256": "d129446f6af156161541efcc973948a67144dcfb224814ab938cda73d3fd0f75",
+      "classification": "locator",
+      "disposition": "violation",
+      "invariant": "Outbox key or stable namespaced sub-receipt coordinate.",
+      "authority": "deliveryReceiptKey / subReceiptKey -> lookupDelivery / recordDelivery",
+      "boundaryOwner": "Shikigami.Sink.Delivery",
+      "rationale": "Raw Text permits confusing parent and sub-receipt lookup with run and message IDs; this durable send guard is not a DTO exemption.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Sink/Delivery.hs#DeliveryReceipt",
+        "shikigami-core/test-postgres/Shikigami/SinkDeliverySpec.hs#corruptDelivery"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Sink/Delivery.hs",
+      "module": "Shikigami.Sink.Delivery",
+      "declaration": "DeliveryReceipt",
+      "member": "DeliveryReceipt.runId",
+      "sourceSha256": "d129446f6af156161541efcc973948a67144dcfb224814ab938cda73d3fd0f75",
+      "classification": "runtime-opaque",
+      "disposition": "violation",
+      "invariant": "Workflow ID copied from the retained SinkIntent.",
+      "authority": "SinkIntent.runId -> deliveryReceiptFor",
+      "boundaryOwner": "Shikigami.Sink.Delivery",
+      "rationale": "Raw Text erases the native workflow identity distinction; no fresh entity identity should be allocated.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Sink/Delivery.hs#DeliveryReceipt",
+        "shikigami-core/test-postgres/Shikigami/SinkDeliverySpec.hs#corruptDelivery"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Sink/Delivery.hs",
+      "module": "Shikigami.Sink.Delivery",
+      "declaration": "DeliveryReceipt",
+      "member": "DeliveryReceipt.sinkKind",
+      "sourceSha256": "d129446f6af156161541efcc973948a67144dcfb224814ab938cda73d3fd0f75",
+      "classification": "domain-value",
+      "disposition": "violation",
+      "invariant": "The transport kind of the retained sink intent.",
+      "authority": "sinkKindOf -> deliveryReceiptFor -> sinkKindText",
+      "boundaryOwner": "Shikigami.Sink.Delivery",
+      "rationale": "Existing SinkKind distinction is flattened to Text in the receipt; the persisted bytes must remain compatible.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Sink/Delivery.hs#DeliveryReceipt",
+        "shikigami-core/test-postgres/Shikigami/SinkDeliverySpec.hs#corruptDelivery"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Sink/Delivery.hs",
+      "module": "Shikigami.Sink.Delivery",
+      "declaration": "DeliveryReceipt",
+      "member": "DeliveryReceipt.status",
+      "sourceSha256": "d129446f6af156161541efcc973948a67144dcfb224814ab938cda73d3fd0f75",
+      "classification": "domain-value",
+      "disposition": "compliant",
+      "invariant": "Closed delivery lifecycle; Delivered proves send suppression and ConversationStarted retains a Danwa substep.",
+      "authority": "publishTracked / delivery guards -> renderDeliveryStatus; deliveryReceiptRow -> parseDeliveryStatus",
+      "boundaryOwner": "Shikigami.Sink.Delivery",
+      "rationale": "Unsupported retained status refuses and condemns the transaction instead of allowing resend or replacing evidence.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Sink/Delivery.hs#DeliveryReceipt",
+        "shikigami-core/test-postgres/Shikigami/SinkDeliverySpec.hs#corruptDelivery"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Sink/Delivery.hs",
+      "module": "Shikigami.Sink.Delivery",
+      "declaration": "DeliveryReceipt",
+      "member": "DeliveryReceipt.updatedAt",
+      "sourceSha256": "d129446f6af156161541efcc973948a67144dcfb224814ab938cda73d3fd0f75",
+      "classification": "runtime-opaque",
+      "disposition": "compliant",
+      "invariant": "Native UTC time when publisher records its observation.",
+      "authority": "getCurrentTime -> deliveryReceiptFor -> receipt row",
+      "boundaryOwner": "Shikigami.Sink.Delivery",
+      "rationale": "Retains native UTCTime; it is observation time, not expiry or permission to resend.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Sink/Delivery.hs#DeliveryReceipt",
+        "shikigami-core/test-postgres/Shikigami/SinkDeliverySpec.hs#corruptDelivery"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Sink/Delivery.hs",
+      "module": "Shikigami.Sink.Delivery",
+      "declaration": "DeliveryStatus",
+      "member": "$self",
+      "sourceSha256": "d129446f6af156161541efcc973948a67144dcfb224814ab938cda73d3fd0f75",
+      "classification": "domain-value",
+      "disposition": "compliant",
+      "invariant": "Closed constructor set for this owner lifecycle.",
+      "authority": "DeliveryStatus constructors and owner render/parse functions",
+      "boundaryOwner": "Shikigami.Sink.Delivery",
+      "rationale": "A separate nominal enum prevents mixing load, skip and delivery lifecycles.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Sink/Delivery.hs#DeliveryStatus",
+        "shikigami-core/test-postgres/Shikigami/SinkDeliverySpec.hs#corruptDelivery"
       ]
     },
     {

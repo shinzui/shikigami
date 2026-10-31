@@ -13,6 +13,7 @@ module Shikigami.Sink.Delivery
     deliveryReceiptKey,
     subReceiptKey,
     lookupDelivery,
+    lookupDeliveryTx,
     recordDelivery,
     recordDeliveryTx,
     renderDeliveryStatus,
@@ -29,6 +30,7 @@ import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Tx
+import Hasql.Transaction.Sessions qualified as Transactions
 import Shikigami.Prelude
 
 -- | The observable lifecycle of one downstream delivery.
@@ -70,8 +72,18 @@ subReceiptKey messageId kind = messageId <> "#" <> kind
 
 -- | Read one receipt by its durable key.
 lookupDelivery :: Pool -> Text -> IO (Either Text (Maybe DeliveryReceipt))
-lookupDelivery pool key =
-  renderUsage <$> Pool.use pool (Session.statement key lookupStatement)
+lookupDelivery pool key = do
+  result <- Pool.use pool (Transactions.transaction Transactions.ReadCommitted Transactions.Write (lookupDeliveryTx key))
+  pure (renderUsage result >>= id)
+
+-- | Unreadable delivery truth cannot authorize another downstream send, even
+-- when a caller ignores the refusal after an earlier tentative write.
+lookupDeliveryTx :: Text -> Tx.Transaction (Either Text (Maybe DeliveryReceipt))
+lookupDeliveryTx key = do
+  retained <- Tx.statement key lookupStatement
+  case sequence retained of
+    Left _ -> Tx.condemn >> pure (Left "corrupt retained sink delivery receipt")
+    Right receipt -> pure (Right receipt)
 
 -- | Upsert one receipt using a pool-managed session.
 recordDelivery :: Pool -> DeliveryReceipt -> IO (Either Text ())
@@ -84,7 +96,7 @@ recordDelivery pool receipt =
 recordDeliveryTx :: DeliveryReceipt -> Tx.Transaction ()
 recordDeliveryTx receipt = Tx.statement receipt recordStatement
 
-lookupStatement :: Statement Text (Maybe DeliveryReceipt)
+lookupStatement :: Statement Text (Maybe (Either Text DeliveryReceipt))
 lookupStatement =
   preparable
     """
@@ -126,18 +138,21 @@ recordStatement =
     )
     Decoders.noResult
 
-deliveryReceiptRow :: Decoders.Row DeliveryReceipt
+deliveryReceiptRow :: Decoders.Row (Either Text DeliveryReceipt)
 deliveryReceiptRow =
-  DeliveryReceipt
+  assemble
     <$> Decoders.column (Decoders.nonNullable Decoders.text)
     <*> Decoders.column (Decoders.nonNullable Decoders.text)
     <*> Decoders.column (Decoders.nonNullable Decoders.text)
     <*> Decoders.column (Decoders.nonNullable Decoders.text)
     <*> (fromIntegral <$> Decoders.column (Decoders.nonNullable Decoders.int4))
     <*> Decoders.column (Decoders.nonNullable Decoders.text)
-    <*> Decoders.column (Decoders.nonNullable (Decoders.refine parseDeliveryStatus Decoders.text))
+    <*> Decoders.column (Decoders.nonNullable Decoders.text)
     <*> Decoders.column (Decoders.nullable Decoders.text)
     <*> Decoders.column (Decoders.nonNullable Decoders.timestamptz)
+  where
+    assemble key message run agent ordinal kind status detail updated =
+      (\parsed -> DeliveryReceipt key message run agent ordinal kind parsed detail updated) <$> parseDeliveryStatus status
 
 renderDeliveryStatus :: DeliveryStatus -> Text
 renderDeliveryStatus = \case

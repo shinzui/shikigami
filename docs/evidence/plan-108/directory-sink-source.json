@@ -1,0 +1,11 @@
+{
+  "sourceParent": "bacd466b801ab28b3f8b7aa7637fd46c2c1d8c54",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "files": {
+    "shikigami-core/src/Shikigami/Directory/Store.hs": "8a0702651d2982532635d4663aeaffa9a3ecf28c0012dcfe28d0ad9b88b9d265",
+    "shikigami-core/src/Shikigami/Sink/Delivery.hs": "d129446f6af156161541efcc973948a67144dcfb224814ab938cda73d3fd0f75",
+    "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs": "e03b62a484f1cdc137d03a110c4be82b9ae473dc7e11ca9615d25fe30b5afc64",
+    "shikigami-core/test-postgres/Shikigami/SinkDeliverySpec.hs": "9a6e42b24b3867bc17f0ddc10c4a4a354350ddc40da83ff48568c69bf19a0aad"
+  }
+}

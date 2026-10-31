@@ -32,6 +32,11 @@ provenance:
       at: 2026-10-31T20:25:12Z
       mode: "implement"
       note: "Continue cleanup-owner corruption refusal, rollback and retained-plan recovery acceptance."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-31T20:50:24Z
+      mode: "implement"
+      note: "Continue directory and sink receipt transactional corruption refusal and recovery acceptance."
 ---
 
 # Complete the remaining domain scalar identity and decoder audit
@@ -68,7 +73,11 @@ agent cases and five public compiler clients passing; its two violations are
 resolved under ADR-80. Cleanup inspection/listing now also preserve an owning
 refusal and transactional rollback, with retained-plan recovery and whole-page
 refusal controls. The cleanup review adds 15 classified keys and five explicit
-scalar/locator violations. These are
+scalar/locator violations. The directory/sink review adds another 29 keys and
+nine unresolved scalar/identity violations: 292 keys reviewed, 46 violations and
+3,697 keys unreviewed. Their retained-row corruption now refuses inside the
+transaction, with whole-list rollback and repaired-delivery send suppression
+passing 24 serial PostgreSQL cases. These are
 partial M1/M2 deliverables, not milestone completion. Continue semantic review
 and the remaining decoder owners before M3; see
 [the current evidence](../evidence/plan-108/acceptance.md) and its source snapshot.
@@ -99,6 +108,14 @@ constructor/Generic exposure, rather than a missing entity identity, bypassed
 the canonical-root resolver. Keep that locator as a private newtype with an
 explicit renderer; do not allocate an entity or introduce another root wrapper.
 Its runtime filesystem rechecks remain necessary after construction.
+
+2026-10-31: Directory and sink readers contain owned enum/name/key decoding,
+rather than SQL JSON. The same owning-transaction refusal rule applies. The
+indexed drain lookup already constrains all parsed fields with checked query
+parameters; do not invent a narrower principal claim or diagnostic contract to
+manufacture corrupt lookup cases. Sink's existing publisher already stops on
+read refusal, and runtime controls prove the delivered send guard survives
+corruption and repair.
 
 2026-10-31: Cleanup's retained plan must pass the existing preparation invariants
 as well as JSON decoding before it can authorize another deletion. Its completion
@@ -134,9 +151,9 @@ holds this durable owner boundary; it does not exempt the remaining scalars.
 
 Partial implementation acceptance is recorded in
 [the current evidence](../evidence/plan-108/acceptance.md): the coverage tooling,
-three owner-decoding paths, one policy scalar and one-off scope construction pass
+five owner-decoding paths, one policy scalar and one-off scope construction pass
 focused checks. The complete
-classification, 37 unresolved violations, remaining owners and M3 acceptance remain
+classification, 46 unresolved violations, remaining owners and M3 acceptance remain
 unfinished; all three milestone checkboxes stay open and the frozen guide stays
 deferred. FRIC-36 remains logged for triage when the plan completes.
 
