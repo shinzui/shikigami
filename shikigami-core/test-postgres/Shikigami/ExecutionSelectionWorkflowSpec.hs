@@ -16,6 +16,7 @@ import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.IORef
+import Data.Int (Int64)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -58,6 +59,7 @@ import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy (ModelOperationInput (..), selectContextView)
 import Shikigami.Execution.Policy.Types (RecoveryClass (RepeatableObservation), defaultHarnessPolicy)
 import Shikigami.Execution.Policy.Types qualified as Harness
+import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
 import Shikigami.Execution.Request
 import Shikigami.Execution.Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
@@ -118,8 +120,32 @@ tests fixture =
           map (\v -> lookupReasoning v) bodies @?= map Just ["low", "medium", "high"]
           snapshot <- expectRight =<< run app (Roots.inspectRoot root)
           snapshot.active @?= 0
-          Map.lookup ModelAttempts snapshot.usage.settled @?= Just 3
+          Map.lookup ModelAttempts snapshot.usage.settled @?= Just (fixtureAmount 3)
           assertBool "different selection identities share one root" (all ((== Just root) . (.rootId)) selections),
+      testCase "out-of-range HTTP usage retains its ceiling while valid usage settles exactly" $
+        mapM_
+          ( \(tokens, overflow) -> withRuntime fixture \app store base -> withHttpWithTokens tokens \bindings observed -> do
+              now <- getCurrentTime
+              root <- seed app now [(Tokens, Limited (fixtureAmount (toInteger (maxBound :: Int64))))]
+              let catalog = mustRight (modelCatalog bindings)
+                  selection = select now root catalog "coordinator"
+              selected <- expectRight =<< buildExecutionEnv (runtime app store base catalog) selection
+              response <- completeBehaviorRequest selected selected.model (systemUser "system" "marker") selected.options
+              responseError response @?= Nothing
+              length <$> observed >>= (@?= 1)
+              snapshot <- expectRight =<< run app (Roots.inspectRoot root)
+              snapshot.active @?= 0
+              snapshot.unknown @?= 1
+              Map.lookup ModelAttempts snapshot.usage.settled @?= Just (fixtureAmount 1)
+              if overflow
+                then do
+                  Map.lookup Tokens snapshot.known @?= Nothing
+                  assertBool "unrepresentable usage keeps its held ceiling" (maybe False (> fixtureAmount 0) (Map.lookup Tokens snapshot.usage.held))
+                else do
+                  Map.lookup Tokens snapshot.known @?= Just (fixtureAmount tokens)
+                  Map.lookup Tokens snapshot.usage.held @?= Just (fixtureAmount 0)
+          )
+          [(2, False), (toInteger (maxBound :: Int64) + 1, True)],
       testCase "an accepted prepared HTTP attempt commits replay and accounting together once" $
         withRuntime fixture \app store base -> withHttp \bindings observed -> do
           now <- getCurrentTime
@@ -165,7 +191,7 @@ tests fixture =
           state.cursor @?= (fixtureRevision 1)
           rootState <- expectRight =<< run app (Roots.inspectRoot root)
           rootState.active @?= 0
-          Map.lookup ModelAttempts rootState.usage.settled @?= Just 1,
+          Map.lookup ModelAttempts rootState.usage.settled @?= Just (fixtureAmount 1),
       testCase "executor restart repairs a lost wake without repeating the HTTP call" $
         withRuntime fixture \app store base -> withHttp \bindings observed -> do
           now <- getCurrentTime
@@ -202,7 +228,7 @@ tests fixture =
           wake.status @?= Awakeable.Completed
           rootState <- expectRight =<< run app (Roots.inspectRoot root)
           rootState.active @?= 0
-          Map.lookup ModelAttempts rootState.usage.settled @?= Just 1,
+          Map.lookup ModelAttempts rootState.usage.settled @?= Just (fixtureAmount 1),
       testCase "a terminal HTTP error releases transport capacity while retaining unknown billing" $
         withRuntime fixture \app store base -> withHttpWithFailure True \bindings observed -> do
           now <- getCurrentTime
@@ -250,7 +276,7 @@ tests fixture =
       testCase "unsupported hard cost ceiling refuses before dispatch" $
         withRuntime fixture \app store base -> withHttp \bindings observed -> do
           now <- getCurrentTime
-          root <- seed app now [(CostMicroUsd, Limited 100)]
+          root <- seed app now [(CostMicroUsd, Limited (fixtureAmount 100))]
           let catalog = mustRight (modelCatalog bindings)
           selected <- expectRight =<< buildExecutionEnv (runtime app store base catalog) (select now root catalog "coordinator")
           response <- completeBehaviorRequest selected selected.model (systemUser "system" "marker") selected.options
@@ -261,12 +287,12 @@ tests fixture =
       testCase "root and assignment race has one winner; replay and settlement are atomic" $
         withRuntime fixture \app _ _ -> do
           now <- getCurrentTime
-          root <- seed app now [(ActiveWork, Limited 1)]
+          root <- seed app now [(ActiveWork, Limited (fixtureAmount 1))]
           let catalog = mustRight (modelCatalog [])
               fallback = mustRight (defaultBinding stubModel Options.emptyOptions)
               selection = mustRight (resolveExecutionSelection "ledger-assignment" catalog (Right fallback) Nothing Nothing Nothing Nothing (Just root) now)
               limits = Calls.CallLimits (Just 3) (Just 1) (Just 1) Nothing Nothing
-              request key = AttemptRequest (AttemptId key) (OperationId "logical") (Map.fromList [(ActiveWork, 1), (ModelAttempts, 1)]) AdmittedUnknownUsage
+              request key = AttemptRequest (AttemptId key) (OperationId "logical") (Map.fromList [(ActiveWork, (fixtureAmount 1)), (ModelAttempts, (fixtureAmount 1))]) AdmittedUnknownUsage
               reserve key = run app (Calls.reserveSelectionCall selection limits (request key) "digest" now)
           (a, b) <- concurrently (reserve "one") (reserve "two")
           receipt <- case (a, b) of
@@ -274,7 +300,7 @@ tests fixture =
             (Left _, Right (Calls.NewCall r)) -> pure r
             other -> assertFailure (show other)
           run app (Calls.reserveSelectionCall selection limits receipt.request "digest" now) >>= (@?= Right (Calls.ExistingCall receipt))
-          let terminal = Calls.CallOutcome Calls.CallTerminal (Map.singleton Tokens 3) [CostMicroUsd] (Just "served") (Just "provider-call") Nothing
+          let terminal = Calls.CallOutcome Calls.CallTerminal (Map.singleton Tokens (fixtureAmount 3)) [CostMicroUsd] (Just "served") (Just "provider-call") Nothing
           run app (Calls.finishSelectionCall receipt terminal) >>= (@?= Right Accepted)
           run app (Calls.finishSelectionCall receipt terminal) >>= (@?= Right AlreadyAccepted)
           next <- expectRight =<< reserve "retry"
@@ -286,8 +312,8 @@ tests fixture =
           assignment.active @?= 0
           length facts @?= 2
           snapshot <- expectRight =<< run app (Roots.inspectRoot root)
-          Map.lookup ModelAttempts snapshot.usage.settled @?= Just 2
-          Map.lookup Tokens snapshot.known @?= Just 6,
+          Map.lookup ModelAttempts snapshot.usage.settled @?= Just (fixtureAmount 2)
+          Map.lookup Tokens snapshot.known @?= Just (fixtureAmount 6),
       testCase "new Skill parent awaits the driver and completes after its provider binding is retired" $
         withRuntime fixture \app store base -> withHttp \bindings observed -> do
           _ <- expectRight =<< run app Catalog.registerProjectionCatalog
@@ -392,7 +418,7 @@ tests fixture =
           assertBool "context cannot change within epoch" (either (const True) (const False) refused)
           observed >>= (\after -> length after @?= 2)
           snapshot <- expectRight =<< run app (Roots.inspectRoot root)
-          Map.lookup ModelAttempts snapshot.usage.settled @?= Just 2
+          Map.lookup ModelAttempts snapshot.usage.settled @?= Just (fixtureAmount 2)
     ]
 
 aliases :: [Text]
@@ -431,7 +457,13 @@ withHttp :: ([ModelBinding] -> IO [Value] -> IO a) -> IO a
 withHttp = withHttpWithFailure False
 
 withHttpWithFailure :: Bool -> ([ModelBinding] -> IO [Value] -> IO a) -> IO a
-withHttpWithFailure failResponse use = do
+withHttpWithFailure failResponse = withHttpUsage failResponse Nothing
+
+withHttpWithTokens :: Integer -> ([ModelBinding] -> IO [Value] -> IO a) -> IO a
+withHttpWithTokens tokens = withHttpUsage False (Just tokens)
+
+withHttpUsage :: Bool -> Maybe Integer -> ([ModelBinding] -> IO [Value] -> IO a) -> IO a
+withHttpUsage failResponse reportedTokens use = do
   requests <- newIORef []
   let application request respond = do
         body <- Wai.strictRequestBody request
@@ -440,12 +472,30 @@ withHttpWithFailure failResponse use = do
         respond (if failResponse then Wai.responseLBS status500 [("Content-Type", "application/json")] "{\"error\":{\"message\":\"fixture failure\"}}" else Wai.responseLBS status200 [("Content-Type", "text/event-stream")] frames)
   testWithApplication (pure application) \port -> do
     let models = take 3 [m | m <- allModels, Model.api m == OpenAIResponses, Model.provider m == "openai", Model.reasoning m]
-        bindings = zipWith3 (\alias model thinking -> mustRight (modelBinding (ModelAlias alias) "1" alias "1" (model & #baseUrl .~ ("http://127.0.0.1:" <> Text.pack (show port) <> "/v1")) (Options.emptyOptions & #thinking .~ Just thinking) (Just (opaqueCredential "fixture-secret")))) aliases models [ThinkingLow, ThinkingMedium, ThinkingHigh]
+        bindings = zipWith3 (\alias model thinking -> mustRight (modelBinding (ModelAlias alias) "1" alias "1" (model & #baseUrl .~ ("http://127.0.0.1:" <> Text.pack (show port) <> "/v1")) (Options.emptyOptions & #thinking .~ Just thinking & #maxTokens .~ (1024 <$ reportedTokens)) (Just (opaqueCredential "fixture-secret")))) aliases models [ThinkingLow, ThinkingMedium, ThinkingHigh]
     length bindings @?= 3
     use bindings (readIORef requests)
   where
     frames :: Lazy.ByteString
-    frames = "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"fixture-call\",\"model\":\"served-model\",\"output\":[{\"id\":\"message\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"marker\"}]}]}}\n\n"
+    frames = case reportedTokens of
+      Nothing -> defaultFrames
+      Just tokens ->
+        "data: "
+          <> encode
+            ( object
+                [ "type" .= ("response.completed" :: Text),
+                  "response"
+                    .= object
+                      [ "id" .= ("fixture-call" :: Text),
+                        "model" .= ("served-model" :: Text),
+                        "output" .= [object ["id" .= ("message" :: Text), "type" .= ("message" :: Text), "role" .= ("assistant" :: Text), "content" .= [object ["type" .= ("output_text" :: Text), "text" .= ("marker" :: Text)]]]],
+                        "usage" .= object ["input_tokens" .= tokens, "output_tokens" .= (0 :: Integer), "input_tokens_details" .= object ["cached_tokens" .= (0 :: Integer), "cache_write_tokens" .= (0 :: Integer)], "output_tokens_details" .= object ["reasoning_tokens" .= (0 :: Integer)]]
+                      ]
+                ]
+            )
+          <> "\n\n"
+    defaultFrames :: Lazy.ByteString
+    defaultFrames = "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"fixture-call\",\"model\":\"served-model\",\"output\":[{\"id\":\"message\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"marker\"}]}]}}\n\n"
 
 lookupField :: Text -> Value -> Maybe Text
 lookupField key value = case eitherDecode (encode value) :: Either String (Map.Map Text Value) of
@@ -502,3 +552,6 @@ mustRight = either (error . show) id
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureAmount :: Integer -> ResourceAmount
+fixtureAmount amount = either (error . show) id (parseResourceAmount amount)

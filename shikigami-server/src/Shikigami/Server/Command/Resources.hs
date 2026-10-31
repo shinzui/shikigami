@@ -11,6 +11,7 @@ import Kiroku.Store.Effect (runStoreIO)
 import Shikigami.App.Config (AppConfig, revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Execution.Identity (ExecutionRootId (..))
+import Shikigami.Execution.Quantity (zeroAmount)
 import Shikigami.Execution.Resources
 import Shikigami.Execution.ResourcesStore (inspectRoot)
 import Shikigami.Migrations (verifyShikigamiMigrations)
@@ -45,7 +46,7 @@ resourceView now root =
         .= ( [RootCancelled | root.cancelled]
                <> [OverageRecorded | root.overage]
                <> [CutoffReached | now >= root.envelope.cutoff]
-               <> [ResourceExhausted d | (d, Limited n) <- Map.toList (effectiveLimits root), Map.findWithDefault 0 d (occupied root.usage) >= n]
+               <> either (\err -> [err]) (\usage -> [ResourceExhausted d | (d, Limited n) <- Map.toList (effectiveLimits root), Map.findWithDefault zeroAmount d usage >= n]) (occupied root.usage)
                <> [DimensionNotAdmitted d | d <- [minBound .. maxBound], Map.notMember d root.envelope.limits]
            )
     ]

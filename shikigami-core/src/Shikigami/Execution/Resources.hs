@@ -3,12 +3,11 @@
 module Shikigami.Execution.Resources where
 
 import Data.Aeson (FromJSONKey, ToJSONKey)
-import Data.Foldable (traverse_)
-import Data.Int (Int64)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Shikigami.Execution.Identity
+import Shikigami.Execution.Quantity
 import Shikigami.Prelude
 import Shikigami.StateRevision
 
@@ -16,11 +15,11 @@ data Dimension = ActiveWork | LifetimeDescendants | ModelAttempts | ToolAttempts
   deriving stock (Eq, Ord, Show, Enum, Bounded, Generic)
   deriving anyclass (ToJSON, FromJSON, ToJSONKey, FromJSONKey)
 
-type Quantities = Map Dimension Integer
+type Quantities = Map Dimension ResourceAmount
 
 -- | Absence is denial. Unbounded capacity must be explicitly admitted by an
 -- operator, including dimensions whose usage a transport cannot measure.
-data Limit = Limited !Integer | ExplicitlyUnbounded
+data Limit = Limited !ResourceAmount | ExplicitlyUnbounded
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -47,7 +46,7 @@ data Root = Root
   { envelope :: !Envelope,
     revision :: !(StateRevision "execution-root"),
     cancelled :: !Bool,
-    activeLimit :: !(Maybe Integer),
+    activeLimit :: !(Maybe ResourceAmount),
     overage :: !Bool,
     active :: !Integer,
     unknown :: !Integer,
@@ -134,41 +133,34 @@ data ResourceError
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-validQuantity :: Integer -> Bool
-validQuantity n = n >= 0 && n <= toInteger (maxBound :: Int64)
+-- Amount admission happens once in ResourceAmount construction/JSON decoding.
+-- The vector operations additionally check aggregate overflow and underflow.
+refineAmounts :: Map Dimension Integer -> Either ResourceError Quantities
+refineAmounts = traverse (either (Left . InvalidResourceRequest) Right . parseResourceAmount)
 
-validateQuantities :: Quantities -> Either ResourceError ()
-validateQuantities amounts =
-  unless (all validQuantity amounts) (Left (InvalidResourceRequest "quantities must fit nonnegative int64 units"))
+add :: Quantities -> Quantities -> Either ResourceError Quantities
+add left right = refineAmounts (Map.unionWith (+) (amountUnits <$> left) (amountUnits <$> right))
 
-validateEnvelope :: Envelope -> Either ResourceError ()
-validateEnvelope Envelope {limits} =
-  traverse_ check (Map.elems limits)
-  where
-    check ExplicitlyUnbounded = Right ()
-    check (Limited n) = unless (validQuantity n) (Left (InvalidResourceRequest "invalid resource limit"))
+subtractAmounts :: Quantities -> Quantities -> Either ResourceError Quantities
+subtractAmounts left right = refineAmounts (Map.unionWith (+) (amountUnits <$> left) (negate . amountUnits <$> right))
 
-add :: Quantities -> Quantities -> Quantities
-add = Map.unionWith (+)
-
-subtractAmounts :: Quantities -> Quantities -> Quantities
-subtractAmounts a b = add a (negate <$> b)
-
-occupied :: Usage -> Quantities
+occupied :: Usage -> Either ResourceError Quantities
 occupied Usage {settled, held} = add settled held
 
 admit :: Limits -> Usage -> Quantities -> Either ResourceError Usage
 admit limits usage amounts = do
-  validateQuantities amounts
-  let next = add (occupied usage) amounts
-  forM_ (Map.toList amounts) \(dimension, amount) -> when (amount > 0) do
+  -- Keep the existing refusal order: dimension/finite limits precede the
+  -- int64 overflow check. Signed/unbounded intermediates stay local here.
+  let next = Map.unionsWith (+) [amountUnits <$> usage.settled, amountUnits <$> usage.held, amountUnits <$> amounts]
+  forM_ (Map.toList amounts) \(dimension, amount) -> when (amount > zeroAmount) do
     case Map.lookup dimension limits of
       Nothing -> Left (DimensionNotAdmitted dimension)
       Just ExplicitlyUnbounded -> pure ()
       Just (Limited maximumAmount) ->
-        when (Map.findWithDefault 0 dimension next > maximumAmount) (Left (ResourceExhausted dimension))
-  validateQuantities next
-  pure (Usage usage.settled (add usage.held amounts))
+        when (Map.findWithDefault 0 dimension next > amountUnits maximumAmount) (Left (ResourceExhausted dimension))
+  _ <- refineAmounts next
+  held <- add usage.held amounts
+  pure (Usage usage.settled held)
 
 checkRoot :: UTCTime -> StateRevision "execution-root" -> Root -> Either ResourceError ()
 checkRoot now expected root = do
@@ -187,9 +179,8 @@ validateOperation request = do
   let OperationId key = request.operationId
   validateKey key
   validateKey request.fingerprint
-  validateQuantities request.quantities
   case request.kind of
-    ChildOperation -> unless (request.quantities == Map.singleton LifetimeDescendants 1) invalid
+    ChildOperation -> unless (request.quantities == Map.singleton LifetimeDescendants oneAmount) invalid
     _ -> unless (Map.null request.quantities) invalid
   where
     invalid = Left (InvalidResourceRequest "only child operations reserve lifetime descendants; attempts reserve actual work")
@@ -204,10 +195,9 @@ validateAttempt limits operation request = do
       count = if operation.kind == ModelOperation then ModelAttempts else ToolAttempts
       forbidden = if operation.kind == ModelOperation then ToolAttempts else ModelAttempts
   validateKey key
-  validateQuantities amounts
   when (operation.kind == ChildOperation || request.operationId /= operation.operationId) invalid
-  unless (Map.lookup count amounts == Just 1 && Map.lookup ActiveWork amounts == Just 1) invalid
-  when (Map.findWithDefault 0 forbidden amounts /= 0 || Map.findWithDefault 0 LifetimeDescendants amounts /= 0) invalid
+  unless (Map.lookup count amounts == Just oneAmount && Map.lookup ActiveWork amounts == Just oneAmount) invalid
+  when (Map.findWithDefault zeroAmount forbidden amounts /= zeroAmount || Map.findWithDefault zeroAmount LifetimeDescendants amounts /= zeroAmount) invalid
   forM_ [Tokens, CostMicroUsd] \dimension -> case Map.lookup dimension limits of
     Nothing | operation.kind == ModelOperation || request.policy == AdmittedUnknownUsage -> Left (DimensionNotAdmitted dimension)
     Just (Limited _) ->
@@ -220,12 +210,12 @@ validateAttempt limits operation request = do
 -- releases active work and replaces token/cost ceilings with measured usage.
 settleUsage :: Quantities -> Quantities -> Usage -> Either ResourceError Usage
 settleUsage reservation measured usage = do
-  validateQuantities measured
   unless (all (`elem` [Tokens, CostMicroUsd]) (Map.keys measured)) (Left (InvalidResourceRequest "only token and cost measurements may be supplied"))
   let required = Map.filterWithKey (\key _ -> key `elem` [Tokens, CostMicroUsd]) reservation
   unless (all (`Map.member` measured) (Map.keys required)) (Left (InvalidResourceRequest "each reserved measurable dimension needs a result"))
   let counters = Map.filterWithKey (\key _ -> key `elem` [ModelAttempts, ToolAttempts]) reservation
-      next = Usage (add usage.settled (add counters measured)) (subtractAmounts usage.held reservation)
-  validateQuantities next.held
-  validateQuantities (occupied next)
+  recorded <- add counters measured >>= add usage.settled
+  held <- subtractAmounts usage.held reservation
+  let next = Usage recorded held
+  _ <- occupied next
   pure next

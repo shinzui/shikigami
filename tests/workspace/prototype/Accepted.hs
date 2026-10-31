@@ -36,6 +36,7 @@ import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy.Types
+import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.Selection
 import Shikigami.Execution.SelectionStore qualified as Calls
@@ -94,12 +95,12 @@ preparePlan upgrade env authorizer current client binding admission mode = do
   access <- right =<< run env (Execution.authorizeReplay snapshot.executionId snapshot.identity (current snapshot))
   (_, operation) <- right =<< run env (Execution.acceptOperation access (fixtureRevision 0) model (Aeson.object []))
   let OperationId key = operation.specification.operationId
-      request = Resources.AttemptRequest (AttemptId ("model:" <> key)) operation.specification.operationId (Map.fromList [(Resources.ActiveWork, 1), (Resources.ModelAttempts, 1), (Resources.Tokens, 10), (Resources.CostMicroUsd, 0)]) Resources.EnforcedCeiling
+      request = Resources.AttemptRequest (AttemptId ("model:" <> key)) operation.specification.operationId (Map.fromList [(Resources.ActiveWork, (fixtureAmount 1)), (Resources.ModelAttempts, (fixtureAmount 1)), (Resources.Tokens, (fixtureAmount 10)), (Resources.CostMicroUsd, (fixtureAmount 0))]) Resources.EnforcedCeiling
   reservation <- right =<< run env (Calls.reserveSelectionCall selection (Calls.CallLimits Nothing Nothing Nothing Nothing Nothing) request "fixture-model" now)
   call <- case reservation of Calls.NewCall value -> pure value; _ -> fail "new fixture model call required"
   let outcome = ModelReturned assistant Nothing
   response <- right (Execution.outcomeReference outcome)
-  void (right =<< run env (Execution.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId outcome (NeedTool response 0) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.fromList [(Resources.Tokens, 1), (Resources.CostMicroUsd, 0)]) [] Nothing Nothing Nothing))))
+  void (right =<< run env (Execution.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId outcome (NeedTool response 0) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.fromList [(Resources.Tokens, (fixtureAmount 1)), (Resources.CostMicroUsd, (fixtureAmount 0))]) [] Nothing Nothing Nothing))))
   first <- submit env snapshot access (ToolOperationInput response 0 (ToolInvocation "edit-mode" edit.name editInput) edit)
   executePrepared env authorizer current client first
   (_, afterEdit) <- right =<< run env (Execution.loadExecution access)
@@ -209,13 +210,13 @@ appendTools env current snapshot calls = do
   (_, operation) <- right =<< run env (Execution.acceptOperation access state.revision model (Aeson.object []))
   now <- getCurrentTime
   let OperationId key = operation.specification.operationId
-      request = Resources.AttemptRequest (AttemptId ("model:" <> key)) operation.specification.operationId (Map.fromList [(Resources.ActiveWork, 1), (Resources.ModelAttempts, 1), (Resources.Tokens, 10), (Resources.CostMicroUsd, 0)]) Resources.EnforcedCeiling
+      request = Resources.AttemptRequest (AttemptId ("model:" <> key)) operation.specification.operationId (Map.fromList [(Resources.ActiveWork, (fixtureAmount 1)), (Resources.ModelAttempts, (fixtureAmount 1)), (Resources.Tokens, (fixtureAmount 10)), (Resources.CostMicroUsd, (fixtureAmount 0))]) Resources.EnforcedCeiling
   reserved <- right =<< run env (Calls.reserveSelectionCall snapshot.selection (Calls.CallLimits Nothing Nothing Nothing Nothing Nothing) request "fixture-model" now)
   call <- case reserved of Calls.NewCall value -> pure value; _ -> fail "expected new fixture call"
   let outcome = ModelReturned assistant Nothing
   response <- right (Execution.outcomeReference outcome)
   (_, accepted) <- right =<< run env (Execution.loadExecution access)
-  void (right =<< run env (Execution.recordOutcomeAndAdvance access accepted.revision operation.specification.operationId outcome (NeedTool response 0) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.fromList [(Resources.Tokens, 1), (Resources.CostMicroUsd, 0)]) [] Nothing Nothing Nothing))))
+  void (right =<< run env (Execution.recordOutcomeAndAdvance access accepted.revision operation.specification.operationId outcome (NeedTool response 0) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.fromList [(Resources.Tokens, (fixtureAmount 1)), (Resources.CostMicroUsd, (fixtureAmount 0))]) [] Nothing Nothing Nothing))))
   nextTool env access snapshot response 0 (head invocations)
 
 advanceTools :: AppEnv -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> Prepared -> IO (Maybe Prepared)
@@ -246,3 +247,6 @@ executeWithProviders providers env authorizer current prepared = do
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureAmount :: Integer -> ResourceAmount
+fixtureAmount amount = either (error . show) id (parseResourceAmount amount)

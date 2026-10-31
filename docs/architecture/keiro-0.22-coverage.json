@@ -139,6 +139,11 @@
           "rationale": "Execution transcript/expected-command revisions and PreparedTool retain execution; state cursors, retained operation positions and operation-id derivation retain execution-operation. Generated Int and SQL adapters render explicitly with existing writer/position bounds. Three full positive codec/byte/identity controls precede invalid-input cases; 14 real compiler clients reject scope substitution. All 552 pure, 376 serial PostgreSQL and 260 serial worker tests pass. Other resource amounts/counters and the full census remain pending."
         },
         {
+          "id": "checked-resource-amounts",
+          "disposition": "implemented",
+          "rationale": "Private ResourceAmount admits nonnegative int64 units at construction/JSON decode. Dimension-keyed vectors and finite/active ceilings retain it. Checked vector arithmetic rejects overflow/underflow before accounting publication and preserves dimension/finite-limit refusal priority. Actual HTTP valid/overflow reports prove exact settlement versus retained unknown billing holds; synthetic full-counter settlement leaves root/attempt unchanged. ADR-76 and 555 pure/378 PostgreSQL/260 worker/95 server evidence cover this change. Distinct counters/policy values and the complete census remain pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -155,7 +160,9 @@
         "docs/evidence/keiro-0.22/worker-owner-revision-results.txt",
         "docs/evidence/keiro-0.22/resource-root-revision-results.txt",
         "docs/evidence/keiro-0.22/worker-cursor-results.txt",
-        "docs/evidence/keiro-0.22/execution-revision-results.txt"
+        "docs/evidence/keiro-0.22/execution-revision-results.txt",
+        "docs/adr/0076-resource-amounts-are-checked-before-accounting-publication.md",
+        "docs/evidence/keiro-0.22/resource-amount-results.txt"
       ]
     },
     {

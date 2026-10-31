@@ -26,6 +26,7 @@ import Shikigami.Delegation.BudgetStore (delegationBudgetIdFor, reserveEnrolledD
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Execution.Identity qualified as Identity
+import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
 import Shikigami.Execution.Request (ExecutionRequest (..))
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
@@ -97,7 +98,7 @@ tests fixture =
           length [() | EventReceipt {event = ResultAvailable {}} <- events] @?= 2
           root <- maybe (assertFailure "missing root" >> fail "missing root") pure admission.context.executionRootId
           ledger <- expectRight =<< run env (Roots.inspectRoot root)
-          Map.lookup Resources.LifetimeDescendants ledger.usage.settled @?= Just 2,
+          Map.lookup Resources.LifetimeDescendants ledger.usage.settled @?= Just (fixtureAmount 2),
       testCase "a registered child with missing input is repaired through governed delegation without another reservation" $
         withFixture fixture \env admission access -> do
           version <- checkpointVersion admission
@@ -132,13 +133,13 @@ tests fixture =
           stored <- expectRight =<< run env (Store.readResult access message.assignmentId)
           case stored of Just (_, value) -> value.disposition @?= AssignmentSucceeded; _ -> assertFailure "result lost"
           ledger <- expectRight =<< run env (Roots.inspectRoot root)
-          Map.lookup Resources.LifetimeDescendants ledger.usage.settled @?= Just 1,
+          Map.lookup Resources.LifetimeDescendants ledger.usage.settled @?= Just (fixtureAmount 1),
       testCase "a pre-spawn root refusal becomes one retained failure and creates no child" $
         withFixture fixture \env admission _ -> do
           now <- getCurrentTime
           let root = Identity.ExecutionRootId "exhausted-session-root"
               limited = admission & #scope . #parent .~ "limited-coordinator" & #objective . #key .~ "limited-objective" & #context . #executionRootId .~ Just root
-          _ <- expectRight =<< run env (Roots.enrollRoot root (Resources.Envelope (Map.singleton Resources.LifetimeDescendants (Resources.Limited 0)) (addUTCTime 3600 now)))
+          _ <- expectRight =<< run env (Roots.enrollRoot root (Resources.Envelope (Map.singleton Resources.LifetimeDescendants (Resources.Limited (fixtureAmount 0))) (addUTCTime 3600 now)))
           _ <- expectRight =<< run env (Store.openSession limited)
           access <- expectRight =<< run env (Store.authorizeSession (sessionIdFor limited) limited.context.identity (pure (Right ())))
           (_, message) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "send") (Instruction 1 FollowUp "no capacity" (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
@@ -218,3 +219,6 @@ expectRight = either (\err -> assertFailure (show err) >> fail (show err)) pure
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureAmount :: Integer -> ResourceAmount
+fixtureAmount amount = either (error . show) id (parseResourceAmount amount)

@@ -93,6 +93,7 @@ import Shikigami.Execution.Catalog (withLiveExecution)
 import Shikigami.Execution.Identity (AttemptId (..), ExecutionRootId, OperationId (..))
 import Shikigami.Execution.Policy (ContextView (..), ModelOperationInput (..), validateTerminalOutput, validateToolInvocation)
 import Shikigami.Execution.Policy.Types (HarnessPolicy (..), RecoveryClass (..), ToolInvoiceCost (..))
+import Shikigami.Execution.Quantity (oneAmount, zeroAmount)
 import Shikigami.Execution.Resources (Admission (..))
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
@@ -1356,15 +1357,15 @@ lockAttemptIdentity = preparable "SELECT 1::int4 FROM pg_advisory_xact_lock(hash
 -- The tool interpreter admits no nested model calls. Native tool transports
 -- therefore reserve and settle an enforced zero for model token/invoice usage.
 zeroModelBilling :: Resources.Quantities
-zeroModelBilling = Map.fromList [(Resources.Tokens, 0), (Resources.CostMicroUsd, 0)]
+zeroModelBilling = Map.fromList [(Resources.Tokens, zeroAmount), (Resources.CostMicroUsd, zeroAmount)]
 
 toolAttemptRequest :: AttemptId -> OperationId -> ToolBinding -> Resources.AttemptRequest
-toolAttemptRequest attempt operation binding = Resources.AttemptRequest attempt operation (Map.fromList ([(Resources.ActiveWork, 1), (Resources.ToolAttempts, 1), (Resources.Tokens, 0)] <> [(Resources.CostMicroUsd, 0) | binding.invoiceCost == NoInvoiceCost])) Resources.EnforcedCeiling
+toolAttemptRequest attempt operation binding = Resources.AttemptRequest attempt operation (Map.fromList ([(Resources.ActiveWork, oneAmount), (Resources.ToolAttempts, oneAmount), (Resources.Tokens, zeroAmount)] <> [(Resources.CostMicroUsd, zeroAmount) | binding.invoiceCost == NoInvoiceCost])) Resources.EnforcedCeiling
 
 toolSettlement :: Resources.AttemptRequest -> Resources.Settlement
 toolSettlement request
   | Map.member Resources.CostMicroUsd request.quantities = Resources.KnownUsage zeroModelBilling
-  | otherwise = Resources.PartialUsage (Map.singleton Resources.Tokens 0) [Resources.CostMicroUsd] "tool invoice billing is unavailable"
+  | otherwise = Resources.PartialUsage (Map.singleton Resources.Tokens zeroAmount) [Resources.CostMicroUsd] "tool invoice billing is unavailable"
 
 listOperationAttempts :: Statement Text [Attempt.ExecutionAttempt]
 listOperationAttempts = preparable "SELECT value FROM shikigami.execution_transcript_operations,LATERAL jsonb_each(dispatches) WHERE operation_id=$1 ORDER BY key LIMIT 1000" textParam (D.rowList jsonRow)

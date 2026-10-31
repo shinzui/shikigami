@@ -164,3 +164,10 @@ scope, separate from operation sequence positions and resource-root policy revis
 codec/identity controls, fourteen compiler clients and the passing 552 pure,
 376 PostgreSQL and 260 worker cases. Other resource quantities/counters and the
 complete scalar census remain open.
+
+Resource amounts now retain a private checked nonnegative int64 type through
+vectors and finite limits, with checked accounting arithmetic and retained holds
+for unrepresentable provider measurements. [Resource-amount acceptance](resource-amount-results.txt)
+records 555 pure, 378 PostgreSQL, 260 worker and 95 server cases, including the
+actual HTTP boundary and synthetic full-counter refusal. Counter, policy and
+identity census work remains open.

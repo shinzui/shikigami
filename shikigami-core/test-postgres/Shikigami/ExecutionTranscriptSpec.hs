@@ -79,6 +79,7 @@ import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy (ContextProvenance (..), ModelOperationInput (..), SummaryReference (..))
 import Shikigami.Execution.Policy.Types
+import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
 import Shikigami.Execution.Resources qualified as R
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Runner qualified as Runner
@@ -286,8 +287,8 @@ tests fixture =
           Just (_, _, operations) <- inspect env snapshot.executionId
           map (\operation -> operation.specification.kind) operations @?= [ModelTurn, ToolOperation, ToolOperation, ModelTurn]
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
-          Map.lookup R.ModelAttempts root.usage.settled @?= Just 2
-          Map.lookup R.ToolAttempts root.usage.settled @?= Just 2,
+          Map.lookup R.ModelAttempts root.usage.settled @?= Just (fixtureAmount 2)
+          Map.lookup R.ToolAttempts root.usage.settled @?= Just (fixtureAmount 2),
       testCase "recorded context summary survives restart and consumes an ordinary model attempt" $
         withConfiguredResourceFixture fixture summaryConfiguration (Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot access -> do
           (executor, calls, _) <- driverRuntime env False
@@ -319,7 +320,7 @@ tests fixture =
               assertBool "raw summary source provenance retained" (isJust (summaryInput.provenance >>= (.summarizes)))
             _ -> assertFailure "summary was resampled after restart"
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
-          Map.lookup R.ModelAttempts root.usage.settled @?= Just 2,
+          Map.lookup R.ModelAttempts root.usage.settled @?= Just (fixtureAmount 2),
       testCase "a summary cannot authorize tool work or trigger an unbounded resample" $
         withConfiguredResourceFixture fixture summaryConfiguration (Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot _ -> do
           (executor, calls, toolCalls) <- driverRuntime env True
@@ -345,7 +346,7 @@ tests fixture =
           calls >>= (@?= [])
           settled <- expectRight =<< run env (Roots.inspectRoot rootId)
           settled.active @?= 0
-          Map.lookup R.ModelAttempts settled.usage.settled @?= Just 1,
+          Map.lookup R.ModelAttempts settled.usage.settled @?= Just (fixtureAmount 1),
       testCase "driver parks one tool across approval restart and refuses revoked authority before submission" $
         withConfiguredResourceFixture fixture (\snapshot -> toolConfiguration snapshot & #policy . #humanTools .~ ["observe"]) (Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot _ -> do
           (executor, calls, toolCalls) <- driverRuntime env True
@@ -440,7 +441,7 @@ tests fixture =
         withConfiguredFixture fixture toolConfiguration \env first firstAccess -> do
           now <- getCurrentTime
           let secondRoot = ExecutionRootId "second-transcript-root"
-              limits = Map.insert R.Tokens (R.Limited 1000) (Map.fromList [(dimension, R.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]])
+              limits = Map.insert R.Tokens (R.Limited (fixtureAmount 1000)) (Map.fromList [(dimension, R.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]])
               second = anotherSnapshot first "second-tool-execution" & #selection . #rootId .~ Just secondRoot
           run env (Roots.enrollRoot secondRoot (R.Envelope limits (addUTCTime 3600 now))) >>= (@?= Right R.Accepted)
           run env (Store.admitExecution second) >>= (@?= Right R.Accepted)
@@ -476,8 +477,8 @@ tests fixture =
           state.cursor @?= (fixtureRevision 1)
           state.activeOperation @?= Nothing
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
-          Map.lookup R.ModelAttempts root.usage.settled @?= Just 1
-          Map.lookup R.Tokens root.usage.settled @?= Just 3
+          Map.lookup R.ModelAttempts root.usage.settled @?= Just (fixtureAmount 1)
+          Map.lookup R.Tokens root.usage.settled @?= Just (fixtureAmount 3)
           operation.specification.operationId @?= reference.operationId
           state.executionId @?= snapshot.executionId,
       testCase "a refused undispatched attempt retries under the same logical key with a new reservation" $
@@ -495,8 +496,8 @@ tests fixture =
           run env (Store.startExecutionAttempt access (fixtureRevision 5) claim) >>= (@?= Right R.Accepted)
           run env (Store.completeExecutionAttempt access (fixtureRevision 6) claim terminalAttempt) >>= (@?= Right R.Accepted)
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
-          Map.lookup R.ModelAttempts root.usage.settled @?= Just 2
-          Map.lookup R.Tokens root.usage.settled @?= Just 3
+          Map.lookup R.ModelAttempts root.usage.settled @?= Just (fixtureAmount 2)
+          Map.lookup R.Tokens root.usage.settled @?= Just (fixtureAmount 3)
           root.active @?= 0,
       testCase "claim expiry before dispatch permits replacement without another actual attempt" $
         withPreparedModel fixture \env _snapshot access _operation reference -> do
@@ -508,7 +509,7 @@ tests fixture =
           run env (Store.startExecutionAttempt access (fixtureRevision 4) replacement) >>= (@?= Right R.Accepted)
           run env (Store.completeExecutionAttempt access (fixtureRevision 5) replacement terminalAttempt) >>= (@?= Right R.Accepted)
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
-          Map.lookup R.ModelAttempts root.usage.settled @?= Just 1,
+          Map.lookup R.ModelAttempts root.usage.settled @?= Just (fixtureAmount 1),
       testCase "expiry after dispatch holds accounting and retains a fenced late receipt" $
         withPreparedModel fixture \env _snapshot access _operation reference -> do
           claim <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) reference "former-owner" 1)
@@ -529,7 +530,7 @@ tests fixture =
           restored <- expectRight =<< run env (Store.readReplayPayload @Attempt.AttemptResult access "late-attempt-receipt" late)
           restored @?= terminalAttempt
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
-          Map.lookup R.Tokens root.usage.held @?= Just 10
+          Map.lookup R.Tokens root.usage.held @?= Just (fixtureAmount 10)
           root.active @?= 1
           run env (Store.claimExecutionAttempt access (fixtureRevision 6) reference "another-owner" 60) >>= (@?= Right Attempt.AttemptNeedsReconciliation)
           run env (Store.reconcileExecutionAttempt access (fixtureRevision 6) reference.attemptId) >>= (@?= Right R.Accepted)
@@ -540,21 +541,21 @@ tests fixture =
           afterTransport <- expectRight =<< run env (Roots.inspectRoot rootId)
           afterTransport.active @?= 0
           afterTransport.unknown @?= 1
-          Map.lookup R.ModelAttempts afterTransport.usage.settled @?= Just 1
-          Map.lookup R.Tokens afterTransport.usage.settled @?= Just 3
+          Map.lookup R.ModelAttempts afterTransport.usage.settled @?= Just (fixtureAmount 1)
+          Map.lookup R.Tokens afterTransport.usage.settled @?= Just (fixtureAmount 3)
           call <- maybe (assertFailure "missing model receipt" >> fail "call") pure attempt.call
-          let complete = terminal & #known .~ Map.fromList [(R.Tokens, 3), (R.CostMicroUsd, 0)] & #missing .~ []
-              conflict = complete & #known .~ Map.fromList [(R.Tokens, 4), (R.CostMicroUsd, 0)]
+          let complete = terminal & #known .~ Map.fromList [(R.Tokens, (fixtureAmount 3)), (R.CostMicroUsd, (fixtureAmount 0))] & #missing .~ []
+              conflict = complete & #known .~ Map.fromList [(R.Tokens, (fixtureAmount 4)), (R.CostMicroUsd, (fixtureAmount 0))]
           run env (runTransaction (Calls.reconcileSelectionCallTx call conflict)) >>= (@?= Left Calls.CallIdentityConflict)
           run env (runTransaction (Calls.reconcileSelectionCallTx call complete)) >>= (@?= Right R.Accepted)
           run env (runTransaction (Calls.reconcileSelectionCallTx call complete)) >>= (@?= Right R.AlreadyAccepted)
           afterBilling <- expectRight =<< run env (Roots.inspectRoot rootId)
           afterBilling.active @?= 0
           afterBilling.unknown @?= 0
-          Map.lookup R.ModelAttempts afterBilling.usage.settled @?= Just 1
-          Map.lookup R.Tokens afterBilling.usage.settled @?= Just 3,
+          Map.lookup R.ModelAttempts afterBilling.usage.settled @?= Just (fixtureAmount 1)
+          Map.lookup R.Tokens afterBilling.usage.settled @?= Just (fixtureAmount 3),
       testCase "the driver safely replaces an expired model transport with a newly accounted attempt" $
-        withConfiguredResourceFixture fixture id (Map.insert R.ActiveWork (R.Limited 2) . Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot access -> do
+        withConfiguredResourceFixture fixture id (Map.insert R.ActiveWork (R.Limited (fixtureAmount 2)) . Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot access -> do
           (executor, calls, _) <- driverRuntime env False
           withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
           let drive = run env (runWorkflow DriverGenerated.workflowName (executionWorkflowId snapshot.executionId) (Driver.executionWorkflow executor (Just (Driver.ExecutionStart snapshot.executionId))))
@@ -586,13 +587,13 @@ tests fixture =
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
           root.active @?= 1
           root.unknown @?= 2
-          Map.lookup R.ModelAttempts root.usage.settled @?= Just 1
-          Map.lookup R.ModelAttempts root.usage.held @?= Just 1,
+          Map.lookup R.ModelAttempts root.usage.settled @?= Just (fixtureAmount 1)
+          Map.lookup R.ModelAttempts root.usage.held @?= Just (fixtureAmount 1),
       testGroup "safe uncertainty recovery" [modelRecoveryCase fixture False, modelRecoveryCase fixture True, recoveryCapacityCase fixture, toolRecoveryCase fixture RepeatableObservation, toolRecoveryCase fixture IdempotentEffect, toolRecoveryCase fixture UncertainEffect],
       testGroup "native executor billing and cleanup" [nativeExecutorCase fixture NoInvoiceCost, nativeExecutorCase fixture UnreportedInvoiceCost],
       testCase "an unreported tool invoice cannot claim a finite cost ceiling" $
-        withConfiguredResourceFixture fixture (\snapshot -> toolConfiguration snapshot & #toolBindings .~ [observationBinding & #invoiceCost .~ UnreportedInvoiceCost]) (Map.insert R.CostMicroUsd (R.Limited 100)) \env snapshot access -> do
-          let billed = terminal & #known .~ Map.fromList [(R.Tokens, 3), (R.CostMicroUsd, 0)] & #missing .~ []
+        withConfiguredResourceFixture fixture (\snapshot -> toolConfiguration snapshot & #toolBindings .~ [observationBinding & #invoiceCost .~ UnreportedInvoiceCost]) (Map.insert R.CostMicroUsd (R.Limited (fixtureAmount 100))) \env snapshot access -> do
+          let billed = terminal & #known .~ Map.fromList [(R.Tokens, (fixtureAmount 3)), (R.CostMicroUsd, (fixtureAmount 0))] & #missing .~ []
           (response, assistant) <- commitToolRequestWith billed env snapshot access
           let binding = head snapshot.toolBindings
               input = ToolOperationInput response 0 (head (toolInvocations assistant)) binding
@@ -845,7 +846,7 @@ tests fixture =
                 tentative <- Tx.statement snapshot.executionId.value outcomeWritesVisible
                 root <- Roots.inspectRootTx rootId
                 pure case root of
-                  Right value | tentative && value.active == 0 && Map.lookup R.Tokens value.known == Just 3 -> Left ExecutionCommandRefused
+                  Right value | tentative && value.active == 0 && Map.lookup R.Tokens value.known == Just (fixtureAmount 3) -> Left ExecutionCommandRefused
                   _ -> Left CorruptReplay
           run env (Store.recordOutcomeAndAdvanceWith access (fixtureRevision 1) operation.specification.operationId modelOutcome NeedModel (Just (receipt, terminal)) finalCheck) >>= (@?= Left ExecutionCommandRefused)
           payloadCount env snapshot.executionId >>= (@?= before)
@@ -864,8 +865,8 @@ tests fixture =
           settled <- expectRight =<< run env (Roots.inspectRoot rootId)
           settled.active @?= 0
           settled.unknown @?= 1
-          Map.lookup R.ModelAttempts settled.known @?= Just 1
-          Map.lookup R.Tokens settled.known @?= Just 3,
+          Map.lookup R.ModelAttempts settled.known @?= Just (fixtureAmount 1)
+          Map.lookup R.Tokens settled.known @?= Just (fixtureAmount 3),
       testCase "root cancellation preserves accepted outcomes and prevents new logical work" $
         withFixture fixture \env snapshot access -> do
           (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
@@ -934,8 +935,8 @@ tests fixture =
           run env (Store.acceptOperation access (fixtureRevision 4) (spec snapshot 2 & #kind .~ ModelRepair) secretInput) >>= (@?= Left ExecutionOutputInvalid)
           run env (Store.acceptOperation access (fixtureRevision 4) (spec snapshot 2 & #kind .~ ModelSummary) secretInput) >>= (@?= Left (ExecutionPolicyRefused "model summaries are disabled"))
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
-          Map.lookup R.ModelAttempts root.usage.settled @?= Just 2
-          Map.lookup R.Tokens root.usage.settled @?= Just 6,
+          Map.lookup R.ModelAttempts root.usage.settled @?= Just (fixtureAmount 2)
+          Map.lookup R.Tokens root.usage.settled @?= Just (fixtureAmount 6),
       testCase "the immutable model-turn ceiling survives accepted refusals" $
         withFixture fixture \env original _ -> do
           let snapshot = anotherSnapshot original "one-turn" & #policy . #maxModelTurns .~ 1
@@ -1100,20 +1101,20 @@ nativeExecutorCase fixture billing = testCase (show billing <> " preserves rich 
     Just wake <- run env (lookupAwakeable UUID.nil)
     wake.status @?= Awakeable.Completed
     root <- expectRight =<< run env (Roots.inspectRoot rootId)
-    Map.lookup R.ToolAttempts root.usage.settled @?= Just 1
+    Map.lookup R.ToolAttempts root.usage.settled @?= Just (fixtureAmount 1)
     root.active @?= 0
     root.unknown @?= (if billing == NoInvoiceCost then 1 else 2)
     when (billing == UnreportedInvoiceCost) (assertBool "unknown invoice was never turned into zero" (Map.notMember R.CostMicroUsd root.known))
 
 modelRecoveryCase :: DatabaseFixture -> Bool -> TestTree
 modelRecoveryCase fixture afterCompletion = testCase (if afterCompletion then "a late superseded model receipt settles after success without replacing output" else "a late superseded model receipt settles during active progress") $
-  withConfiguredResourceFixture fixture id (Map.insert R.ActiveWork (R.Limited 2)) \env snapshot access -> do
+  withConfiguredResourceFixture fixture id (Map.insert R.ActiveWork (R.Limited (fixtureAmount 2))) \env snapshot access -> do
     (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
     let first = concurrentModelSubmission operation
         old = Attempt.JobReference 1 snapshot.executionId operation.specification.operationId first.request.attemptId
         second = first & #request . #attemptId .~ AttemptId "recovery-model-attempt"
         next = old & #attemptId .~ second.request.attemptId
-        actual = terminalAttempt & #accounting .~ Just (terminal & #known .~ Map.fromList [(R.Tokens, 3), (R.CostMicroUsd, 0)] & #missing .~ [])
+        actual = terminalAttempt & #accounting .~ Just (terminal & #known .~ Map.fromList [(R.Tokens, (fixtureAmount 3)), (R.CostMicroUsd, (fixtureAmount 0))] & #missing .~ [])
     _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 1) first (\_ -> pure ()))
     former <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) old "former-owner" 1)
     run env (Store.startExecutionAttempt access (fixtureRevision 3) former) >>= (@?= Right R.Accepted)
@@ -1152,13 +1153,13 @@ modelRecoveryCase fixture afterCompletion = testCase (if afterCompletion then "a
     afterRoot <- expectRight =<< run env (Roots.inspectRoot rootId)
     afterRoot.active @?= 0
     afterRoot.unknown @?= 0
-    Map.lookup R.ModelAttempts afterRoot.usage.settled @?= Just 2
-    Map.lookup R.Tokens afterRoot.usage.settled @?= Just 6
+    Map.lookup R.ModelAttempts afterRoot.usage.settled @?= Just (fixtureAmount 2)
+    Map.lookup R.Tokens afterRoot.usage.settled @?= Just (fixtureAmount 6)
     when (not afterCompletion) (run env (Store.finishExecution access after.revision (object ["reply" .= ("accepted reply" :: Text)])) >>= (@?= Right R.Accepted))
 
 recoveryCapacityCase :: DatabaseFixture -> TestTree
 recoveryCapacityCase fixture = testCase "a refused recovery preserves the unknown attempt and its held capacity" $
-  withConfiguredResourceFixture fixture id (Map.insert R.ActiveWork (R.Limited 1)) \env snapshot access -> do
+  withConfiguredResourceFixture fixture id (Map.insert R.ActiveWork (R.Limited (fixtureAmount 1))) \env snapshot access -> do
     (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
     let first = concurrentModelSubmission operation
         old = Attempt.JobReference 1 snapshot.executionId operation.specification.operationId first.request.attemptId
@@ -1182,7 +1183,7 @@ recoveryCapacityCase fixture = testCase "a refused recovery preserves the unknow
 
 toolRecoveryCase :: DatabaseFixture -> RecoveryClass -> TestTree
 toolRecoveryCase fixture recovery = testCase (show recovery <> " retains its logical key through a lost native receipt") $
-  withConfiguredResourceFixture fixture (\snapshot -> toolConfiguration snapshot & #toolBindings .~ [observationBinding & #recovery .~ recovery]) (Map.insert R.ActiveWork (R.Limited 2)) \env snapshot access -> do
+  withConfiguredResourceFixture fixture (\snapshot -> toolConfiguration snapshot & #toolBindings .~ [observationBinding & #recovery .~ recovery]) (Map.insert R.ActiveWork (R.Limited (fixtureAmount 2))) \env snapshot access -> do
     (response, assistant) <- commitToolRequest env snapshot access
     let binding = observationBinding & #recovery .~ recovery
         input = ToolOperationInput response 0 (head (toolInvocations assistant)) binding
@@ -1252,7 +1253,7 @@ toolRecoveryCase fixture recovery = testCase (show recovery <> " retains its log
         settled.pendingReceipts @?= 0
         root <- expectRight =<< run env (Roots.inspectRoot rootId)
         root.active @?= 0
-        Map.lookup R.ToolAttempts root.usage.settled @?= Just 2
+        Map.lookup R.ToolAttempts root.usage.settled @?= Just (fixtureAmount 2)
 
 concurrentModelSubmission :: Operation -> Attempt.AttemptSubmission
 concurrentModelSubmission operation = modelSubmission operation & #modelCall .~ Just (Attempt.ModelCallPreparation (Calls.CallLimits (Just 8) (Just 2) (Just 2) Nothing (Just 1000)) "actual-request-digest")
@@ -1260,7 +1261,7 @@ concurrentModelSubmission operation = modelSubmission operation & #modelCall .~ 
 modelSubmission :: Operation -> Attempt.AttemptSubmission
 modelSubmission operation =
   Attempt.AttemptSubmission
-    (R.AttemptRequest (AttemptId "prepared-model-attempt") operation.specification.operationId (Map.fromList [(R.ActiveWork, 1), (R.ModelAttempts, 1), (R.Tokens, 10)]) R.EnforcedCeiling)
+    (R.AttemptRequest (AttemptId "prepared-model-attempt") operation.specification.operationId (Map.fromList [(R.ActiveWork, (fixtureAmount 1)), (R.ModelAttempts, (fixtureAmount 1)), (R.Tokens, (fixtureAmount 10))]) R.EnforcedCeiling)
     (Just (Attempt.ModelCallPreparation (Calls.CallLimits (Just 8) (Just 2) (Just 1) Nothing (Just 1000)) "actual-request-digest"))
     (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)
 
@@ -1312,7 +1313,7 @@ modelOutcome :: OperationOutcome
 modelOutcome = ModelReturned (ReplayAssistant 1 [TextBlock "accepted reply"] Stop (Just "response") Nothing (object []) Nothing) (Just (object ["raw" .= ("provider evidence" :: Text)]))
 
 terminal :: Calls.CallOutcome
-terminal = Calls.CallOutcome Calls.CallTerminal (Map.singleton R.Tokens 3) [R.CostMicroUsd] (Just "served-model") (Just "provider-call") Nothing
+terminal = Calls.CallOutcome Calls.CallTerminal (Map.singleton R.Tokens (fixtureAmount 3)) [R.CostMicroUsd] (Just "served-model") (Just "provider-call") Nothing
 
 spec :: ExecutionSnapshot -> Integer -> OperationSpec
 spec snapshot cursor = OperationSpec (operationIdFor snapshot.executionId (fixtureRevision cursor)) ModelTurn RepeatableObservation "model" (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) "scope-digest" Nothing
@@ -1321,7 +1322,7 @@ reserveCall :: AppEnv -> ExecutionSnapshot -> Operation -> IO Calls.CallReceipt
 reserveCall env snapshot operation = do
   now <- getCurrentTime
   let OperationId operationKey = operation.specification.operationId
-      request = R.AttemptRequest (AttemptId ("attempt:" <> operationKey)) operation.specification.operationId (Map.fromList [(R.ActiveWork, 1), (R.ModelAttempts, 1), (R.Tokens, 10), (R.CostMicroUsd, 0)]) R.EnforcedCeiling
+      request = R.AttemptRequest (AttemptId ("attempt:" <> operationKey)) operation.specification.operationId (Map.fromList [(R.ActiveWork, (fixtureAmount 1)), (R.ModelAttempts, (fixtureAmount 1)), (R.Tokens, (fixtureAmount 10)), (R.CostMicroUsd, (fixtureAmount 0))]) R.EnforcedCeiling
       limits = Calls.CallLimits (Just 8) (Just 2) (Just 1) Nothing (Just 1000)
   result <- expectRight =<< run env (Calls.reserveSelectionCall snapshot.selection limits request "actual-request-digest" now)
   case result of Calls.NewCall receipt -> pure receipt; _ -> assertFailure "new actual attempt expected"
@@ -1341,7 +1342,7 @@ withConfiguredResourceFixture fixture configure editLimits use = withShikigamiFr
   now <- getCurrentTime
   session <- genSessionId
   let env = AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing
-      limits = editLimits (Map.insert R.Tokens (R.Limited 1000) (Map.fromList [(dimension, R.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]))
+      limits = editLimits (Map.insert R.Tokens (R.Limited (fixtureAmount 1000)) (Map.fromList [(dimension, R.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]))
       selection = mustRight (resolveExecutionSelection "transcript-assignment" (mustRight (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just rootId) now)
       snapshot = configure (ExecutionSnapshot 1 (executionIdFor selection.assignmentId) "transcript-run" (AgentName "worker") (compatibilityIdentity "worker") session selection Nothing (SkillInstructions "fixture" "system" "PRIVATE_REPLAY_MARKER") (ReplayContext 1 (Just "system") [UserTurn [TextBlock "PRIVATE_REPLAY_MARKER"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing)
   _ <- expectRight =<< run env Catalog.registerProjectionCatalog
@@ -1389,3 +1390,6 @@ outcomeWritesVisible =
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureAmount :: Integer -> ResourceAmount
+fixtureAmount amount = either (error . show) id (parseResourceAmount amount)

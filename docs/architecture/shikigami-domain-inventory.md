@@ -54,6 +54,15 @@ input bytes are covered by ExecutionPositionSpec. This scalar refactor changes n
 workflow step or declared DSL body; counters and other scalar findings retain
 their separate open census in plan 107.
 
+Resource vectors now retain private checked ResourceAmount values, indexed by
+Dimension, through finite limits, reservations, usage and settlement. Numeric
+wire values remain unchanged. Checked arithmetic and preflight accumulation
+reject underflow/overflow before publication; an unrepresentable provider report
+retains its unknown billing hold instead of becoming zero. ADR-76 and
+[resource-amount acceptance](../evidence/keiro-0.22/resource-amount-results.txt)
+cover the real HTTP and synthetic counter-boundary cases. This does not complete
+the separate counter/policy/identity census.
+
 Objective is an application-owned entity: `ObjectiveId` now uses the generated
 abstract TypeID-v7 domain with prefix `shikigami_objective`. Creation allocates a
 UUIDv7 ID, while creator-scoped operation receipts retain deduplication authority.

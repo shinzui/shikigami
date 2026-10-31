@@ -26,6 +26,7 @@ import Settei.Env (envSnapshot, environmentSource)
 import Shikigami.Agent.Approval (ApprovalDecision (..))
 import Shikigami.App.Config (AppConfig (..), Role (..), environmentBindings, revealSecretText)
 import Shikigami.App.Config.Load (ConfigOptions (..), ConfigRun (..), DiagnosticMode (..), appConfigRun)
+import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Server.Command (adminInfo, adminPrefs, adminSubcommands)
 import Shikigami.Server.Command.Ops (redactDatabaseUrl)
@@ -86,9 +87,9 @@ tests =
           _ -> assertBool "resources did not parse" False,
       testCase "resource JSON distinguishes held unknown usage from measured consumption" do
         let now = UTCTime (fromGregorian 2026 10 27) 0
-            envelope = Resources.Envelope (Map.singleton Resources.Tokens (Resources.Limited 100)) now
-            usage = Resources.Usage (Map.singleton Resources.Tokens 3) (Map.singleton Resources.Tokens 10)
-            root = Resources.Root envelope (fixtureRevision 0) False Nothing False 1 1 (Map.singleton Resources.Tokens 3) usage
+            envelope = Resources.Envelope (Map.singleton Resources.Tokens (Resources.Limited (fixtureAmount 100))) now
+            usage = Resources.Usage (Map.singleton Resources.Tokens (fixtureAmount 3)) (Map.singleton Resources.Tokens (fixtureAmount 10))
+            root = Resources.Root envelope (fixtureRevision 0) False Nothing False 1 1 (Map.singleton Resources.Tokens (fixtureAmount 3)) usage
             result = resourceView now root
         case result of
           Aeson.Object fields -> do
@@ -322,3 +323,6 @@ showParse = \case
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureAmount :: Integer -> ResourceAmount
+fixtureAmount amount = either (error . show) id (parseResourceAmount amount)

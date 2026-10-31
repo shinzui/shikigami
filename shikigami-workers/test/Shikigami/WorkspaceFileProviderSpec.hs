@@ -36,6 +36,7 @@ import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy.Types
+import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Runner (DispatchContext (..))
@@ -418,13 +419,13 @@ withAcceptedWorkspaceTool toolCount install agent wire token env admission runti
   access <- right =<< run env (Execution.authorizeReplay snapshot.executionId identity (pure (Right ())))
   (_, operation) <- right =<< run env (Execution.acceptOperation access (fixtureRevision 0) model (Aeson.object []))
   let OperationId operationKey = operation.specification.operationId
-      modelRequest = Resources.AttemptRequest (AttemptId ("model:" <> operationKey)) operation.specification.operationId (Map.fromList [(Resources.ActiveWork, 1), (Resources.ModelAttempts, 1), (Resources.Tokens, 10), (Resources.CostMicroUsd, 0)]) Resources.EnforcedCeiling
+      modelRequest = Resources.AttemptRequest (AttemptId ("model:" <> operationKey)) operation.specification.operationId (Map.fromList [(Resources.ActiveWork, (fixtureAmount 1)), (Resources.ModelAttempts, (fixtureAmount 1)), (Resources.Tokens, (fixtureAmount 10)), (Resources.CostMicroUsd, (fixtureAmount 0))]) Resources.EnforcedCeiling
   reservation <- right =<< run env (Calls.reserveSelectionCall selection (Calls.CallLimits Nothing Nothing Nothing Nothing Nothing) modelRequest "fixture-model" now)
   call <- case reservation of Calls.NewCall value -> pure value; _ -> fail "new fixture call required"
   let assistant = ReplayAssistant 1 ([ToolBlock (ToolInvocation "replace-call" tool.name input)] <> [ToolBlock (ToolInvocation ("additional-call-" <> Text.pack (show index)) tool.name input) | index <- [1 .. toolCount - 1]]) ToolUse Nothing Nothing (Aeson.object []) Nothing
       outcome = ModelReturned assistant Nothing
   response <- right (Execution.outcomeReference outcome)
-  run env (Execution.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId outcome (NeedTool response 0) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.singleton Resources.Tokens 1) [Resources.CostMicroUsd] Nothing Nothing Nothing))) >>= (@?= Right Resources.Accepted)
+  run env (Execution.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId outcome (NeedTool response 0) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.singleton Resources.Tokens (fixtureAmount 1)) [Resources.CostMicroUsd] Nothing Nothing Nothing))) >>= (@?= Right Resources.Accepted)
   let toolInput = ToolOperationInput response 0 (ToolInvocation "replace-call" tool.name input) tool
       specification = OperationSpec (operationIdFor snapshot.executionId (fixtureRevision 1)) ToolOperation tool.recovery tool.name (versionedDigest "shikigami.harness-policy/1" (Aeson.toJSON snapshot.policy)) (toolScopeDigest tool) (Just 0)
       reference = Attempt.JobReference 1 snapshot.executionId specification.operationId (AttemptId ("file-tool:" <> case specification.operationId of OperationId key -> key))
@@ -476,3 +477,6 @@ retainedOutput env snapshot operation = do
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureAmount :: Integer -> ResourceAmount
+fixtureAmount amount = either (error . show) id (parseResourceAmount amount)

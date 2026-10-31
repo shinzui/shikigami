@@ -106,6 +106,7 @@ import Shikigami.Execution.Admission (enrollRootRun)
 import Shikigami.Execution.Driver (ExecutionDriverResult (..))
 import Shikigami.Execution.Identity (ExecutionRootId (..))
 import Shikigami.Execution.Policy.Types qualified as Harness
+import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Resources
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
@@ -1309,7 +1310,7 @@ tests databaseFixture =
               tracer <- noopTracer
               let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
               now <- getCurrentTime
-              let envelope = Resources.Envelope (Map.singleton Resources.LifetimeDescendants (Resources.Limited 1)) (addUTCTime 3600 now)
+              let envelope = Resources.Envelope (Map.singleton Resources.LifetimeDescendants (Resources.Limited (fixtureAmount 1))) (addUTCTime 3600 now)
               first <- runAppIO appEnv (enrollRootRun envelope (capabilityJob "heartbeat" "new-root"))
               job <- case first of
                 Right (Right admitted) -> pure admitted
@@ -1327,7 +1328,7 @@ tests databaseFixture =
               now <- getCurrentTime
               let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                   root = ExecutionRootId "delegation-resource-root"
-                  envelope = Resources.Envelope (Map.singleton Resources.LifetimeDescendants (Resources.Limited 1)) (addUTCTime 3600 now)
+                  envelope = Resources.Envelope (Map.singleton Resources.LifetimeDescendants (Resources.Limited (fixtureAmount 1))) (addUTCTime 3600 now)
                   parentName = WorkflowName "shikigami.test-resource-parent"
                   parentId = WorkflowId "resource-parent"
                   childId = delegatedWorkflowId parentId "heartbeat" "first"
@@ -3434,3 +3435,6 @@ expectedSupervisorOutput =
             "finding" .= ("The code path should spawn child workflows before awaiting their results." :: Text)
           ]
     ]
+
+fixtureAmount :: Integer -> ResourceAmount
+fixtureAmount amount = either (error . show) id (parseResourceAmount amount)

@@ -23,6 +23,7 @@ import Shikigami.Attestation.CallFacts (CallComplianceFacts)
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Execution.Identity
+import Shikigami.Execution.Quantity
 import Shikigami.Execution.Resources
 import Shikigami.Execution.ResourcesStore qualified as Resources
 import Shikigami.Execution.Selection (ExecutionSelection (..))
@@ -129,8 +130,9 @@ reserveSelectionCallTx selection limits request fingerprint now = do
       validateKey assignmentId
       validateKey fingerprint
       validateOperation (OperationRequest request.operationId Nothing ModelOperation Map.empty fingerprint)
-      validateAttempt (assignmentLimits limits) (OperationRequest request.operationId Nothing ModelOperation Map.empty fingerprint) request
-      forM_ [limits.calls, limits.retries, limits.concurrency, limits.tokens] (traverse_ (\n -> unless (validQuantity n) (Left (InvalidResourceRequest "invalid assignment limit"))))
+      resourceLimits <- assignmentLimits limits
+      validateAttempt resourceLimits (OperationRequest request.operationId Nothing ModelOperation Map.empty fingerprint) request
+      forM_ [limits.calls, limits.retries, limits.concurrency, limits.tokens] (traverse_ (\n -> unless (validCallCount n) (Left (InvalidResourceRequest "invalid assignment limit"))))
     reserveValidated = do
       root <- traverse Resources.inspectRootTx selection.rootId
       case sequence root of
@@ -151,10 +153,10 @@ reserveSelectionCallTx selection limits request fingerprint now = do
                       | maybe False (now >=) limits.cutoff -> pure (Left AssignmentCutoffReached)
                       | maybe False (assignment.active >=) limits.concurrency -> pure (Left AssignmentConcurrencyExceeded)
                       | maybe False (assignment.attempts >=) limits.calls -> pure (Left AssignmentCallLimitExceeded)
-                      | not (validQuantity (assignment.attempts + 1)) -> pure (Left AssignmentCallLimitExceeded)
+                      | not (validCallCount (assignment.attempts + 1)) -> pure (Left AssignmentCallLimitExceeded)
                       | otherwise -> do
                           previous <- Tx.statement (assignmentId, operationKey request.operationId) countOperationCalls
-                          admitted <- case admit (assignmentLimits limits) assignment.usage request.quantities of
+                          admitted <- case assignmentLimits limits >>= \resourceLimits -> admit resourceLimits assignment.usage request.quantities of
                             Left err -> pure (Left (CallResourcesRefused err))
                             Right usage -> do
                               rootAdmission <-
@@ -203,7 +205,7 @@ finishSelectionCallTx receipt outcome = do
           | otherwise -> do
               let settlement = case outcome.phase of
                     CallTransportUnknown -> UnknownUsage "transport outcome unavailable"
-                    CallRefused -> KnownUsage (Map.fromList [(Tokens, 0), (CostMicroUsd, 0)])
+                    CallRefused -> KnownUsage (Map.fromList [(Tokens, zeroAmount), (CostMicroUsd, zeroAmount)])
                     CallTerminal | null outcome.missing -> KnownUsage outcome.known
                     CallTerminal -> PartialUsage outcome.known outcome.missing "terminal billing facts unavailable"
               let localUsage = maybe (Left (InvalidResourceRequest "assignment missing")) (settleAssignment receipt.request.quantities settlement . (.usage)) assignment
@@ -251,7 +253,7 @@ reconcileSelectionCallTx receipt outcome = do
     reconcileUsage assignment previous = do
       let fromUnknown = previous.phase == CallTransportUnknown
           refused = outcome.phase == CallRefused
-          measured = if refused then Map.fromList [(Tokens, 0), (CostMicroUsd, 0)] else outcome.known
+          measured = if refused then Map.fromList [(Tokens, zeroAmount), (CostMicroUsd, zeroAmount)] else outcome.known
       unless (outcome.phase /= CallTransportUnknown && previous.phase /= CallRefused && (fromUnknown || not (null previous.missing)) && (not refused || (fromUnknown && null outcome.missing && Map.null outcome.known))) (Left CallIdentityConflict)
       unless (all (\(dimension, amount) -> Map.lookup dimension measured == Just amount) (Map.toList previous.known) && preserves previous.reportedModel outcome.reportedModel && preserves previous.providerCallId outcome.providerCallId && preserves previous.compliance outcome.compliance) (Left CallIdentityConflict)
       let settlement = if null outcome.missing then KnownUsage measured else PartialUsage measured outcome.missing "terminal billing facts unavailable"
@@ -263,10 +265,11 @@ reconcileSelectionCallTx receipt outcome = do
       pure (usage, assignment.active - if fromUnknown then 1 else 0, assignment.unknown - if null outcome.missing then 1 else 0, settlement)
     preserves old new = maybe True (\value -> new == Just value) old
 
-assignmentLimits :: CallLimits -> Limits
-assignmentLimits limits =
+assignmentLimits :: CallLimits -> Either ResourceError Limits
+assignmentLimits limits = do
   let unbounded = Map.fromList [(d, ExplicitlyUnbounded) | d <- [minBound .. maxBound]]
-   in maybe unbounded (\n -> Map.insert Tokens (Limited n) unbounded) limits.tokens
+  tokens <- traverse (either (Left . InvalidResourceRequest) Right . parseResourceAmount) limits.tokens
+  pure (maybe unbounded (\n -> Map.insert Tokens (Limited n) unbounded) tokens)
 
 settleAssignment :: Quantities -> Settlement -> Usage -> Either ResourceError Usage
 settleAssignment reservation settlement usage = case settlement of
@@ -324,3 +327,6 @@ operationKey (OperationId key) = key
 
 countOperationCalls :: Statement (Text, Text) Integer
 countOperationCalls = preparable "SELECT count(*) FROM shikigami.execution_selection_calls WHERE assignment_id=$1 AND operation_id=$2" (contrazip2 textParam textParam) (D.singleRow (toInteger <$> D.column (D.nonNullable D.int8)))
+
+validCallCount :: Integer -> Bool
+validCallCount count = count >= 0 && count <= toInteger (maxBound :: Int64)

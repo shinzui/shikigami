@@ -36,6 +36,7 @@ import Hasql.Transaction qualified as Tx
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Execution.Identity
+import Shikigami.Execution.Quantity
 import Shikigami.Execution.Resources
 import Shikigami.Prelude
 import Shikigami.StateRevision
@@ -46,7 +47,7 @@ enrollRoot root envelope = runTransaction (enrollRootTx root envelope)
 -- | Only an admitted new-root boundary calls this. Descendant commands never
 -- create a row; the immutable envelope is compared even after policy changes.
 enrollRootTx :: ExecutionRootId -> Envelope -> Transaction (Either ResourceError Admission)
-enrollRootTx (ExecutionRootId key) envelope = case validateKey key >> validateEnvelope envelope of
+enrollRootTx (ExecutionRootId key) envelope = case validateKey key of
   Left err -> pure (Left err)
   Right () -> do
     let initial = Root envelope initialRevision False Nothing False 0 0 Map.empty emptyUsage
@@ -117,7 +118,7 @@ beginAttemptTx root expected request now = withRoot root \state -> do
                   pure (Right Accepted)
   where
     checkActive state = case Map.lookup ActiveWork (effectiveLimits state) of
-      Just (Limited n) | state.active >= n -> Left (ResourceExhausted ActiveWork)
+      Just (Limited n) | state.active >= amountUnits n -> Left (ResourceExhausted ActiveWork)
       _ -> Right ()
 
 settleAttempt :: (Store :> es) => ExecutionRootId -> AttemptId -> Settlement -> Eff es (Either ResourceError Admission)
@@ -166,16 +167,21 @@ recordSettlement reconcile root attemptId outcome = withRoot root \state -> do
                       Just (PartialUsage _ missing _) -> (Map.filterWithKey (\d _ -> d `elem` missing) attempt.request.quantities, Map.filterWithKey (\d _ -> d `elem` missing) measured)
                       _ -> (attempt.request.quantities, measured)
                     preservePartial =
-                      validateQuantities measured >> unless (all (`elem` [Tokens, CostMicroUsd]) (Map.keys measured)) (Left SettlementConflict) >> case attempt.outcome of
+                      unless (all (`elem` [Tokens, CostMicroUsd]) (Map.keys measured)) (Left SettlementConflict) >> case attempt.outcome of
                         Just (PartialUsage previous missing _) -> do
                           unless (all (\(d, n) -> Map.lookup d measured == Just n) (Map.toList previous) && all (`Map.member` measured) missing) (Left SettlementConflict)
                         _ -> Right ()
-                case scope >>= \(_, _, usage) -> preservePartial >> validateQuantities (add state.known newlyMeasured) >> settleUsage reservation newlyMeasured usage of
+                    counters = Map.filterWithKey (\d _ -> d `elem` [ModelAttempts, ToolAttempts]) reservation
+                    prepare (_, _, usage) = do
+                      preservePartial
+                      known <- add counters newlyMeasured >>= add state.known
+                      settled <- settleUsage reservation newlyMeasured usage
+                      pure (settled, known)
+                case scope >>= prepare of
                   Left err -> pure (Left err)
-                  Right usage -> do
+                  Right (usage, known) -> do
                     next <- saveScopeUsage root state operationRequest.allocationId usage
-                    let exceeded = any (\(d, n) -> Map.member d reservation && n > Map.findWithDefault 0 d reservation) (Map.toList newlyMeasured)
-                        counters = Map.filterWithKey (\d _ -> d `elem` [ModelAttempts, ToolAttempts]) reservation
+                    let exceeded = any (\(d, n) -> Map.member d reservation && n > Map.findWithDefault zeroAmount d reservation) (Map.toList newlyMeasured)
                         recorded =
                           next
                             & #active
@@ -185,7 +191,7 @@ recordSettlement reconcile root attemptId outcome = withRoot root \state -> do
                               .~ state.unknown
                             - (if wasUncertain attempt then 1 else 0)
                               & #known
-                              .~ add state.known (add counters newlyMeasured)
+                              .~ known
                               & #overage
                               .~ (state.overage || exceeded)
                     writeAttempt root (Attempt attempt.request (Just outcome))
@@ -200,14 +206,18 @@ recordSettlement reconcile root attemptId outcome = withRoot root \state -> do
                   Just operationRequest -> do
                     scope <- loadScope root state operationRequest.allocationId
                     let knownReservation = Map.filterWithKey (\d _ -> d `notElem` missing) attempt.request.quantities
-                    case scope >>= \(_, _, usage) -> validateQuantities (add state.known measured) >> settleUsage knownReservation measured usage of
+                        counters = Map.filterWithKey (\d _ -> d `elem` [ModelAttempts, ToolAttempts]) knownReservation
+                        prepare (_, _, usage) = do
+                          known <- add counters measured >>= add state.known
+                          settled <- settleUsage knownReservation measured usage
+                          pure (settled, known)
+                    case scope >>= prepare of
                       Left err -> pure (Left err)
-                      Right usage -> do
+                      Right (usage, known) -> do
                         next <- saveScopeUsage root state operationRequest.allocationId usage
-                        let counters = Map.filterWithKey (\d _ -> d `elem` [ModelAttempts, ToolAttempts]) knownReservation
-                            exceeded = any (\(d, n) -> Map.member d knownReservation && n > Map.findWithDefault 0 d knownReservation) (Map.toList measured)
+                        let exceeded = any (\(d, n) -> Map.member d knownReservation && n > Map.findWithDefault zeroAmount d knownReservation) (Map.toList measured)
                         writeAttempt root (Attempt attempt.request (Just outcome))
-                        saveRoot root (next & #active .~ (state.active - 1) & #unknown .~ (state.unknown + if wasUncertain attempt then 0 else 1) & #known .~ add state.known (add counters measured) & #overage .~ (state.overage || exceeded))
+                        saveRoot root (next & #active .~ (state.active - 1) & #unknown .~ (state.unknown + if wasUncertain attempt then 0 else 1) & #known .~ known & #overage .~ (state.overage || exceeded))
                         pure (Right Accepted)
   where
     wasUncertain attempt = case attempt.outcome of
@@ -225,7 +235,7 @@ narrowAllocation root expected allocationId@(AllocationId key) parent envelope n
   existing <- readAllocation root allocationId
   case existing of
     Just allocation | allocation.parent == parent && allocation.current == envelope -> pure (Right AlreadyAccepted)
-    _ -> case checkRoot now expected state >> validateKey key >> validateEnvelope envelope >> finiteLimits envelope of
+    _ -> case checkRoot now expected state >> validateKey key >> finiteLimits envelope of
       Left err -> pure (Left err)
       Right quantities -> do
         parentScope <- loadScope root state parent
@@ -247,16 +257,19 @@ narrowAllocation root expected allocationId@(AllocationId key) parent envelope n
                   | otherwise -> case finiteLimits old.current of
                       Left err -> pure (Left err)
                       Right previous -> do
-                        let delta = subtractAmounts previous quantities
-                            occupancy = occupied old.usage
-                            narrowed =
-                              all (>= 0) delta
-                                && all (\(d, n) -> n >= Map.findWithDefault 0 d occupancy) (Map.toList quantities)
-                                && all (\(d, n) -> n <= Map.findWithDefault 0 d quantities) (Map.toList occupancy)
-                        if not narrowed
-                          then pure (Left (InvalidResourceRequest "allocation must narrow without releasing spent or held work"))
-                          else do
-                            next <- saveScopeUsage root state parent (Usage parentUsage.settled (subtractAmounts parentUsage.held delta))
+                        let prepare = do
+                              delta <- subtractAmounts previous quantities
+                              occupancy <- occupied old.usage
+                              unless
+                                ( all (\(d, n) -> n >= Map.findWithDefault zeroAmount d occupancy) (Map.toList quantities)
+                                    && all (\(d, n) -> n <= Map.findWithDefault zeroAmount d quantities) (Map.toList occupancy)
+                                )
+                                (Left (InvalidResourceRequest "allocation must narrow without releasing spent or held work"))
+                              subtractAmounts parentUsage.held delta
+                        case prepare of
+                          Left _ -> pure (Left (InvalidResourceRequest "allocation must narrow without releasing spent or held work"))
+                          Right held -> do
+                            next <- saveScopeUsage root state parent (Usage parentUsage.settled held)
                             writeAllocation root allocationId (Allocation parent old.admitted envelope old.usage)
                             saveRoot root next
                             pure (Right Accepted)
@@ -269,22 +282,19 @@ finiteLimits Envelope {limits} = traverse finite limits
 
 -- | Policy revisions change only here. Usage recording remains permitted
 -- after cancellation/cutoff/revision changes; accepted work must drain truthfully.
-setRootControl :: (Store :> es) => ExecutionRootId -> StateRevision "execution-root" -> Bool -> Maybe Integer -> Eff es (Either ResourceError ())
+setRootControl :: (Store :> es) => ExecutionRootId -> StateRevision "execution-root" -> Bool -> Maybe ResourceAmount -> Eff es (Either ResourceError ())
 setRootControl root expected cancelled activeLimit = runTransaction $ withRoot root \state ->
   if expected /= state.revision
     then pure (Left RevisionConflict)
     else
-      if maybe False (not . validQuantity) activeLimit
-        then pure (Left (InvalidResourceRequest "invalid active limit"))
+      if state.cancelled && not cancelled
+        then pure (Left (InvalidResourceRequest "cancellation is irreversible"))
         else
-          if state.cancelled && not cancelled
-            then pure (Left (InvalidResourceRequest "cancellation is irreversible"))
-            else
-              if maybe False (\n -> case Map.lookup ActiveWork state.envelope.limits of Just (Limited maximumAmount) -> n > maximumAmount; Nothing -> n > 0; _ -> False) activeLimit
-                then pure (Left (InvalidResourceRequest "control cannot widen the admitted envelope"))
-                else do
-                  saveRoot root (state & #revision .~ advanceRevision expected & #cancelled .~ cancelled & #activeLimit .~ activeLimit)
-                  pure (Right ())
+          if maybe False (\n -> case Map.lookup ActiveWork state.envelope.limits of Just (Limited maximumAmount) -> n > maximumAmount; Nothing -> n > zeroAmount; _ -> False) activeLimit
+            then pure (Left (InvalidResourceRequest "control cannot widen the admitted envelope"))
+            else do
+              saveRoot root (state & #revision .~ advanceRevision expected & #cancelled .~ cancelled & #activeLimit .~ activeLimit)
+              pure (Right ())
 
 -- | One bounded row: no transcript, operation history, tool payload or secret.
 inspectRoot :: (Store :> es) => ExecutionRootId -> Eff es (Either ResourceError Root)
@@ -314,13 +324,18 @@ loadScope root state (Just allocationId) = do
 charge :: ExecutionRootId -> Root -> Maybe AllocationId -> UTCTime -> Quantities -> Transaction (Either ResourceError Root)
 charge root state scope now amounts = do
   loaded <- loadScope root state scope
-  case loaded >>= \(limits, cutoff, usage) -> if now >= cutoff then Left CutoffReached else admit limits usage amounts of
+  let prepare (limits, cutoff, usage) = do
+        admitted <- if now >= cutoff then Left CutoffReached else admit limits usage amounts
+        let descendants = Map.filterWithKey (\dimension _ -> dimension == LifetimeDescendants) amounts
+        settled <- add admitted.settled descendants
+        held <- subtractAmounts admitted.held descendants
+        known <- add state.known descendants
+        pure (Usage settled held, known)
+  case loaded >>= prepare of
     Left err -> pure (Left err)
-    Right usage -> do
-      let descendants = Map.filterWithKey (\dimension _ -> dimension == LifetimeDescendants) amounts
-          next = Usage (add usage.settled descendants) (subtractAmounts usage.held descendants)
-      updated <- saveScopeUsage root state scope next
-      pure (Right (updated & #known .~ add state.known descendants))
+    Right (usage, known) -> do
+      updated <- saveScopeUsage root state scope usage
+      pure (Right (updated & #known .~ known))
 
 saveScopeUsage :: ExecutionRootId -> Root -> Maybe AllocationId -> Usage -> Transaction Root
 saveScopeUsage _ state Nothing usage = pure (state & #usage .~ usage)

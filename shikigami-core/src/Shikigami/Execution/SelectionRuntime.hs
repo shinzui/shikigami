@@ -47,6 +47,7 @@ import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..), versi
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Execution.Attempt (ModelCallPreparation (..))
 import Shikigami.Execution.Identity
+import Shikigami.Execution.Quantity (parseResourceAmount)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Resources
 import Shikigami.Execution.Selection
@@ -315,7 +316,7 @@ reservation limits root model options = do
         Just output | output > 0 && Model.contextWindow model > 0 -> Right (Just (toInteger output + toInteger (Model.contextWindow model)))
         _ -> Left "ExecutionResourceBoundUnsupported:Tokens"
       else Right Nothing
-  let quantities = Map.fromList ([(Resources.ActiveWork, 1), (Resources.ModelAttempts, 1)] <> maybe [] (\n -> [(Resources.Tokens, n)]) tokenCeiling)
+  quantities <- first (Text.pack . show) (Resources.refineAmounts (Map.fromList ([(Resources.ActiveWork, 1), (Resources.ModelAttempts, 1)] <> maybe [] (\n -> [(Resources.Tokens, n)]) tokenCeiling)))
   pure (quantities, if finiteTokens then Resources.EnforcedCeiling else Resources.AdmittedUnknownUsage)
 
 outcomeFor :: Bool -> Maybe Evidence.ModelCallEvidence -> Calls.CallOutcome
@@ -331,7 +332,9 @@ outcomeFor _failed evidence =
            in if Set.member Cost.ProviderReportedTotal (Cost.sources basis) && Set.null (Cost.estimateReasons basis) && Cost.usd cost >= 0
                 then Just (ceiling (Cost.usd cost * 1000000))
                 else Nothing
-      known = Map.fromList (maybe [] (\n -> [(Resources.Tokens, n)]) knownTokens <> maybe [] (\n -> [(Resources.CostMicroUsd, n)]) knownCost)
+      -- Invalid provider measurements remain unknown, preserving their held
+      -- ceiling; they never become zero usage or a refunded reservation.
+      known = Map.mapMaybe (either (const Nothing) Just . parseResourceAmount) (Map.fromList (maybe [] (\n -> [(Resources.Tokens, n)]) knownTokens <> maybe [] (\n -> [(Resources.CostMicroUsd, n)]) knownCost))
       missing = [dimension | dimension <- [Resources.Tokens, Resources.CostMicroUsd], Map.notMember dimension known]
    in Calls.CallOutcome Calls.CallTerminal known missing (Text.take 256 <$> (evidence >>= (Evidence.observedValue . (.observedModel)))) (Text.take 256 . (.callId) <$> evidence) Nothing
 

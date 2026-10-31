@@ -10,6 +10,8 @@ HEADER = '''{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 module RevisionBoundary where
 import Data.Coerce (coerce)
+import Data.Text (Text)
+import Shikigami.Execution.Quantity
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Capability (WorkerCommand (CancelWorker))
 import Shikigami.WorkerSession.Types (WorkerSessionId)
@@ -37,6 +39,17 @@ executionRevision root = root.revision
 ''', False),
     ("operation-is-not-execution-revision", '''executionRevision :: Execution.ExecutionState -> StateRevision "execution"
 executionRevision state = state.cursor
+''', False),
+    ("resource-amount", '''amount :: Integer -> Either Text ResourceAmount
+amount = parseResourceAmount
+units :: ResourceAmount -> Integer
+units = amountUnits
+''', True),
+    ("unchecked-resource-arithmetic", '''negative :: ResourceAmount
+negative = -1
+''', False),
+    ("unchecked-resource-coercion", '''unchecked :: Integer -> ResourceAmount
+unchecked = coerce
 ''', False),
     ("wrong-root-revision", '''rootRevision :: Resources.Root -> StateRevision "worker-session"
 rootRevision root = root.revision
@@ -76,6 +89,8 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
                 "event-is-not-message-sequence": ["Couldn't match type", "worker-message", "worker-event"],
                 "execution-root-is-not-execution": ["Couldn't match type", "execution-root", "execution"],
                 "operation-is-not-execution-revision": ["Couldn't match type", "execution-operation", "execution"],
+                "unchecked-resource-arithmetic": ["ResourceAmount", "Num"],
+                "unchecked-resource-coercion": ["ResourceAmount", "Integer"],
                 "wrong-root-revision": ["Couldn't match type", "worker-session", "execution-root"],
                 "wrong-worker-revision": ["Couldn't match type", "worker-session", "objective"],
                 "scope-coercion": ["Couldn't match type", "objective", "objective-criteria"],

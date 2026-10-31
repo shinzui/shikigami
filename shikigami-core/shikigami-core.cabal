@@ -105,6 +105,7 @@ library
     Shikigami.Execution.Live
     Shikigami.Execution.Policy
     Shikigami.Execution.Policy.Types
+    Shikigami.Execution.Quantity
     Shikigami.Execution.Request
     Shikigami.Execution.Resources
     Shikigami.Execution.ResourcesStore
