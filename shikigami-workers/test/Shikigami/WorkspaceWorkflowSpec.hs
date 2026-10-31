@@ -58,6 +58,7 @@ import Shikigami.Sink.Config
 import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
+import Shikigami.WorkerSession.Input (SessionLimit (..))
 import Shikigami.WorkerSession.Store qualified as Sessions
 import Shikigami.WorkerSession.Types qualified as Sessions
 import Shikigami.Workspace.Admission (WorkspaceHost (..))
@@ -135,7 +136,7 @@ tests fixture =
           access <- right =<< run env (Execution.authorizeReplay (executionIdFor (assignmentIdFor (runJobWorkflowId job).unWorkflowId)) job.identity (pure (Right ())))
           (snapshot, _) <- right =<< run env (Execution.loadExecution access)
           let coordinator = CompatibilityIdentity "cleanup-coordinator"
-              admission = Sessions.SessionAdmission 1 (Sessions.SessionScope parentSession "worker") (Sessions.ObjectiveRef "fixture" "objective") (parent & #name .~ "cleanup-coordinator" & #delegates .~ ["workspace-worker"]) (DelegateCtx (DelegationDepth 0) coordinator (Just snapshot.sessionId) Nothing (Just (WorkflowId "cleanup-parent")) [AgentName "cleanup-coordinator"] Nothing (Just binding.request.rootId) Nothing defaultDelegationBudget) (AgentName "workspace-worker") job.identity 10 4
+              admission = Sessions.SessionAdmission 1 (Sessions.SessionScope parentSession "worker") (Sessions.ObjectiveRef "fixture" "objective") (parent & #name .~ "cleanup-coordinator" & #delegates .~ ["workspace-worker"]) (DelegateCtx (DelegationDepth 0) coordinator (Just snapshot.sessionId) Nothing (Just (WorkflowId "cleanup-parent")) [AgentName "cleanup-coordinator"] Nothing (Just binding.request.rootId) Nothing defaultDelegationBudget) (AgentName "workspace-worker") job.identity (fixtureLimit 10) (fixtureLimit 4)
           _ <- right =<< run env (Sessions.openSession admission)
           cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
           run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Nothing)
@@ -356,3 +357,6 @@ finishWorkspace env job deps = do
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureLimit :: (SessionLimit a) => Integer -> a
+fixtureLimit value = either (error . show) id (parseSessionLimit value)

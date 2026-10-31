@@ -87,7 +87,7 @@ native delivery/recovery and actual administrative CLI/HTTP/live inspection are
 accepted. EP-5 has implemented public API/CLI/configuration behavior and explicit
 clause dispositions for 42 of its 46 frozen source rows. Objective identity uses a
 checked allocated TypeID; objective content and worker/workspace ownership retain
-nominal checked values. Latest affected acceptance is 557 pure, 383 serial PostgreSQL, 260 worker and 95
+nominal checked values. Latest affected acceptance is 559 pure, 383 serial PostgreSQL, 260 worker and 95
 server cases. The remaining scalar/identity census keeps EP-5 In Progress;
 three further source rows retain only final-profile clauses owned by EP-6. EP-6's exact frozen artifacts, Linux/runtime integration and final
 inventory gate have not started; all five implementation children must complete

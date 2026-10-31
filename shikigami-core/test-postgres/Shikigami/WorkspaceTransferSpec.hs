@@ -17,6 +17,7 @@ import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude
 import Shikigami.StateRevision (StateRevision, advanceRevision, parseRevision)
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
+import Shikigami.WorkerSession.Input (InstructionText, parseInstructionText)
 import Shikigami.WorkerSession.Store qualified as Sessions
 import Shikigami.WorkerSession.Transfer
 import Shikigami.WorkerSession.Types hiding (assignmentIdFor)
@@ -115,7 +116,7 @@ successor :: AgentIdentity
 successor = compatibilityIdentity "successor"
 
 instruction :: Instruction
-instruction = Instruction 1 FollowUp "bounded fixture assignment" (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing
+instruction = Instruction 1 FollowUp (fixtureInstruction "bounded fixture assignment") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing
 
 withWorkspace :: DatabaseFixture -> (AppEnv -> SessionAdmission -> Sessions.SessionAccess -> WorkspaceBinding -> WorkspaceAdmission -> IO a) -> IO a
 withWorkspace fixture callback = Fixture.withConfiguredFixture fixture (\admission -> admission & #delegator . #delegates .~ ["worker", "successor"]) \env session access -> do
@@ -151,3 +152,6 @@ right = either (\err -> assertFailure (show err) >> fail "unreachable") pure
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureInstruction :: Text -> InstructionText
+fixtureInstruction value = either (error . show) id (parseInstructionText value)

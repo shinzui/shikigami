@@ -3,6 +3,7 @@ module Shikigami.WorkerSessionStoreSpec (tests, withFixture, withConfiguredFixtu
 import Control.Concurrent.Async (concurrently)
 import Data.Aeson (object, (.=))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
@@ -36,6 +37,7 @@ import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.StateRevision (StateRevision, advanceRevision, parseRevision)
 import Shikigami.WorkerSession.Checkpoint qualified as Checkpoint
 import Shikigami.WorkerSession.Identity (assignmentChildWorkflowId)
+import Shikigami.WorkerSession.Input (InstructionText, SessionLimit (..), parseInstructionText)
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Types
 import Test.Tasty (TestTree, testGroup)
@@ -51,7 +53,13 @@ tests fixture =
           accepted @?= AlreadyAccepted
           state.sessionId @?= sessionIdFor admission
           Aeson.eitherDecode (Aeson.encode admission) @?= Right admission
-          run env (Store.openSession (admission & #maximumAssignments .~ 20)) >>= (@?= Left SessionBindingConflict)
+          case Aeson.toJSON admission of
+            Aeson.Object fields -> do
+              let oldWire = Aeson.Object (KeyMap.insert "maximumAssignments" (Aeson.toJSON (10 :: Int)) (KeyMap.insert "mailboxLimit" (Aeson.toJSON (4 :: Int)) fields))
+              Aeson.encode admission @?= Aeson.encode oldWire
+              mapM_ (\(key, bad) -> assertBool "invalid admission limit refused at decode" (case Aeson.fromJSON (Aeson.Object (KeyMap.insert key (Aeson.toJSON (bad :: Integer)) fields)) :: Aeson.Result SessionAdmission of Aeson.Error _ -> True; Aeson.Success _ -> False)) [("maximumAssignments", 0), ("maximumAssignments", 1001), ("mailboxLimit", 0), ("mailboxLimit", 129)]
+            _ -> assertFailure "admission did not encode as an object"
+          run env (Store.openSession (admission & #maximumAssignments .~ (fixtureLimit 20))) >>= (@?= Left SessionBindingConflict)
           run env (Store.openSession (admission & #objective . #key .~ "another-objective")) >>= (@?= Left SessionBindingConflict),
       testCase "active and idle follow-ups remain ordered and retain separate assignments/results" $
         withFixture fixture \env admission access -> do
@@ -148,7 +156,7 @@ tests fixture =
           metadata <- expectRight =<< run env (Store.inspectSession (sessionIdFor admission))
           assertBool "ordinary metadata excludes instructions" (not ("PRIVATE_SESSION_INSTRUCTION" `Text.isInfixOf` Text.pack (show (Aeson.encode metadata)))),
       testCase "mailbox assignment and epoch limits cannot be reset by follow-ups" $
-        withConfiguredFixture fixture (\admission -> admission & #maximumAssignments .~ 2 & #mailboxLimit .~ 1) \env admission access -> do
+        withConfiguredFixture fixture (\admission -> admission & #maximumAssignments .~ (fixtureLimit 2) & #mailboxLimit .~ (fixtureLimit 1)) \env admission access -> do
           (_, first) <- accept env access 0 "first" (instruction "one")
           run env (Store.acceptMessage access (fixtureRevision 1) (fixtureRevision 0) (OperationId "second") (instruction "two")) >>= (@?= Left SessionMailboxFull)
           _ <- expectRight =<< run env (Store.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (OperationId "start") first.assignmentId)
@@ -254,7 +262,7 @@ tests fixture =
     ]
 
 instruction :: Text -> Instruction
-instruction text = Instruction 1 FollowUp text (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing
+instruction text = Instruction 1 FollowUp (fixtureInstruction text) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing
 
 checkpointVersion :: SessionAdmission -> IO Checkpoint.ObjectiveVersion
 checkpointVersion admission = do
@@ -310,8 +318,8 @@ withConfiguredFixture fixture configure callback = withShikigamiFreshDatabase fi
             (DelegateCtx (DelegationDepth 0) (compatibilityIdentity "coordinator") (Just parentSession) Nothing (Just (WorkflowId "original-parent")) [AgentName "coordinator"] (Just ["worker-model"]) (Just root) Nothing defaultDelegationBudget)
             (AgentName "worker")
             (compatibilityIdentity "worker")
-            10
-            4
+            (fixtureLimit 10)
+            (fixtureLimit 4)
   _ <- expectRight =<< run env Catalog.registerProjectionCatalog
   run env (Roots.enrollRoot root (R.Envelope (Map.fromList [(dimension, R.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now))) >>= (@?= Right Accepted)
   (accepted, _) <- expectRight =<< run env (Store.openSession admission)
@@ -330,3 +338,9 @@ expectRight = either (assertFailure . show) pure
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureInstruction :: Text -> InstructionText
+fixtureInstruction value = either (error . show) id (parseInstructionText value)
+
+fixtureLimit :: (SessionLimit a) => Integer -> a
+fixtureLimit value = either (error . show) id (parseSessionLimit value)

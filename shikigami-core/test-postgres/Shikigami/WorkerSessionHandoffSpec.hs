@@ -29,6 +29,7 @@ import Shikigami.StateRevision (StateRevision, advanceRevision, parseRevision)
 import Shikigami.WorkerSession.Checkpoint qualified as Checkpoint
 import Shikigami.WorkerSession.Handoff qualified as Handoff
 import Shikigami.WorkerSession.Identity (assignmentChildWorkflowId, sessionWorkflowId, sessionWorkflowName)
+import Shikigami.WorkerSession.Input (InstructionText, parseInstructionText)
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Transfer
 import Shikigami.WorkerSession.Types
@@ -192,7 +193,7 @@ successor :: AgentIdentity
 successor = compatibilityIdentity "successor"
 
 instruction :: Integer -> Instruction
-instruction revision = Instruction 1 FollowUp "retained assignment" (fixtureRevision revision) (fixtureRevision 1) (fixtureRevision 1) Nothing
+instruction revision = Instruction 1 FollowUp (fixtureInstruction "retained assignment") (fixtureRevision revision) (fixtureRevision 1) (fixtureRevision 1) Nothing
 
 request :: AppEnv -> SessionAdmission -> Owners -> IO (Either SessionError TransferIntent)
 request env admission owners = requestAt env admission owners (fixtureRevision 0)
@@ -270,3 +271,6 @@ assertLeft = \case Left _ -> pure (); Right value -> assertFailure ("unexpected 
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureInstruction :: Text -> InstructionText
+fixtureInstruction value = either (error . show) id (parseInstructionText value)

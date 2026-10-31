@@ -25,6 +25,7 @@ import Shikigami.Execution.Request (ExecutionRequest)
 import Shikigami.Execution.Transcript (ExecutionId, PayloadRef)
 import Shikigami.Prelude
 import Shikigami.StateRevision
+import Shikigami.WorkerSession.Input
 import Shikigami.WorkerSession.Position
 
 newtype WorkerSessionId = WorkerSessionId {value :: Text}
@@ -53,8 +54,8 @@ data SessionAdmission = SessionAdmission
     context :: !DelegateCtx,
     worker :: !AgentName,
     identity :: !AgentIdentity,
-    maximumAssignments :: !Int,
-    mailboxLimit :: !Int
+    maximumAssignments :: !MaximumAssignments,
+    mailboxLimit :: !MailboxLimit
   }
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON)
@@ -148,7 +149,7 @@ data MessageKind = FollowUp | Interrupt !AssignmentId
 data Instruction = Instruction
   { format :: !Int,
     kind :: !MessageKind,
-    text :: !Text,
+    text :: !InstructionText,
     objectiveRevision :: !(StateRevision "objective"),
     assignmentRevision :: !(StateRevision "objective-assignment"),
     criteriaRevision :: !(StateRevision "objective-criteria"),
@@ -289,7 +290,7 @@ assignmentIdFor session sequence operation = AssignmentId (UUID.toText (UUID.gen
 validateAdmission :: SessionAdmission -> Either SessionError ()
 validateAdmission admission = do
   unless (admission.identity /= admission.context.identity) (Left SessionOwnerRefused)
-  unless (admission.format == 1 && admission.maximumAssignments >= 1 && admission.maximumAssignments <= 1000 && admission.mailboxLimit >= 1 && admission.mailboxLimit <= 128) (Left (SessionInputRefused "invalid session bounds"))
+  unless (admission.format == 1) (Left (SessionInputRefused "invalid session bounds"))
   unless (all validKey [admission.scope.parent, admission.scope.workerKey, admission.objective.provider, admission.objective.key, agentNameText admission.worker, admission.delegator.name]) (Left (SessionInputRefused "invalid session scope or objective reference"))
   unless (isJust admission.context.executionRootId && isJust admission.context.sessionId) (Left (SessionInputRefused "continuing work requires an admitted root and parent memory session"))
   unless (length admission.context.lineage == depthInt admission.context.depth + 1 && length (nub admission.context.lineage) == length admission.context.lineage && take 1 (reverse admission.context.lineage) == [AgentName admission.delegator.name]) (Left (SessionInputRefused "delegation lineage does not match its parent and depth"))
@@ -303,7 +304,7 @@ validateAdmission admission = do
 
 validateInstruction :: Instruction -> Either SessionError ()
 validateInstruction instruction =
-  unless (instruction.format == 1 && not (Text.null (Text.strip instruction.text))) (Left (SessionInputRefused "invalid instruction or objective/assignment revision"))
+  unless (instruction.format == 1) (Left (SessionInputRefused "invalid instruction or objective/assignment revision"))
 
 instance CanonicalTypeName WorkerSessionId where
   canonicalTypeName _ = "shikigami.WorkerSessionId.v1"

@@ -191,3 +191,9 @@ records unchanged numeric bytes, configuration refinement, 31 compiler clients a
 atomic refusal at the existing receipt capacity. Full affected acceptance is 557
 pure, 383 PostgreSQL, 260 worker and 95 server tests. The complete scalar/identity
 census remains open.
+
+Worker session/assignment/mailbox limits and retained instruction text now have
+private checked constructors under ADR-79. [Worker-input acceptance](worker-input-results.txt)
+records exact valid numeric/Unicode bytes, invalid admission bounds, 37 compiler
+clients, neutral native reports and 559 pure/383 PostgreSQL/260 worker/95 server
+tests. The complete scalar/identity census remains open.

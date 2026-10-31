@@ -49,6 +49,7 @@ import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.WorkerSession.Capability
 import Shikigami.WorkerSession.Handoff (TransferServices (..))
 import Shikigami.WorkerSession.Identity (sessionWorkflowId, sessionWorkflowName)
+import Shikigami.WorkerSession.Input (InstructionText, SessionLimit (..), parseInstructionText)
 import Shikigami.WorkerSession.Position (MessagePosition, parseMessagePosition)
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Tools qualified as Tools
@@ -90,7 +91,7 @@ tests fixture =
         withCapabilityFixture fixture \env admission host scope authorizer _ _ -> do
           let session = Session.sessionIdFor admission
           access <- expectRight =<< run env (Store.authorizeSession session admission.context.identity (pure (Right ())))
-          _ <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "send-before-registration") (Session.Instruction 1 Session.FollowUp "retained" (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+          _ <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "send-before-registration") (Session.Instruction 1 Session.FollowUp (fixtureInstruction "retained") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
           run env (lookupInstance sessionWorkflowName (sessionWorkflowId session)) >>= (@?= Nothing)
           grant <- permit env host scope authorizer
           reply <- expectRight =<< run env (executeCommand host authorizer grant (OperationId "send-before-registration") (SendWorker session (fixtureRevision 0) (fixtureRevision 0) (draft "retained")))
@@ -116,7 +117,7 @@ tests fixture =
           grant <- permit env host scope authorizer
           run env (executeCommand host authorizer grant (OperationId "foreign") (InspectWorker (Session.WorkerSessionId "foreign") (fixturePosition (-1)) 1)) >>= (@?= Left Session.SessionMissing)
           let slot = head scope.workers & #workerKey .~ "another-worker" & #sessionId .~ Nothing
-              bounded = scope & #workers .~ [slot] & #maximumSessions .~ 1
+              bounded = scope & #workers .~ [slot] & #maximumSessions .~ (fixtureLimit 1)
               authority = CoordinationAuthority (\_ -> pure (Right (Just bounded))) (\_ _ -> pure (Right bounded))
               restricted = CoordinationHost host.services authority
           limited <- permit env restricted bounded authorizer
@@ -174,7 +175,7 @@ tests fixture =
           _ <- run env (gcWorkflowsOnce (addUTCTime 1 now) (WorkflowGcPolicy 0 10))
           run env (Awakeable.lookupAwakeable (awakeableIdToUuid token)) >>= (@?= Nothing)
           access <- expectRight =<< run env (Store.authorizeSession session admission.context.identity (pure (Right ())))
-          _ <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 1) (fixtureRevision 0) (OperationId "after-gc") (Session.Instruction 1 Session.FollowUp "retained" (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+          _ <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 1) (fixtureRevision 0) (OperationId "after-gc") (Session.Instruction 1 Session.FollowUp (fixtureInstruction "retained") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
           Just (state, _) <- expectRight =<< run env (Store.inspectSession session)
           state.eventCursor @?= (fixtureRevision 1),
       testCase "coordinating Skills require admitted scope and retain a worker tool instead of running a fixed supervisor" $
@@ -261,7 +262,7 @@ flowName :: WorkflowName
 flowName = WorkflowName "fixture.worker-events"
 
 draft :: Text -> WorkerInstruction
-draft text = WorkerInstruction text (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing
+draft text = WorkerInstruction (fixtureInstruction text) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing
 
 permit :: AppEnv -> CoordinationHost -> CoordinationScope -> ActionAuthorizer -> IO CoordinationGrant
 permit env host scope authorizer = do
@@ -274,7 +275,7 @@ withCapabilityFixture fixture callback = withFixture fixture \env admission _ ->
   version <- checkpointVersion admission
   (checkpoints, _) <- fixtureCheckpoints version False
   let run = CoordinatorRun "capability-parent" admission.context.identity memory admission.context.executionRootId admission.context.executionPermissions
-      scope = CoordinationScope 1 run admission.scope.parent (admission.delegator & #behavior .~ CoordinatingSkill "fixture-coordinator") admission.context [WorkerSlot admission.scope.workerKey admission.worker admission.identity admission.objective (Just (Session.sessionIdFor admission))] 8 admission.maximumAssignments admission.mailboxLimit
+      scope = CoordinationScope 1 run admission.scope.parent (admission.delegator & #behavior .~ CoordinatingSkill "fixture-coordinator") admission.context [WorkerSlot admission.scope.workerKey admission.worker admission.identity admission.objective (Just (Session.sessionIdFor admission))] (fixtureLimit 8) admission.maximumAssignments admission.mailboxLimit
       sessions = SessionRuntime env [admission.delegator & #name .~ "worker" & #delegates .~ []] disabledDirectoryHandle (const (pure (Right ()))) (Just checkpoints)
   current <- newIORef (Just scope)
   revoked <- newIORef False
@@ -315,3 +316,9 @@ fixtureRevision value = either (error . show) id (parseRevision value)
 
 fixturePosition :: Integer -> MessagePosition
 fixturePosition value = either (error . show) id (parseMessagePosition value)
+
+fixtureInstruction :: Text -> InstructionText
+fixtureInstruction value = either (error . show) id (parseInstructionText value)
+
+fixtureLimit :: (SessionLimit a) => Integer -> a
+fixtureLimit value = either (error . show) id (parseSessionLimit value)

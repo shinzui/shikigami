@@ -24,6 +24,7 @@ import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.StateRevision (StateRevision)
 import Shikigami.WorkerSession.Capability
 import Shikigami.WorkerSession.Handoff (TransferServices (..))
+import Shikigami.WorkerSession.Input (maximumSessionCapacity)
 import Shikigami.WorkerSession.Position (MessagePosition)
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Types
@@ -69,7 +70,7 @@ runWorkersControl key command config = do
   memory <- maybe (die "worker admission has no parent memory session") pure admission.context.sessionId
   agents <- loadedAgents <$> loadAgentsReport config.agentsDirectory
   let run = CoordinatorRun ("operator-workers:" <> session.value) admission.context.identity memory admission.context.executionRootId admission.context.executionPermissions
-      scope = CoordinationScope 1 run admission.scope.parent admission.delegator admission.context [WorkerSlot admission.scope.workerKey admission.worker admission.identity admission.objective (Just session)] 128 admission.maximumAssignments admission.mailboxLimit
+      scope = CoordinationScope 1 run admission.scope.parent admission.delegator admission.context [WorkerSlot admission.scope.workerKey admission.worker admission.identity admission.objective (Just session)] maximumSessionCapacity admission.maximumAssignments admission.mailboxLimit
       authority = CoordinationAuthority (\requested -> pure (if requested == run then Right (Just scope) else Left "foreign control scope")) (\requested pinned -> pure (if requested == run && pinned == scopeFingerprint scope then Right scope else Left "control scope unavailable"))
       sessions = SessionRuntime env agents directory.handle (Directory.identityLifecycleAdmission directory.handle) Nothing
       host = CoordinationHost (TransferServices sessions Nothing Nothing) authority

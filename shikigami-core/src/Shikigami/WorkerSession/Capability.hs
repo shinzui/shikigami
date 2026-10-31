@@ -49,6 +49,7 @@ import Shikigami.Prelude
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Checkpoint (CheckpointProvider (..), ObjectiveVersion (..))
 import Shikigami.WorkerSession.Handoff (TransferOutcome, TransferServices (..), requestHandoff, resumeHandoff)
+import Shikigami.WorkerSession.Input
 import Shikigami.WorkerSession.Integration (IntegrationOutcome, integrateEvents)
 import Shikigami.WorkerSession.Position
 import Shikigami.WorkerSession.Store qualified as Store
@@ -83,9 +84,9 @@ data CoordinationScope = CoordinationScope
     agent :: !AgentDecl,
     context :: !DelegateCtx,
     workers :: ![WorkerSlot],
-    maximumSessions :: !Int,
-    maximumAssignments :: !Int,
-    mailboxLimit :: !Int
+    maximumSessions :: !MaximumSessions,
+    maximumAssignments :: !MaximumAssignments,
+    mailboxLimit :: !MailboxLimit
   }
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -113,7 +114,7 @@ newtype CoordinationGrant = CoordinationGrant CoordinationScope
 instance Show CoordinationGrant where show _ = "CoordinationGrant <protected>"
 
 data WorkerInstruction = WorkerInstruction
-  { text :: !Text,
+  { text :: !InstructionText,
     objectiveRevision :: !(StateRevision "objective"),
     assignmentRevision :: !(StateRevision "objective-assignment"),
     criteriaRevision :: !(StateRevision "objective-criteria"),
@@ -187,7 +188,7 @@ resolveGrant host authorizer run pinned = do
   case supplied of
     Right (Right Nothing) -> pure (Right Nothing)
     Right (Right (Just scope)) -> do
-      let valid = scope.format == 1 && scope.run == run && scope.context.identity == run.identity && scope.context.sessionId == Just run.sessionId && scope.context.executionRootId == run.rootId && scope.context.executionPermissions == run.permittedAliases && isJust run.rootId && not (Text.null scope.parentScope) && Text.length scope.parentScope <= 256 && scope.maximumSessions >= 1 && scope.maximumSessions <= 128 && not (null scope.workers) && length scope.workers <= scope.maximumSessions && length (nub (map (.workerKey) scope.workers)) == length scope.workers && maybe True (== scopeFingerprint scope) pinned
+      let valid = scope.format == 1 && scope.run == run && scope.context.identity == run.identity && scope.context.sessionId == Just run.sessionId && scope.context.executionRootId == run.rootId && scope.context.executionPermissions == run.permittedAliases && isJust run.rootId && not (Text.null scope.parentScope) && Text.length scope.parentScope <= 256 && not (null scope.workers) && length scope.workers <= sessionLimit scope.maximumSessions && length (nub (map (.workerKey) scope.workers)) == length scope.workers && maybe True (== scopeFingerprint scope) pinned
           admissions = [sessionAdmission scope worker | worker <- scope.workers]
       if not valid || any (either (const True) (const False) . validateAdmission) admissions
         then pure (Left SessionOwnerRefused)
@@ -279,7 +280,7 @@ executeAdmittedCommand host authorizer (CoordinationGrant scope) operation comma
           admission <- Store.loadAdmission access
           metadata <- Store.inspectSession session
           case (admission, metadata) of
-            (Right admitted, Right (Just (state, _))) | revisionNumber state.nextSequence < toInteger scope.maximumAssignments -> do
+            (Right admitted, Right (Just (state, _))) | revisionNumber state.nextSequence < toInteger (sessionLimit scope.maximumAssignments) -> do
               let permissions = case (admitted.context.executionPermissions, scope.context.executionPermissions) of
                     (Nothing, narrowed) -> narrowed
                     (existing, Nothing) -> existing

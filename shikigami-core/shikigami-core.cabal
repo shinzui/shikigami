@@ -217,6 +217,7 @@ library
     Shikigami.WorkerSession.Checkpoint
     Shikigami.WorkerSession.Handoff
     Shikigami.WorkerSession.Identity
+    Shikigami.WorkerSession.Input
     Shikigami.WorkerSession.Integration
     Shikigami.WorkerSession.Live
     Shikigami.WorkerSession.Position

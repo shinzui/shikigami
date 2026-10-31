@@ -32,6 +32,7 @@ import Shikigami.Objective.Types
 import Shikigami.Prelude
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.WorkerSession.Checkpoint qualified as CP
+import Shikigami.WorkerSession.Input (InstructionText, parseInstructionText)
 import Shikigami.WorkerSession.Store qualified as Sessions
 import Shikigami.WorkerSession.Types qualified as WS
 import Shikigami.WorkerSessionStoreSpec qualified as SessionsFixture
@@ -290,7 +291,7 @@ tests fixture =
           access <- right =<< run env (Sessions.authorizeSession session.sessionId admission.context.identity (pure (Right ())))
           before <- get env objective
           initialVersion <- right (S.versionFor before key)
-          let instruction = WS.Instruction 1 WS.FollowUp "accepted before cancellation" initialVersion.revision initialVersion.assignmentRevision initialVersion.criteriaRevision Nothing
+          let instruction = WS.Instruction 1 WS.FollowUp (fixtureInstruction "accepted before cancellation") initialVersion.revision initialVersion.assignmentRevision initialVersion.criteriaRevision Nothing
           (_, message) <- right =<< run env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "send") instruction)
           _ <- right =<< run env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (OperationId "start") message.assignmentId)
           (_, result) <- right =<< run env (Sessions.recordResult access (fixtureRevision 2) (fixtureRevision 0) (OperationId "result") (WS.AssignmentResult 1 message.assignmentId WS.AssignmentSucceeded Nothing (Aeson.object []) ["artifact"]))
@@ -382,7 +383,7 @@ checkpoint env actor _ current assignment key = do
   session <- maybe (assertFailure "missing fixture session" >> fail "unreachable") pure assignment.sessionId
   access <- right =<< run env (Sessions.authorizeSession session actor (pure (Right ())))
   version <- right (S.versionFor current assignment.assignmentId)
-  let instruction = WS.Instruction 1 WS.FollowUp "perform" version.revision version.assignmentRevision version.criteriaRevision Nothing
+  let instruction = WS.Instruction 1 WS.FollowUp (fixtureInstruction "perform") version.revision version.assignmentRevision version.criteriaRevision Nothing
   (_, message) <- right =<< run env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "send") instruction)
   _ <- right =<< run env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (OperationId "start") message.assignmentId)
   let result = WS.AssignmentResult 1 message.assignmentId WS.AssignmentSucceeded Nothing (Aeson.object []) ["artifact"]
@@ -456,3 +457,6 @@ limitation = either (error . show) id . parseCompletionLimitation
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureInstruction :: Text -> InstructionText
+fixtureInstruction value = either (error . show) id (parseInstructionText value)

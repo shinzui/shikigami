@@ -89,6 +89,7 @@ import Shikigami.StateRevision
 import Shikigami.WorkerSession.Catalog (withLiveSession)
 import Shikigami.WorkerSession.Checkpoint
 import Shikigami.WorkerSession.Identity (assignmentChildWorkflowId, sessionWorkflowId, sessionWorkflowName)
+import Shikigami.WorkerSession.Input
 import Shikigami.WorkerSession.Position
 import Shikigami.WorkerSession.Transfer
 import Shikigami.WorkerSession.Types
@@ -148,11 +149,10 @@ readPayload session kind ref = do
     _ -> abort (SessionInputRefused "session payload is unavailable")
 
 openSession :: (SessionEffects es) => SessionAdmission -> Eff es (Either SessionError (Admission, SessionState))
-openSession = openSessionWithLimit 128
+openSession = openSessionWithLimit maximumSessionCapacity
 
-openSessionWithLimit :: (SessionEffects es) => Int -> SessionAdmission -> Eff es (Either SessionError (Admission, SessionState))
+openSessionWithLimit :: (SessionEffects es) => MaximumSessions -> SessionAdmission -> Eff es (Either SessionError (Admission, SessionState))
 openSessionWithLimit maximumSessions admission = guarded do
-  unless (maximumSessions >= 1 && maximumSessions <= 128) (throwIO (SessionAbort SessionLimitExceeded))
   either (throwIO . SessionAbort) pure (validateAdmission admission)
   ref <- either (throwIO . SessionAbort) pure (payloadReference encoded)
   let session = sessionIdFor admission
@@ -173,7 +173,7 @@ openSessionWithLimit maximumSessions admission = guarded do
         existingScope <- Tx.statement (admission.scope.parent, toJSON admission.context.identity) selectScopeBinding
         when (maybe False ((/= root) . (.rootId)) existingScope) (abort SessionBindingConflict)
         count <- Tx.statement (admission.scope.parent, toJSON admission.context.identity) countScopeSessions
-        when (count >= fromIntegral maximumSessions) (abort SessionLimitExceeded)
+        when (count >= fromIntegral (sessionLimit maximumSessions)) (abort SessionLimitExceeded)
         collision <- Tx.statement session.value selectSession
         when (isJust collision) (abort SessionBindingConflict)
         Tx.statement (session.value, scopeDigestFor admission, initial, binding) insertSession
@@ -281,9 +281,9 @@ acceptScopedMessage access expected epoch operation permissions instruction = gu
     (\session revision -> Generated.AcceptSessionMessage (Generated.AcceptSessionMessageData session revision (revision + 1)))
     \state _ admission -> do
       unless (state.phase `elem` [Idle, Active, Parked, Unresolved, Transferring]) (abort SessionClosed)
-      when (revisionNumber state.nextSequence >= toInteger admission.maximumAssignments) (abort SessionLimitExceeded)
+      when (revisionNumber state.nextSequence >= toInteger (sessionLimit admission.maximumAssignments)) (abort SessionLimitExceeded)
       queued <- Tx.statement state.sessionId.value countQueued
-      when (queued >= fromIntegral admission.mailboxLimit) (abort SessionMailboxFull)
+      when (queued >= fromIntegral (sessionLimit admission.mailboxLimit)) (abort SessionMailboxFull)
       case instruction.kind of
         FollowUp -> pure ()
         Interrupt assignment -> unless (state.activeAssignment == Just assignment) (abort InterruptTargetChanged)

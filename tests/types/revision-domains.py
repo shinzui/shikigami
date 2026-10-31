@@ -15,6 +15,7 @@ import Shikigami.Execution.Counter
 import Shikigami.Execution.Quantity
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Capability (WorkerCommand (CancelWorker))
+import Shikigami.WorkerSession.Input
 import Shikigami.WorkerSession.Types (WorkerSessionId)
 import Shikigami.WorkerSession.Types qualified as WorkerSession
 import Shikigami.Execution.Resources qualified as Resources
@@ -25,6 +26,26 @@ import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ("worker-assignment-limit", '''limit :: WorkerSession.SessionAdmission -> MaximumAssignments
+limit admission = admission.maximumAssignments
+capacity :: MaximumSessions
+capacity = maximumSessionCapacity
+''', True),
+    ("mailbox-is-not-assignment-limit", '''limit :: WorkerSession.SessionAdmission -> MaximumAssignments
+limit admission = admission.mailboxLimit
+''', False),
+    ("unchecked-session-limit-arithmetic", '''zero :: MaximumAssignments
+zero = 0
+''', False),
+    ("unchecked-session-limit-coercion", '''unchecked :: Int -> MaximumSessions
+unchecked = coerce
+''', False),
+    ("worker-instruction", '''text :: WorkerSession.Instruction -> InstructionText
+text instruction = instruction.text
+''', True),
+    ("unchecked-instruction-coercion", '''unchecked :: Text -> InstructionText
+unchecked = coerce
+''', False),
     ("valid", '''value :: StateRevision "objective"
 value = advanceRevision initialRevision
 number :: Integer
@@ -136,6 +157,10 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
                 "event-is-not-message-sequence": ["Couldn't match type", "worker-message", "worker-event"],
                 "execution-root-is-not-execution": ["Couldn't match type", "execution-root", "execution"],
                 "operation-is-not-execution-revision": ["Couldn't match type", "execution-operation", "execution"],
+                "mailbox-is-not-assignment-limit": ["Couldn't match", "MaximumAssignments", "MailboxLimit"],
+                "unchecked-session-limit-arithmetic": ["MaximumAssignments", "Num"],
+                "unchecked-session-limit-coercion": ["MaximumSessions", "Int"],
+                "unchecked-instruction-coercion": ["InstructionText", "Text"],
                 "repair-is-not-turn-count": ["Couldn't match", "ModelTurnCount", "RepairCount"],
                 "unchecked-progress-arithmetic": ["PendingReceiptCount", "Num"],
                 "unchecked-progress-coercion": ["PendingReceiptCount", "Integer"],
