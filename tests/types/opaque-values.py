@@ -44,6 +44,7 @@ import Shikigami.Execution.Payload qualified as Payload
 import Shikigami.Execution.AssignmentKey qualified as Assignment
 import Shikigami.Execution.ToolPosition qualified as Position
 import Shikigami.Decision.Contract qualified as Decision
+import Shikigami.Decision.Evidence qualified as DecisionEvidence
 import Shikigami.Log.Correlation qualified as Correlation
 import Shikigami.PracticeReview.IdentityStore qualified as ReviewIdentity
 import Shikigami.PracticeReview qualified as Review
@@ -69,6 +70,8 @@ attemptCount :: Integer -> Either Text (Counter.AttemptCount "selection-calls")
 attemptCount = Counter.parseAttemptCount
 nativeWorkflow :: Decision.PreparedDecision -> WorkflowId
 nativeWorkflow value = value.workflowId
+storedCorrelation :: DecisionEvidence.StoredDecisionCall -> Correlation.CallCorrelationId
+storedCorrelation value = value.correlationId
 runDisposition :: Ledger.RunDisposition
 runDisposition = Ledger.RunAccepted
 runDispositionText :: Text
@@ -280,6 +283,9 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         assert result.returncode != 0 and kind.split('.')[-1] in result.stderr, (kind, result.stderr)
         assert any(fragment in result.stderr.lower() for fragment in ['not in scope', 'does not export', 'illegal term-level use']), (kind, result.stderr)
         print('opaque boundary: ' + kind + ' constructor refused: passed', flush=True)
+    result = compile('bypass :: DecisionEvidence.StoredDecisionCall -> Text\nbypass value = value.correlationId\n')
+    assert result.returncode != 0 and 'CallCorrelationId' in result.stderr and 'Text' in result.stderr, result.stderr
+    print('opaque boundary: stored call retains native correlation: passed', flush=True)
     for kind, operation in CASES:
         if operation == 'parse':
             body = 'bypass :: Aeson.Value -> Parser ' + kind + '\nbypass = Aeson.genericParseJSON Aeson.defaultOptions\n'

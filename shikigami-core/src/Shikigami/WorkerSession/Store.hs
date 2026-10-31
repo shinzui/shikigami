@@ -241,7 +241,8 @@ rootSessionsTerminalTx root = do
       allTerminal <- prior
       (state, binding) <- parsed
       unless (state.sessionId.value == identifier && binding.sessionId == state.sessionId) (Left ())
-      pure (allTerminal && (binding.rootId /= root || state.phase `elem` [Failed, Cancelled]))
+      let terminal = allTerminal && (binding.rootId /= root || state.phase `elem` [Failed, Cancelled])
+      terminal `seq` pure terminal
 
 inspectSessionPage :: (SessionReadEffects es) => WorkerSessionId -> MessagePosition -> Int -> Eff es (Either SessionError (Maybe SessionInspection))
 inspectSessionPage session after limit

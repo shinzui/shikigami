@@ -103,7 +103,8 @@ inspectWorkspaceBindingsTx storageRoot cursor = Tx.statement cursor statement >>
     collect prior (resource, parsed) = do
       page <- prior
       (binding, _) <- parsed >>= checkedBinding (WorkspaceRef "shikigami.workspace/1" resource)
-      pure (if binding.storageRoot == storageRoot && length page < 20 then page <> [binding] else page)
+      let next = if binding.storageRoot == storageRoot && length page < 20 then page <> [binding] else page
+      length next `seq` pure next
 
 -- | Only the allocator calls this after atomic publication of a complete copy.
 -- Comparing the full immutable binding also protects against stale callbacks.
@@ -352,7 +353,8 @@ workspaceEffectsSettledTx binding = do
           pure (value.phase `elem` [Git.GitApplied, Git.GitRefused])
         _ -> Left "unknown workspace effect kind"
       unless (terminal == settled) (Left "inconsistent effect settlement flag")
-      pure (previous && terminal)
+      let allSettled = previous && terminal
+      allSettled `seq` pure allSettled
     process prior (operation, fingerprint, raw, settled) = do
       previous <- prior
       value <- (decodeJSON raw :: Either Text ProcessRecord)
@@ -365,4 +367,5 @@ workspaceEffectsSettledTx binding = do
         ProcessRefused -> Left "invalid prelaunch refusal"
         _ -> Right False
       unless (terminal == settled) (Left "inconsistent process settlement flag")
-      pure (previous && terminal)
+      let allSettled = previous && terminal
+      allSettled `seq` pure allSettled

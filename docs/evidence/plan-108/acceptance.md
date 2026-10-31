@@ -488,3 +488,60 @@ independently enumerates the same 3,996 keys; all 726 semantic source identities
 still match, so only the census hash is renewed. Generated conformance reports
 156 passing checks. The upgrade inventory audit and its 21 mutation tests pass,
 retaining all 124 frozen sources and 93 release items.
+
+The next owner candidate is `decision-evidence-source.json`, against parent
+`2711a19`. Decision evidence readers now retain complete SQL terminal envelopes
+and typed invocation metadata until their owning transaction validates them.
+SQL JSON status extraction no longer hides a malformed envelope as unresolved
+absence. Correlation remains native `CallCorrelationId`; invocation/run columns,
+input commitment, model, pinned profile and facts/provider-column associations
+are checked. Decision facts retain the existing unknown-lineage convention.
+Historical profile data is checked for integrity without reapplying lifecycle.
+Original raw invocation/provider JSON remains the output representation after
+validation; no unsupported provider decoder or new entity identity is introduced.
+
+Twenty-three corruption cases start from two complete public attempts, a valid
+sibling and a successfully finalized report, then mutate a terminal, model,
+correlation, input commitment, invocation or pinned profile. Reports, pages,
+finalization, factual acknowledgement and fresh admission refuse. Ignoring
+composable read refusals rolls back both earlier and later tentative cache
+writes. Bad earlier spending also rolls back a tentatively inserted distinct
+invocation. Exact repair recovers the original report, receipt IDs, timestamps,
+provider JSON and idempotent acknowledgement. No stale cached report is used to
+hide corrupt source metadata. Missing-run and genuine SQL-failure controls keep
+separate outcomes. Failed/unknown terminals without provider evidence remain
+valid uncertainty, not corruption or zero spending.
+
+A real Handan/provider check stops the durable workflow after preparing the
+second decision, removes a required field from the retained first invocation,
+and probes the actual pending program runner. The owner refuses before another
+provider request or expectation can be admitted. After exact repair, the same
+pending workflow resumes under its original preparation and retains its first
+actual call and invocation bytes. This probe occurs before the journaled result
+step; it does not claim automatic recovery from an already committed failure
+outcome.
+
+The formatted candidate passes 62 core PostgreSQL cases (decision owners,
+workflows and workspace transfer) plus 22 worker transfer/cleanup cases. An
+additional valid failed/unknown-terminal control then passes with the full
+35-case decision-evidence and 17-case workflow groups (52 PostgreSQL cases):
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test shikigami-workers-test --enable-tests -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/durable decision evidence/||/durable typed decisions/||/workspace transfer store/||/workspace governed parent and child/||/workspace concrete transfer owner/'
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test --enable-tests -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/durable decision evidence/||/durable typed decisions/'
+nix develop --no-write-lock-file -c python3 tests/types/opaque-values.py
+```
+
+All 82 public compiler controls pass, including the native correlation projection
+positive control and refusal to flatten it to Text implicitly. The 24 domain-tool
+mutation tests, Haskell conventions and whitespace checks pass. Database cases
+use serial suite-owned disposable fixtures with none skipped.
+
+The same candidate forces Boolean and bounded-list fold payloads for workspace,
+session-root and child attribution scans. A strict outer Either alone does not
+force its payload. Existing paging, corruption, rollback, cleanup and transfer
+controls pass; this bounds only the Haskell accumulator, with no full-query or
+native containment performance claim. No Agent/Flow body, workflow label,
+durable identity formula, migration, dependency or valid wire representation
+changes. Full build, declaration refresh and semantic source reconciliation
+follow the implementation commit; exhaustive M1/M2/M3 acceptance remains open.

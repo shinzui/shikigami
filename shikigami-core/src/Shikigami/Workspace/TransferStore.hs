@@ -333,7 +333,8 @@ selectChild run = preparable "SELECT s.state,s.binding,m.state FROM shikigami.wo
       unless (state.sessionId == binding.sessionId && message.sessionId == state.sessionId) (Left "inconsistent session child attribution")
       -- Unreadable attribution cannot authorize a standalone-allocation
       -- fallback. Keep at most two matches while validating the whole scan.
-      pure (if message.childWorkflowId == Just run then take 2 (pair : matches) else matches)
+      let next = if message.childWorkflowId == Just run then take 2 (pair : matches) else matches
+      length next `seq` pure next
 
 selectSession :: Statement Text (Maybe (Either Text (SessionState, SessionBinding)))
 selectSession = preparable "SELECT state,binding FROM shikigami.worker_sessions WHERE session_id=$1" textParam (D.rowMaybe (liftA2 (,) <$> jsonRow <*> jsonRow))

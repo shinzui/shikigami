@@ -8,20 +8,23 @@ module Shikigami.Decision.Evidence
     DecisionEvidenceReport (..),
     StoredDecisionCall (..),
     readDecisionReport,
+    readDecisionReportTx,
     finalizeDecisionReport,
     listDecisionCalls,
+    listDecisionCallsTx,
   )
 where
 
 import Baikai.Evidence qualified as Baikai
 import Control.Lens ((&), (.~))
-import Data.Aeson (FromJSON, Result (..), ToJSON, Value (..), fromJSON, object, toJSON, (.=))
+import Data.Aeson (FromJSON (..), Result (..), ToJSON (..), Value (..), fromJSON, object, withObject, withText, (.:), (.=))
 import Data.Bifunctor (first)
 import Data.Generics.Labels ()
 import Data.Int (Int64)
+import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe, isJust, isNothing)
 import Data.Text (Text)
-import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
+import Data.Time (UTCTime, diffUTCTime)
 import GHC.Generics (Generic)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -34,12 +37,13 @@ import Keiro.Workflow.Types (WorkflowId (..))
 import Numeric.Natural (Natural)
 import Shikigami.Attestation.CallFacts
 import Shikigami.Attestation.Compliance (ComplianceRollUp, evaluateCallFacts)
+import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Evidence (CallRelationship (RootCall), ExpectedCall (..))
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Provider.Coordinate (providerCoordinateText)
 import Shikigami.Decision.Contract
-import Shikigami.Log.Correlation (RunCorrelationId, callCorrelationId, renderCallCorrelationId, renderRunCorrelationId, runCorrelationId)
+import Shikigami.Log.Correlation (CallCorrelationId, RunCorrelationId, callCorrelationId, renderCallCorrelationId, renderRunCorrelationId, runCorrelationId)
 
 newtype DecisionEvidenceStore = DecisionEvidenceStore Pool
 
@@ -48,7 +52,7 @@ postgresDecisionEvidenceStore = DecisionEvidenceStore
 
 data StoredDecisionCall = StoredDecisionCall
   { callId :: !DecisionCallId,
-    correlationId :: !Text,
+    correlationId :: !CallCorrelationId,
     invocationId :: !DecisionPreparationId,
     ordinal :: !DecisionCallOrdinal,
     model :: !ModelDescriptor,
@@ -71,22 +75,67 @@ data DecisionEvidenceReport = DecisionEvidenceReport
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON)
 
--- An invocation binding deliberately omits its input: the journal owns it. The
--- commitment still detects reuse with different input without storing prompts.
-invocationBinding :: PreparedDecision -> Value
-invocationBinding prepared =
-  object
-    [ "format" .= (1 :: Int),
-      "identity" .= prepared.identity,
-      "runId" .= prepared.runId,
-      "workflowId" .= prepared.workflowId.unWorkflowId,
-      "generation" .= prepared.generation,
-      "label" .= prepared.label,
-      "program" .= prepared.program,
-      "model" .= prepared.model,
-      "policy" .= prepared.policy,
-      "inputDigest" .= versionedDigest "shikigami.decision-input/1" prepared.input
-    ]
+-- Input remains in the protected journal. This separate commitment is not a
+-- preparation identity or authority to dispatch a provider call.
+newtype InvocationInputDigest = InvocationInputDigest Text
+  deriving stock (Eq, Show)
+
+instance ToJSON InvocationInputDigest where
+  toJSON (InvocationInputDigest value) = toJSON value
+
+instance FromJSON InvocationInputDigest where
+  parseJSON = withText "decision input commitment" \value -> case parseProgramParameterDigest value of
+    Left _ -> fail "invalid decision input commitment"
+    Right digest -> pure (InvocationInputDigest (programParameterDigestText digest))
+
+data InvocationBinding = InvocationBinding
+  { identity :: !DecisionPreparationId,
+    runId :: !RunCorrelationId,
+    workflowId :: !WorkflowId,
+    generation :: !DecisionGeneration,
+    label :: !DecisionSlotLabel,
+    program :: !ProgramDescriptor,
+    model :: !ModelDescriptor,
+    policy :: !(Maybe Profile.SanctionedExecutionProfileRef),
+    inputDigest :: !InvocationInputDigest
+  }
+  deriving stock (Eq, Show)
+
+instance ToJSON InvocationBinding where
+  toJSON value = object ["format" .= (1 :: Int), "identity" .= value.identity, "runId" .= value.runId, "workflowId" .= value.workflowId.unWorkflowId, "generation" .= value.generation, "label" .= value.label, "program" .= value.program, "model" .= value.model, "policy" .= value.policy, "inputDigest" .= value.inputDigest]
+
+instance FromJSON InvocationBinding where
+  parseJSON = withObject "decision invocation binding" \o -> do
+    format <- o .: "format"
+    if format /= (1 :: Int)
+      then fail "unsupported decision invocation format"
+      else InvocationBinding <$> o .: "identity" <*> o .: "runId" <*> (WorkflowId <$> o .: "workflowId") <*> o .: "generation" <*> o .: "label" <*> o .: "program" <*> o .: "model" <*> o .: "policy" <*> o .: "inputDigest"
+
+invocationBinding :: PreparedDecision -> InvocationBinding
+invocationBinding prepared = InvocationBinding prepared.identity prepared.runId prepared.workflowId prepared.generation prepared.label prepared.program prepared.model prepared.policy (InvocationInputDigest (versionedDigest "shikigami.decision-input/1" prepared.input))
+
+-- SQL transfer representations are consumed only by decodeCall. Keep the whole
+-- terminal envelope: SQL JSON extraction could hide a present malformed value.
+data RawCall = RawCall
+  { runId :: !Text,
+    callId :: !Text,
+    correlationId :: !Text,
+    invocationId :: !Text,
+    ordinal :: !Int64,
+    model :: !Value,
+    terminal :: !(Maybe Value),
+    facts :: !(Maybe Value),
+    evidence :: !(Maybe Value)
+  }
+
+data TerminalEnvelope = TerminalEnvelope
+  { terminal :: !CallTerminal,
+    facts :: !(Maybe Value),
+    evidence :: !(Maybe Value)
+  }
+
+instance FromJSON TerminalEnvelope where
+  parseJSON = withObject "decision terminal envelope" \o -> TerminalEnvelope <$> o .: "terminal" <*> o .: "facts" <*> o .: "evidence"
 
 ensureInvocation :: DecisionEvidenceStore -> Maybe ResolvedProfile -> PreparedDecision -> IO (Either DecisionFailure ())
 ensureInvocation store profile prepared = transaction store (ensureTx profile prepared)
@@ -96,13 +145,23 @@ ensureTx profile prepared = do
   let binding = invocationBinding prepared
       run = object ["runId" .= prepared.runId, "profile" .= profile]
   Tx.statement run insertRun
-  (storedProfile, _) <- Tx.statement (renderRunCorrelationId prepared.runId) lockRun
-  if storedProfile /= toJSON profile || prepared.policy /= ((\p -> p.ref) <$> profile)
-    then pure (refuse ContractMismatch "decision run profile binding conflicts")
-    else do
-      Tx.statement binding insertInvocation
-      stored <- Tx.statement (decisionPreparationIdText prepared.identity) findInvocation
-      pure (if stored == binding then Right () else refuse ContractMismatch "decision invocation immutable binding conflicts")
+  (rawProfile, _) <- Tx.statement (renderRunCorrelationId prepared.runId) lockRun
+  retainedBindings <- readInvocationsTx prepared.runId
+  storedProfile <- checkedRead do
+    actual <- decodeProfile rawProfile
+    bindings <- retainedBindings
+    validateInvocationPolicies actual bindings
+    pure actual
+  case storedProfile of
+    Left err -> pure (Left err)
+    Right actual
+      | rawProfile /= toJSON profile || actual /= profile || prepared.policy /= ((\p -> p.ref) <$> profile) -> pure (refuse ContractMismatch "decision run profile binding conflicts")
+      | otherwise -> do
+          Tx.statement (toJSON binding) insertInvocation
+          stored <- readInvocationTx prepared.identity
+          pure do
+            (raw, actualBinding) <- stored
+            if raw == toJSON binding && actualBinding == binding then Right () else refuse ContractMismatch "decision invocation immutable binding conflicts"
 
 decisionCallHooks :: DecisionEvidenceStore -> Maybe ResolvedProfile -> DecisionCallHooks
 decisionCallHooks store profile = DecisionCallHooks begin finish
@@ -119,61 +178,71 @@ decisionCallHooks store profile = DecisionCallHooks begin finish
             let prepared = context.prepared
             (_, started) <- Tx.statement (renderRunCorrelationId prepared.runId) lockRun
             now <- Tx.statement () currentTime
-            previous <- Tx.statement (renderRunCorrelationId prepared.runId) allCalls
-            case decodeCalls previous of
+            previous <- Tx.statement (renderRunCorrelationId prepared.runId) allCalls >>= checkedRead . decodeCalls
+            case previous of
               Left err -> pure (Left err)
-              Right calls -> case admit now started profile calls >> first (const (decisionFailure CallLimitExceeded "decision call ordinal exhausted")) (parseDecisionCallOrdinal (toInteger (length calls) + 1)) of
-                Left err -> pure (Left err)
-                Right ordinal -> do
-                  let correlation = callCorrelationId prepared.runId (decisionCallIdText (attemptId token)) 0
-                      row =
-                        object
-                          [ "callId" .= attemptId token,
-                            "correlationId" .= renderCallCorrelationId correlation,
-                            "runId" .= prepared.runId,
-                            "invocationId" .= prepared.identity,
-                            "ordinal" .= ordinal,
-                            "model" .= context.effectiveModel
-                          ]
-                  if context.effectiveModel /= prepared.model
-                    then pure (refuse ContractMismatch "decision attempt tuple differs from preparation")
-                    else do
-                      Tx.statement row insertAttempt
-                      -- Preserve the allocated ID while assigning the serialized ordinal.
-                      pure (Right (withAttemptOrdinal ordinal token))
+              Right calls -> do
+                associated <- checkCallBindingsTx prepared.runId calls
+                case associated >> admit now started profile calls >> first (const (decisionFailure CallLimitExceeded "decision call ordinal exhausted")) (parseDecisionCallOrdinal (toInteger (length calls) + 1)) of
+                  Left err -> pure (Left err)
+                  Right ordinal -> do
+                    let correlation = callCorrelationId prepared.runId (decisionCallIdText (attemptId token)) 0
+                        row =
+                          object
+                            [ "callId" .= attemptId token,
+                              "correlationId" .= renderCallCorrelationId correlation,
+                              "runId" .= prepared.runId,
+                              "invocationId" .= prepared.identity,
+                              "ordinal" .= ordinal,
+                              "model" .= context.effectiveModel
+                            ]
+                    if context.effectiveModel /= prepared.model
+                      then pure (refuse ContractMismatch "decision attempt tuple differs from preparation")
+                      else do
+                        Tx.statement row insertAttempt
+                        -- Preserve the allocated ID while assigning the serialized ordinal.
+                        pure (Right (withAttemptOrdinal ordinal token))
     finish token terminal evidence = transaction store do
       found <- Tx.statement (decisionCallIdText (attemptId token)) findAttemptForUpdate
       case found of
         Nothing -> pure (refuse EvidenceFailure "unknown decision attempt")
-        Just (runId, _invocationId, ordinal, modelJson, oldTerminal) -> do
-          _ <- Tx.statement runId lockRun
-          case decode modelJson of
+        Just raw -> do
+          _ <- Tx.statement raw.runId lockRun
+          current <- checkedRead (decodeCall raw)
+          case current of
             Left err -> pure (Left err)
-            Right (model :: ModelDescriptor) -> do
-              let correlation = callCorrelationId (runCorrelationId runId) (decisionCallIdText (attemptId token)) 0
-                  facts =
-                    ( \ev ->
-                        factsFromTerminal
-                          correlation
-                          RootCall
-                          (fromMaybe (providerCoordinateText model.modelId) (Baikai.observedValue ev.observedModel))
-                          Nothing
-                          ev
-                    )
-                      <$> evidence
-                  normalized = (\fact -> (fact & #relationshipKnown .~ (False))) <$> facts
-                  payload = object ["terminal" .= terminal, "facts" .= normalized, "evidence" .= (toJSON <$> evidence)]
-              if toInteger ordinal /= toInteger (decisionCallOrdinalNumber (attemptOrdinal token))
-                then pure (refuse ContractMismatch "decision attempt ordinal differs")
-                else
-                  if terminal == CallSucceeded && isNothing evidence
-                    then pure (refuse EvidenceFailure "successful decision attempt lacks provider evidence")
-                    else case oldTerminal of
-                      Just previous | previous /= payload -> pure (refuse EvidenceFailure "decision terminal conflicts with stored evidence")
-                      Just _ -> pure (Right ())
-                      Nothing -> do
-                        Tx.statement (object ["callId" .= attemptId token, "payload" .= payload]) updateTerminal
-                        pure (Right ())
+            Right actual -> do
+              associated <- checkCallBindingsTx (runCorrelationId raw.runId) [actual]
+              case associated of
+                Left err -> pure (Left err)
+                Right () -> finishActual token terminal evidence raw actual
+    finishActual :: AttemptToken -> CallTerminal -> Maybe Baikai.ModelCallEvidence -> RawCall -> StoredDecisionCall -> Tx.Transaction (Either DecisionFailure ())
+    finishActual token terminal evidence raw actual = do
+      let model = actual.model
+          correlation = actual.correlationId
+          facts =
+            ( \ev ->
+                factsFromTerminal
+                  correlation
+                  RootCall
+                  (fromMaybe (providerCoordinateText model.modelId) (Baikai.observedValue ev.observedModel))
+                  Nothing
+                  ev
+            )
+              <$> evidence
+          normalized = (\fact -> (fact & #relationshipKnown .~ (False))) <$> facts
+          payload = object ["terminal" .= terminal, "facts" .= normalized, "evidence" .= (toJSON <$> evidence)]
+      if actual.ordinal /= attemptOrdinal token
+        then pure (refuse ContractMismatch "decision attempt ordinal differs")
+        else
+          if terminal == CallSucceeded && isNothing evidence
+            then pure (refuse EvidenceFailure "successful decision attempt lacks provider evidence")
+            else case raw.terminal of
+              Just previous | previous /= payload -> pure (refuse EvidenceFailure "decision terminal conflicts with stored evidence")
+              Just _ -> pure (Right ())
+              Nothing -> do
+                Tx.statement (object ["callId" .= attemptId token, "payload" .= payload]) updateTerminal
+                pure (Right ())
 
 -- | Bounded run-wide admission includes unresolved/unknown spending from prior
 -- processes. A capped resource cannot be treated as zero when its facts are lost.
@@ -202,6 +271,9 @@ admit now started profile calls
 readDecisionReport :: DecisionEvidenceStore -> RunCorrelationId -> IO (Either DecisionFailure (Maybe DecisionEvidenceReport))
 readDecisionReport store runId = transaction store (reportTx runId)
 
+readDecisionReportTx :: RunCorrelationId -> Tx.Transaction (Either DecisionFailure (Maybe DecisionEvidenceReport))
+readDecisionReportTx = reportTx
+
 finalizeDecisionReport :: DecisionEvidenceStore -> RunCorrelationId -> IO (Either DecisionFailure (Maybe DecisionEvidenceReport))
 finalizeDecisionReport store runId = transaction store do
   report <- reportTx runId
@@ -219,10 +291,13 @@ reportTx runId = do
       _ <- Tx.statement (renderRunCorrelationId runId) lockRun
       raw <- Tx.statement (renderRunCorrelationId runId) allCalls
       invocations <- Tx.statement (renderRunCorrelationId runId) findInvocations
-      pure do
-        profile <- decode rawProfile
+      checkedRead do
+        profile <- decodeProfile rawProfile
         calls <- decodeCalls raw
         whenTooManyInvocations invocations
+        verified <- traverse checkInvocation invocations
+        validateInvocationPolicies profile verified
+        mapM_ (validateCallBinding (invocationIndex verified)) calls
         let facts = [facts | call <- calls, Just facts <- [call.facts]]
             expected = [ExpectedCall (callCorrelationId runId (decisionCallIdText call.callId) 0) RootCall (decisionCallOrdinalNumber call.ordinal) | call <- calls]
         Right
@@ -231,7 +306,7 @@ reportTx runId = do
                   1
                   runId
                   profile
-                  invocations
+                  (map fst verified)
                   calls
                   (all (\call -> isJust call.terminal && isJust call.facts && isJust call.evidence) calls)
                   ((\p -> evaluateCallFacts p.profile expected facts) <$> profile)
@@ -241,9 +316,17 @@ reportTx runId = do
 -- | Detail pages are bounded independently of the report's 10,000-attempt run
 -- cap. Stable run ordinals are the cursor, so concurrent inserts cannot reorder.
 listDecisionCalls :: DecisionEvidenceStore -> RunCorrelationId -> Natural -> Int -> IO (Either DecisionFailure [StoredDecisionCall])
-listDecisionCalls store runId after limit = transaction store do
+listDecisionCalls store runId after limit = transaction store (listDecisionCallsTx runId after limit)
+
+listDecisionCallsTx :: RunCorrelationId -> Natural -> Int -> Tx.Transaction (Either DecisionFailure [StoredDecisionCall])
+listDecisionCallsTx runId after limit = do
   rows <- Tx.statement (object ["runId" .= runId, "after" .= min 10000 after, "limit" .= max 1 (min 200 limit)]) callPage
-  pure (decodeCalls rows)
+  parsed <- checkedRead (decodeCalls rows)
+  case parsed of
+    Left err -> pure (Left err)
+    Right calls -> do
+      associated <- checkCallBindingsTx runId calls
+      pure (calls <$ associated)
 
 transaction :: DecisionEvidenceStore -> Tx.Transaction (Either DecisionFailure a) -> IO (Either DecisionFailure a)
 transaction (DecisionEvidenceStore pool) tx = do
@@ -255,10 +338,89 @@ decode value = case fromJSON value of
   Success decoded -> Right decoded
   Error _ -> refuse UnsupportedVersion "decision evidence facts or binding version is unsupported"
 
-decodeCalls :: [Value] -> Either DecisionFailure [StoredDecisionCall]
+checkedRead :: Either DecisionFailure a -> Tx.Transaction (Either DecisionFailure a)
+checkedRead result = case result of
+  Left _ -> Tx.condemn >> pure result
+  Right _ -> pure result
+
+decodeProfile :: Value -> Either DecisionFailure (Maybe ResolvedProfile)
+decodeProfile value = do
+  profile <- decode value
+  mapM_ check profile
+  pure profile
+  where
+    check resolved
+      | resolved.ref.profileId == resolved.profile.profileId && resolved.ref.version == resolved.profile.version && resolved.ref.digest == profileDigest resolved.profile = Right ()
+      | otherwise = refuse UnsupportedVersion "inconsistent retained decision profile"
+
+checkInvocation :: (Value, Either DecisionFailure InvocationBinding) -> Either DecisionFailure (Value, InvocationBinding)
+checkInvocation (raw, parsed) = (raw,) <$> parsed
+
+decodeCall :: RawCall -> Either DecisionFailure StoredDecisionCall
+decodeCall raw = do
+  identifier <- first (const (decisionFailure UnsupportedVersion "invalid retained decision call identity")) (parseDecisionCallId raw.callId)
+  invocation <- first (const (decisionFailure UnsupportedVersion "invalid retained decision preparation identity")) (parseDecisionPreparationId raw.invocationId)
+  ordinal <- first (const (decisionFailure UnsupportedVersion "invalid retained decision ordinal")) (parseDecisionCallOrdinal (toInteger raw.ordinal))
+  model <- decode raw.model
+  let correlation = callCorrelationId (runCorrelationId raw.runId) raw.callId 0
+  if renderCallCorrelationId correlation /= raw.correlationId
+    then refuse UnsupportedVersion "inconsistent retained decision correlation"
+    else case raw.terminal of
+      Nothing
+        | isNothing raw.facts && isNothing raw.evidence -> Right (StoredDecisionCall identifier correlation invocation ordinal model Nothing Nothing Nothing)
+        | otherwise -> refuse UnsupportedVersion "decision facts without a terminal envelope"
+      Just value -> do
+        envelope <- decode @TerminalEnvelope value
+        if envelope.facts /= raw.facts || envelope.evidence /= raw.evidence
+          then refuse UnsupportedVersion "inconsistent retained decision terminal columns"
+          else do
+            facts <- traverse decode raw.facts
+            if (envelope.terminal == CallSucceeded && isNothing raw.evidence) || isJust facts /= isJust raw.evidence || any (\fact -> fact.callId /= correlation || fact.relationship /= RootCall || fact.relationshipKnown) facts
+              then refuse UnsupportedVersion "inconsistent retained decision terminal facts"
+              else Right (StoredDecisionCall identifier correlation invocation ordinal model (Just envelope.terminal) facts raw.evidence)
+
+validateCallBinding :: Map.Map DecisionPreparationId InvocationBinding -> StoredDecisionCall -> Either DecisionFailure ()
+validateCallBinding bindings call = case Map.lookup call.invocationId bindings of
+  Just binding | binding.model == call.model -> Right ()
+  _ -> refuse UnsupportedVersion "missing or inconsistent decision invocation association"
+
+invocationIndex :: [(Value, InvocationBinding)] -> Map.Map DecisionPreparationId InvocationBinding
+invocationIndex = Map.fromList . map (\(_, binding) -> (binding.identity, binding))
+
+readInvocationTx :: DecisionPreparationId -> Tx.Transaction (Either DecisionFailure (Value, InvocationBinding))
+readInvocationTx identifier = do
+  retained <- Tx.statement (decisionPreparationIdText identifier) findInvocation
+  checkedRead (maybe (refuse UnsupportedVersion "missing retained decision invocation") checkInvocation retained)
+
+readInvocationsTx :: RunCorrelationId -> Tx.Transaction (Either DecisionFailure [(Value, InvocationBinding)])
+readInvocationsTx runId = do
+  retained <- Tx.statement (renderRunCorrelationId runId) findInvocations
+  checkedRead do
+    whenTooManyInvocations retained
+    traverse checkInvocation retained
+
+checkCallBindingsTx :: RunCorrelationId -> [StoredDecisionCall] -> Tx.Transaction (Either DecisionFailure ())
+checkCallBindingsTx runId calls = do
+  rawProfile <- Tx.statement (renderRunCorrelationId runId) maybeRun
+  retained <- readInvocationsTx runId
+  checkedRead do
+    bindings <- retained
+    profile <- case rawProfile of
+      Just raw -> decodeProfile raw
+      Nothing | null calls && null bindings -> Right Nothing
+      Nothing -> refuse UnsupportedVersion "missing retained decision run"
+    validateInvocationPolicies profile bindings
+    mapM_ (validateCallBinding (invocationIndex bindings)) calls
+
+validateInvocationPolicies :: Maybe ResolvedProfile -> [(Value, InvocationBinding)] -> Either DecisionFailure ()
+validateInvocationPolicies profile bindings
+  | all (\(_, binding) -> binding.policy == ((\value -> value.ref) <$> profile)) bindings = Right ()
+  | otherwise = refuse UnsupportedVersion "inconsistent retained decision invocation policy"
+
+decodeCalls :: [RawCall] -> Either DecisionFailure [StoredDecisionCall]
 decodeCalls values
   | length values > 10000 = refuse CallLimitExceeded "decision run exceeds bounded report capacity"
-  | otherwise = traverse decode values
+  | otherwise = traverse decodeCall values
 
 refuse :: FailureCode -> Text -> Either DecisionFailure a
 refuse code = Left . decisionFailure code
@@ -268,12 +430,6 @@ jsonInput = E.param (E.nonNullable E.jsonb)
 
 textInput :: E.Params Text
 textInput = E.param (E.nonNullable E.text)
-
-jsonOutput :: D.Result Value
-jsonOutput = D.singleRow (D.column (D.nonNullable D.jsonb))
-
-jsonRows :: D.Result [Value]
-jsonRows = D.rowList (D.column (D.nonNullable D.jsonb))
 
 insertRun :: Statement Value ()
 insertRun = preparable "INSERT INTO shikigami.decision_runs(run_id,profile) VALUES ($1->>'runId',$1->'profile') ON CONFLICT DO NOTHING" jsonInput D.noResult
@@ -287,14 +443,26 @@ maybeRun = preparable "SELECT profile FROM shikigami.decision_runs WHERE run_id=
 insertInvocation :: Statement Value ()
 insertInvocation = preparable "INSERT INTO shikigami.decision_invocations(invocation_id,run_id,binding) VALUES ($1->>'identity',$1->>'runId',$1) ON CONFLICT DO NOTHING" jsonInput D.noResult
 
-findInvocation :: Statement Text Value
-findInvocation = preparable "SELECT binding FROM shikigami.decision_invocations WHERE invocation_id=$1" textInput jsonOutput
+invocationRow :: D.Row (Value, Either DecisionFailure InvocationBinding)
+invocationRow = check <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.jsonb)
+  where
+    check identifier run raw =
+      ( raw,
+        do
+          binding <- decode raw
+          if decisionPreparationIdText binding.identity == identifier && renderRunCorrelationId binding.runId == run
+            then Right binding
+            else refuse UnsupportedVersion "inconsistent retained decision invocation coordinates"
+      )
+
+findInvocation :: Statement Text (Maybe (Value, Either DecisionFailure InvocationBinding))
+findInvocation = preparable "SELECT invocation_id,run_id,binding FROM shikigami.decision_invocations WHERE invocation_id=$1" textInput (D.rowMaybe invocationRow)
 
 insertAttempt :: Statement Value ()
 insertAttempt = preparable "WITH invalidate AS (UPDATE shikigami.decision_runs SET report=NULL WHERE run_id=$1->>'runId') INSERT INTO shikigami.decision_attempts(call_id,correlation_id,run_id,invocation_id,ordinal,effective_model) VALUES ($1->>'callId',$1->>'correlationId',$1->>'runId',$1->>'invocationId',($1->>'ordinal')::bigint,$1->'model')" jsonInput D.noResult
 
-findAttemptForUpdate :: Statement Text (Maybe (Text, Text, Int64, Value, Maybe Value))
-findAttemptForUpdate = preparable "SELECT run_id,invocation_id,ordinal,effective_model,terminal FROM shikigami.decision_attempts WHERE call_id=$1 FOR UPDATE" textInput (D.rowMaybe ((,,,,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.jsonb) <*> D.column (D.nullable D.jsonb)))
+findAttemptForUpdate :: Statement Text (Maybe RawCall)
+findAttemptForUpdate = preparable ("SELECT " <> callColumns <> " FROM shikigami.decision_attempts WHERE call_id=$1 FOR UPDATE") textInput (D.rowMaybe callRow)
 
 updateTerminal :: Statement Value ()
 updateTerminal = preparable "UPDATE shikigami.decision_attempts SET terminal=$1->'payload', facts=NULLIF($1->'payload'->'facts','null'::jsonb),evidence=NULLIF($1->'payload'->'evidence','null'::jsonb),finished_at=clock_timestamp() WHERE call_id=$1->>'callId'" jsonInput D.noResult
@@ -302,22 +470,28 @@ updateTerminal = preparable "UPDATE shikigami.decision_attempts SET terminal=$1-
 saveReport :: Statement Value ()
 saveReport = preparable "UPDATE shikigami.decision_runs SET report=$1->'report' WHERE run_id=$1->>'runId'" jsonInput D.noResult
 
-findInvocations :: Statement Text [Value]
-findInvocations = preparable "SELECT binding FROM shikigami.decision_invocations WHERE run_id=$1 ORDER BY invocation_id LIMIT 10001" textInput jsonRows
+findInvocations :: Statement Text [(Value, Either DecisionFailure InvocationBinding)]
+findInvocations = preparable "SELECT invocation_id,run_id,binding FROM shikigami.decision_invocations WHERE run_id=$1 ORDER BY invocation_id LIMIT 10001" textInput (D.rowList invocationRow)
 
-callProjection :: Text
-callProjection = "jsonb_build_object('callId',call_id,'correlationId',correlation_id,'invocationId',invocation_id,'ordinal',ordinal,'model',effective_model,'terminal',terminal->'terminal','facts',facts,'evidence',evidence)"
+callColumns :: Text
+callColumns = "run_id,call_id,correlation_id,invocation_id,ordinal,effective_model,terminal,facts,evidence"
 
-allCalls :: Statement Text [Value]
-allCalls = preparable ("SELECT " <> callProjection <> " FROM shikigami.decision_attempts WHERE run_id=$1 ORDER BY ordinal LIMIT 10001") textInput jsonRows
+callRow :: D.Row RawCall
+callRow = RawCall <$> text <*> text <*> text <*> text <*> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.jsonb) <*> optional <*> optional <*> optional
+  where
+    text = D.column (D.nonNullable D.text)
+    optional = D.column (D.nullable D.jsonb)
 
-callPage :: Statement Value [Value]
-callPage = preparable ("SELECT " <> callProjection <> " FROM shikigami.decision_attempts WHERE run_id=$1->>'runId' AND ordinal>($1->>'after')::bigint ORDER BY ordinal LIMIT ($1->>'limit')::integer") jsonInput jsonRows
+allCalls :: Statement Text [RawCall]
+allCalls = preparable ("SELECT " <> callColumns <> " FROM shikigami.decision_attempts WHERE run_id=$1 ORDER BY ordinal LIMIT 10001") textInput (D.rowList callRow)
+
+callPage :: Statement Value [RawCall]
+callPage = preparable ("SELECT " <> callColumns <> " FROM shikigami.decision_attempts WHERE run_id=$1->>'runId' AND ordinal>($1->>'after')::bigint ORDER BY ordinal LIMIT ($1->>'limit')::integer") jsonInput (D.rowList callRow)
 
 currentTime :: Statement () UTCTime
 currentTime = preparable "SELECT clock_timestamp()" E.noParams (D.singleRow (D.column (D.nonNullable D.timestamptz)))
 
-whenTooManyInvocations :: [Value] -> Either DecisionFailure ()
+whenTooManyInvocations :: [a] -> Either DecisionFailure ()
 whenTooManyInvocations rows
   | length rows > 10000 = refuse CallLimitExceeded "decision invocation report capacity exceeded"
   | otherwise = Right ()

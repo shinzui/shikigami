@@ -237,6 +237,44 @@ tests fixture =
           evidence <- report store "decision-lost-append"
           length evidence.calls @?= 5
           evidence.complete @?= True,
+      testCase "corrupt retained metadata refuses the real pending provider and repair reuses the original preparation" $
+        withRuntime fixture \app store behavior -> do
+          (handler, observed) <- scriptedProvider Investigate returned
+          hooks <- crashAt False "decision-result-investigate"
+          let services = Decision.defaultDecisionServices catalog
+              runtime = (deps app store behavior handler services) {Agent.hooks = hooks}
+              request = job "decision-corrupt-ledger"
+              evidenceStore = postgresDecisionEvidenceStore store.pool
+          stopped <- try @SomeException (Agent.runAgentRunWorkflow runtime request)
+          assertBool "stopped after the actual preparation" (either (const True) (const False) stopped)
+          observed >>= (@?= ["stub-triage"])
+          before <- report store "decision-corrupt-ledger"
+          length before.calls @?= 1
+          before.complete @?= True
+          index <- expectRight =<< runAppIO app (loadStepIndex Agent.agentRunWorkflowName (runJobWorkflowId request) 0)
+          prepared <- case Map.lookup "decision-prepare-investigate" index of
+            Just value -> case Aeson.fromJSON @(Either DecisionFailure PreparedDecision) value of
+              Aeson.Success (Right value) -> pure value
+              _ -> assertFailure "invalid complete preparation"
+            Nothing -> assertFailure "missing prepared decision"
+          input <- case Aeson.fromJSON @InvestigationInput prepared.input of
+            Aeson.Success value -> pure value
+            Aeson.Error _ -> assertFailure "invalid complete prepared input"
+          _ <- expectRight =<< Pool.use store.pool (Session.script "CREATE TABLE shikigami.audit_provider_invocations AS SELECT * FROM shikigami.decision_invocations; UPDATE shikigami.decision_invocations SET binding=binding-'inputDigest'")
+          let pending = DecisionRuntime behavior.runtime services.programs catalog Nothing (decisionCallHooks evidenceStore Nothing) [handler] 2_000_000 64
+          refused <- runDecisionProgram pending prepared (programRef investigationProgram) input
+          either (Right . failureCode) (const (Left ())) refused @?= Right UnsupportedVersion
+          observed >>= (@?= ["stub-triage"])
+          _ <- expectRight =<< Pool.use store.pool (Session.script "UPDATE shikigami.decision_invocations i SET binding=b.binding FROM shikigami.audit_provider_invocations b WHERE i.invocation_id=b.invocation_id")
+          repaired <- report store "decision-corrupt-ledger"
+          toJSON repaired @?= toJSON before
+          _ <- assertCompleted =<< Agent.runAgentRunWorkflow runtime request
+          observed >>= (@?= ["stub-triage", "stub-investigate", "stub-investigate"])
+          after <- report store "decision-corrupt-ledger"
+          take 1 (map (\call -> call.callId) after.calls) @?= map (\call -> call.callId) before.calls
+          assertBool "original invocation bytes survive" (all (`elem` after.invocations) before.invocations)
+          restoredIndex <- expectRight =<< runAppIO app (loadStepIndex Agent.agentRunWorkflowName (runJobWorkflowId request) 0)
+          Map.lookup "decision-prepare-investigate" restoredIndex @?= Map.lookup "decision-prepare-investigate" index,
       testCase "a two-model profile admits selected models while the unused default is forbidden" $
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned

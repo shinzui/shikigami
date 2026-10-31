@@ -1,0 +1,14 @@
+{
+  "sourceParent": "2711a19",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "files": {
+    "shikigami-core/src/Shikigami/Decision/Evidence.hs": "8ae9c39cdd4551220a70a3d52cba9f512da11ecd6799a894a410fc51ecfdca32",
+    "shikigami-core/src/Shikigami/WorkerSession/Store.hs": "6c7c087e4505b7a9a7443117334c86aee8ccf7adb1fdfde1820c6143e7372a04",
+    "shikigami-core/src/Shikigami/Workspace/Store.hs": "ed6ad426b5313f749ae4344031302776ab741c5b318f86e78e2a180aff87e648",
+    "shikigami-core/src/Shikigami/Workspace/TransferStore.hs": "9766aa39af91b85a7179c4d210fbdd734049f1d5a01e8b2d797ac297255e8fc9",
+    "shikigami-core/test-postgres/Shikigami/DecisionEvidenceSpec.hs": "989e523ed47d47ab6db318fe03c9c66e7cb0811aaff07f849fe175052bcdac9c",
+    "shikigami-core/test-postgres/Shikigami/DecisionWorkflowSpec.hs": "3dba537783df9bde3133fcad01293d860b76112ec67023efc3be9d04b6e1b926",
+    "tests/types/opaque-values.py": "c02b9fad77ce0a324be685c8cf118aa244d93be5e2daf16ec035bc6549226865"
+  }
+}

@@ -120,6 +120,30 @@ unsafe absence; it is not a performance qualification. A future independently
 maintained relational index would require its own migration and consistency
 acceptance. Existing addresses, identities and table layouts are unchanged.
 
+The decision-attempt ledger follows the same boundary. Report, page, admission
+and factual-completion reads validate complete invocation and terminal envelopes
+inside the transaction. Invocation identity/run columns, pinned profile content
+and reference, input commitment, model association and call correlation must
+agree. Terminal facts and provider JSON must agree with their denormalized
+columns. The decision writer deliberately records unknown retry lineage; a
+stored claim of known lineage is not a producer-supported state for this owner.
+Failed/unknown terminals without provider evidence remain valid uncertain
+spending, distinct from malformed metadata.
+
+Corruption retains the existing `UnsupportedVersion` owner refusal and condemns
+the transaction. Public composable readers preserve rollback even when ignored.
+Native SQL failures remain `EvidenceFailure`; absent runs remain absence.
+Validation does not reapply current profile lifecycle to historical facts.
+The report preserves the original invocation/provider JSON as an output
+representation after typed validation. It does not invent a decoder for the
+encode-only upstream provider record. Original raw binding comparison still
+owns immutable duplicate detection, including fields unknown to typed readers.
+
+Metadata scans force their Boolean or bounded list spine on every fold step.
+Forcing only an outer `Either` constructor would retain deferred calculations
+and references to earlier rows. This bounds the Haskell accumulator; it does
+not qualify total query memory, driver buffering or scan performance.
+
 These checks qualify the named read boundaries, not the remaining scalar audit.
 
 ## Alternatives rejected

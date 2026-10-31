@@ -6,6 +6,7 @@ import Baikai.Evidence qualified as B
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Lens ((&), (.~))
+import Control.Monad (forM_)
 import Data.Aeson (Value (..), object, toJSON, (.=))
 import Data.Either (isLeft)
 import Data.Generics.Labels ()
@@ -14,9 +15,14 @@ import Data.Text (Text)
 import Data.Text qualified as AliasText
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
+import Hasql.Decoders qualified as D
+import Hasql.Encoders qualified as E
 import Hasql.Pool (Pool)
 import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Session
+import Hasql.Statement (preparable)
+import Hasql.Transaction qualified as Tx
+import Hasql.Transaction.Sessions qualified as Sessions
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Attestation.Compliance (ComplianceRollUp (..), evaluateCallFacts)
@@ -98,7 +104,22 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "durable decision evidence"
-    [ testCase "fresh connections preserve actual calls, exact JSON and immutable invocation identities" $
+    [ testGroup "owned metadata refusals" [testCase name (metadataRefusal fixture pinned mutation) | (name, pinned, mutation) <- metadataCases],
+      testCase "absence and SQL failure keep separate outcomes" $
+        withShikigamiFreshDatabase fixture \connection -> withPool connection \pool -> do
+          let store = postgresDecisionEvidenceStore pool
+          readDecisionReport store (runCorrelationId "missing") >>= (@?= Right Nothing)
+          listDecisionCalls store (runCorrelationId "missing") 0 20 >>= (@?= Right [])
+          token <- expectRight =<< (decisionCallHooks store Nothing).beginCall context
+          positive <- expectReport =<< readDecisionReport store prepared.runId
+          map (\call -> call.callId) positive.calls @?= [attemptId token]
+          sql pool "ALTER TABLE shikigami.decision_attempts RENAME TO audit_held_attempts"
+          unavailable <- readDecisionReport store prepared.runId
+          either (Right . failureCode) (const (Left ())) unavailable @?= Right EvidenceFailure
+          sql pool "ALTER TABLE shikigami.audit_held_attempts RENAME TO decision_attempts"
+          restored <- expectReport =<< readDecisionReport store prepared.runId
+          toJSON restored @?= toJSON positive,
+      testCase "fresh connections preserve actual calls, exact JSON and immutable invocation identities" $
         withShikigamiFreshDatabase fixture \connection -> do
           withPool connection \pool -> do
             let hooks = decisionCallHooks (postgresDecisionEvidenceStore pool) Nothing
@@ -143,6 +164,20 @@ tests fixture =
             length report.calls @?= 1
             report.complete @?= False
             map (\call -> call.terminal) report.calls @?= [Nothing],
+      testCase "failed and unknown terminals without provider evidence remain valid uncertain spending" $
+        withShikigamiFreshDatabase fixture \connection -> withPool connection \pool -> do
+          let store = postgresDecisionEvidenceStore pool
+              hooks = decisionCallHooks store Nothing
+          first <- expectRight =<< hooks.beginCall context
+          hooks.finishCall first CallUnknown Nothing >>= (@?= Right ())
+          second <- expectRight =<< hooks.beginCall context
+          hooks.finishCall second CallFailed Nothing >>= (@?= Right ())
+          report <- expectReport =<< readDecisionReport store prepared.runId
+          report.complete @?= False
+          map (\call -> (call.terminal, call.facts, call.evidence)) report.calls @?= [(Just CallUnknown, Nothing, Nothing), (Just CallFailed, Nothing, Nothing)]
+          page <- expectRight =<< listDecisionCalls store prepared.runId 0 20
+          page @?= report.calls
+          hooks.finishCall first CallUnknown Nothing >>= (@?= Right ()),
       testCase "identical terminal writes converge and conflicting evidence is refused" $
         withShikigamiFreshDatabase fixture \connection -> withPool connection \pool -> do
           let store = postgresDecisionEvidenceStore pool
@@ -175,7 +210,9 @@ tests fixture =
               hooks = decisionCallHooks store Nothing
           token <- expectRight =<< hooks.beginCall context
           hooks.finishCall token CallSucceeded (Just (terminal "provider-1")) >>= (@?= Right ())
-          sql pool "UPDATE shikigami.decision_attempts SET facts=jsonb_set(facts,'{format}','999'::jsonb)"
+          positive <- expectReport =<< readDecisionReport store prepared.runId
+          positive.complete @?= True
+          sql pool "UPDATE shikigami.decision_attempts SET facts=jsonb_set(facts,'{format}','999'::jsonb),terminal=jsonb_set(terminal,'{facts,format}','999'::jsonb)"
           result <- readDecisionReport store prepared.runId
           either (Right . failureCode) (const (Left ())) result @?= Right UnsupportedVersion,
       testCase "malformed retained call identity is a data refusal before further admission" $
@@ -232,6 +269,108 @@ tests fixture =
             assertBool "uncertain cost blocks a clean assessment" (maybe False (not . (\assessment -> assessment.sanctioned)) report.assessment)
             hooks.beginCall pinnedContext >>= (assertBool "uncertainty is not reset" . isLeft)
     ]
+
+-- Each case starts from two complete public attempts and a cached public report.
+-- The valid first member proves that a corrupt second member is not omitted.
+metadataCases :: [(String, Maybe ResolvedProfile, Text)]
+metadataCases =
+  [(name, Nothing, "UPDATE shikigami.decision_attempts SET " <> mutation <> " WHERE ordinal=2") | (name, mutation) <- callCases]
+    <> [(name, Nothing, "UPDATE shikigami.decision_invocations SET binding=" <> mutation <> " WHERE binding->>'label'='investigate'") | (name, mutation) <- bindingCases]
+    <> [(name, Just (profile P.unlimitedProfileLimits), "UPDATE shikigami.decision_runs SET profile=" <> mutation) | (name, mutation) <- profileCases]
+  where
+    callCases =
+      [ ("terminal JSON null cannot become unresolved absence", "terminal='null'::jsonb"),
+        ("missing terminal disposition refuses", "terminal=terminal-'terminal'"),
+        ("missing complete-envelope facts member refuses", "terminal=terminal-'facts'"),
+        ("orphan facts cannot become an unresolved expectation", "terminal=NULL,finished_at=NULL"),
+        ("matching columns still reject unsupported facts", "facts=jsonb_set(facts,'{format}','999'),terminal=jsonb_set(terminal,'{facts,format}','999')"),
+        ("invented known retry lineage refuses", "facts=jsonb_set(facts,'{relationshipKnown}','true'),terminal=jsonb_set(terminal,'{facts,relationshipKnown}','true')"),
+        ("unrelated local facts correlation refuses", "facts=jsonb_set(facts,'{callId}','\"unrelated\"'),terminal=jsonb_set(terminal,'{facts,callId}','\"unrelated\"')"),
+        ("denormalized evidence disagreement refuses", "evidence='\"substituted\"'::jsonb"),
+        ("complete-envelope evidence absence refuses", "terminal=jsonb_set(terminal,'{evidence}','null')"),
+        ("invalid model registration refuses", "effective_model=jsonb_set(effective_model,'{version}','\"\"')"),
+        ("typed model substitution cannot change invocation ownership", "effective_model=jsonb_set(effective_model,'{modelId}','\"different-model\"')"),
+        ("unrelated call correlation refuses", "correlation_id='unrelated'")
+      ]
+    bindingCases =
+      [ ("invocation JSON null refuses the whole report", "'null'::jsonb"),
+        ("missing input commitment refuses", "binding-'inputDigest'"),
+        ("unproducible input commitment refuses", "jsonb_set(binding,'{inputDigest}','\"sha256:short\"')"),
+        ("unsupported invocation format refuses", "jsonb_set(binding,'{format}','2')"),
+        ("negative invocation generation refuses", "jsonb_set(binding,'{generation}','-1')"),
+        ("invocation identity must agree with its relational key", "jsonb_set(binding,'{identity}','\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"')"),
+        ("invocation run must agree with its relational key", "jsonb_set(binding,'{runId}','\"different-run\"')"),
+        ("invocation policy must agree with the retained run", "jsonb_set(binding,'{policy}','{\"profileId\":\"different\",\"version\":\"1\",\"digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}')")
+      ]
+    profileCases =
+      [ ("missing pinned profile cannot become an unconstrained run", "'null'::jsonb"),
+        ("profile content cannot change behind its commitment", "jsonb_set(profile,'{profile,version}','\"changed\"')"),
+        ("profile reference must name the same content", "jsonb_set(profile,'{ref,profileId}','\"different\"')")
+      ]
+
+metadataRefusal :: DatabaseFixture -> Maybe ResolvedProfile -> Text -> IO ()
+metadataRefusal fixture pinned mutation = withShikigamiFreshDatabase fixture \connection -> withPool connection \pool -> do
+  let original = prepared & #policy .~ ((\value -> value.ref) <$> pinned)
+      later = original & #identity .~ decisionPreparationId (String "second-invocation") & #label .~ investigationDecisionSlot
+      replacement = original & #identity .~ decisionPreparationId (String "replacement-invocation")
+      store = postgresDecisionEvidenceStore pool
+      hooks = decisionCallHooks store pinned
+  first <- expectRight =<< hooks.beginCall (DecisionCallContext original model)
+  hooks.finishCall first CallSucceeded (Just (terminal "provider-1")) >>= (@?= Right ())
+  second <- expectRight =<< hooks.beginCall (DecisionCallContext later model)
+  hooks.finishCall second CallSucceeded (Just (terminal "provider-2")) >>= (@?= Right ())
+  positive <- expectReport =<< finalizeDecisionReport store original.runId
+  positive.complete @?= True
+  length positive.calls @?= 2
+  length positive.invocations @?= 2
+  map (\call -> call.evidence) positive.calls @?= [Just (toJSON (terminal "provider-1")), Just (toJSON (terminal "provider-2"))]
+  sql pool "CREATE TABLE shikigami.audit_decision_calls AS SELECT * FROM shikigami.decision_attempts; CREATE TABLE shikigami.audit_decision_invocations AS SELECT * FROM shikigami.decision_invocations; CREATE TABLE shikigami.audit_decision_runs AS SELECT * FROM shikigami.decision_runs"
+  originalCalls <- readJSON pool callsSnapshot
+  originalInvocations <- readJSON pool invocationsSnapshot
+  originalRun <- readJSON pool runSnapshot
+  sql pool mutation
+  corruptCalls <- readJSON pool callsSnapshot
+  corruptInvocations <- readJSON pool invocationsSnapshot
+  corruptRun <- readJSON pool runSnapshot
+  ownerRefusal =<< readDecisionReport store original.runId
+  ownerRefusal =<< listDecisionCalls store original.runId 0 20
+  ownerRefusal =<< finalizeDecisionReport store original.runId
+  ownerRefusal =<< hooks.finishCall second CallSucceeded (Just (terminal "provider-2"))
+  -- Admission may tentatively insert a distinct invocation before reading old
+  -- spending. Corruption must condemn that insert as well as refuse dispatch.
+  ownerRefusal =<< hooks.beginCall (DecisionCallContext replacement model)
+  forM_ [readDecisionReportTx original.runId >> pure (), listDecisionCallsTx original.runId 0 20 >> pure ()] \ignoredRead -> do
+    transactionResult <-
+      expectRight
+        =<< Pool.use
+          pool
+          ( Sessions.transaction Sessions.ReadCommitted Sessions.Write do
+              Tx.sql "UPDATE shikigami.decision_runs SET report='\"tentative-before\"'::jsonb"
+              ignoredRead
+              Tx.sql "UPDATE shikigami.decision_runs SET report='\"tentative-after\"'::jsonb"
+          )
+    transactionResult @?= ()
+    readJSON pool runSnapshot >>= (@?= corruptRun)
+  readJSON pool callsSnapshot >>= (@?= corruptCalls)
+  readJSON pool invocationsSnapshot >>= (@?= corruptInvocations)
+  readJSON pool runSnapshot >>= (@?= corruptRun)
+  sql pool "UPDATE shikigami.decision_attempts a SET correlation_id=b.correlation_id,invocation_id=b.invocation_id,ordinal=b.ordinal,effective_model=b.effective_model,terminal=b.terminal,facts=b.facts,evidence=b.evidence,finished_at=b.finished_at FROM shikigami.audit_decision_calls b WHERE a.call_id=b.call_id; UPDATE shikigami.decision_invocations i SET binding=b.binding FROM shikigami.audit_decision_invocations b WHERE i.invocation_id=b.invocation_id; UPDATE shikigami.decision_runs r SET profile=b.profile,report=b.report FROM shikigami.audit_decision_runs b WHERE r.run_id=b.run_id"
+  restored <- expectReport =<< readDecisionReport store original.runId
+  toJSON restored @?= toJSON positive
+  hooks.finishCall second CallSucceeded (Just (terminal "provider-2")) >>= (@?= Right ())
+  readJSON pool callsSnapshot >>= (@?= originalCalls)
+  readJSON pool invocationsSnapshot >>= (@?= originalInvocations)
+  readJSON pool runSnapshot >>= (@?= originalRun)
+  where
+    callsSnapshot = "SELECT jsonb_agg(to_jsonb(a) ORDER BY ordinal) FROM shikigami.decision_attempts a"
+    invocationsSnapshot = "SELECT jsonb_agg(to_jsonb(i) ORDER BY invocation_id) FROM shikigami.decision_invocations i"
+    runSnapshot = "SELECT to_jsonb(r) FROM shikigami.decision_runs r"
+
+ownerRefusal :: Either DecisionFailure a -> IO ()
+ownerRefusal result = either (Right . failureCode) (const (Left ())) result @?= Right UnsupportedVersion
+
+readJSON :: Pool -> Text -> IO Value
+readJSON pool query = expectRight =<< Pool.use pool (Session.statement () (preparable query E.noParams (D.singleRow (D.column (D.nonNullable D.jsonb)))))
 
 withPool :: Text -> (Pool -> IO a) -> IO a
 withPool connection use = withStore (defaultConnectionSettings connection) (use . (.pool))

@@ -84,6 +84,15 @@ workspace cases. Child/root attribution is decoded before filtering; without
 independent relational indexes, scans conservatively refuse unreadable
 attribution and may inspect all remaining metadata.
 
+The decision-evidence owner candidate adds complete terminal/invocation decoding,
+composable condemned reads and native call correlation. Its 23 corruption controls
+preserve earlier/later rollback and original records after repair; the actual
+pending provider is not called while retained metadata is unreadable. The latest
+owner groups pass 52 PostgreSQL cases after a 62-core/22-worker pass, and all 82
+compiler controls pass. Workspace fold payloads are forced to preserve bounded
+accumulators. See `decision-evidence-source.json`; coherent declaration refresh
+and classification reconciliation follow the implementation commit.
+
 The native workflow gate passes on `400cdc0` against `af76f1b`, with no findings
 and a replay-neutral native verdict. Exact reports accompany the current evidence.
 The full build, fresh census and focused checks are checkpoints, not milestone
