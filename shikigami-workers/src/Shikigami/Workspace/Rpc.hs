@@ -33,6 +33,7 @@ import Network.Socket.ByteString qualified as SocketBytes
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Execution.Identity (AttemptId (..), OperationId (..))
 import Shikigami.Prelude hiding ((.=))
+import Shikigami.StateRevision (StateRevision)
 import Shikigami.WorkerSession.Transfer
 import Shikigami.WorkerSession.Types (WorkerSessionId)
 import Shikigami.Workspace.Process
@@ -47,7 +48,7 @@ data RpcError = RpcRefused | RpcUnavailable | RpcMalformed | RpcPeerDenied | Rpc
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data RpcRequest = RpcLaunch !SupervisorRequest | RpcObserve !OperationId | RpcFence !TransferIntent | RpcAdmitWrite !WorkspaceRef !WorkerSessionId !AgentIdentity !Integer !OperationId
+data RpcRequest = RpcLaunch !SupervisorRequest | RpcObserve !OperationId | RpcFence !TransferIntent | RpcAdmitWrite !WorkspaceRef !WorkerSessionId !AgentIdentity !(StateRevision "worker-owner") !OperationId
   deriving stock (Eq)
 
 instance Show RpcRequest where show _ = "RpcRequest <protected>"

@@ -13,6 +13,7 @@ import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Execution.Identity (ExecutionRootId (..))
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
+import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.InstructionLoader (loadWorkspaceAdmission)
@@ -103,7 +104,7 @@ withProfiles fixture use = Fixture.withFixture fixture \env source root reposito
   selected <- right (resolveRepository catalog (repositoryIdentity repository) Nothing)
   let create name = do
         let owner = CompatibilityIdentity "profile-worker"
-            request = WorkspaceRequest name Nothing (ExecutionRootId ("profile-root-" <> name)) owner owner 0
+            request = WorkspaceRequest name Nothing (ExecutionRootId ("profile-root-" <> name)) owner owner (fixtureRevision 0)
         (binding, state) <- right =<< run env (Workspaces.reserveWorkspaceTx root request selected)
         allocateWorkspace root binding state >>= (@?= Right ())
         run env (Workspaces.markWorkspaceReadyTx binding) >>= (@?= Right ())
@@ -127,3 +128,6 @@ right = either (\err -> assertFailure (show err) >> fail "unreachable") pure
 assertLeft :: Either a b -> IO ()
 assertLeft (Left _) = pure ()
 assertLeft _ = assertFailure "unqualified profile accepted"
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

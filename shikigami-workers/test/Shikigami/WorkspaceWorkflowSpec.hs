@@ -56,6 +56,7 @@ import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config
 import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
+import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.WorkerSession.Store qualified as Sessions
 import Shikigami.WorkerSession.Types qualified as Sessions
@@ -142,7 +143,7 @@ tests fixture =
       testCase "terminal cleanup refuses a prepared mutation without inferring settlement from a free lock" $
         withWorkflow fixture \env root job _ deps _ -> do
           binding <- finishWorkspace env job deps
-          run env (runTransaction (Store.reserveWorkspaceEffectTx binding job.identity 0 (OperationId "pending-cleanup-effect") "pending")) >>= (@?= Right Nothing)
+          run env (runTransaction (Store.reserveWorkspaceEffectTx binding job.identity (fixtureRevision 0) (OperationId "pending-cleanup-effect") "pending")) >>= (@?= Right Nothing)
           cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
           run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Nothing)
           doesPathExist (workspaceFiles root binding) >>= (@?= True),
@@ -170,7 +171,7 @@ tests fixture =
             access <- right =<< run env (Execution.authorizeReplay execution job.identity (pure (Right ())))
             right =<< run env (Execution.loadExecution access)
           admission <- maybe (fail "workspace admission missing") pure snapshot.workspace
-          let request = WorkspaceRequest snapshot.runId Nothing (ExecutionRootId "workflow-root") job.identity job.identity 0
+          let request = WorkspaceRequest snapshot.runId Nothing (ExecutionRootId "workflow-root") job.identity job.identity (fixtureRevision 0)
               -- The binding itself is authoritative, never a model-selected path.
               storage = root
           Just (binding, _) <- run env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
@@ -352,3 +353,6 @@ finishWorkspace env job deps = do
   _ <- right =<< driveExecutionForeground (Agent.executionRuntime deps) (ExecutionStart execution) 30
   Agent.runAgentRunWorkflow deps job >>= assertCompleted
   admittedBinding env job
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

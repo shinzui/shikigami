@@ -23,6 +23,7 @@ import Shikigami.Execution.Identity
 import Shikigami.Execution.Runner
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadRef (..))
 import Shikigami.Prelude ((&), (.~))
+import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
 import Shikigami.WorkerSession.Transfer (TransferIntent (..))
 import Shikigami.WorkerSession.Types (AssignmentId (..), ObjectiveRef (..), WorkerSessionId (..))
@@ -47,7 +48,7 @@ tests =
         requestId <- right (Kikan.mkRequestId "workspace-proof")
         schema <- right (Kikan.mkActionSchemaHash "schema-workspace-fixture")
         let owner = VerifiedIdentity actor
-            request = WorkspaceRequest "run" Nothing (ExecutionRootId "root") owner owner 0
+            request = WorkspaceRequest "run" Nothing (ExecutionRootId "root") owner owner (fixtureRevision 0)
             binding = WorkspaceBinding request (WorkspaceRef "shikigami.workspace/1" "resource") "mori://fixture/repo" (Text.replicate 40 "a") "policy-1" "/private/workspaces" "/operator/source"
             logical = OperationContext (ExecutionId "execution") (OperationId "operation") "operation" "fingerprint" "scope"
             dispatch = DispatchContext logical (AttemptId "attempt") "claim-owner" 1
@@ -68,7 +69,7 @@ tests =
         checkedAt <- right (Kikan.mkConsistencyToken "snapshot-1")
         let issued = Kikan.IssuedActionProof proof minted.expiresAt [] checkedAt
         _ <- right =<< verifyIssuedAction verifier now actionRequest issued
-        let changedBindings = [binding & #repository .~ "mori://fixture/other", binding & #base .~ Text.replicate 40 "b", binding & #policyRevision .~ "policy-2", binding & #workspace . #resource .~ "other-resource", binding & #request . #rootId .~ ExecutionRootId "other-root", binding & #request . #epoch .~ 1, binding & #request . #runId .~ "other-run"]
+        let changedBindings = [binding & #repository .~ "mori://fixture/other", binding & #base .~ Text.replicate 40 "b", binding & #policyRevision .~ "policy-2", binding & #workspace . #resource .~ "other-resource", binding & #request . #rootId .~ ExecutionRootId "other-root", binding & #request . #epoch .~ (fixtureRevision 1), binding & #request . #runId .~ "other-run"]
         bindingActions <- mapM (\b -> admissionFor b >>= \a -> right (workspaceFileAction b a dispatch "replace" "src/file" "device:parent" "input-hash")) changedBindings
         changedPolicy <- right (mkInstructionBundle 65536 binding.repository binding.base [("AGENTS.md", "changed policy")])
         coordinateActions <-
@@ -275,7 +276,7 @@ tests =
         observation provisionAdmission gitDispatch profile "commit" command.profile "device:files" @?= Left FileEffectRefused
         let workerSession = WorkerSessionId "retained-session"
             transferBinding = provisionBinding & #request . #assignment .~ Just (workerSession, AssignmentId "retained-assignment")
-            intent = TransferIntent 1 workerSession (ObjectiveRef "checkpoints" "objective") owner (OperationId "handoff") (ObjectiveVersion 1 1 1 0 owner True transferBinding.request.rootId expiry) owner (CompatibilityIdentity "successor") (AgentName "successor") 0 1 transferBinding.request.rootId transferBinding.workspace
+            intent = TransferIntent 1 workerSession (ObjectiveRef "checkpoints" "objective") owner (OperationId "handoff") (ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) owner True transferBinding.request.rootId expiry) owner (CompatibilityIdentity "successor") (AgentName "successor") (fixtureRevision 0) (fixtureRevision 1) transferBinding.request.rootId transferBinding.workspace
         fenceAction <- right (workspaceTransferAction transferBinding intent)
         let fenceRequest = commitRequest & #action .~ fenceAction
             fenceGrant = commitGrant & #object .~ ObjectRef (ObjectType (Kikan.actionObjectType fenceAction)) (Kikan.actionObjectId fenceAction)
@@ -291,14 +292,14 @@ tests =
               intent & #newOwner .~ CompatibilityIdentity "other-successor",
               intent & #newWorker .~ AgentName "other-worker",
               intent & #objective . #key .~ "other-objective",
-              intent & #expected . #revision .~ 2,
+              intent & #expected . #revision .~ (fixtureRevision 2),
               intent & #expected . #cutoff .~ addUTCTime 1 expiry,
-              intent & #oldEpoch .~ 1 & #newEpoch .~ 2
+              intent & #oldEpoch .~ (fixtureRevision 1) & #newEpoch .~ (fixtureRevision 2)
             ]
-        writeAdmission <- right (workspaceWriteAdmissionAction transferBinding transferBinding.workspace workerSession intent.newOwner 1 (OperationId "write"))
+        writeAdmission <- right (workspaceWriteAdmissionAction transferBinding transferBinding.workspace workerSession intent.newOwner (fixtureRevision 1) (OperationId "write"))
         mapM_ (\action -> verifyIssuedAction verifier now (fenceRequest & #action .~ action) fenceIssued >>= \answer -> assertBool "fence proof binds complete transfer and cannot authorize writes" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) (writeAdmission : changedFences)
         workspaceTransferAction provisionBinding intent @?= Left FileEffectRefused
-        let successorAdmission = provisionAdmission & #bindingDigest .~ workspaceBindingDigest transferBinding & #runId .~ "successor-run" & #assignmentId .~ "successor-assignment" & #owner .~ intent.newOwner & #epoch .~ 1 & #filePolicy .~ Just transferableFilePolicy
+        let successorAdmission = provisionAdmission & #bindingDigest .~ workspaceBindingDigest transferBinding & #runId .~ "successor-run" & #assignmentId .~ "successor-assignment" & #owner .~ intent.newOwner & #epoch .~ (fixtureRevision 1) & #filePolicy .~ Just transferableFilePolicy
             retainedProfile = profile & #bindingDigest .~ workspaceBindingDigest transferBinding
             successorProcess = recordFor transferBinding successorAdmission dispatch command & #routing .~ Just (ProcessRouting 1 logical.executionId intent.newOwner command.profile NeedModel)
             successorGit raw = let changed = raw & #bindingDigest .~ workspaceBindingDigest transferBinding & #profileDigest .~ Git.gitProfileDigest retainedProfile & #routing . #identity .~ intent.newOwner in changed & #fingerprint .~ Git.gitFingerprint transferBinding changed
@@ -315,23 +316,23 @@ tests =
         changedSuccessorFiles <-
           mapM
             right
-            [ workspaceTransferredFileAction retainedProfile transferBinding (successorAdmission & #epoch .~ 2) dispatch "replace" "src/file" "device:parent" "input-hash",
+            [ workspaceTransferredFileAction retainedProfile transferBinding (successorAdmission & #epoch .~ (fixtureRevision 2)) dispatch "replace" "src/file" "device:parent" "input-hash",
               workspaceTransferredFileAction retainedProfile transferBinding (successorAdmission & #owner .~ CompatibilityIdentity "other-successor") dispatch "replace" "src/file" "device:parent" "input-hash",
               workspaceTransferredFileAction retainedProfile transferBinding (successorAdmission & #runId .~ "other-run") dispatch "replace" "src/file" "device:parent" "input-hash",
               workspaceTransferredFileAction retainedProfile transferBinding successorAdmission dispatch "replace" "src/file" "device:other-parent" "input-hash"
             ]
         verifyTargets successorFile (fileAction : changedSuccessorFiles)
         successorProcessAction <- right (workspaceTransferredProcessAction transferBinding successorAdmission dispatch successorProcess boot "device:parent")
-        changedSuccessorProcess <- right (workspaceTransferredProcessAction transferBinding (successorAdmission & #epoch .~ 2) dispatch successorProcess boot "device:parent")
+        changedSuccessorProcess <- right (workspaceTransferredProcessAction transferBinding (successorAdmission & #epoch .~ (fixtureRevision 2)) dispatch successorProcess boot "device:parent")
         verifyTargets successorProcessAction [processAction, changedSuccessorProcess]
         successorCommit <- right (workspaceTransferredGitAction transferBinding successorAdmission gitDispatch retainedProfile proposedGit)
-        changedSuccessorCommit <- right (workspaceTransferredGitAction transferBinding (successorAdmission & #epoch .~ 2) gitDispatch retainedProfile proposedGit)
+        changedSuccessorCommit <- right (workspaceTransferredGitAction transferBinding (successorAdmission & #epoch .~ (fixtureRevision 2)) gitDispatch retainedProfile proposedGit)
         verifyTargets successorCommit [commitAction, changedSuccessorCommit]
         successorStatus <- right (workspaceTransferredGitObservationAction transferBinding successorAdmission gitDispatch retainedProfile "status" command.profile "device:files")
-        changedSuccessorStatus <- right (workspaceTransferredGitObservationAction transferBinding (successorAdmission & #epoch .~ 2) gitDispatch retainedProfile "status" command.profile "device:files")
+        changedSuccessorStatus <- right (workspaceTransferredGitObservationAction transferBinding (successorAdmission & #epoch .~ (fixtureRevision 2)) gitDispatch retainedProfile "status" command.profile "device:files")
         verifyTargets successorStatus [statusAction, changedSuccessorStatus]
         successorAction <- right (workspaceSuccessorAdmissionAction transferBinding successorAdmission retainedProfile)
-        changedSuccessorAction <- right (workspaceSuccessorAdmissionAction transferBinding (successorAdmission & #epoch .~ 2) retainedProfile)
+        changedSuccessorAction <- right (workspaceSuccessorAdmissionAction transferBinding (successorAdmission & #epoch .~ (fixtureRevision 2)) retainedProfile)
         verifyTargets successorAction [fenceAction, changedSuccessorAction]
         workspaceSupervisedFileAction retainedProfile transferBinding successorAdmission dispatch "replace" "src/file" "device:parent" "input-hash" @?= Left FileEffectRefused
         workspaceProcessAction transferBinding successorAdmission dispatch successorProcess boot "device:parent" @?= Left FileEffectRefused
@@ -359,3 +360,6 @@ tests =
 
 right :: (Show e) => Either e a -> IO a
 right = either (\err -> assertFailure (show err) >> fail "unreachable") pure
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

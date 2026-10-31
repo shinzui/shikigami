@@ -32,6 +32,7 @@ import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
+import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.ContainedFile
@@ -98,7 +99,7 @@ tests fixture =
         execute (Fixture.executorForAdapter (transferredWorkspaceGitAdapterWithBackend interrupted) runtime) snapshot reference
         readIORef publications >>= (@?= 1)
         Just before <- run env (runTransaction (Git.inspectGitTx reference.operationId))
-        run env (runTransaction (Store.freezeWorkspaceTx binding binding.request.owner 0)) >>= (@?= Right ())
+        run env (runTransaction (Store.freezeWorkspaceTx binding binding.request.owner (fixtureRevision 0))) >>= (@?= Right ())
         publishGitReceipt env reference.operationId >>= (@?= Right GitReceiptAcknowledged)
         publishGitReceipt env reference.operationId >>= (@?= Right GitReceiptAcknowledged)
         Just after <- run env (runTransaction (Git.inspectGitTx reference.operationId))
@@ -138,7 +139,7 @@ tests fixture =
         readIORef reached >>= (@?= True)
         Just before <- right =<< run env (Execution.inspectExecutionAttempt reference.attemptId)
         before.phase @?= Attempt.AttemptUncertain
-        run env (runTransaction (Store.freezeWorkspaceTx binding binding.request.owner 0)) >>= (@?= Right ())
+        run env (runTransaction (Store.freezeWorkspaceTx binding binding.request.owner (fixtureRevision 0))) >>= (@?= Right ())
         scan <- right =<< scanGitReceipts env Nothing
         scan.inspected @?= 1
         scan.acknowledged @?= 1
@@ -209,7 +210,7 @@ tests fixture =
         publishGitReceipt env reference.operationId >>= (@?= Right AwaitingGitReceipt)
         Just record <- run env (runTransaction (Git.inspectGitTx reference.operationId))
         record.phase @?= GitUnresolved
-        run env (runTransaction (Store.checkWorkspaceOperationTx binding binding.request.owner 0 (OperationId "successor"))) >>= (@?= Left WorkspaceBindingConflict)
+        run env (runTransaction (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "successor"))) >>= (@?= Left WorkspaceBindingConflict)
         (_, state) <- right =<< run env (Execution.loadExecution access)
         state.phase @?= Unresolved,
       testCase "unsettled processes block Git observations and commits before capture" $
@@ -370,3 +371,6 @@ assertRefused :: OperationOutcome -> Assertion
 assertRefused (ToolReturned _ True) = pure ()
 assertRefused (RichToolReturned result) | result.failed = pure ()
 assertRefused _ = assertFailure "expected bounded refusal"
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

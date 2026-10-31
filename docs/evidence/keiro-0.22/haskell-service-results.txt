@@ -34,3 +34,11 @@ Core PostgreSQL: all 375 passed serially (106.31s). Workers: all 260 passed seri
 just keiro-gate 0208d32: passed strict Language 6 checks, idempotent scaffold, all 151 generated conformance assertions and replay-neutral/non-breaking diff.
 
 Checked assignment/artifact locator extension: 544 core pure and 375 serial PostgreSQL tests passed (101.58s). The extended eight-case Objectives subset passes exact assignment object encoding and invalid locator admission; all enabled components compile.
+
+Worker/workspace ownership extension, source parent e1d5548:
+Core pure: 545 passed (5.83s). Core PostgreSQL: 375 passed serially (102.63s).
+Workers: 260 passed serially (162.46s). Server: 95 passed serially (18.75s), including new negative revision/epoch parser refusal.
+No required PostgreSQL test skips. Language checker plus all nine mutation cases passed. All 124 frozen producer source hashes remain unchanged.
+Thirty-five of the 46 plan107 source rows have explicit implemented dispositions; eleven architecture/domain rows remain pending. FRIC-35 is triaged accepted with the exact native versioned banner preserved.
+All six compiler boundary cases passed, including the real WorkerCommand signature.
+just keiro-gate e1d5548 passed strict Language 6 checks for ten members, idempotent scaffold, no breaking findings and replay-neutral impact. Current native conformance output has 156 passing rows (70 aggregate, 30 workflow, 28 read-model, 26 structural, 2 mapped-surface); the earlier 151 summaries undercounted the generated identity checks.

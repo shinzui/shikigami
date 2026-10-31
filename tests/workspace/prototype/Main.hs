@@ -53,6 +53,7 @@ import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript (ExecutionSnapshot (..), ExecutionState (..), operationIdFor)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude ((&), (.~))
+import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.ContainedFile (withWorkspaceLock)
@@ -191,7 +192,7 @@ nativeProvision configFile specFile = do
   base <- Text.strip . Encoding.decodeUtf8 <$> git ["-C", source, "rev-parse", "HEAD"]
   properties <- Systemd.systemdPropertiesIdentity
   let policy = ProcessPolicy 1 spec.image properties [CommandRule "validate" "/bin/probe" ["validate"] "" (Map.singleton "HOME" "/scratch") 30 1024] [""] ["src"]
-      request = WorkspaceRequest "native-fixture" Nothing (ExecutionRootId "native-fixture-root") principal principal 0
+      request = WorkspaceRequest "native-fixture" Nothing (ExecutionRootId "native-fixture-root") principal principal (fixtureRevision 0)
   catalog <- requireRight (mkWorkspaceCatalog [RepositoryPolicy "mori://fixture/repo" source [base] base (processPolicyIdentity policy)])
   repository <- requireRight (resolveRepository catalog "mori://fixture/repo" Nothing)
   (binding, state) <- requireRight =<< transact env (Workspaces.reserveWorkspaceTx storage request repository)
@@ -287,7 +288,7 @@ prepareCase config prefix name mode = do
   initial <- requireRight . Aeson.eitherDecodeStrict @ReadyProfile =<< Bytes.readFile (prefix </> "native-ready.json")
   withRuntime config \env authorizer current client -> do
     let owner = initial.binding.request.owner
-        request = WorkspaceRequest ("case-" <> Text.pack name) Nothing (ExecutionRootId ("case-root-" <> Text.pack name)) owner owner 0
+        request = WorkspaceRequest ("case-" <> Text.pack name) Nothing (ExecutionRootId ("case-root-" <> Text.pack name)) owner owner (fixtureRevision 0)
         base = initial.binding.base
         policy = initial.profile.policy
     catalog <- requireRight (mkWorkspaceCatalog [RepositoryPolicy initial.binding.repository initial.binding.source [base] base (processPolicyIdentity policy)])
@@ -389,3 +390,6 @@ verifyGitCase env expected item = do
 
 stored :: AppEnv -> Eff AppEffects (Either e a) -> IO a
 stored env action = requireRight =<< (requireRight =<< runAppIO env action)
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

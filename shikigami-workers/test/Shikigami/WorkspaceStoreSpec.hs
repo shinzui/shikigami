@@ -18,6 +18,7 @@ import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Execution.Identity (ExecutionRootId (..))
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude ((&), (.~))
+import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.WorkerSession.Types (AssignmentId (..), WorkerSessionId (..))
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
@@ -59,7 +60,7 @@ tests fixture =
         _ <- right =<< run env (reserveWorkspaceTx root request repo)
         mapM_
           (\changed -> run env (reserveWorkspaceTx root changed repo) >>= (@?= Left WorkspaceBindingConflict))
-          [request & #runId .~ "different", request & #owner .~ CompatibilityIdentity "other", request & #epoch .~ 1, request & #rootId .~ ExecutionRootId "other"]
+          [request & #runId .~ "different", request & #owner .~ CompatibilityIdentity "other", request & #epoch .~ (fixtureRevision 1), request & #rootId .~ ExecutionRootId "other"]
         changed <- resolved (repositorySource repo) (repositoryBase repo) "policy-2"
         run env (reserveWorkspaceTx root request changed) >>= (@?= Left WorkspaceBindingConflict)
         changedSource <- resolved (repositorySource repo <> "-other") (repositoryBase repo) "policy-1"
@@ -177,7 +178,7 @@ tests fixture =
     takeDirectoryOfFiles root binding = takeDirectory (workspaceFiles root binding)
 
 request :: WorkspaceRequest
-request = WorkspaceRequest "run" (Just (WorkerSessionId "session", AssignmentId "one")) (ExecutionRootId "root") (CompatibilityIdentity "parent") (CompatibilityIdentity "worker") 0
+request = WorkspaceRequest "run" (Just (WorkerSessionId "session", AssignmentId "one")) (ExecutionRootId "root") (CompatibilityIdentity "parent") (CompatibilityIdentity "worker") (fixtureRevision 0)
 
 resolved :: FilePath -> Text.Text -> Text.Text -> IO ResolvedRepository
 resolved source base policy = do
@@ -247,3 +248,6 @@ commitRepository source = do
   _ <- git ["-C", source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "instructions"]
   base <- Text.strip . Text.pack <$> git ["-C", source, "rev-parse", "HEAD"]
   resolved source base "policy-1"
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Consumer contract for the separately owned objective/checkpoint provider.
 -- No production provider is selected by this module. A provider must deduplicate
 -- an operation before checking its expected revision, including after a lost
@@ -8,13 +10,14 @@ import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Prelude
+import Shikigami.StateRevision
 import Shikigami.WorkerSession.Types (EventReceipt, ObjectiveRef, WorkerSessionId)
 
 data ObjectiveVersion = ObjectiveVersion
-  { revision :: !Integer,
-    assignmentRevision :: !Integer,
-    criteriaRevision :: !Integer,
-    ownerEpoch :: !Integer,
+  { revision :: !(StateRevision "objective"),
+    assignmentRevision :: !(StateRevision "objective-assignment"),
+    criteriaRevision :: !(StateRevision "objective-criteria"),
+    ownerEpoch :: !(StateRevision "worker-owner"),
     owner :: !AgentIdentity,
     active :: !Bool,
     rootId :: !ExecutionRootId,
@@ -29,7 +32,7 @@ data CheckpointIntent = CheckpointIntent
     objective :: !ObjectiveRef,
     operationId :: !OperationId,
     actor :: !AgentIdentity,
-    epoch :: !Integer,
+    epoch :: !(StateRevision "worker-owner"),
     expected :: !ObjectiveVersion,
     previousCursor :: !Integer,
     throughCursor :: !Integer,
@@ -43,7 +46,7 @@ data CheckpointReceipt = CheckpointReceipt
     objective :: !ObjectiveRef,
     operationId :: !OperationId,
     fingerprint :: !Text,
-    revision :: !Integer
+    revision :: !(StateRevision "objective")
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)

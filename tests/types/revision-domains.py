@@ -9,6 +9,8 @@ HEADER = '''{-# LANGUAGE DataKinds #-}
 module RevisionBoundary where
 import Data.Coerce (coerce)
 import Shikigami.StateRevision
+import Shikigami.WorkerSession.Capability (WorkerCommand (CancelWorker))
+import Shikigami.WorkerSession.Types (WorkerSessionId)
 '''
 CASES = [
     ("valid", '''value :: StateRevision "objective"
@@ -16,6 +18,12 @@ value = advanceRevision initialRevision
 number :: Integer
 number = revisionNumber value
 ''', True),
+    ("worker-command", '''command :: WorkerSessionId -> StateRevision "worker-session" -> StateRevision "worker-owner" -> WorkerCommand
+command = CancelWorker
+''', True),
+    ("wrong-worker-revision", '''command :: WorkerSessionId -> StateRevision "objective" -> StateRevision "worker-owner" -> WorkerCommand
+command = CancelWorker
+''', False),
     ("scope-coercion", '''swapScope :: StateRevision "objective" -> StateRevision "objective-criteria"
 swapScope = coerce
 ''', False),
@@ -36,6 +44,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
         assert (result.returncode == 0) == expected, (name, result.stdout, result.stderr)
         if not expected:
             fragments = {
+                "wrong-worker-revision": ["Couldn't match type", "worker-session", "objective"],
                 "scope-coercion": ["Couldn't match type", "objective", "objective-criteria"],
                 "representation-coercion": ["StateRevision", "Integer"],
                 "unchecked-arithmetic": ["StateRevision", "Num"],

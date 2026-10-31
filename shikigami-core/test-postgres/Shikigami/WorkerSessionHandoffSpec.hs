@@ -25,6 +25,7 @@ import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude
 import Shikigami.RouterWorkflowSpec qualified as Fixture
+import Shikigami.StateRevision (StateRevision, advanceRevision, parseRevision)
 import Shikigami.WorkerSession.Checkpoint qualified as Checkpoint
 import Shikigami.WorkerSession.Handoff qualified as Handoff
 import Shikigami.WorkerSession.Identity (assignmentChildWorkflowId, sessionWorkflowId, sessionWorkflowName)
@@ -48,7 +49,7 @@ tests fixture =
           run env (Handoff.resumeHandoff owner.services intent.sessionId) >>= (@?= Right Handoff.HandoffPending)
           pending <- current env admission
           pending.phase @?= Transferring
-          pending.epoch @?= 0
+          pending.epoch @?= (fixtureRevision 0)
           ((.stage) <$> pending.handoff) @?= Just TransferUnresolved
           refusedWrite owner admission admission.identity 0
           refusedWrite owner admission successor 1
@@ -58,51 +59,51 @@ tests fixture =
           run env (Handoff.resumeHandoff owner.services intent.sessionId) >>= (@?= Right Handoff.HandoffPending)
           actual <- current env admission
           actual.owner @?= admission.identity
-          actual.epoch @?= 0
+          actual.epoch @?= (fixtureRevision 0)
           refusedWrite owner admission successor 1
           version <- owner.checkpoints.current admission.objective >>= expectRight
           version.owner @?= successor
-          version.ownerEpoch @?= 1
+          version.ownerEpoch @?= (fixtureRevision 1)
           let restarted = Handoff.TransferServices owner.services.sessions (Just owner.workspace) (Just owner.ownership)
-          run env (Handoff.resumeHandoff restarted intent.sessionId) >>= (@?= Right (Handoff.HandoffEstablished successor 1))
-          run env (Handoff.resumeHandoff restarted intent.sessionId) >>= (@?= Right (Handoff.HandoffEstablished successor 1))
+          run env (Handoff.resumeHandoff restarted intent.sessionId) >>= (@?= Right (Handoff.HandoffEstablished successor (fixtureRevision 1)))
+          run env (Handoff.resumeHandoff restarted intent.sessionId) >>= (@?= Right (Handoff.HandoffEstablished successor (fixtureRevision 1)))
           established <- current env admission
           established.phase @?= Idle
-          established.epoch @?= 1
+          established.epoch @?= (fixtureRevision 1)
           established.worker @?= Just (AgentName "successor")
           run env (Store.loadAdmission old) >>= (@?= Left SessionOwnerRefused)
-          run env (Store.acceptMessage access established.revision 0 (OperationId "stale-epoch") (instruction 2)) >>= (@?= Left SessionOwnerRefused)
-          owner.workspace.admitWrite workspaceRef intent.sessionId admission.identity 0 (OperationId "late-old") >>= assertLeft
-          owner.workspace.admitWrite workspaceRef intent.sessionId successor 1 (OperationId "successor-write") >>= (@?= Right ())
-          owner.workspace.admitWrite workspaceRef intent.sessionId successor 1 (OperationId "successor-write") >>= (@?= Right ())
+          run env (Store.acceptMessage access established.revision (fixtureRevision 0) (OperationId "stale-epoch") (instruction 2)) >>= (@?= Left SessionOwnerRefused)
+          owner.workspace.admitWrite workspaceRef intent.sessionId admission.identity (fixtureRevision 0) (OperationId "late-old") >>= assertLeft
+          owner.workspace.admitWrite workspaceRef intent.sessionId successor (fixtureRevision 1) (OperationId "successor-write") >>= (@?= Right ())
+          owner.workspace.admitWrite workspaceRef intent.sessionId successor (fixtureRevision 1) (OperationId "successor-write") >>= (@?= Right ())
           readIORef owner.writes >>= (@?= [OperationId "successor-write"])
           readIORef owner.ownershipUpdates >>= (@?= 1)
           request env admission owner >>= (@?= Right intent)
-          run env (Handoff.requestHandoff owner.services intent.sessionId 0 0 (OperationId "transfer") workspaceRef (AgentName "worker")) >>= (@?= Left MessageConflict)
+          run env (Handoff.requestHandoff owner.services intent.sessionId (fixtureRevision 0) (fixtureRevision 0) (OperationId "transfer") workspaceRef (AgentName "worker")) >>= (@?= Left MessageConflict)
           -- A stale checkpoint cannot restore the previous owner.
           stale <- checkpointVersion admission
-          let obsolete = Checkpoint.CheckpointIntent 1 intent.sessionId admission.objective (OperationId "stale-checkpoint") admission.context.identity 0 stale 0 1 []
+          let obsolete = Checkpoint.CheckpointIntent 1 intent.sessionId admission.objective (OperationId "stale-checkpoint") admission.context.identity (fixtureRevision 0) stale 0 1 []
           owner.checkpoints.commit obsolete >>= (@?= Checkpoint.CheckpointConflict)
           latest <- owner.checkpoints.current admission.objective >>= expectRight
           latest.owner @?= successor
-          (_, follow) <- expectRight =<< run env (Store.acceptMessage access established.revision 1 (OperationId "new-assignment") (instruction 2))
-          (_, started) <- expectRight =<< run env (Store.startAssignment access (established.revision + 1) 1 (OperationId "new-start") follow.assignmentId)
+          (_, follow) <- expectRight =<< run env (Store.acceptMessage access established.revision (fixtureRevision 1) (OperationId "new-assignment") (instruction 2))
+          (_, started) <- expectRight =<< run env (Store.startAssignment access (advanceRevision established.revision) (fixtureRevision 1) (OperationId "new-start") follow.assignmentId)
           started.childWorkflowId @?= Just (assignmentChildWorkflowId intent.sessionId (AgentName "successor") follow.assignmentId).unWorkflowId,
       testCase "a fenced workspace cannot establish ownership while an accepted assignment remains active" $
         withTransferFixture fixture False \env admission access owner -> do
-          (_, message) <- expectRight =<< run env (Store.acceptMessage access 0 0 (OperationId "send") (instruction 1))
-          _ <- expectRight =<< run env (Store.startAssignment access 1 0 (OperationId "start") message.assignmentId)
+          (_, message) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "send") (instruction 1))
+          _ <- expectRight =<< run env (Store.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (OperationId "start") message.assignmentId)
           before <- current env admission
           _ <- expectRight =<< requestAt env admission owner before.revision
           writeIORef owner.inFlight False
           run env (Handoff.resumeHandoff owner.services (sessionIdFor admission)) >>= (@?= Right Handoff.HandoffPending)
           readIORef owner.ownershipUpdates >>= (@?= 0)
           pending <- current env admission
-          (_, receipt) <- expectRight =<< run env (Store.recordResult access pending.revision 0 (OperationId "finish") (AssignmentResult 1 message.assignmentId AssignmentSucceeded Nothing (Aeson.String "retained artifact") ["artifact-1"]))
+          (_, receipt) <- expectRight =<< run env (Store.recordResult access pending.revision (fixtureRevision 0) (OperationId "finish") (AssignmentResult 1 message.assignmentId AssignmentSucceeded Nothing (Aeson.String "retained artifact") ["artifact-1"]))
           after <- current env admission
           after.phase @?= Transferring
           after.activeAssignment @?= Nothing
-          run env (Handoff.resumeHandoff owner.services (sessionIdFor admission)) >>= (@?= Right (Handoff.HandoffEstablished successor 1))
+          run env (Handoff.resumeHandoff owner.services (sessionIdFor admission)) >>= (@?= Right (Handoff.HandoffEstablished successor (fixtureRevision 1)))
           reader <- expectRight =<< run env (Store.authorizeSession (sessionIdFor admission) successor (pure (Right ())))
           result <- expectRight =<< run env (Store.readResult reader message.assignmentId)
           ((.cursor) . fst <$> result) @?= Just receipt.cursor,
@@ -114,7 +115,7 @@ tests fixture =
               options = shikigamiWorkflowRunOptions env
               dependencies = Fixture.routerDeps env behavior (Routing.RoutingRuntime (\_ -> fail "unexpected routing") (\_ _ _ -> fail "unexpected routing")) runtime.agents
               drive = run env (runWorkflowWith options sessionWorkflowName (sessionWorkflowId session) (Session.sessionWorkflow runtime (Just (Session.WorkerSessionStart session))))
-          (_, message) <- expectRight =<< run env (Store.acceptMessage access 0 0 (OperationId "send") (instruction 1))
+          (_, message) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "send") (instruction 1))
           drive >>= (@?= Suspended)
           started <- expectRight =<< run env (Store.readAssignment access message.assignmentId)
           child <- maybe (assertFailure "missing mapping" >> fail "missing mapping") (pure . WorkflowId) started.childWorkflowId
@@ -123,36 +124,36 @@ tests fixture =
           pending <- current env admission
           -- Simulate the store commit succeeding just before the parent step's
           -- journal acknowledgement is lost.
-          _ <- expectRight =<< run env (Store.recordResult access pending.revision 0 (OperationId ("result:" <> message.assignmentId.value)) (AssignmentResult 1 message.assignmentId AssignmentSucceeded Nothing output []))
+          _ <- expectRight =<< run env (Store.recordResult access pending.revision (fixtureRevision 0) (OperationId ("result:" <> message.assignmentId.value)) (AssignmentResult 1 message.assignmentId AssignmentSucceeded Nothing output []))
           recorded <- current env admission
           _ <- expectRight =<< requestAt env admission owner recorded.revision
           writeIORef owner.inFlight False
-          run env (Handoff.resumeHandoff owner.services session) >>= (@?= Right (Handoff.HandoffEstablished successor 1))
+          run env (Handoff.resumeHandoff owner.services session) >>= (@?= Right (Handoff.HandoffEstablished successor (fixtureRevision 1)))
           drive >>= (@?= ContinuedAsNew)
           final <- current env admission
           final.owner @?= successor
-          final.epoch @?= 1
+          final.epoch @?= (fixtureRevision 1)
           events <- expectRight =<< run env (Store.readEvents access 0 100)
           length [() | EventReceipt {event = ResultAvailable {}} <- events] @?= 1,
       testCase "missing execution evidence keeps a settled workspace handoff unresolved" $
         withTransferFixture fixture False \env admission access owner -> do
-          (_, message) <- expectRight =<< run env (Store.acceptMessage access 0 0 (OperationId "send") (instruction 1))
-          _ <- expectRight =<< run env (Store.startAssignment access 1 0 (OperationId "start") message.assignmentId)
-          _ <- expectRight =<< run env (Store.recordResult access 2 0 (OperationId "finish") (AssignmentResult 1 message.assignmentId AssignmentSucceeded (Just (ExecutionId "unavailable-execution")) Aeson.Null []))
-          _ <- expectRight =<< requestAt env admission owner 3
+          (_, message) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "send") (instruction 1))
+          _ <- expectRight =<< run env (Store.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (OperationId "start") message.assignmentId)
+          _ <- expectRight =<< run env (Store.recordResult access (fixtureRevision 2) (fixtureRevision 0) (OperationId "finish") (AssignmentResult 1 message.assignmentId AssignmentSucceeded (Just (ExecutionId "unavailable-execution")) Aeson.Null []))
+          _ <- expectRight =<< requestAt env admission owner (fixtureRevision 3)
           writeIORef owner.inFlight False
           run env (Handoff.resumeHandoff owner.services (sessionIdFor admission)) >>= (@?= Right Handoff.HandoffPending)
           readIORef owner.ownershipUpdates >>= (@?= 0)
           state <- current env admission
-          state.epoch @?= 0,
+          state.epoch @?= (fixtureRevision 0),
       testCase "fence proof substitution refuses without advancing ownership" $
         withTransferFixture fixture False \env admission access owner -> do
           intent <- expectRight =<< request env admission owner
-          let proof = FenceProof 1 (workspaceRef & #resource .~ "another-resource") intent.operationId (transferFingerprint intent) 0 1 "foreign-proof"
-          run env (Store.retainTransferFence access 1 0 (OperationId "foreign-proof") intent.operationId (FencedAndSettled proof)) >>= (@?= Left SessionBindingConflict)
+          let proof = FenceProof 1 (workspaceRef & #resource .~ "another-resource") intent.operationId (transferFingerprint intent) (fixtureRevision 0) (fixtureRevision 1) "foreign-proof"
+          run env (Store.retainTransferFence access (fixtureRevision 1) (fixtureRevision 0) (OperationId "foreign-proof") intent.operationId (FencedAndSettled proof)) >>= (@?= Left SessionBindingConflict)
           state <- current env admission
-          state.epoch @?= 0
-          state.revision @?= 1
+          state.epoch @?= (fixtureRevision 0)
+          state.revision @?= (fixtureRevision 1)
           readIORef owner.ownershipUpdates >>= (@?= 0),
       testCase "accepted ownership facts converge after root cancellation without granting new work" $
         withTransferFixture fixture True \env admission access owner -> do
@@ -162,15 +163,15 @@ tests fixture =
           rootId <- maybe (assertFailure "missing root" >> fail "missing root") pure admission.context.executionRootId
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
           run env (Roots.setRootControl rootId root.revision True Nothing) >>= (@?= Right ())
-          run env (Handoff.resumeHandoff owner.services (sessionIdFor admission)) >>= (@?= Right (Handoff.HandoffEstablished successor 1))
+          run env (Handoff.resumeHandoff owner.services (sessionIdFor admission)) >>= (@?= Right (Handoff.HandoffEstablished successor (fixtureRevision 1)))
           state <- current env admission
-          run env (Store.acceptMessage access state.revision 1 (OperationId "cancelled-root-work") (instruction 2)) >>= (@?= Left SessionOwnerRefused),
+          run env (Store.acceptMessage access state.revision (fixtureRevision 1) (OperationId "cancelled-root-work") (instruction 2)) >>= (@?= Left SessionOwnerRefused),
       testCase "absent real adapters refuse before a transfer request changes state" $
         withTransferFixture fixture False \env admission _ owner -> do
           let unavailable = owner.services & #workspaces .~ Nothing
-          run env (Handoff.requestHandoff unavailable (sessionIdFor admission) 0 0 (OperationId "transfer") workspaceRef (AgentName "successor")) >>= assertLeft
+          run env (Handoff.requestHandoff unavailable (sessionIdFor admission) (fixtureRevision 0) (fixtureRevision 0) (OperationId "transfer") workspaceRef (AgentName "successor")) >>= assertLeft
           state <- current env admission
-          state.revision @?= 0
+          state.revision @?= (fixtureRevision 0)
           state.handoff @?= Nothing
     ]
 
@@ -191,16 +192,16 @@ successor :: AgentIdentity
 successor = compatibilityIdentity "successor"
 
 instruction :: Integer -> Instruction
-instruction revision = Instruction 1 FollowUp "retained assignment" revision 1 1 Nothing
+instruction revision = Instruction 1 FollowUp "retained assignment" (fixtureRevision revision) (fixtureRevision 1) (fixtureRevision 1) Nothing
 
 request :: AppEnv -> SessionAdmission -> Owners -> IO (Either SessionError TransferIntent)
-request env admission owners = requestAt env admission owners 0
+request env admission owners = requestAt env admission owners (fixtureRevision 0)
 
-requestAt :: AppEnv -> SessionAdmission -> Owners -> Integer -> IO (Either SessionError TransferIntent)
-requestAt env admission owners revision = run env (Handoff.requestHandoff owners.services (sessionIdFor admission) revision 0 (OperationId "transfer") workspaceRef (AgentName "successor"))
+requestAt :: AppEnv -> SessionAdmission -> Owners -> StateRevision "worker-session" -> IO (Either SessionError TransferIntent)
+requestAt env admission owners revision = run env (Handoff.requestHandoff owners.services (sessionIdFor admission) revision (fixtureRevision 0) (OperationId "transfer") workspaceRef (AgentName "successor"))
 
 refusedWrite :: Owners -> SessionAdmission -> AgentIdentity -> Integer -> IO ()
-refusedWrite owner admission actor epoch = owner.workspace.admitWrite workspaceRef (sessionIdFor admission) actor epoch (OperationId "refused") >>= assertLeft
+refusedWrite owner admission actor epoch = owner.workspace.admitWrite workspaceRef (sessionIdFor admission) actor (fixtureRevision epoch) (OperationId "refused") >>= assertLeft
 
 withTransferFixture :: DatabaseFixture -> Bool -> (AppEnv -> SessionAdmission -> Store.SessionAccess -> Owners -> IO a) -> IO a
 withTransferFixture fixture loseAcknowledgement callback = withConfiguredFixture fixture (\admission -> admission & #delegator . #delegates .~ ["worker", "successor"]) \env admission access -> do
@@ -234,8 +235,8 @@ withTransferFixture fixture loseAcknowledgement callback = withConfiguredFixture
             Just _ -> (stored, (OwnershipConflict, False))
             Nothing | version /= intent.expected || not (matchesFence intent proof) -> (stored, (OwnershipConflict, False))
             Nothing ->
-              let receipt = OwnershipReceipt 1 intent.objective intent.operationId (ownershipFingerprint intent proof) (version.revision + 1)
-                  next = version & #revision .~ (version.revision + 1) & #owner .~ intent.newOwner & #ownerEpoch .~ intent.newEpoch
+              let receipt = OwnershipReceipt 1 intent.objective intent.operationId (ownershipFingerprint intent proof) (advanceRevision version.revision)
+                  next = version & #revision .~ (advanceRevision version.revision) & #owner .~ intent.newOwner & #ownerEpoch .~ intent.newEpoch
                in ((next, Map.insert intent.operationId (receipt.fingerprint, receipt) receipts), (OwnershipAccepted receipt, True))
         case outcome of
           OwnershipAccepted _ -> do
@@ -266,3 +267,6 @@ expectRight = either (\err -> assertFailure (show err) >> fail (show err)) pure
 
 assertLeft :: (Show a, Show b) => Either a b -> IO ()
 assertLeft = \case Left _ -> pure (); Right value -> assertFailure ("unexpected acceptance: " <> show value)
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

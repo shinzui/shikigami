@@ -21,6 +21,7 @@ import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
+import Shikigami.StateRevision (StateRevision)
 import Shikigami.WorkerSession.Capability
 import Shikigami.WorkerSession.Handoff (TransferServices (..))
 import Shikigami.WorkerSession.Store qualified as Store
@@ -37,12 +38,12 @@ runWorkersInspect key after limit _asJson config = do
     Right (Right Nothing) -> die "worker session was not found"
     _ -> die "worker session inspection was refused; verify the catalog and page bounds"
 
-runWorkersSend :: Text -> Text -> Integer -> Integer -> FilePath -> AppConfig -> IO ()
+runWorkersSend :: Text -> Text -> StateRevision "worker-session" -> StateRevision "worker-owner" -> FilePath -> AppConfig -> IO ()
 runWorkersSend session key revision epoch path config = do
   instruction <- readInstruction path
   runWorkersControl key (SendWorker (WorkerSessionId session) revision epoch instruction) config
 
-runWorkersInterrupt :: Text -> Text -> Integer -> Integer -> Text -> FilePath -> AppConfig -> IO ()
+runWorkersInterrupt :: Text -> Text -> StateRevision "worker-session" -> StateRevision "worker-owner" -> Text -> FilePath -> AppConfig -> IO ()
 runWorkersInterrupt session key revision epoch assignment path config = do
   instruction <- readInstruction path
   runWorkersControl key (InterruptWorker (WorkerSessionId session) revision epoch (AssignmentId assignment) instruction) config

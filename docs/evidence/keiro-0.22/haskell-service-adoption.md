@@ -78,7 +78,9 @@ Objective and assignment revisions now use abstract `StateRevision` values with
 nominal scopes for objective state, assignment state, their instruction revisions,
 criteria and worker ownership. The name distinguishes these counters from the
 existing repository Git `Revision`. Domain command arguments use the same scoped
-types; provider DTOs and generated/SQL adapters render numbers explicitly.
+types; generated/SQL adapters render numbers explicitly. The subsequent worker
+extension also carries nominal scopes through objective-version, checkpoint and
+ownership provider contracts, rather than flattening those domain interfaces.
 Construction/JSON decoding rejects negative counters, and the type exposes no Num,
 IsString or Generic instance. Valid JSON remains numeric, including its byte encoding.
 The source-owned compile fixture first proves a valid client, then rejects scope
@@ -99,3 +101,21 @@ policy and JSON string bytes. Show renders a fixed protected marker. Joint list,
 graph, encoded-size, revision and authority checks remain at their owning command
 boundaries. The pure suite covers empty/oversized admission, exact string encoding
 and protected Show; all 545 pure and 375 PostgreSQL tests pass after conversion.
+
+Worker-session state now has its own revision scope; instructions retain distinct
+objective/assignment/criteria revisions. Worker ownership uses one worker-owner
+scope through messages, checkpoint intents, transfer fences, workspace requests,
+admissions, controls and private RPC. SQL parameter codecs unwrap explicitly.
+Operator revision/epoch readers refine inputs before runtime acquisition. A
+predecessor lookup returns Nothing at zero. The generic scoped codec retains
+numeric JSON, while existing concurrency, lost-acknowledgement, stale-owner and
+workspace settlement cases exercise the same production transaction paths.
+Mailbox sequences/event cursors and the broader resource/identity census remain
+under review; these changes do not certify those remaining fields.
+
+Seven additional frozen core/navigation/governance sources now have explicit
+clause dispositions. Core compiler/extensions, record/deriving/import conventions,
+Prelude isolation and multiline literal use are implemented or verified in source.
+Producer-only corpus maintenance is not applicable because no producer pattern
+document was changed. Existing timestamp-bound reviews remain historical; no
+independent review approval was invented.

@@ -17,6 +17,7 @@ import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (NeedModel))
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
+import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.GitStore
 import Shikigami.Workspace.GitTypes
@@ -50,7 +51,7 @@ tests fixture =
         Just requested <- run env (inspectGitTx proposed.operation.operationId)
         unresolved <- right =<< run env (markGitUnresolvedTx requested)
         assertBlocked env binding
-        run env (Store.freezeWorkspaceTx binding binding.request.owner 0) >>= (@?= Right ())
+        run env (Store.freezeWorkspaceTx binding binding.request.owner (fixtureRevision 0)) >>= (@?= Right ())
         run env (requestGitPublicationTx binding prepared) >>= (@?= Left WorkspaceBindingConflict)
         applied <- right =<< run env (recordGitAppliedTx unresolved)
         applied.phase @?= GitApplied
@@ -69,18 +70,18 @@ tests fixture =
         prepared <- right =<< run env (prepareGitTx binding proposed candidate)
         run env (recordGitAppliedTx prepared) >>= (@?= Left WorkspaceBindingConflict)
         assertBlocked env binding
-        run env (Store.reserveWorkspaceEffectTx binding binding.request.owner 0 (OperationId "file-operation") digest) >>= (@?= Left WorkspaceBindingConflict)
+        run env (Store.reserveWorkspaceEffectTx binding binding.request.owner (fixtureRevision 0) (OperationId "file-operation") digest) >>= (@?= Left WorkspaceBindingConflict)
         refused <- right =<< run env (refuseGitBeforePublicationTx prepared)
         refused.phase @?= GitRefused
-        run env (Store.checkWorkspaceOperationTx binding binding.request.owner 0 (OperationId "successor")) >>= (@?= Right ())
+        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "successor")) >>= (@?= Right ())
         run env (requestGitPublicationTx binding prepared) >>= (@?= Left WorkspaceBindingConflict),
       testCase "historical file receipts stay typed and cannot be reinterpreted as Git records" $ withGit fixture \env binding proposed -> do
         let operation = proposed.operation.operationId
-        run env (Store.reserveWorkspaceEffectTx binding binding.request.owner 0 operation digest) >>= (@?= Right Nothing)
+        run env (Store.reserveWorkspaceEffectTx binding binding.request.owner (fixtureRevision 0) operation digest) >>= (@?= Right Nothing)
         run env (reserveGitTx binding proposed) >>= (@?= Left WorkspaceBindingConflict)
         let receipt = FileReceipt operation (AttemptId "file-attempt") 1 digest (workspaceBindingDigest binding) digest "dependency.txt" "device:parent" Nothing digest EditRefused
         run env (Store.recordWorkspaceReceiptTx binding receipt) >>= (@?= Right ())
-        run env (Store.reserveWorkspaceEffectTx binding binding.request.owner 0 operation digest) >>= (@?= Right (Just receipt))
+        run env (Store.reserveWorkspaceEffectTx binding binding.request.owner (fixtureRevision 0) operation digest) >>= (@?= Right (Just receipt))
         run env (inspectGitTx operation) >>= (@?= Nothing)
         run env (reserveGitTx binding proposed) >>= (@?= Left WorkspaceBindingConflict),
       testCase "bounded factual scans include settled records and advance without relaunch authority" $ withGit fixture \env binding proposed -> do
@@ -113,7 +114,7 @@ tests fixture =
 withGit :: DatabaseFixture -> (AppEnv -> WorkspaceBinding -> GitRecord -> IO a) -> IO a
 withGit fixture use = Fixture.withFixture fixture \env _ root repository -> do
   let owner = CompatibilityIdentity "git-worker"
-      request = WorkspaceRequest "git-run" Nothing (ExecutionRootId "git-root") owner owner 0
+      request = WorkspaceRequest "git-run" Nothing (ExecutionRootId "git-root") owner owner (fixtureRevision 0)
   (binding, _) <- right =<< run env (Store.reserveWorkspaceTx root request repository)
   allocateWorkspace root binding Reserved >>= (@?= Right ())
   run env (Store.markWorkspaceReadyTx binding) >>= (@?= Right ())
@@ -129,10 +130,13 @@ digest :: Text.Text
 digest = "sha256:" <> Text.replicate 64 "a"
 
 assertBlocked :: AppEnv -> WorkspaceBinding -> Assertion
-assertBlocked env binding = run env (Store.checkWorkspaceOperationTx binding binding.request.owner 0 (OperationId "successor")) >>= (@?= Left WorkspaceBindingConflict)
+assertBlocked env binding = run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "successor")) >>= (@?= Left WorkspaceBindingConflict)
 
 run :: AppEnv -> Transaction a -> IO a
 run env action = runAppIO env (runTransaction action) >>= right
 
 right :: (Show e) => Either e a -> IO a
 right = either (\err -> assertFailure (show err) >> fail "unreachable") pure
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

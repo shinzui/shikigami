@@ -72,6 +72,9 @@ tests =
         case execParserPure adminPrefs adminInfo ["workers", "send", "session-1", "--instruction-file", "instruction.json"] of
           Failure _ -> pure ()
           _ -> assertBool "missing operation and revision admitted" False,
+      testCase "worker revision and ownership flags reject negative integers" do
+        let args revision epoch = ["workers", "send", "session-1", "--operation", "send-1", "--expected-revision", revision, "--epoch", epoch, "--instruction-file", "instruction.json"]
+        mapM_ (\values -> case execParserPure adminPrefs adminInfo values of Failure _ -> pure (); _ -> assertBool "negative domain counter admitted" False) [args "-1" "0", args "0" "-1"],
       testCase "worker commands cannot choose a replacement resource root" do
         case execParserPure adminPrefs adminInfo ["workers", "cancel", "session-1", "--operation", "cancel-1", "--expected-revision", "3", "--epoch", "0", "--root", "replacement"] of
           Failure _ -> pure ()

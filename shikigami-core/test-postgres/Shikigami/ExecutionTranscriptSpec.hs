@@ -99,6 +99,7 @@ import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
+import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Trigger.Enqueue (addressedRunJob, enqueueRunJobTx, ensureRunQueue)
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
@@ -146,7 +147,7 @@ tests fixture =
           (executor, observed, _) <- driverRuntime env False
           bundle <- expectRight (mkInstructionBundle 65536 "mori://fixture/repo" (Text.replicate 40 "a") [("AGENTS.md", "PRIVATE_ROOT_POLICY"), ("src/AGENTS.md", "PRIVATE_NESTED_POLICY")])
           let snapshot = anotherSnapshot original "workspace-instructions"
-              admission = WorkspaceAdmission (WorkspaceRef "shikigami.workspace/1" "fixture") ("sha256:" <> Text.replicate 64 "a") snapshot.runId snapshot.selection.assignmentId rootId snapshot.identity 0 bundle Nothing
+              admission = WorkspaceAdmission (WorkspaceRef "shikigami.workspace/1" "fixture") ("sha256:" <> Text.replicate 64 "a") snapshot.runId snapshot.selection.assignmentId rootId snapshot.identity (fixtureRevision 0) bundle Nothing
               assignment = Start.SkillAssignment snapshot.runId snapshot.agent snapshot.identity snapshot.sessionId snapshot.selection snapshot.sanctionedProfile snapshot.capabilities (Right snapshot.policy) (SkillDir "test/fixtures/durable-skill") (pure (Right (Start.SkillInput (triggerOnly (object [])) [])))
               describe _ = pure (Right (Tools.ExecutionToolMenu (toJSON ([] :: [Value])) []))
           accepted <- expectRight =<< Start.admitWorkspaceSkillExecution (pure (Right admission)) executor describe assignment
@@ -170,7 +171,7 @@ tests fixture =
           (executor, observed, _) <- driverRuntime env False
           bundle <- expectRight (mkInstructionBundle 65536 "mori://fixture/repo" (Text.replicate 40 "a") [("AGENTS.md", Text.replicate 2000 "x")])
           let snapshot = anotherSnapshot original "workspace-budget"
-              admission = WorkspaceAdmission (WorkspaceRef "shikigami.workspace/1" "fixture") ("sha256:" <> Text.replicate 64 "a") snapshot.runId snapshot.selection.assignmentId rootId snapshot.identity 0 bundle Nothing
+              admission = WorkspaceAdmission (WorkspaceRef "shikigami.workspace/1" "fixture") ("sha256:" <> Text.replicate 64 "a") snapshot.runId snapshot.selection.assignmentId rootId snapshot.identity (fixtureRevision 0) bundle Nothing
               assignment = Start.SkillAssignment snapshot.runId snapshot.agent snapshot.identity snapshot.sessionId snapshot.selection Nothing snapshot.capabilities (Right (snapshot.policy & #contextBytes .~ 1024)) (SkillDir "test/fixtures/durable-skill") (pure (Right (Start.SkillInput (triggerOnly (object [])) [])))
           result <- Start.admitWorkspaceSkillExecution (pure (Right admission)) executor (\_ -> assertFailure "over-budget policy reached the menu" >> pure (Left UnsupportedReplay)) assignment
           result @?= Left (ExecutionPolicyRefused "required context exceeds the configured byte ceiling")
@@ -181,7 +182,7 @@ tests fixture =
           bundle <- expectRight (mkInstructionBundle 65536 "mori://fixture/repo" (Text.replicate 40 "a") [])
           capability <- expectRight (Overlay.mkCapabilityId "workspace.edit")
           revision <- expectRight (Overlay.mkCapabilityRevision "1")
-          let admission = WorkspaceAdmission (WorkspaceRef "shikigami.workspace/1" "fixture") ("sha256:" <> Text.replicate 64 "a") original.runId original.selection.assignmentId rootId original.identity 0 bundle Nothing
+          let admission = WorkspaceAdmission (WorkspaceRef "shikigami.workspace/1" "fixture") ("sha256:" <> Text.replicate 64 "a") original.runId original.selection.assignmentId rootId original.identity (fixtureRevision 0) bundle Nothing
               snapshot = original & #workspace .~ Just admission & #initialContext . #systemPrompt .~ Just (instructionPrompt bundle) & #capabilities .~ Overlay.mkResolvedCapabilitySet [descriptor]
               descriptor = Overlay.CapabilityDescriptor capability revision [Overlay.CapabilityToolDescriptor "edit" Overlay.IdempotentMutation]
               contract = Capability.DurableToolContract "edit" "Edit fixture." (object []) IdempotentEffect NoInvoiceCost
@@ -1385,3 +1386,6 @@ outcomeWritesVisible =
     "SELECT (state->>'revision')::bigint=2 AND (state->>'cursor')::bigint=1 AND state->>'activeOperation' IS NULL FROM shikigami.executions WHERE execution_id=$1"
     (E.param (E.nonNullable E.text))
     (D.singleRow (D.column (D.nonNullable D.bool)))
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

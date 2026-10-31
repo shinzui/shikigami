@@ -31,6 +31,7 @@ import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
+import Shikigami.StateRevision (StateRevision, advanceRevision, parseRevision)
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
 import Shikigami.WorkerSession.Store qualified as Sessions
 import Shikigami.WorkerSession.Transfer
@@ -76,12 +77,12 @@ continuingCase config prefix stage = withQualification config prefix \q -> case 
     Just (state, _) <- right =<< run q.env (Sessions.inspectSession item.session)
     successor <- VerifiedIdentity <$> right (mkAgentPrincipal "agent_01h000000000000000successor")
     now <- getCurrentTime
-    let expected = ObjectiveVersion 1 1 1 0 item.admission.owner True item.admission.rootId (addUTCTime 3600 now)
-    (_, intent) <- right =<< run q.env (Sessions.requestTransfer access state.revision 0 (OperationId "native-freeze") expected item.binding.workspace (AgentName "successor") successor)
+    let expected = ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) item.admission.owner True item.admission.rootId (addUTCTime 3600 now)
+    (_, intent) <- right =<< run q.env (Sessions.requestTransfer access state.revision (fixtureRevision 0) (OperationId "native-freeze") expected item.binding.workspace (AgentName "successor") successor)
     Lazy.writeFile (prefix </> "continuing-intent.json") (Aeson.encode intent)
     outcome <- (workspaceTransferClient q.client).reconcile intent
     unless (outcome == FenceUnresolved) (fail "held collector unexpectedly established a fence")
-    refused =<< (workspaceTransferClient q.client).admitWrite item.binding.workspace item.session successor 1 (OperationId "premature-successor-write")
+    refused =<< (workspaceTransferClient q.client).admitWrite item.binding.workspace item.session successor (fixtureRevision 1) (OperationId "premature-successor-write")
     putStrLn "PASS a real in-flight descendant and held collector keep the transfer fence unresolved"
   "settled" -> withCase q \item -> do
     intent <- right . Aeson.eitherDecodeStrict @TransferIntent =<< Bytes.readFile (prefix </> "continuing-intent.json")
@@ -132,10 +133,10 @@ followup q = do
   access <- right =<< run q.env (Sessions.authorizeSession session actor (q.lifecycle actor))
   Just (active, _) <- right =<< run q.env (Sessions.inspectSession session)
   originalAssignment <- maybe (fail "original assignment absent") pure active.activeAssignment
-  void (right =<< run q.env (Sessions.recordResult access active.revision 0 (OperationId "followup-original-result") (AssignmentResult 1 originalAssignment AssignmentFailed (Just first.snapshot.executionId) Aeson.Null [])))
+  void (right =<< run q.env (Sessions.recordResult access active.revision (fixtureRevision 0) (OperationId "followup-original-result") (AssignmentResult 1 originalAssignment AssignmentFailed (Just first.snapshot.executionId) Aeson.Null [])))
   Just (idle, _) <- right =<< run q.env (Sessions.inspectSession session)
-  (_, message) <- right =<< run q.env (Sessions.acceptMessage access idle.revision 0 (OperationId "followup-next-message") (Instruction 1 FollowUp "continue accepted repository" 1 1 1 Nothing))
-  (_, started) <- right =<< run q.env (Sessions.startAssignment access (idle.revision + 1) 0 (OperationId "followup-next-start") message.assignmentId)
+  (_, message) <- right =<< run q.env (Sessions.acceptMessage access idle.revision (fixtureRevision 0) (OperationId "followup-next-message") (Instruction 1 FollowUp "continue accepted repository" (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+  (_, started) <- right =<< run q.env (Sessions.startAssignment access (advanceRevision idle.revision) (fixtureRevision 0) (OperationId "followup-next-start") message.assignmentId)
   nextRun <- maybe (fail "followup child absent") pure started.childWorkflowId
   next <- loadAssignment q root nextRun original.owner
   unless (next.workspace == original.workspace && next.bindingDigest == original.bindingDigest && next.instructions == original.instructions && next.epoch == original.epoch) (fail "followup allocation or accepted instructions changed")
@@ -147,12 +148,12 @@ followup q = do
   unless (after == before) (fail "followup changed the ready Unix profile")
   terminal q secondLast
   Just (running, _) <- right =<< run q.env (Sessions.inspectSession session)
-  void (right =<< run q.env (Sessions.recordResult access running.revision 0 (OperationId "followup-result") (AssignmentResult 1 message.assignmentId AssignmentFailed (Just second.snapshot.executionId) Aeson.Null [])))
+  void (right =<< run q.env (Sessions.recordResult access running.revision (fixtureRevision 0) (OperationId "followup-result") (AssignmentResult 1 message.assignmentId AssignmentFailed (Just second.snapshot.executionId) Aeson.Null [])))
   let maintenance = MaintenanceRuntime q.env binding.storageRoot q.authorizer q.lifecycle (pure ())
   retained <- cleanupWorkspace maintenance actor binding.workspace
   unless (retained == Left CleanupRefused) (fail "idle continuing session was cleaned")
   Just (finished, _) <- right =<< run q.env (Sessions.inspectSession session)
-  void (right =<< run q.env (Sessions.closeSession access finished.revision 0 (OperationId "followup-close") AssignmentFailed))
+  void (right =<< run q.env (Sessions.closeSession access finished.revision (fixtureRevision 0) (OperationId "followup-close") AssignmentFailed))
   right =<< cleanupWorkspace maintenance actor binding.workspace
   right =<< cleanupWorkspace maintenance actor binding.workspace
   files <- doesDirectoryExist (workspaceFiles binding.storageRoot binding)
@@ -180,8 +181,8 @@ openNativeSession q name = do
   void (right =<< run q.env (Roots.enrollRoot root (Resources.Envelope (Map.fromList [(dimension, Resources.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now))))
   void (right =<< run q.env (Sessions.openSession admission))
   access <- right =<< run q.env (Sessions.authorizeSession (sessionIdFor admission) actor (q.lifecycle actor))
-  (_, message) <- right =<< run q.env (Sessions.acceptMessage access 0 0 (OperationId (name <> "-message")) (Instruction 1 FollowUp "native workspace fixture" 1 1 1 Nothing))
-  (_, started) <- right =<< run q.env (Sessions.startAssignment access 1 0 (OperationId (name <> "-start")) message.assignmentId)
+  (_, message) <- right =<< run q.env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId (name <> "-message")) (Instruction 1 FollowUp "native workspace fixture" (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+  (_, started) <- right =<< run q.env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (OperationId (name <> "-start")) message.assignmentId)
   child <- maybe (fail "native child absent") pure started.childWorkflowId
   pure (sessionIdFor admission, actor, child, root)
 
@@ -193,3 +194,6 @@ edit path before after = ("overlay__workspace-edit__replace", Aeson.toJSON (Repl
 
 validate :: (Text.Text, Aeson.Value)
 validate = ("overlay__workspace-exec__validate", Aeson.object ["rule" Aeson..= ("validate" :: Text.Text)])
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

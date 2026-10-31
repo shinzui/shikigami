@@ -84,11 +84,14 @@ EP-6 owns final source/release inventory validation, exact-candidate evidence, f
 
 2026-10-30: EP-1 through EP-4 are Complete. The released cohort/current domain,
 native delivery/recovery and actual administrative CLI/HTTP/live inspection are
-accepted. Latest core/server/worker suites pass541/93/260 cases; strict generation,
-neutral evolution diff and159 conformance assertions pass. Inspection owns separate
-finite capacity, explicit display/mutation authority and actual process lifetimes.
-EP-5's46 assigned Haskell/architecture/configuration guides and EP-6's exact frozen
-artifacts, Linux/runtime integration and final inventory gate remain outstanding.
+accepted. EP-5 has implemented public API/CLI/configuration behavior and explicit
+clause dispositions for 35 of its 46 frozen source rows. Objective identity uses a
+checked allocated TypeID; objective content and worker/workspace ownership retain
+nominal checked values. Latest affected core acceptance is 545 pure and 375 serial
+PostgreSQL cases. The remaining eleven architecture/domain source rows keep EP-5
+In Progress. EP-6's exact frozen artifacts, Linux/runtime integration and final
+inventory gate have not started; all five implementation children must complete
+before that qualification.
 
 ## Surprises & Discoveries
 

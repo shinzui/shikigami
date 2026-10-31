@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Workspace-side handoff facts and successor authority. Allocation and all
 -- original effect receipts remain immutable. The IO owner holds the shared OS
 -- lock across freeze, proof publication and conditional successor admission.
@@ -35,6 +37,7 @@ import Shikigami.Execution.Identity (ExecutionRootId, OperationId (..))
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Transcript (ExecutionId (..), executionIdFor)
 import Shikigami.Prelude hiding ((.=))
+import Shikigami.StateRevision
 import Shikigami.WorkerSession.Transfer
 import Shikigami.WorkerSession.Types hiding (assignmentIdFor)
 import Shikigami.Workspace.Catalog
@@ -47,7 +50,7 @@ data SessionChild = SessionChild
     assignment :: !AssignmentId,
     sequence :: !Integer,
     owner :: !AgentIdentity,
-    epoch :: !Integer,
+    epoch :: !(StateRevision "worker-owner"),
     rootId :: !ExecutionRootId,
     handoff :: !(Maybe HandoffProgress)
   }
@@ -68,7 +71,7 @@ lookupSessionChildTx run = do
           Right (Just (SessionChild state.sessionId message.assignmentId message.sequence state.owner state.epoch binding.rootId state.handoff))
     _ -> Left WorkspaceBindingConflict
 
-inspectTransferTx :: WorkspaceBinding -> Integer -> Transaction (Maybe (TransferIntent, Maybe FenceProof))
+inspectTransferTx :: WorkspaceBinding -> StateRevision "worker-owner" -> Transaction (Maybe (TransferIntent, Maybe FenceProof))
 inspectTransferTx binding epoch = Tx.statement (binding.workspace.resource, epoch) selectTransfer
 
 -- The retained session command is authoritative. No caller can freeze a
@@ -102,7 +105,7 @@ retainedTransferTx intent = do
     _ -> False
 
 validIntent :: WorkspaceBinding -> TransferIntent -> Bool
-validIntent binding intent = intent.format == 1 && intent.workspace == binding.workspace && intent.rootId == binding.request.rootId && intent.oldEpoch >= binding.request.epoch && intent.newEpoch == intent.oldEpoch + 1 && intent.newEpoch < 9223372036854775808 && intent.oldOwner /= intent.newOwner && intent.actor /= intent.newOwner
+validIntent binding intent = intent.format == 1 && intent.workspace == binding.workspace && intent.rootId == binding.request.rootId && intent.oldEpoch >= binding.request.epoch && intent.newEpoch == advanceRevision intent.oldEpoch && revisionNumber intent.newEpoch < 9223372036854775808 && intent.oldOwner /= intent.newOwner && intent.actor /= intent.newOwner
 
 -- Only retained settlement of every file/Git/process effect permits a fence.
 -- A free OS lock, missing unit or expired claim alone cannot satisfy this query.
@@ -136,7 +139,7 @@ admitSuccessorTx binding admission = do
   case child of
     Right (Just current) | current.owner == admission.owner && current.epoch == admission.epoch && current.rootId == admission.rootId && admission.epoch > binding.request.epoch && admission.assignmentId == assignmentIdFor admission.runId && matchesAdmission binding admission && admission.filePolicy == Just transferableFilePolicy -> case current.handoff of
       Just progress | progress.stage == TransferEstablished && isJust progress.fence && isJust progress.checkpoint -> do
-        transferred <- inspectTransferTx binding (admission.epoch - 1)
+        transferred <- maybe (pure Nothing) (inspectTransferTx binding) (previousRevision admission.epoch)
         case transferred of
           Just (intent, Just proof) | matchesFence intent proof && intent.sessionId == current.session && intent.operationId == progress.operationId && intent.newOwner == current.owner && intent.newEpoch == current.epoch && intent.rootId == current.rootId -> do
             settled <- Tx.statement binding.workspace.resource settledWorkspace
@@ -208,7 +211,7 @@ checkWorkspaceAdmissionOwnerTx binding admission = do
 
 -- Consumer-side admission is not a bearer grant. Actual tool providers still
 -- validate their protected snapshot, actual claim and fresh exact IO authority.
-checkSessionWriteTx :: WorkspaceBinding -> WorkerSessionId -> AgentIdentity -> Integer -> OperationId -> Transaction (Either WorkspaceError ())
+checkSessionWriteTx :: WorkspaceBinding -> WorkerSessionId -> AgentIdentity -> StateRevision "worker-owner" -> OperationId -> Transaction (Either WorkspaceError ())
 checkSessionWriteTx binding session owner epoch operation = do
   retained <- Tx.statement session.value selectSession
   case retained of
@@ -241,6 +244,9 @@ successorWorkspaceTx child = case child.handoff of
 textParam :: E.Params Text
 textParam = E.param (E.nonNullable E.text)
 
+epochParam :: E.Params (StateRevision "worker-owner")
+epochParam = revisionNumber >$< integerParam
+
 integerParam :: E.Params Integer
 integerParam = fromInteger >$< E.param (E.nonNullable E.int8)
 
@@ -262,14 +268,14 @@ selectSession = preparable "SELECT state,binding FROM shikigami.worker_sessions 
 selectSessionTransfer :: Statement (Text, Text) (Maybe (SessionState, SessionBinding, TransferIntent))
 selectSessionTransfer = preparable "SELECT s.state,s.binding,c.state FROM shikigami.worker_sessions s JOIN shikigami.worker_session_commands c USING(session_id) WHERE s.session_id=$1 AND c.operation_id=$2" (contrazip2 textParam textParam) (D.rowMaybe ((,,) <$> jsonRow <*> jsonRow <*> jsonRow))
 
-selectTransfer :: Statement (Text, Integer) (Maybe (TransferIntent, Maybe FenceProof))
-selectTransfer = preparable "SELECT intent,proof FROM shikigami.workspace_transfers WHERE resource=$1 AND old_epoch=$2" (contrazip2 textParam integerParam) (D.rowMaybe ((,) <$> jsonRow <*> D.column (D.nullable (D.refine (\value -> case Aeson.fromJSON value of Aeson.Success result -> Right result; Aeson.Error err -> Left (Text.pack err)) D.jsonb))))
+selectTransfer :: Statement (Text, StateRevision "worker-owner") (Maybe (TransferIntent, Maybe FenceProof))
+selectTransfer = preparable "SELECT intent,proof FROM shikigami.workspace_transfers WHERE resource=$1 AND old_epoch=$2" (contrazip2 textParam epochParam) (D.rowMaybe ((,) <$> jsonRow <*> D.column (D.nullable (D.refine (\value -> case Aeson.fromJSON value of Aeson.Success result -> Right result; Aeson.Error err -> Left (Text.pack err)) D.jsonb))))
 
-insertTransfer :: Statement (Text, Integer, TransferIntent) ()
-insertTransfer = preparable "INSERT INTO shikigami.workspace_transfers(resource,old_epoch,intent) VALUES($1,$2,$3) ON CONFLICT DO NOTHING" (contrazip3 textParam integerParam jsonParam) D.noResult
+insertTransfer :: Statement (Text, StateRevision "worker-owner", TransferIntent) ()
+insertTransfer = preparable "INSERT INTO shikigami.workspace_transfers(resource,old_epoch,intent) VALUES($1,$2,$3) ON CONFLICT DO NOTHING" (contrazip3 textParam epochParam jsonParam) D.noResult
 
-saveFence :: Statement (Text, Integer, FenceProof) ()
-saveFence = preparable "UPDATE shikigami.workspace_transfers SET proof=$3 WHERE resource=$1 AND old_epoch=$2 AND proof IS NULL" (contrazip3 textParam integerParam jsonParam) D.noResult
+saveFence :: Statement (Text, StateRevision "worker-owner", FenceProof) ()
+saveFence = preparable "UPDATE shikigami.workspace_transfers SET proof=$3 WHERE resource=$1 AND old_epoch=$2 AND proof IS NULL" (contrazip3 textParam epochParam jsonParam) D.noResult
 
 settledWorkspace :: Statement Text Bool
 settledWorkspace = preparable "SELECT NOT EXISTS(SELECT 1 FROM shikigami.workspace_effects WHERE resource=$1 AND NOT settled) AND NOT EXISTS(SELECT 1 FROM shikigami.workspace_processes WHERE resource=$1 AND NOT settled) AND NOT EXISTS(SELECT 1 FROM shikigami.workspace_cleanup WHERE resource=$1)" textParam (D.singleRow (D.column (D.nonNullable D.bool)))
@@ -277,8 +283,8 @@ settledWorkspace = preparable "SELECT NOT EXISTS(SELECT 1 FROM shikigami.workspa
 pendingOperations :: Statement Text [(OperationId, Text)]
 pendingOperations = preparable "SELECT operation_id,kind FROM (SELECT operation_id,kind FROM shikigami.workspace_effects WHERE resource=$1 AND NOT settled UNION ALL SELECT operation_id,'process' AS kind FROM shikigami.workspace_processes WHERE resource=$1 AND NOT settled) pending ORDER BY operation_id LIMIT 64" textParam (D.rowList ((,) <$> (OperationId <$> D.column (D.nonNullable D.text)) <*> D.column (D.nonNullable D.text)))
 
-establishControl :: Statement (Text, Aeson.Value, Integer) ()
-establishControl = preparable "UPDATE shikigami.workspace_controls SET owner=$2,epoch=$3,frozen=false WHERE resource=$1" (contrazip3 textParam (E.param (E.nonNullable E.jsonb)) integerParam) D.noResult
+establishControl :: Statement (Text, Aeson.Value, StateRevision "worker-owner") ()
+establishControl = preparable "UPDATE shikigami.workspace_controls SET owner=$2,epoch=$3,frozen=false WHERE resource=$1" (contrazip3 textParam (E.param (E.nonNullable E.jsonb)) epochParam) D.noResult
 
 insertAdmission :: Statement (Text, Text, Text, Text, Integer, WorkspaceAdmission) ()
 insertAdmission = preparable "INSERT INTO shikigami.workspace_successor_admissions(run_id,resource,session_id,assignment_id,sequence,admission) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING" (contrazip6 textParam textParam textParam textParam integerParam jsonParam) D.noResult
@@ -286,11 +292,11 @@ insertAdmission = preparable "INSERT INTO shikigami.workspace_successor_admissio
 selectAdmission :: Statement Text (Maybe WorkspaceAdmission)
 selectAdmission = preparable "SELECT admission FROM shikigami.workspace_successor_admissions WHERE run_id=$1" textParam (D.rowMaybe jsonRow)
 
-selectCurrentAdmission :: Statement (Text, Aeson.Value, Integer) (Maybe (Text, Text, Text))
-selectCurrentAdmission = preparable "SELECT run_id,session_id,assignment_id FROM shikigami.workspace_successor_admissions WHERE resource=$1 AND admission->'owner'=$2 AND (admission->>'epoch')::bigint=$3 ORDER BY sequence DESC LIMIT 1" (contrazip3 textParam (E.param (E.nonNullable E.jsonb)) integerParam) (D.rowMaybe ((,,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text)))
+selectCurrentAdmission :: Statement (Text, Aeson.Value, StateRevision "worker-owner") (Maybe (Text, Text, Text))
+selectCurrentAdmission = preparable "SELECT run_id,session_id,assignment_id FROM shikigami.workspace_successor_admissions WHERE resource=$1 AND admission->'owner'=$2 AND (admission->>'epoch')::bigint=$3 ORDER BY sequence DESC LIMIT 1" (contrazip3 textParam (E.param (E.nonNullable E.jsonb)) epochParam) (D.rowMaybe ((,,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text)))
 
-selectSuccessorWorkspace :: Statement (Text, Integer, Text) [(WorkspaceBinding, TransferIntent, FenceProof)]
-selectSuccessorWorkspace = preparable "SELECT b.binding,t.intent,t.proof FROM shikigami.workspace_transfers t JOIN shikigami.workspace_bindings b USING(resource) WHERE t.intent->>'sessionId'=$1 AND (t.intent->>'newEpoch')::bigint=$2 AND t.intent->>'operationId'=$3 AND t.proof IS NOT NULL AND b.state='ready' LIMIT 2" (contrazip3 textParam integerParam textParam) (D.rowList ((,,) <$> jsonRow <*> jsonRow <*> jsonRow))
+selectSuccessorWorkspace :: Statement (Text, StateRevision "worker-owner", Text) [(WorkspaceBinding, TransferIntent, FenceProof)]
+selectSuccessorWorkspace = preparable "SELECT b.binding,t.intent,t.proof FROM shikigami.workspace_transfers t JOIN shikigami.workspace_bindings b USING(resource) WHERE t.intent->>'sessionId'=$1 AND (t.intent->>'newEpoch')::bigint=$2 AND t.intent->>'operationId'=$3 AND t.proof IS NOT NULL AND b.state='ready' LIMIT 2" (contrazip3 textParam epochParam textParam) (D.rowList ((,,) <$> jsonRow <*> jsonRow <*> jsonRow))
 
 selectFollowupWorkspace :: Statement (Text, Aeson.Value) [WorkspaceBinding]
 selectFollowupWorkspace = preparable "SELECT binding FROM shikigami.workspace_bindings WHERE binding->'request'->'assignment'->>0=$1 AND binding->'request'->>'runId'<>$2->>'runId' AND binding->>'repository'=$2->>'repository' AND binding->>'base'=$2->>'base' AND binding->>'policyRevision'=$2->>'policyRevision' AND binding->>'source'=$2->>'source' AND binding->>'storageRoot'=$2->>'storageRoot' AND binding->'request'->'rootId'=$2->'rootId' AND binding->'request'->'owner'=$2->'owner' AND binding->'request'->'epoch'=$2->'epoch' LIMIT 2" (contrazip2 textParam (E.param (E.nonNullable E.jsonb))) (D.rowList jsonRow)

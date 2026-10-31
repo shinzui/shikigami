@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
 
 -- | The checked lifecycle, ordered mailbox and retained result/event rows share
 -- a transaction. Queue notifications never own message or result availability.
@@ -84,6 +85,7 @@ import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Transcript (ExecutionId, PayloadRef (..))
 import Shikigami.Prelude hiding ((.=))
+import Shikigami.StateRevision
 import Shikigami.WorkerSession.Catalog (withLiveSession)
 import Shikigami.WorkerSession.Checkpoint
 import Shikigami.WorkerSession.Identity (assignmentChildWorkflowId, sessionWorkflowId, sessionWorkflowName)
@@ -155,7 +157,7 @@ openSessionWithLimit maximumSessions admission = guarded do
   let session = sessionIdFor admission
       root = fromMaybe (error "validated session root missing") admission.context.executionRootId
       binding = SessionBinding session (scopeDigestFor admission) admission.scope admission.objective admission.context.identity admission.identity root ref
-      initial = SessionState 1 session 0 Idle admission.identity 0 Nothing 0 0 0 Nothing Nothing Nothing Nothing []
+      initial = SessionState 1 session initialRevision Idle admission.identity initialRevision Nothing 0 0 0 Nothing Nothing Nothing Nothing []
       matching = \case
         Just (state, existing) | existing == binding -> Right (AlreadyAccepted, state)
         Just _ -> Left SessionBindingConflict
@@ -258,10 +260,10 @@ nextAssignment access@(SessionAccess session _ _) = protected do
 
 -- Expected assignment revision is immutable input. Optimistic session revision
 -- is not part of the fingerprint, so a refused race can retry the same key.
-acceptMessage :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> Instruction -> Eff es (Either SessionError (Admission, MessageReceipt))
+acceptMessage :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> Instruction -> Eff es (Either SessionError (Admission, MessageReceipt))
 acceptMessage access expected epoch operation instruction = acceptScopedMessage access expected epoch operation Nothing instruction
 
-acceptScopedMessage :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> Maybe [Text] -> Instruction -> Eff es (Either SessionError (Admission, MessageReceipt))
+acceptScopedMessage :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> Maybe [Text] -> Instruction -> Eff es (Either SessionError (Admission, MessageReceipt))
 acceptScopedMessage access expected epoch operation permissions instruction = guarded do
   either (throwIO . SessionAbort) pure (validateInstruction instruction)
   unless (maybe True (\aliases -> not (null aliases) && length aliases <= 128 && all (\alias -> not (Text.null alias) && Text.length alias <= 256) aliases) permissions) (throwIO (SessionAbort SessionOwnerRefused))
@@ -307,7 +309,7 @@ readMessageAcceptance access@(SessionAccess session _ _) operation = protected d
 
 -- The child mapping is fixed before any spawn. A second assignment receives a
 -- distinct deterministic mapping under the same continuing session.
-startAssignment :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> AssignmentId -> Eff es (Either SessionError (Admission, MessageReceipt))
+startAssignment :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> AssignmentId -> Eff es (Either SessionError (Admission, MessageReceipt))
 startAssignment access expected epoch operation assignment = guarded do
   mutate
     access
@@ -337,7 +339,7 @@ startAssignment access expected epoch operation assignment = guarded do
 
 -- | Trusted runtime observations only. Resuming/reconciling a status does not
 -- grant external write authority; the effect owner must independently admit it.
-setAssignmentStatus :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> AssignmentId -> AssignmentPhase -> Eff es (Either SessionError (Admission, MessageReceipt))
+setAssignmentStatus :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> AssignmentId -> AssignmentPhase -> Eff es (Either SessionError (Admission, MessageReceipt))
 setAssignmentStatus access expected epoch operation assignment target =
   case target of
     AssignmentParked -> change (\session revision -> Generated.ParkSessionAssignment (Generated.ParkSessionAssignmentData session revision (revision + 1))) [Active] Parked False
@@ -377,7 +379,7 @@ setAssignmentStatus access expected epoch operation assignment target =
 
 -- | Closure cannot silently discard queued or unresolved work. Final retained
 -- events may still be acknowledged after logical closure.
-closeSession :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> ResultDisposition -> Eff es (Either SessionError (Admission, SessionState))
+closeSession :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> ResultDisposition -> Eff es (Either SessionError (Admission, SessionState))
 closeSession access expected epoch operation disposition =
   case disposition of
     AssignmentFailed -> close (\session revision -> Generated.FailWorkerSession (Generated.FailWorkerSessionData session revision (revision + 1))) Failed
@@ -398,10 +400,10 @@ closeSession access expected epoch operation disposition =
           queued <- Tx.statement state.sessionId.value countQueued
           unless (state.phase == Idle && isNothing state.activeAssignment && queued == 0) (abort AssignmentStillActive)
           appendEvent state (SessionClosedEvent phase)
-          let next = state & #phase .~ phase & #revision .~ (expected + 1) & #eventCursor .~ (state.eventCursor + 1)
+          let next = state & #phase .~ phase & #revision .~ (advanceRevision expected) & #eventCursor .~ (state.eventCursor + 1)
           pure (next, next)
 
-recordResult :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> AssignmentResult -> Eff es (Either SessionError (Admission, ResultReceipt))
+recordResult :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> AssignmentResult -> Eff es (Either SessionError (Admission, ResultReceipt))
 recordResult access expected epoch operation result = guarded do
   unless (result.format == 1 && length result.artifacts <= 128 && all (\ref -> not (Text.null ref) && Text.length ref <= 256) result.artifacts) (throwIO (SessionAbort (SessionInputRefused "invalid assignment result")))
   ref <- either (throwIO . SessionAbort) pure (payloadReference encoded)
@@ -447,7 +449,7 @@ readEvents access@(SessionAccess session _ _) after limit
 
 -- The caller's local integration update shares the cursor transaction. A
 -- cross-store checkpoint owner must first converge its durable pending intent.
-consumeEventsWith :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> Integer -> Integer -> Transaction (Either SessionError ()) -> Eff es (Either SessionError (Admission, Integer))
+consumeEventsWith :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> Integer -> Integer -> Transaction (Either SessionError ()) -> Eff es (Either SessionError (Admission, Integer))
 consumeEventsWith access expected epoch operation previous through integrate = guarded $
   mutate
     access
@@ -466,7 +468,7 @@ consumeEventsWith access expected epoch operation previous through integrate = g
 
 -- | Persist the exact bounded event batch before contacting a checkpoint owner.
 -- One pending intent prevents overlapping batches from racing unknown receipts.
-prepareCheckpoint :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> ObjectiveVersion -> Integer -> Integer -> Eff es (Either SessionError (Admission, CheckpointIntent))
+prepareCheckpoint :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> ObjectiveVersion -> Integer -> Integer -> Eff es (Either SessionError (Admission, CheckpointIntent))
 prepareCheckpoint access expected epoch operation version previous through = guarded $
   mutate
     access
@@ -479,7 +481,7 @@ prepareCheckpoint access expected epoch operation version previous through = gua
     (\session revision -> Generated.PrepareSessionCheckpoint (Generated.PrepareSessionCheckpointData session revision (revision + 1)))
     \state binding _ -> do
       unless (isNothing state.checkpointIntent && state.consumedCursor == previous && previous >= 0 && through > previous && through <= state.eventCursor && through - previous <= 100) (abort AssignmentConflict)
-      unless (version.rootId == binding.rootId && version.ownerEpoch == epoch && version.owner == state.owner && all (>= 0) [version.revision, version.assignmentRevision, version.criteriaRevision]) (abort SessionBindingConflict)
+      unless (version.rootId == binding.rootId && version.ownerEpoch == epoch && version.owner == state.owner) (abort SessionBindingConflict)
       events <- Tx.statement (state.sessionId.value, fromInteger previous, fromInteger (through - previous)) listEvents
       unless (map (.cursor) events == [previous + 1 .. through]) (abort SessionBindingConflict)
       let intent = CheckpointIntent 1 state.sessionId binding.objective operation binding.parentIdentity epoch version previous through events
@@ -502,7 +504,7 @@ getCheckpointIntent session operation = do
 
 -- | Only a receipt for this immutable request permits local integration. An
 -- exception or refusal in the hook rolls back receipt, cursor and progress.
-acceptCheckpointWith :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> OperationId -> CheckpointReceipt -> Transaction (Either SessionError ()) -> Eff es (Either SessionError (Admission, Integer))
+acceptCheckpointWith :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> OperationId -> CheckpointReceipt -> Transaction (Either SessionError ()) -> Eff es (Either SessionError (Admission, Integer))
 acceptCheckpointWith access expected epoch acknowledgement operation receipt integrate = guarded $
   mutate
     access
@@ -519,7 +521,7 @@ acceptCheckpointWith access expected epoch acknowledgement operation receipt int
       integrate >>= require
       pure (intent.throughCursor, state & #consumedCursor .~ intent.throughCursor & #checkpointIntent .~ Nothing)
 
-observeSession :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> SessionWake -> Eff es (Either SessionError (Admission, SessionState))
+observeSession :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> SessionWake -> Eff es (Either SessionError (Admission, SessionState))
 observeSession access@(SessionAccess session _ _) expected epoch operation wake = guarded do
   _ <- validateWake session wake
   mutate
@@ -533,10 +535,10 @@ observeSession access@(SessionAccess session _ _) expected epoch operation wake 
     (\key revision -> Generated.ObserveWorkerSession (Generated.ObserveWorkerSessionData key revision (revision + 1)))
     \state _ _ -> do
       ref <- writePayload session (body "session-wake" wake)
-      let next = state & #wake .~ Just ref & #revision .~ (expected + 1)
+      let next = state & #wake .~ Just ref & #revision .~ (advanceRevision expected)
       pure (next, next)
 
-subscribeEvents :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> SessionListener -> Eff es (Either SessionError (Admission, Integer))
+subscribeEvents :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> SessionListener -> Eff es (Either SessionError (Admission, Integer))
 subscribeEvents access@(SessionAccess session _ _) expected epoch operation listener = guarded do
   unless (listener.after >= 0 && listener.after <= 100000 && listener.generation >= 0) (throwIO (SessionAbort SessionBindingConflict))
   _ <- validateListener listener
@@ -593,7 +595,7 @@ prepareListenerNotification session listener = do
             JournalAlreadyPresent stored | stored /= toJSON session -> abort SessionStorageUnavailable
             _ -> pure ()
 
-requestTransfer :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> ObjectiveVersion -> WorkspaceRef -> AgentName -> AgentIdentity -> Eff es (Either SessionError (Admission, TransferIntent))
+requestTransfer :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> ObjectiveVersion -> WorkspaceRef -> AgentName -> AgentIdentity -> Eff es (Either SessionError (Admission, TransferIntent))
 requestTransfer access expected epoch operation version workspace target successor = guarded $
   mutate
     access
@@ -606,12 +608,12 @@ requestTransfer access expected epoch operation version workspace target success
     (\session revision -> Generated.RequestSessionTransfer (Generated.RequestSessionTransferData session revision (revision + 1)))
     \state binding admission -> do
       unless (isNothing state.checkpointIntent && maybe True ((== TransferEstablished) . (.stage)) state.handoff) (abort AssignmentConflict)
-      unless (version.active && version.owner == state.owner && version.ownerEpoch == epoch && version.rootId == binding.rootId && successor /= state.owner && successor /= binding.parentIdentity && all (>= 0) [version.revision, version.assignmentRevision, version.criteriaRevision] && all (\value -> not (Text.null value) && Text.length value <= 256) [workspace.provider, workspace.resource]) (abort SessionBindingConflict)
+      unless (version.active && version.owner == state.owner && version.ownerEpoch == epoch && version.rootId == binding.rootId && successor /= state.owner && successor /= binding.parentIdentity && all (\value -> not (Text.null value) && Text.length value <= 256) [workspace.provider, workspace.resource]) (abort SessionBindingConflict)
       void (require (either (const (Left SessionOwnerRefused)) Right (identityText successor)))
       require (either (const (Left SessionOwnerRefused)) Right (assertMayDelegate admission.delegator (agentNameText target)))
       require (either (const (Left SessionOwnerRefused)) Right (checkCycle admission.context (agentNameText target)))
       void (require (either (const (Left SessionOwnerRefused)) Right (checkDepth admission.context)))
-      let intent = TransferIntent 1 state.sessionId binding.objective binding.parentIdentity operation version state.owner successor target epoch (epoch + 1) binding.rootId workspace
+      let intent = TransferIntent 1 state.sessionId binding.objective binding.parentIdentity operation version state.owner successor target epoch (advanceRevision epoch) binding.rootId workspace
       ref <- writePayload state.sessionId (body "transfer-intent" intent)
       appendEvent state (TransferStatusChanged operation TransferRequested)
       pure (intent, state & #phase .~ Transferring & #handoff .~ Just (HandoffProgress operation ref TransferRequested Nothing Nothing) & #eventCursor .~ (state.eventCursor + 1))
@@ -641,7 +643,7 @@ readTransferFence access@(SessionAccess session _ _) = protected do
   progress <- maybe (abort AssignmentMissing) pure state.handoff
   traverse (readPayload session "transfer-fence") progress.fence
 
-markTransferReconciling :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> OperationId -> Eff es (Either SessionError (Admission, HandoffProgress))
+markTransferReconciling :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> OperationId -> Eff es (Either SessionError (Admission, HandoffProgress))
 markTransferReconciling access expected epoch operation transfer = guarded $
   mutate
     access
@@ -659,7 +661,7 @@ markTransferReconciling access expected epoch operation transfer = guarded $
       appendEvent state (TransferStatusChanged transfer TransferReconciling)
       pure (next, state & #handoff .~ Just next & #eventCursor .~ (state.eventCursor + 1))
 
-retainTransferFence :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> OperationId -> FenceOutcome -> Eff es (Either SessionError (Admission, HandoffProgress))
+retainTransferFence :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> OperationId -> FenceOutcome -> Eff es (Either SessionError (Admission, HandoffProgress))
 retainTransferFence access expected epoch operation transfer outcome = guarded $
   mutate
     access
@@ -685,7 +687,7 @@ retainTransferFence access expected epoch operation transfer outcome = guarded $
       appendEvent state (TransferStatusChanged transfer next.stage)
       pure (next, state & #handoff .~ Just next & #eventCursor .~ (state.eventCursor + 1))
 
-establishOwner :: (SessionEffects es) => SessionAccess -> Integer -> Integer -> OperationId -> OperationId -> FenceProof -> OwnershipReceipt -> Eff es (Either SessionError (Admission, SessionState))
+establishOwner :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> OperationId -> FenceProof -> OwnershipReceipt -> Eff es (Either SessionError (Admission, SessionState))
 establishOwner access expected epoch operation transfer proof receipt = guarded $
   mutate
     access
@@ -699,12 +701,12 @@ establishOwner access expected epoch operation transfer proof receipt = guarded 
     \state binding _ -> do
       progress <- transferProgress state transfer
       intent <- readPayload state.sessionId "transfer-intent" progress.intent
-      unless (isNothing state.activeAssignment && isNothing state.checkpointIntent && progress.stage == TransferFenced && state.owner == intent.oldOwner && epoch == intent.oldEpoch && intent.newEpoch == epoch + 1 && binding.rootId == intent.rootId && matchesOwnership intent proof receipt) (abort AssignmentConflict)
+      unless (isNothing state.activeAssignment && isNothing state.checkpointIntent && progress.stage == TransferFenced && state.owner == intent.oldOwner && epoch == intent.oldEpoch && intent.newEpoch == advanceRevision epoch && binding.rootId == intent.rootId && matchesOwnership intent proof receipt) (abort AssignmentConflict)
       storedProof <- maybe (abort AssignmentMissing) (readPayload state.sessionId "transfer-fence") progress.fence
       unless (storedProof == proof) (abort SessionBindingConflict)
       ref <- writePayload state.sessionId (body "transfer-checkpoint" receipt)
       let established = progress & #stage .~ TransferEstablished & #checkpoint .~ Just ref
-          next = state & #phase .~ Idle & #owner .~ intent.newOwner & #worker .~ Just intent.newWorker & #epoch .~ intent.newEpoch & #handoff .~ Just established & #eventCursor .~ (state.eventCursor + 1) & #revision .~ (expected + 1)
+          next = state & #phase .~ Idle & #owner .~ intent.newOwner & #worker .~ Just intent.newWorker & #epoch .~ intent.newEpoch & #handoff .~ Just established & #eventCursor .~ (state.eventCursor + 1) & #revision .~ (advanceRevision expected)
       appendEvent state (TransferStatusChanged transfer TransferEstablished)
       pure (next, next)
 
@@ -767,7 +769,7 @@ prepareNotification access@(SessionAccess session _ _) = do
         forM_ notifications \(after, notify) -> when (state.eventCursor > after) notify
     )
 
-mutate :: (SessionEffects es, ToJSON a, FromJSON a) => SessionAccess -> Integer -> Integer -> OperationId -> Text -> Aeson.Value -> Bool -> (WorkerSessionId -> Int -> Generated.WorkerSessionLifecycleCommand) -> (SessionState -> SessionBinding -> SessionAdmission -> Transaction (a, SessionState)) -> Eff es (Either SessionError (Admission, a))
+mutate :: (SessionEffects es, ToJSON a, FromJSON a) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> Text -> Aeson.Value -> Bool -> (WorkerSessionId -> Int -> Generated.WorkerSessionLifecycleCommand) -> (SessionState -> SessionBinding -> SessionAdmission -> Transaction (a, SessionState)) -> Eff es (Either SessionError (Admission, a))
 mutate access@(SessionAccess session actor _) expected epoch operation kind input fresh command action = do
   requireKey operation
   (_, binding) <- metadata (Tx.statement session.value selectSession) >>= maybe (throwIO (SessionAbort SessionMissing)) pure
@@ -782,18 +784,18 @@ mutate access@(SessionAccess session actor _) expected epoch operation kind inpu
     Just _ -> pure (decodeStored old)
     Nothing -> do
       notification <- if kind `elem` ["observe", "subscribe"] then pure Nothing else Just <$> prepareNotification access
-      result <- persist session (command session (fromInteger expected)) do
+      result <- persist session (command session (fromInteger (revisionNumber expected))) do
         validateRoot fresh binding.rootId
         (state, actualBinding) <- getSession session
         checkAccess access state actualBinding
         unless (actor == actualBinding.parentIdentity && state.epoch == epoch) (abort SessionOwnerRefused)
-        unless (state.revision == expected && expected >= 0 && expected < toInteger (maxBound :: Int)) (abort SessionRevisionConflict)
+        unless (state.revision == expected && revisionNumber expected < toInteger (maxBound :: Int)) (abort SessionRevisionConflict)
         admission <- readPayload session "session-admission" actualBinding.admission
         (value, next) <- action state actualBinding admission
         forM_ notification \(reference, listeners, notify) -> do
           unless (reference == state.wake && listeners == state.listeners) (abort SessionRevisionConflict)
           notify next
-        saveSession (next & #revision .~ (expected + 1))
+        saveSession (next & #revision .~ (advanceRevision expected))
         Tx.statement (session.value, operationKey operation, fingerprint, toJSON value) insertCommand
       stored <- metadata (Tx.statement (session.value, operationKey operation) selectCommand)
       pure $ case (result, stored) of

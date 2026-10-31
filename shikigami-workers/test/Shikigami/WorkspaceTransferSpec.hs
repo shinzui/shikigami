@@ -40,6 +40,7 @@ import Shikigami.Execution.Transcript
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
+import Shikigami.StateRevision (StateRevision, advanceRevision, parseRevision)
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
 import Shikigami.WorkerSession.Store qualified as Sessions
 import Shikigami.WorkerSession.Transfer
@@ -98,10 +99,10 @@ tests fixture =
           parent <- right =<< run env (Sessions.authorizeSession context.sessionId context.actor (pure (Right ())))
           Just (_, first) <- pure binding.request.assignment
           Just (active, _) <- right =<< run env (Sessions.inspectSession context.sessionId)
-          _ <- right =<< run env (Sessions.recordResult parent active.revision 0 (OperationId "finish-first") (AssignmentResult 1 first AssignmentFailed (Just execution) Aeson.Null []))
+          _ <- right =<< run env (Sessions.recordResult parent active.revision (fixtureRevision 0) (OperationId "finish-first") (AssignmentResult 1 first AssignmentFailed (Just execution) Aeson.Null []))
           Just (idle, _) <- right =<< run env (Sessions.inspectSession context.sessionId)
-          (_, message) <- right =<< run env (Sessions.acceptMessage parent idle.revision 0 (OperationId "follow-up") (Instruction 1 FollowUp "continue accepted work" 1 1 1 Nothing))
-          (_, started) <- right =<< run env (Sessions.startAssignment parent (idle.revision + 1) 0 (OperationId "start-follow-up") message.assignmentId)
+          (_, message) <- right =<< run env (Sessions.acceptMessage parent idle.revision (fixtureRevision 0) (OperationId "follow-up") (Instruction 1 FollowUp "continue accepted work" (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+          (_, started) <- right =<< run env (Sessions.startAssignment parent (advanceRevision idle.revision) (fixtureRevision 0) (OperationId "start-follow-up") message.assignmentId)
           child <- maybe (fail "missing follow-up child") pure started.childWorkflowId
           now <- getCurrentTime
           memory <- genSessionId
@@ -115,7 +116,7 @@ tests fixture =
           writeFile (workspaceFiles binding.storageRoot binding </> "dependency.txt") "ACCEPTED_PRIOR_CHANGE\n"
           let operation = OperationId "uncertain-prior-effect"
               prepared = FileReceipt operation (AttemptId "prior-actual") 1 digest (workspaceBindingDigest binding) (bundleDigest original.instructions) "dependency.txt" "1:2" Nothing digest EditPrepared
-          _ <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceEffectTx binding binding.request.owner 0 operation digest))
+          _ <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceEffectTx binding binding.request.owner (fixtureRevision 0) operation digest))
           run env (runTransaction (Workspaces.recordWorkspaceReceiptTx binding prepared)) >>= (@?= Right ())
           host.load assignment >>= \case Left _ -> pure (); Right _ -> assertFailure "unknown effect was bypassed"
           length <$> run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing)) >>= (@?= 1)
@@ -123,7 +124,7 @@ tests fixture =
           admission <- right =<< host.load assignment
           admission.workspace @?= binding.workspace
           admission.owner @?= binding.request.owner
-          admission.epoch @?= 0
+          admission.epoch @?= (fixtureRevision 0)
           host.load assignment >>= (@?= Right admission)
           nextToken <- UUID4.nextRandom
           latest <- FileFixture.withAcceptedWorkspaceTool 1 transferredWorkspaceEditAdapter (AgentName "worker") "overlay__workspace-edit__read" nextToken env admission runtime input \snapshot access reference -> do
@@ -133,10 +134,10 @@ tests fixture =
             output <- right =<< run env (Execution.readReplayPayload @OperationOutcome access "operation-outcome" result)
             assertBool "follow-up sees accepted work" ("ACCEPTED_PRIOR_CHANGE" `Text.isInfixOf` Text.pack (show (Aeson.encode output)))
             Just (active, _) <- right =<< run env (Sessions.inspectSession context.sessionId)
-            _ <- right =<< run env (Sessions.recordResult parent active.revision 0 (OperationId "premature-second-result") (AssignmentResult 1 message.assignmentId AssignmentFailed (Just snapshot.executionId) Aeson.Null []))
+            _ <- right =<< run env (Sessions.recordResult parent active.revision (fixtureRevision 0) (OperationId "premature-second-result") (AssignmentResult 1 message.assignmentId AssignmentFailed (Just snapshot.executionId) Aeson.Null []))
             Just (idle, _) <- right =<< run env (Sessions.inspectSession context.sessionId)
-            (_, third) <- right =<< run env (Sessions.acceptMessage parent idle.revision 0 (OperationId "third-message") (Instruction 1 FollowUp "continue again" 1 1 1 Nothing))
-            (_, started) <- right =<< run env (Sessions.startAssignment parent (idle.revision + 1) 0 (OperationId "third-start") third.assignmentId)
+            (_, third) <- right =<< run env (Sessions.acceptMessage parent idle.revision (fixtureRevision 0) (OperationId "third-message") (Instruction 1 FollowUp "continue again" (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+            (_, started) <- right =<< run env (Sessions.startAssignment parent (advanceRevision idle.revision) (fixtureRevision 0) (OperationId "third-start") third.assignmentId)
             thirdRun <- maybe (fail "missing third child") pure started.childWorkflowId
             selection <- right (resolveExecutionSelection (Selection.assignmentIdFor thirdRun) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just context.rootId) now)
             let next = assignment & #runId .~ thirdRun & #selection .~ selection
@@ -171,11 +172,11 @@ tests fixture =
           let hostFor runtime = right (governedWorkspaceHostWithTransfers runtime [transferredWorkspaceEditAdapter runtime] [workspaceEditAdapter runtime, supervisedWorkspaceEditAdapter runtime] (\_ _ admission -> pure (Right admission)) binding.storageRoot (const (pure (Right repository))) (const (pure (Right ()))))
           denied <- hostFor (fileRuntime & #authorizer .~ denyAllActionAuthorizer)
           denied.load assignment >>= \case Left _ -> pure (); Right _ -> assertFailure "denied successor admitted"
-          run env (runTransaction (Workspaces.checkWorkspaceOwnerTx binding intent.newOwner 1)) >>= (@?= Left WorkspaceBindingConflict)
+          run env (runTransaction (Workspaces.checkWorkspaceOwnerTx binding intent.newOwner (fixtureRevision 1))) >>= (@?= Left WorkspaceBindingConflict)
           host <- hostFor fileRuntime
           admission <- right =<< host.load assignment
           admission.owner @?= intent.newOwner
-          admission.epoch @?= 1
+          admission.epoch @?= (fixtureRevision 1)
           admission.runId @?= childRun
           admission.filePolicy @?= Just transferableFilePolicy
           host.load assignment >>= (@?= Right admission)
@@ -191,14 +192,14 @@ tests fixture =
             parent <- right =<< run env (Sessions.authorizeSession intent.sessionId intent.actor (pure (Right ())))
             Just (active, _) <- right =<< run env (Sessions.inspectSession intent.sessionId)
             assignment <- maybe (fail "missing successor assignment") pure active.activeAssignment
-            _ <- right =<< run env (Sessions.recordResult parent active.revision 1 (OperationId "finish-successor") (AssignmentResult 1 assignment AssignmentFailed (Just snapshot.executionId) Aeson.Null []))
+            _ <- right =<< run env (Sessions.recordResult parent active.revision (fixtureRevision 1) (OperationId "finish-successor") (AssignmentResult 1 assignment AssignmentFailed (Just snapshot.executionId) Aeson.Null []))
             -- Idleness never retires the continuing session's workspace. Once
             -- closed, eligibility follows the successor execution, despite no
             -- terminal original-allocation execution being present.
             run env (runTransaction (cleanupEligibleTx binding)) >>= (@?= False)
             Just (idle, _) <- right =<< run env (Sessions.inspectSession intent.sessionId)
-            (_, nextMessage) <- right =<< run env (Sessions.acceptMessage parent idle.revision 1 (OperationId "successor-followup-message") (Instruction 1 FollowUp "continue successor" 1 1 1 Nothing))
-            (_, nextStarted) <- right =<< run env (Sessions.startAssignment parent (idle.revision + 1) 1 (OperationId "successor-followup-start") nextMessage.assignmentId)
+            (_, nextMessage) <- right =<< run env (Sessions.acceptMessage parent idle.revision (fixtureRevision 1) (OperationId "successor-followup-message") (Instruction 1 FollowUp "continue successor" (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+            (_, nextStarted) <- right =<< run env (Sessions.startAssignment parent (advanceRevision idle.revision) (fixtureRevision 1) (OperationId "successor-followup-start") nextMessage.assignmentId)
             nextRun <- maybe (fail "missing successor followup child") pure nextStarted.childWorkflowId
             nextSelection <- right (resolveExecutionSelection (Selection.assignmentIdFor nextRun) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just intent.rootId) now)
             let nextAssignment = assignmentFor nextRun nextSelection
@@ -212,14 +213,14 @@ tests fixture =
               (_, nextState) <- right =<< run env (Execution.loadExecution nextAccess)
               _ <- right =<< run env (Execution.stopExecution nextSnapshot.identity nextSnapshot.executionId nextState.revision False (ExecutionPolicyRefused "fixture terminal"))
               Just (running, _) <- right =<< run env (Sessions.inspectSession intent.sessionId)
-              _ <- right =<< run env (Sessions.recordResult parent running.revision 1 (OperationId "finish-successor-followup") (AssignmentResult 1 nextMessage.assignmentId AssignmentFailed (Just nextSnapshot.executionId) Aeson.Null []))
+              _ <- right =<< run env (Sessions.recordResult parent running.revision (fixtureRevision 1) (OperationId "finish-successor-followup") (AssignmentResult 1 nextMessage.assignmentId AssignmentFailed (Just nextSnapshot.executionId) Aeson.Null []))
               pure ()
             Just (finished, _) <- right =<< run env (Sessions.inspectSession intent.sessionId)
-            _ <- right =<< run env (Sessions.closeSession parent finished.revision 1 (OperationId "close-successor") AssignmentFailed)
+            _ <- right =<< run env (Sessions.closeSession parent finished.revision (fixtureRevision 1) (OperationId "close-successor") AssignmentFailed)
             run env (runTransaction (cleanupEligibleTx binding)) >>= (@?= True)
           run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Just (binding, Ready))
           run env (runTransaction (inspectProcessProfileTx binding.workspace)) >>= (@?= Just (profile, ProfileReady))
-          (workspaceTransferProvider supervisor).admitWrite binding.workspace intent.sessionId intent.oldOwner 0 (OperationId "late-original") >>= assertRefused,
+          (workspaceTransferProvider supervisor).admitWrite binding.workspace intent.sessionId intent.oldOwner (fixtureRevision 0) (OperationId "late-original") >>= assertRefused,
       testCase "private peer client recovers one retained fence across service restart and revocation" $ withTransfer fixture \env binding intent runtime _ -> withListener \path listener uid -> do
         let client = workspaceTransferClient (ProcessClient path uid 3 3)
             serve selected = serveRpc (RpcPolicy [uid] 2 3) listener (dispatchSupervisorRpc selected)
@@ -231,8 +232,8 @@ tests fixture =
         assertBool "full retained coordinates match" (matchesFence intent proof)
         withAsync (serve (runtime & #authorizer .~ denyAllActionAuthorizer & #replayAuthority .~ const (pure (Left "revoked")))) \_ -> do
           client.reconcile intent >>= (@?= FencedAndSettled proof)
-          client.admitWrite binding.workspace intent.sessionId intent.oldOwner 0 (OperationId "late-old") >>= assertRefused
-          client.admitWrite binding.workspace intent.sessionId intent.newOwner 1 (OperationId "premature-successor") >>= assertRefused
+          client.admitWrite binding.workspace intent.sessionId intent.oldOwner (fixtureRevision 0) (OperationId "late-old") >>= assertRefused
+          client.admitWrite binding.workspace intent.sessionId intent.newOwner (fixtureRevision 1) (OperationId "premature-successor") >>= assertRefused
         run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Just (binding, Ready)),
       testCase "freeze cancels the retained process but cannot prove descendant settlement from a stop request" $ withTransferProcess fixture \env binding intent runtime record stopped -> do
         provider <- pure (workspaceTransferProvider runtime)
@@ -240,14 +241,14 @@ tests fixture =
         readIORef stopped >>= (@?= 1)
         doesFileExist (processDirectory binding record </> "cancel") >>= (@?= True)
         readFile (workspaceFiles binding.storageRoot binding </> "dependency.txt") >>= (@?= "old dependency\n")
-        provider.admitWrite binding.workspace intent.sessionId intent.newOwner 1 (OperationId "premature") >>= assertRefused
+        provider.admitWrite binding.workspace intent.sessionId intent.newOwner (fixtureRevision 1) (OperationId "premature") >>= assertRefused
         -- Instrumented factual backend evidence, not a real process qualification.
         let empty = CapturedOutput "stdout" ("sha256:" <> Text.replicate 64 "b") 0 False
             receipt = ProcessReceipt record.operationId record.attemptId record.generation record.fingerprint record.bindingDigest record.unit boot invocation (Just 143) ProcessCancelled empty (empty & #artifact .~ "stderr") True True
         run env (runTransaction (Processes.recordProcessReceiptTx receipt)) >>= (@?= Right ())
         outcome <- (workspaceTransferProvider (runtime & #authorizer .~ denyAllActionAuthorizer)).reconcile intent
         assertBool "only retained full settlement produces a fence" (case outcome of FencedAndSettled proof -> matchesFence intent proof; _ -> False)
-        provider.admitWrite binding.workspace intent.sessionId intent.oldOwner 0 (OperationId "late-old") >>= assertRefused,
+        provider.admitWrite binding.workspace intent.sessionId intent.oldOwner (fixtureRevision 0) (OperationId "late-old") >>= assertRefused,
       testCase "a reserved process is refused without launch while unknown launch evidence remains pending" $ withTransfer fixture \env binding intent runtime _ -> do
         record <- reserveProcess env binding
         (workspaceTransferProvider runtime).reconcile intent >>= \outcome -> assertBool "proven unlaunched reservation permits settlement" (case outcome of FencedAndSettled proof -> matchesFence intent proof; _ -> False)
@@ -256,13 +257,13 @@ tests fixture =
       testCase "denied fresh authority never freezes or stops an unadmitted workspace" $ withTransferProcess fixture \env binding intent runtime _ stopped -> do
         (workspaceTransferProvider (runtime & #authorizer .~ denyAllActionAuthorizer)).reconcile intent >>= (@?= FenceUnavailable)
         readIORef stopped >>= (@?= 0)
-        run env (runTransaction (Workspaces.checkWorkspaceOwnerTx binding intent.oldOwner 0)) >>= (@?= Right ()),
+        run env (runTransaction (Workspaces.checkWorkspaceOwnerTx binding intent.oldOwner (fixtureRevision 0))) >>= (@?= Right ()),
       testCase "an independently held writer lock cannot be mistaken for successful write or fence admission" $ withTransfer fixture \_ binding intent runtime _ -> do
         withWorkspaceLock
           (workspaceMetadata binding.storageRoot binding)
           ( do
               (workspaceTransferProvider runtime).reconcile intent >>= (@?= FenceUnresolved)
-              (workspaceTransferProvider runtime).admitWrite binding.workspace intent.sessionId intent.oldOwner 0 (OperationId "locked-write") >>= assertRefused
+              (workspaceTransferProvider runtime).admitWrite binding.workspace intent.sessionId intent.oldOwner (fixtureRevision 0) (OperationId "locked-write") >>= assertRefused
               pure (Right ())
           )
           >>= (@?= Right ())
@@ -300,17 +301,17 @@ withWorkspacePolicy transferring policy fixture callback = Fixture.withFixture f
   run env (Roots.enrollRoot root (Resources.Envelope (Map.fromList [(dimension, Resources.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now))) >>= (@?= Right Resources.Accepted)
   _ <- right =<< run env (Sessions.openSession session)
   access <- right =<< run env (Sessions.authorizeSession (sessionIdFor session) actor (pure (Right ())))
-  (_, message) <- right =<< run env (Sessions.acceptMessage access 0 0 (OperationId "send") (Instruction 1 FollowUp "fixture" 1 1 1 Nothing))
-  (_, started) <- right =<< run env (Sessions.startAssignment access 1 0 (OperationId "start") message.assignmentId)
+  (_, message) <- right =<< run env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "send") (Instruction 1 FollowUp "fixture" (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+  (_, started) <- right =<< run env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (OperationId "start") message.assignmentId)
   child <- maybe (fail "missing child") pure started.childWorkflowId
-  (binding, _) <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx storage (WorkspaceRequest child (Just (sessionIdFor session, message.assignmentId)) root old old 0) repository))
+  (binding, _) <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx storage (WorkspaceRequest child (Just (sessionIdFor session, message.assignmentId)) root old old (fixtureRevision 0)) repository))
   allocateWorkspace storage binding Reserved >>= (@?= Right ())
   run env (runTransaction (Workspaces.markWorkspaceReadyTx binding)) >>= (@?= Right ())
-  let version = ObjectiveVersion 1 1 1 0 old True root (addUTCTime 3600 now)
+  let version = ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) old True root (addUTCTime 3600 now)
   intent <-
     if transferring
-      then snd <$> (right =<< run env (Sessions.requestTransfer access 2 0 (OperationId "transfer") version binding.workspace (AgentName "successor") successor))
-      else pure (TransferIntent 1 (sessionIdFor session) session.objective actor (OperationId "not-requested") version old successor (AgentName "successor") 0 1 root binding.workspace)
+      then snd <$> (right =<< run env (Sessions.requestTransfer access (fixtureRevision 2) (fixtureRevision 0) (OperationId "transfer") version binding.workspace (AgentName "successor") successor))
+      else pure (TransferIntent 1 (sessionIdFor session) session.objective actor (OperationId "not-requested") version old successor (AgentName "successor") (fixtureRevision 0) (fixtureRevision 1) root binding.workspace)
   stopped <- newIORef 0
   let backend = SupervisorBackend (pure (Right boot)) (\_ _ _ -> fail "transfer cannot capture") (\_ _ _ _ _ -> fail "transfer cannot launch") (const (pure (Right True))) (\_ -> modifyIORef' stopped (+ 1) >> pure (Right ()))
       runtime = SupervisorRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ -> fail "transfer cannot select new commands") backend
@@ -347,16 +348,16 @@ establishSuccessor env binding intent proof = do
         Just (state, _) <- right =<< run env (Sessions.inspectSession intent.sessionId)
         pure state
   state <- current
-  _ <- right =<< run env (Sessions.retainTransferFence access state.revision 0 (OperationId "retain-fence") intent.operationId (FencedAndSettled proof))
+  _ <- right =<< run env (Sessions.retainTransferFence access state.revision (fixtureRevision 0) (OperationId "retain-fence") intent.operationId (FencedAndSettled proof))
   Just (_, original) <- pure binding.request.assignment
   pending <- current
-  _ <- right =<< run env (Sessions.recordResult access pending.revision 0 (OperationId "finish-original") (AssignmentResult 1 original AssignmentFailed Nothing Aeson.Null []))
+  _ <- right =<< run env (Sessions.recordResult access pending.revision (fixtureRevision 0) (OperationId "finish-original") (AssignmentResult 1 original AssignmentFailed Nothing Aeson.Null []))
   ready <- current
-  let receipt = OwnershipReceipt 1 intent.objective intent.operationId (ownershipFingerprint intent proof) (intent.expected.revision + 1)
-  _ <- right =<< run env (Sessions.establishOwner access ready.revision 0 (OperationId "establish") intent.operationId proof receipt)
+  let receipt = OwnershipReceipt 1 intent.objective intent.operationId (ownershipFingerprint intent proof) (advanceRevision intent.expected.revision)
+  _ <- right =<< run env (Sessions.establishOwner access ready.revision (fixtureRevision 0) (OperationId "establish") intent.operationId proof receipt)
   established <- current
-  (_, message) <- right =<< run env (Sessions.acceptMessage access established.revision 1 (OperationId "successor-message") (Instruction 1 FollowUp "continue fixture" 1 1 1 Nothing))
-  (_, started) <- right =<< run env (Sessions.startAssignment access (established.revision + 1) 1 (OperationId "successor-start") message.assignmentId)
+  (_, message) <- right =<< run env (Sessions.acceptMessage access established.revision (fixtureRevision 1) (OperationId "successor-message") (Instruction 1 FollowUp "continue fixture" (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+  (_, started) <- right =<< run env (Sessions.startAssignment access (advanceRevision established.revision) (fixtureRevision 1) (OperationId "successor-start") message.assignmentId)
   maybe (fail "missing actual successor child") pure started.childWorkflowId
 
 run :: AppEnv -> Eff AppEffects a -> IO a
@@ -364,3 +365,6 @@ run env action = runAppIO env action >>= right
 
 right :: (Show e) => Either e a -> IO a
 right = either (\err -> assertFailure (show err) >> fail "unreachable") pure
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

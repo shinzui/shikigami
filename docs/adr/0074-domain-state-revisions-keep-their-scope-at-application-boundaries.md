@@ -24,7 +24,12 @@ in their existing separate type.
 
 Domain command APIs retain the same scope as the state they address. In particular,
 objective expected revisions and worker-owner epochs are distinct types. Render
-numbers explicitly at owning generated, database and provider-protocol adapters.
+numbers explicitly at owning generated and database adapters. Objective-version,
+checkpoint and ownership provider contracts retain scoped values as domain
+interfaces, including worker-session state revisions and worker-owner epochs.
+Workspace requests, admissions, retained controls, handoff fences and private RPC
+requests use that same worker-owner scope; only the SQL parameter codec renders
+it as an integer.
 Those adapters do not widen authority: current membership, expected state, owner
 and lifecycle fences still execute in the production transaction. Preserve late
 projection/accounting exceptions that cause complete rollback under ADR-53.
@@ -39,7 +44,9 @@ upgrade or authorize resetting a developer database.
 
 The compiler rejects accidental substitution among revision domains. Boundary code
 performs visible conversion, while business transitions cannot perform arbitrary
-numeric arithmetic. Tests must establish a working compiled client before accepting
+numeric arithmetic. `previousRevision` returns Nothing at zero, so a predecessor
+lookup cannot fabricate a negative epoch. The operator parser refines numeric
+revision/epoch flags before runtime IO. Tests must establish a working compiled client before accepting
 negative compilation cases, and must retain numeric JSON/byte compatibility and
 transaction/receipt recovery evidence. Additional domain scalar findings remain
 subject to their own complete review; this decision is not a blanket claim that

@@ -1,0 +1,10 @@
+ExecPlan 107 worker/workspace ownership revisions; source parent e1d5548; 2026-10-31 UTC.
+Worker-session state has its own scope; instructions and objective-version/checkpoint/ownership contracts retain their objective/assignment/criteria/worker-owner scopes. Workspace requests, admissions, controls, fences and private RPC keep worker-owner values. SQL parameter codecs alone render integers.
+Negative operator revision/epoch flags fail parsing before runtime acquisition. A predecessor at zero is absent rather than a negative epoch. Numeric JSON uses the same explicit StateRevision codec.
+Core pure: all 545 passed (5.83s), including exact numeric encoding, negative JSON rejection and predecessor boundary checks.
+Core PostgreSQL: all 375 passed serially (102.63s), including concurrent checkpoints, lost acknowledgements, stale owners, pending handoffs, authority and rollback checks.
+Language checker, nine mutation/lexical tests and git diff --check passed after formatting. All 124 frozen producer source hashes remain unchanged.
+Workers: all 260 passed serially (162.46s). Server: all 95 passed serially (18.75s), including negative revision/epoch parser refusal and native HTTP/live inspection. Fixture databases were provisioned; no required database cases skipped.
+All six real compiler fixtures passed: valid numeric revision and valid WorkerCommand clients, rejected wrong worker revision, scope coercion, raw representation coercion and unchecked arithmetic. Positive cases run before expected failures.
+just keiro-gate e1d5548 passed strict Language 6 checks for all ten members, idempotent scaffolding, no breaking findings and replay-neutral impact. The current native runner prints 156 successful conformance rows (70 aggregate, 30 workflow, 28 read-model, 26 structural, two mapped-surface); use this exact observed count rather than the earlier 151 summaries.
+Remaining mailbox/resource/scalar census and final packaged/Linux qualification are not certified by this result.

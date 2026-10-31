@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Immutable, protected repository instructions. Ordinary source is never
 -- promoted to policy. The IO loader must first prove instruction files regular.
 module Shikigami.Workspace.Instructions
@@ -29,6 +31,7 @@ import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Prelude
+import Shikigami.StateRevision
 import Shikigami.Workspace.Reference (WorkspaceRef)
 
 data RepositoryInstruction = RepositoryInstruction
@@ -110,7 +113,7 @@ data WorkspaceAdmission = WorkspaceAdmission
     assignmentId :: !Text,
     rootId :: !ExecutionRootId,
     owner :: !AgentIdentity,
-    epoch :: !Integer,
+    epoch :: !(StateRevision "worker-owner"),
     instructions :: !InstructionBundle,
     filePolicy :: !(Maybe Text)
   }

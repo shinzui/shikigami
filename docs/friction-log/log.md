@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-31
+* **Update**: FRIC-35 accepted: Retain native 0.22 ownership headers, keep generated output outside formatting, and reject fake generated banners in hand-owned paths.
+
 ## 2026-10-30
 * **Addition**: FRIC-35 records detour documentation friction with mori://shinzui/keiro-runtime-patterns/docs/architecture-vertical-slice-modules: The generated firewall guide names a banner the released emitter no longer writes
 * **Update**: FRIC-34 accepted: Accepted the narrow kiroku-cli TLS exception after compiled listener qualification.

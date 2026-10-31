@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Durable handoff orchestration. The real owners must supply fencing,
 -- reconciliation and versioned checkpoint effects; absence is explicit.
 module Shikigami.WorkerSession.Handoff (TransferServices (..), TransferOutcome (..), requestHandoff, resumeHandoff) where
@@ -16,6 +18,7 @@ import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript qualified as Execution
 import Shikigami.Prelude
+import Shikigami.StateRevision
 import Shikigami.WorkerSession.Checkpoint (CheckpointProvider (..), ObjectiveVersion (..))
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Transfer
@@ -29,11 +32,11 @@ data TransferServices = TransferServices
   }
   deriving stock (Generic)
 
-data TransferOutcome = HandoffEstablished !AgentIdentity !Integer | HandoffPending | HandoffConflict | HandoffUnavailable
+data TransferOutcome = HandoffEstablished !AgentIdentity !(StateRevision "worker-owner") | HandoffPending | HandoffConflict | HandoffUnavailable
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-requestHandoff :: TransferServices -> WorkerSessionId -> Integer -> Integer -> OperationId -> WorkspaceRef -> AgentName -> Eff AppEffects (Either SessionError TransferIntent)
+requestHandoff :: TransferServices -> WorkerSessionId -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> WorkspaceRef -> AgentName -> Eff AppEffects (Either SessionError TransferIntent)
 requestHandoff services session revision epoch operation workspace target =
   sessionAccess services.sessions session >>= \case
     Left err -> pure (Left err)

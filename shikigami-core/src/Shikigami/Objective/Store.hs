@@ -264,7 +264,7 @@ versionFor objective key = do
   assignment <- maybe (Left ObjectiveMissing) Right (find ((== key) . (.definition.assignmentId)) objective.assignments)
   root <- maybe (Left (ObjectiveInvalid "assignment has no admitted resource root")) Right assignment.definition.rootId
   cutoff <- maybe (Left (ObjectiveInvalid "assignment has no admitted cutoff")) Right assignment.definition.cutoff
-  pure (CP.ObjectiveVersion (revisionNumber objective.revision) (revisionNumber assignment.revision) (revisionNumber objective.criteriaRevision) (revisionNumber assignment.ownerEpoch) assignment.definition.owner (objective.status == Open && assignment.definition.state `notElem` [Done, Withdrawn]) root cutoff)
+  pure (CP.ObjectiveVersion objective.revision assignment.revision objective.criteriaRevision assignment.ownerEpoch assignment.definition.owner (objective.status == Open && assignment.definition.state `notElem` [Done, Withdrawn]) root cutoff)
 
 validateTransition :: UTCTime -> Access -> StateRevision "objective" -> Mutation -> Objective -> Either ObjectiveError Objective
 validateTransition _now access expected mutation current = do
@@ -274,7 +274,7 @@ validateTransition _now access expected mutation current = do
     Internal (IngestCheckpoint key intent _ _) -> do
       actual <- versionFor current key
       let wanted = intent.expected
-      unless (intent.format == 1 && revisionNumber expected == wanted.revision && revisionNumber expected <= actual.revision && actual.assignmentRevision == wanted.assignmentRevision && actual.criteriaRevision == wanted.criteriaRevision && actual.owner == wanted.owner && actual.ownerEpoch == wanted.ownerEpoch && actual.rootId == wanted.rootId && actual.active == wanted.active && intent.epoch == actual.ownerEpoch && wanted.cutoff == actual.cutoff) (Left ObjectiveConflict)
+      unless (intent.format == 1 && expected == wanted.revision && expected <= actual.revision && actual.assignmentRevision == wanted.assignmentRevision && actual.criteriaRevision == wanted.criteriaRevision && actual.owner == wanted.owner && actual.ownerEpoch == wanted.ownerEpoch && actual.rootId == wanted.rootId && actual.active == wanted.active && intent.epoch == actual.ownerEpoch && wanted.cutoff == actual.cutoff) (Left ObjectiveConflict)
     _ -> unless (expected == current.revision) (Left ObjectiveConflict)
   next <- transition
   let advanced = next & #revision .~ (advanceRevision current.revision)
@@ -383,7 +383,7 @@ validateSources objective mutation = do
       Nothing -> pure (Right ())
       Just session -> do
         actual <- Tx.statement session.value selectWorkerBinding
-        let epoch = maybe 0 (revisionNumber . (.ownerEpoch)) (find ((== draft.assignmentId) . (.definition.assignmentId)) objective.assignments)
+        let epoch = maybe initialRevision (.ownerEpoch) (find ((== draft.assignmentId) . (.definition.assignmentId)) objective.assignments)
         pure $ case actual of
           Just (state, binding) | state.owner == draft.owner && state.epoch == epoch && Just binding.rootId == draft.rootId && binding.objective == referenceFor objective.objectiveId draft.assignmentId -> Right ()
           _ -> Left ObjectiveConflict

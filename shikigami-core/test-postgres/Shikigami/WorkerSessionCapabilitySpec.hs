@@ -45,6 +45,7 @@ import Shikigami.Flow.Workers qualified as Flow
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RouterWorkflowSpec qualified as Fixture
+import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.WorkerSession.Capability
 import Shikigami.WorkerSession.Handoff (TransferServices (..))
 import Shikigami.WorkerSession.Identity (sessionWorkflowId, sessionWorkflowName)
@@ -70,7 +71,7 @@ tests fixture =
         withCapabilityFixture fixture \env admission host scope authorizer revoked _ -> do
           grant <- permit env host scope authorizer
           let session = Session.sessionIdFor admission
-              input = SendWorker session 0 0 (draft "PRIVATE_COMMAND")
+              input = SendWorker session (fixtureRevision 0) (fixtureRevision 0) (draft "PRIVATE_COMMAND")
           first <- expectRight =<< run env (executeCommand host authorizer grant (OperationId "send") input)
           case first of MessageAcceptedReply Accepted _ -> pure (); _ -> assertFailure (show first)
           let unavailable = host & #services . #sessions . #checkpoints .~ Nothing
@@ -78,20 +79,20 @@ tests fixture =
           case replayWithoutProvider of MessageAcceptedReply AlreadyAccepted _ -> pure (); _ -> assertFailure (show replayWithoutProvider)
           replay <- expectRight =<< run env (executeCommand host authorizer grant (OperationId "send") input)
           case replay of MessageAcceptedReply AlreadyAccepted _ -> pure (); _ -> assertFailure (show replay)
-          run env (executeCommand host authorizer grant (OperationId "send") (SendWorker session 0 0 (draft "changed"))) >>= (@?= Left Session.MessageConflict)
-          run env (executeCommand host authorizer grant (OperationId "stale") (SendWorker session 1 0 (draft "stale" & #objectiveRevision .~ 99))) >>= (@?= Left Session.SessionOwnerRefused)
+          run env (executeCommand host authorizer grant (OperationId "send") (SendWorker session (fixtureRevision 0) (fixtureRevision 0) (draft "changed"))) >>= (@?= Left Session.MessageConflict)
+          run env (executeCommand host authorizer grant (OperationId "stale") (SendWorker session (fixtureRevision 1) (fixtureRevision 0) (draft "stale" & #objectiveRevision .~ (fixtureRevision 99)))) >>= (@?= Left Session.SessionOwnerRefused)
           writeIORef revoked True
-          run env (executeCommand host authorizer grant (OperationId "revoked") (SendWorker session 1 0 (draft "no"))) >>= (@?= Left Session.SessionOwnerRefused)
+          run env (executeCommand host authorizer grant (OperationId "revoked") (SendWorker session (fixtureRevision 1) (fixtureRevision 0) (draft "no"))) >>= (@?= Left Session.SessionOwnerRefused)
           Just (state, _) <- expectRight =<< run env (Store.inspectSession session)
           state.nextSequence @?= 1,
       testCase "retry repairs driver registration after a mailbox acceptance acknowledgement was lost" $
         withCapabilityFixture fixture \env admission host scope authorizer _ _ -> do
           let session = Session.sessionIdFor admission
           access <- expectRight =<< run env (Store.authorizeSession session admission.context.identity (pure (Right ())))
-          _ <- expectRight =<< run env (Store.acceptMessage access 0 0 (OperationId "send-before-registration") (Session.Instruction 1 Session.FollowUp "retained" 1 1 1 Nothing))
+          _ <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "send-before-registration") (Session.Instruction 1 Session.FollowUp "retained" (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
           run env (lookupInstance sessionWorkflowName (sessionWorkflowId session)) >>= (@?= Nothing)
           grant <- permit env host scope authorizer
-          reply <- expectRight =<< run env (executeCommand host authorizer grant (OperationId "send-before-registration") (SendWorker session 0 0 (draft "retained")))
+          reply <- expectRight =<< run env (executeCommand host authorizer grant (OperationId "send-before-registration") (SendWorker session (fixtureRevision 0) (fixtureRevision 0) (draft "retained")))
           case reply of MessageAcceptedReply AlreadyAccepted _ -> pure (); _ -> assertFailure (show reply)
           registered <- run env (lookupInstance sessionWorkflowName (sessionWorkflowId session))
           assertBool "registered for the common resume registry" (isJust registered)
@@ -126,7 +127,7 @@ tests fixture =
               drive = run env (runWorkflowWith (shikigamiWorkflowRunOptions env) flowName (WorkflowId scope.run.runId) body)
           drive >>= (@?= Suspended)
           grant <- permit env host scope authorizer
-          _ <- expectRight =<< run env (executeCommand host authorizer grant (OperationId "send") (SendWorker session 1 0 (draft "finding")))
+          _ <- expectRight =<< run env (executeCommand host authorizer grant (OperationId "send") (SendWorker session (fixtureRevision 1) (fixtureRevision 0) (draft "finding")))
           result <- drive
           case result of Completed (Right [_]) -> pure (); _ -> assertFailure (show result)
           drive >>= (@?= result)
@@ -142,9 +143,9 @@ tests fixture =
           now <- getCurrentTime
           run env (appendJournalEntry flowName workflow (StepRecorded ("awk:" <> awakeableIdText token) (Aeson.String "conflict") now))
           grant <- permit env host scope authorizer
-          run env (executeCommand host authorizer grant (OperationId "send") (SendWorker session 1 0 (draft "rolled back"))) >>= (@?= Left Session.SessionStorageUnavailable)
+          run env (executeCommand host authorizer grant (OperationId "send") (SendWorker session (fixtureRevision 1) (fixtureRevision 0) (draft "rolled back"))) >>= (@?= Left Session.SessionStorageUnavailable)
           Just (state, _) <- expectRight =<< run env (Store.inspectSession session)
-          state.revision @?= 1
+          state.revision @?= (fixtureRevision 1)
           state.eventCursor @?= 0
           run env (runTransaction (Awakeable.lookupAwakeableStatusTx (awakeableIdToUuid token))) >>= (@?= Just Awakeable.Pending),
       testCase "an old listener cannot signal a rotated coordinator generation" $
@@ -157,7 +158,7 @@ tests fixture =
           token <- listenerToken env scope
           run env (runWorkflowWith options flowName workflow (continueAsNew (Aeson.object []) :: Eff (Workflow : AppEffects) ())) >>= (@?= ContinuedAsNew)
           grant <- permit env host scope authorizer
-          _ <- expectRight =<< run env (executeCommand host authorizer grant (OperationId "send") (SendWorker session 1 0 (draft "new fact")))
+          _ <- expectRight =<< run env (executeCommand host authorizer grant (OperationId "send") (SendWorker session (fixtureRevision 1) (fixtureRevision 0) (draft "new fact")))
           successor <- run env (loadStepIndex flowName workflow 1)
           Map.lookup ("awk:" <> awakeableIdText token) successor @?= Nothing,
       testCase "a collected listener cannot poison the retained session mailbox" $
@@ -172,7 +173,7 @@ tests fixture =
           _ <- run env (gcWorkflowsOnce (addUTCTime 1 now) (WorkflowGcPolicy 0 10))
           run env (Awakeable.lookupAwakeable (awakeableIdToUuid token)) >>= (@?= Nothing)
           access <- expectRight =<< run env (Store.authorizeSession session admission.context.identity (pure (Right ())))
-          _ <- expectRight =<< run env (Store.acceptMessage access 1 0 (OperationId "after-gc") (Session.Instruction 1 Session.FollowUp "retained" 1 1 1 Nothing))
+          _ <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 1) (fixtureRevision 0) (OperationId "after-gc") (Session.Instruction 1 Session.FollowUp "retained" (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
           Just (state, _) <- expectRight =<< run env (Store.inspectSession session)
           state.eventCursor @?= 1,
       testCase "coordinating Skills require admitted scope and retain a worker tool instead of running a fixed supervisor" $
@@ -229,7 +230,7 @@ tests fixture =
               authority = CoordinationAuthority (\_ -> pure (Right (Just narrowed))) (\_ _ -> pure (Right narrowed))
               selected = host & #authority .~ authority
           grant <- permit env selected narrowed authorizer
-          run env (executeCommand selected authorizer grant (OperationId "disjoint-permissions") (SendWorker (Session.sessionIdFor admission) 0 0 (draft "refused"))) >>= (@?= Left Session.SessionOwnerRefused)
+          run env (executeCommand selected authorizer grant (OperationId "disjoint-permissions") (SendWorker (Session.sessionIdFor admission) (fixtureRevision 0) (fixtureRevision 0) (draft "refused"))) >>= (@?= Left Session.SessionOwnerRefused)
           Just (state, _) <- expectRight =<< run env (Store.inspectSession (Session.sessionIdFor admission))
           state.nextSequence @?= 0,
       testCase "native tools pin a scope across replay and never accept model operation or root coordinates" $
@@ -239,7 +240,7 @@ tests fixture =
           [described] <- expectRight =<< factory.describe snapshot
           let accepted = snapshot & #toolBindings .~ [described.binding] & #offeredTools .~ toJSON [lowerSomeTool described.tool]
               context = OperationContext accepted.executionId (OperationId "trusted-operation") "trusted-key" "fingerprint" "scope"
-              input = toJSON (SendWorker (Session.sessionIdFor admission) 0 0 (draft "PRIVATE_NATIVE_INSTRUCTION"))
+              input = toJSON (SendWorker (Session.sessionIdFor admission) (fixtureRevision 0) (fixtureRevision 0) (draft "PRIVATE_NATIVE_INSTRUCTION"))
           [prepared] <- expectRight =<< factory.prepare accepted context (Just "workers")
           output <- executeTool prepared input
           writeIORef current Nothing
@@ -259,7 +260,7 @@ flowName :: WorkflowName
 flowName = WorkflowName "fixture.worker-events"
 
 draft :: Text -> WorkerInstruction
-draft text = WorkerInstruction text 1 1 1 Nothing
+draft text = WorkerInstruction text (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing
 
 permit :: AppEnv -> CoordinationHost -> CoordinationScope -> ActionAuthorizer -> IO CoordinationGrant
 permit env host scope authorizer = do
@@ -307,3 +308,6 @@ run env action = runAppIO env action >>= either (assertFailure . show) pure
 
 expectRight :: (Show e) => Either e a -> IO a
 expectRight = either (\err -> assertFailure (show err) >> fail (show err)) pure
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

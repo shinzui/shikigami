@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Protected allocation metadata. These values are not workflow journal input
 -- and confer no read, mutation, process or transfer authority.
 module Shikigami.Workspace.Types where
@@ -6,6 +8,7 @@ import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Prelude
+import Shikigami.StateRevision
 import Shikigami.WorkerSession.Transfer (WorkspaceRef)
 import Shikigami.WorkerSession.Types (AssignmentId, WorkerSessionId)
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), bundleBase, bundleRepository, transferableFilePolicy)
@@ -16,7 +19,7 @@ data WorkspaceRequest = WorkspaceRequest
     rootId :: !ExecutionRootId,
     principal :: !AgentIdentity,
     owner :: !AgentIdentity,
-    epoch :: !Integer
+    epoch :: !(StateRevision "worker-owner")
   }
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -59,5 +62,5 @@ matchesWorkspaceAdmission binding admission =
     && bundleRepository admission.instructions == binding.repository
     && bundleBase admission.instructions == binding.base
     && ( (admission.runId == binding.request.runId && admission.owner == binding.request.owner && admission.epoch == binding.request.epoch)
-           || (admission.filePolicy == Just transferableFilePolicy && admission.epoch >= binding.request.epoch && (admission.epoch /= binding.request.epoch || admission.owner == binding.request.owner) && admission.epoch < 9223372036854775808 && admission.runId /= binding.request.runId && admission.runId /= "" && admission.assignmentId /= "")
+           || (admission.filePolicy == Just transferableFilePolicy && admission.epoch >= binding.request.epoch && (admission.epoch /= binding.request.epoch || admission.owner == binding.request.owner) && revisionNumber admission.epoch < 9223372036854775808 && admission.runId /= binding.request.runId && admission.runId /= "" && admission.assignmentId /= "")
        )

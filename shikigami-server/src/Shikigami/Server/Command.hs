@@ -70,6 +70,7 @@ import Shikigami.Server.Command.StubKanmon (runStubKanmonCmd)
 import Shikigami.Server.Command.StubKawa (runStubKawaCmd)
 import Shikigami.Server.Command.Validate (runValidate)
 import Shikigami.Server.Command.Workers (runWorkersControl, runWorkersInspect, runWorkersInterrupt, runWorkersSend)
+import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.WorkerSession.Capability (WorkerCommand (..))
 import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
 import Shikigami.WorkerSession.Types (WorkerSessionId (..))
@@ -177,8 +178,8 @@ workersInfo = info (subparser commands <**> helper) (progDesc "Inspect continuin
         <> command "integrate" (info (integrate <**> helper) (progDesc "Integrate retained events through the authoritative checkpoint owner"))
     session = strArgument (metavar "SESSION" <> help "Retained worker session id")
     operation = strOption (long "operation" <> metavar "KEY" <> help "Stable caller operation key; reuse it after a lost acknowledgement")
-    revision = option auto (long "expected-revision" <> metavar "REVISION" <> help "Expected session revision")
-    epoch = option auto (long "epoch" <> metavar "EPOCH" <> help "Expected owner epoch")
+    revision = option revisionReader (long "expected-revision" <> metavar "REVISION" <> help "Expected session revision")
+    epoch = option revisionReader (long "epoch" <> metavar "EPOCH" <> help "Expected owner epoch")
     instruction = strOption (long "instruction-file" <> metavar "PATH" <> help "Bounded WorkerInstruction JSON: text, objectiveRevision, assignmentRevision, criteriaRevision and optional selection")
     action function = (function, [])
     inspect =
@@ -466,3 +467,8 @@ danwaUrlOption =
     "--danwa-url"
     sinksDanwaBaseUrlKey
     (long "danwa-url" <> metavar "URL" <> help "danwa base URL (sets sinks.danwa.base_url)")
+
+revisionReader :: ReadM (StateRevision scope)
+revisionReader = eitherReader \raw -> case reads raw of
+  [(value, "")] -> either (Left . Text.unpack) Right (parseRevision value)
+  _ -> Left "expected a nonnegative integer"

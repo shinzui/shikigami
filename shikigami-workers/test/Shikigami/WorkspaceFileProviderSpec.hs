@@ -48,6 +48,7 @@ import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
+import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.ContainedFile (withWorkspaceLock)
@@ -78,7 +79,7 @@ tests fixture =
         Executor.executeAcceptedAttempt (executorFor runtime checkpoint) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         (_, uncertain) <- right =<< run env (Execution.loadExecution access)
         uncertain.phase @?= Unresolved
-        run env (runTransaction (Store.freezeWorkspaceTx binding snapshot.identity 0)) >>= (@?= Right ())
+        run env (runTransaction (Store.freezeWorkspaceTx binding snapshot.identity (fixtureRevision 0))) >>= (@?= Right ())
         let path = workspaceFiles binding.storageRoot binding </> "src/dependency.txt"
         published <- getModificationTime path
         -- The factual API accepts only an operation id, never current authority,
@@ -109,7 +110,7 @@ tests fixture =
             tool = head snapshot.toolBindings
             submission = Attempt.AttemptSubmission (Execution.toolAttemptRequest next.attemptId next.operationId tool) Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)
         _ <- right =<< run env (Execution.recoverExecutionAttemptWith access uncertain.revision reference.attemptId submission (\_ -> pure ()))
-        run env (runTransaction (Store.freezeWorkspaceTx binding snapshot.identity 0)) >>= (@?= Right ())
+        run env (runTransaction (Store.freezeWorkspaceTx binding snapshot.identity (fixtureRevision 0))) >>= (@?= Right ())
         publishFileReceipt env reference.operationId >>= (@?= Right FileReceiptAcknowledged)
         Just original <- right =<< run env (Execution.inspectExecutionAttempt reference.attemptId)
         original.phase @?= Attempt.AttemptSuperseded
@@ -126,7 +127,7 @@ tests fixture =
                     if ordinal == 1 then throwIO (userError "interrupted before publication") else allowAllActionAuthorizerForTests.authorize principal action
                 }
         Executor.executeAcceptedAttempt (executorFor (runtime & #authorizer .~ interrupted) (pure ())) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
-        run env (runTransaction (Store.freezeWorkspaceTx binding snapshot.identity 0)) >>= (@?= Right ())
+        run env (runTransaction (Store.freezeWorkspaceTx binding snapshot.identity (fixtureRevision 0))) >>= (@?= Right ())
         publishFileReceipt env reference.operationId >>= (@?= Right AwaitingFileReceipt)
         readFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") >>= (@?= "old dependency\n")
         Just original <- right =<< run env (Execution.inspectExecutionAttempt reference.attemptId)
@@ -263,7 +264,7 @@ tests fixture =
                     ordinal <- atomicModifyIORef' calls (\n -> (n + 1, n))
                     if ordinal == 1
                       then do
-                        run env (runTransaction (Store.freezeWorkspaceTx binding snapshot.identity 0)) >>= (@?= Right ())
+                        run env (runTransaction (Store.freezeWorkspaceTx binding snapshot.identity (fixtureRevision 0))) >>= (@?= Right ())
                         allowAllActionAuthorizerForTests.authorize principal action
                       else allowAllActionAuthorizerForTests.authorize principal action
                 }
@@ -271,7 +272,7 @@ tests fixture =
         readFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") >>= (@?= "old dependency\n")
         -- A proven pre-publication refusal is settled metadata, not an invented
         -- applied edit; the frozen owner still cannot admit another operation.
-        run env (runTransaction (Store.checkWorkspaceOwnerTx binding snapshot.identity 0)) >>= (@?= Left WorkspaceBindingConflict),
+        run env (runTransaction (Store.checkWorkspaceOwnerTx binding snapshot.identity (fixtureRevision 0))) >>= (@?= Left WorkspaceBindingConflict),
       testCase "frozen scoped instructions reach operator policy and explicit conflicts refuse before IO" $ withEffect fixture \_ binding snapshot _ reference runtime _ -> do
         checked <- newIORef ([] :: [Text.Text])
         authorizations <- newIORef (0 :: Int)
@@ -296,11 +297,11 @@ tests fixture =
         result <- maybe (fail "missing read outcome") pure operation.outcome
         output <- right =<< run env (Execution.readReplayPayload @OperationOutcome access "operation-outcome" result)
         assertBool "protected read outcome carries content and exact hash" (all (`Text.isInfixOf` Text.pack (show (Aeson.encode output))) ["old dependency", contentDigest "old dependency\n"])
-        run env (runTransaction (Store.checkWorkspaceOperationTx binding snapshot.identity 0 (OperationId "later"))) >>= (@?= Right ()),
+        run env (runTransaction (Store.checkWorkspaceOperationTx binding snapshot.identity (fixtureRevision 0) (OperationId "later"))) >>= (@?= Right ()),
       testCase "denied exact authority refuses before reserving or changing files" $ withEffect fixture \env binding snapshot _ reference runtime _ -> do
         Executor.executeAcceptedAttempt (executorFor (runtime & #authorizer .~ denyAllActionAuthorizer) (pure ())) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         readFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") >>= (@?= "old dependency\n")
-        run env (runTransaction (Store.checkWorkspaceOperationTx binding snapshot.identity 0 (OperationId "later"))) >>= (@?= Right ()),
+        run env (runTransaction (Store.checkWorkspaceOperationTx binding snapshot.identity (fixtureRevision 0) (OperationId "later"))) >>= (@?= Right ()),
       testCase "an independently held workspace lock retains uncertainty without publishing" $ withEffect fixture \env binding snapshot access reference runtime _ -> do
         withWorkspaceLock
           (workspaceMetadata binding.storageRoot binding)
@@ -316,14 +317,14 @@ tests fixture =
       testCase "historical workspace admission without file qualification refuses before IO" $ withEffectQualified (#filePolicy .~ Nothing) "replace" Nothing fixture \env binding snapshot _ reference runtime _ -> do
         Executor.executeAcceptedAttempt (executorFor runtime (pure ())) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         readFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") >>= (@?= "old dependency\n")
-        run env (runTransaction (Store.checkWorkspaceOperationTx binding snapshot.identity 0 (OperationId "later"))) >>= (@?= Right ()),
+        run env (runTransaction (Store.checkWorkspaceOperationTx binding snapshot.identity (fixtureRevision 0) (OperationId "later"))) >>= (@?= Right ()),
       testCase "content conflicts and hostile accepted paths refuse without effects" $ do
         withEffect fixture \env binding snapshot _ reference runtime _ -> do
           let path = workspaceFiles binding.storageRoot binding </> "src/dependency.txt"
           writeFile path "operator update\n"
           Executor.executeAcceptedAttempt (executorFor runtime (pure ())) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
           readFile path >>= (@?= "operator update\n")
-          run env (runTransaction (Store.checkWorkspaceOperationTx binding snapshot.identity 0 (OperationId "later"))) >>= (@?= Right ())
+          run env (runTransaction (Store.checkWorkspaceOperationTx binding snapshot.identity (fixtureRevision 0) (OperationId "later"))) >>= (@?= Right ())
         withEffectFor "replace" (Just (Aeson.toJSON (Replacement "../escape" Nothing "FORGED"))) fixture \_ binding snapshot _ reference runtime _ -> do
           Executor.executeAcceptedAttempt (executorFor runtime (pure ())) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
           readFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") >>= (@?= "old dependency\n"),
@@ -378,7 +379,7 @@ withEffectAdapterPolicyInput processPolicy toolCount qualify install wire logica
       right (resolveRepository catalog (repositoryIdentity originalRepository) Nothing)
   let identity = CompatibilityIdentity "worker"
       rootId = ExecutionRootId "file-root"
-      request = WorkspaceRequest "file-run" Nothing rootId identity identity 0
+      request = WorkspaceRequest "file-run" Nothing rootId identity identity (fixtureRevision 0)
       runtime = FileRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ _ _ -> pure (Right ()))
       assignment = "file-execution"
   (binding, _) <- right =<< run env (runTransaction (Store.reserveWorkspaceTx root request repository))
@@ -472,3 +473,6 @@ retainedOutput env snapshot operation = do
   access <- right =<< run env (Execution.authorizeReplay snapshot.executionId snapshot.identity (pure (Right ())))
   result <- maybe (fail "missing file outcome") pure operation.outcome
   right =<< run env (Execution.readReplayPayload @OperationOutcome access "operation-outcome" result)
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

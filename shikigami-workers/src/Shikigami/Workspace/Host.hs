@@ -18,6 +18,7 @@ import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Start (SkillAssignment (..))
 import Shikigami.Execution.Transcript (ExecutionError (..))
 import Shikigami.Prelude
+import Shikigami.StateRevision (initialRevision)
 import Shikigami.Workspace.Admission (WorkspaceHost (..))
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog (ResolvedRepository, repositoryBase, repositoryIdentity, repositoryPolicyRevision, repositorySource)
@@ -62,7 +63,7 @@ workspaceHostFor transferable runtime selected historical prepare storageRoot se
         mapped <- mapping assignment
         allowed <- gate assignment root
         case (selected, mapped, allowed) of
-          (Right repository, Right (Just child), Right ()) | child.epoch > 0 -> do
+          (Right repository, Right (Just child), Right ()) | child.epoch > initialRevision -> do
             retained <- runAppIO runtime.appEnv (runTransaction (Transfers.successorWorkspaceTx child))
             case retained of
               Right (Right binding) -> reuse False assignment root policy principal repository child binding
@@ -100,7 +101,7 @@ workspaceHostFor transferable runtime selected historical prepare storageRoot se
                         Right accepted -> admitExisting followup assignment binding accepted
             _ -> pure refused
     allocate assignment root policy principal repository mappedChild = do
-      let request = WorkspaceRequest assignment.runId (fmap (\child -> (child.session, child.assignment)) mappedChild) root assignment.identity assignment.identity (maybe 0 (.epoch) mappedChild)
+      let request = WorkspaceRequest assignment.runId (fmap (\child -> (child.session, child.assignment)) mappedChild) root assignment.identity assignment.identity (maybe initialRevision (.epoch) mappedChild)
       reserved <- runAppIO runtime.appEnv (runTransaction (Store.reserveWorkspaceTx storageRoot request repository))
       case reserved of
         Right (Right (binding, state)) -> case workspaceAllocationAction binding assignment.selection.assignmentId of

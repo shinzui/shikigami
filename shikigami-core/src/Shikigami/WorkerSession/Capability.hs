@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | One closed command admission boundary for Flow, model and operator callers.
 -- A declaration requests control; an admitted, retained scope and fresh exact
 -- authorization are both required. No generic mutation overlay is enabled.
@@ -44,6 +46,7 @@ import Shikigami.Execution.Resources (Admission (..), Root (..), checkRoot)
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Transcript (PayloadRef (..))
 import Shikigami.Prelude
+import Shikigami.StateRevision
 import Shikigami.WorkerSession.Checkpoint (CheckpointProvider (..), ObjectiveVersion (..))
 import Shikigami.WorkerSession.Handoff (TransferOutcome, TransferServices (..), requestHandoff, resumeHandoff)
 import Shikigami.WorkerSession.Integration (IntegrationOutcome, integrateEvents)
@@ -110,9 +113,9 @@ instance Show CoordinationGrant where show _ = "CoordinationGrant <protected>"
 
 data WorkerInstruction = WorkerInstruction
   { text :: !Text,
-    objectiveRevision :: !Integer,
-    assignmentRevision :: !Integer,
-    criteriaRevision :: !Integer,
+    objectiveRevision :: !(StateRevision "objective"),
+    assignmentRevision :: !(StateRevision "objective-assignment"),
+    criteriaRevision :: !(StateRevision "objective-criteria"),
     selection :: !(Maybe ExecutionRequest)
   }
   deriving stock (Eq, Generic)
@@ -125,13 +128,13 @@ instance Show WorkerInstruction where show _ = "WorkerInstruction <protected>"
 
 data WorkerCommand
   = FindWorker {workerKey :: !Text}
-  | SendWorker {sessionId :: !WorkerSessionId, expectedRevision :: !Integer, epoch :: !Integer, instruction :: !WorkerInstruction}
+  | SendWorker {sessionId :: !WorkerSessionId, expectedRevision :: !(StateRevision "worker-session"), epoch :: !(StateRevision "worker-owner"), instruction :: !WorkerInstruction}
   | InspectWorker {sessionId :: !WorkerSessionId, after :: !Integer, limit :: !Int}
   | ReadWorkerEvents {sessionId :: !WorkerSessionId, after :: !Integer, limit :: !Int}
   | ReadWorkerResult {sessionId :: !WorkerSessionId, assignmentId :: !AssignmentId}
-  | InterruptWorker {sessionId :: !WorkerSessionId, expectedRevision :: !Integer, epoch :: !Integer, assignmentId :: !AssignmentId, instruction :: !WorkerInstruction}
-  | CancelWorker {sessionId :: !WorkerSessionId, expectedRevision :: !Integer, epoch :: !Integer}
-  | TransferWorker {sessionId :: !WorkerSessionId, expectedRevision :: !Integer, epoch :: !Integer, workspace :: !WorkspaceRef, target :: !AgentName}
+  | InterruptWorker {sessionId :: !WorkerSessionId, expectedRevision :: !(StateRevision "worker-session"), epoch :: !(StateRevision "worker-owner"), assignmentId :: !AssignmentId, instruction :: !WorkerInstruction}
+  | CancelWorker {sessionId :: !WorkerSessionId, expectedRevision :: !(StateRevision "worker-session"), epoch :: !(StateRevision "worker-owner")}
+  | TransferWorker {sessionId :: !WorkerSessionId, expectedRevision :: !(StateRevision "worker-session"), epoch :: !(StateRevision "worker-owner"), workspace :: !WorkspaceRef, target :: !AgentName}
   | ReconcileWorker {sessionId :: !WorkerSessionId}
   | IntegrateWorkerEvents {sessionId :: !WorkerSessionId}
   deriving stock (Eq, Generic)
@@ -287,7 +290,7 @@ executeAdmittedCommand host authorizer (CoordinationGrant scope) operation comma
         version <- trySync (liftIO (provider.current slot.objective))
         now <- liftIO getCurrentTime
         pure case (actual, version) of
-          (Right identity, Right (Right current)) | identity == slot.identity && current.active && current.owner == identity && current.ownerEpoch == 0 && Just current.rootId == scope.run.rootId && now < current.cutoff -> Right ()
+          (Right identity, Right (Right current)) | identity == slot.identity && current.active && current.owner == identity && current.ownerEpoch == initialRevision && Just current.rootId == scope.run.rootId && now < current.cutoff -> Right ()
           _ -> Left SessionOwnerRefused
       _ -> pure (Left SessionOwnerRefused)
     message kind draft = Instruction 1 kind draft.text draft.objectiveRevision draft.assignmentRevision draft.criteriaRevision draft.selection

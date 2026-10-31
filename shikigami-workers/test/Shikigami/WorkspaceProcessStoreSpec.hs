@@ -24,6 +24,7 @@ import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Execution.Transcript (ExecutionId (..))
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
+import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Collector
 import Shikigami.Workspace.ContainedFile (ensurePrivateDirectory)
@@ -77,7 +78,7 @@ tests fixture =
         let otherId = OperationId "other-operation"
             other = proposed & #operationId .~ otherId & #unit .~ processUnit otherId proposed.fingerprint
         run env (reserveProcessTx binding other) >>= (@?= Left WorkspaceBindingConflict)
-        run env (Store.checkWorkspaceOperationTx binding binding.request.owner 0 (OperationId "read")) >>= (@?= Left WorkspaceBindingConflict)
+        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "read")) >>= (@?= Left WorkspaceBindingConflict)
         (a, b) <- concurrently (run env (requestProcessLaunchTx binding proposed boot)) (run env (requestProcessLaunchTx binding proposed boot))
         granted <- traverse right [a, b]
         sort granted @?= [False, True]
@@ -95,11 +96,11 @@ tests fixture =
           ProcessRefused -> do
             launch @?= Left WorkspaceBindingConflict
             refused @?= Right ()
-            run env (Store.checkWorkspaceOperationTx binding binding.request.owner 0 (OperationId "later")) >>= (@?= Right ())
+            run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "later")) >>= (@?= Right ())
           ProcessLaunchRequested -> do
             launch @?= Right True
             refused @?= Left WorkspaceBindingConflict
-            run env (Store.checkWorkspaceOperationTx binding binding.request.owner 0 (OperationId "later")) >>= (@?= Left WorkspaceBindingConflict)
+            run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "later")) >>= (@?= Left WorkspaceBindingConflict)
           other -> assertFailure ("unexpected launch/refusal race: " <> show other),
       testCase "missing launch evidence stays unresolved and blocks file reuse until a matching receipt" $ withProcess fixture \env binding proposed -> do
         _ <- right =<< run env (reserveProcessTx binding proposed)
@@ -107,16 +108,16 @@ tests fixture =
         run env (markProcessUnresolvedTx proposed) >>= (@?= Right ())
         run env (requestProcessLaunchTx binding proposed boot) >>= (@?= Right False)
         run env (observeProcessInvocationTx proposed otherBoot invocation) >>= (@?= Left WorkspaceBindingConflict)
-        run env (Store.checkWorkspaceOperationTx binding binding.request.owner 0 (OperationId "later")) >>= (@?= Left WorkspaceBindingConflict)
+        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "later")) >>= (@?= Left WorkspaceBindingConflict)
         run env (observeProcessInvocationTx proposed boot invocation) >>= (@?= Right ())
         run env (observeProcessInvocationTx proposed boot otherBoot) >>= (@?= Left WorkspaceBindingConflict)
         run env (recordProcessReceiptTx (receiptFor proposed)) >>= (@?= Right ())
-        run env (Store.checkWorkspaceOperationTx binding binding.request.owner 0 (OperationId "later")) >>= (@?= Right ()),
+        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "later")) >>= (@?= Right ()),
       testCase "factual receipts settle after freeze but cannot replace invocation, output or descendant evidence" $ withProcess fixture \env binding proposed -> do
         _ <- right =<< run env (reserveProcessTx binding proposed)
         run env (requestProcessLaunchTx binding proposed boot) >>= (@?= Right True)
         run env (observeProcessInvocationTx proposed boot invocation) >>= (@?= Right ())
-        run env (Store.freezeWorkspaceTx binding binding.request.owner 0) >>= (@?= Right ())
+        run env (Store.freezeWorkspaceTx binding binding.request.owner (fixtureRevision 0)) >>= (@?= Right ())
         let receipt = receiptFor proposed
         mapM_
           (\invalid -> run env (recordProcessReceiptTx invalid) >>= (@?= Left WorkspaceBindingConflict))
@@ -131,14 +132,14 @@ tests fixture =
         run env (recordProcessReceiptTx receipt) >>= (@?= Right ())
         run env (recordProcessReceiptTx receipt) >>= (@?= Right ())
         run env (recordProcessReceiptTx (receipt & #exitCode .~ Just 1)) >>= (@?= Left WorkspaceBindingConflict)
-        run env (Store.checkWorkspaceOwnerTx binding binding.request.owner 0) >>= (@?= Left WorkspaceBindingConflict)
+        run env (Store.checkWorkspaceOwnerTx binding binding.request.owner (fixtureRevision 0)) >>= (@?= Left WorkspaceBindingConflict)
         Just retained <- run env (inspectProcessTx proposed.operationId)
         retained.phase @?= ProcessSettled,
       testCase "private collector completion reconciles the original attempt after freeze and acknowledgement loss" $ withProcess fixture \env binding proposed -> do
         record <- launchRecord env binding proposed
         directory <- collectorDirectory binding
         writeCollector directory record []
-        run env (Store.freezeWorkspaceTx binding binding.request.owner 0) >>= (@?= Right ())
+        run env (Store.freezeWorkspaceTx binding binding.request.owner (fixtureRevision 0)) >>= (@?= Right ())
         Just receipt <- right =<< reconcileCollector env directory record
         receipt.attemptId @?= proposed.attemptId
         receipt.generation @?= proposed.generation
@@ -177,13 +178,13 @@ tests fixture =
         directory <- collectorDirectory binding
         Lazy.writeFile (directory </> "observed.json") (Aeson.encode (Aeson.object ["bootId" .= boot, "invocationId" .= invocation]))
         reconcileCollector env directory record >>= (@?= Right Nothing)
-        run env (Store.checkWorkspaceOperationTx binding binding.request.owner 0 (OperationId "later")) >>= (@?= Left WorkspaceBindingConflict)
+        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "later")) >>= (@?= Left WorkspaceBindingConflict)
         writeCollector directory record ["invocationId" .= otherBoot]
         reconcileCollector env directory record >>= (@?= Left CollectorEvidenceConflict)
         run env (markProcessUnresolvedTx record) >>= (@?= Right ())
         writeCollector directory record []
         Just _ <- right =<< reconcileCollector env directory record
-        run env (Store.checkWorkspaceOperationTx binding binding.request.owner 0 (OperationId "later")) >>= (@?= Right ()),
+        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "later")) >>= (@?= Right ()),
       testCase "timeout settlement preserves unavailable status and cannot be interpreted as successful validation" $ withProcess fixture \env binding proposed -> do
         record <- launchRecord env binding proposed
         directory <- collectorDirectory binding
@@ -198,7 +199,7 @@ tests fixture =
         receipt.termination @?= ProcessTimedOut
         assertBool "missing status is never validation success" (not (processSucceeded receipt))
         assertBool "timeout remains failure even with a zero exit status" (not (processSucceeded (receipt & #exitCode .~ Just 0)))
-        run env (Store.checkWorkspaceOperationTx binding binding.request.owner 0 (OperationId "later")) >>= (@?= Right ())
+        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "later")) >>= (@?= Right ())
     ]
 
 -- These JSON fixtures exercise receipt validation and database ownership; only
@@ -243,7 +244,7 @@ writeCollector directory record changed = do
 withProcess :: DatabaseFixture -> (AppEnv -> WorkspaceBinding -> ProcessRecord -> IO a) -> IO a
 withProcess fixture use = Fixture.withFixture fixture \env _ root repository -> do
   let owner = CompatibilityIdentity "process-worker"
-      request = WorkspaceRequest "process-run" Nothing (ExecutionRootId "process-root") owner owner 0
+      request = WorkspaceRequest "process-run" Nothing (ExecutionRootId "process-root") owner owner (fixtureRevision 0)
   (binding, _) <- right =<< run env (Store.reserveWorkspaceTx root request repository)
   allocateWorkspace root binding Reserved >>= (@?= Right ())
   run env (Store.markWorkspaceReadyTx binding) >>= (@?= Right ())
@@ -271,3 +272,6 @@ run env action = runAppIO env (runTransaction action) >>= right
 
 right :: (Show e) => Either e a -> IO a
 right = either (\err -> assertFailure (show err) >> fail "unreachable") pure
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

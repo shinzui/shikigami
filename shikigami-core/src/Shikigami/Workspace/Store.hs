@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Reserve before filesystem effects. Matching duplicate requests converge;
 -- reservation metadata remains immutable after the workspace becomes ready.
 module Shikigami.Workspace.Store (reserveWorkspaceTx, inspectWorkspaceTx, markWorkspaceReadyTx, checkWorkspaceOwnerTx, checkWorkspaceOperationTx, reserveWorkspaceEffectTx, recordWorkspaceReceiptTx, freezeWorkspaceTx, registerFileTx, registerFileForOwnerTx, inspectRegisteredFileTx, inspectFilePageTx, WorkspaceControl (..), inspectWorkspaceControlTx) where
@@ -16,6 +18,7 @@ import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
 import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Prelude
+import Shikigami.StateRevision
 import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
 import Shikigami.WorkerSession.Types (AssignmentId (..), WorkerSessionId (..))
 import Shikigami.Workspace.Catalog
@@ -33,14 +36,14 @@ reserveWorkspaceTx storageRoot request repository
       retired <- Tx.statement resource hasCleanup
       case existing of
         Just pair@(stored, _) | stored == binding && not retired -> do
-          Tx.statement (resource, request.owner, request.epoch) insertControl
+          Tx.statement (resource, request.owner, revisionNumber request.epoch) insertControl
           pure (Right pair)
         _ -> pure (Left WorkspaceBindingConflict)
   where
     ExecutionRootId root = request.rootId
     validKey value = not (Text.null value) && Text.length value <= 256 && not (Text.any (== '\0') value)
     validIdentity = either (const False) validKey . identityText
-    valid = storageRoot /= "/" && ".." `notElem` splitDirectories storageRoot && isAbsolute storageRoot && normalise storageRoot == storageRoot && not ('\0' `elem` storageRoot) && validKey request.runId && validKey root && validIdentity request.principal && validIdentity request.owner && request.epoch >= 0 && request.epoch < 9223372036854775808 && maybe True (\(session, assignment) -> validKey session.value && validKey assignment.value) request.assignment
+    valid = storageRoot /= "/" && ".." `notElem` splitDirectories storageRoot && isAbsolute storageRoot && normalise storageRoot == storageRoot && not ('\0' `elem` storageRoot) && validKey request.runId && validKey root && validIdentity request.principal && validIdentity request.owner && revisionNumber request.epoch < 9223372036854775808 && maybe True (\(session, assignment) -> validKey session.value && validKey assignment.value) request.assignment
     key = versionedDigest "shikigami.workspace-assignment/1" (maybe (toJSON request.runId) toJSON request.assignment)
     resource = Text.drop 7 (versionedDigest "shikigami.workspace-resource/1" (toJSON key))
     binding = WorkspaceBinding request (WorkspaceRef "shikigami.workspace/1" resource) (repositoryIdentity repository) (repositoryBase repository) (repositoryPolicyRevision repository) storageRoot (repositorySource repository)
@@ -84,7 +87,7 @@ jsonRow = D.column (D.nonNullable (D.refine decode D.jsonb))
 
 -- The concrete provider holds the independent workspace lock throughout these
 -- checks and its effect. Freeze/transfer must use that same lock before acting.
-checkWorkspaceOwnerTx :: WorkspaceBinding -> AgentIdentity -> Integer -> Transaction (Either WorkspaceError ())
+checkWorkspaceOwnerTx :: WorkspaceBinding -> AgentIdentity -> StateRevision "worker-owner" -> Transaction (Either WorkspaceError ())
 checkWorkspaceOwnerTx binding owner epoch = do
   retained <- inspectWorkspaceTx binding.workspace
   control <- Tx.statement binding.workspace.resource lockControl
@@ -94,7 +97,7 @@ checkWorkspaceOwnerTx binding owner epoch = do
 
 -- An unresolved effect blocks reuse by another logical operation, including
 -- ordinary reads. Only that effect's reconciliation can inspect its target.
-checkWorkspaceOperationTx :: WorkspaceBinding -> AgentIdentity -> Integer -> OperationId -> Transaction (Either WorkspaceError ())
+checkWorkspaceOperationTx :: WorkspaceBinding -> AgentIdentity -> StateRevision "worker-owner" -> OperationId -> Transaction (Either WorkspaceError ())
 checkWorkspaceOperationTx binding owner epoch (OperationId operation) = do
   current <- checkWorkspaceOwnerTx binding owner epoch
   case current of
@@ -104,7 +107,7 @@ checkWorkspaceOperationTx binding owner epoch (OperationId operation) = do
       processes <- Tx.statement binding.workspace.resource pendingProcess
       pure (if pending || processes then Left WorkspaceBindingConflict else Right ())
 
-reserveWorkspaceEffectTx :: WorkspaceBinding -> AgentIdentity -> Integer -> OperationId -> Text -> Transaction (Either WorkspaceError (Maybe FileReceipt))
+reserveWorkspaceEffectTx :: WorkspaceBinding -> AgentIdentity -> StateRevision "worker-owner" -> OperationId -> Text -> Transaction (Either WorkspaceError (Maybe FileReceipt))
 reserveWorkspaceEffectTx binding owner epoch (OperationId operation) fingerprint = do
   checked <- checkWorkspaceOperationTx binding owner epoch (OperationId operation)
   case checked of
@@ -140,7 +143,7 @@ recordWorkspaceReceiptTx binding receipt
 registerFileTx :: WorkspaceBinding -> FileRegistration -> Transaction (Either WorkspaceError ())
 registerFileTx binding = registerFileForOwnerTx binding binding.request.owner binding.request.epoch
 
-registerFileForOwnerTx :: WorkspaceBinding -> AgentIdentity -> Integer -> FileRegistration -> Transaction (Either WorkspaceError ())
+registerFileForOwnerTx :: WorkspaceBinding -> AgentIdentity -> StateRevision "worker-owner" -> FileRegistration -> Transaction (Either WorkspaceError ())
 registerFileForOwnerTx binding owner epoch registration = do
   current <- checkWorkspaceOwnerTx binding owner epoch
   let receipt = registration.receipt
@@ -159,14 +162,14 @@ inspectRegisteredFileTx (OperationId key) = Tx.statement key selectRegisteredFil
 inspectFilePageTx :: Maybe OperationId -> Transaction [OperationId]
 inspectFilePageTx cursor = Tx.statement (maybe "" (\(OperationId key) -> key) cursor) selectFilePage
 
-freezeWorkspaceTx :: WorkspaceBinding -> AgentIdentity -> Integer -> Transaction (Either WorkspaceError ())
+freezeWorkspaceTx :: WorkspaceBinding -> AgentIdentity -> StateRevision "worker-owner" -> Transaction (Either WorkspaceError ())
 freezeWorkspaceTx binding owner epoch = do
   checked <- checkWorkspaceOwnerTx binding owner epoch
   case checked of
     Left err -> pure (Left err)
     Right () -> Tx.statement binding.workspace.resource freezeControl >> pure (Right ())
 
-data WorkspaceControl = WorkspaceControl {owner :: !AgentIdentity, epoch :: !Integer, frozen :: !Bool}
+data WorkspaceControl = WorkspaceControl {owner :: !AgentIdentity, epoch :: !(StateRevision "worker-owner"), frozen :: !Bool}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromJSON)
 

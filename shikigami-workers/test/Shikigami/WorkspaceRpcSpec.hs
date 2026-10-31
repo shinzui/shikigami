@@ -15,6 +15,7 @@ import Network.Socket.ByteString qualified as SocketBytes
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Execution.Identity (AttemptId (..), ExecutionRootId (..), OperationId (..))
+import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
 import Shikigami.WorkerSession.Transfer
 import Shikigami.WorkerSession.Types (ObjectiveRef (..), WorkerSessionId (..))
@@ -36,14 +37,14 @@ tests =
         let owner = compatibilityIdentity "old"
             root = ExecutionRootId "root"
             workspace = WorkspaceRef "shikigami.workspace/1" "resource"
-            intent = TransferIntent 1 (WorkerSessionId "session") (ObjectiveRef "provider" "objective") (compatibilityIdentity "parent") operation (ObjectiveVersion 1 1 1 0 owner True root (read "2026-10-30 20:00:00 UTC")) owner (compatibilityIdentity "new") (AgentName "new") 0 1 root workspace
-            proof = FenceProof 1 workspace operation (transferFingerprint intent) 0 1 "retained-fence"
+            intent = TransferIntent 1 (WorkerSessionId "session") (ObjectiveRef "provider" "objective") (compatibilityIdentity "parent") operation (ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) owner True root (read "2026-10-30 20:00:00 UTC")) owner (compatibilityIdentity "new") (AgentName "new") (fixtureRevision 0) (fixtureRevision 1) root workspace
+            proof = FenceProof 1 workspace operation (transferFingerprint intent) (fixtureRevision 0) (fixtureRevision 1) "retained-fence"
             request = RpcFence intent
         Aeson.eitherDecode (Aeson.encode request) @?= Right request
         withAsync (serveRpc (RpcPolicy [uid] 1 2) listener (const (pure (RpcFenceResult (FencedAndSettled proof))))) \_ -> callRpc path uid 3 request >>= (@?= Right (RpcFenceResult (FencedAndSettled proof)))
-        let wrong = FenceProof 1 workspace (OperationId "other-operation") (transferFingerprint intent) 0 1 "retained-fence"
+        let wrong = FenceProof 1 workspace (OperationId "other-operation") (transferFingerprint intent) (fixtureRevision 0) (fixtureRevision 1) "retained-fence"
         mapM_ (\value -> withAsync (serveRpc (RpcPolicy [uid] 1 2) listener (const (pure value))) \_ -> callRpc path uid 3 request >>= (@?= Left RpcMalformed)) [RpcFenceResult (FencedAndSettled wrong), RpcWriteResult True, reply]
-        withAsync (serveRpc (RpcPolicy [uid] 1 2) listener (const (pure (RpcWriteResult True)))) \_ -> callRpc path uid 3 (RpcAdmitWrite workspace intent.sessionId owner 0 operation) >>= (@?= Right (RpcWriteResult True)),
+        withAsync (serveRpc (RpcPolicy [uid] 1 2) listener (const (pure (RpcWriteResult True)))) \_ -> callRpc path uid 3 (RpcAdmitWrite workspace intent.sessionId owner (fixtureRevision 0) operation) >>= (@?= Right (RpcWriteResult True)),
       testCase "authenticates real Unix peers and returns only retained process metadata" $ withListener \path listener uid -> do
         calls <- newIORef (0 :: Int)
         withAsync (serveRpc (RpcPolicy [uid] 2 2) listener (counted calls)) \_ -> do
@@ -173,3 +174,6 @@ otherUid uid = (uid + 1) `mod` 4294967296
 isLeft :: Either a b -> Bool
 isLeft (Left _) = True
 isLeft _ = False
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

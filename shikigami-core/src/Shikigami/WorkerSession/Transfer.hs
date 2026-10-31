@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Consumer contracts for authoritative workspace fencing and objective
 -- ownership. These adapters do not supply the separately owned real providers.
 module Shikigami.WorkerSession.Transfer
@@ -21,6 +23,7 @@ import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Prelude
+import Shikigami.StateRevision
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
 import Shikigami.WorkerSession.Types (ObjectiveRef, WorkerSessionId)
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
@@ -35,8 +38,8 @@ data TransferIntent = TransferIntent
     oldOwner :: !AgentIdentity,
     newOwner :: !AgentIdentity,
     newWorker :: !AgentName,
-    oldEpoch :: !Integer,
-    newEpoch :: !Integer,
+    oldEpoch :: !(StateRevision "worker-owner"),
+    newEpoch :: !(StateRevision "worker-owner"),
     rootId :: !ExecutionRootId,
     workspace :: !WorkspaceRef
   }
@@ -48,8 +51,8 @@ data FenceProof = FenceProof
     workspace :: !WorkspaceRef,
     operationId :: !OperationId,
     fingerprint :: !Text,
-    oldEpoch :: !Integer,
-    newEpoch :: !Integer,
+    oldEpoch :: !(StateRevision "worker-owner"),
+    newEpoch :: !(StateRevision "worker-owner"),
     receipt :: !Text
   }
   deriving stock (Eq, Show, Generic)
@@ -64,7 +67,7 @@ data OwnershipReceipt = OwnershipReceipt
     objective :: !ObjectiveRef,
     operationId :: !OperationId,
     fingerprint :: !Text,
-    revision :: !Integer
+    revision :: !(StateRevision "objective")
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -81,7 +84,7 @@ data WorkspaceProvider = WorkspaceProvider
     -- Every real write requires both fresh current-session authority and a
     -- conditional provider epoch check at the effect boundary. A text epoch
     -- supplied by a model is not an authorization grant.
-    admitWrite :: !(WorkspaceRef -> WorkerSessionId -> AgentIdentity -> Integer -> OperationId -> IO (Either Text ()))
+    admitWrite :: !(WorkspaceRef -> WorkerSessionId -> AgentIdentity -> StateRevision "worker-owner" -> OperationId -> IO (Either Text ()))
   }
 
 newtype OwnershipProvider = OwnershipProvider

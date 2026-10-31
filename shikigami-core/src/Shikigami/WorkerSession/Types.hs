@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Continuing-session state is distinct from Kioku memory and Danwa epochs.
 -- Objective identifiers are consumer references to the separately owned store.
 module Shikigami.WorkerSession.Types where
@@ -23,6 +25,7 @@ import Shikigami.Execution.Request (ExecutionRequest)
 import Shikigami.Execution.Transcript (ExecutionId, PayloadRef)
 import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
+import Shikigami.StateRevision
 
 newtype WorkerSessionId = WorkerSessionId {value :: Text}
   deriving stock (Eq, Ord, Show, Generic)
@@ -83,10 +86,10 @@ data SessionPhase = Idle | Active | Parked | Unresolved | Transferring | Failed 
 data SessionState = SessionState
   { format :: !Int,
     sessionId :: !WorkerSessionId,
-    revision :: !Integer,
+    revision :: !(StateRevision "worker-session"),
     phase :: !SessionPhase,
     owner :: !AgentIdentity,
-    epoch :: !Integer,
+    epoch :: !(StateRevision "worker-owner"),
     activeAssignment :: !(Maybe AssignmentId),
     nextSequence :: !Integer,
     eventCursor :: !Integer,
@@ -103,7 +106,7 @@ data SessionState = SessionState
 instance FromJSON SessionState where
   parseJSON = Aeson.withObject "SessionState" \fields -> do
     state <- SessionState <$> fields .: "format" <*> fields .: "sessionId" <*> fields .: "revision" <*> fields .: "phase" <*> fields .: "owner" <*> fields .: "epoch" <*> fields .: "activeAssignment" <*> fields .: "nextSequence" <*> fields .: "eventCursor" <*> fields .: "consumedCursor" <*> fields .:? "checkpointIntent" <*> fields .:? "wake" <*> fields .:? "worker" <*> fields .:? "handoff" <*> (fields .:? "listeners" .!= [])
-    unless (state.format == 1 && all (>= 0) [state.revision, state.epoch, state.nextSequence, state.eventCursor, state.consumedCursor] && state.consumedCursor <= state.eventCursor && state.eventCursor <= 100000 && state.nextSequence <= 10000 && length state.listeners <= 32) (fail "unsupported worker session state")
+    unless (state.format == 1 && all (>= 0) [state.nextSequence, state.eventCursor, state.consumedCursor] && state.consumedCursor <= state.eventCursor && state.eventCursor <= 100000 && state.nextSequence <= 10000 && length state.listeners <= 32) (fail "unsupported worker session state")
     pure state
 
 data SessionListener = SessionListener
@@ -146,9 +149,9 @@ data Instruction = Instruction
   { format :: !Int,
     kind :: !MessageKind,
     text :: !Text,
-    objectiveRevision :: !Integer,
-    assignmentRevision :: !Integer,
-    criteriaRevision :: !Integer,
+    objectiveRevision :: !(StateRevision "objective"),
+    assignmentRevision :: !(StateRevision "objective-assignment"),
+    criteriaRevision :: !(StateRevision "objective-criteria"),
     selection :: !(Maybe ExecutionRequest)
   }
   deriving stock (Eq, Generic)
@@ -174,8 +177,8 @@ data MessageReceipt = MessageReceipt
     fingerprint :: !Text,
     kind :: !MessageKind,
     input :: !PayloadRef,
-    assignmentRevision :: !Integer,
-    epoch :: !Integer,
+    assignmentRevision :: !(StateRevision "objective-assignment"),
+    epoch :: !(StateRevision "worker-owner"),
     phase :: !AssignmentPhase,
     childWorkflowId :: !(Maybe Text),
     executionId :: !(Maybe ExecutionId),
@@ -190,7 +193,7 @@ instance FromJSON MessageReceipt where
     context <- fields .:? "context"
     aliases <- fields .:? "permittedAliases"
     message <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (KeyMap.insert "permittedAliases" (toJSON (aliases :: Maybe [Text])) (KeyMap.insert "context" (toJSON (context :: Maybe PayloadRef)) fields)))
-    unless (message.format == 1 && message.sequence >= 0 && message.sequence < 10000 && message.assignmentRevision >= 0 && message.epoch >= 0 && message.assignmentId == assignmentIdFor message.sessionId message.sequence message.operationId) (fail "unsupported assignment receipt identity")
+    unless (message.format == 1 && message.sequence >= 0 && message.sequence < 10000 && message.assignmentId == assignmentIdFor message.sessionId message.sequence message.operationId) (fail "unsupported assignment receipt identity")
     _ <- traverse (either (fail . show) pure . mkWorkflowId) message.childWorkflowId
     unless (if message.phase == Queued then isNothing message.childWorkflowId else isJust message.childWorkflowId) (fail "assignment child mapping is missing or premature")
     pure message
@@ -300,7 +303,7 @@ validateAdmission admission = do
 
 validateInstruction :: Instruction -> Either SessionError ()
 validateInstruction instruction =
-  unless (instruction.format == 1 && not (Text.null (Text.strip instruction.text)) && all (>= 0) [instruction.objectiveRevision, instruction.assignmentRevision, instruction.criteriaRevision]) (Left (SessionInputRefused "invalid instruction or objective/assignment revision"))
+  unless (instruction.format == 1 && not (Text.null (Text.strip instruction.text))) (Left (SessionInputRefused "invalid instruction or objective/assignment revision"))
 
 instance CanonicalTypeName WorkerSessionId where
   canonicalTypeName _ = "shikigami.WorkerSessionId.v1"

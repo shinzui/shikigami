@@ -11,6 +11,7 @@ import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.Execution.Identity (ExecutionRootId (..))
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Transcript
+import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Test.Tasty (TestTree, testGroup)
@@ -22,7 +23,7 @@ tests =
     "workspace instructions"
     [ testCase "historical admissions preserve JSON and cannot acquire a native file profile" $ do
         bundle <- right (mkInstructionBundle 65536 repository base [])
-        let admission = WorkspaceAdmission (WorkspaceRef "provider" "resource") "binding" "run" "assignment" (ExecutionRootId "root") (CompatibilityIdentity "worker") 0 bundle Nothing
+        let admission = WorkspaceAdmission (WorkspaceRef "provider" "resource") "binding" "run" "assignment" (ExecutionRootId "root") (CompatibilityIdentity "worker") (fixtureRevision 0) bundle Nothing
             historical = Aeson.object ["workspace" .= admission.workspace, "bindingDigest" .= admission.bindingDigest, "runId" .= admission.runId, "assignmentId" .= admission.assignmentId, "rootId" .= admission.rootId, "owner" .= admission.owner, "epoch" .= admission.epoch, "instructions" .= bundle]
         Aeson.fromJSON historical @?= Aeson.Success admission
         Aeson.toJSON admission @?= historical
@@ -73,3 +74,6 @@ tests =
     base = Text.replicate 40 "a"
     right :: (Show e) => Either e a -> IO a
     right = either (\err -> assertFailure (show err) >> fail "unreachable") pure
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

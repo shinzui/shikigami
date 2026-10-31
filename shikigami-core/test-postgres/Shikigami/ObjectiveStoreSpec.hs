@@ -193,7 +193,7 @@ tests fixture =
       testCase "sibling checkpoints commit from one base, real result projects and retries survive invalidation" $
         withObjective fixture \env admission objective -> do
           (a, b, firstIntent, secondIntent, firstInput, secondInput) <- checkpointPair env admission objective
-          let base = firstIntent.expected.revision
+          let base = revisionNumber firstIntent.expected.revision
               commit key intent input keyText = run env (O.executeInternal ownerHost objective (revision base) (OperationId keyText) (IngestCheckpoint key intent [input] []))
           (left, rightResult) <- concurrently (commit a.assignmentId firstIntent firstInput "checkpoint-a") (commit b.assignmentId secondIntent secondInput "checkpoint-b")
           first <- right left
@@ -201,7 +201,7 @@ tests fixture =
           assertBool "distinct advancing receipts" (first.revision /= second.revision && all (> revision base) [first.revision, second.revision])
           current <- get env objective
           version <- right (S.versionFor current a.assignmentId)
-          version.assignmentRevision @?= firstIntent.expected.assignmentRevision + 1
+          version.assignmentRevision @?= advanceRevision firstIntent.expected.assignmentRevision
           version.owner @?= a.owner
           Just version.rootId @?= a.rootId
           run env (O.readObjectiveVersion ownerHost (S.referenceFor objective a.assignmentId)) >>= (@?= Right version)
@@ -212,7 +212,7 @@ tests fixture =
       testCase "instruction and block/unblock cycles never revive prepared checkpoints or advance cursors" $
         withObjective fixture \env admission objective -> do
           (a, _, intent, _, input, _) <- checkpointPair env admission objective
-          let base = intent.expected.revision
+          let base = revisionNumber intent.expected.revision
           _ <- right =<< run env (O.executeCommand ownerHost objective (revision base) (OperationId "instructions") (ReviseInstructions (instructions "changed")))
           _ <- right =<< run env (O.executeCommand ownerHost objective (revision (base + 1)) (OperationId "restore") (ReviseInstructions (instructions "instructions")))
           run env (O.executeInternal ownerHost objective (revision base) (OperationId "stale") (IngestCheckpoint a.assignmentId intent [input] [])) >>= (@?= Left ObjectiveConflict)
@@ -255,7 +255,7 @@ tests fixture =
       testCase "child success is observed evidence and cannot substitute for a verifier" $
         withObjective fixture \env admission objective -> do
           (a, b, intent, _, input, _) <- checkpointPair env admission objective
-          let base = intent.expected.revision
+          let base = revisionNumber intent.expected.revision
               send expected key command = run env (O.executeCommand ownerHost objective (revision expected) (OperationId key) command)
           _ <- right =<< run env (O.executeInternal ownerHost objective (revision base) (OperationId "checkpoint") (IngestCheckpoint a.assignmentId intent [input] []))
           _ <- right =<< send (base + 1) "done-a" (RecordProgress a.assignmentId Done [] [])
@@ -267,7 +267,7 @@ tests fixture =
       testCase "unresolved effects block otherwise complete acceptance and source forgery advances no cursor" $
         withObjective fixture \env admission objective -> do
           (a, b, intent, _, input, _) <- checkpointPair env admission objective
-          let base = intent.expected.revision
+          let base = revisionNumber intent.expected.revision
               send expected key command = run env (O.executeCommand ownerHost objective (revision expected) (OperationId key) command)
               unresolved = UnresolvedOperation a.assignmentId origin (OperationId "unsettled-effect")
           run env (O.executeInternal ownerHost objective (revision base) (OperationId "forged") (IngestCheckpoint a.assignmentId (intent & #events .~ []) [input] [])) >>= (@?= Left ObjectiveConflict)
@@ -291,14 +291,14 @@ tests fixture =
           before <- get env objective
           initialVersion <- right (S.versionFor before key)
           let instruction = WS.Instruction 1 WS.FollowUp "accepted before cancellation" initialVersion.revision initialVersion.assignmentRevision initialVersion.criteriaRevision Nothing
-          (_, message) <- right =<< run env (Sessions.acceptMessage access 0 0 (OperationId "send") instruction)
-          _ <- right =<< run env (Sessions.startAssignment access 1 0 (OperationId "start") message.assignmentId)
-          (_, result) <- right =<< run env (Sessions.recordResult access 2 0 (OperationId "result") (WS.AssignmentResult 1 message.assignmentId WS.AssignmentSucceeded Nothing (Aeson.object []) ["artifact"]))
+          (_, message) <- right =<< run env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "send") instruction)
+          _ <- right =<< run env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (OperationId "start") message.assignmentId)
+          (_, result) <- right =<< run env (Sessions.recordResult access (fixtureRevision 2) (fixtureRevision 0) (OperationId "result") (WS.AssignmentResult 1 message.assignmentId WS.AssignmentSucceeded Nothing (Aeson.object []) ["artifact"]))
           _ <- right =<< run env (O.executeCommand ownerHost objective (revision 2) (OperationId "cancel") CancelObjective)
           cancelled <- get env objective
           version <- right (S.versionFor cancelled key)
           version.active @?= False
-          (_, intent) <- right =<< run env (Sessions.prepareCheckpoint access 3 0 (OperationId "prepare") version 0 3)
+          (_, intent) <- right =<< run env (Sessions.prepareCheckpoint access (fixtureRevision 3) (fixtureRevision 0) (OperationId "prepare") version 0 3)
           let evidence = ResultEvidence (evidenceKey "late") (criterionKey "human") (WorkerResult result (artifact "artifact")) False
           _ <- right =<< run env (O.executeInternal ownerHost objective (revision 3) (OperationId "reconcile") (IngestCheckpoint key intent [evidence] []))
           run env (O.executeCommand ownerHost objective (revision 4) (OperationId "fresh-progress") (RecordProgress key Working [] [])) >>= assertLeft
@@ -383,11 +383,11 @@ checkpoint env actor _ current assignment key = do
   access <- right =<< run env (Sessions.authorizeSession session actor (pure (Right ())))
   version <- right (S.versionFor current assignment.assignmentId)
   let instruction = WS.Instruction 1 WS.FollowUp "perform" version.revision version.assignmentRevision version.criteriaRevision Nothing
-  (_, message) <- right =<< run env (Sessions.acceptMessage access 0 0 (OperationId "send") instruction)
-  _ <- right =<< run env (Sessions.startAssignment access 1 0 (OperationId "start") message.assignmentId)
+  (_, message) <- right =<< run env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId "send") instruction)
+  _ <- right =<< run env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (OperationId "start") message.assignmentId)
   let result = WS.AssignmentResult 1 message.assignmentId WS.AssignmentSucceeded Nothing (Aeson.object []) ["artifact"]
-  (_, receipt) <- right =<< run env (Sessions.recordResult access 2 0 (OperationId "result") result)
-  (_, intent) <- right =<< run env (Sessions.prepareCheckpoint access 3 0 (OperationId "prepare") version 0 3)
+  (_, receipt) <- right =<< run env (Sessions.recordResult access (fixtureRevision 2) (fixtureRevision 0) (OperationId "result") result)
+  (_, intent) <- right =<< run env (Sessions.prepareCheckpoint access (fixtureRevision 3) (fixtureRevision 0) (OperationId "prepare") version 0 3)
   pure (intent, ResultEvidence (evidenceKey key) (criterionKey "human") (WorkerResult receipt (artifact "artifact")) False)
 
 run :: AppEnv -> Eff AppEffects a -> IO a
@@ -453,3 +453,6 @@ nextAction = either (error . show) id . parseNextAction
 
 limitation :: Text -> CompletionLimitation
 limitation = either (error . show) id . parseCompletionLimitation
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

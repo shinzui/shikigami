@@ -10,6 +10,7 @@ module Shikigami.StateRevision
     revisionNumber,
     initialRevision,
     advanceRevision,
+    previousRevision,
   )
 where
 
@@ -36,6 +37,12 @@ initialRevision = StateRevision 0
 
 advanceRevision :: StateRevision scope -> StateRevision scope
 advanceRevision (StateRevision number) = StateRevision (number + 1)
+
+-- | A predecessor is absent at the initial revision; never admit a negative value.
+previousRevision :: StateRevision scope -> Maybe (StateRevision scope)
+previousRevision (StateRevision number)
+  | number == 0 = Nothing
+  | otherwise = Just (StateRevision (number - 1))
 
 instance ToJSON (StateRevision scope) where
   toJSON = toJSON . revisionNumber

@@ -43,7 +43,7 @@
         {
           "id": "revision-domains",
           "disposition": "implemented",
-          "rationale": "Abstract nominal StateRevision scopes cover objective, assignment, instructions, criteria and worker-owner counters, including domain command arguments. Checked nonnegative JSON retains exact numeric bytes. Real positive/negative compiler clients and full core/PostgreSQL acceptance pass; adapters render numbers explicitly under ADR-74."
+          "rationale": "Abstract nominal StateRevision scopes cover objective, assignment, instructions, criteria, worker-session and worker-owner counters, including commands, objective/checkpoint/ownership provider contracts, workspace requests/admissions/controls/fences and private RPC. Numeric JSON stays unchanged. Private constructors reject negative counters, operator flags refine before runtime IO and predecessor lookup refuses zero. Domain/provider interfaces retain scope; generated/SQL adapters render integers explicitly. All 545 pure, 375 serial PostgreSQL, 260 worker and 95 server cases pass under ADR-74. Mailbox/resource counters remain in the pending census."
         },
         {
           "id": "objective-prose",
@@ -63,7 +63,8 @@
         "docs/adr/0074-domain-state-revisions-keep-their-scope-at-application-boundaries.md",
         "docs/evidence/keiro-0.22/state-revision-results.txt",
         "tests/types/revision-domains.py",
-        "docs/evidence/keiro-0.22/objective-content-results.txt"
+        "docs/evidence/keiro-0.22/objective-content-results.txt",
+        "docs/evidence/keiro-0.22/worker-owner-revision-results.txt"
       ]
     },
     {
@@ -3702,9 +3703,36 @@
       "sourcePath": "patterns/core/custom-prelude.md",
       "sourceSha256": "0310ce0e98f122f96c3a6ce1b6214ec0bfce6549d418f1ebe082bcfee78d6930",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "small-core-prelude",
+          "disposition": "existing",
+          "rationale": "Shikigami.Prelude is exposed by core and collects base/text/time/aeson reexports plus lens. Leaf client and migration packages retain explicit imports rather than introduce forbidden core dependency arrows."
+        },
+        {
+          "id": "package-imports-only-here",
+          "disposition": "existing",
+          "rationale": "PackageImports is a local Prelude pragma; its reexports name their package. The checker rejects package-qualified imports elsewhere and global enabling."
+        },
+        {
+          "id": "local-label-orphan",
+          "disposition": "implemented",
+          "rationale": "The Prelude never imports Data.Generics.Labels; each generic-record lens user imports it locally. Missing imports are detected by a mutation case. Definition modules without record manipulation remain free of the orphan."
+        },
+        {
+          "id": "shared-codecs-and-import-conflicts",
+          "disposition": "implemented",
+          "rationale": "Prelude owns eventAesonOptions. Existing native/generated and public protocol codecs retain their owning wire contract. Conflicting operators are imported unqualified and hidden from the Prelude; the former qualified operator workarounds were removed."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "tools/style/check_haskell.py",
+        "tools/style/test_check_haskell.py",
+        "shikigami-core/test/Shikigami/PackageArchitectureSpec.hs"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/core-multiline-strings",
@@ -3712,9 +3740,31 @@
       "sourcePath": "patterns/core/multiline-strings.md",
       "sourceSha256": "849c9a4ae02f125130983619053df0931296119d3203170af2d6543560c21a9a",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "ghc-extension",
+          "disposition": "existing",
+          "rationale": "GHC 9.12.4 and the common MultilineStrings extension enable native triple-quoted source literals."
+        },
+        {
+          "id": "embedded-multiline-content",
+          "disposition": "existing",
+          "rationale": "Hand-owned migration and SQL source uses native multiline literals where the content is multiline; ordinary single-line SQL stays an ordinary literal. There are no string-gap or raw quasiquote SQL substitutes in the inspected core/migration source. Escaped newlines in intentionally rendered prompts/logs are output composition, not an embedded multiline SQL workaround."
+        },
+        {
+          "id": "indentation-and-overloaded-strings",
+          "disposition": "existing",
+          "rationale": "The source literals use common indentation and ordinary OverloadedStrings target types; actual migration smoke and PostgreSQL suites execute them. The style lexer preserves triple-quoted content when checking surrounding Haskell."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "tools/style/check_haskell.py",
+        "tools/style/test_check_haskell.py",
+        "shikigami-core/test/Shikigami/PackageArchitectureSpec.hs"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/core-overview",
@@ -3722,9 +3772,21 @@
       "sourcePath": "patterns/core/overview.md",
       "sourceSha256": "79ce4f15691fbf601f0f208c655f8f74a6d970197df77f0d1b562ff3f2dedfaa",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "core-navigation",
+          "disposition": "existing",
+          "rationale": "All four linked normative guides were read and receive their own frozen clause rows: standards, records, custom Prelude and multiline strings. This navigation document adds no distinct executable behavior."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "tools/style/check_haskell.py",
+        "tools/style/test_check_haskell.py",
+        "shikigami-core/test/Shikigami/PackageArchitectureSpec.hs"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/core-record-patterns",
@@ -3732,9 +3794,41 @@
       "sourcePath": "patterns/core/record-patterns.md",
       "sourceSha256": "9f72001e0083fff8c4661cab1aed488abd502c148168df2f201d4c628ed0148f",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "strict-unprefixed-records",
+          "disposition": "implemented",
+          "rationale": "Hand-owned records use strict direct labels. Type/module prefixes were removed with explicit JSON mappings for existing public field names. Newtypes omit an illegal strictness bang. The lexical checker covers source and fixtures."
+        },
+        {
+          "id": "generic-record-access",
+          "disposition": "implemented",
+          "rationale": "Mutable Generic records use locally imported #label lenses; concise record-dot reads use the current generated edition. Pattern matching and record construction remain valid. Higher-rank capabilities cannot derive Generic under GHC 9.12.4, and public upstream records without Generic retain direct updates; the narrow source-verified exception is recorded in haskell-service-adoption.md."
+        },
+        {
+          "id": "entity-first-command-records",
+          "disposition": "existing",
+          "rationale": "Generated lifecycle commands/events put their declared identity first. Session control commands put sessionId first; domain mutation sums use their addressed aggregate at the command boundary, rather than inventing a duplicate field."
+        },
+        {
+          "id": "deriving-and-wire-ownership",
+          "disposition": "implemented",
+          "rationale": "Every deriving strategy is explicit. Shared event options stay in the Prelude; native/generated codecs and public DTO exceptions remain explicit. Renamed hand-owned fields preserve wire keys with focused API/codec evidence."
+        },
+        {
+          "id": "dependency-and-orphan-boundary",
+          "disposition": "implemented",
+          "rationale": "Lens/generic-lens are declared directly in the packages that use them; the agent library dependency was corrected. No orphan was moved to the Prelude and no broad Num/IsString instance was added to checked scalar types."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "tools/style/check_haskell.py",
+        "tools/style/test_check_haskell.py",
+        "shikigami-core/test/Shikigami/PackageArchitectureSpec.hs"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/core-standards",
@@ -3742,9 +3836,36 @@
       "sourcePath": "patterns/core/standards.md",
       "sourceSha256": "df87f26c1953ad519087ef89a34c2d21538f9fdfa74e5a2f6287799171afdc9a",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "compiler-and-edition",
+          "disposition": "existing",
+          "rationale": "The selected compiler is GHC 9.12.4. All seven application packages use GHC2024 in their common stanza; PackageArchitectureSpec and the convention checker guard every component importing that baseline."
+        },
+        {
+          "id": "required-extensions",
+          "disposition": "existing",
+          "rationale": "DeriveAnyClass, DuplicateRecordFields, OverloadedLabels and OverloadedStrings remain common defaults, with NoFieldSelectors/OverloadedRecordDot and MultilineStrings. Missing record fields are fatal. Generated extensions remain producer-owned."
+        },
+        {
+          "id": "postpositive-qualified-imports",
+          "disposition": "implemented",
+          "rationale": "All hand-owned source and fixtures use postpositive qualified imports. The lexical checker ignores strings/comments and rejects the prepositive syntax through mutation tests."
+        },
+        {
+          "id": "explicit-deriving",
+          "disposition": "implemented",
+          "rationale": "Deriving clauses explicitly select stock, newtype or anyclass; the same source checker rejects unqualified deriving clauses."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "tools/style/check_haskell.py",
+        "tools/style/test_check_haskell.py",
+        "shikigami-core/test/Shikigami/PackageArchitectureSpec.hs"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/patterns-getting-started",
@@ -3752,9 +3873,31 @@
       "sourcePath": "patterns/getting-started.md",
       "sourceSha256": "1271c4faed544e6440bbfaa5404396dd7ecbefc17a8a662afe755eb883b224a2",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "task-oriented-discovery",
+          "disposition": "existing",
+          "rationale": "The complete thirty-document Haskell corpus remains frozen, including API, CLI, agent and core routes. Applicable linked clauses are owned explicitly; optional CLI product choices are recorded in ADR-72."
+        },
+        {
+          "id": "config-route",
+          "disposition": "existing",
+          "rationale": "The current Settei standard is the configuration source; the removed layered-Dhall loader is not reintroduced."
+        },
+        {
+          "id": "review-discovery",
+          "disposition": "existing",
+          "rationale": "Review metadata is treated as timestamp-bound producer evidence. No new producer review approval was fabricated from implementation or validation."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "tools/style/check_haskell.py",
+        "tools/style/test_check_haskell.py",
+        "shikigami-core/test/Shikigami/PackageArchitectureSpec.hs"
+      ]
     },
     {
       "source": "mori://shinzui/haskell-jitsurei/docs/governance-review-policy",
@@ -3762,9 +3905,31 @@
       "sourcePath": "patterns/governance/review-policy.md",
       "sourceSha256": "645b333683a5d1a59786498ac1b2e440921357feb24efd0c84c53eeef00d4f09",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "producer-change-protocol",
+          "disposition": "not-applicable",
+          "rationale": "This change consumes a pinned Haskell pattern corpus; it does not edit that producer OKF bundle, its indexes, timestamps or logs. Producer-specific okf/mori/review-status commands apply when changing that corpus, which has not occurred."
+        },
+        {
+          "id": "timestamp-bound-reviews",
+          "disposition": "existing",
+          "rationale": "Frozen source revision and SHA-256 identify exactly which advice was reviewed. Existing model reviews are historical provenance, not independent approval of this implementation."
+        },
+        {
+          "id": "honest-authorship",
+          "disposition": "existing",
+          "rationale": "ExecPlan/MasterPlan revisions use the installed provenance script with verified runtime identity. No independent human/model review is claimed and existing records are retained."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/haskell-service-adoption.md",
+        "docs/evidence/keiro-0.22/haskell-service-results.txt",
+        "tools/style/check_haskell.py",
+        "tools/style/test_check_haskell.py",
+        "shikigami-core/test/Shikigami/PackageArchitectureSpec.hs"
+      ]
     }
   ],
   "unregisteredDocuments": [
