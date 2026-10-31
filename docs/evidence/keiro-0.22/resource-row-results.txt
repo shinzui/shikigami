@@ -1,0 +1,17 @@
+Transactional resource-row corruption refusals — ExecPlan 107
+Source parent: 3181122 (master); selected GHC 9.12.4/frozen cohort, arm64 macOS and real PostgreSQL fixtures.
+Decision: docs/adr/0098-resource-row-decoding-refuses-corruption-inside-the-transaction.md.
+
+Contract
+All four ResourcesStore JSON statement families retain their domain type as Either () value. The read boundary traverses the optional result inside the transaction, condemns that transaction on decoding failure and returns ResourceStateCorrupt. Parser/source text is discarded. Concrete SQL failures remain StoreError. No error-text matching, deferred exceptions, raw JSON propagation or invalid-row omission is introduced.
+Root callbacks, scope/usage updates and operation/attempt/settlement readers propagate the refusal before successful publication. Valid query text, parameters, row locks, optional absence, conservation, revisions, ceilings and accounting updates remain unchanged. Existing native command aborts and rich-body authority checks retain their owners.
+
+Acceptance
+Five positive-first PostgreSQL controls PASS (1.14s). The same five tests against the committed pre-change decoder all FAIL (1.08s), specifically through its store ConnectionError/DeserializationCellError path. The controlled experiment restores the fix in finally; source is restored before qualification. See resource-row-before-regressions.txt.
+Controls cover malformed root, operation, attempt and allocation rows, unchanged active/held accounting, a read-only root refusal rolling back an earlier tentative root publication, and a late malformed operation rolling back an earlier batch member. Existing publication SQL-fault controls still report a store failure. No shared/framework rows or predicates are modified.
+Full suites PASS: 584 pure (5.95s), 403 serial PostgreSQL (114.33s), 262 worker (167.35s), 95 server (19.04s). Existing uncertainty, settlement, inherited budgets, late abort, dispatch/restart, workspace handoff and recovery remain qualified. Selected components build through those tests. Public checked-value interfaces are unchanged; the previous 230 compiler-client results remain historical applicable evidence and were not rerun for this private reader change.
+just keiro-gate 3181122 PASS: native check, ten-member inspection, idempotent scaffold and 156 conformance rows. Strict diff has zero findings. Domain and six diagram checks pass; four transducer fingerprints/source hashes are unchanged. Exact native diff/replay/fold reports are retained. No DSL/workflow shape, valid codec or identity producer changes; no patch is needed.
+All 124 frozen guide source hashes verified. Current source/tool hashes and unique worklist verified: 320 modules, 907 declarations, 14 entrypoints. The census remains unclassified. Haskell conventions, thirteen checker mutation tests and git diff --check pass; generated files remain untouched.
+
+Scope
+This decision covers ResourcesStore's JSON decoding boundary, not all business consistency checks or other stores. Model/other decision values, the complete scalar/identity census and other decoder-owner classifications keep plan107 M1 open. API/client/agent/CLI/live HTTP records remain their preceding historical evidence. Packaged/Linux/runtime qualification and plan95 have not started.

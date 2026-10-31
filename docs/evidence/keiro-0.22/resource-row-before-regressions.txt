@@ -1,0 +1,14 @@
+Resource owned-row regression control
+Source baseline: committed 3181122; the five new tests alone were applied to its original ResourcesStore decoder.
+Command: cabal test shikigami-core-postgres-test --test-option=-p --test-option='/owned resource row decoding/' --test-option=-j1 --test-show-details=direct -j1
+Selected count: five, all executed; five out of five FAIL (1.08s).
+Every positive setup/read completed before its malformed task-owned row was injected.
+
+malformed root is a data refusal and rolls back coupled tentative publication: FAIL
+malformed operation retains the reservation before attempt admission: FAIL
+malformed attempt retains active and held accounting before completion: FAIL
+malformed allocation retains its exclusive hold: FAIL
+late malformed operation rolls back an earlier batch member: FAIL
+
+Each original failure is the generic store ConnectionError/DeserializationCellError path from FromJSON missing required root/operation/attempt/allocation fields. The expected resource-level ResourceStateCorrupt is not returned. This is a classification regression control; the old driver already rolls back a query failure. The new in-transaction condemnation must preserve that rollback while returning an owning data refusal.
+The baseline experiment restored the fixed source in finally. The same five cases pass with the fixed decoder (1.14s), including tentative-publication and earlier-batch-member rollback. No predicate was weakened and no shared/framework rows were edited.

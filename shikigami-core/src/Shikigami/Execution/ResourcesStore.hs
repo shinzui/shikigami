@@ -97,10 +97,12 @@ enrollRootTx identifier envelope = do
   let key = executionRootIdText identifier
       initial = Root envelope initialRevision ContinueWork Nothing NoOverage noAttempts noAttempts Map.empty emptyUsage
   inserted <- Tx.statement (key, initial) insertRoot
-  stored <- Tx.statement key lockRoot
-  pure case stored of
-    Just root | root.envelope == envelope -> Right (if inserted then Accepted else AlreadyAccepted)
-    _ -> Left IdentityConflict
+  stored <- readChecked key lockRoot
+  pure do
+    value <- stored
+    case value of
+      Just root | root.envelope == envelope -> Right (if inserted then Accepted else AlreadyAccepted)
+      _ -> Left IdentityConflict
 
 reserveOperation :: (Store :> es) => ExecutionRootId -> StateRevision "execution-root" -> OperationRequest -> UTCTime -> Eff es (Either ResourceError Admission)
 reserveOperation root revision request now = reserveOperations root revision [request] now
@@ -124,9 +126,10 @@ reserveOperationsTx root expected requests now = do
       Right () -> do
         existing <- readOperation root request.operationId
         case existing of
-          Just old | old == request -> go state admission rest
-          Just _ -> pure (Left IdentityConflict)
-          Nothing -> case checkRoot now expected state of
+          Left err -> pure (Left err)
+          Right (Just old) | old == request -> go state admission rest
+          Right (Just _) -> pure (Left IdentityConflict)
+          Right Nothing -> case checkRoot now expected state of
             Left err -> pure (Left err)
             Right () -> do
               charged <- charge root state request.allocationId now request.quantities
@@ -143,13 +146,15 @@ beginAttemptTx :: ExecutionRootId -> StateRevision "execution-root" -> AttemptRe
 beginAttemptTx root expected request now = withRoot root \state -> do
   existing <- readAttempt root request.attemptId
   case existing of
-    Just old | old.request == request -> pure (Right AlreadyAccepted)
-    Just _ -> pure (Left IdentityConflict)
-    Nothing -> do
+    Left err -> pure (Left err)
+    Right (Just old) | old.request == request -> pure (Right AlreadyAccepted)
+    Right (Just _) -> pure (Left IdentityConflict)
+    Right Nothing -> do
       operation <- readOperation root request.operationId
       case operation of
-        Nothing -> pure (Left OperationMissing)
-        Just operationRequest -> do
+        Left err -> pure (Left err)
+        Right Nothing -> pure (Left OperationMissing)
+        Right (Just operationRequest) -> do
           scope <- loadScope root state operationRequest.allocationId
           case scope >>= \(limits, _, _) -> checkRoot now expected state >> validateAttempt limits operationRequest request >> checkActive state of
             Left err -> pure (Left err)
@@ -189,8 +194,9 @@ recordSettlement :: Bool -> ExecutionRootId -> AttemptId -> Settlement -> Transa
 recordSettlement reconcile root attemptId outcome = withRoot root \state -> do
   stored <- readAttempt root attemptId
   case stored of
-    Nothing -> pure (Left AttemptMissing)
-    Just attempt
+    Left err -> pure (Left err)
+    Right Nothing -> pure (Left AttemptMissing)
+    Right (Just attempt)
       | attempt.outcome == Just outcome -> pure (Right AlreadyAccepted)
       | isJust attempt.outcome && not (reconcile && wasUncertain attempt) -> pure (Left SettlementConflict)
       | reconcile && not (wasUncertain attempt) -> pure (Left SettlementConflict)
@@ -205,8 +211,9 @@ recordSettlement reconcile root attemptId outcome = withRoot root \state -> do
           KnownUsage measured -> do
             operation <- readOperation root attempt.request.operationId
             case operation of
-              Nothing -> pure (Left OperationMissing)
-              Just operationRequest -> do
+              Left err -> pure (Left err)
+              Right Nothing -> pure (Left OperationMissing)
+              Right (Just operationRequest) -> do
                 scope <- loadScope root state operationRequest.allocationId
                 let (reservation, newlyMeasured) = case attempt.outcome of
                       Just (PartialUsage _ missing _) -> (Map.filterWithKey (\d _ -> d `elem` missing) attempt.request.quantities, Map.filterWithKey (\d _ -> d `elem` missing) measured)
@@ -227,19 +234,23 @@ recordSettlement reconcile root attemptId outcome = withRoot root \state -> do
                 case scope >>= prepare of
                   Left err -> pure (Left err)
                   Right (usage, known, active, unknown) -> do
-                    next <- saveScopeUsage root state operationRequest.allocationId usage
-                    let exceeded = any (\(d, n) -> Map.member d reservation && n > Map.findWithDefault zeroAmount d reservation) (Map.toList newlyMeasured)
-                        recorded = next & #active .~ active & #unknown .~ unknown & #known .~ known & #overage .~ (if exceeded then OverageDetected else state.overage)
-                    writeAttempt root (Attempt attempt.request (Just outcome))
-                    saveRoot root recorded
-                    pure (Right Accepted)
+                    updated <- saveScopeUsage root state operationRequest.allocationId usage
+                    case updated of
+                      Left err -> pure (Left err)
+                      Right next -> do
+                        let exceeded = any (\(d, n) -> Map.member d reservation && n > Map.findWithDefault zeroAmount d reservation) (Map.toList newlyMeasured)
+                            recorded = next & #active .~ active & #unknown .~ unknown & #known .~ known & #overage .~ (if exceeded then OverageDetected else state.overage)
+                        writeAttempt root (Attempt attempt.request (Just outcome))
+                        saveRoot root recorded
+                        pure (Right Accepted)
           PartialUsage measured missing reason
             | null missing || any (`notElem` [Tokens, CostMicroUsd]) missing || any (`Map.member` measured) missing || Text.null reason || Text.length reason > 512 -> pure (Left (InvalidResourceRequest "partial usage requires disjoint known measurements, unknown billing dimensions and a bounded reason"))
             | otherwise -> do
                 operation <- readOperation root attempt.request.operationId
                 case operation of
-                  Nothing -> pure (Left OperationMissing)
-                  Just operationRequest -> do
+                  Left err -> pure (Left err)
+                  Right Nothing -> pure (Left OperationMissing)
+                  Right (Just operationRequest) -> do
                     scope <- loadScope root state operationRequest.allocationId
                     let knownReservation = Map.filterWithKey (\d _ -> d `notElem` missing) attempt.request.quantities
                         counters = Map.filterWithKey (\d _ -> d `elem` [ModelAttempts, ToolAttempts]) knownReservation
@@ -252,11 +263,14 @@ recordSettlement reconcile root attemptId outcome = withRoot root \state -> do
                     case scope >>= prepare of
                       Left err -> pure (Left err)
                       Right (usage, known, active, unknown) -> do
-                        next <- saveScopeUsage root state operationRequest.allocationId usage
-                        let exceeded = any (\(d, n) -> Map.member d knownReservation && n > Map.findWithDefault zeroAmount d knownReservation) (Map.toList measured)
-                        writeAttempt root (Attempt attempt.request (Just outcome))
-                        saveRoot root (next & #active .~ active & #unknown .~ unknown & #known .~ known & #overage .~ (if exceeded then OverageDetected else state.overage))
-                        pure (Right Accepted)
+                        updated <- saveScopeUsage root state operationRequest.allocationId usage
+                        case updated of
+                          Left err -> pure (Left err)
+                          Right next -> do
+                            let exceeded = any (\(d, n) -> Map.member d knownReservation && n > Map.findWithDefault zeroAmount d knownReservation) (Map.toList measured)
+                            writeAttempt root (Attempt attempt.request (Just outcome))
+                            saveRoot root (next & #active .~ active & #unknown .~ unknown & #known .~ known & #overage .~ (if exceeded then OverageDetected else state.overage))
+                            pure (Right Accepted)
   where
     wasUncertain attempt = case attempt.outcome of
       Just (UnknownUsage _) -> True
@@ -272,8 +286,9 @@ narrowAllocation :: (Store :> es) => ExecutionRootId -> StateRevision "execution
 narrowAllocation root expected allocationId parent envelope now = runTransaction $ withRoot root \state -> do
   existing <- readAllocation root allocationId
   case existing of
-    Just allocation | allocation.parent == parent && allocation.current == envelope -> pure (Right AlreadyAccepted)
-    _ -> case checkRoot now expected state >> finiteLimits envelope of
+    Left err -> pure (Left err)
+    Right (Just allocation) | allocation.parent == parent && allocation.current == envelope -> pure (Right AlreadyAccepted)
+    Right existingAllocation -> case checkRoot now expected state >> finiteLimits envelope of
       Left err -> pure (Left err)
       Right quantities -> do
         parentScope <- loadScope root state parent
@@ -281,14 +296,17 @@ narrowAllocation root expected allocationId parent envelope now = runTransaction
           Left err -> pure (Left err)
           Right (limits, cutoff, parentUsage)
             | envelope.cutoff > cutoff -> pure (Left (InvalidResourceRequest "allocation cannot extend its parent's cutoff"))
-            | otherwise -> case existing of
+            | otherwise -> case existingAllocation of
                 Nothing -> case admit limits parentUsage quantities of
                   Left err -> pure (Left err)
                   Right usage -> do
-                    next <- saveScopeUsage root state parent usage
-                    writeAllocation root allocationId (Allocation parent envelope envelope emptyUsage)
-                    saveRoot root next
-                    pure (Right Accepted)
+                    updated <- saveScopeUsage root state parent usage
+                    case updated of
+                      Left err -> pure (Left err)
+                      Right next -> do
+                        writeAllocation root allocationId (Allocation parent envelope envelope emptyUsage)
+                        saveRoot root next
+                        pure (Right Accepted)
                 Just old
                   | old.parent /= parent -> pure (Left IdentityConflict)
                   | envelope.cutoff > old.current.cutoff -> pure (Left (InvalidResourceRequest "allocation cutoff cannot increase"))
@@ -307,10 +325,13 @@ narrowAllocation root expected allocationId parent envelope now = runTransaction
                         case prepare of
                           Left _ -> pure (Left (InvalidResourceRequest "allocation must narrow without releasing spent or held work"))
                           Right held -> do
-                            next <- saveScopeUsage root state parent (Usage parentUsage.settled held)
-                            writeAllocation root allocationId (Allocation parent old.admitted envelope old.usage)
-                            saveRoot root next
-                            pure (Right Accepted)
+                            updated <- saveScopeUsage root state parent (Usage parentUsage.settled held)
+                            case updated of
+                              Left err -> pure (Left err)
+                              Right next -> do
+                                writeAllocation root allocationId (Allocation parent old.admitted envelope old.usage)
+                                saveRoot root next
+                                pure (Right Accepted)
 
 finiteLimits :: Envelope -> Either ResourceError Quantities
 finiteLimits Envelope {limits} = traverse finite limits
@@ -344,18 +365,23 @@ inspectRootTx root = withRoot root (pure . Right)
 -- | An accepted identity is a receipt, never permission to redispatch. Executors
 -- recover this record alongside their own dispatch claim and protected outcome.
 inspectAttempt :: (Store :> es) => ExecutionRootId -> AttemptId -> Eff es (Either ResourceError (Maybe Attempt))
-inspectAttempt root attempt = runTransaction (withRoot root (\_ -> Right <$> readAttempt root attempt))
+inspectAttempt root attempt = runTransaction (withRoot root (\_ -> readAttempt root attempt))
 
 withRoot :: ExecutionRootId -> (Root -> Transaction (Either ResourceError a)) -> Transaction (Either ResourceError a)
-withRoot identifier action = Tx.statement (executionRootIdText identifier) lockRoot >>= maybe (pure (Left RootMissing)) action
+withRoot identifier action =
+  readChecked (executionRootIdText identifier) lockRoot >>= \case
+    Left err -> pure (Left err)
+    Right Nothing -> pure (Left RootMissing)
+    Right (Just state) -> action state
 
 loadScope :: ExecutionRootId -> Root -> Maybe AllocationId -> Transaction (Either ResourceError (Limits, UTCTime, Usage))
 loadScope _ state Nothing = pure (Right (effectiveLimits state, state.envelope.cutoff, state.usage))
 loadScope root state (Just allocationId) = do
   allocation <- readAllocation root allocationId
   case allocation of
-    Nothing -> pure (Left AllocationMissing)
-    Just a -> do
+    Left err -> pure (Left err)
+    Right Nothing -> pure (Left AllocationMissing)
+    Right (Just a) -> do
       parent <- loadScope root state a.parent
       pure ((\(_, cutoff, _) -> (a.current.limits, min cutoff a.current.cutoff, a.usage)) <$> parent)
 
@@ -373,15 +399,18 @@ charge root state scope now amounts = do
     Left err -> pure (Left err)
     Right (usage, known) -> do
       updated <- saveScopeUsage root state scope usage
-      pure (Right (updated & #known .~ known))
+      pure ((\next -> next & #known .~ known) <$> updated)
 
-saveScopeUsage :: ExecutionRootId -> Root -> Maybe AllocationId -> Usage -> Transaction Root
-saveScopeUsage _ state Nothing usage = pure (state & #usage .~ usage)
+saveScopeUsage :: ExecutionRootId -> Root -> Maybe AllocationId -> Usage -> Transaction (Either ResourceError Root)
+saveScopeUsage _ state Nothing usage = pure (Right (state & #usage .~ usage))
 saveScopeUsage root state (Just allocationId) usage = do
   -- The root lock serializes all access, so this row cannot disappear or change.
   stored <- readAllocation root allocationId
-  forM_ stored \allocation -> writeAllocation root allocationId (allocation & #usage .~ usage)
-  pure state
+  case stored of
+    Left err -> pure (Left err)
+    Right value -> do
+      forM_ value \allocation -> writeAllocation root allocationId (allocation & #usage .~ usage)
+      pure (Right state)
 
 textParam :: E.Params Text
 textParam = E.param (E.nonNullable E.text)
@@ -389,10 +418,19 @@ textParam = E.param (E.nonNullable E.text)
 jsonParam :: (ToJSON a) => E.Params a
 jsonParam = toJSON >$< E.param (E.nonNullable E.jsonb)
 
-jsonRow :: (FromJSON a) => D.Row a
-jsonRow = D.column (D.nonNullable (D.refine decode D.jsonb))
+jsonRow :: (FromJSON a) => D.Row (Either () a)
+jsonRow = decode <$> D.column (D.nonNullable D.jsonb)
   where
-    decode value = case Aeson.fromJSON value of Aeson.Error err -> Left (Text.pack err); Aeson.Success a -> Right a
+    decode value = case Aeson.fromJSON value of Aeson.Error _ -> Left (); Aeson.Success a -> Right a
+
+-- Any malformed owned row condemns the whole transaction, including tentative
+-- writes made by a coupled owner before this read. Never drop an invalid row.
+readChecked :: params -> Statement params (Maybe (Either () a)) -> Transaction (Either ResourceError (Maybe a))
+readChecked params statement = do
+  stored <- Tx.statement params statement
+  case traverse id stored of
+    Left () -> Tx.condemn >> pure (Left ResourceStateCorrupt)
+    Right value -> pure (Right value)
 
 insertRoot :: Statement (Text, Root) Bool
 insertRoot =
@@ -401,7 +439,7 @@ insertRoot =
     (contrazip2 textParam jsonParam)
     (fromMaybe False <$> D.rowMaybe (D.column (D.nonNullable D.bool)))
 
-lockRoot :: Statement Text (Maybe Root)
+lockRoot :: Statement Text (Maybe (Either () Root))
 lockRoot = preparable "SELECT state FROM shikigami.execution_roots WHERE root_id=$1 FOR UPDATE" textParam (D.rowMaybe jsonRow)
 
 saveRoot :: ExecutionRootId -> Root -> Transaction ()
@@ -410,10 +448,10 @@ saveRoot identifier state = Tx.statement (executionRootIdText identifier, state)
 updateRoot :: Statement (Text, Root) ()
 updateRoot = preparable "UPDATE shikigami.execution_roots SET state=$2 WHERE root_id=$1" (contrazip2 textParam jsonParam) D.noResult
 
-readOperation :: ExecutionRootId -> OperationId -> Transaction (Maybe OperationRequest)
-readOperation root (operationIdText -> key) = Tx.statement (executionRootIdText root, key) getOperation
+readOperation :: ExecutionRootId -> OperationId -> Transaction (Either ResourceError (Maybe OperationRequest))
+readOperation root (operationIdText -> key) = readChecked (executionRootIdText root, key) getOperation
 
-getOperation :: Statement (Text, Text) (Maybe OperationRequest)
+getOperation :: Statement (Text, Text) (Maybe (Either () OperationRequest))
 getOperation = preparable "SELECT request FROM shikigami.execution_operations WHERE root_id=$1 AND operation_id=$2" (contrazip2 textParam textParam) (D.rowMaybe jsonRow)
 
 writeOperation :: ExecutionRootId -> OperationRequest -> Transaction ()
@@ -422,10 +460,10 @@ writeOperation root request = let key = operationIdText request.operationId in T
 putOperation :: Statement (Text, Text, OperationRequest) ()
 putOperation = preparable "INSERT INTO shikigami.execution_operations (root_id,operation_id,request) VALUES ($1,$2,$3)" (contrazip3 textParam textParam jsonParam) D.noResult
 
-readAttempt :: ExecutionRootId -> AttemptId -> Transaction (Maybe Attempt)
-readAttempt root identifier = Tx.statement (executionRootIdText root, attemptIdText identifier) getAttempt
+readAttempt :: ExecutionRootId -> AttemptId -> Transaction (Either ResourceError (Maybe Attempt))
+readAttempt root identifier = readChecked (executionRootIdText root, attemptIdText identifier) getAttempt
 
-getAttempt :: Statement (Text, Text) (Maybe Attempt)
+getAttempt :: Statement (Text, Text) (Maybe (Either () Attempt))
 getAttempt = preparable "SELECT state FROM shikigami.execution_attempts WHERE root_id=$1 AND attempt_id=$2" (contrazip2 textParam textParam) (D.rowMaybe jsonRow)
 
 writeAttempt :: ExecutionRootId -> Attempt -> Transaction ()
@@ -434,10 +472,10 @@ writeAttempt root attempt = Tx.statement (executionRootIdText root, attemptIdTex
 putAttempt :: Statement (Text, Text, Attempt) ()
 putAttempt = preparable "INSERT INTO shikigami.execution_attempts (root_id,attempt_id,state) VALUES ($1,$2,$3) ON CONFLICT (root_id,attempt_id) DO UPDATE SET state=EXCLUDED.state" (contrazip3 textParam textParam jsonParam) D.noResult
 
-readAllocation :: ExecutionRootId -> AllocationId -> Transaction (Maybe Allocation)
-readAllocation root identifier = Tx.statement (executionRootIdText root, allocationIdText identifier) getAllocation
+readAllocation :: ExecutionRootId -> AllocationId -> Transaction (Either ResourceError (Maybe Allocation))
+readAllocation root identifier = readChecked (executionRootIdText root, allocationIdText identifier) getAllocation
 
-getAllocation :: Statement (Text, Text) (Maybe Allocation)
+getAllocation :: Statement (Text, Text) (Maybe (Either () Allocation))
 getAllocation = preparable "SELECT state FROM shikigami.execution_allocations WHERE root_id=$1 AND allocation_id=$2" (contrazip2 textParam textParam) (D.rowMaybe jsonRow)
 
 writeAllocation :: ExecutionRootId -> AllocationId -> Allocation -> Transaction ()

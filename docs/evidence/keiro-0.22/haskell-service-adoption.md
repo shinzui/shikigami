@@ -367,3 +367,13 @@ Valid metadata bytes/preimages and complete immutable binding/type witnesses
 remain. Native findings against 6d8d74e are empty and four transducers unchanged.
 The 320-module/907-declaration worklist remains unclassified; model/other decision
 values, complete scalar/identity and decoder-owner review remain open.
+
+Owned resource JSON decoding now returns ResourceStateCorrupt inside the
+transaction and condemns coupled tentative writes. Typed root/operation/attempt/
+allocation statements preserve queries, locks, holds and genuine StoreError.
+[ADR-98](../../adr/0098-resource-row-decoding-refuses-corruption-inside-the-transaction.md)
+and [acceptance](resource-row-results.txt) record five committed-decoder failures,
+then 584 pure/403 PostgreSQL/262 worker/95 server cases and native/domain/diagram
+gates. Native findings against 3181122 are empty; four transducers remain unchanged.
+The 320-module/907-declaration worklist remains unclassified, and complete scalar/
+identity, model/other decision and remaining decoder-owner review remain open.

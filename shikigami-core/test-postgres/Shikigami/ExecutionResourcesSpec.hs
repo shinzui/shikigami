@@ -38,7 +38,70 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "ExecutionResources"
-    [ testCase "root origin allocates once across concurrent and missing-response retries" $ withFixture fixture \env -> do
+    [ testGroup
+        "owned resource row decoding"
+        [ testCase "malformed root is a data refusal and rolls back coupled tentative publication" $ withFixture fixture \env -> do
+            seed env []
+            before <- root env
+            let other = fixtureRootId "coupled-publication"
+                insert =
+                  preparable
+                    "INSERT INTO shikigami.execution_roots(root_id,state) VALUES ($1,$2)"
+                    (contrazip2 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.jsonb)))
+                    D.noResult
+            run env (runTransaction (Tx.sql "UPDATE shikigami.execution_roots SET state='{}'::jsonb"))
+            run env (inspectRoot rid) >>= (@?= Left ResourceStateCorrupt)
+            run env (enrollRoot rid (envelope [])) >>= (@?= Left ResourceStateCorrupt)
+            run
+              env
+              ( runTransaction do
+                  Tx.statement (executionRootIdText other, Aeson.toJSON before) insert
+                  inspectRootTx rid
+              )
+              >>= (@?= Left ResourceStateCorrupt)
+            run env (inspectRoot other) >>= (@?= Left RootMissing),
+          testCase "malformed operation retains the reservation before attempt admission" $ withFixture fixture \env -> do
+            seed env []
+            reserveModel env "one"
+            run env (reserveOperation rid (fixtureRevision 0) (model "one") now) >>= (@?= Right AlreadyAccepted)
+            before <- root env
+            run env (runTransaction (Tx.sql "UPDATE shikigami.execution_operations SET request='{}'::jsonb"))
+            run env (reserveOperation rid (fixtureRevision 0) (model "one") now) >>= (@?= Left ResourceStateCorrupt)
+            run env (begin "a" "one") >>= (@?= Left ResourceStateCorrupt)
+            root env >>= (@?= before),
+          testCase "malformed attempt retains active and held accounting before completion" $ withFixture fixture \env -> do
+            seed env []
+            reserveModel env "one"
+            run env (begin "a" "one") >>= (@?= Right Accepted)
+            run env (inspectAttempt rid (fixtureAttemptId "a")) >>= (assertBool "positive attempt lookup" . \case Right (Just _) -> True; _ -> False)
+            before <- root env
+            run env (runTransaction (Tx.sql "UPDATE shikigami.execution_attempts SET state='{}'::jsonb"))
+            run env (inspectAttempt rid (fixtureAttemptId "a")) >>= (@?= Left ResourceStateCorrupt)
+            run env (begin "a" "one") >>= (@?= Left ResourceStateCorrupt)
+            run env (settleAttempt rid (fixtureAttemptId "a") (KnownUsage (measure 3))) >>= (@?= Left ResourceStateCorrupt)
+            root env >>= (@?= before),
+          testCase "malformed allocation retains its exclusive hold" $ withFixture fixture \env -> do
+            seed env []
+            let allocation = fixtureAllocationId "allocation"
+                allowance = envelope [(Tokens, fixtureAmount 10)]
+                reserve key = reserveOperation rid (fixtureRevision 0) ((model key) {allocationId = Just allocation}) now
+            run env (narrowAllocation rid (fixtureRevision 0) allocation Nothing allowance now) >>= (@?= Right Accepted)
+            run env (reserve "before") >>= (@?= Right Accepted)
+            before <- root env
+            run env (runTransaction (Tx.sql "UPDATE shikigami.execution_allocations SET state='{}'::jsonb"))
+            run env (narrowAllocation rid (fixtureRevision 0) allocation Nothing allowance now) >>= (@?= Left ResourceStateCorrupt)
+            run env (reserve "after") >>= (@?= Left ResourceStateCorrupt)
+            root env >>= (@?= before),
+          testCase "late malformed operation rolls back an earlier batch member" $ withFixture fixture \env -> do
+            seed env []
+            reserveModel env "one"
+            before <- root env
+            run env (runTransaction (Tx.sql "UPDATE shikigami.execution_operations SET request='{}'::jsonb"))
+            run env (reserveOperations rid (fixtureRevision 0) [child "new", model "one"] now) >>= (@?= Left ResourceStateCorrupt)
+            root env >>= (@?= before)
+            run env (begin "a" "new") >>= (@?= Left OperationMissing)
+        ],
+      testCase "root origin allocates once across concurrent and missing-response retries" $ withFixture fixture \env -> do
         let caller = either (error . show) id (mkAgentName "root-owner")
             create supplied = allocateRootForWorkflow (CompatibilityAgent caller) caller (WorkflowId "native-root-run") supplied (envelope [])
         values <- replicateConcurrently 8 (run env (create Nothing))

@@ -254,6 +254,11 @@
           "rationale": "ADR-97 retains seven registration identities/versions as private nominal-scoped ProgramIdentity values after boundary refinement; complete descriptor decoding rejects emptiness. The computed ProgramParameterDigest has its concrete canonical SHA-256 encoding and preserves the existing domain/preimage. A closed ParametersV1 format retains numeric one. Opaque implementation/version labels preserve admitted bytes without invented hash/version syntax. Complete immutable binding and Haskell type-witness checks remain; unrelated model/decision values and the complete census stay pending."
         },
         {
+          "id": "owned-resource-row-decoding",
+          "disposition": "implemented",
+          "rationale": "ADR-98 captures ResourcesStore root/operation/attempt/allocation FromJSON refusals as typed row data and condemns the transaction before returning ResourceStateCorrupt. Concrete SQL failures keep StoreError. Five positive-first PostgreSQL corruption cases fail against the original decoder and pass with explicit refusal, preserved holds and coupled/batch rollback. Valid queries, locks, limits and native owners remain; other stores and the full scalar/identity census remain pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -362,7 +367,12 @@
         "docs/evidence/keiro-0.22/program-values-results.txt",
         "docs/evidence/keiro-0.22/program-values-native-diff.json",
         "docs/evidence/keiro-0.22/program-values-native-replay.json",
-        "docs/evidence/keiro-0.22/program-values-fold-identities.json"
+        "docs/evidence/keiro-0.22/program-values-fold-identities.json",
+        "docs/evidence/keiro-0.22/resource-row-results.txt",
+        "docs/evidence/keiro-0.22/resource-row-before-regressions.txt",
+        "docs/evidence/keiro-0.22/resource-row-native-diff.json",
+        "docs/evidence/keiro-0.22/resource-row-native-replay.json",
+        "docs/evidence/keiro-0.22/resource-row-fold-identities.json"
       ]
     },
     {

@@ -96,6 +96,11 @@ scalar/identity and remaining decoder-owner classifications remain open.
 
 ## Decision Log
 
+2026-10-31: Five committed-decoder PostgreSQL controls reproduce resource JSON
+corruption reaching StoreError. ADR-98 captures typed row decoding and condemns
+inside the resource read boundary before returning ResourceStateCorrupt. Preserve
+SQL outage classification, coupled rollback, accounting and native abort owners.
+
 2026-10-31: ADR-97 retains the existing seven nonempty program registration
 coordinates as nominal-scoped values, the computed parameter commitment in its
 concrete digest domain, and parameter format as closed numeric one. Preserve
@@ -137,14 +142,14 @@ cases. The language checker and thirteen style/ownership mutation tests pass.
 [The adoption record](../evidence/keiro-0.22/haskell-service-adoption.md) links each
 implemented domain-value wave and its exact candidate/evidence.
 
-Latest program-value acceptance passed 584 pure and 398 serial PostgreSQL cases,
-230 compiler clients, the native/domain/diagram gates and all-enabled compilation.
-[Acceptance](../evidence/keiro-0.22/program-values-results.txt) records complete
-invalid-descriptor controls and preserved immutable registration, pending state,
-completed outcome and provider/accounting behavior. Strict native findings against
-6d8d74e are empty; four transducers remain unchanged. The current
-320-module/907-declaration worklist, source/tool hashes and all 124 frozen guide
-hashes are verified. Earlier role/CLI/live HTTP results remain in their individual
+Latest resource-row acceptance passed 584 pure, 403 serial PostgreSQL, 262 worker
+and 95 server cases plus native/domain/diagram gates.
+[Acceptance](../evidence/keiro-0.22/resource-row-results.txt) records five committed-
+decoder failures followed by owning corruption refusals, preserved holds and
+coupled/batch rollback. Strict native findings against 3181122 are empty; four
+transducers remain unchanged. The current 320-module/907-declaration worklist,
+source/tool hashes and all 124 frozen guide hashes are verified. Earlier 230
+compiler-client and other role/CLI/live HTTP results remain in their individual
 wave records. Forty-two of 46 assigned sources have implemented dispositions.
 Complete scalar/identity, model/other decision values and remaining decoder-owner
 review keep M1 incomplete. Three final-profile clauses and plan95's packaged
