@@ -1,5 +1,5 @@
 -- | Documentation rendered from the same transducers used by command runners.
-module Shikigami.DomainDiagrams (domainAtlas, domainEdgeInspectors) where
+module Shikigami.Diagrams (domainAtlas, domainEdgeInspectors) where
 
 import Data.Text (Text)
 import Data.Text qualified as Text

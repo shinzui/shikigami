@@ -30,7 +30,7 @@
 -- resume worker whose outer runner returned. Composing the loops with a bare
 -- @concurrently_@ treats both as \"this branch finished, wait for the others\",
 -- which is how a process ends up running three loops around a corpse.
-module Shikigami.Workers.Supervision
+module Shikigami.Health.Supervision
   ( LoopExited (..),
     superviseLoops,
   )

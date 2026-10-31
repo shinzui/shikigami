@@ -23,6 +23,7 @@ import Shikigami.App.Config (AppConfig, Role (SchedulerRole))
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Directory (DirectoryRuntime (..))
+import Shikigami.Health.Supervision (superviseLoops)
 import Shikigami.Health.Worker (LoopName (DirectoryLoop, SchedulerLoop), beat, loopStaleAfter, newHeartbeatsWithStaleness, serveProbesWith)
 import Shikigami.Inspection.Runtime (withInspectionRuntime)
 import Shikigami.Inspection.Store (withObservedStore)
@@ -34,7 +35,6 @@ import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trigger.Schedule (CronSchedule)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, runSchedulerTimerWorker)
 import Shikigami.Workers.Config (directoryLoopRegistration, persistAgentLoadReport, principalIdsByAgent, schedulerSchedules, startProcessDirectory)
-import Shikigami.Workers.Supervision (superviseLoops)
 import System.Exit (exitFailure)
 
 -- | Arm every scheduled agent and drive keiro timer firing.

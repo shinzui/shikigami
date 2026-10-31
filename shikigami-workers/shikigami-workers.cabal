@@ -43,7 +43,10 @@ library
     Shikigami.Agent.RunJob.Worker
     Shikigami.Agent.Workflow.Resume
     Shikigami.Flow.SinkOutbox.Publisher
+    Shikigami.Health.Supervision
     Shikigami.Health.Worker
+    Shikigami.Inspection.Consumer
+    Shikigami.Integration.ConsumerRuntime
     Shikigami.Telemetry
     Shikigami.Telemetry.Sampler
     Shikigami.Trigger.Consumer
@@ -53,12 +56,9 @@ library
     Shikigami.Workers.Command.Scheduler
     Shikigami.Workers.Command.Worker
     Shikigami.Workers.Config
-    Shikigami.Workers.ConsumerApp
-    Shikigami.Workers.Inspection
     Shikigami.Workers.Registry
     Shikigami.Workers.Shutdown
     Shikigami.Workers.Subscription
-    Shikigami.Workers.Supervision
     Shikigami.Workspace.Allocation
     Shikigami.Workspace.Cleanup
     Shikigami.Workspace.Collector
@@ -222,15 +222,15 @@ test-suite shikigami-workers-test
   other-modules:
     Shikigami.Agent.RunJob.WorkerSpec
     Shikigami.AgentRun.StatusSpec
+    Shikigami.Health.SupervisionSpec
     Shikigami.Health.WorkerSpec
+    Shikigami.Inspection.ConsumerSpec
+    Shikigami.Integration.ConsumerRuntimeSpec
     Shikigami.SchedulerSpec
     Shikigami.StreamInboxSpec
     Shikigami.TelemetrySpec
     Shikigami.TimerRecoverySpec
     Shikigami.Workers.CommandSpec
-    Shikigami.Workers.ConsumerAppSpec
-    Shikigami.Workers.InspectionSpec
-    Shikigami.Workers.SupervisionSpec
     Shikigami.WorkspaceContainedFileSpec
     Shikigami.WorkspaceFileProviderSpec
     Shikigami.WorkspaceGitObjectsSpec

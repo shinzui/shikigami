@@ -16,7 +16,7 @@ import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), StreamMatch (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.RunJob (RunJob)
 import Shikigami.Agent.RunJob qualified as RunJob
-import Shikigami.Id.Name (nameBytes)
+import Shikigami.Prelude (nameBytes)
 import Shikigami.Trigger.Enqueue (addressedRunKey, envelopeOccurredAt, runJobFromEnvelope, runQueueName)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))

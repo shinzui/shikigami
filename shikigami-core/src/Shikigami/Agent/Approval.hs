@@ -62,7 +62,6 @@ import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId)
 import Shikigami.Agent.Workflow.Input (awaitInput, deliverInput)
 import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
-import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 import Shikigami.Sink.Permission (AgentIdentity, SinkKind (..), sinkKindText)
 

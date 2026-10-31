@@ -8,9 +8,43 @@
       "sourcePath": "runtime-patterns/architecture/cross-cutting-modules.md",
       "sourceSha256": "6a936a9b2a3b8d9290a8bda356eec6b0a7070d79c8e6672393f2b0ac3ec079ee",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "closed-module-budget",
+          "disposition": "implemented",
+          "rationale": "All hand-owned modules have concept roots or exact reviewed composition entries in tools/style/module-ownership.json. The checker rejects Core, Id/Store technology buckets, unreviewed role helpers and mismatched headers; four mutation cases complement semantic review."
+        },
+        {
+          "id": "concept-ownership",
+          "disposition": "implemented",
+          "rationale": "Execution/WorkerSession mappings now live in their own Bindings modules. Integration.ConsumerRuntime owns the bracketed consumer, Health.Supervision owns loop health and Inspection owns both role bridges; Workers.Registry only composes them."
+        },
+        {
+          "id": "real-infrastructure-only",
+          "disposition": "implemented",
+          "rationale": "Removed the unused Core milestone module. Diagrams renders real transducers. The unchanged shared UUID UTF-8 encoder lives in Prelude, with existing frozen identity/Unicode vector controls."
+        },
+        {
+          "id": "explicit-service-extensions",
+          "disposition": "implemented",
+          "rationale": "ADR-75 explicitly extends the upstream closed list for the service resource interpreter/configuration loader, five-family startup registry, neutral telemetry, role acquisition/shutdown and leaf package adapters. Exact modules and reasons are recorded; these are narrow local deviations, not an assertion that the frozen upstream list includes them."
+        },
+        {
+          "id": "package-lifetimes",
+          "disposition": "implemented",
+          "rationale": "Migrations remains in its package, leaf client/API avoid core runtime dependencies, SDK/listener acquisition stays in serving roles and the agent remains the ADR-3 lightweight seventh-package exception."
+        }
+      ],
+      "evidence": [
+        "docs/adr/0075-service-composition-has-a-closed-reviewed-module-budget.md",
+        "docs/architecture/packages.md",
+        "tools/style/module-ownership.json",
+        "tools/style/module_ownership.py",
+        "tools/style/test_module_ownership.py",
+        "docs/evidence/keiro-0.22/module-placement-results.txt",
+        "shikigami-core/test/Shikigami/PackageArchitectureSpec.hs"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-design",
@@ -312,7 +346,7 @@
         {
           "id": "firewall-and-current-sidecars",
           "disposition": "existing",
-          "rationale": "Generation remains producer-owned, holes/bindings/witnesses create-once, and the native workspace sidecars/ledger are committed. Treefmt excludes generated output. Versioned 0.22 ownership headers are preserved under the documented FRIC-35 correction."
+          "rationale": "Generation remains producer-owned and holes/bindings/witnesses create-once. Native workspace/conformance ledgers are committed; the generated Cabal fragment is intentionally ignored, and the consuming Cabal declarations are versioned. Treefmt excludes generated output. Versioned 0.22 ownership headers are preserved under the accepted FRIC-35 correction."
         },
         {
           "id": "explicit-evolution",
@@ -388,9 +422,43 @@
       "sourcePath": "runtime-patterns/architecture/vertical-slice-modules.md",
       "sourceSha256": "99e522b56c91b9f13bedf47362da6ffb6a3d2dddbaea539a4d14cffeaca3f2c7",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "status": "implemented",
+      "clauses": [
+        {
+          "id": "concept-verticals",
+          "disposition": "implemented",
+          "rationale": "All concept behavior retains Shikigami.<Concept> across core/API/server/workers, including moved selection/resource/delegation stores and the Integration/Health/Inspection role bridges. The exact namespace policy rejects generic technical buckets."
+        },
+        {
+          "id": "aggregate-ring",
+          "disposition": "implemented",
+          "rationale": "All four persisted aggregates consume the native collocated Generated ring, declared hooks and behavior witnesses. There is no parallel hand transducer/codec/projection/stream ring. The four public Conformance facades compose native contracts and focused guard clients."
+        },
+        {
+          "id": "mapped-binding-ownership",
+          "disposition": "implemented",
+          "rationale": "Shared generated Structural.Shape/StructuralProjections/NominalProjections stay under Shikigami.Generated. RunJobs.Bindings, Execution.Bindings and WorkerSession.Bindings are hand-owned concept authorities with unchanged conversion bodies/fixtures/initials; no catch-all DomainBindings remains."
+        },
+        {
+          "id": "producer-firewall",
+          "disposition": "implemented",
+          "rationale": "Only the pinned 0.22 scaffolder changes generated modules and its native workspace ledger. Generated code is excluded from formatting; hand bindings and witnesses are create-once. Versioned native owner banners are retained under the accepted FRIC-35 correction to the frozen prose."
+        },
+        {
+          "id": "explicit-evolution",
+          "disposition": "implemented",
+          "rationale": "Native strict diff records 36 NominalBindingChanged, four NominalInitialChanged, two NominalFixturesChanged and two AggFoldSurfaceChanged warnings. Replay impact is affected for ExecutionLifecycle and WorkerSessionLifecycle. Complete rebuild, native nominal/codec conformance and same-build application replay exercise the unchanged valid identity bytes; no replay-neutral or populated-upgrade claim is made."
+        }
+      ],
+      "evidence": [
+        "docs/architecture/shikigami-domain-inventory.md",
+        "docs/adr/0075-service-composition-has-a-closed-reviewed-module-budget.md",
+        "docs/evidence/keiro-0.22/module-placement-results.txt",
+        "docs/evidence/keiro-0.22/module-placement-diff.json",
+        "docs/evidence/keiro-0.22/module-placement-replay.json",
+        "shikigami-core/test-domain/Main.hs",
+        "tools/style/test_module_ownership.py"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-worked-example-conversation",
@@ -904,7 +972,7 @@
         {
           "id": "complete-readable-atlas",
           "disposition": "implemented",
-          "rationale": "DomainDiagrams renders all four persisted aggregates plus the sole hand-owned Keiki machine with toMermaid defaults; no transducer orchestrator is omitted."
+          "rationale": "Diagrams renders all four persisted aggregates plus the sole hand-owned Keiki machine with toMermaid defaults; no transducer orchestrator is omitted."
         },
         {
           "id": "edge-inspectors-and-regeneration",
@@ -1712,7 +1780,7 @@
         {
           "id": "total-existing-domain-isomorphisms",
           "disposition": "implemented",
-          "rationale": "DomainBindings wraps/unwraps Text for existing runtime-owned ExecutionId and WorkerSessionId with deterministic edge fixtures and declared empty initials. ObjectiveId is now a generated checked TypeID domain, not a nominal Text isomorphism."
+          "rationale": "Execution.Bindings and WorkerSession.Bindings wrap/unwrap Text for their runtime-owned ExecutionId and WorkerSessionId with deterministic edge fixtures and declared empty initials. ObjectiveId is now a generated checked TypeID domain, not a nominal Text isomorphism."
         },
         {
           "id": "actual-guards-and-wire",

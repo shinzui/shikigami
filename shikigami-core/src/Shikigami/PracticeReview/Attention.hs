@@ -49,7 +49,6 @@ import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Directory (DirectoryHandle)
-import Shikigami.Id.Name (nameBytes)
 import Shikigami.PracticeReview
   ( Applicability (..),
     ClaimId (..),

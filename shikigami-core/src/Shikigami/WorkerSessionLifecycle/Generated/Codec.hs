@@ -16,7 +16,7 @@ import Keiro.Codec.Nominal (nominalFromRepresentation, nominalToRepresentation)
 import Keiro.Codec (Codec (..), EventType (..))
 
 
-import Shikigami.DomainBindings qualified as DomainBindings
+import Shikigami.WorkerSession.Bindings qualified as Bindings
 
 
 
@@ -57,118 +57,118 @@ encodeWorkerSessionLifecycleEvent = \case
   WorkerSessionAdmitted payload ->
     object
       [ "kind" .= ("WorkerSessionAdmitted" :: Text)
-      , "sessionId" .= nominalToRepresentation DomainBindings.workerSessionIdentityBinding payload.sessionId
+      , "sessionId" .= nominalToRepresentation Bindings.workerSessionIdentityBinding payload.sessionId
       , "bindingDigest" .= payload.bindingDigest
       ]
   SessionMessageAccepted payload ->
     object
       [ "kind" .= ("SessionMessageAccepted" :: Text)
-      , "sessionId" .= nominalToRepresentation DomainBindings.workerSessionIdentityBinding payload.sessionId
+      , "sessionId" .= nominalToRepresentation Bindings.workerSessionIdentityBinding payload.sessionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   SessionAssignmentStarted payload ->
     object
       [ "kind" .= ("SessionAssignmentStarted" :: Text)
-      , "sessionId" .= nominalToRepresentation DomainBindings.workerSessionIdentityBinding payload.sessionId
+      , "sessionId" .= nominalToRepresentation Bindings.workerSessionIdentityBinding payload.sessionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   SessionAssignmentParked payload ->
     object
       [ "kind" .= ("SessionAssignmentParked" :: Text)
-      , "sessionId" .= nominalToRepresentation DomainBindings.workerSessionIdentityBinding payload.sessionId
+      , "sessionId" .= nominalToRepresentation Bindings.workerSessionIdentityBinding payload.sessionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   SessionAssignmentResumed payload ->
     object
       [ "kind" .= ("SessionAssignmentResumed" :: Text)
-      , "sessionId" .= nominalToRepresentation DomainBindings.workerSessionIdentityBinding payload.sessionId
+      , "sessionId" .= nominalToRepresentation Bindings.workerSessionIdentityBinding payload.sessionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   SessionResultRecorded payload ->
     object
       [ "kind" .= ("SessionResultRecorded" :: Text)
-      , "sessionId" .= nominalToRepresentation DomainBindings.workerSessionIdentityBinding payload.sessionId
+      , "sessionId" .= nominalToRepresentation Bindings.workerSessionIdentityBinding payload.sessionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   SessionBecameUnresolved payload ->
     object
       [ "kind" .= ("SessionBecameUnresolved" :: Text)
-      , "sessionId" .= nominalToRepresentation DomainBindings.workerSessionIdentityBinding payload.sessionId
+      , "sessionId" .= nominalToRepresentation Bindings.workerSessionIdentityBinding payload.sessionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   SessionAssignmentReconciled payload ->
     object
       [ "kind" .= ("SessionAssignmentReconciled" :: Text)
-      , "sessionId" .= nominalToRepresentation DomainBindings.workerSessionIdentityBinding payload.sessionId
+      , "sessionId" .= nominalToRepresentation Bindings.workerSessionIdentityBinding payload.sessionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   SessionTransferRequested payload ->
     object
       [ "kind" .= ("SessionTransferRequested" :: Text)
-      , "sessionId" .= nominalToRepresentation DomainBindings.workerSessionIdentityBinding payload.sessionId
+      , "sessionId" .= nominalToRepresentation Bindings.workerSessionIdentityBinding payload.sessionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   SessionTransferReconciled payload ->
     object
       [ "kind" .= ("SessionTransferReconciled" :: Text)
-      , "sessionId" .= nominalToRepresentation DomainBindings.workerSessionIdentityBinding payload.sessionId
+      , "sessionId" .= nominalToRepresentation Bindings.workerSessionIdentityBinding payload.sessionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   SessionOwnerEstablished payload ->
     object
       [ "kind" .= ("SessionOwnerEstablished" :: Text)
-      , "sessionId" .= nominalToRepresentation DomainBindings.workerSessionIdentityBinding payload.sessionId
+      , "sessionId" .= nominalToRepresentation Bindings.workerSessionIdentityBinding payload.sessionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   SessionEventsSubscribed payload ->
     object
       [ "kind" .= ("SessionEventsSubscribed" :: Text)
-      , "sessionId" .= nominalToRepresentation DomainBindings.workerSessionIdentityBinding payload.sessionId
+      , "sessionId" .= nominalToRepresentation Bindings.workerSessionIdentityBinding payload.sessionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   WorkerSessionObserved payload ->
     object
       [ "kind" .= ("WorkerSessionObserved" :: Text)
-      , "sessionId" .= nominalToRepresentation DomainBindings.workerSessionIdentityBinding payload.sessionId
+      , "sessionId" .= nominalToRepresentation Bindings.workerSessionIdentityBinding payload.sessionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   SessionCheckpointPrepared payload ->
     object
       [ "kind" .= ("SessionCheckpointPrepared" :: Text)
-      , "sessionId" .= nominalToRepresentation DomainBindings.workerSessionIdentityBinding payload.sessionId
+      , "sessionId" .= nominalToRepresentation Bindings.workerSessionIdentityBinding payload.sessionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   SessionEventsConsumed payload ->
     object
       [ "kind" .= ("SessionEventsConsumed" :: Text)
-      , "sessionId" .= nominalToRepresentation DomainBindings.workerSessionIdentityBinding payload.sessionId
+      , "sessionId" .= nominalToRepresentation Bindings.workerSessionIdentityBinding payload.sessionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   WorkerSessionFailed payload ->
     object
       [ "kind" .= ("WorkerSessionFailed" :: Text)
-      , "sessionId" .= nominalToRepresentation DomainBindings.workerSessionIdentityBinding payload.sessionId
+      , "sessionId" .= nominalToRepresentation Bindings.workerSessionIdentityBinding payload.sessionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
   WorkerSessionCancelled payload ->
     object
       [ "kind" .= ("WorkerSessionCancelled" :: Text)
-      , "sessionId" .= nominalToRepresentation DomainBindings.workerSessionIdentityBinding payload.sessionId
+      , "sessionId" .= nominalToRepresentation Bindings.workerSessionIdentityBinding payload.sessionId
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
@@ -181,118 +181,118 @@ parseWorkerSessionLifecycleEvent (EventType tag) = mapLeftText . parseEither (wi
         "WorkerSessionAdmitted" ->
           WorkerSessionAdmitted
             <$> ( WorkerSessionAdmittedData
-                    <$> (nominalFromRepresentation DomainBindings.workerSessionIdentityBinding <$> o .: "sessionId")
+                    <$> (nominalFromRepresentation Bindings.workerSessionIdentityBinding <$> o .: "sessionId")
                     <*> o .: "bindingDigest"
                 )
         "SessionMessageAccepted" ->
           SessionMessageAccepted
             <$> ( SessionMessageAcceptedData
-                    <$> (nominalFromRepresentation DomainBindings.workerSessionIdentityBinding <$> o .: "sessionId")
+                    <$> (nominalFromRepresentation Bindings.workerSessionIdentityBinding <$> o .: "sessionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "SessionAssignmentStarted" ->
           SessionAssignmentStarted
             <$> ( SessionAssignmentStartedData
-                    <$> (nominalFromRepresentation DomainBindings.workerSessionIdentityBinding <$> o .: "sessionId")
+                    <$> (nominalFromRepresentation Bindings.workerSessionIdentityBinding <$> o .: "sessionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "SessionAssignmentParked" ->
           SessionAssignmentParked
             <$> ( SessionAssignmentParkedData
-                    <$> (nominalFromRepresentation DomainBindings.workerSessionIdentityBinding <$> o .: "sessionId")
+                    <$> (nominalFromRepresentation Bindings.workerSessionIdentityBinding <$> o .: "sessionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "SessionAssignmentResumed" ->
           SessionAssignmentResumed
             <$> ( SessionAssignmentResumedData
-                    <$> (nominalFromRepresentation DomainBindings.workerSessionIdentityBinding <$> o .: "sessionId")
+                    <$> (nominalFromRepresentation Bindings.workerSessionIdentityBinding <$> o .: "sessionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "SessionResultRecorded" ->
           SessionResultRecorded
             <$> ( SessionResultRecordedData
-                    <$> (nominalFromRepresentation DomainBindings.workerSessionIdentityBinding <$> o .: "sessionId")
+                    <$> (nominalFromRepresentation Bindings.workerSessionIdentityBinding <$> o .: "sessionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "SessionBecameUnresolved" ->
           SessionBecameUnresolved
             <$> ( SessionBecameUnresolvedData
-                    <$> (nominalFromRepresentation DomainBindings.workerSessionIdentityBinding <$> o .: "sessionId")
+                    <$> (nominalFromRepresentation Bindings.workerSessionIdentityBinding <$> o .: "sessionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "SessionAssignmentReconciled" ->
           SessionAssignmentReconciled
             <$> ( SessionAssignmentReconciledData
-                    <$> (nominalFromRepresentation DomainBindings.workerSessionIdentityBinding <$> o .: "sessionId")
+                    <$> (nominalFromRepresentation Bindings.workerSessionIdentityBinding <$> o .: "sessionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "SessionTransferRequested" ->
           SessionTransferRequested
             <$> ( SessionTransferRequestedData
-                    <$> (nominalFromRepresentation DomainBindings.workerSessionIdentityBinding <$> o .: "sessionId")
+                    <$> (nominalFromRepresentation Bindings.workerSessionIdentityBinding <$> o .: "sessionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "SessionTransferReconciled" ->
           SessionTransferReconciled
             <$> ( SessionTransferReconciledData
-                    <$> (nominalFromRepresentation DomainBindings.workerSessionIdentityBinding <$> o .: "sessionId")
+                    <$> (nominalFromRepresentation Bindings.workerSessionIdentityBinding <$> o .: "sessionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "SessionOwnerEstablished" ->
           SessionOwnerEstablished
             <$> ( SessionOwnerEstablishedData
-                    <$> (nominalFromRepresentation DomainBindings.workerSessionIdentityBinding <$> o .: "sessionId")
+                    <$> (nominalFromRepresentation Bindings.workerSessionIdentityBinding <$> o .: "sessionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "SessionEventsSubscribed" ->
           SessionEventsSubscribed
             <$> ( SessionEventsSubscribedData
-                    <$> (nominalFromRepresentation DomainBindings.workerSessionIdentityBinding <$> o .: "sessionId")
+                    <$> (nominalFromRepresentation Bindings.workerSessionIdentityBinding <$> o .: "sessionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "WorkerSessionObserved" ->
           WorkerSessionObserved
             <$> ( WorkerSessionObservedData
-                    <$> (nominalFromRepresentation DomainBindings.workerSessionIdentityBinding <$> o .: "sessionId")
+                    <$> (nominalFromRepresentation Bindings.workerSessionIdentityBinding <$> o .: "sessionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "SessionCheckpointPrepared" ->
           SessionCheckpointPrepared
             <$> ( SessionCheckpointPreparedData
-                    <$> (nominalFromRepresentation DomainBindings.workerSessionIdentityBinding <$> o .: "sessionId")
+                    <$> (nominalFromRepresentation Bindings.workerSessionIdentityBinding <$> o .: "sessionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "SessionEventsConsumed" ->
           SessionEventsConsumed
             <$> ( SessionEventsConsumedData
-                    <$> (nominalFromRepresentation DomainBindings.workerSessionIdentityBinding <$> o .: "sessionId")
+                    <$> (nominalFromRepresentation Bindings.workerSessionIdentityBinding <$> o .: "sessionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "WorkerSessionFailed" ->
           WorkerSessionFailed
             <$> ( WorkerSessionFailedData
-                    <$> (nominalFromRepresentation DomainBindings.workerSessionIdentityBinding <$> o .: "sessionId")
+                    <$> (nominalFromRepresentation Bindings.workerSessionIdentityBinding <$> o .: "sessionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )
         "WorkerSessionCancelled" ->
           WorkerSessionCancelled
             <$> ( WorkerSessionCancelledData
-                    <$> (nominalFromRepresentation DomainBindings.workerSessionIdentityBinding <$> o .: "sessionId")
+                    <$> (nominalFromRepresentation Bindings.workerSessionIdentityBinding <$> o .: "sessionId")
                     <*> o .: "expected"
                     <*> o .: "revision"
                 )

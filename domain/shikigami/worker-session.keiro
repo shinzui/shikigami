@@ -4,11 +4,11 @@ layout collocated
 
 mapped nominal WorkerSessionIdentity : Text {
   haskell package=shikigami-core module=Shikigami.WorkerSession.Types type=WorkerSessionId
-  binding = "Shikigami.DomainBindings.workerSessionIdentityBinding"
+  binding = "Shikigami.WorkerSession.Bindings.workerSessionIdentityBinding"
   binding-version = "1"
   canonical-type = "shikigami.WorkerSessionId.v1"
-  fixtures = "Shikigami.DomainBindings.workerSessionIdentityCases"
-  initial = "Shikigami.DomainBindings.initialWorkerSessionIdentity"
+  fixtures = "Shikigami.WorkerSession.Bindings.workerSessionIdentityCases"
+  initial = "Shikigami.WorkerSession.Bindings.initialWorkerSessionIdentity"
 }
 
 target worker_session_rows {

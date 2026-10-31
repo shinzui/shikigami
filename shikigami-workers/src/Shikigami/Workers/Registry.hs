@@ -36,16 +36,16 @@ import Shikigami.Agent.RunJob.Worker (handleRunJob, runJob)
 import Shikigami.Agent.Workflow.Resume (runResumeWorker, runWorkflowGc)
 import Shikigami.App (AppEnv (..))
 import Shikigami.Flow.SinkOutbox.Publisher (runOutboxPublisher)
+import Shikigami.Health.Supervision (LoopExited (LoopExited), superviseLoops)
 import Shikigami.Health.Worker (LoopName (DirectoryLoop, OutboxLoop, QueueLoop, ResumeLoop, TelemetryLoop, TimerLoop, WorkflowGcLoop), registerReport, supervisedLoopVerdictWithStaleness)
+import Shikigami.Inspection.Consumer (withConsumerInspection)
+import Shikigami.Integration.ConsumerRuntime (withConsumerAppAcquisition)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Telemetry.Sampler (runTelemetrySampler)
 import Shikigami.Trigger.Timer (runTimerWorker)
 import Shikigami.Workers.Config (WorkerEnv (..), envDirectoryRefresher, envHeartbeats, envLogger)
-import Shikigami.Workers.ConsumerApp (withConsumerAppAcquisition)
-import Shikigami.Workers.Inspection (withConsumerInspection)
-import Shikigami.Workers.Supervision (LoopExited (LoopExited), superviseLoops)
 
 -- | Start every worker loop and run until the process is stopped.
 --

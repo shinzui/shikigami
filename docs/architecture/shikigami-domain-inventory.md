@@ -39,7 +39,8 @@ law. Hand-written string adapters are removed. `AgentName`, `RunKey` and
 not total isomorphisms over Text/Int. Upstream `SessionId`/`WorkflowId` are opaque
 identities. Queue decoding still reaches these real parsers before execution.
 
-Execution and worker-session aggregate identities use nominal Text bindings to
+The concept-owned `Execution.Bindings` and `WorkerSession.Bindings` modules supply
+nominal Text bindings to
 `ExecutionId` and `WorkerSessionId`. They preserve their runtime-owned UUIDv5
 technical coordinates and empty initial sentinel. They are not TypeID-v7 domains.
 
@@ -237,3 +238,20 @@ explicitly supplies review metadata to the real evidence persistence owner under
 the same workflow correlation ID; ordinary runs do not invent review bindings.
 Conversation qualification reads the tokens actually published in successive
 generation journals: an old token is refused and the live token accepts input.
+
+## Current module-placement fold audit
+
+Plan 107 moved nominal bindings from the former DomainBindings bucket into their
+concepts and regenerated the dependent ring with the pinned producer. Conversion
+bodies, binding versions, fixtures, initial values and canonical type names are
+unchanged. Native strict analysis nevertheless reports affected replay and fold
+changes for ExecutionLifecycle (`dcb54c2c08dc93a15d777f0516cb3bbd` to
+`275db6f9a12b2d5d58c8add044ce074d`) and WorkerSessionLifecycle
+(`b6c71cca77fae715bdf11f112f991d69` to `837966c8889d6f3acec8c67a761887c9`).
+ObjectiveLifecycle stays `f36259bde91df3202d0d3fd6ddf14188` and RunEvidence stays
+`f3498d651a5f18786ed1bb41eb3d4977`.
+The [native findings](../evidence/keiro-0.22/module-placement-diff.json),
+[replay report](../evidence/keiro-0.22/module-placement-replay.json) and
+[acceptance](../evidence/keiro-0.22/module-placement-results.txt) retain this distinction.
+All four remain Never without a state codec. This is a first-release baseline
+change; it does not qualify an old populated deployment or invent a cache consumer.

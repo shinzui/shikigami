@@ -6,7 +6,7 @@
 -- why there is no fault-injection hook in @WorkerEnv@: a private test flag on a
 -- production record is a worse seam than a function that takes the action it
 -- supervises.
-module Shikigami.Workers.SupervisionSpec
+module Shikigami.Health.SupervisionSpec
   ( tests,
     gracefulShutdownFixture,
   )
@@ -20,10 +20,10 @@ import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.List (isInfixOf)
 import Keiro.Workflow.Resume (ResumeSummary (..), emptyResumeSummary)
 import Shikigami.Agent.Workflow.Resume (ResumeRetry (..), drainResumePasses, runResumeLoopWith)
+import Shikigami.Health.Supervision (LoopExited (LoopExited), superviseLoops)
 import Shikigami.Health.Worker (LoopName (OutboxLoop, ResumeLoop, TimerLoop))
 import Shikigami.Log qualified as Log
 import Shikigami.Workers.Shutdown (withGracefulShutdown)
-import Shikigami.Workers.Supervision (LoopExited (LoopExited), superviseLoops)
 import System.Environment (getEnvironment, getExecutablePath)
 import System.Exit (ExitCode (ExitSuccess))
 import System.IO (BufferMode (LineBuffering), hGetContents, hGetLine, hSetBuffering, stderr, stdout)

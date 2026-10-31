@@ -18,7 +18,6 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId)
 import Shikigami.Execution.Attempt
-import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 
 data ObservationTimer = ObservationTimer

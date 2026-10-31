@@ -709,7 +709,7 @@ workerSessionLifecycleTransducer =
     _ -> False
 
 workerSessionLifecycleFoldFingerprint :: Text
-workerSessionLifecycleFoldFingerprint = "b6c71cca77fae715bdf11f112f991d69"
+workerSessionLifecycleFoldFingerprint = "837966c8889d6f3acec8c67a761887c9"
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)

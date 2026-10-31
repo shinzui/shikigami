@@ -59,8 +59,8 @@ import Shikigami.Agent.Principal
     mkAgentPrincipal,
     principalText,
   )
-import Shikigami.Id.Name (nameBytes)
 import Shikigami.Log qualified as Log
+import Shikigami.Prelude (nameBytes)
 import System.IO.Error (tryIOError)
 
 -- | The lifecycle values Shikigami enforces from Meibo.

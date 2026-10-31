@@ -9,6 +9,7 @@ import argparse
 from pathlib import Path
 import re
 import subprocess
+from module_ownership import check_module_ownership
 
 BASELINE = {
     "DeriveAnyClass", "DuplicateRecordFields", "OverloadedLabels",
@@ -156,7 +157,9 @@ def check_repository(root):
         if not path.is_file() or not name.startswith("shikigami-"):
             continue
         if path.suffix == ".hs":
-            findings.extend(check_source(name, path.read_text()))
+            source = path.read_text()
+            findings.extend(check_source(name, source))
+            findings.extend(check_module_ownership(name, source))
         elif path.suffix == ".cabal" and len(Path(name).parts) == 2:
             findings.extend(check_cabal(name, path.read_text()))
     return findings

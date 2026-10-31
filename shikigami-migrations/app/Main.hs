@@ -62,9 +62,9 @@ import Options.Applicative
     (<|>),
   )
 import Shikigami.Migrations (MigrationPlan, reconcileShikigamiReadModels, shikigamiMigrationPlan, verifyShikigamiSchema)
+import Shikigami.Migrations.Version (versionOption)
 import System.Environment (lookupEnv)
 import System.Exit qualified as Exit
-import Version (versionOption)
 
 data Command = Migrate MigrationCommand | VerifySchema
 

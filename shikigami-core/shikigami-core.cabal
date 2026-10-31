@@ -86,15 +86,14 @@ library
     Shikigami.Capability.Overlay
     Shikigami.Capability.Provider
     Shikigami.Capability.Tools
-    Shikigami.Core
     Shikigami.Decision.Contract
     Shikigami.Decision.Evidence
     Shikigami.Decision.ModelCatalog
     Shikigami.Decision.StubProvider
     Shikigami.Delegation.BudgetStore
+    Shikigami.Diagrams
     Shikigami.Directory
     Shikigami.Directory.Store
-    Shikigami.DomainDiagrams
     Shikigami.Execution.Admission
     Shikigami.Execution.Attempt
     Shikigami.Execution.Catalog
@@ -136,7 +135,6 @@ library
     Shikigami.Flow.Workers
     Shikigami.Generated.Conformance
     Shikigami.Health.Ping
-    Shikigami.Id.Name
     Shikigami.Inspection.Aggregates
     Shikigami.Inspection.Settings
     Shikigami.Integration.Danwa
@@ -260,7 +258,7 @@ library
     Shikigami.ContinuingWorker.Generated.WorkflowRuntime
     Shikigami.DanwaConversation.Generated.WorkflowFacts
     Shikigami.DanwaConversation.Generated.WorkflowRuntime
-    Shikigami.DomainBindings
+    Shikigami.Execution.Bindings
     Shikigami.ExecutionLifecycle.BehaviorHoles
     Shikigami.ExecutionLifecycle.Generated.BehaviorContract
     Shikigami.ExecutionLifecycle.Generated.Codec
@@ -302,6 +300,7 @@ library
     Shikigami.RunJobs.Generated.QueueCodec
     Shikigami.RunJobs.Generated.QueuePolicy
     Shikigami.Sink.Auth.Internal
+    Shikigami.WorkerSession.Bindings
     Shikigami.WorkerSessionLifecycle.BehaviorHoles
     Shikigami.WorkerSessionLifecycle.Generated.BehaviorContract
     Shikigami.WorkerSessionLifecycle.Generated.Codec

@@ -6,6 +6,7 @@ module Shikigami.Prelude
   ( module X,
     module Control.Lens,
     eventAesonOptions,
+    nameBytes,
   )
 where
 
@@ -30,9 +31,12 @@ import "base" Control.Monad.IO.Class as X (MonadIO, liftIO)
 import "base" Data.List.NonEmpty as X (NonEmpty (..))
 import "base" Data.Maybe as X (fromMaybe, isJust, isNothing, mapMaybe)
 import "base" Data.Proxy as X (Proxy (..))
+import "base" Data.Word (Word8)
 import "base" GHC.Generics as X (Generic)
+import "bytestring" Data.ByteString qualified as ByteString
 import "lens" Control.Lens
 import "text" Data.Text as X (Text)
+import "text" Data.Text.Encoding qualified as Text.Encoding
 import "time" Data.Time as X (UTCTime, getCurrentTime)
 
 -- | Standard event/command JSON options: sums as {"type": "...", "data": {...}}.
@@ -43,3 +47,8 @@ eventAesonOptions =
       constructorTagModifier = camelTo2 '_',
       tagSingleConstructors = True
     }
+
+-- | UTF-8 bytes for a deterministic technical identity. Keep the complete
+-- encoding; truncating Char values would collide for distinct Unicode names.
+nameBytes :: Text -> [Word8]
+nameBytes = ByteString.unpack . Text.Encoding.encodeUtf8

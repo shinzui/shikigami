@@ -1,5 +1,5 @@
 -- | One bracketed Shibuya application owned by a consumer connection.
-module Shikigami.Workers.ConsumerApp
+module Shikigami.Integration.ConsumerRuntime
   ( withConsumerApp,
     withConsumerAppAcquisition,
     consumerAppConfig,

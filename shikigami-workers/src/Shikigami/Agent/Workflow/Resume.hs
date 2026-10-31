@@ -40,10 +40,10 @@ import Data.Time (NominalDiffTime, diffUTCTime, getCurrentTime)
 import Keiro.Workflow.Gc (runWorkflowGcWorkerWith)
 import Keiro.Workflow.Resume (ResumeSummary (..), WorkflowRegistry, resumeWorkflowsOnceUpTo, runWorkflowResumeWorkerWith)
 import Shikigami.App (AppEffects, runAppIO)
+import Shikigami.Health.Supervision (LoopExited (LoopExited))
 import Shikigami.Health.Worker (LoopName (ResumeLoop, WorkflowGcLoop))
 import Shikigami.Log qualified as Log
 import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, conversationEnv, envLogger)
-import Shikigami.Workers.Supervision (LoopExited (LoopExited))
 import Shikigami.Workflow.Registry qualified as Registry
 import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions, terminalWorkflowRetention)
 

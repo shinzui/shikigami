@@ -36,7 +36,6 @@ import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Selection (ExecutionSelection (..))
-import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude hiding (Options)
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), instructionPrompt)
 import Shikigami.Workspace.Reference (WorkspaceRef (..))

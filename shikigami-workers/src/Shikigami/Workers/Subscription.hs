@@ -13,6 +13,7 @@ import Shikigami.App.Config (AppConfig, Role (EventConsumerRole, StreamConsumerR
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Directory (DirectoryRuntime (..))
+import Shikigami.Health.Supervision (superviseLoops)
 import Shikigami.Health.Worker
   ( Heartbeats,
     LoopName (ConsumerLoop, DirectoryLoop),
@@ -24,6 +25,7 @@ import Shikigami.Health.Worker
     serveProbesWith,
     supervisedLoopVerdict,
   )
+import Shikigami.Inspection.Consumer (consumerInspection)
 import Shikigami.Inspection.Store (withObservedStore)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
@@ -33,8 +35,6 @@ import Shikigami.Trigger.Consumer (EventHit (..), OnSupervisor, StreamConfig (..
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors, IncludeAgentActors))
 import Shikigami.Workers.Config (directoryLoopRegistration, persistAgentLoadReport, startProcessDirectory)
-import Shikigami.Workers.Inspection (consumerInspection)
-import Shikigami.Workers.Supervision (superviseLoops)
 
 -- | Run the @activity.v1@ stream consumer; for each declared stream agent that
 -- matches an incoming envelope, log the match and enqueue a run job (the

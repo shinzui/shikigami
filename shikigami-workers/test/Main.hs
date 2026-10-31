@@ -2,16 +2,16 @@ module Main (main) where
 
 import Shikigami.Agent.RunJob.WorkerSpec qualified as RunJobWorkerSpec
 import Shikigami.AgentRun.StatusSpec qualified as StatusSpec
+import Shikigami.Health.SupervisionSpec qualified as SupervisionSpec
 import Shikigami.Health.WorkerSpec qualified as HealthWorkerSpec
+import Shikigami.Inspection.ConsumerSpec qualified as InspectionSpec
+import Shikigami.Integration.ConsumerRuntimeSpec qualified as ConsumerAppSpec
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
 import Shikigami.SchedulerSpec qualified as SchedulerSpec
 import Shikigami.StreamInboxSpec qualified as StreamInboxSpec
 import Shikigami.TelemetrySpec qualified as TelemetrySpec
 import Shikigami.TimerRecoverySpec qualified as TimerRecoverySpec
 import Shikigami.Workers.CommandSpec qualified as CommandSpec
-import Shikigami.Workers.ConsumerAppSpec qualified as ConsumerAppSpec
-import Shikigami.Workers.InspectionSpec qualified as InspectionSpec
-import Shikigami.Workers.SupervisionSpec qualified as SupervisionSpec
 import Shikigami.WorkspaceContainedFileSpec qualified as WorkspaceContainedFileSpec
 import Shikigami.WorkspaceFileProviderSpec qualified as WorkspaceFileProviderSpec
 import Shikigami.WorkspaceGitObjectsSpec qualified as WorkspaceGitObjectsSpec

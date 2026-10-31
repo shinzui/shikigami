@@ -23,7 +23,6 @@ import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Execution.Request (ExecutionRequest)
 import Shikigami.Execution.Transcript (ExecutionId, PayloadRef)
-import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Position

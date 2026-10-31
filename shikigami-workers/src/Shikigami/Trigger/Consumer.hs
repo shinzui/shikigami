@@ -87,14 +87,14 @@ import Shikigami.Agent.RunJob qualified as RunJob
 import Shikigami.App (AppEnv (..), runAppIO)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), recordRunSkipTx)
+import Shikigami.Inspection.Consumer (ConsumerInspection, withConsumerInspection)
+import Shikigami.Integration.ConsumerRuntime (consumerAppConfig, withConsumerApp)
 import Shikigami.Integration.Danwa qualified as Danwa
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Telemetry.Metrics (ShikigamiMetrics, recordConsumerRecord)
 import Shikigami.Trigger.Enqueue (enqueueRunJobTx, envelopeOccurredAt, runJobFromEnvelopeWithIdentity)
 import Shikigami.Trigger.Stream (IncludeAgentActors, matchesStreamWith)
-import Shikigami.Workers.ConsumerApp (consumerAppConfig, withConsumerApp)
-import Shikigami.Workers.Inspection (ConsumerInspection, withConsumerInspection)
 
 -- | Connection and durable poison-record target for one Kafka subscription.
 data StreamConfig = StreamConfig

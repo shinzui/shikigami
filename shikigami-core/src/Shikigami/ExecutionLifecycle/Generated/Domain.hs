@@ -6,7 +6,7 @@ import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Keiki.Core (RegFile (..))
-import Shikigami.DomainBindings qualified as DomainBindings
+import Shikigami.Execution.Bindings qualified as Bindings
 import Shikigami.Execution.Transcript (ExecutionId)
 import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)
 
@@ -259,7 +259,7 @@ type ExecutionLifecycleRegs =
 
 initialExecutionLifecycleRegs :: RegFile ExecutionLifecycleRegs
 initialExecutionLifecycleRegs =
-  RCons (Proxy @"executionId") DomainBindings.initialExecutionIdentity $
+  RCons (Proxy @"executionId") Bindings.initialExecutionIdentity $
   RCons (Proxy @"snapshotDigest") "" $
   RCons (Proxy @"revision") 0 $
   RCons (Proxy @"pendingReceipts") 0 RNil

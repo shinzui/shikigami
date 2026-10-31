@@ -29,6 +29,7 @@ import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Flow (flowDeclarationErrors)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TelemetryLoop, TimerLoop), loopStaleAfter, newHeartbeatsWithStaleness, serveProbesWith)
+import Shikigami.Inspection.Consumer (consumerInspection)
 import Shikigami.Inspection.Store (withObservedStore)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
@@ -39,7 +40,6 @@ import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, SinkHttpError, credential
 import Shikigami.Sink.Permission (sinkKindText)
 import Shikigami.Telemetry (withRunTelemetry)
 import Shikigami.Workers.Config (WorkerEnv (..), directoryLoopRegistration, persistAgentLoadReport, schedulerSchedules, startProcessDirectory)
-import Shikigami.Workers.Inspection (consumerInspection)
 import Shikigami.Workers.Registry (runWorkers)
 import Shikigami.Workspace.ConfiguredHost (configuredWorkspaceHost)
 import System.Exit qualified as Exit

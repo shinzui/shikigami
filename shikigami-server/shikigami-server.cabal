@@ -34,6 +34,7 @@ library
     Shikigami.AgentRun.Handler
     Shikigami.Caller.Verifier
     Shikigami.Health.Handler
+    Shikigami.Inspection.Server
     Shikigami.Server.App
     Shikigami.Server.Boot
     Shikigami.Server.Command
@@ -53,7 +54,6 @@ library
     Shikigami.Server.Command.Validate
     Shikigami.Server.Command.Workers
     Shikigami.Server.Config
-    Shikigami.Server.Inspection
     Shikigami.Server.RequestLog
     Shikigami.Server.Seam
     Shikigami.Server.Telemetry

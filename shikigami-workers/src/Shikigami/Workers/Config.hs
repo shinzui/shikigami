@@ -59,6 +59,7 @@ import Shikigami.Execution.Policy.Types (HarnessPolicy)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), beat)
+import Shikigami.Inspection.Consumer (ConsumerInspection)
 import Shikigami.Log qualified as Log
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.Prelude hiding ((.=))
@@ -68,7 +69,6 @@ import Shikigami.Sink.Http (SinkHttp)
 import Shikigami.Telemetry.Metrics (ShikigamiMetrics)
 import Shikigami.Trigger.Schedule (CatchUpPolicy, CronSchedule, parseCron)
 import Shikigami.Trigger.Scheduler qualified as Scheduler
-import Shikigami.Workers.Inspection (ConsumerInspection)
 import Shikigami.Workspace.Admission (WorkspaceHost (..))
 import System.Exit (exitFailure)
 

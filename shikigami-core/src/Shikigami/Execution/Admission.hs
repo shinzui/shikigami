@@ -13,7 +13,6 @@ import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Execution.Identity (ExecutionRootId (..))
 import Shikigami.Execution.Resources (Envelope, ResourceError (..))
 import Shikigami.Execution.ResourcesStore (enrollRoot)
-import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 
 enrollRootRun :: (Store :> es) => Envelope -> RunJob -> Eff es (Either ResourceError RunJob)

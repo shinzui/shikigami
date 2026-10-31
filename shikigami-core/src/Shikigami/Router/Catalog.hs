@@ -33,7 +33,6 @@ import Shikigami.Directory
     renderDirectorySourceKind,
   )
 import Shikigami.Directory qualified as Directory
-import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Router.Declaration (ValidatedRouterDeclaration (..))
 

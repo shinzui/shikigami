@@ -54,7 +54,6 @@ import Shikigami.Delegation.BudgetStore
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Request (ExecutionRequest)
-import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 import Shikigami.Router.Catalog (CandidateAvailability (..), CandidateCatalog (..), CandidateEntry (..), ExclusionReason)
 

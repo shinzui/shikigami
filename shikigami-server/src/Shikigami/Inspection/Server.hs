@@ -1,5 +1,5 @@
 -- | Durable inspection in the server; consumer-local metrics stay in workers.
-module Shikigami.Server.Inspection (withServerInspection) where
+module Shikigami.Inspection.Server (withServerInspection) where
 
 import Kiroku.Metrics (KirokuMetrics)
 import Kiroku.Store.Connection (ConnectionSettings, KirokuStore)

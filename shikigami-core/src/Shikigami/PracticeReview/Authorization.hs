@@ -27,7 +27,6 @@ import Hasql.Pool (Pool)
 import Pgmq (MessageId)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Agent.RunJob (RunRouteKind (AgentWorkflowRoute))
-import Shikigami.Id.Name (nameBytes)
 import Shikigami.PracticeReview
   ( OwnerPrincipal (..),
     PracticeReviewResolution (..),

@@ -6,7 +6,7 @@ import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Keiki.Core (RegFile (..))
-import Shikigami.DomainBindings qualified as DomainBindings
+import Shikigami.WorkerSession.Bindings qualified as Bindings
 import Shikigami.WorkerSession.Types (WorkerSessionId)
 import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)
 
@@ -295,7 +295,7 @@ type WorkerSessionLifecycleRegs =
 
 initialWorkerSessionLifecycleRegs :: RegFile WorkerSessionLifecycleRegs
 initialWorkerSessionLifecycleRegs =
-  RCons (Proxy @"sessionId") DomainBindings.initialWorkerSessionIdentity $
+  RCons (Proxy @"sessionId") Bindings.initialWorkerSessionIdentity $
   RCons (Proxy @"bindingDigest") "" $
   RCons (Proxy @"revision") 0 RNil
 

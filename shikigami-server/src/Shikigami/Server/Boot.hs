@@ -44,13 +44,13 @@ import Shikigami.App.Config (AppConfig (..), HttpAuthSettings (..), Role (Server
 import Shikigami.App.Config.Load (requireDatabaseUrl, runAppConfig)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Health.Handler (mkHealthChecks)
+import Shikigami.Inspection.Server (withServerInspection)
 import Shikigami.Inspection.Store (withObservedStore)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
 import Shikigami.Server.App (exceptionBoundary, shikigamiApplication)
 import Shikigami.Server.Config (ServerConfig (..), serverConfigFrom, serverParserInfo)
-import Shikigami.Server.Inspection (withServerInspection)
 import Shikigami.Server.RequestLog (includeProductionRequest, requestLogMiddleware)
 import Shikigami.Server.Seam (ServerEnv (..))
 import Shikigami.Server.Telemetry (ServerTelemetry (..), boundedTelemetryMiddleware, withServerTelemetry)

@@ -23,7 +23,6 @@ import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.Agent.Run.Key (RunKey, runKeyText)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Execution.Request (ExecutionRequest)
-import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude hiding ((.=))
 
 -- | Which trigger class produced the job.

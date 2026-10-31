@@ -35,7 +35,6 @@ import Shikigami.App (AppEnv (..))
 import Shikigami.Directory qualified as Directory
 import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), recordRunSkip)
 import Shikigami.Execution.Timer qualified as ExecutionTimer
-import Shikigami.Id.Name (nameBytes)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Trigger.Enqueue (enqueueScheduledRun, scheduleRunIdempotencyKey)

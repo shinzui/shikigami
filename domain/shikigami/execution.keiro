@@ -4,11 +4,11 @@ layout collocated
 
 mapped nominal ExecutionIdentity : Text {
   haskell package=shikigami-core module=Shikigami.Execution.Transcript type=ExecutionId
-  binding = "Shikigami.DomainBindings.executionIdentityBinding"
+  binding = "Shikigami.Execution.Bindings.executionIdentityBinding"
   binding-version = "1"
   canonical-type = "shikigami.ExecutionId.v1"
-  fixtures = "Shikigami.DomainBindings.executionIdentityCases"
-  initial = "Shikigami.DomainBindings.initialExecutionIdentity"
+  fixtures = "Shikigami.Execution.Bindings.executionIdentityCases"
+  initial = "Shikigami.Execution.Bindings.initialExecutionIdentity"
 }
 
 target execution_rows {

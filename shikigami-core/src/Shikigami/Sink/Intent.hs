@@ -59,7 +59,6 @@ import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
-import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Sink
   ( DanwaTarget,

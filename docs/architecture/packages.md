@@ -173,6 +173,15 @@ overlay registry and cannot be replaced by an adapter.
      `optparse-applicative`'s `execParserPure` instead of shelling out to a built
      binary.
    Everything else is a concept module.
+   The complete current composition budget and concept namespaces are now
+   machine-readable in `tools/style/module-ownership.json`, with the narrow
+   service-specific extensions explained by [ADR-75](../adr/0075-service-composition-has-a-closed-reviewed-module-budget.md).
+   `just haskell-conventions` rejects unlisted technical modules and obsolete
+   Core/Id/Store buckets. The real renderer is `Shikigami.Diagrams`.
+   Consumer app ownership lives in `Integration.ConsumerRuntime`, loop health in
+   `Health.Supervision`, and host bridges in `Inspection.Consumer`/`Inspection.Server`.
+   Concept-owned mappings live in `Execution.Bindings`, `WorkerSession.Bindings`
+   and `RunJobs.Bindings`; no current mapping needs a service-wide DomainBindings bucket.
 3. A composition module composes; it does not absorb behavior. `Shikigami.Workers.Registry`
    builds the processor map, but each processor's logic lives in its own vertical module.
 4. New Haskell records use direct, unprefixed, strict fields, explicit deriving

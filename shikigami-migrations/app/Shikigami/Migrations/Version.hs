@@ -2,7 +2,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 -- | Build identity stays in the migrations package to preserve the acyclic boundary.
-module Version (versionOption) where
+module Shikigami.Migrations.Version (versionOption) where
 
 import Data.Version (showVersion)
 import GitHash (GitInfo, giHash, tGitInfoCwdTry)

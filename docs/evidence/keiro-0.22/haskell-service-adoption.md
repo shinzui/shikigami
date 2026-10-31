@@ -146,5 +146,14 @@ and 143 domain-driver cases pass; the strict generator has 156 passing rows and 
 neutral diff/replay report. See [worker-cursor-results.txt](worker-cursor-results.txt).
 Seven architecture sources now have explicit clause reviews; generated-artifact,
 package and test-profile qualification remains explicitly owned by plan95. The
-remaining local reviews are cross-cutting placement, aggregate verticals and the
-complete domain scalar/identity census.
+remaining local review is the complete domain scalar/identity census.
+
+Concept placement is accepted in [module-placement-results.txt](module-placement-results.txt).
+The exact module policy and ADR-75 expose the service-specific composition
+extensions. Execution/WorkerSession bindings, Integration consumer ownership,
+Health supervision and Inspection role bridges now live with their concepts. The
+placeholder Core is removed and Diagrams owns the real renderer. Unlike the
+earlier domain-member directory move, moving binding symbols changes two fold
+fingerprints: the strict report retains 44 warnings and affected replay. Complete
+rebuild, 156 native conformance rows, 143 domain assertions and the full
+549/376/260/95 application suites pass, as do ten compiler and 70 CLI clients.

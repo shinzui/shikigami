@@ -37,7 +37,6 @@ import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
 import Shikigami.Agent.Run.Key (RunKey (..))
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
-import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunJobs (encodeRunJob, queuePhysical, runJob)
 

@@ -39,7 +39,6 @@ import Shikigami.Agent.Delegate.Context (DelegationBudgetId (..))
 import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Resources
-import Shikigami.Id.Name (nameBytes)
 import Shikigami.Prelude
 
 data ReservationResult

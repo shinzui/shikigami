@@ -85,10 +85,10 @@ EP-6 owns final source/release inventory validation, exact-candidate evidence, f
 2026-10-30: EP-1 through EP-4 are Complete. The released cohort/current domain,
 native delivery/recovery and actual administrative CLI/HTTP/live inspection are
 accepted. EP-5 has implemented public API/CLI/configuration behavior and explicit
-clause dispositions for 40 of its 46 frozen source rows. Objective identity uses a
+clause dispositions for 42 of its 46 frozen source rows. Objective identity uses a
 checked allocated TypeID; objective content and worker/workspace ownership retain
 nominal checked values. Latest affected acceptance is 549 pure, 376 serial PostgreSQL, 260 worker and 95
-server cases. Three local architecture/domain reviews keep EP-5 In Progress;
+server cases. The remaining scalar/identity census keeps EP-5 In Progress;
 three further source rows retain only final-profile clauses owned by EP-6. EP-6's exact frozen artifacts, Linux/runtime integration and final
 inventory gate have not started; all five implementation children must complete
 before that qualification.

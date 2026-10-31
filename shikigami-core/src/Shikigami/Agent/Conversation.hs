@@ -115,7 +115,6 @@ import Shikigami.Execution.Start qualified as ExecutionStart
 import Shikigami.Execution.Tools qualified as ExecutionTools
 import Shikigami.Execution.Transcript qualified as Execution
 import Shikigami.Flow.Decision qualified as FlowDecision
-import Shikigami.Id.Name (nameBytes)
 import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Log qualified as Log
 import Shikigami.Log.Correlation (runCorrelationId)

@@ -522,7 +522,7 @@ executionLifecycleTransducer =
     _ -> False
 
 executionLifecycleFoldFingerprint :: Text
-executionLifecycleFoldFingerprint = "dcb54c2c08dc93a15d777f0516cb3bbd"
+executionLifecycleFoldFingerprint = "275db6f9a12b2d5d58c8add044ce074d"
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)

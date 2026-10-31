@@ -1,4 +1,4 @@
-module Shikigami.Workers.InspectionSpec (tests) where
+module Shikigami.Inspection.ConsumerSpec (tests) where
 
 import Control.Concurrent.Async qualified as Async
 import Control.Concurrent.MVar
@@ -25,12 +25,12 @@ import Shibuya.Core.Ingested (mkIngested)
 import Shibuya.Core.Types (MessageId (..), mkEnvelope)
 import Shibuya.Telemetry.Effect (runTracingNoop)
 import Shikigami.App (noopTracer)
+import Shikigami.Inspection.Consumer (consumerInspection, withConsumerInspection)
 import Shikigami.Inspection.Store (withObservedStore)
+import Shikigami.Integration.ConsumerRuntime (consumerAppConfig, withConsumerApp)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Runtime (registerRuntimeCatalog)
-import Shikigami.Workers.ConsumerApp (consumerAppConfig, withConsumerApp)
-import Shikigami.Workers.Inspection (consumerInspection, withConsumerInspection)
 import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)

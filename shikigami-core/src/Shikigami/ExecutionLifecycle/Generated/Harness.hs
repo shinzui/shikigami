@@ -10,7 +10,7 @@ import Keiro.Codec (eventType)
 import Data.List.NonEmpty qualified as NonEmpty
 import Keiro.Codec.Nominal (nominalDomainRoundTrip, nominalFixtureCases, nominalFixtureDomain, nominalRepresentationRoundTrip, nominalToRepresentation)
 import Shikigami.Generated.NominalProjections qualified as NominalProjections
-import Shikigami.DomainBindings qualified as DomainBindings
+import Shikigami.Execution.Bindings qualified as Bindings
 
 -- | (label, passed). A driver runs these and exits non-zero on any False,
 -- naming the failing assertion. Filling a hole wrongly turns a specific
@@ -43,53 +43,53 @@ roundTrips :: ExecutionLifecycleEvent -> Bool
 roundTrips e = parseExecutionLifecycleEvent (eventType executionLifecycleCodec e) (encodeExecutionLifecycleEvent e) == Right e
 
 sampleEventExecutionAdmitted :: ExecutionLifecycleEvent
-sampleEventExecutionAdmitted = ExecutionAdmitted (ExecutionAdmittedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.executionIdentityCases))) "sample-snapshotDigest")
+sampleEventExecutionAdmitted = ExecutionAdmitted (ExecutionAdmittedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.executionIdentityCases))) "sample-snapshotDigest")
 
 sampleEventExecutionAdvanced :: ExecutionLifecycleEvent
-sampleEventExecutionAdvanced = ExecutionAdvanced (ExecutionAdvancedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.executionIdentityCases))) 0 0)
+sampleEventExecutionAdvanced = ExecutionAdvanced (ExecutionAdvancedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.executionIdentityCases))) 0 0)
 
 sampleEventExecutionParked :: ExecutionLifecycleEvent
-sampleEventExecutionParked = ExecutionParked (ExecutionParkedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.executionIdentityCases))) 0 0)
+sampleEventExecutionParked = ExecutionParked (ExecutionParkedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.executionIdentityCases))) 0 0)
 
 sampleEventExecutionResumed :: ExecutionLifecycleEvent
-sampleEventExecutionResumed = ExecutionResumed (ExecutionResumedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.executionIdentityCases))) 0 0)
+sampleEventExecutionResumed = ExecutionResumed (ExecutionResumedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.executionIdentityCases))) 0 0)
 
 sampleEventExecutionBecameUnresolved :: ExecutionLifecycleEvent
-sampleEventExecutionBecameUnresolved = ExecutionBecameUnresolved (ExecutionBecameUnresolvedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.executionIdentityCases))) 0 0)
+sampleEventExecutionBecameUnresolved = ExecutionBecameUnresolved (ExecutionBecameUnresolvedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.executionIdentityCases))) 0 0)
 
 sampleEventExecutionReconciled :: ExecutionLifecycleEvent
-sampleEventExecutionReconciled = ExecutionReconciled (ExecutionReconciledData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.executionIdentityCases))) 0 0)
+sampleEventExecutionReconciled = ExecutionReconciled (ExecutionReconciledData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.executionIdentityCases))) 0 0)
 
 sampleEventExecutionFinished :: ExecutionLifecycleEvent
-sampleEventExecutionFinished = ExecutionFinished (ExecutionFinishedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.executionIdentityCases))) 0 0)
+sampleEventExecutionFinished = ExecutionFinished (ExecutionFinishedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.executionIdentityCases))) 0 0)
 
 sampleEventExecutionFailed :: ExecutionLifecycleEvent
-sampleEventExecutionFailed = ExecutionFailed (ExecutionFailedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.executionIdentityCases))) 0 0)
+sampleEventExecutionFailed = ExecutionFailed (ExecutionFailedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.executionIdentityCases))) 0 0)
 
 sampleEventExecutionCancelled :: ExecutionLifecycleEvent
-sampleEventExecutionCancelled = ExecutionCancelled (ExecutionCancelledData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.executionIdentityCases))) 0 0)
+sampleEventExecutionCancelled = ExecutionCancelled (ExecutionCancelledData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.executionIdentityCases))) 0 0)
 
 sampleEventExecutionRetried :: ExecutionLifecycleEvent
-sampleEventExecutionRetried = ExecutionRetried (ExecutionRetriedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.executionIdentityCases))) 0 0)
+sampleEventExecutionRetried = ExecutionRetried (ExecutionRetriedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.executionIdentityCases))) 0 0)
 
 sampleEventExecutionReceiptSettled :: ExecutionLifecycleEvent
-sampleEventExecutionReceiptSettled = ExecutionReceiptSettled (ExecutionReceiptSettledData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.executionIdentityCases))) 0 0 0)
+sampleEventExecutionReceiptSettled = ExecutionReceiptSettled (ExecutionReceiptSettledData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.executionIdentityCases))) 0 0 0)
 
 sampleEventExecutionReceiptsClosed :: ExecutionLifecycleEvent
-sampleEventExecutionReceiptsClosed = ExecutionReceiptsClosed (ExecutionReceiptsClosedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.executionIdentityCases))) 0 0 0)
+sampleEventExecutionReceiptsClosed = ExecutionReceiptsClosed (ExecutionReceiptsClosedData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.executionIdentityCases))) 0 0 0)
 
 sampleEventExecutionFinishedPendingReceipts :: ExecutionLifecycleEvent
-sampleEventExecutionFinishedPendingReceipts = ExecutionFinishedPendingReceipts (ExecutionFinishedPendingReceiptsData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.executionIdentityCases))) 0 0)
+sampleEventExecutionFinishedPendingReceipts = ExecutionFinishedPendingReceipts (ExecutionFinishedPendingReceiptsData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.executionIdentityCases))) 0 0)
 
 sampleEventExecutionFailedPendingReceipts :: ExecutionLifecycleEvent
-sampleEventExecutionFailedPendingReceipts = ExecutionFailedPendingReceipts (ExecutionFailedPendingReceiptsData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.executionIdentityCases))) 0 0)
+sampleEventExecutionFailedPendingReceipts = ExecutionFailedPendingReceipts (ExecutionFailedPendingReceiptsData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.executionIdentityCases))) 0 0)
 
 sampleEventExecutionCancelledPendingReceipts :: ExecutionLifecycleEvent
-sampleEventExecutionCancelledPendingReceipts = ExecutionCancelledPendingReceipts (ExecutionCancelledPendingReceiptsData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.executionIdentityCases))) 0 0)
+sampleEventExecutionCancelledPendingReceipts = ExecutionCancelledPendingReceipts (ExecutionCancelledPendingReceiptsData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.executionIdentityCases))) 0 0)
 
 acceptAdmitExecution :: Bool
 acceptAdmitExecution =
-  case step executionLifecycleTransducer (ExecutionLifecycleMissing, initialExecutionLifecycleRegs) (AdmitExecution (AdmitExecutionData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.executionIdentityCases))) "sample-snapshotDigest")) of
+  case step executionLifecycleTransducer (ExecutionLifecycleMissing, initialExecutionLifecycleRegs) (AdmitExecution (AdmitExecutionData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.executionIdentityCases))) "sample-snapshotDigest")) of
     Just (v, _, _) -> v == ExecutionLifecycleActive
     Nothing -> False
 
@@ -97,7 +97,7 @@ acceptAdmitExecution =
 -- replay the emitted chain, and compare the final vertex and every register.
 forwardReplayAdmitExecution :: [(String, Bool)]
 forwardReplayAdmitExecution =
-  case step executionLifecycleTransducer (ExecutionLifecycleMissing, initialExecutionLifecycleRegs) (AdmitExecution (AdmitExecutionData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases DomainBindings.executionIdentityCases))) "sample-snapshotDigest")) of
+  case step executionLifecycleTransducer (ExecutionLifecycleMissing, initialExecutionLifecycleRegs) (AdmitExecution (AdmitExecutionData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.executionIdentityCases))) "sample-snapshotDigest")) of
     Nothing -> [(prefix <> "forward step accepted", False)]
     Just (forwardVertex, forwardRegs, emitted) ->
       case mapM (\event -> parseExecutionLifecycleEvent (eventType executionLifecycleCodec event) (encodeExecutionLifecycleEvent event)) emitted of
@@ -117,7 +117,7 @@ forwardReplayAdmitExecution =
 
 nominalConformanceAssertions :: [(String, Bool)]
 nominalConformanceAssertions =
-  [ ("nominal domain law: ExecutionIdentity", all (\fixture -> nominalDomainRoundTrip DomainBindings.executionIdentityBinding (nominalFixtureDomain fixture)) (NonEmpty.toList (nominalFixtureCases DomainBindings.executionIdentityCases)))
-  , ("nominal representation law: ExecutionIdentity", all (\fixture -> let domainValue = nominalFixtureDomain fixture in nominalRepresentationRoundTrip DomainBindings.executionIdentityBinding (nominalToRepresentation DomainBindings.executionIdentityBinding domainValue)) (NonEmpty.toList (nominalFixtureCases DomainBindings.executionIdentityCases)))
-  , ("nominal projection agreement: ExecutionIdentity", all (\fixture -> fieldWitnessAgrees NominalProjections.executionIdentityWitness (nominalToRepresentation DomainBindings.executionIdentityBinding) (nominalFixtureDomain fixture)) (NonEmpty.toList (nominalFixtureCases DomainBindings.executionIdentityCases)))
+  [ ("nominal domain law: ExecutionIdentity", all (\fixture -> nominalDomainRoundTrip Bindings.executionIdentityBinding (nominalFixtureDomain fixture)) (NonEmpty.toList (nominalFixtureCases Bindings.executionIdentityCases)))
+  , ("nominal representation law: ExecutionIdentity", all (\fixture -> let domainValue = nominalFixtureDomain fixture in nominalRepresentationRoundTrip Bindings.executionIdentityBinding (nominalToRepresentation Bindings.executionIdentityBinding domainValue)) (NonEmpty.toList (nominalFixtureCases Bindings.executionIdentityCases)))
+  , ("nominal projection agreement: ExecutionIdentity", all (\fixture -> fieldWitnessAgrees NominalProjections.executionIdentityWitness (nominalToRepresentation Bindings.executionIdentityBinding) (nominalFixtureDomain fixture)) (NonEmpty.toList (nominalFixtureCases Bindings.executionIdentityCases)))
   ]

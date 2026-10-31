@@ -1,4 +1,4 @@
-module Shikigami.Workers.ConsumerAppSpec (tests) where
+module Shikigami.Integration.ConsumerRuntimeSpec (tests) where
 
 import Control.Concurrent (newEmptyMVar, putMVar, takeMVar)
 import Control.Concurrent.Async qualified as Async
@@ -19,8 +19,8 @@ import Shibuya.Core.AckHandle (AckHandle (..))
 import Shibuya.Core.Ingested (DeliveryStatus (..), Ingested (..), Message (..), mkIngested)
 import Shibuya.Core.Types (Envelope (..), MessageId (..), mkEnvelope)
 import Shibuya.Telemetry.Effect (runTracingNoop)
+import Shikigami.Integration.ConsumerRuntime (ConsumerProcessorFailure, consumerAppConfig, withConsumerApp)
 import Shikigami.Trigger.Consumer (kafkaReconnectAllowed)
-import Shikigami.Workers.ConsumerApp (ConsumerProcessorFailure, consumerAppConfig, withConsumerApp)
 import Shikigami.Workers.Registry (queueTuningFor)
 import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)

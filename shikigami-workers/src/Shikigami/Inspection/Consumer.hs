@@ -1,5 +1,5 @@
 -- | Inspect the actual consumer master for exactly its owned lifetime.
-module Shikigami.Workers.Inspection
+module Shikigami.Inspection.Consumer
   ( ConsumerInspection (..),
     consumerInspection,
     withConsumerInspection,

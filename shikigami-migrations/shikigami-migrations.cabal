@@ -51,7 +51,7 @@ executable shikigami-migrate
   hs-source-dirs: app
   other-modules:
     Paths_shikigami_migrations
-    Version
+    Shikigami.Migrations.Version
 
   autogen-modules: Paths_shikigami_migrations
   ghc-options:
