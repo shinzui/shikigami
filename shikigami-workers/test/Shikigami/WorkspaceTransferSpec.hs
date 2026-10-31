@@ -130,6 +130,7 @@ tests fixture =
           run env (runTransaction (Workspaces.recordWorkspaceReceiptTx binding (prepared & #state .~ EditRefused))) >>= (@?= Right ())
           admission <- right =<< host.load assignment
           admission.workspace @?= binding.workspace
+          run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Just (binding, Ready))
           admission.owner @?= binding.request.owner
           admission.epoch @?= (fixtureRevision 0)
           host.load assignment >>= (@?= Right admission)

@@ -274,6 +274,11 @@
           "rationale": "ADR-101 captures ProcessStore direct/joined FromJSON refusals as typed row data, condemns inside the read and preserves WorkspaceBindingConflict rather than missing intent. Supervisor data remains unresolved while SQL failure is unavailable. Closed numeric-one ProcessRoutingFormat preserves process/file routing bytes and original coordinates. Positive controls preserve the barrier, roll back a freeze and keep accepted-attempt uncertainty/one launch without fabricated receipt. Other workspace stores and the full scalar/identity census remain pending."
         },
         {
+          "id": "workspace-entity-allocation",
+          "disposition": "implemented",
+          "rationale": "ADR-102 retains a private checked UUIDv7 WorkspaceId beside the unchanged technical origin/provider locator. PostgreSQL 18 allocates inside the existing immutable origin reservation; concurrent/lost-response requests return its committed winner and refusal condemns the transaction. Fresh DDL uniquely binds the identity to protected JSON. Real concurrent, rollback, immutable-conflict, follow-up/transfer and action-proof controls pass. Binding digests intentionally reset under ADR-27; the full scalar/identity and other decoder-owner review remains pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -399,7 +404,12 @@
         "docs/evidence/keiro-0.22/process-row-results.txt",
         "docs/evidence/keiro-0.22/process-row-native-diff.json",
         "docs/evidence/keiro-0.22/process-row-native-replay.json",
-        "docs/evidence/keiro-0.22/process-row-fold-identities.json"
+        "docs/evidence/keiro-0.22/process-row-fold-identities.json",
+        "docs/adr/0102-workspaces-have-allocated-identities-beside-stable-origin-locators.md",
+        "docs/evidence/keiro-0.22/workspace-identity-results.txt",
+        "docs/evidence/keiro-0.22/workspace-identity-native-diff.json",
+        "docs/evidence/keiro-0.22/workspace-identity-native-replay.json",
+        "docs/evidence/keiro-0.22/workspace-identity-fold-identities.json"
       ]
     },
     {

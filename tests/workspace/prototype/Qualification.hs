@@ -156,7 +156,7 @@ integrationCase config prefix = withQualification config prefix \q -> do
     (lastTool, outputs) <- runTools q prepared
     receipt <- right (Aeson.fromJSON (outputs !! 2) `asEither` ())
     unless (successful receipt) (fail "worker-local validation failed")
-    Just (binding, record) <- run q.env (runTransaction (Git.inspectRegisteredGitTx lastTool.reference.operationId))
+    Just (binding, record) <- right =<< run q.env (runTransaction (Git.inspectRegisteredGitTx lastTool.reference.operationId))
     candidate <- maybe (fail "worker artifact missing") pure record.candidate
     unless (record.phase == GitApplied) (fail "worker artifact not applied")
     pure (Integration.Artifact record.operation.operationId (workspaceBindingDigest binding) binding.base candidate.result)
@@ -176,7 +176,7 @@ integrationCase config prefix = withQualification config prefix \q -> do
   (committed, results) <- runTools q apply
   receipt <- right (Aeson.fromJSON (results !! length replacements) `asEither` ())
   unless (successful receipt) (fail "combined validation failed")
-  Just (_, committedRecord) <- run q.env (runTransaction (Git.inspectRegisteredGitTx committed.reference.operationId))
+  Just (_, committedRecord) <- right =<< run q.env (runTransaction (Git.inspectRegisteredGitTx committed.reference.operationId))
   candidate <- maybe (fail "combined commit absent") pure committedRecord.candidate
   field "tree" proposal >>= \tree -> unless (tree == Aeson.toJSON candidate.tree) (fail "validated commit differs from planned combined tree")
   putStrLn "PASS two exact worker commits integrate, validate and commit in a third configured workspace"

@@ -4,6 +4,7 @@ module Shikigami.WorkspaceActionProofSpec (tests) where
 
 import Auth.Biscuit (toPublic)
 import Data.Aeson (toJSON)
+import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
@@ -13,6 +14,7 @@ import Data.Text qualified as ClaimText
 import Data.Text qualified as Text
 import Data.Text.Encoding (decodeUtf8)
 import Data.Time (addUTCTime)
+import Data.UUID.V4 qualified as UUID
 import En.Biscuit.Grant qualified as Grant
 import En.Biscuit.Keys (parseSigningKeyText, singleKey)
 import En.Biscuit.Mint (MintConfig (..), MintedGrant (..), mintObjectGrantWithExpiry)
@@ -52,15 +54,28 @@ tests :: TestTree
 tests =
   testGroup
     "workspace exact action proofs"
-    [ testCase "real producer and verifier bind every workspace and dispatch coordinate" $ do
+    [ testCase "workspace identities round-trip and reject other versions and prefixes" do
+        identifier <- newWorkspaceId
+        parseWorkspaceId (workspaceIdText identifier) @?= Right identifier
+        Aeson.eitherDecode (Aeson.encode identifier) @?= Right identifier
+        toJSON identifier @?= toJSON (workspaceIdText identifier)
+        legacy <- UUID.nextRandom
+        assertBool "UUIDv4 is not an allocated workspace identity" (case workspaceIdFromUUID legacy of Left _ -> True; _ -> False)
+        mapM_
+          (\value -> assertBool "invalid retained identity refused" (case parseWorkspaceId value of Left _ -> True; _ -> False))
+          ["", "shikigami_workspace_5q2yqxm4kkaka84gadcrsgwfyk", Text.toUpper (workspaceIdText identifier), Text.replace "shikigami_workspace_" "shikigami_execution_root_" (workspaceIdText identifier)]
+        assertBool "missing allocated identity is not inferred" (case Aeson.eitherDecode @WorkspaceBinding "{}" of Left _ -> True; _ -> False),
+      testCase "real producer and verifier bind every workspace and dispatch coordinate" $ do
         (keyId, secret) <- right (parseSigningKeyText "1:a2c4ead323536b925f3488ee83e0888b79c2761405ca7c0c9a018c7c1905eecc")
         actor <- right (mkAgentPrincipal "agent_01h000000000000000triage")
         principal <- right (Kikan.mkAgentPrincipal "agent_01h000000000000000triage")
         requestId <- right (Kikan.mkRequestId "workspace-proof")
         schema <- right (Kikan.mkActionSchemaHash "schema-workspace-fixture")
+        workspaceId <- newWorkspaceId
+        otherWorkspaceId <- newWorkspaceId
         let owner = VerifiedIdentity actor
             request = WorkspaceRequest "run" Nothing (fixtureRootId "root") owner owner (fixtureRevision 0)
-            binding = WorkspaceBinding request (WorkspaceRef "shikigami.workspace/1" "resource") "mori://fixture/repo" (Text.replicate 40 "a") "policy-1" "/private/workspaces" "/operator/source"
+            binding = WorkspaceBinding workspaceId request (WorkspaceRef "shikigami.workspace/1" "resource") "mori://fixture/repo" (Text.replicate 40 "a") "policy-1" "/private/workspaces" "/operator/source"
             logical = OperationContext (ExecutionId "execution") (fixtureOperationId "operation") "operation" "fingerprint" "scope"
             dispatch = DispatchContext logical (fixtureAttemptId "attempt") (fixtureOwner "claim-owner") (fixtureGeneration 1)
             now = read "2026-10-29 12:00:00 UTC"
@@ -80,7 +95,7 @@ tests =
         checkedAt <- right (Kikan.mkConsistencyToken "snapshot-1")
         let issued = Kikan.IssuedActionProof proof minted.expiresAt [] checkedAt
         _ <- right =<< verifyIssuedAction verifier now actionRequest issued
-        let changedBindings = [binding & #repository .~ "mori://fixture/other", binding & #base .~ Text.replicate 40 "b", binding & #policyRevision .~ "policy-2", binding & #workspace . #resource .~ "other-resource", binding & #request . #rootId .~ fixtureRootId "other-root", binding & #request . #epoch .~ (fixtureRevision 1), binding & #request . #runId .~ "other-run"]
+        let changedBindings = [binding & #id .~ otherWorkspaceId, binding & #repository .~ "mori://fixture/other", binding & #base .~ Text.replicate 40 "b", binding & #policyRevision .~ "policy-2", binding & #workspace . #resource .~ "other-resource", binding & #request . #rootId .~ fixtureRootId "other-root", binding & #request . #epoch .~ (fixtureRevision 1), binding & #request . #runId .~ "other-run"]
         bindingActions <- mapM (\b -> admissionFor b >>= \a -> right (workspaceFileAction b a dispatch "replace" "src/file" "device:parent" "input-hash")) changedBindings
         changedPolicy <- right (mkInstructionBundle 65536 binding.repository binding.base [("AGENTS.md", "changed policy")])
         coordinateActions <-

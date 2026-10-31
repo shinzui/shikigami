@@ -96,6 +96,13 @@ scalar/identity and remaining decoder-owner classifications remain open.
 
 ## Decision Log
 
+2026-10-31: ADR-63 establishes allocation lifetime through follow-up and transfer.
+ADR-102 gives that workspace a private UUIDv7 entity identity beside its existing
+technical origin/provider address. PostgreSQL 18 allocates inside the reservation
+transaction and the complete immutable receipt returns the retained winner.
+First-release binding JSON/digests change intentionally; no backfill or old-marker
+inference is introduced.
+
 2026-10-31: ADR-101 captures process intent/origin decoding as a transactional
 owning refusal, preserving supervisor uncertainty and distinct SQL availability.
 Close process/file receipt-routing format at numeric one; preserve exact original
@@ -161,18 +168,20 @@ cases. The language checker and thirteen style/ownership mutation tests pass.
 [The adoption record](../evidence/keiro-0.22/haskell-service-adoption.md) links each
 implemented domain-value wave and its exact candidate/evidence.
 
-Latest process intent/routing acceptance passed 584 pure, 405 serial PostgreSQL,
-273 worker and 95 server cases, 236 compiler clients and native/domain/diagram
-gates. [Acceptance](../evidence/keiro-0.22/process-row-results.txt) records malformed
-record/routing/origin refusals, coupled freeze rollback, one launch and retained
-accepted-attempt uncertainty without an invented receipt. SQL failure remains
-separate. Strict native findings against c8f3c23 are empty; four transducers remain
-unchanged. The current 320-module/909-declaration worklist, source/tool hashes and
-all 124 frozen guide hashes are verified. Other role/CLI/live HTTP results remain
-in their individual wave records. Forty-two of 46 assigned sources have
-implemented dispositions. Complete scalar/identity, model/other decision values
-and remaining decoder-owner review keep M1 incomplete. Three final-profile clauses
-and plan95's packaged Linux/runtime qualification remain open.
+Latest workspace identity acceptance passed the all-enabled build, 585 pure,
+405 serial PostgreSQL, 274 worker and 95 server cases, 243 compiler clients and
+native/domain/diagram gates. ADR-102 allocates one retained workspace identity
+beside its stable origin/provider locator. Concurrent/lost-response, rollback,
+immutable-conflict and follow-up/transfer controls pass; fresh composition and
+all eleven live migration checks pass. Binding JSON/digests intentionally change
+under ADR-27. Native findings against ee8f85c are empty with unchanged transducers.
+The unclassified census has 320 modules and 910 declarations. Complete scalar/
+identity, model/other decision values and remaining decoder-owner review keep
+M1 incomplete. Plan95's frozen closure, packaged Linux/runtime and inventory
+gates have not started.
+[Acceptance](../evidence/keiro-0.22/workspace-identity-results.txt) retains exact
+results and scope. Forty-two of 46 assigned sources have implemented dispositions.
+
 
 ## Context and Orientation
 

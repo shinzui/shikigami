@@ -1,8 +1,9 @@
 module Shikigami.WorkspaceStoreSpec (tests, withFixture, commitRepository) where
 
-import Control.Concurrent.Async (async, cancel, concurrently)
+import Control.Concurrent.Async (async, cancel, concurrently, mapConcurrently)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (bracket)
+import Data.Aeson (toJSON)
 import Data.ByteString qualified as Bytes
 import Data.Generics.Labels ()
 import Data.List (sort)
@@ -13,17 +14,20 @@ import Data.Time (UTCTime)
 import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUID
 import Hasql.Transaction (Transaction)
+import Hasql.Transaction qualified as Tx
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
+import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision (StateRevision, parseRevision)
+import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
 import Shikigami.WorkerSession.Types (AssignmentId (..), WorkerSessionId (..))
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
@@ -48,6 +52,12 @@ tests fixture =
         first <- right a
         b @?= Right first
         let binding = fst first
+            key = versionedDigest "shikigami.workspace-assignment/1" (toJSON request.assignment)
+            oldResource = Text.drop 7 (versionedDigest "shikigami.workspace-resource/1" (toJSON key))
+        binding.workspace @?= WorkspaceRef "shikigami.workspace/1" oldResource
+        duplicates <- mapConcurrently (\_ -> run env (reserveWorkspaceTx root request repo)) [1 .. 8 :: Int]
+        mapM_ (@?= Right first) duplicates
+        parseWorkspaceId (workspaceIdText binding.id) @?= Right binding.id
         fmap fst <$> run env (reserveWorkspaceTx root request repo) >>= (@?= Right binding)
         before <- sourceSnapshot source
         (x, y) <- concurrently (allocateWorkspace root binding Reserved) (allocateWorkspace root binding Reserved)
@@ -62,7 +72,7 @@ tests fixture =
         sourceSnapshot source >>= (@?= before)
         allocateWorkspace (root <> "-other") binding Reserved >>= (@?= Left WorkspaceAllocationRefused),
       testCase "changed run, owner, epoch, root, policy or source cannot rebind an assignment" $ withFixture fixture \env _ root repo -> do
-        _ <- right =<< run env (reserveWorkspaceTx root request repo)
+        (original, _) <- right =<< run env (reserveWorkspaceTx root request repo)
         mapM_
           (\changed -> run env (reserveWorkspaceTx root changed repo) >>= (@?= Left WorkspaceBindingConflict))
           [request & #runId .~ "different", request & #owner .~ CompatibilityIdentity (fixtureAgentName "other"), request & #epoch .~ (fixtureRevision 1), request & #rootId .~ fixtureRootId "other"]
@@ -72,10 +82,19 @@ tests fixture =
         run env (reserveWorkspaceTx root request changedSource) >>= (@?= Left WorkspaceBindingConflict)
         changedBase <- resolved (repositorySource repo) (Text.replicate 40 "a") "policy-1"
         run env (reserveWorkspaceTx root request changedBase) >>= (@?= Left WorkspaceBindingConflict)
-        run env (reserveWorkspaceTx (root <> "-other") request repo) >>= (@?= Left WorkspaceBindingConflict),
+        run env (reserveWorkspaceTx (root <> "-other") request repo) >>= (@?= Left WorkspaceBindingConflict)
+        run env (reserveWorkspaceTx root request repo) >>= (@?= Right (original, Reserved)),
+      testCase "aborted reservation publishes neither identity nor origin" $ withFixture fixture \env _ root repo -> do
+        (aborted, _) <- right =<< run env (do result <- reserveWorkspaceTx root request repo; Tx.condemn; pure result)
+        run env (inspectWorkspaceTx aborted.workspace) >>= (@?= Nothing)
+        (retained, _) <- right =<< run env (reserveWorkspaceTx root request repo)
+        retained.workspace @?= aborted.workspace
+        assertBool "rolled back candidate is not reused" (retained.id /= aborted.id)
+        run env (reserveWorkspaceTx root request repo) >>= (@?= Right (retained, Reserved)),
       testCase "distinct assignments have private files, objects and indexes" $ withFixture fixture \env source root repo -> do
         (one, _) <- right =<< run env (reserveWorkspaceTx root request repo)
         (two, _) <- right =<< run env (reserveWorkspaceTx root ((request & #assignment .~ (Just (WorkerSessionId "session", AssignmentId "two")))) repo)
+        assertBool "distinct allocated entity identities" (one.id /= two.id)
         assertBool "different resources" (one.workspace /= two.workspace)
         before <- sourceSnapshot source
         allocateWorkspace root one Reserved >>= (@?= Right ())

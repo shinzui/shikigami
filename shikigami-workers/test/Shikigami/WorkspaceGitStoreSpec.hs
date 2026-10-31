@@ -50,7 +50,7 @@ tests fixture =
           testCase "malformed registered origin refuses before a provider directory can be restored" $ withGit fixture \env binding proposed -> do
             run env (reserveGitTx binding proposed) >>= (@?= Right proposed)
             run env (inspectRegisteredGitTx proposed.operation.operationId) >>= (@?= Right (Just (binding, proposed)))
-            run env (Tx.sql "UPDATE shikigami.workspace_bindings SET binding='{}'::jsonb")
+            run env (Tx.sql "UPDATE shikigami.workspace_bindings SET binding=jsonb_build_object('id',binding->'id')")
             run env (inspectGitTx proposed.operation.operationId) >>= (@?= Right (Just proposed))
             run env (inspectRegisteredGitTx proposed.operation.operationId) >>= (@?= Left WorkspaceBindingConflict),
           testCase "record format is closed numeric one" do

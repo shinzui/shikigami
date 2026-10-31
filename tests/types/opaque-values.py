@@ -45,6 +45,7 @@ import Shikigami.PracticeReview qualified as Review
 import Shikigami.PracticeReview.Evidence qualified as Evidence
 import Shikigami.Router.Declaration qualified as Declaration
 import Shikigami.Workspace.Instructions qualified as Instructions
+import Shikigami.Workspace.Types qualified as Workspace
 import Shikigami.Inspection.Settings qualified as Inspection
 import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
@@ -162,6 +163,7 @@ CASES = [
     ('Decision.ProgramParameterDigest', 'generic'),
     ('Decision.DecisionCallId', 'generic'),
     ('Decision.DecisionCallOrdinal', 'generic'),
+    ('Workspace.WorkspaceId', 'generic'),
     ('Entity.OperationId', 'generic'),
     ('Entity.ExecutionRootId', 'generic'),
     ('Entity.AttemptId', 'generic'),

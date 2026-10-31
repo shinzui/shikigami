@@ -71,7 +71,7 @@ continuingCase config prefix stage = withQualification config prefix \q -> case 
     Lazy.writeFile (prefix </> "continuing.json") (Aeson.encode (Continuing binding admission process session actor))
   "worker" -> withCase q \item -> executeConfigured q item.prepared
   "inspect" -> withCase q \item -> do
-    process <- run q.env (runTransaction (Processes.inspectProcessTx item.prepared.reference.operationId))
+    process <- right =<< run q.env (runTransaction (Processes.inspectProcessTx item.prepared.reference.operationId))
     actual <- right =<< run q.env (Execution.inspectExecutionAttempt item.prepared.reference.attemptId)
     let capture record = "shikigami-capture-" <> Text.drop (Text.length ("shikigami-workspace-" :: Text.Text)) record.unit
     Lazy.writeFile (prefix </> "continuing-status.json") (Aeson.encode (Aeson.object ["process" Aeson..= process, "actual" Aeson..= actual, "capture" Aeson..= (capture <$> process), "files" Aeson..= workspaceFiles item.binding.storageRoot item.binding]))
@@ -94,7 +94,7 @@ continuingCase config prefix stage = withQualification config prefix \q -> case 
     unless (matchesFence intent proof) (fail "fence coordinates changed")
     again <- (workspaceTransferClient q.client).reconcile intent
     unless (again == outcome) (fail "duplicate fence differs")
-    Just process <- run q.env (runTransaction (Processes.inspectProcessTx item.prepared.reference.operationId))
+    Just process <- right =<< run q.env (runTransaction (Processes.inspectProcessTx item.prepared.reference.operationId))
     receipt <- maybe (fail "native settlement receipt absent") pure process.receipt
     unless (process.phase == ProcessSettled && receipt.descendantsEmpty && receipt.outputComplete) (fail "descendant settlement is not factual")
     Just actual <- right =<< run q.env (Execution.inspectExecutionAttempt item.prepared.reference.attemptId)

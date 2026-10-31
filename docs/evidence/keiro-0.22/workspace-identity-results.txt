@@ -1,0 +1,22 @@
+Allocated workspace identity and stable origin receipts — ExecPlan 107
+Source parent: ee8f85c (master); selected GHC 9.12.4/frozen cohort.
+arm64 macOS and real PostgreSQL 18 fixtures.
+Decision: docs/adr/0102-workspaces-have-allocated-identities-beside-stable-origin-locators.md.
+
+Contract
+WorkspaceBinding retains a private canonical UUIDv7 WorkspaceId with prefix shikigami_workspace. Public checked text/UUID capture and exact string JSON reject invalid encoding/prefix/version/variant. No Generic, literal, constructor or representation coercion escapes.
+The existing reservation transaction allocates with pg_catalog.uuidv7(), publishes one unique entity identity beside the logical-origin receipt, compares the complete immutable binding using its committed identity and returns the retained winner. Every refused reservation condemns the transaction. Provider/resource derivation and filesystem locator bytes remain exact. Same-owner follow-up and transfer retain the original complete binding.
+Migration 0034 adds a unique workspace_id and requires it to match the protected JSON binding. This fresh first-release contract changes binding JSON/digests/action-proof coordinates deliberately; it has no populated-binding backfill or old-marker compatibility. No developer database is deleted. The PostgreSQL 18 baseline already existed; no dependency bound changed.
+
+Acceptance
+Focused suites PASS: 30 pure workspace (0.08s), 159 worker workspace (174.00s), nine migration composition (0.04s) and eleven real migration smoke (2.58s). The snapshot capture wrote the new snapshot and correctly refused the previously compiled one; rebuilding passed verification and drift checks.
+Eight concurrent duplicate reservations plus the existing race/lost-response controls recover one immutable identity. Changed run/owner/epoch/root/policy/source/base/storage refuse while preserving the original binding. Distinct assignments allocate different IDs. A condemned reservation leaves no origin; retry retains a new winner under the exact old locator. Same-owner follow-up and transferred/terminal bindings compare equal to the original complete allocation. Physical publication retries preserve accepted edits and source bytes.
+Pure checked-ID codecs reject UUIDv4, same-prefix UUIDv5, wrong prefix and noncanonical case; no missing-ID inference. Changing only the allocated identity cannot reuse an exact action proof. Git/process joined-origin corruption controls preserve the valid identity constraint while making the rest of the protected binding invalid.
+Full all-enabled build PASS, including workspace-linux-fixture. That build found Linux fixture callers missed by the earlier Git/process inspector API changes; Main, Continuing and Qualification now explicitly unwrap the owning Either before observation. Compilation is not Linux runtime evidence.
+Full suites PASS: 585 pure (5.97s), 405 serial PostgreSQL (115.67s), 274 worker (175.12s), 95 server (19.19s). Domain behavior and six diagrams PASS.
+Selected compiler: 184 nominal + 59 opaque = 243 PASS. Positive factory/retained-field controls precede constructor, text/KindID coercion, literal, root substitution and Generic rejection.
+just keiro-gate ee8f85c PASS: native check, ten-member inspection, idempotent scaffold and 156 conformance rows. Strict findings are empty; four transducer fingerprints/source hashes remain unchanged. Native diff/replay/fold reports retained. Neutral declarations do not imply old opaque-binding compatibility; workflow-versioning records the intentional first-release reset.
+All 124 frozen guide hashes verified. Current compiled source/tool worklist verified: 320 modules, 910 declarations (695 data, 178 newtypes, 37 aliases), 14 entrypoints. Haskell conventions, thirteen mutation tests and git diff --check pass. Generated files are unchanged.
+
+Scope
+This closes workspace entity allocation beside its technical origin, not every workspace scalar/decoder or independent Linux containment/restart. The declaration worklist remains unclassified. Complete scalar/identity, model/other decision and remaining decoder-owner reviews keep plan107 M1 open. Final packaged Linux/runtime profiles and plan95 have not started.

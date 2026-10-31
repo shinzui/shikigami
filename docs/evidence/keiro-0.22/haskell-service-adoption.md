@@ -413,3 +413,16 @@ uncertain actual and no invented receipt. Native Linux systemd behavior is not
 inferred. Native findings against c8f3c23 are empty and four transducers unchanged.
 The 320-module/909-declaration worklist remains unclassified; complete scalar/
 identity, model/other decision and remaining decoder-owner review remain open.
+
+
+Workspace allocations now retain private UUIDv7 entity identities beside their
+stable technical provider/origin addresses. [ADR-102](../../adr/0102-workspaces-have-allocated-identities-beside-stable-origin-locators.md)
+and [acceptance](workspace-identity-results.txt) record concurrent/lost-response
+convergence, rollback, immutable conflicts, retained follow-up/transfer identity
+and exact action proofs. The full all-enabled build, 585 pure/405 PostgreSQL/274
+worker/95 server, 243 compiler clients and native/domain/diagram gates pass.
+Fresh schema composition and all eleven live migration checks pass. Native
+findings against ee8f85c are empty; four transducers remain unchanged. Binding
+JSON/digests intentionally change under the unused first-release policy. No old
+metadata compatibility or Linux runtime qualification is inferred. The 320-module/
+910-declaration worklist remains unclassified; complete M1 review stays open.

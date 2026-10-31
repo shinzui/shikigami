@@ -234,6 +234,7 @@ column	workspace_bindings.assignment_key	text not null
 column	workspace_bindings.binding	jsonb not null
 column	workspace_bindings.resource	text not null
 column	workspace_bindings.state	text not null
+column	workspace_bindings.workspace_id	text not null
 column	workspace_cleanup.complete	boolean not null default false
 column	workspace_cleanup.plan	jsonb not null
 column	workspace_cleanup.resource	text not null
@@ -615,6 +616,9 @@ constraint	workspace_bindings.workspace_bindings_resource_key	UNIQUE (resource)
 constraint	workspace_bindings.workspace_bindings_resource_not_null	NOT NULL resource
 constraint	workspace_bindings.workspace_bindings_state_check	CHECK ((state = ANY (ARRAY['reserved'::text, 'ready'::text])))
 constraint	workspace_bindings.workspace_bindings_state_not_null	NOT NULL state
+constraint	workspace_bindings.workspace_bindings_workspace_id_not_null	NOT NULL workspace_id
+constraint	workspace_bindings.workspace_entity_identity_matches_binding	CHECK ((((binding ->> 'id'::text) IS NOT NULL) AND ((binding ->> 'id'::text) = workspace_id)))
+constraint	workspace_bindings.workspace_entity_identity_unique	UNIQUE (workspace_id)
 constraint	workspace_cleanup.workspace_cleanup_complete_not_null	NOT NULL complete
 constraint	workspace_cleanup.workspace_cleanup_pkey	PRIMARY KEY (resource)
 constraint	workspace_cleanup.workspace_cleanup_plan_not_null	NOT NULL plan
@@ -762,6 +766,7 @@ index	workspace_bindings_resource_key	CREATE UNIQUE INDEX workspace_bindings_res
 index	workspace_cleanup_pkey	CREATE UNIQUE INDEX workspace_cleanup_pkey ON shikigami.workspace_cleanup USING btree (resource)
 index	workspace_controls_pkey	CREATE UNIQUE INDEX workspace_controls_pkey ON shikigami.workspace_controls USING btree (resource)
 index	workspace_effects_pkey	CREATE UNIQUE INDEX workspace_effects_pkey ON shikigami.workspace_effects USING btree (operation_id)
+index	workspace_entity_identity_unique	CREATE UNIQUE INDEX workspace_entity_identity_unique ON shikigami.workspace_bindings USING btree (workspace_id)
 index	workspace_file_registrations_pkey	CREATE UNIQUE INDEX workspace_file_registrations_pkey ON shikigami.workspace_file_registrations USING btree (operation_id)
 index	workspace_process_profiles_pkey	CREATE UNIQUE INDEX workspace_process_profiles_pkey ON shikigami.workspace_process_profiles USING btree (resource)
 index	workspace_process_profiles_user_id_key	CREATE UNIQUE INDEX workspace_process_profiles_user_id_key ON shikigami.workspace_process_profiles USING btree (user_id)

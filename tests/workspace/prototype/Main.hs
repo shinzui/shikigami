@@ -332,8 +332,8 @@ inspectCase :: AppEnv -> FilePath -> String -> PreparedCase -> IO ()
 inspectCase env prefix name item = do
   metadata <- stored env (Execution.inspectExecution item.prepared.snapshot.executionId)
   actual <- stored env (Execution.inspectExecutionAttempt item.prepared.reference.attemptId)
-  process <- transact env (Processes.inspectProcessTx item.prepared.reference.operationId)
-  git <- transact env (Git.inspectGitTx item.prepared.reference.operationId)
+  process <- requireRight =<< transact env (Processes.inspectProcessTx item.prepared.reference.operationId)
+  git <- requireRight =<< transact env (Git.inspectGitTx item.prepared.reference.operationId)
   let state = (\(value, _, _) -> value) <$> metadata
       operationDirectory record = workspaceMetadata item.binding.storageRoot item.binding </> Text.unpack ("process-" <> Text.drop 7 (versionedDigest "shikigami.workspace-process-directory/1" (Aeson.toJSON (record.operationId, record.fingerprint))))
       capture record = "shikigami-capture-" <> Text.drop (Text.length ("shikigami-workspace-" :: Text.Text)) record.unit
@@ -345,7 +345,7 @@ verifyCase :: AppEnv -> FilePath -> String -> String -> PreparedCase -> IO ()
 verifyCase env _prefix _name expected item = do
   Just (state, _, _) <- stored env (Execution.inspectExecution item.prepared.snapshot.executionId)
   Just actual <- stored env (Execution.inspectExecutionAttempt item.prepared.reference.attemptId)
-  Just process <- transact env (Processes.inspectProcessTx item.prepared.reference.operationId)
+  Just process <- requireRight =<< transact env (Processes.inspectProcessTx item.prepared.reference.operationId)
   root <- stored env (Roots.inspectRoot item.binding.request.rootId)
   let path = workspaceFiles item.binding.storageRoot item.binding </> "src/launch-count"
   exists <- doesFileExist path
@@ -367,11 +367,11 @@ verifyCase env _prefix _name expected item = do
 
 verifyGitCase :: AppEnv -> String -> PreparedCase -> IO ()
 verifyGitCase env expected item = do
-  Just record <- transact env (Git.inspectGitTx item.prepared.reference.operationId)
+  Just record <- requireRight =<< transact env (Git.inspectGitTx item.prepared.reference.operationId)
   Just actual <- stored env (Execution.inspectExecutionAttempt item.prepared.reference.attemptId)
   Just (state, _, _) <- stored env (Execution.inspectExecution item.prepared.snapshot.executionId)
   root <- stored env (Roots.inspectRoot item.binding.request.rootId)
-  Just validation <- transact env (Processes.inspectProcessTx (operationIdFor item.prepared.snapshot.executionId (fixtureRevision 2)))
+  Just validation <- requireRight =<< transact env (Processes.inspectProcessTx (operationIdFor item.prepared.snapshot.executionId (fixtureRevision 2)))
   unless (maybe False processSucceeded validation.receipt && validation.instructionDigest == record.instructionDigest) (fail "upgrade validation evidence missing")
   unless (record.attemptId == actual.request.attemptId && record.generation == actual.generation && actual.phase == Attempt.AttemptCommitted && state.cursor == (fixtureRevision 4) && root.active == noAttempts && root.unknown == noAttempts) (fail "original Git actual did not settle")
   let metadata = workspaceMetadata item.binding.storageRoot item.binding

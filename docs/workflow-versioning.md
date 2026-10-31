@@ -71,6 +71,15 @@ same; a neutral diff does not assert compatibility for former UUIDv4 payloads.
 Current-call retry accounting and same-build recovery remain independently tested.
 
 
+[ADR-102](adr/0102-workspaces-have-allocated-identities-beside-stable-origin-locators.md)
+adds the allocated workspace identity to its protected binding under the same
+unused first-release exception. Provider/resource addresses retain their bytes;
+binding JSON, digests and derived action-proof resources intentionally change.
+Neutral native workflow declarations do not establish old opaque-metadata or
+marker compatibility. Fresh provisioning and same-build reservation/recovery are
+required; no old-identity inference is introduced.
+
+
 ## What a durable workflow is, and why editing one is not like editing ordinary code
 
 Shikigami runs each agent run and each Danwa conversation as a **durable

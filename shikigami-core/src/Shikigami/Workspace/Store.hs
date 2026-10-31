@@ -29,25 +29,38 @@ import Shikigami.Workspace.Types
 import System.FilePath (isAbsolute, normalise, splitDirectories)
 
 reserveWorkspaceTx :: FilePath -> WorkspaceRequest -> ResolvedRepository -> Transaction (Either WorkspaceError (WorkspaceBinding, AllocationState))
-reserveWorkspaceTx storageRoot request repository
-  | not valid = pure (Left InvalidWorkspaceRequest)
-  | otherwise = do
-      Tx.statement (key, resource, binding) insertBinding
-      existing <- inspectWorkspaceTx binding.workspace
-      retired <- Tx.statement resource hasCleanup
-      case existing of
-        Just pair@(stored, _) | stored == binding && not retired -> do
-          Tx.statement (resource, request.owner, revisionNumber request.epoch) insertControl
-          pure (Right pair)
-        _ -> pure (Left WorkspaceBindingConflict)
+reserveWorkspaceTx storageRoot request repository = do
+  result <- if not valid then pure (Left InvalidWorkspaceRequest) else reserve
+  case result of Left _ -> Tx.condemn; Right _ -> pure ()
+  pure result
   where
+    reserve = do
+      allocated <- Tx.statement () allocateWorkspaceId
+      case allocated of
+        Left _ -> pure (Left WorkspaceBindingConflict)
+        Right identifier -> do
+          let proposed = bindingFor identifier
+          Tx.statement (key, resource, workspaceIdText identifier, proposed) insertBinding
+          existing <- inspectWorkspaceTx proposed.workspace
+          retired <- Tx.statement resource hasCleanup
+          case existing of
+            Just pair@(stored, _) | stored == bindingFor stored.id && not retired -> do
+              Tx.statement (resource, request.owner, revisionNumber request.epoch) insertControl
+              pure (Right pair)
+            _ -> pure (Left WorkspaceBindingConflict)
     root = executionRootIdText request.rootId
     validKey value = not (Text.null value) && Text.length value <= 256 && not (Text.any (== '\0') value)
     validIdentity = either (const False) validKey . identityText
     valid = storageRoot /= "/" && ".." `notElem` splitDirectories storageRoot && isAbsolute storageRoot && normalise storageRoot == storageRoot && not ('\0' `elem` storageRoot) && validKey request.runId && validKey root && validIdentity request.principal && validIdentity request.owner && revisionNumber request.epoch < 9223372036854775808 && maybe True (\(session, assignment) -> validKey session.value && validKey assignment.value) request.assignment
     key = versionedDigest "shikigami.workspace-assignment/1" (maybe (toJSON request.runId) toJSON request.assignment)
+    -- This is the provider address of the natural origin, not its entity ID.
     resource = Text.drop 7 (versionedDigest "shikigami.workspace-resource/1" (toJSON key))
-    binding = WorkspaceBinding request (WorkspaceRef "shikigami.workspace/1" resource) (repositoryIdentity repository) (repositoryBase repository) (repositoryPolicyRevision repository) storageRoot (repositorySource repository)
+    bindingFor identifier = WorkspaceBinding identifier request (WorkspaceRef "shikigami.workspace/1" resource) (repositoryIdentity repository) (repositoryBase repository) (repositoryPolicyRevision repository) storageRoot (repositorySource repository)
+
+-- PostgreSQL 18 owns UUIDv7 allocation. Only the committed logical-origin
+-- winner escapes; concurrent/transaction retries return its retained identity.
+allocateWorkspaceId :: Statement () (Either Text WorkspaceId)
+allocateWorkspaceId = preparable "SELECT pg_catalog.uuidv7()" E.noParams (D.singleRow (workspaceIdFromUUID <$> D.column (D.nonNullable D.uuid)))
 
 inspectWorkspaceTx :: WorkspaceRef -> Transaction (Maybe (WorkspaceBinding, AllocationState))
 inspectWorkspaceTx ref
@@ -64,8 +77,8 @@ markWorkspaceReadyTx binding = do
 textParam :: E.Value Text
 textParam = E.text
 
-insertBinding :: Statement (Text, Text, WorkspaceBinding) ()
-insertBinding = preparable "INSERT INTO shikigami.workspace_bindings(assignment_key,resource,binding,state) VALUES($1,$2,$3,'reserved') ON CONFLICT DO NOTHING" (contrazip3 (E.param (E.nonNullable textParam)) (E.param (E.nonNullable textParam)) jsonParam) D.noResult
+insertBinding :: Statement (Text, Text, Text, WorkspaceBinding) ()
+insertBinding = preparable "INSERT INTO shikigami.workspace_bindings(assignment_key,resource,workspace_id,binding,state) VALUES($1,$2,$3,$4,'reserved') ON CONFLICT DO NOTHING" (contrazip4 (E.param (E.nonNullable textParam)) (E.param (E.nonNullable textParam)) (E.param (E.nonNullable textParam)) jsonParam) D.noResult
 
 hasCleanup :: Statement Text Bool
 hasCleanup = preparable "SELECT EXISTS(SELECT 1 FROM shikigami.workspace_cleanup WHERE resource=$1)" (E.param (E.nonNullable E.text)) (D.singleRow (D.column (D.nonNullable D.bool)))

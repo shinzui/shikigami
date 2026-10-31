@@ -90,16 +90,17 @@ a checked allocated TypeID; objective content, worker/workspace ownership,
 execution policies, counters, root control decisions and assignment locators retain their
 nominal checked meanings.
 
-Latest process intent/routing acceptance passed 584 pure, 405 serial PostgreSQL,
-273 worker and 95 server cases, 236 compiler clients and native/domain/diagram
-gates. ADR-101 preserves process uncertainty on malformed metadata and closes
-routing format at numeric one. Positive controls retain one launch, roll back a
-freeze and refuse acknowledgement without facts. Native Linux containment is
-not inferred. Strict native findings against c8f3c23 are empty with unchanged
-transducers. The unclassified census has 320 modules and 909 declarations.
-Complete scalar/identity, model/other decision values and remaining decoder-owner
-review keep EP-5 In Progress. EP-6's frozen closure, packaged Linux/runtime and
-inventory gates have not started.
+Latest workspace identity acceptance passed the all-enabled build, 585 pure,
+405 serial PostgreSQL, 274 worker and 95 server cases, 243 compiler clients and
+native/domain/diagram gates. ADR-102 allocates one retained workspace identity
+beside its stable origin/provider locator. Concurrent/lost-response, rollback,
+immutable-conflict and follow-up/transfer controls pass; fresh composition and
+all eleven live migration checks pass. Binding JSON/digests intentionally change
+under ADR-27. Native findings against ee8f85c are empty with unchanged transducers.
+The unclassified census has 320 modules and 910 declarations. Complete scalar/
+identity, model/other decision values and remaining decoder-owner review keep
+EP-5 In Progress. EP-6's frozen closure, packaged Linux/runtime and inventory
+gates have not started.
 
 ## Surprises & Discoveries
 

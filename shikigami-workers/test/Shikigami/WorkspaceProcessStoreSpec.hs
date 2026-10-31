@@ -59,7 +59,7 @@ tests fixture =
           testCase "malformed registered origin is an owning refusal" $ withProcess fixture \env binding proposed -> do
             run env (reserveProcessTx binding proposed) >>= (@?= Right proposed)
             run env (inspectRegisteredProcessTx proposed.operationId) >>= (@?= Right (Just (binding, proposed)))
-            run env (Tx.sql "UPDATE shikigami.workspace_bindings SET binding='{}'::jsonb")
+            run env (Tx.sql "UPDATE shikigami.workspace_bindings SET binding=jsonb_build_object('id',binding->'id')")
             run env (inspectProcessTx proposed.operationId) >>= (@?= Right (Just proposed))
             run env (inspectRegisteredProcessTx proposed.operationId) >>= (@?= Left WorkspaceBindingConflict),
           testCase "routing format has exact closed numeric-one codecs" do

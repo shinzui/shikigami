@@ -48,6 +48,7 @@ import Shikigami.Execution.Counter
 import Shikigami.Decision.Contract qualified as Decision
 import Shikigami.Workspace.GitTypes qualified as Git
 import Shikigami.Workspace.Process qualified as Process
+import Shikigami.Workspace.Types qualified as Workspace
 import Shikigami.Execution.Quantity
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Capability (WorkerCommand (CancelWorker))
@@ -63,6 +64,13 @@ import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ('workspace-values', 'parse :: Text -> Either Text Workspace.WorkspaceId\nparse = Workspace.parseWorkspaceId\nidentity :: Workspace.WorkspaceBinding -> Workspace.WorkspaceId\nidentity binding = binding.id\n', True),
+    ('workspace-id-constructor', 'value = Workspace.WorkspaceId\n', False),
+    ('workspace-id-kindid-coercion', 'value :: KindID.KindID "shikigami_workspace" -> Workspace.WorkspaceId\nvalue = coerce\n', False),
+    ('workspace-id-text-coercion', 'value :: Text -> Workspace.WorkspaceId\nvalue = coerce\n', False),
+    ('workspace-id-literal', 'value :: Workspace.WorkspaceId\nvalue = fromString "bad"\n', False),
+    ('root-is-not-workspace', 'value :: Entity.ExecutionRootId -> Workspace.WorkspaceId\nvalue = id\n', False),
+
     ('process-routing-format', 'value :: Process.ProcessRoutingFormat\nvalue = Process.ProcessRoutingV1\nreadFormat :: Process.ProcessRouting -> Process.ProcessRoutingFormat\nreadFormat routing = routing.format\n', True),
     ('process-routing-format-numeric', 'value :: Process.ProcessRoutingFormat\nvalue = 2\n', False),
     ('git-format-is-not-process-routing-format', 'value :: Git.GitRecordFormat -> Process.ProcessRoutingFormat\nvalue = id\n', False),
@@ -448,6 +456,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
             fragments.update({'program-identity-constructor': ['ProgramIdentity'], 'program-identity-coercion': ['ProgramIdentity', 'Text'], 'program-identity-scope-coercion': ["Couldn't match", 'program-id', 'program-version'], 'program-identity-scope-substitution': ["Couldn't match", 'input-schema-version', 'result-schema-version'], 'program-identity-literal': ['ProgramIdentity', 'IsString'], 'program-parameter-format-numeric': ['ProgramParameterFormat', 'Num'], 'program-parameter-digest-constructor': ['ProgramParameterDigest'], 'program-parameter-digest-coercion': ['ProgramParameterDigest', 'Text'], 'program-parameter-digest-literal': ['ProgramParameterDigest', 'IsString'], 'payload-digest-is-not-program-parameter-digest': ["Couldn't match", 'PayloadDigest', 'ProgramParameterDigest']})
             fragments.update({'git-record-format-numeric': ['GitRecordFormat', 'Num'], 'program-format-is-not-git-record-format': ["Couldn't match", 'ProgramParameterFormat', 'GitRecordFormat']})
             fragments.update({'process-routing-format-numeric': ['ProcessRoutingFormat', 'Num'], 'git-format-is-not-process-routing-format': ["Couldn't match", 'GitRecordFormat', 'ProcessRoutingFormat']})
+            fragments.update({'workspace-id-constructor': ['WorkspaceId'], 'workspace-id-kindid-coercion': ['WorkspaceId'], 'workspace-id-text-coercion': ['WorkspaceId', 'Text'], 'workspace-id-literal': ['WorkspaceId', 'IsString'], 'root-is-not-workspace': ["Couldn't match", 'ExecutionRootId', 'WorkspaceId']})
             if name.endswith("-constructor"):
                 assert any(marker in result.stderr.lower() for marker in ["not in scope", "does not export", "illegal term-level"]), (name, result.stderr)
             assert all(fragment in result.stderr for fragment in fragments[name]), (name, result.stderr)
