@@ -9,6 +9,7 @@ import Data.ByteString qualified as Bytes
 import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
+import Data.Text qualified as AssignmentText
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
 import Data.Time (addUTCTime, getCurrentTime)
@@ -21,6 +22,7 @@ import Shikigami.Action.Authorization
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Capability.Provider (DurableAdapter (..))
+import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Counter (AttemptCount, parseAttemptCount)
 import Shikigami.Execution.Executor qualified as Executor
@@ -336,7 +338,7 @@ sibling env original profile runId = do
   (binding, state) <- right =<< run env (runTransaction (Store.reserveWorkspaceTx original.storageRoot request repository))
   allocateWorkspace original.storageRoot binding state >>= (@?= Right ())
   run env (runTransaction (Store.markWorkspaceReadyTx binding)) >>= (@?= Right ())
-  admission <- right =<< loadWorkspaceAdmission binding (runId <> "-assignment") 65536
+  admission <- right =<< loadWorkspaceAdmission binding (fixtureAssignment (runId <> "-assignment")) 65536
   (retained, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest admission.instructions) profile.policy (IdentityRange 62002 62020)))
   profileReady env binding retained
   pure (binding, admission & #filePolicy .~ Just transferableFilePolicy)
@@ -382,3 +384,6 @@ fixtureCount number = either (error . show) id (parseAttemptCount number)
 
 fixtureProgress :: (ProgressNumber a) => Integer -> a
 fixtureProgress number = either (error . show) id (parseProgress number)
+
+fixtureAssignment :: AssignmentText.Text -> AssignmentKey
+fixtureAssignment = either (error . show) id . parseAssignmentKey

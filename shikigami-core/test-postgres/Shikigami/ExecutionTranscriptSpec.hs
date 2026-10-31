@@ -26,6 +26,7 @@ import Data.List (nub)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text)
+import Data.Text qualified as AssignmentText
 import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
 import Data.UUID qualified as UUID
@@ -76,6 +77,7 @@ import Shikigami.Capability.Provider qualified as Capability
 import Shikigami.Capability.Tools (overlayToolName)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Decision.ModelCatalog (modelCatalog)
+import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Catalog qualified as ExecutionCatalog
 import Shikigami.Execution.Counter (AttemptCount, AttemptLimit, attemptNumber, parseAttemptCount, parseAttemptLimit)
@@ -1336,7 +1338,7 @@ reserveCall env snapshot operation = do
   case result of Calls.NewCall receipt -> pure receipt; _ -> assertFailure "new actual attempt expected"
 
 anotherSnapshot :: ExecutionSnapshot -> Text -> ExecutionSnapshot
-anotherSnapshot snapshot assignment = snapshot & #executionId .~ executionIdFor assignment & #selection . #assignmentId .~ assignment
+anotherSnapshot snapshot raw = let assignment = fixtureAssignment raw in snapshot & #executionId .~ executionIdFor assignment & #selection . #assignmentId .~ assignment
 
 withFixture :: DatabaseFixture -> (AppEnv -> ExecutionSnapshot -> Store.ReplayAccess -> IO a) -> IO a
 withFixture fixture = withConfiguredFixture fixture id
@@ -1351,7 +1353,7 @@ withConfiguredResourceFixture fixture configure editLimits use = withShikigamiFr
   session <- genSessionId
   let env = AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing
       limits = editLimits (Map.insert R.Tokens (R.Limited (fixtureAmount 1000)) (Map.fromList [(dimension, R.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]))
-      selection = mustRight (resolveExecutionSelection "transcript-assignment" (mustRight (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just rootId) now)
+      selection = mustRight (resolveExecutionSelection (fixtureAssignment "transcript-assignment") (mustRight (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just rootId) now)
       snapshot = configure (ExecutionSnapshot 1 (executionIdFor selection.assignmentId) "transcript-run" (AgentName "worker") (compatibilityIdentity "worker") session selection Nothing (SkillInstructions "fixture" "system" "PRIVATE_REPLAY_MARKER") (ReplayContext 1 (Just "system") [UserTurn [TextBlock "PRIVATE_REPLAY_MARKER"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing)
   _ <- expectRight =<< run env Catalog.registerProjectionCatalog
   run env (Roots.enrollRoot rootId (R.Envelope limits (addUTCTime 3600 now))) >>= (@?= Right R.Accepted)
@@ -1451,3 +1453,6 @@ recoveryReceiptCapacityCase fixture = testCase "full pending-receipt capacity re
 
 fixtureToolPosition :: Integer -> ToolPosition
 fixtureToolPosition value = either (error . show) id (parseToolPosition value)
+
+fixtureAssignment :: AssignmentText.Text -> AssignmentKey
+fixtureAssignment = either (error . show) id . parseAssignmentKey

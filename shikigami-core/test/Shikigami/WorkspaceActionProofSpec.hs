@@ -5,6 +5,7 @@ import Data.Aeson (toJSON)
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
+import Data.Text qualified as AssignmentText
 import Data.Text qualified as Text
 import Data.Text.Encoding (decodeUtf8)
 import Data.Time (addUTCTime)
@@ -19,6 +20,7 @@ import Kikan.En.Action qualified as Kikan
 import Kikan.En.Client (newActionProofVerifier, verifyIssuedAction)
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
+import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Runner
 import Shikigami.Execution.ToolPosition (ToolPosition, parseToolPosition)
@@ -58,7 +60,7 @@ tests =
             verifier = newActionProofVerifier (singleKey keyId (toPublic secret)) (Set.singleton schema) (const (pure False))
             admissionFor b = do
               bundle <- right (mkInstructionBundle 65536 b.repository b.base [("AGENTS.md", "fixture policy")])
-              pure (WorkspaceAdmission b.workspace (workspaceBindingDigest b) b.request.runId "assignment" b.request.rootId b.request.owner b.request.epoch bundle (Just nativeFilePolicy))
+              pure (WorkspaceAdmission b.workspace (workspaceBindingDigest b) b.request.runId (fixtureAssignment "assignment") b.request.rootId b.request.owner b.request.epoch bundle (Just nativeFilePolicy))
         admission <- admissionFor binding
         workspaceFileAction binding (admission & #filePolicy .~ Nothing) dispatch "replace" "src/file" "device:parent" "input-hash" @?= Left FileEffectRefused
         workspaceFileAction binding (admission & #filePolicy .~ Just "unqualified-profile") dispatch "replace" "src/file" "device:parent" "input-hash" @?= Left FileEffectRefused
@@ -77,7 +79,7 @@ tests =
           mapM
             right
             [ workspaceFileAction binding (admission & #instructions .~ changedPolicy) dispatch "replace" "src/file" "device:parent" "input-hash",
-              workspaceFileAction binding (admission & #assignmentId .~ "other-assignment") dispatch "replace" "src/file" "device:parent" "input-hash",
+              workspaceFileAction binding (admission & #assignmentId .~ (fixtureAssignment "other-assignment")) dispatch "replace" "src/file" "device:parent" "input-hash",
               workspaceFileAction binding admission (dispatch & #attemptId .~ AttemptId "other-attempt") "replace" "src/file" "device:parent" "input-hash",
               workspaceFileAction binding admission (dispatch & #owner .~ "other-claim") "replace" "src/file" "device:parent" "input-hash",
               workspaceFileAction binding admission (dispatch & #generation .~ 2) "replace" "src/file" "device:parent" "input-hash",
@@ -141,7 +143,7 @@ tests =
                 <> [ workspaceProcessAction binding processAdmission dispatch (record & #deadline .~ addUTCTime 1 expiry) boot "device:parent",
                      workspaceProcessAction binding processAdmission dispatch record "22222222-2222-4222-8222-222222222222" "device:parent",
                      workspaceProcessAction binding processAdmission dispatch record boot "device:other-parent",
-                     workspaceProcessAction binding (processAdmission & #assignmentId .~ "other-assignment") dispatch record boot "device:parent",
+                     workspaceProcessAction binding (processAdmission & #assignmentId .~ (fixtureAssignment "other-assignment")) dispatch record boot "device:parent",
                      workspaceProcessAction binding processAdmission dispatch (record & #routing .~ Just (ProcessRouting 1 logical.executionId owner ("sha256:" <> Text.replicate 64 "b") NeedModel)) boot "device:parent",
                      workspaceProcessAction binding processAdmission dispatch (record & #routing .~ Just (ProcessRouting 1 logical.executionId owner ("sha256:" <> Text.replicate 64 "a") (NeedTool (PayloadRef "response" ("sha256:" <> Text.replicate 64 "a") 1) (fixtureToolPosition 1)))) boot "device:parent"
                    ]
@@ -203,7 +205,7 @@ tests =
           mapM
             right
             [ workspaceProvisionAction provisionBinding provisionAdmission (profile & #userId .~ 62002 & #groupId .~ 62002) boot "device:files" "device:scratch",
-              workspaceProvisionAction provisionBinding (provisionAdmission & #assignmentId .~ "other-assignment") profile boot "device:files" "device:scratch",
+              workspaceProvisionAction provisionBinding (provisionAdmission & #assignmentId .~ (fixtureAssignment "other-assignment")) profile boot "device:files" "device:scratch",
               workspaceProvisionAction provisionBinding provisionAdmission profile boot "device:other-files" "device:scratch",
               workspaceProvisionAction provisionBinding provisionAdmission profile boot "device:files" "device:other-scratch",
               workspaceProvisionAction provisionBinding provisionAdmission profile "22222222-2222-4222-8222-222222222222" "device:files" "device:scratch"
@@ -243,7 +245,7 @@ tests =
               gitAction provisionAdmission gitDispatch profile (gitRecord & #candidate .~ Just (candidate & #paths .~ ["src/other"])),
               gitAction provisionAdmission gitDispatch profile (gitRecord & #expectedParent .~ Text.replicate 40 "d" & #candidate .~ Just (candidate & #parent .~ Text.replicate 40 "d")),
               gitAction provisionAdmission gitDispatch profile (gitRecord & #routing . #inputDigest .~ ("sha256:" <> Text.replicate 64 "b")),
-              gitAction (provisionAdmission & #assignmentId .~ "other-assignment") gitDispatch profile gitRecord,
+              gitAction (provisionAdmission & #assignmentId .~ (fixtureAssignment "other-assignment")) gitDispatch profile gitRecord,
               gitAction provisionAdmission (gitDispatch & #attemptId .~ AttemptId "other-attempt") profile (gitRecord & #attemptId .~ AttemptId "other-attempt"),
               gitAction provisionAdmission (gitDispatch & #owner .~ "other-claim") profile (gitRecord & #claimOwner .~ "other-claim"),
               gitAction provisionAdmission (gitDispatch & #generation .~ 2) profile (gitRecord & #generation .~ 2),
@@ -269,7 +271,7 @@ tests =
             [ observation provisionAdmission gitDispatch profile "diff" command.profile "device:files",
               observation provisionAdmission gitDispatch profile "status" ("sha256:" <> Text.replicate 64 "b") "device:files",
               observation provisionAdmission gitDispatch profile "status" command.profile "device:other-files",
-              observation (provisionAdmission & #assignmentId .~ "other-assignment") gitDispatch profile "status" command.profile "device:files",
+              observation (provisionAdmission & #assignmentId .~ (fixtureAssignment "other-assignment")) gitDispatch profile "status" command.profile "device:files",
               observation provisionAdmission (gitDispatch & #generation .~ 2) profile "status" command.profile "device:files",
               observation provisionAdmission gitDispatch changedProfile "status" command.profile "device:files"
             ]
@@ -300,7 +302,7 @@ tests =
         writeAdmission <- right (workspaceWriteAdmissionAction transferBinding transferBinding.workspace workerSession intent.newOwner (fixtureRevision 1) (OperationId "write"))
         mapM_ (\action -> verifyIssuedAction verifier now (fenceRequest & #action .~ action) fenceIssued >>= \answer -> assertBool "fence proof binds complete transfer and cannot authorize writes" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) (writeAdmission : changedFences)
         workspaceTransferAction provisionBinding intent @?= Left FileEffectRefused
-        let successorAdmission = provisionAdmission & #bindingDigest .~ workspaceBindingDigest transferBinding & #runId .~ "successor-run" & #assignmentId .~ "successor-assignment" & #owner .~ intent.newOwner & #epoch .~ (fixtureRevision 1) & #filePolicy .~ Just transferableFilePolicy
+        let successorAdmission = provisionAdmission & #bindingDigest .~ workspaceBindingDigest transferBinding & #runId .~ "successor-run" & #assignmentId .~ (fixtureAssignment "successor-assignment") & #owner .~ intent.newOwner & #epoch .~ (fixtureRevision 1) & #filePolicy .~ Just transferableFilePolicy
             retainedProfile = profile & #bindingDigest .~ workspaceBindingDigest transferBinding
             successorProcess = recordFor transferBinding successorAdmission dispatch command & #routing .~ Just (ProcessRouting 1 logical.executionId intent.newOwner command.profile NeedModel)
             successorGit raw = let changed = raw & #bindingDigest .~ workspaceBindingDigest transferBinding & #profileDigest .~ Git.gitProfileDigest retainedProfile & #routing . #identity .~ intent.newOwner in changed & #fingerprint .~ Git.gitFingerprint transferBinding changed
@@ -342,7 +344,7 @@ tests =
         workspaceProvisionAction transferBinding successorAdmission retainedProfile boot "device:files" "device:scratch" @?= Left FileEffectRefused
         let followup = successorAdmission & #owner .~ transferBinding.request.owner & #epoch .~ transferBinding.request.epoch
         followupAction <- right (workspaceFollowupAdmissionAction transferBinding followup retainedProfile)
-        nextFollowupAction <- right (workspaceFollowupAdmissionAction transferBinding (followup & #runId .~ "next-followup" & #assignmentId .~ "next-assignment") retainedProfile)
+        nextFollowupAction <- right (workspaceFollowupAdmissionAction transferBinding (followup & #runId .~ "next-followup" & #assignmentId .~ (fixtureAssignment "next-assignment")) retainedProfile)
         verifyTargets followupAction [successorAction, nextFollowupAction]
         workspaceSuccessorAdmissionAction transferBinding followup retainedProfile @?= Left FileEffectRefused
         let sourceBinding suffix = provisionBinding & #workspace . #resource .~ Text.replicate 64 suffix & #request . #runId .~ ("artifact-" <> suffix)
@@ -367,3 +369,6 @@ fixtureRevision value = either (error . show) id (parseRevision value)
 
 fixtureToolPosition :: Integer -> ToolPosition
 fixtureToolPosition value = either (error . show) id (parseToolPosition value)
+
+fixtureAssignment :: AssignmentText.Text -> AssignmentKey
+fixtureAssignment = either (error . show) id . parseAssignmentKey

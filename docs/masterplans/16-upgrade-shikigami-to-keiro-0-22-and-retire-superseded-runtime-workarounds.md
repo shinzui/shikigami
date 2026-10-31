@@ -85,18 +85,18 @@ EP-6 owns final source/release inventory validation, exact-candidate evidence, f
 2026-10-30: EP-1 through EP-4 are Complete. The released cohort/current domain,
 native delivery/recovery and actual administrative CLI/HTTP/live inspection are
 accepted. EP-5 has implemented public API/CLI/configuration behavior and explicit
-clause dispositions for 42 of its 46 frozen source rows. Objective identity uses a
-checked allocated TypeID; objective content and worker/workspace ownership retain
-nominal checked values. Worker-input acceptance is 559 pure, 383 serial PostgreSQL, 260 worker and 95
-server cases. The subsequent opaque-instance fix rebuilt all components and passed
-51 compiler clients, 559 pure and 95 server cases. Validated-result/bundle-codec
-acceptance then reran all package suites with 63 compiler clients and unchanged
-559 pure/383 PostgreSQL/260 worker/95 server counts. Root-decision acceptance
-then retained those runtime counts with 67 compiler clients. Tool-position acceptance
-now passes 72 compiler clients and 560 pure/383 PostgreSQL/260 worker/95 server cases. The remaining scalar/identity census keeps EP-5 In Progress;
-three further source rows retain only final-profile clauses owned by EP-6. EP-6's exact frozen artifacts, Linux/runtime integration and final
-inventory gate have not started; all five implementation children must complete
-before that qualification.
+clause dispositions for 42 of its 46 frozen source rows. Objective identity uses
+a checked allocated TypeID; objective content, worker/workspace ownership,
+execution policies, counters, decisions and assignment locators retain their
+nominal checked meanings.
+
+Latest assignment-key acceptance rebuilt all enabled components and passed 561
+pure, 383 serial PostgreSQL, 260 worker and 95 server cases, plus 77 compiler
+clients, native/domain/diagram checks and neutral native diff/replay. The remaining
+scalar/identity census keeps EP-5 In Progress. Three further source rows retain
+only final-profile clauses owned by EP-6. EP-6's exact frozen artifacts,
+Linux/runtime integration and final inventory gate have not started; all five
+implementation children must complete before that qualification.
 
 ## Surprises & Discoveries
 

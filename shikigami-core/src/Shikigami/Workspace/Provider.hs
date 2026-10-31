@@ -10,6 +10,7 @@ import Data.Text qualified as Text
 import Kikan.En.Action (AgentAction (InvokeCapabilityTool), mkCapabilityToolTarget)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Execution.AssignmentKey (AssignmentKey)
 import Shikigami.Execution.Identity (AttemptId, OperationId)
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Prelude hiding ((.=))
@@ -101,9 +102,8 @@ workspaceControlAction binding kind value = do
 
 -- Allocation is protected IO too. This action binds the reserved immutable
 -- resource and execution assignment before reading the operator's source.
-workspaceAllocationAction :: WorkspaceBinding -> Text -> Either FileEffectError AgentAction
+workspaceAllocationAction :: WorkspaceBinding -> AssignmentKey -> Either FileEffectError AgentAction
 workspaceAllocationAction binding assignment = do
-  unless (not (Text.null assignment) && Text.length assignment <= 256) (Left FileEffectRefused)
   let digest = Text.replace ":" "-" (versionedDigest "shikigami.workspace-admission-action/1" (toJSON (workspaceBindingDigest binding, assignment)))
   either (const (Left FileEffectRefused)) (Right . InvokeCapabilityTool) (mkCapabilityToolTarget "shikigami.workspace" "1" ("admit-" <> digest))
 
@@ -112,7 +112,7 @@ workspaceAllocationAction binding assignment = do
 -- reserved Unix identity, frozen policy and anchored roots into fresh C13.
 workspaceProvisionAction :: WorkspaceBinding -> WorkspaceAdmission -> ProcessProfile -> Text -> Text -> Text -> Either FileEffectError AgentAction
 workspaceProvisionAction binding admission profile boot filesTarget scratchTarget = do
-  unless (admission.filePolicy `elem` map Just [supervisedFilePolicy, transferableFilePolicy] && matchesWorkspaceAdmission binding admission && admission.runId == binding.request.runId && admission.owner == binding.request.owner && admission.epoch == binding.request.epoch && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base && bounded admission.assignmentId) (Left FileEffectRefused)
+  unless (admission.filePolicy `elem` map Just [supervisedFilePolicy, transferableFilePolicy] && matchesWorkspaceAdmission binding admission && admission.runId == binding.request.runId && admission.owner == binding.request.owner && admission.epoch == binding.request.epoch && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base) (Left FileEffectRefused)
   unless (validProcessProfile profile && profile.bindingDigest == workspaceBindingDigest binding && profile.instructionDigest == bundleDigest admission.instructions && processPolicyIdentity profile.policy == binding.policyRevision && hostIdentity boot && all (\target -> bounded target && Text.length target <= 128) [filesTarget, scratchTarget]) (Left FileEffectRefused)
   let coordinates =
         Aeson.object

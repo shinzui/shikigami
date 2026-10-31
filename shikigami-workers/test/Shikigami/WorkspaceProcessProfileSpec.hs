@@ -10,6 +10,7 @@ import Hasql.Transaction (Transaction)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Principal (AgentIdentity (CompatibilityIdentity))
 import Shikigami.App (AppEnv, runAppIO)
+import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Identity (ExecutionRootId (..))
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
@@ -108,7 +109,7 @@ withProfiles fixture use = Fixture.withFixture fixture \env source root reposito
         (binding, state) <- right =<< run env (Workspaces.reserveWorkspaceTx root request selected)
         allocateWorkspace root binding state >>= (@?= Right ())
         run env (Workspaces.markWorkspaceReadyTx binding) >>= (@?= Right ())
-        admission <- right =<< loadWorkspaceAdmission binding ("assignment-" <> name) 65536
+        admission <- right =<< loadWorkspaceAdmission binding (fixtureAssignment ("assignment-" <> name)) 65536
         pure (binding, admission & #filePolicy .~ Just supervisedFilePolicy)
   use env policy create
 
@@ -131,3 +132,6 @@ assertLeft _ = assertFailure "unqualified profile accepted"
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureAssignment :: Text.Text -> AssignmentKey
+fixtureAssignment = either (error . show) id . parseAssignmentKey

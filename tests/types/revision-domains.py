@@ -17,6 +17,9 @@ HEADER = '''{-# LANGUAGE DataKinds #-}
 module RevisionBoundary where
 import Data.Coerce (coerce)
 import Data.Text (Text)
+import Shikigami.Execution.AssignmentKey
+import Shikigami.Execution.Selection qualified as Selection
+import Shikigami.Objective.Keys qualified as Objective
 import Shikigami.Execution.Counter
 import Shikigami.Execution.Quantity
 import Shikigami.StateRevision
@@ -33,6 +36,18 @@ import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ("execution-assignment-key", '''key :: Selection.ExecutionSelection -> AssignmentKey
+key selection = selection.assignmentId
+''', True),
+    ("objective-assignment-is-not-execution-key", '''key :: Objective.ObjectiveAssignmentId -> AssignmentKey
+key value = value
+''', False),
+    ("worker-assignment-is-not-execution-key", '''key :: WorkerSession.AssignmentId -> AssignmentKey
+key value = value
+''', False),
+    ("unchecked-assignment-key-coercion", '''key :: Text -> AssignmentKey
+key = coerce
+''', False),
     ("tool-position", '''position :: Execution.ToolOperationInput -> ToolPosition
 position input = input.position
 ''', True),
@@ -185,6 +200,9 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
         assert (result.returncode == 0) == expected, (name, result.stdout, result.stderr)
         if not expected:
             fragments = {
+                "objective-assignment-is-not-execution-key": ["Couldn't match", "ObjectiveAssignmentId", "AssignmentKey"],
+                "worker-assignment-is-not-execution-key": ["Couldn't match", "AssignmentId", "AssignmentKey"],
+                "unchecked-assignment-key-coercion": ["AssignmentKey", "Text"],
                 "event-is-not-message-sequence": ["Couldn't match type", "worker-message", "worker-event"],
                 "execution-root-is-not-execution": ["Couldn't match type", "execution-root", "execution"],
                 "operation-is-not-execution-revision": ["Couldn't match type", "execution-operation", "execution"],

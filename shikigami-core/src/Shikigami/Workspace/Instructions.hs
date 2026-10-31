@@ -30,6 +30,7 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Execution.AssignmentKey (AssignmentKey)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.StateRevision
@@ -116,7 +117,7 @@ data WorkspaceAdmission = WorkspaceAdmission
   { workspace :: !WorkspaceRef,
     bindingDigest :: !Text,
     runId :: !Text,
-    assignmentId :: !Text,
+    assignmentId :: !AssignmentKey,
     rootId :: !ExecutionRootId,
     owner :: !AgentIdentity,
     epoch :: !(StateRevision "worker-owner"),

@@ -14,6 +14,7 @@ import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.IORef (newIORef, readIORef, writeIORef)
 import Data.Map.Strict qualified as Map
+import Data.Text qualified as AssignmentText
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
 import Data.Time (addUTCTime, getCurrentTime)
@@ -45,6 +46,7 @@ import Shikigami.App.Config (AppConfig (..), Role (AdminRole), revealSecretText)
 import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), requireDatabaseUrl, runAppConfig)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Directory (DirectoryRuntime (..), identityLifecycleAdmission, startDirectory)
+import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Counter (noAttempts)
 import Shikigami.Execution.Identity (ExecutionRootId (..), OperationId (..))
@@ -199,7 +201,7 @@ nativeProvision configFile specFile = do
   (binding, state) <- requireRight =<< transact env (Workspaces.reserveWorkspaceTx storage request repository)
   requireRight =<< allocateWorkspace storage binding state
   requireRight =<< transact env (Workspaces.markWorkspaceReadyTx binding)
-  admission <- (\value -> value & #filePolicy .~ Just supervisedFilePolicy) <$> (requireRight =<< loadWorkspaceAdmission binding "native-fixture-assignment" 65536)
+  admission <- (\value -> value & #filePolicy .~ Just supervisedFilePolicy) <$> (requireRight =<< loadWorkspaceAdmission binding (fixtureAssignment "native-fixture-assignment") 65536)
   now <- getCurrentTime
   void (requireRight =<< transact env (Roots.enrollRootTx request.rootId (Resources.Envelope (Map.fromList [(dimension, Resources.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now))))
   reachedReady <- newIORef False
@@ -297,7 +299,7 @@ prepareCase config prefix name mode = do
     (binding, state) <- requireRight =<< transact env (Workspaces.reserveWorkspaceTx initial.binding.storageRoot request repository)
     requireRight =<< allocateWorkspace binding.storageRoot binding state
     requireRight =<< transact env (Workspaces.markWorkspaceReadyTx binding)
-    admission <- (\value -> value & #filePolicy .~ Just supervisedFilePolicy) <$> (requireRight =<< loadWorkspaceAdmission binding ("case-assignment-" <> Text.pack name) 65536)
+    admission <- (\value -> value & #filePolicy .~ Just supervisedFilePolicy) <$> (requireRight =<< loadWorkspaceAdmission binding (fixtureAssignment ("case-assignment-" <> Text.pack name)) 65536)
     now <- getCurrentTime
     void (requireRight =<< transact env (Roots.enrollRootTx request.rootId (Resources.Envelope (Map.fromList [(dimension, Resources.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now))))
     -- This fresh boundary uses the same configured C13 verifier as the daemon.
@@ -394,3 +396,6 @@ stored env action = requireRight =<< (requireRight =<< runAppIO env action)
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureAssignment :: AssignmentText.Text -> AssignmentKey
+fixtureAssignment = either (error . show) id . parseAssignmentKey

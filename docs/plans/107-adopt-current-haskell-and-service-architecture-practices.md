@@ -32,7 +32,32 @@ Review and fix every applicable Haskell and service-architecture guideline acros
 
 ## Surprises & Discoveries
 
-The native Relay query formatter owns a public JSON error protocol. Rewriting its response through private WAI constructors concealed that contract and was removed. Static configuration discovery previously read sources before selecting its static diagnostic; a FIFO exposes the resulting block. Both shared and interactive loaders now select static diagnostics before IO. The domain identity review found that ObjectiveId is application-owned and cannot be accepted as an arbitrary-text technical identity. The correction uses a generated checked TypeID-v7 domain while the atomic creator-scoped receipt remains the deduplication authority (ADR-73). Objective counters and command arguments now retain checked nominal StateRevision scopes, with numeric JSON/byte compatibility and four real compiler boundary cases (ADR-74). The ownership extension now retains worker-session revisions, objective/assignment/criteria instruction revisions and worker-owner epochs through checkpoint/ownership providers, workspace fences and private RPC. Mailbox sequences and event cursors now retain their separate scopes, with an explicit -1 assignment-page position and atomic refusal at the existing event capacity. The domain driver covers all four aggregates with 143 assertions. Concept placement now has a closed checked module budget and explicit ADR-75 service extensions. Moving the execution/session binding symbols changes two conservative fold fingerprints; the native affected replay report is retained despite unchanged conversion bodies and identity bytes. Execution transcript/expected-command revisions and PreparedTool now retain execution, while state cursors, operation positions and technical operation derivation retain execution-operation. Three complete codec/identity controls and fourteen compiler clients guard that boundary. Resource vectors and finite/active ceilings now retain private checked ResourceAmount values, with preflight vector arithmetic and explicit unknown billing for out-of-range provider reports (ADR-76). Attempt counts/operational ceilings now retain nominal scopes; profile refinement fails as data, and four root/assignment zero-count cases refuse before coupled settlement (ADR-77). A compiled declaration worklist now enumerates 311 hand-owned modules/888 declarations plus 14 role entrypoints, with source/interface hashes and explicit current-component selection. It is not a semantic compliance claim. Seven policy ceilings and three durable execution progress counts now have private checked types, with exact numeric wire controls and atomic full-receipt refusal (ADR-78). Thirty-seven compiler clients pass. Worker admission limits and retained instruction text now refine at private constructors while keeping exact valid wire bytes (ADR-79). Thirteen opaque Generic instances also bypassed private constructors or credential disclosure boundaries; actual probes preceded the ADR-80 fix and fourteen new compiler controls. Two further validated result records now use private seals with public read views; instruction bundles use the same validating wire contract without Generic. Sixty-three compiler clients and full affected package suites pass (ADR-81). Root cancellation, recorded overage and execution termination now retain distinct closed types and exact root boolean bytes. All 67 compiler clients and affected runtime suites pass under ADR-82. Tool response positions now retain a private bounded type, with exact continuation/input/specification bytes, 72 compiler clients and 560 pure/383 PostgreSQL/260 worker/95 server cases (ADR-83). The complete scalar/newtype review remains open.
+The native Relay query formatter owns a public JSON error protocol; a private
+WAI rewrite concealed it. Static configuration diagnostics must precede source
+IO: a FIFO exposed the former block. Both corrections have real process/HTTP
+controls in the adoption evidence.
+
+ObjectiveId was an application-owned allocated identity, not an arbitrary-text
+runtime coordinate. ADR-73 moves it to the checked TypeID-v7 domain while retaining
+atomic creator-scoped deduplication. Objective prose, revisions, counters, policy
+ceilings, worker limits and instructions now retain their checked meanings.
+Concept placement has a closed module budget under ADR-75. Moving execution and
+session binding symbols changed two conservative fold fingerprints despite
+unchanged conversion bodies; all 44 native findings and the affected replay report
+remain retained rather than relabelled neutral.
+
+Actual Generic probes bypassed thirteen private constructors/disclosure boundaries.
+ADR-80 removes those instances. ADR-81 seals validated router declarations and
+pinned diffs behind public read views and gives instruction bundles an explicit
+validating codec. Root cancellation, overage and termination are distinct closed
+types (ADR-82). Tool response positions retain their checked 0..255 domain and
+separate whole-assistant cardinality (ADR-83).
+
+Execution assignment keys now retain a private locator type through selection,
+receipts, inspection, SQL and workspace authorization (ADR-84). Their existing
+workflow/message hash derivations and bytes are unchanged. The compiled declaration
+worklist retains source/interface hashes and current-component selection; it is
+not a semantic compliance claim. The complete scalar/identity review remains open.
 
 ## Decision Log
 
@@ -40,7 +65,21 @@ The native Relay query formatter owns a public JSON error protocol. Rewriting it
 
 ## Outcomes & Retrospective
 
-Public API/CLI changes are implemented and the interim acceptance is in [haskell-service-results.txt](../evidence/keiro-0.22/haskell-service-results.txt): 94 server, 37 agent, 9 client and 30 API tests; live Hurl lifecycle; 70 real-process offline CLI checks. The language checker and thirteen mutation/lexical tests pass. ObjectiveId now has its checked TypeID-v7 domain; objective prose and worker/workspace ownership scopes are checked types. The latest 560 pure, 383 serial PostgreSQL, 260 worker and 95 server tests pass, and the strict breaking diff/fold change are retained. The earlier domain-member directory move is strict-diff neutral; the later concept-binding move retains 44 native warnings and affected replay for two aggregates. The subsequent instance-only opacity fix rebuilt all enabled components and passed fourteen opaque plus 37 nominal compiler clients, 559 pure and 95 server tests. The full PostgreSQL/worker counts belong to the preceding worker-input candidate. The subsequent validated-result/bundle-codec candidate reran all seven package suites successfully: 559 pure, 383 PostgreSQL, 260 worker, 95 server, 30 API, nine client and 37 agent cases; 63 compiler clients, 143 domain assertions and six diagrams pass. Forty-two of the 46 assigned source rows now have explicit implemented dispositions. One local review remains (the complete scalar/identity census); three source rows retain only final-profile clauses owned by plan95. M1 and final source dispositions remain open; this is not completion or packaged Linux qualification.
+Public API/CLI behavior is implemented: the earlier acceptance includes live Hurl
+lifecycle, 70 real-process offline CLI checks, 30 API, nine client and 37 agent
+cases. The language checker and thirteen style/ownership mutation tests pass.
+[The adoption record](../evidence/keiro-0.22/haskell-service-adoption.md) links each
+implemented domain-value wave and its exact candidate/evidence.
+
+Latest assignment-key acceptance rebuilt all enabled components and passed 561
+pure, 383 serial PostgreSQL, 260 worker and 95 server tests, with 77 positive-first
+compiler clients, 143 domain-driver assertions, six diagrams and 156 native
+conformance rows. Its native diff/replay is neutral; this does not erase the
+previous retained identity/binding breaks. Forty-two of the 46 assigned sources
+have implemented dispositions. One local review remains: the complete scalar and
+identity census. Three source rows retain only final-profile clauses owned by
+plan95. M1 and final source dispositions remain open; this is not completion or
+packaged Linux qualification.
 
 ## Context and Orientation
 

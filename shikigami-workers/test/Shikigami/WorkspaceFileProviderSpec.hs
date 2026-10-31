@@ -9,6 +9,7 @@ import Data.Aeson.KeyMap qualified as AesonKeyMap
 import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
+import Data.Text qualified as AssignmentText
 import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
 import Data.UUID qualified as UUID
@@ -32,6 +33,7 @@ import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Decision.ModelCatalog (modelCatalog)
+import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Counter (AttemptCount, parseAttemptCount)
 import Shikigami.Execution.Executor qualified as Executor
@@ -385,7 +387,7 @@ withEffectAdapterPolicyInput processPolicy toolCount qualify install wire logica
       rootId = ExecutionRootId "file-root"
       request = WorkspaceRequest "file-run" Nothing rootId identity identity (fixtureRevision 0)
       runtime = FileRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ _ _ -> pure (Right ()))
-      assignment = "file-execution"
+      assignment = fixtureAssignment "file-execution"
   (binding, _) <- right =<< run env (runTransaction (Store.reserveWorkspaceTx root request repository))
   let input = maybe (if logical == "read" then Aeson.object ["path" .= ("src/dependency.txt" :: Text.Text)] else Aeson.toJSON (Replacement "src/dependency.txt" (Just (contentDigest "old dependency\n")) "PRIVATE_REPLACEMENT\n")) id (supplied binding)
   allocateWorkspace root binding Reserved >>= (@?= Right ())
@@ -492,3 +494,6 @@ fixtureProgress number = either (error . show) id (parseProgress number)
 
 fixtureToolPosition :: Integer -> ToolPosition
 fixtureToolPosition value = either (error . show) id (parseToolPosition value)
+
+fixtureAssignment :: AssignmentText.Text -> AssignmentKey
+fixtureAssignment = either (error . show) id . parseAssignmentKey

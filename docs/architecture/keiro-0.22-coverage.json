@@ -179,6 +179,11 @@
           "rationale": "Private ToolPosition retains 0..255 through tool inputs, continuations, specifications and workspace consumers. Whole-assistant admission retains 128 calls and binding checks. Explicit list adapters and shared continuation preserve valid bytes and behavior. ADR-83 records refusal of structurally invalid routes above 255; 72 compiler clients and 560 pure/383 PostgreSQL/260 worker/95 server cases pass with neutral native reports. The complete scalar/identity census remains pending."
         },
         {
+          "id": "execution-assignment-locators",
+          "disposition": "implemented",
+          "rationale": "Private AssignmentKey owns existing 1..256-character admission throughout selection, binding, call receipts, inspection and workspace allocation/instructions/transfers. Domain and statement APIs retain it; SQL encoders lower explicitly. Technical workflow/message derivation, execution lookup and action hashes retain exact string inputs, including total empty/Unicode derivation. ADR-84, complete positive byte controls and 77 compiler clients pass with 561 pure/383 PostgreSQL/260 worker/95 server cases and neutral native reports. Complete scalar/identity review remains pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -212,7 +217,9 @@
         "docs/adr/0082-root-control-decisions-and-execution-termination-have-distinct-types.md",
         "docs/evidence/keiro-0.22/root-decisions-results.txt",
         "docs/adr/0083-tool-response-positions-retain-their-own-checked-type.md",
-        "docs/evidence/keiro-0.22/tool-position-results.txt"
+        "docs/evidence/keiro-0.22/tool-position-results.txt",
+        "docs/adr/0084-execution-assignment-keys-retain-their-locator-meaning.md",
+        "docs/evidence/keiro-0.22/assignment-key-results.txt"
       ]
     },
     {

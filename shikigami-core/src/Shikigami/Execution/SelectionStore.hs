@@ -23,6 +23,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Attestation.CallFacts (CallComplianceFacts)
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Execution.AssignmentKey (AssignmentKey, assignmentKeyText)
 import Shikigami.Execution.Counter
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Quantity
@@ -71,7 +72,7 @@ data Assignment = Assignment
   deriving anyclass (ToJSON, FromJSON)
 
 data CallReceipt = CallReceipt
-  { assignmentId :: !Text,
+  { assignmentId :: !AssignmentKey,
     rootId :: !(Maybe ExecutionRootId),
     request :: !AttemptRequest,
     fingerprint :: !Text,
@@ -138,7 +139,6 @@ reserveSelectionCallTx selection limits request fingerprint now = do
       Left err -> pure (Left (CallResourcesRefused err))
       Right () -> reserveValidated
     validate = do
-      validateKey assignmentId
       validateKey fingerprint
       validateOperation (OperationRequest request.operationId Nothing ModelOperation Map.empty fingerprint)
       validateAttempt (assignmentLimits limits) (OperationRequest request.operationId Nothing ModelOperation Map.empty fingerprint) request
@@ -294,12 +294,15 @@ settleAssignment reservation settlement usage = case settlement of
     settleUsage (Map.filterWithKey (\d _ -> d `notElem` missing) reservation) known usage
 
 -- | At most 100 facts; the aggregate count also exposes omitted history.
-inspectSelection :: (Store :> es) => Text -> Eff es (Maybe (Assignment, [SelectionCall]))
+inspectSelection :: (Store :> es) => AssignmentKey -> Eff es (Maybe (Assignment, [SelectionCall]))
 inspectSelection key = runTransaction do
   assignment <- Tx.statement key lockAssignment
   case assignment of
     Nothing -> pure Nothing
     Just value -> Just . (value,) <$> Tx.statement key listCalls
+
+assignmentParam :: E.Params AssignmentKey
+assignmentParam = assignmentKeyText >$< textParam
 
 textParam :: E.Params Text
 textParam = E.param (E.nonNullable E.text)
@@ -312,14 +315,14 @@ jsonRow = D.column (D.nonNullable (D.refine decode D.jsonb))
   where
     decode value = case Aeson.fromJSON value of Aeson.Error err -> Left (Text.pack err); Aeson.Success v -> Right v
 
-insertAssignment :: Statement (Text, Assignment) ()
-insertAssignment = preparable "INSERT INTO shikigami.execution_selections (assignment_id,state) VALUES ($1,$2) ON CONFLICT DO NOTHING" (contrazip2 textParam jsonParam) D.noResult
+insertAssignment :: Statement (AssignmentKey, Assignment) ()
+insertAssignment = preparable "INSERT INTO shikigami.execution_selections (assignment_id,state) VALUES ($1,$2) ON CONFLICT DO NOTHING" (contrazip2 assignmentParam jsonParam) D.noResult
 
-lockAssignment :: Statement Text (Maybe Assignment)
-lockAssignment = preparable "SELECT state FROM shikigami.execution_selections WHERE assignment_id=$1 FOR UPDATE" textParam (D.rowMaybe jsonRow)
+lockAssignment :: Statement AssignmentKey (Maybe Assignment)
+lockAssignment = preparable "SELECT state FROM shikigami.execution_selections WHERE assignment_id=$1 FOR UPDATE" assignmentParam (D.rowMaybe jsonRow)
 
-updateAssignment :: Statement (Text, Assignment) ()
-updateAssignment = preparable "UPDATE shikigami.execution_selections SET state=$2 WHERE assignment_id=$1" (contrazip2 textParam jsonParam) D.noResult
+updateAssignment :: Statement (AssignmentKey, Assignment) ()
+updateAssignment = preparable "UPDATE shikigami.execution_selections SET state=$2 WHERE assignment_id=$1" (contrazip2 assignmentParam jsonParam) D.noResult
 
 readCall :: AttemptId -> Transaction (Maybe SelectionCall)
 readCall (AttemptId key) = Tx.statement key getCall
@@ -330,14 +333,14 @@ getCall = preparable "SELECT state FROM shikigami.execution_selection_calls WHER
 writeCall :: SelectionCall -> Transaction ()
 writeCall call = let AttemptId key = call.receipt.request.attemptId in Tx.statement (call.receipt.assignmentId, key, operationKey call.receipt.request.operationId, fromInteger (attemptNumber call.receipt.ordinal), call) putCall
 
-putCall :: Statement (Text, Text, Text, Int64, SelectionCall) ()
-putCall = preparable "INSERT INTO shikigami.execution_selection_calls (assignment_id,attempt_id,operation_id,ordinal,state) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (attempt_id) DO UPDATE SET state=EXCLUDED.state" (contrazip5 textParam textParam textParam (E.param (E.nonNullable E.int8)) jsonParam) D.noResult
+putCall :: Statement (AssignmentKey, Text, Text, Int64, SelectionCall) ()
+putCall = preparable "INSERT INTO shikigami.execution_selection_calls (assignment_id,attempt_id,operation_id,ordinal,state) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (attempt_id) DO UPDATE SET state=EXCLUDED.state" (contrazip5 assignmentParam textParam textParam (E.param (E.nonNullable E.int8)) jsonParam) D.noResult
 
-listCalls :: Statement Text [SelectionCall]
-listCalls = preparable "SELECT state FROM shikigami.execution_selection_calls WHERE assignment_id=$1 ORDER BY ordinal LIMIT 100" textParam (D.rowList jsonRow)
+listCalls :: Statement AssignmentKey [SelectionCall]
+listCalls = preparable "SELECT state FROM shikigami.execution_selection_calls WHERE assignment_id=$1 ORDER BY ordinal LIMIT 100" assignmentParam (D.rowList jsonRow)
 
 operationKey :: OperationId -> Text
 operationKey (OperationId key) = key
 
-countOperationCalls :: Statement (Text, Text) Integer
-countOperationCalls = preparable "SELECT count(*) FROM shikigami.execution_selection_calls WHERE assignment_id=$1 AND operation_id=$2" (contrazip2 textParam textParam) (D.singleRow (toInteger <$> D.column (D.nonNullable D.int8)))
+countOperationCalls :: Statement (AssignmentKey, Text) Integer
+countOperationCalls = preparable "SELECT count(*) FROM shikigami.execution_selection_calls WHERE assignment_id=$1 AND operation_id=$2" (contrazip2 assignmentParam textParam) (D.singleRow (toInteger <$> D.column (D.nonNullable D.int8)))

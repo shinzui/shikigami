@@ -88,6 +88,7 @@ import Shikigami.Agent.Approval (ApprovalDecision (..), ReviewRequestId, reviewR
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.App (CommandEffects, commandOptions)
 import Shikigami.Decision.Contract (ModelDescriptor, versionedDigest)
+import Shikigami.Execution.AssignmentKey (AssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Catalog (withLiveExecution)
 import Shikigami.Execution.Identity (AttemptId (..), ExecutionRootId, OperationId (..))
@@ -116,7 +117,7 @@ type ExecutionEffects es = (ExecutionReadEffects es, KirokuStoreResource :> es, 
 data ExecutionBinding = ExecutionBinding
   { identity :: !AgentIdentity,
     rootId :: !(Maybe ExecutionRootId),
-    assignmentId :: !Text,
+    assignmentId :: !AssignmentKey,
     descriptor :: !ModelDescriptor,
     snapshotDigest :: !Text,
     policyDigest :: !Text

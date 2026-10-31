@@ -6,6 +6,7 @@ import Control.Exception (bracket)
 import Data.ByteString qualified as Bytes
 import Data.Generics.Labels ()
 import Data.List (sort)
+import Data.Text qualified as AssignmentText
 import Data.Text qualified as Text
 import Data.Time (UTCTime)
 import Data.UUID qualified as UUID
@@ -15,6 +16,7 @@ import Kiroku.Store.Connection (defaultConnectionSettings)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
+import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Identity (ExecutionRootId (..))
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude ((&), (.~))
@@ -93,7 +95,7 @@ tests fixture =
         allocateWorkspace root binding Reserved >>= (@?= Right ())
         bundle <- right =<< loadRepositoryInstructions binding 65536
         map (.path) (bundleFiles bundle) @?= ["AGENTS.md", "src/AGENTS.md"]
-        admission <- right =<< loadWorkspaceAdmission binding "execution-assignment" 65536
+        admission <- right =<< loadWorkspaceAdmission binding (fixtureAssignment "execution-assignment") 65536
         admission.bindingDigest @?= workspaceBindingDigest binding
         admission.owner @?= binding.request.owner
         admission.instructions @?= bundle
@@ -137,7 +139,7 @@ tests fixture =
         allocateWorkspace root binding Reserved >>= (@?= Right ())
         bundle <- right =<< loadRepositoryInstructions binding 65536
         map (.text) (bundleFiles bundle) @?= ["root policy"]
-        loadWorkspaceAdmission binding "native-files" 65536 >>= (@?= Left InstructionSourceRefused),
+        loadWorkspaceAdmission binding (fixtureAssignment "native-files") 65536 >>= (@?= Left InstructionSourceRefused),
       testCase "borrowed source objects are copied into the private repository" $ withFixture fixture \env source root original -> do
         let borrowed = source <> "-borrowed"
         _ <- git ["clone", "--shared", "--", source, borrowed]
@@ -251,3 +253,6 @@ commitRepository source = do
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureAssignment :: AssignmentText.Text -> AssignmentKey
+fixtureAssignment = either (error . show) id . parseAssignmentKey

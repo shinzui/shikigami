@@ -35,6 +35,7 @@ import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Capability.Overlay (ResolvedCapabilitySet)
 import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Execution.AssignmentKey (AssignmentKey)
 import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Progress
@@ -50,7 +51,7 @@ newtype ExecutionId = ExecutionId {value :: Text}
   deriving stock (Eq, Ord, Show, Generic)
   deriving newtype (ToJSON, FromJSON)
 
-executionIdFor :: Text -> ExecutionId
+executionIdFor :: AssignmentKey -> ExecutionId
 executionIdFor assignment = ExecutionId ("execution:" <> versionedDigest "shikigami.execution/1" (toJSON assignment))
 
 -- Technical journal identity is independent of resource keys, whose digest

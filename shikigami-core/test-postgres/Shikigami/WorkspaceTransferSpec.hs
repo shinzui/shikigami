@@ -3,6 +3,7 @@ module Shikigami.WorkspaceTransferSpec (tests) where
 import Control.Concurrent.Async (concurrently)
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
+import Data.Text qualified as AssignmentText
 import Data.Text qualified as Text
 import Effectful (Eff)
 import Kiroku.Store.Transaction (runTransaction)
@@ -11,6 +12,7 @@ import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
+import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Identity (AttemptId (..), OperationId (..))
 import Shikigami.Execution.SelectionRuntime qualified as Selection
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
@@ -102,7 +104,7 @@ tests fixture =
         run env (runTransaction (checkWorkspaceAdmissionTx binding admission (OperationId "successor-effect"))) >>= (@?= Right ())
         run env (runTransaction (checkWorkspaceAdmissionTx binding original (OperationId "late-old-effect"))) >>= (@?= Left WorkspaceBindingConflict)
         run env (runTransaction (lookupSessionChildTx binding.request.runId)) >>= (@?= Left WorkspaceBindingConflict)
-        run env (runTransaction (admitSuccessorTx binding (admission & #assignmentId .~ "payload-assignment"))) >>= (@?= Left WorkspaceBindingConflict)
+        run env (runTransaction (admitSuccessorTx binding (admission & #assignmentId .~ (fixtureAssignment "payload-assignment")))) >>= (@?= Left WorkspaceBindingConflict)
         run env (runTransaction (admitSuccessorTx binding (admission & #filePolicy .~ Just supervisedFilePolicy))) >>= (@?= Left WorkspaceBindingConflict)
         run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Just (binding, Ready))
         effective <- run env (runTransaction (currentWorkspaceRequestTx binding))
@@ -155,3 +157,6 @@ fixtureRevision value = either (error . show) id (parseRevision value)
 
 fixtureInstruction :: Text -> InstructionText
 fixtureInstruction value = either (error . show) id (parseInstructionText value)
+
+fixtureAssignment :: AssignmentText.Text -> AssignmentKey
+fixtureAssignment = either (error . show) id . parseAssignmentKey

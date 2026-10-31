@@ -8,6 +8,7 @@ import Data.List (inits)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
+import Shikigami.Execution.AssignmentKey (AssignmentKey)
 import Shikigami.Workspace.Allocation (workspaceMetadata)
 import Shikigami.Workspace.Git (runWorkspaceGit)
 import Shikigami.Workspace.Instructions
@@ -67,9 +68,7 @@ loadInstructions qualifyFiles binding budget = do
 -- | Content loading after trusted provider admission. This does not grant
 -- lifecycle, replay, read or write authority; the provider supplies retained
 -- binding and execution-assignment coordinates outside model arguments.
-loadWorkspaceAdmission :: WorkspaceBinding -> Text.Text -> Int -> IO (Either InstructionError WorkspaceAdmission)
-loadWorkspaceAdmission binding assignmentId budget
-  | Text.null assignmentId || Text.length assignmentId > 256 = pure (Left InstructionSourceRefused)
-  | otherwise = do
-      loaded <- loadInstructions True binding budget
-      pure ((\bundle -> WorkspaceAdmission binding.workspace (workspaceBindingDigest binding) binding.request.runId assignmentId binding.request.rootId binding.request.owner binding.request.epoch bundle (Just nativeFilePolicy)) <$> loaded)
+loadWorkspaceAdmission :: WorkspaceBinding -> AssignmentKey -> Int -> IO (Either InstructionError WorkspaceAdmission)
+loadWorkspaceAdmission binding assignmentId budget = do
+  loaded <- loadInstructions True binding budget
+  pure ((\bundle -> WorkspaceAdmission binding.workspace (workspaceBindingDigest binding) binding.request.runId assignmentId binding.request.rootId binding.request.owner binding.request.epoch bundle (Just nativeFilePolicy)) <$> loaded)

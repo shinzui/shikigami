@@ -20,6 +20,7 @@ import Data.Int (Int64)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
+import Data.Text qualified as AssignmentText
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TextEncoding
 import Data.Time (UTCTime, addUTCTime, getCurrentTime)
@@ -55,6 +56,7 @@ import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
 import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..), versionedDigest)
 import Shikigami.Decision.ModelCatalog
+import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Counter (AttemptCount, AttemptLimit, noAttempts, parseAttemptCount, parseAttemptLimit)
 import Shikigami.Execution.Driver qualified as Driver
@@ -295,7 +297,7 @@ tests fixture =
           root <- seed app now [(ActiveWork, Limited (fixtureAmount 1))]
           let catalog = mustRight (modelCatalog [])
               fallback = mustRight (defaultBinding stubModel Options.emptyOptions)
-              selection = mustRight (resolveExecutionSelection "ledger-assignment" catalog (Right fallback) Nothing Nothing Nothing Nothing (Just root) now)
+              selection = mustRight (resolveExecutionSelection (fixtureAssignment "ledger-assignment") catalog (Right fallback) Nothing Nothing Nothing Nothing (Just root) now)
               limits = Calls.CallLimits (Just (fixtureLimit 3)) (Just (fixtureLimit 1)) (Just (fixtureLimit 1)) Nothing Nothing
               request key = AttemptRequest (AttemptId key) (OperationId "logical") (Map.fromList [(ActiveWork, (fixtureAmount 1)), (ModelAttempts, (fixtureAmount 1))]) AdmittedUnknownUsage
               reserve key = run app (Calls.reserveSelectionCall selection limits (request key) "digest" now)
@@ -304,6 +306,9 @@ tests fixture =
             (Right (Calls.NewCall r), Left _) -> pure r
             (Left _, Right (Calls.NewCall r)) -> pure r
             other -> assertFailure (show other)
+          let receiptWire = Aeson.object ["assignmentId" .= Aeson.String "ledger-assignment", "rootId" .= receipt.rootId, "request" .= receipt.request, "fingerprint" .= receipt.fingerprint, "ordinal" .= receipt.ordinal, "startedAt" .= receipt.startedAt]
+          Aeson.eitherDecode (Aeson.encode receipt) @?= Right receipt
+          Aeson.encode receipt @?= Aeson.encode receiptWire
           run app (Calls.reserveSelectionCall selection limits receipt.request "digest" now) >>= (@?= Right (Calls.ExistingCall receipt))
           let terminal = Calls.CallOutcome Calls.CallTerminal (Map.singleton Tokens (fixtureAmount 3)) [CostMicroUsd] (Just "served") (Just "provider-call") Nothing
           run app (Calls.finishSelectionCall receipt terminal) >>= (@?= Right Accepted)
@@ -447,7 +452,7 @@ runtime :: AppEnv -> KirokuStore -> BehaviorEnv -> ModelCatalog -> SelectionRunt
 runtime app store base catalog = SelectionRuntime catalog Nothing (Decision.defaultDecisionServices catalog).providers base (runCorrelationId "selection-fixture") (pure (Right ())) (selectionTransaction app (Just store.pool))
 
 select :: UTCTime -> ExecutionRootId -> ModelCatalog -> Text -> ExecutionSelection
-select now root catalog alias = mustRight (resolveExecutionSelection ("assignment:" <> alias) catalog (Left PinnedBindingUnavailable) (Just (ExecutionPolicy alias aliases)) Nothing Nothing Nothing (Just root) now)
+select now root catalog alias = mustRight (resolveExecutionSelection (fixtureAssignment ("assignment:" <> alias)) catalog (Left PinnedBindingUnavailable) (Just (ExecutionPolicy alias aliases)) Nothing Nothing Nothing (Just root) now)
 
 seed :: AppEnv -> UTCTime -> [(Dimension, Limit)] -> IO ExecutionRootId
 seed app now overrides = do
@@ -579,7 +584,7 @@ refusedAssignmentSettlement fixture reconcile = withRuntime fixture \app _ _ -> 
   root <- seed app now []
   let catalog = mustRight (modelCatalog [])
       fallback = mustRight (defaultBinding stubModel Options.emptyOptions)
-      selection = mustRight (resolveExecutionSelection "counter-refusal" catalog (Right fallback) Nothing Nothing Nothing Nothing (Just root) now)
+      selection = mustRight (resolveExecutionSelection (fixtureAssignment "counter-refusal") catalog (Right fallback) Nothing Nothing Nothing Nothing (Just root) now)
       limits = mustRight (Calls.callLimitsFor selection Nothing)
       request = AttemptRequest (AttemptId "counter-refusal") (OperationId "counter-operation") (Map.fromList [(ActiveWork, fixtureAmount 1), (ModelAttempts, fixtureAmount 1), (Tokens, fixtureAmount 10), (CostMicroUsd, fixtureAmount 0)]) EnforcedCeiling
       terminal = Calls.CallOutcome Calls.CallTerminal (Map.fromList [(Tokens, fixtureAmount 3), (CostMicroUsd, fixtureAmount 0)]) [] Nothing Nothing Nothing
@@ -608,3 +613,6 @@ refusedAssignmentSettlement fixture reconcile = withRuntime fixture \app _ _ -> 
   run app (Calls.inspectSelection selection.assignmentId) >>= (@?= Just (invalid, facts))
   afterRoot <- expectRight =<< run app (Roots.inspectRoot root)
   afterRoot @?= beforeRoot
+
+fixtureAssignment :: AssignmentText.Text -> AssignmentKey
+fixtureAssignment = either (error . show) id . parseAssignmentKey

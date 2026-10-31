@@ -26,6 +26,7 @@ import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Provider.Call (providerCallFor, validateProfileCall)
 import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..))
 import Shikigami.Decision.ModelCatalog
+import Shikigami.Execution.AssignmentKey (AssignmentKey)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Execution.Request
 import Shikigami.Prelude hiding (Options)
@@ -35,7 +36,7 @@ data SelectionSource = DeclaredAlias | ProcessDefault
   deriving anyclass (ToJSON, FromJSON)
 
 data ExecutionSelection = ExecutionSelection
-  { assignmentId :: !Text,
+  { assignmentId :: !AssignmentKey,
     descriptor :: !ModelDescriptor,
     effectiveOptions :: !Aeson.Value,
     permittedAliases :: ![Text],
@@ -76,7 +77,7 @@ defaultBinding model options = do
     (modelBinding (ModelAlias "__process_default__") "1" "behavior.default" "1" model ((options & #apiKey .~ (Nothing))) credential)
 
 resolveExecutionSelection ::
-  Text ->
+  AssignmentKey ->
   ModelCatalog ->
   Either ExecutionSelectionFailure ModelBinding ->
   Maybe ExecutionPolicy ->
@@ -87,7 +88,6 @@ resolveExecutionSelection ::
   UTCTime ->
   Either ExecutionSelectionFailure ExecutionSelection
 resolveExecutionSelection assignmentId catalog fallback declaration requested inherited profile rootId admittedAt = do
-  unless (not (Text.null assignmentId) && Text.length assignmentId <= 256) (Left InvalidExecutionPermission)
   let policy = declaration
       request = fromMaybe (ExecutionRequest Nothing Nothing Nothing) requested
       restrict allowed = maybe allowed (filter (`elem` allowed)) inherited

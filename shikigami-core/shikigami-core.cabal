@@ -95,6 +95,7 @@ library
     Shikigami.Directory
     Shikigami.Directory.Store
     Shikigami.Execution.Admission
+    Shikigami.Execution.AssignmentKey
     Shikigami.Execution.Attempt
     Shikigami.Execution.Catalog
     Shikigami.Execution.Counter

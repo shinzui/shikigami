@@ -8,6 +8,7 @@ import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
+import Data.Text qualified as AssignmentText
 import Data.Text qualified as Text
 import Data.Time (addUTCTime)
 import Effectful (Eff, runEff)
@@ -30,6 +31,7 @@ import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
 import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..))
 import Shikigami.Directory (disabledDirectoryHandle)
+import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Executor (BoundTool (..))
 import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Execution.Policy.Types (defaultHarnessPolicy)
@@ -294,7 +296,7 @@ snapshotFor :: CoordinationScope -> IO Replay.ExecutionSnapshot
 snapshotFor scope = do
   now <- getCurrentTime
   let descriptor = ModelDescriptor (ModelAlias "worker-model") "1" "fixture-model" "fixture" "fixture" "fixture" "fixture" Nothing "fixture" "1"
-      selection = ExecutionSelection "coordination-assignment" descriptor (Aeson.object []) ["worker-model"] Nothing scope.run.rootId ProcessDefault now
+      selection = ExecutionSelection (fixtureAssignment "coordination-assignment") descriptor (Aeson.object []) ["worker-model"] Nothing scope.run.rootId ProcessDefault now
   pure (Replay.ExecutionSnapshot 1 (Replay.executionIdFor selection.assignmentId) scope.run.runId (AgentName "coordinator") scope.run.identity scope.run.sessionId selection Nothing (Replay.SkillInstructions "fixture" "fixture" "fixture") (Replay.ReplayContext 2 Nothing [Replay.RequestTurn [Replay.TextBlock "coordinate"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] Nothing)
 
 executeTool :: BoundTool -> Aeson.Value -> IO ToolOutput
@@ -322,3 +324,6 @@ fixtureInstruction value = either (error . show) id (parseInstructionText value)
 
 fixtureLimit :: (SessionLimit a) => Integer -> a
 fixtureLimit value = either (error . show) id (parseSessionLimit value)
+
+fixtureAssignment :: AssignmentText.Text -> AssignmentKey
+fixtureAssignment = either (error . show) id . parseAssignmentKey

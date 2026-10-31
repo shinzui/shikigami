@@ -6,8 +6,10 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Either (isLeft)
 import Data.Generics.Labels ()
+import Data.Text qualified as AssignmentText
 import Data.Text qualified as Text
 import Shikigami.Agent.Principal (AgentIdentity (..))
+import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Identity (ExecutionRootId (..))
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
@@ -24,10 +26,11 @@ tests =
     "workspace instructions"
     [ testCase "historical admissions preserve JSON and cannot acquire a native file profile" $ do
         bundle <- right (mkInstructionBundle 65536 repository base [])
-        let admission = WorkspaceAdmission (WorkspaceRef "provider" "resource") "binding" "run" "assignment" (ExecutionRootId "root") (CompatibilityIdentity "worker") (fixtureRevision 0) bundle Nothing
-            historical = Aeson.object ["workspace" .= admission.workspace, "bindingDigest" .= admission.bindingDigest, "runId" .= admission.runId, "assignmentId" .= admission.assignmentId, "rootId" .= admission.rootId, "owner" .= admission.owner, "epoch" .= admission.epoch, "instructions" .= bundle]
+        let admission = WorkspaceAdmission (WorkspaceRef "provider" "resource") "binding" "run" (fixtureAssignment "assignment") (ExecutionRootId "root") (CompatibilityIdentity "worker") (fixtureRevision 0) bundle Nothing
+            historical = Aeson.object ["workspace" .= admission.workspace, "bindingDigest" .= admission.bindingDigest, "runId" .= admission.runId, "assignmentId" .= Aeson.String "assignment", "rootId" .= admission.rootId, "owner" .= admission.owner, "epoch" .= admission.epoch, "instructions" .= bundle]
         Aeson.fromJSON historical @?= Aeson.Success admission
         Aeson.toJSON admission @?= historical
+        Aeson.encode admission @?= Aeson.encode historical
         Aeson.fromJSON (Aeson.toJSON (admission & #filePolicy .~ Just nativeFilePolicy)) @?= Aeson.Success (admission & #filePolicy .~ Just nativeFilePolicy),
       testCase "nested instructions apply to new descendants and never siblings" $ do
         bundle <- right (mkInstructionBundle 65536 repository base [("AGENTS.md", "root"), ("src/AGENTS.md", "nested"), ("src/deep/AGENTS.md", "deep")])
@@ -83,3 +86,6 @@ fixtureRevision value = either (error . show) id (parseRevision value)
 
 fixturePolicy :: (PolicyNumber a) => Integer -> a
 fixturePolicy number = either (error . show) id (parsePolicyNumber number)
+
+fixtureAssignment :: AssignmentText.Text -> AssignmentKey
+fixtureAssignment = either (error . show) id . parseAssignmentKey

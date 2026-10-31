@@ -45,6 +45,7 @@ import Shikigami.Behavior.Provider.Call (providerCallFor, validateProfileCall)
 import Shikigami.Behavior.Run (BehaviorEnv (..))
 import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..), versionedDigest)
 import Shikigami.Decision.ModelCatalog
+import Shikigami.Execution.AssignmentKey (assignmentIdFor, conversationAssignmentIdFor)
 import Shikigami.Execution.Attempt (ModelCallPreparation (..))
 import Shikigami.Execution.Counter (attemptNumber)
 import Shikigami.Execution.Identity
@@ -66,9 +67,6 @@ data SelectionRuntime = SelectionRuntime
     authorize :: !(IO (Either Text ())),
     transact :: !(forall a. Transaction a -> IO (Either Text a))
   }
-
-assignmentIdFor :: Text -> Text
-assignmentIdFor key = "assignment:" <> versionedDigest "shikigami.assignment/1" (toJSON key)
 
 data PreparedSelectionCall = PreparedSelectionCall
   { receipt :: !Calls.CallReceipt,
@@ -351,9 +349,6 @@ selectionTransaction :: AppEnv -> Maybe Pool -> Transaction a -> IO (Either Text
 selectionTransaction appEnv pool transaction = case pool of
   Just shared -> first (const "execution call store unavailable") <$> Pool.use shared (Sessions.transaction Sessions.ReadCommitted Sessions.Write transaction)
   Nothing -> first (const "execution call store unavailable") <$> runAppIO appEnv (StoreTransaction.runTransaction transaction)
-
-conversationAssignmentIdFor :: Text -> Text -> Text
-conversationAssignmentIdFor workflow message = assignmentIdFor (versionedDigest "shikigami.conversation-assignment/1" (object ["workflow" .= workflow, "message" .= message]))
 
 -- Revalidate the exact pinned version's lifecycle, never the mutable default
 -- profile. A changed digest cannot silently replace the recorded policy.
