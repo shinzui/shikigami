@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.DecisionEvidenceSpec (tests) where
 
 import Baikai.Evidence qualified as B
@@ -22,6 +24,7 @@ import Shikigami.Attestation.Evidence (CallRelationship (RootCall), ExpectedCall
 import Shikigami.Attestation.Profile qualified as P
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Decision.Contract
+import Shikigami.Decision.Contract qualified as Model
 import Shikigami.Decision.Evidence
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Log.Correlation (callCorrelationId, runCorrelationId)
@@ -35,7 +38,7 @@ program = ProgramDescriptor (identity "fixture") (identity "1") (identity "sha25
     identity = mustRight . parseProgramIdentity
 
 model :: ModelDescriptor
-model = ModelDescriptor (fixtureModelAlias "triage") "1" "sha256:model" "stub" "stub" "in-process" "model-a" Nothing "binding" "1"
+model = ModelDescriptor (fixtureModelAlias "triage") (fixtureModelRegistration "1") (modelDescriptorDigest (toJSON ("model" :: Text))) "stub" "stub" "in-process" "model-a" Nothing (fixtureModelRegistration "binding") (fixtureModelRegistration "1")
 
 prepared :: PreparedDecision
 prepared =
@@ -248,3 +251,6 @@ containsPrompt = ("PROMPT_MARKER" `Text.isInfixOf`) . Text.pack . show
 
 fixtureModelAlias :: AliasText.Text -> Alias.ModelAlias
 fixtureModelAlias = either (error . show) id . Alias.parseModelAlias
+
+fixtureModelRegistration :: AliasText.Text -> Model.ModelRegistration scope
+fixtureModelRegistration = either (error . show) id . Model.parseModelRegistration

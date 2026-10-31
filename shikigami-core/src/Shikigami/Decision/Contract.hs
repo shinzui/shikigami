@@ -18,6 +18,13 @@ module Shikigami.Decision.Contract
     parseProgramParameterDigest,
     programParameterDigest,
     programParameterDigestText,
+    ModelRegistration,
+    parseModelRegistration,
+    modelRegistrationText,
+    ModelDescriptorDigest,
+    parseModelDescriptorDigest,
+    modelDescriptorDigest,
+    modelDescriptorDigestText,
     ModelDescriptor (..),
     DecisionSlot (..),
     DecisionPolicySnapshot (..),
@@ -160,19 +167,65 @@ instance FromJSON ProgramDescriptor where
       <*> o .: "parameterDigest"
       <*> o .: "derivationVersion"
 
+-- | Supplied immutable registration coordinates, distinct from program
+-- registration and model aliases. Opaque versions do not imply SemVer or hashes.
+type role ModelRegistration nominal
+
+newtype ModelRegistration (scope :: Symbol) = ModelRegistration Text
+  deriving stock (Eq, Ord, Show)
+
+parseModelRegistration :: Text -> Either Text (ModelRegistration scope)
+parseModelRegistration value
+  | Text.null value = Left "model registration coordinate must not be empty"
+  | otherwise = Right (ModelRegistration value)
+
+modelRegistrationText :: ModelRegistration scope -> Text
+modelRegistrationText (ModelRegistration value) = value
+
+instance ToJSON (ModelRegistration scope) where
+  toJSON = toJSON . modelRegistrationText
+  toEncoding = toEncoding . modelRegistrationText
+
+instance FromJSON (ModelRegistration scope) where
+  parseJSON = withText "model registration coordinate" (either (fail . Text.unpack) pure . parseModelRegistration)
+
+-- | The actual commitment computed over the complete credential-free binding.
+newtype ModelDescriptorDigest = ModelDescriptorDigest Text
+  deriving stock (Eq, Ord, Show)
+
+parseModelDescriptorDigest :: Text -> Either Text ModelDescriptorDigest
+parseModelDescriptorDigest value
+  | Text.length value == 71 && "sha256:" `Text.isPrefixOf` value && Text.all hex (Text.drop 7 value) = Right (ModelDescriptorDigest value)
+  | otherwise = Left "model descriptor digest requires sha256 and 64 lowercase hexadecimal digits"
+  where
+    hex character = (character >= '0' && character <= '9') || (character >= 'a' && character <= 'f')
+
+modelDescriptorDigest :: Value -> ModelDescriptorDigest
+modelDescriptorDigest = ModelDescriptorDigest . versionedDigest "shikigami.decision-model/1"
+
+modelDescriptorDigestText :: ModelDescriptorDigest -> Text
+modelDescriptorDigestText (ModelDescriptorDigest value) = value
+
+instance ToJSON ModelDescriptorDigest where
+  toJSON = toJSON . modelDescriptorDigestText
+  toEncoding = toEncoding . modelDescriptorDigestText
+
+instance FromJSON ModelDescriptorDigest where
+  parseJSON = withText "model descriptor digest" (either (fail . Text.unpack) pure . parseModelDescriptorDigest)
+
 -- | Public metadata shared with whole-run selection. Binding versions describe
 -- authority/endpoint semantics, not individual secret rotations.
 data ModelDescriptor = ModelDescriptor
   { alias :: !ModelAlias,
-    version :: !Text,
-    digest :: !Text,
+    version :: !(ModelRegistration "model-version"),
+    digest :: !ModelDescriptorDigest,
     provider :: !Text,
     api :: !Text,
     endpointClass :: !Text,
     modelId :: !Text,
     thinking :: !(Maybe ThinkingLevel),
-    bindingId :: !Text,
-    bindingVersion :: !Text
+    bindingId :: !(ModelRegistration "credential-binding-id"),
+    bindingVersion :: !(ModelRegistration "credential-binding-version")
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)

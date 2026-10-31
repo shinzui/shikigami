@@ -90,16 +90,16 @@ a checked allocated TypeID; objective content, worker/workspace ownership,
 execution policies, counters, root control decisions and assignment locators retain their
 nominal checked meanings.
 
-Latest model-alias acceptance passed the all-enabled build, 590 pure, 405 serial
-PostgreSQL, 274 worker and 95 server cases, 249 compiler clients and native/domain/
-diagram gates. ADR-103 keeps checked lookup names throughout permissions,
-selection, queued jobs, delegation and worker receipts. JSON/Dhall admission,
-concrete owner bounds and exact model/profile authority checks pass. Valid strings
-retain their bytes; empty names refuse without fallback. Native findings against
-d907aee are empty with unchanged transducers. The unclassified census has 321
-modules and 910 declarations. Complete scalar/identity, other model/decision
-values and remaining decoder-owner review keep EP-5 In Progress. EP-6's frozen
-closure, packaged Linux/runtime and inventory gates have not started.
+Latest model-registration acceptance passed the all-enabled build, 592 pure,
+405 serial PostgreSQL, 274 worker and 95 server cases, 263 compiler clients and
+native/domain/diagram gates. ADR-104 retains scoped model/credential-binding
+registration coordinates and checked computed commitments. Complete descriptor
+codecs and the former raw-value preimage pass; valid bytes/digests remain.
+Native findings against ac5cc43 are empty with unchanged transducers. The
+unclassified census has 321 modules and 912 declarations. Complete scalar/
+identity, provider tuple/other decision values and remaining decoder-owner review
+keep EP-5 In Progress. EP-6's frozen closure, packaged Linux/runtime and inventory
+gates have not started.
 
 ## Surprises & Discoveries
 

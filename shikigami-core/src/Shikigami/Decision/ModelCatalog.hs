@@ -60,47 +60,31 @@ data ModelBinding = ModelBinding
 -- Options are immutable and credential-free; the runner injects the secret only
 -- at the actual transport boundary. All option metadata joins the digest.
 modelBinding :: ModelAlias -> Text -> Text -> Text -> Model -> Options -> Maybe OpaqueCredential -> Either DecisionFailure ModelBinding
-modelBinding alias version bindingId bindingVersion model options credential
-  | any Text.null [version, bindingId, bindingVersion] = refuse "model descriptor identities must be nonempty"
-  | Options.apiKey options /= Nothing = refuse "model options must not carry a credential"
-  | Model.api model `notElem` [AnthropicMessages, OpenAIChatCompletions, OpenAIResponses, Custom "stub"] = refuse "decision model requires an admitted HTTP or stub API"
-  | Model.api model /= Custom "stub", maybe True (Text.null . revealCredential) credential = refuse "decision credential binding is unavailable"
-  | Left _ <- validateResponseOptions model options = refuse "decision response options are incompatible"
-  | otherwise =
-      Right
-        ModelBinding
-          { descriptor =
-              ModelDescriptor
-                { alias,
-                  version,
-                  digest,
-                  provider = call.provider,
-                  api = call.api,
-                  endpointClass = call.endpointClass,
-                  modelId = call.modelId,
-                  thinking = call.thinking,
-                  bindingId,
-                  bindingVersion
-                },
-            model,
-            options,
-            credential
-          }
+modelBinding alias suppliedVersion suppliedBindingId suppliedBindingVersion model options credential = do
+  version <- capture suppliedVersion
+  bindingId <- capture suppliedBindingId
+  bindingVersion <- capture suppliedBindingVersion
+  admit version bindingId bindingVersion
   where
-    call = providerCallFor model options
-    digest =
-      versionedDigest
-        "shikigami.decision-model/1"
-        ( object
-            [ "alias" .= alias,
-              "version" .= version,
-              "tuple" .= call,
-              "model" .= model,
-              "options" .= options,
-              "bindingId" .= bindingId,
-              "bindingVersion" .= bindingVersion
-            ]
-        )
+    capture :: Text -> Either DecisionFailure (ModelRegistration scope)
+    capture = either (const (refuse "model descriptor identities must be nonempty")) Right . parseModelRegistration
+    admit version bindingId bindingVersion
+      | Options.apiKey options /= Nothing = refuse "model options must not carry a credential"
+      | Model.api model `notElem` [AnthropicMessages, OpenAIChatCompletions, OpenAIResponses, Custom "stub"] = refuse "decision model requires an admitted HTTP or stub API"
+      | Model.api model /= Custom "stub", maybe True (Text.null . revealCredential) credential = refuse "decision credential binding is unavailable"
+      | Left _ <- validateResponseOptions model options = refuse "decision response options are incompatible"
+      | otherwise =
+          let call = providerCallFor model options
+              digest =
+                modelDescriptorDigest
+                  (object ["alias" .= alias, "version" .= version, "tuple" .= call, "model" .= model, "options" .= options, "bindingId" .= bindingId, "bindingVersion" .= bindingVersion])
+           in Right
+                ModelBinding
+                  { descriptor = ModelDescriptor {alias, version, digest, provider = call.provider, api = call.api, endpointClass = call.endpointClass, modelId = call.modelId, thinking = call.thinking, bindingId, bindingVersion},
+                    model,
+                    options,
+                    credential
+                  }
     refuse = Left . decisionFailure UnavailableModel
 
 modelDescriptor :: ModelBinding -> ModelDescriptor

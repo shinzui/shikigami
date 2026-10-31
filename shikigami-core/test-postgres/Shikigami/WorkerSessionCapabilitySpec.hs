@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.WorkerSessionCapabilitySpec (tests) where
 
 import Control.Exception (SomeException, try)
@@ -31,6 +33,7 @@ import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
 import Shikigami.Decision.Contract (ModelAlias, ModelDescriptor (..))
+import Shikigami.Decision.Contract qualified as Model
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
@@ -298,7 +301,7 @@ listenerToken env scope = do
 snapshotFor :: CoordinationScope -> IO Replay.ExecutionSnapshot
 snapshotFor scope = do
   now <- getCurrentTime
-  let descriptor = ModelDescriptor (fixtureModelAlias "worker-model") "1" "fixture-model" "fixture" "fixture" "fixture" "fixture" Nothing "fixture" "1"
+  let descriptor = ModelDescriptor (fixtureModelAlias "worker-model") (fixtureModelRegistration "1") (Model.modelDescriptorDigest (toJSON ("fixture-model" :: Text))) "fixture" "fixture" "fixture" "fixture" Nothing (fixtureModelRegistration "fixture") (fixtureModelRegistration "1")
       selection = ExecutionSelection (fixtureAssignment "coordination-assignment") descriptor (Aeson.object []) [fixtureModelAlias "worker-model"] Nothing scope.run.rootId ProcessDefault now
   pure (Replay.ExecutionSnapshot 1 (Replay.executionIdFor selection.assignmentId) scope.run.runId (fixtureAgentName "coordinator") scope.run.identity scope.run.sessionId selection Nothing (Replay.SkillInstructions "fixture" "fixture" "fixture") (Replay.ReplayContext 2 Nothing [Replay.RequestTurn [Replay.TextBlock "coordinate"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] Nothing)
 
@@ -336,3 +339,6 @@ fixtureAgentName = either (error . show) id . mkAgentName
 
 fixtureModelAlias :: AliasText.Text -> Alias.ModelAlias
 fixtureModelAlias = either (error . show) id . Alias.parseModelAlias
+
+fixtureModelRegistration :: AliasText.Text -> Model.ModelRegistration scope
+fixtureModelRegistration = either (error . show) id . Model.parseModelRegistration

@@ -96,6 +96,12 @@ scalar/identity and remaining decoder-owner classifications remain open.
 
 ## Decision Log
 
+2026-10-31: ADR-104 retains model version and credential-binding key/version as
+private nominal-scoped coordinates after existing boundary capture. Preserve
+opaque labels and complete immutable binding authority. The separately computed
+model commitment has its concrete checked encoding and unchanged former preimage;
+provider tuple values and other decision/census work remain open.
+
 2026-10-31: ADR-103 keeps checked model lookup names through configuration,
 declaration/whole-run permissions, selection, queued jobs, delegation and session
 receipts. Preserve valid strings and consumer-specific bounds rather than minting
@@ -175,18 +181,18 @@ cases. The language checker and thirteen style/ownership mutation tests pass.
 [The adoption record](../evidence/keiro-0.22/haskell-service-adoption.md) links each
 implemented domain-value wave and its exact candidate/evidence.
 
-Latest model-alias acceptance passed the all-enabled build, 590 pure, 405 serial
-PostgreSQL, 274 worker and 95 server cases, 249 compiler clients and native/domain/
-diagram gates. ADR-103 keeps checked lookup names throughout permissions,
-selection, queued jobs, delegation and worker receipts. JSON/Dhall admission,
-concrete owner bounds and exact model/profile authority checks pass. Valid strings
-retain their bytes; empty names refuse without fallback. Native findings against
-d907aee are empty with unchanged transducers. The unclassified census has 321
-modules and 910 declarations. Complete scalar/identity, other model/decision
-values and remaining decoder-owner review keep M1 incomplete. Plan95's frozen
-closure, packaged Linux/runtime and inventory gates have not started.
-[Acceptance](../evidence/keiro-0.22/model-alias-results.txt) retains exact results
-and scope. Forty-two of 46 assigned sources have implemented dispositions.
+Latest model-registration acceptance passed the all-enabled build, 592 pure,
+405 serial PostgreSQL, 274 worker and 95 server cases, 263 compiler clients and
+native/domain/diagram gates. ADR-104 retains scoped model/credential-binding
+registration coordinates and checked computed commitments. Complete descriptor
+codecs and the former raw-value preimage pass; valid bytes/digests remain.
+Native findings against ac5cc43 are empty with unchanged transducers. The
+unclassified census has 321 modules and 912 declarations. Complete scalar/
+identity, provider tuple/other decision values and remaining decoder-owner review
+keep M1 incomplete. Plan95's frozen closure, packaged Linux/runtime and inventory
+gates have not started.
+[Acceptance](../evidence/keiro-0.22/model-registration-results.txt) retains exact
+results and scope. Forty-two of 46 assigned sources have implemented dispositions.
 
 
 ## Context and Orientation

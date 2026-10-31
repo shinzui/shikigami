@@ -438,3 +438,16 @@ clients and native/domain/diagram gates pass. Native findings against d907aee
 are empty and four transducers unchanged. Other model metadata and decision
 scalars remain open. The 321-module/910-declaration worklist remains unclassified;
 complete M1 review and plan95 remain open.
+
+
+Model registration versions and credential-binding coordinates remain private,
+nominal-scoped values through descriptors; computed commitments retain their
+checked concrete encoding and complete former preimage.
+[ADR-104](../../adr/0104-model-registration-coordinates-and-commitments-remain-checked.md)
+and [acceptance](model-registration-results.txt) record 63 focused pure/57
+PostgreSQL, the all-enabled build, 592 pure/405 PostgreSQL/274 worker/95 server,
+263 compiler clients and native/domain/diagram gates. Findings against ac5cc43
+are empty and four transducers unchanged. Valid strings/digests retain bytes;
+invalid first-release metadata refuses. Provider tuple/other decision values,
+decoder owners and complete M1 review remain open. The 321-module/912-declaration
+worklist remains unclassified; plan95 remains not started.

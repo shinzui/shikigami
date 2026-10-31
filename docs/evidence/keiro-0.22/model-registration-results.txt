@@ -1,0 +1,18 @@
+Checked model registration coordinates and computed commitments — ExecPlan 107
+Source parent: ac5cc43 (master); selected GHC 9.12.4/frozen cohort.
+arm64 macOS and real PostgreSQL fixtures.
+Decision: docs/adr/0104-model-registration-coordinates-and-commitments-remain-checked.md.
+
+Contract
+ModelDescriptor retains private nominal-scoped ModelRegistration values for model-version, credential-binding-id and credential-binding-version. modelBinding refines each supplied text coordinate once before publication, preserving existing nonempty admission and failure order. Exact opaque labels remain strings with no invented version/hash syntax or global cap.
+ModelDescriptorDigest is private and checked: sha256: plus 64 lowercase hexadecimal digits. Its producer retains the exact shikigami.decision-model/1 domain and complete credential-free alias/version/provider tuple/native model/options/credential-binding preimage. These coordinates are authored immutable lookup names, not allocated call entities. Complete binding conflicts, pinned lookup, provider/profile/options checks and credential availability remain required.
+
+Acceptance
+Focused suites: 63 pure PASS (0.25s), 57 PostgreSQL decision/selection/worker capability PASS (18.36s). Positive complete descriptor/codecs precede empty coordinate and malformed commitment refusal. Opaque Unicode/whitespace coordinates retain bytes; invalid digest prefix/length/uppercase refuse. The actual modelBinding digest equals the former raw-string preimage exactly. Three synthetic descriptors now use real computed commitments instead of fake digest labels; no production fallback is added.
+All-enabled build PASS, including Linux fixture compilation. Full suites PASS: 592 pure (5.95s), 405 serial PostgreSQL (116.21s), 274 worker (176.01s), 95 server (19.28s). Domain behavior and six diagrams PASS. Actual exact HTTP model/thinking selection, inherited/profile permission, immutable binding, call evidence/recovery and workspace regressions remain qualified on macOS; Linux runtime behavior is not inferred.
+Selected compiler: 201 nominal + 62 opaque = 263 PASS. Positive descriptor field clients precede constructor/text-coercion/literal/Generic, scope coercion/substitution and program/payload commitment substitution rejection.
+just keiro-gate ac5cc43 PASS: native check, ten-member inspection, idempotent scaffold and 156 conformance rows. Strict findings empty; four transducer fingerprints/source hashes unchanged. Native diff/replay/fold reports retained. Valid wire/preimages and step meaning remain unchanged; no patch is needed. Invalid first-release opaque metadata refuses without fallback, recorded in workflow-versioning.
+All 124 frozen guide hashes verified. Current source/tool compiled worklist verified: 321 modules, 912 declarations (695 data, 180 newtypes, 37 aliases), 14 entrypoints. Haskell conventions, thirteen checker mutation tests and git diff --check PASS. Generated files unchanged; no dependency bound changes.
+
+Scope
+Provider tuple fields, other decision scalars, remaining decoder owners and complete domain classification remain open. The declaration worklist remains unclassified; M1 and final packaged/Linux/runtime qualification remain incomplete. Plan95 has not started.

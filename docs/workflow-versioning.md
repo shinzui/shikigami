@@ -90,6 +90,14 @@ opaque metadata. Valid same-build selection and permission recovery remain
 separate behavioral gates.
 
 
+[ADR-104](adr/0104-model-registration-coordinates-and-commitments-remain-checked.md)
+retains checked model registration/version coordinates and computed commitments.
+Valid primitive strings, descriptor commitments and workflow step meaning remain
+unchanged. Empty coordinates and malformed computed digests refuse on complete
+JSON admission under the unused first-release policy. No old invalid-value
+reader is introduced, and native helper references do not certify opaque data.
+
+
 ## What a durable workflow is, and why editing one is not like editing ordinary code
 
 Shikigami runs each agent run and each Danwa conversation as a **durable

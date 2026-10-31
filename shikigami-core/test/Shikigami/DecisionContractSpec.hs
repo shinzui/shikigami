@@ -7,6 +7,7 @@ import Control.Exception (SomeException, try)
 import Control.Lens ((&), (.~))
 import Control.Monad (forM_)
 import Data.Aeson (FromJSON, ToJSON, Value (..), eitherDecode, encode, object, toJSON, (.=))
+import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Either (isLeft)
 import Data.Generics.Labels ()
@@ -19,6 +20,7 @@ import Data.Time (UTCTime (..), fromGregorian)
 import Dhall qualified
 import GHC.Generics (Generic)
 import Shikigami.Decision.Contract
+import Shikigami.Decision.Contract qualified as Model
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Program.Decision
@@ -47,7 +49,7 @@ original :: RegisteredProgram Request Answer
 original = registration "1" emptyParams
 
 model :: ModelDescriptor
-model = ModelDescriptor (fixtureModelAlias "triage") "1" "sha256:model" "stub" "stub" "in-process" "stub-a" Nothing "stub-binding" "1"
+model = ModelDescriptor (fixtureModelAlias "triage") (fixtureModelRegistration "1") (modelDescriptorDigest (toJSON ("model" :: Text))) "stub" "stub" "in-process" "stub-a" Nothing (fixtureModelRegistration "stub-binding") (fixtureModelRegistration "1")
 
 prepared :: PreparedDecision
 prepared = PreparedDecision "prepare-1" (runCorrelationId "run-1") "workflow-1" 0 "triage" (descriptor (programRef original)) (object ["request" .= ("hello" :: Text)]) model Nothing
@@ -68,6 +70,24 @@ tests =
         Dhall.input Dhall.auto "\"triage\"" >>= (@?= fixtureModelAlias "triage")
         refused <- try @SomeException (Dhall.input Dhall.auto "\"\"" :: IO ModelAlias)
         assertBool "empty Dhall lookup name refused" (isLeft refused),
+      testCase "model registration and computed commitments have checked codecs" do
+        let raw = " opaque:model-version λ "
+            coordinate = mustRight (parseModelRegistration raw :: Either Text (ModelRegistration "model-version"))
+            digest = modelDescriptorDigest (object ["fixture" .= raw])
+        modelRegistrationText coordinate @?= raw
+        eitherDecode (encode coordinate) @?= Right coordinate
+        toJSON coordinate @?= toJSON raw
+        parseModelRegistration @"model-version" "" @?= Left "model registration coordinate must not be empty"
+        parseModelDescriptorDigest (modelDescriptorDigestText digest) @?= Right digest
+        eitherDecode (encode digest) @?= Right digest
+        toJSON digest @?= toJSON (modelDescriptorDigestText digest)
+        eitherDecode (encode model) @?= Right model
+        case toJSON model of
+          Object fields -> forM_ ["version", "bindingId", "bindingVersion", "digest"] \field ->
+            assertBool "invalid retained registration refused" (case Aeson.fromJSON @ModelDescriptor (Object (KeyMap.insert field (toJSON ("" :: Text)) fields)) of Aeson.Error _ -> True; _ -> False)
+          _ -> assertFailure "model control was not an object"
+        forM_ ["", "sha256:model", "sha256:" <> Text.replicate 64 "A", "sha256:" <> Text.replicate 63 "a"] \bad ->
+          assertBool "invalid commitment refused" (isLeft (parseModelDescriptorDigest bad)),
       testCase "program identity scopes and computed parameter contracts retain checked wire values" do
         let raw = " \nλ:opaque-version "
             identity = mustRight (parseProgramIdentity raw :: Either Text (ProgramIdentity "implementation-digest"))
@@ -198,3 +218,6 @@ mustRight = either (error . show) id
 
 fixtureModelAlias :: AliasText.Text -> Alias.ModelAlias
 fixtureModelAlias = either (error . show) id . Alias.parseModelAlias
+
+fixtureModelRegistration :: AliasText.Text -> Model.ModelRegistration scope
+fixtureModelRegistration = either (error . show) id . Model.parseModelRegistration

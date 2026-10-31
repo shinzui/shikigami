@@ -284,6 +284,11 @@
           "rationale": "ADR-103 seals the exact nonempty model lookup name and retains it through catalog/configuration, declarations, policies, requests, selections, queued jobs, delegation and worker receipts. Checked JSON/Dhall codecs preserve valid strings; consumer-specific syntax/cardinality/key bounds remain with their owners. Positive retained-field compiler clients and actual model/profile/inherited permission controls pass. Other model metadata/decision scalars and the complete census remain pending."
         },
         {
+          "id": "model-registration-coordinates-and-commitment",
+          "disposition": "implemented",
+          "rationale": "ADR-104 retains private nominal-scoped model version and credential-binding key/version values after the existing nonempty registration boundary, with complete checked descriptor JSON. The computed ModelDescriptorDigest retains its exact canonical SHA-256 encoding/domain/preimage. Real former-preimage, codec, scope/Generic compiler and model/evidence/recovery controls pass. Provider tuple values, other decision scalars and the full census remain pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -419,7 +424,12 @@
         "docs/evidence/keiro-0.22/model-alias-results.txt",
         "docs/evidence/keiro-0.22/model-alias-native-diff.json",
         "docs/evidence/keiro-0.22/model-alias-native-replay.json",
-        "docs/evidence/keiro-0.22/model-alias-fold-identities.json"
+        "docs/evidence/keiro-0.22/model-alias-fold-identities.json",
+        "docs/adr/0104-model-registration-coordinates-and-commitments-remain-checked.md",
+        "docs/evidence/keiro-0.22/model-registration-results.txt",
+        "docs/evidence/keiro-0.22/model-registration-native-diff.json",
+        "docs/evidence/keiro-0.22/model-registration-native-replay.json",
+        "docs/evidence/keiro-0.22/model-registration-fold-identities.json"
       ]
     },
     {

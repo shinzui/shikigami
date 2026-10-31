@@ -24,6 +24,7 @@ import Shikigami.App.Config.Load (ConfigOptions (..), ConfigRun (..), appConfigR
 import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Behavior.Provider.Call (providerCallFor)
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelAlias qualified as Alias
@@ -61,6 +62,17 @@ tests =
         assertBool "unknown aliases denied" (isLeft (resolveModel catalog declaration Nothing (fixtureModelAlias "payload-model")))
         assertBool "agent permission required" (isLeft (resolveModel catalog ((declaration & #decisionModels .~ ([]))) Nothing (fixtureModelAlias "triage")))
         assertBool "duplicate operator aliases refused" (isLeft (modelCatalog [binding "triage" "stub-triage", binding "triage" "stub-investigate"])),
+      testCase "model commitments retain the complete former binding preimage" do
+        let admitted = binding "triage" "stub-triage"
+            metadata = modelDescriptor admitted
+            model = stubModel & #modelId .~ "stub-triage"
+            old =
+              versionedDigest
+                "shikigami.decision-model/1"
+                (object ["alias" .= ("triage" :: Text), "version" .= ("1" :: Text), "tuple" .= providerCallFor model emptyOptions, "model" .= model, "options" .= emptyOptions, "bindingId" .= ("binding" :: Text), "bindingVersion" .= ("1" :: Text)])
+        modelDescriptorDigestText metadata.digest @?= old
+        eitherDecode (encode metadata) @?= Right metadata
+        mapM_ (\(version, key, revision) -> assertBool "missing registration refused before binding" (isLeft (modelBinding (fixtureModelAlias "triage") version key revision model emptyOptions Nothing))) [("", "binding", "1"), ("1", "", "1"), ("1", "binding", "")],
       testCase "whole-slot policy narrows to the pinned profile" do
         declaration <- allowedDeclaration
         let snapshot = mustRight (resolvePolicy registry [slot] catalog declaration (Just (profile "stub-triage")))
@@ -84,7 +96,7 @@ tests =
       testCase "changed option identity cannot replace a pinned binding" do
         let wanted = modelDescriptor (binding "triage" "stub-triage")
         assertBool "retained binding found" (not (isLeft (pinnedBinding catalog wanted)))
-        assertBool "descriptor drift refused" (isLeft (pinnedBinding catalog ((wanted & #bindingVersion .~ ("2"))))),
+        assertBool "descriptor drift refused" (isLeft (pinnedBinding catalog ((wanted & #bindingVersion .~ (mustRight (parseModelRegistration "2")))))),
       testCase "Settei loads two finite aliases and rejects malformed selections" do
         let run = configRun [("behavior.decisionModels", specList ["stub-triage", "stub-investigate"])] NoDiagnostic
         run.exitCode @?= 0

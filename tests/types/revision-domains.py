@@ -69,6 +69,19 @@ import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ('retained-model-registration', 'version :: Decision.ModelDescriptor -> Decision.ModelRegistration "model-version"\nversion value = value.version\nbinding :: Decision.ModelDescriptor -> Decision.ModelRegistration "credential-binding-id"\nbinding value = value.bindingId\nrevision :: Decision.ModelDescriptor -> Decision.ModelRegistration "credential-binding-version"\nrevision value = value.bindingVersion\ndigest :: Decision.ModelDescriptor -> Decision.ModelDescriptorDigest\ndigest value = value.digest\nparse :: Text -> Either Text (Decision.ModelRegistration "model-version")\nparse = Decision.parseModelRegistration\n', True),
+    ('model-registration-constructor', 'value = Decision.ModelRegistration\n', False),
+    ('model-registration-coercion', 'value :: Text -> Decision.ModelRegistration "model-version"\nvalue = coerce\n', False),
+    ('model-registration-scope-coercion', 'value :: Decision.ModelRegistration "model-version" -> Decision.ModelRegistration "credential-binding-version"\nvalue = coerce\n', False),
+    ('model-registration-scope-substitution', 'value :: Decision.ModelRegistration "credential-binding-id" -> Decision.ModelRegistration "credential-binding-version"\nvalue = id\n', False),
+    ('model-registration-literal', 'value :: Decision.ModelRegistration "model-version"\nvalue = fromString ""\n', False),
+    ('program-is-not-model-registration', 'value :: Decision.ProgramIdentity "program-version" -> Decision.ModelRegistration "model-version"\nvalue = id\n', False),
+    ('model-digest-constructor', 'value = Decision.ModelDescriptorDigest\n', False),
+    ('model-digest-coercion', 'value :: Text -> Decision.ModelDescriptorDigest\nvalue = coerce\n', False),
+    ('model-digest-literal', 'value :: Decision.ModelDescriptorDigest\nvalue = fromString "bad"\n', False),
+    ('payload-is-not-model-digest', 'value :: Payload.PayloadDigest -> Decision.ModelDescriptorDigest\nvalue = id\n', False),
+    ('program-parameters-are-not-model-digest', 'value :: Decision.ProgramParameterDigest -> Decision.ModelDescriptorDigest\nvalue = id\n', False),
+
     ('retained-model-aliases', 'parse :: Text -> Either Text Alias.ModelAlias\nparse = Alias.parseModelAlias\npolicy :: AliasRequest.ExecutionPolicy -> [Alias.ModelAlias]\npolicy value = value.permittedAliases\nrequest :: AliasRequest.ExecutionRequest -> Maybe Alias.ModelAlias\nrequest value = value.alias\ncontext :: AliasRequest.ExecutionContext -> Maybe [Alias.ModelAlias]\ncontext value = value.permittedAliases\njob :: AliasJob.RunJob -> Maybe [Alias.ModelAlias]\njob value = value.executionPermissions\ndelegate :: AliasDelegate.DelegateCtx -> Maybe [Alias.ModelAlias]\ndelegate value = value.executionPermissions\nmessage :: WorkerSession.MessageReceipt -> Maybe [Alias.ModelAlias]\nmessage value = value.permittedAliases\ncoordinator :: AliasCoordinator.CoordinatorRun -> Maybe [Alias.ModelAlias]\ncoordinator value = value.permittedAliases\ndeclaration :: Agent.AgentDecl -> [Alias.ModelAlias]\ndeclaration value = value.decisionModels\nselection :: Selection.ExecutionSelection -> [Alias.ModelAlias]\nselection value = value.permittedAliases\n', True),
     ('model-alias-constructor', 'value = Alias.ModelAlias\n', False),
     ('model-alias-coercion', 'value :: Text -> Alias.ModelAlias\nvalue = coerce\n', False),
@@ -469,6 +482,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
             fragments.update({'process-routing-format-numeric': ['ProcessRoutingFormat', 'Num'], 'git-format-is-not-process-routing-format': ["Couldn't match", 'GitRecordFormat', 'ProcessRoutingFormat']})
             fragments.update({'workspace-id-constructor': ['WorkspaceId'], 'workspace-id-kindid-coercion': ['WorkspaceId'], 'workspace-id-text-coercion': ['WorkspaceId', 'Text'], 'workspace-id-literal': ['WorkspaceId', 'IsString'], 'root-is-not-workspace': ["Couldn't match", 'ExecutionRootId', 'WorkspaceId']})
             fragments.update({'model-alias-constructor': ['ModelAlias'], 'model-alias-coercion': ['ModelAlias', 'Text'], 'model-alias-literal': ['ModelAlias', 'IsString'], 'agent-name-is-not-model-alias': ["Couldn't match", 'AgentName', 'ModelAlias']})
+            fragments.update({'model-registration-constructor': ['ModelRegistration'], 'model-registration-coercion': ['ModelRegistration', 'Text'], 'model-registration-scope-coercion': ["Couldn't match", 'model-version', 'credential-binding-version'], 'model-registration-scope-substitution': ["Couldn't match", 'credential-binding-id', 'credential-binding-version'], 'model-registration-literal': ['ModelRegistration', 'IsString'], 'program-is-not-model-registration': ["Couldn't match", 'ProgramIdentity', 'ModelRegistration'], 'model-digest-constructor': ['ModelDescriptorDigest'], 'model-digest-coercion': ['ModelDescriptorDigest', 'Text'], 'model-digest-literal': ['ModelDescriptorDigest', 'IsString'], 'payload-is-not-model-digest': ["Couldn't match", 'PayloadDigest', 'ModelDescriptorDigest'], 'program-parameters-are-not-model-digest': ["Couldn't match", 'ProgramParameterDigest', 'ModelDescriptorDigest']})
             if name.endswith("-constructor"):
                 assert any(marker in result.stderr.lower() for marker in ["not in scope", "does not export", "illegal term-level"]), (name, result.stderr)
             assert all(fragment in result.stderr for fragment in fragments[name]), (name, result.stderr)

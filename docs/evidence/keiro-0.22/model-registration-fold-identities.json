@@ -1,0 +1,30 @@
+[
+  {
+    "aggregate": "ExecutionLifecycle",
+    "fingerprint": "275db6f9a12b2d5d58c8add044ce074d",
+    "sourcePath": "shikigami-core/src/Shikigami/ExecutionLifecycle/Generated/Transducer.hs",
+    "sourceSha256": "58ccde19f4dee005f14abd40068d7463bf6d987595d7808018b04b0501ebfd8c",
+    "changed": false
+  },
+  {
+    "aggregate": "WorkerSessionLifecycle",
+    "fingerprint": "837966c8889d6f3acec8c67a761887c9",
+    "sourcePath": "shikigami-core/src/Shikigami/WorkerSessionLifecycle/Generated/Transducer.hs",
+    "sourceSha256": "9c53ad8b0d54b681b9ad10c864d2acb943ede0f8fa33dbef9b9420214a13d465",
+    "changed": false
+  },
+  {
+    "aggregate": "ObjectiveLifecycle",
+    "fingerprint": "f36259bde91df3202d0d3fd6ddf14188",
+    "sourcePath": "shikigami-core/src/Shikigami/ObjectiveLifecycle/Generated/Transducer.hs",
+    "sourceSha256": "ecb9a2f5d833d7c5e8cc356e4edb340d12c05fa47449915ffbfab3e26d17fba3",
+    "changed": false
+  },
+  {
+    "aggregate": "RunEvidence",
+    "fingerprint": "f3498d651a5f18786ed1bb41eb3d4977",
+    "sourcePath": "shikigami-core/src/Shikigami/RunEvidence/Generated/Transducer.hs",
+    "sourceSha256": "acb3a1b0453144d46c7c65f3655e57e1034bc06e0dc273f134a284d2b5cb60cd",
+    "changed": false
+  }
+]

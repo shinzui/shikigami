@@ -164,6 +164,8 @@ CASES = [
     ('Decision.ProgramParameterDigest', 'generic'),
     ('Decision.DecisionCallId', 'generic'),
     ('Decision.DecisionCallOrdinal', 'generic'),
+    ('Decision.ModelRegistration "model-version"', 'generic'),
+    ('Decision.ModelDescriptorDigest', 'generic'),
     ('Alias.ModelAlias', 'generic'),
     ('Workspace.WorkspaceId', 'generic'),
     ('Entity.OperationId', 'generic'),
