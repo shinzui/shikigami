@@ -1,8 +1,12 @@
 module Shikigami.ExecutionResourcesSpec (tests) where
 
+import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Int (Int64)
 import Data.Map.Strict qualified as Map
+import Data.Time (UTCTime (..), fromGregorian)
 import Shikigami.Execution.Resources
+import Shikigami.StateRevision (initialRevision)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -10,7 +14,18 @@ tests :: TestTree
 tests =
   testGroup
     "ExecutionResources"
-    [ testCase "negative and overflowing quantities are refused" do
+    [ testCase "root revisions preserve numeric JSON and reject negative admission" do
+        let now = UTCTime (fromGregorian 2026 10 30) 0
+            root = Root (Envelope Map.empty now) initialRevision False Nothing False 0 0 Map.empty emptyUsage
+            encoded = Aeson.toJSON root
+        Aeson.fromJSON encoded @?= Aeson.Success root
+        case encoded of
+          Aeson.Object fields -> do
+            fmap Aeson.encode (KeyMap.lookup "revision" fields) @?= Just (Aeson.encode (0 :: Integer))
+            let negative = Aeson.Object (KeyMap.insert "revision" (Aeson.toJSON (-1 :: Integer)) fields)
+            assertBool "negative root revision refused" (case Aeson.fromJSON negative :: Aeson.Result Root of Aeson.Error _ -> True; _ -> False)
+          _ -> assertFailure "resource root was not an object",
+      testCase "negative and overflowing quantities are refused" do
         mapM_
           (\n -> assertBool "invalid integer refused" (case validateQuantities (Map.singleton Tokens n) of Left _ -> True; _ -> False))
           [-1, toInteger (maxBound :: Int64) + 1],

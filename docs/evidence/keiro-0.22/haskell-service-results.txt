@@ -42,3 +42,5 @@ No required PostgreSQL test skips. Language checker plus all nine mutation cases
 Thirty-five of the 46 plan107 source rows have explicit implemented dispositions; eleven architecture/domain rows remain pending. FRIC-35 is triaged accepted with the exact native versioned banner preserved.
 All six compiler boundary cases passed, including the real WorkerCommand signature.
 just keiro-gate e1d5548 passed strict Language 6 checks for ten members, idempotent scaffold, no breaking findings and replay-neutral impact. Current native conformance output has 156 passing rows (70 aggregate, 30 workflow, 28 read-model, 26 structural, 2 mapped-surface); the earlier 151 summaries undercounted the generated identity checks.
+
+Resource-root revision extension (source parent 1a9feb5): all enabled application/test components compile; 546 pure (5.94s), 375 serial PostgreSQL (101.15s), 95 serial server (18.68s) cases pass. Eight real compiler cases and nine style mutation/lexical cases pass. The full nominal quantity/identity census remains open.

@@ -27,7 +27,8 @@ objective expected revisions and worker-owner epochs are distinct types. Render
 numbers explicitly at owning generated and database adapters. Objective-version,
 checkpoint and ownership provider contracts retain scoped values as domain
 interfaces, including worker-session state revisions and worker-owner epochs.
-Workspace requests, admissions, retained controls, handoff fences and private RPC
+Resource-root policy revisions also retain their own execution-root scope across
+reservation, attempt, allocation and control APIs. Workspace requests, admissions, retained controls, handoff fences and private RPC
 requests use that same worker-owner scope; only the SQL parameter codec renders
 it as an integer.
 Those adapters do not widen authority: current membership, expected state, owner

@@ -31,6 +31,7 @@ import Shikigami.Server.Command (adminInfo, adminPrefs, adminSubcommands)
 import Shikigami.Server.Command.Ops (redactDatabaseUrl)
 import Shikigami.Server.Command.ResolveApproval (resolutionResult, resolveApprovalOptionsParser)
 import Shikigami.Server.Command.Resources (resourceView)
+import Shikigami.StateRevision (StateRevision, parseRevision)
 import System.Exit (ExitCode (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
@@ -87,7 +88,7 @@ tests =
         let now = UTCTime (fromGregorian 2026 10 27) 0
             envelope = Resources.Envelope (Map.singleton Resources.Tokens (Resources.Limited 100)) now
             usage = Resources.Usage (Map.singleton Resources.Tokens 3) (Map.singleton Resources.Tokens 10)
-            root = Resources.Root envelope 0 False Nothing False 1 1 (Map.singleton Resources.Tokens 3) usage
+            root = Resources.Root envelope (fixtureRevision 0) False Nothing False 1 1 (Map.singleton Resources.Tokens 3) usage
             result = resourceView now root
         case result of
           Aeson.Object fields -> do
@@ -318,3 +319,6 @@ showParse = \case
   Success _ -> "success with unexpected decision"
   Failure failure -> fst (renderFailure failure "resolve-approval")
   CompletionInvoked _ -> "completion invoked"
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

@@ -10,6 +10,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Shikigami.Execution.Identity
 import Shikigami.Prelude
+import Shikigami.StateRevision
 
 data Dimension = ActiveWork | LifetimeDescendants | ModelAttempts | ToolAttempts | Tokens | CostMicroUsd
   deriving stock (Eq, Ord, Show, Enum, Bounded, Generic)
@@ -44,7 +45,7 @@ emptyUsage = Usage Map.empty Map.empty
 
 data Root = Root
   { envelope :: !Envelope,
-    revision :: !Integer,
+    revision :: !(StateRevision "execution-root"),
     cancelled :: !Bool,
     activeLimit :: !(Maybe Integer),
     overage :: !Bool,
@@ -169,7 +170,7 @@ admit limits usage amounts = do
   validateQuantities next
   pure (Usage usage.settled (add usage.held amounts))
 
-checkRoot :: UTCTime -> Integer -> Root -> Either ResourceError ()
+checkRoot :: UTCTime -> StateRevision "execution-root" -> Root -> Either ResourceError ()
 checkRoot now expected root = do
   when (expected /= root.revision) (Left RevisionConflict)
   when root.cancelled (Left RootCancelled)

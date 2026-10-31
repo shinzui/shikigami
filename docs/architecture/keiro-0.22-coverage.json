@@ -51,6 +51,11 @@
           "rationale": "Nine private checked prose types retain established individual length rules and exact JSON strings, with protected Show. Joint command/graph/size/authority checks remain. All 545 pure and 375 serial PostgreSQL cases pass after conversion."
         },
         {
+          "id": "resource-root-policy-revision",
+          "disposition": "implemented",
+          "rationale": "Resource-root policy revisions retain a separate execution-root scope in state and reservation/attempt/allocation/control APIs. Valid root JSON remains numeric and a complete positive round-trip precedes negative admission refusal. Eight compiler boundary cases reject root/worker/objective substitution. All enabled components compile and 546 pure, 375 serial PostgreSQL and 95 server cases pass. Resource amounts and wider scalar census remain pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -64,7 +69,8 @@
         "docs/evidence/keiro-0.22/state-revision-results.txt",
         "tests/types/revision-domains.py",
         "docs/evidence/keiro-0.22/objective-content-results.txt",
-        "docs/evidence/keiro-0.22/worker-owner-revision-results.txt"
+        "docs/evidence/keiro-0.22/worker-owner-revision-results.txt",
+        "docs/evidence/keiro-0.22/resource-root-revision-results.txt"
       ]
     },
     {

@@ -126,3 +126,12 @@ compiled generated service facade. All 143 assertions pass, including fifteen
 focused guard checks with accepted controls and successful replay seeds. Native
 unverified guard classifications remain visible. The 545 pure tests pass after
 the test-layout extension; see [domain-driver-results.txt](domain-driver-results.txt).
+
+Resource-root policy revisions now use their own execution-root scope through
+reservation, attempt, allocation and control APIs. Their initial/advance operations
+retain that scope, and complete root JSON admission rejects a negative revision
+while preserving numeric encoding. All 546 pure, 375 serial PostgreSQL and 95
+server cases pass after conversion. Eight real compiler cases include positive
+resource-root and worker-command clients and reject cross-domain substitutions.
+Resource quantities and the wider scalar census remain open; see
+[resource-root-revision-results.txt](resource-root-revision-results.txt).

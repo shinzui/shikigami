@@ -38,6 +38,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Resources
 import Shikigami.Prelude
+import Shikigami.StateRevision
 
 enrollRoot :: (Store :> es) => ExecutionRootId -> Envelope -> Eff es (Either ResourceError Admission)
 enrollRoot root envelope = runTransaction (enrollRootTx root envelope)
@@ -48,22 +49,22 @@ enrollRootTx :: ExecutionRootId -> Envelope -> Transaction (Either ResourceError
 enrollRootTx (ExecutionRootId key) envelope = case validateKey key >> validateEnvelope envelope of
   Left err -> pure (Left err)
   Right () -> do
-    let initial = Root envelope 0 False Nothing False 0 0 Map.empty emptyUsage
+    let initial = Root envelope initialRevision False Nothing False 0 0 Map.empty emptyUsage
     inserted <- Tx.statement (key, initial) insertRoot
     stored <- Tx.statement key lockRoot
     pure case stored of
       Just root | root.envelope == envelope -> Right (if inserted then Accepted else AlreadyAccepted)
       _ -> Left IdentityConflict
 
-reserveOperation :: (Store :> es) => ExecutionRootId -> Integer -> OperationRequest -> UTCTime -> Eff es (Either ResourceError Admission)
+reserveOperation :: (Store :> es) => ExecutionRootId -> StateRevision "execution-root" -> OperationRequest -> UTCTime -> Eff es (Either ResourceError Admission)
 reserveOperation root revision request now = reserveOperations root revision [request] now
 
-reserveOperations :: (Store :> es) => ExecutionRootId -> Integer -> [OperationRequest] -> UTCTime -> Eff es (Either ResourceError Admission)
+reserveOperations :: (Store :> es) => ExecutionRootId -> StateRevision "execution-root" -> [OperationRequest] -> UTCTime -> Eff es (Either ResourceError Admission)
 reserveOperations root revision requests now = runTransaction (reserveOperationsTx root revision requests now)
 
 -- | Batch failure condemns the transaction, including any other owner writes.
 -- Callers must propagate Left. The same primitive serves singleton admission.
-reserveOperationsTx :: ExecutionRootId -> Integer -> [OperationRequest] -> UTCTime -> Transaction (Either ResourceError Admission)
+reserveOperationsTx :: ExecutionRootId -> StateRevision "execution-root" -> [OperationRequest] -> UTCTime -> Transaction (Either ResourceError Admission)
 reserveOperationsTx root expected requests now = do
   result <- withRoot root \state -> go state AlreadyAccepted requests
   case result of
@@ -89,10 +90,10 @@ reserveOperationsTx root expected requests now = do
                   writeOperation root request
                   go next Accepted rest
 
-beginAttempt :: (Store :> es) => ExecutionRootId -> Integer -> AttemptRequest -> UTCTime -> Eff es (Either ResourceError Admission)
+beginAttempt :: (Store :> es) => ExecutionRootId -> StateRevision "execution-root" -> AttemptRequest -> UTCTime -> Eff es (Either ResourceError Admission)
 beginAttempt root expected request now = runTransaction (beginAttemptTx root expected request now)
 
-beginAttemptTx :: ExecutionRootId -> Integer -> AttemptRequest -> UTCTime -> Transaction (Either ResourceError Admission)
+beginAttemptTx :: ExecutionRootId -> StateRevision "execution-root" -> AttemptRequest -> UTCTime -> Transaction (Either ResourceError Admission)
 beginAttemptTx root expected request now = withRoot root \state -> do
   existing <- readAttempt root request.attemptId
   case existing of
@@ -219,7 +220,7 @@ recordSettlement reconcile root attemptId outcome = withRoot root \state -> do
 
 -- | Creating an allocation holds its entire finite ceiling in its parent.
 -- Later narrowing returns only unused capacity; consumption is never refunded.
-narrowAllocation :: (Store :> es) => ExecutionRootId -> Integer -> AllocationId -> Maybe AllocationId -> Envelope -> UTCTime -> Eff es (Either ResourceError Admission)
+narrowAllocation :: (Store :> es) => ExecutionRootId -> StateRevision "execution-root" -> AllocationId -> Maybe AllocationId -> Envelope -> UTCTime -> Eff es (Either ResourceError Admission)
 narrowAllocation root expected allocationId@(AllocationId key) parent envelope now = runTransaction $ withRoot root \state -> do
   existing <- readAllocation root allocationId
   case existing of
@@ -268,7 +269,7 @@ finiteLimits Envelope {limits} = traverse finite limits
 
 -- | Policy revisions change only here. Usage recording remains permitted
 -- after cancellation/cutoff/revision changes; accepted work must drain truthfully.
-setRootControl :: (Store :> es) => ExecutionRootId -> Integer -> Bool -> Maybe Integer -> Eff es (Either ResourceError ())
+setRootControl :: (Store :> es) => ExecutionRootId -> StateRevision "execution-root" -> Bool -> Maybe Integer -> Eff es (Either ResourceError ())
 setRootControl root expected cancelled activeLimit = runTransaction $ withRoot root \state ->
   if expected /= state.revision
     then pure (Left RevisionConflict)
@@ -282,7 +283,7 @@ setRootControl root expected cancelled activeLimit = runTransaction $ withRoot r
               if maybe False (\n -> case Map.lookup ActiveWork state.envelope.limits of Just (Limited maximumAmount) -> n > maximumAmount; Nothing -> n > 0; _ -> False) activeLimit
                 then pure (Left (InvalidResourceRequest "control cannot widen the admitted envelope"))
                 else do
-                  saveRoot root (state & #revision .~ expected + 1 & #cancelled .~ cancelled & #activeLimit .~ activeLimit)
+                  saveRoot root (state & #revision .~ advanceRevision expected & #cancelled .~ cancelled & #activeLimit .~ activeLimit)
                   pure (Right ())
 
 -- | One bounded row: no transcript, operation history, tool payload or secret.

@@ -6,11 +6,14 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 HEADER = '''{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 module RevisionBoundary where
 import Data.Coerce (coerce)
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Capability (WorkerCommand (CancelWorker))
 import Shikigami.WorkerSession.Types (WorkerSessionId)
+import Shikigami.Execution.Resources qualified as Resources
 '''
 CASES = [
     ("valid", '''value :: StateRevision "objective"
@@ -18,6 +21,12 @@ value = advanceRevision initialRevision
 number :: Integer
 number = revisionNumber value
 ''', True),
+    ("resource-root", '''rootRevision :: Resources.Root -> StateRevision "execution-root"
+rootRevision root = root.revision
+''', True),
+    ("wrong-root-revision", '''rootRevision :: Resources.Root -> StateRevision "worker-session"
+rootRevision root = root.revision
+''', False),
     ("worker-command", '''command :: WorkerSessionId -> StateRevision "worker-session" -> StateRevision "worker-owner" -> WorkerCommand
 command = CancelWorker
 ''', True),
@@ -44,6 +53,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
         assert (result.returncode == 0) == expected, (name, result.stdout, result.stderr)
         if not expected:
             fragments = {
+                "wrong-root-revision": ["Couldn't match type", "worker-session", "execution-root"],
                 "wrong-worker-revision": ["Couldn't match type", "worker-session", "objective"],
                 "scope-coercion": ["Couldn't match type", "objective", "objective-criteria"],
                 "representation-coercion": ["StateRevision", "Integer"],

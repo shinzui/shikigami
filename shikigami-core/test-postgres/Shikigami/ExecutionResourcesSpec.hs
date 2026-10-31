@@ -17,6 +17,7 @@ import Shikigami.Execution.Identity
 import Shikigami.Execution.Resources
 import Shikigami.Execution.ResourcesStore
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.StateRevision (StateRevision, parseRevision)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -40,17 +41,17 @@ tests fixture =
         run env (begin "a" "one") >>= (@?= Left (ResourceExhausted Tokens))
         snapshot <- root env
         snapshot.usage @?= emptyUsage
-        run env (beginAttempt rid 0 (attempt "a" "one" 5) now) >>= (@?= Right Accepted),
+        run env (beginAttempt rid (fixtureRevision 0) (attempt "a" "one" 5) now) >>= (@?= Right Accepted),
       testCase "whole operation batch rolls back on exhaustion" $ withFixture fixture \env -> do
         seed env [(LifetimeDescendants, 1)]
-        run env (reserveOperations rid 0 [child "one", child "two"] now) >>= (@?= Left (ResourceExhausted LifetimeDescendants))
+        run env (reserveOperations rid (fixtureRevision 0) [child "one", child "two"] now) >>= (@?= Left (ResourceExhausted LifetimeDescendants))
         snapshot <- root env
         snapshot.usage @?= emptyUsage
-        run env (reserveOperation rid 0 (child "one") now) >>= (@?= Right Accepted),
+        run env (reserveOperation rid (fixtureRevision 0) (child "one") now) >>= (@?= Right Accepted),
       testCase "conflicting duplicate batch rolls back its first insert" $ withFixture fixture \env -> do
         seed env []
         let altered = OperationRequest (OperationId "one") Nothing ToolOperation Map.empty "different"
-        run env (reserveOperations rid 0 [model "one", altered] now) >>= (@?= Left IdentityConflict)
+        run env (reserveOperations rid (fixtureRevision 0) [model "one", altered] now) >>= (@?= Left IdentityConflict)
         run env (begin "a" "one") >>= (@?= Left OperationMissing),
       testCase "replay after lost response spends nothing and cannot widen" $ withFixture fixture \env -> do
         seed env []
@@ -58,7 +59,7 @@ tests fixture =
         run env (begin "a" "one") >>= (@?= Right Accepted)
         before <- root env
         run env (begin "a" "one") >>= (@?= Right AlreadyAccepted)
-        run env (beginAttempt rid 0 (attempt "a" "one" 11) now) >>= (@?= Left IdentityConflict)
+        run env (beginAttempt rid (fixtureRevision 0) (attempt "a" "one" 11) now) >>= (@?= Left IdentityConflict)
         after <- root env
         after @?= before
         run env (enrollRoot rid (envelope [(Tokens, 500)])) >>= (@?= Left IdentityConflict),
@@ -112,18 +113,18 @@ tests fixture =
         seed env []
         reserveModel env "one"
         run env (begin "a" "one") >>= (@?= Right Accepted)
-        run env (beginAttempt rid 0 (attempt "b" "one" 10) (addUTCTime 3600 now)) >>= (@?= Left CutoffReached)
-        run env (setRootControl rid 0 True Nothing) >>= (@?= Right ())
-        run env (beginAttempt rid 1 (attempt "b" "one" 10) now) >>= (@?= Left RootCancelled)
+        run env (beginAttempt rid (fixtureRevision 0) (attempt "b" "one" 10) (addUTCTime 3600 now)) >>= (@?= Left CutoffReached)
+        run env (setRootControl rid (fixtureRevision 0) True Nothing) >>= (@?= Right ())
+        run env (beginAttempt rid (fixtureRevision 1) (attempt "b" "one" 10) now) >>= (@?= Left RootCancelled)
         settle env "a" 5
         run env (begin "a" "one") >>= (@?= Right AlreadyAccepted)
-        run env (setRootControl rid 1 False Nothing) >>= (@?= Left (InvalidResourceRequest "cancellation is irreversible")),
+        run env (setRootControl rid (fixtureRevision 1) False Nothing) >>= (@?= Left (InvalidResourceRequest "cancellation is irreversible")),
       testCase "reduced active cap drains accepted work without fabricating cancellation" $ withFixture fixture \env -> do
         seed env []
         reserveModel env "one"
         run env (begin "a" "one") >>= (@?= Right Accepted)
-        run env (setRootControl rid 0 False (Just 0)) >>= (@?= Right ())
-        run env (beginAttempt rid 1 (attempt "b" "one" 10) now) >>= (@?= Left (ResourceExhausted ActiveWork))
+        run env (setRootControl rid (fixtureRevision 0) False (Just 0)) >>= (@?= Right ())
+        run env (beginAttempt rid (fixtureRevision 1) (attempt "b" "one" 10) now) >>= (@?= Left (ResourceExhausted ActiveWork))
         settle env "a" 5
         snapshot <- root env
         snapshot.active @?= 0
@@ -132,38 +133,38 @@ tests fixture =
         seed env []
         reserveModel env "one"
         let request = AttemptRequest (AttemptId "a") (OperationId "one") (Map.fromList [(ActiveWork, 1), (ModelAttempts, 1)]) AdmittedUnknownUsage
-        result <- run env (beginAttempt rid 0 request now)
+        result <- run env (beginAttempt rid (fixtureRevision 0) request now)
         assertBool "refused before dispatch" (case result of Left (InvalidResourceRequest _) -> True; _ -> False)
         snapshot <- root env
         snapshot.usage @?= emptyUsage,
       testCase "absent dimension is denied; explicitly unbounded usage is admitted" $ withFixture fixture \env -> do
         let restricted = Envelope (Map.singleton ActiveWork (Limited 1)) (addUTCTime 3600 now)
         run env (enrollRoot rid restricted) >>= (@?= Right Accepted)
-        run env (reserveOperation rid 0 (child "one") now) >>= (@?= Left (DimensionNotAdmitted LifetimeDescendants))
+        run env (reserveOperation rid (fixtureRevision 0) (child "one") now) >>= (@?= Left (DimensionNotAdmitted LifetimeDescendants))
         let other = ExecutionRootId "explicit-root"
             explicit = Envelope (Map.fromList [(ActiveWork, Limited 1), (ModelAttempts, ExplicitlyUnbounded), (Tokens, ExplicitlyUnbounded), (CostMicroUsd, ExplicitlyUnbounded)]) (addUTCTime 3600 now)
         run env (enrollRoot other explicit) >>= (@?= Right Accepted)
-        run env (reserveOperation other 0 (model "one") now) >>= (@?= Right Accepted)
+        run env (reserveOperation other (fixtureRevision 0) (model "one") now) >>= (@?= Right Accepted)
         let request = AttemptRequest (AttemptId "a") (OperationId "one") (Map.fromList [(ActiveWork, 1), (ModelAttempts, 1)]) AdmittedUnknownUsage
-        run env (beginAttempt other 0 request now) >>= (@?= Right Accepted),
+        run env (beginAttempt other (fixtureRevision 0) request now) >>= (@?= Right Accepted),
       testCase "suballocations hold root capacity and cannot reset consumption" $ withFixture fixture \env -> do
         seed env [(LifetimeDescendants, 2)]
         let allocation = AllocationId "worker"
             slice = Envelope (Map.singleton LifetimeDescendants (Limited 2)) (addUTCTime 3600 now)
             scoped = OperationRequest (OperationId "one") (Just allocation) ChildOperation (Map.singleton LifetimeDescendants 1) "child-v1"
-        run env (narrowAllocation rid 0 allocation Nothing slice now) >>= (@?= Right Accepted)
-        run env (reserveOperation rid 0 (child "direct") now) >>= (@?= Left (ResourceExhausted LifetimeDescendants))
-        run env (reserveOperation rid 0 scoped now) >>= (@?= Right Accepted)
+        run env (narrowAllocation rid (fixtureRevision 0) allocation Nothing slice now) >>= (@?= Right Accepted)
+        run env (reserveOperation rid (fixtureRevision 0) (child "direct") now) >>= (@?= Left (ResourceExhausted LifetimeDescendants))
+        run env (reserveOperation rid (fixtureRevision 0) scoped now) >>= (@?= Right Accepted)
         let narrower = Envelope (Map.singleton LifetimeDescendants (Limited 1)) slice.cutoff
-        run env (narrowAllocation rid 0 allocation Nothing narrower now) >>= (@?= Right Accepted)
-        run env (narrowAllocation rid 0 allocation Nothing slice now) >>= \result -> assertBool "cannot widen" (case result of Left _ -> True; _ -> False)
-        run env (reserveOperation rid 0 (child "direct") now) >>= (@?= Right Accepted)
-        run env (reserveOperation rid 0 (child "third") now) >>= (@?= Left (ResourceExhausted LifetimeDescendants)),
+        run env (narrowAllocation rid (fixtureRevision 0) allocation Nothing narrower now) >>= (@?= Right Accepted)
+        run env (narrowAllocation rid (fixtureRevision 0) allocation Nothing slice now) >>= \result -> assertBool "cannot widen" (case result of Left _ -> True; _ -> False)
+        run env (reserveOperation rid (fixtureRevision 0) (child "direct") now) >>= (@?= Right Accepted)
+        run env (reserveOperation rid (fixtureRevision 0) (child "third") now) >>= (@?= Left (ResourceExhausted LifetimeDescendants)),
       testCase "missing roots and scopes never seed allowance" $ withFixture fixture \env -> do
-        run env (reserveOperation rid 0 (child "one") now) >>= (@?= Left RootMissing)
+        run env (reserveOperation rid (fixtureRevision 0) (child "one") now) >>= (@?= Left RootMissing)
         seed env []
         let scoped = OperationRequest (OperationId "one") (Just (AllocationId "missing")) ChildOperation (Map.singleton LifetimeDescendants 1) "child-v1"
-        run env (reserveOperation rid 0 scoped now) >>= (@?= Left AllocationMissing),
+        run env (reserveOperation rid (fixtureRevision 0) scoped now) >>= (@?= Left AllocationMissing),
       testCase "transaction hook rolls settlement back with the accepted outcome" $ withFixture fixture \env -> do
         seed env []
         reserveModel env "one"
@@ -227,7 +228,7 @@ tests fixture =
         reserveModel env "one"
         let request = AttemptRequest (AttemptId "a") (OperationId "one") (Map.fromList [(ActiveWork, 1), (ModelAttempts, 1), (Tokens, 10), (CostMicroUsd, 10)]) EnforcedCeiling
             partial = PartialUsage (Map.singleton Tokens 3) [CostMicroUsd] "invoice usage unavailable"
-        run env (beginAttempt rid 0 request now) >>= (@?= Right Accepted)
+        run env (beginAttempt rid (fixtureRevision 0) request now) >>= (@?= Right Accepted)
         run env (settleAttempt rid (AttemptId "a") partial) >>= (@?= Right Accepted)
         run env (settleAttempt rid (AttemptId "a") partial) >>= (@?= Right AlreadyAccepted)
         snapshot <- root env
@@ -235,7 +236,7 @@ tests fixture =
         snapshot.unknown @?= 1
         Map.lookup CostMicroUsd snapshot.usage.held @?= Just 10
         Map.lookup Tokens snapshot.known @?= Just 3
-        run env (beginAttempt rid 0 (AttemptRequest (AttemptId "b") (OperationId "one") (Map.fromList [(ActiveWork, 1), (ModelAttempts, 1), (Tokens, 10), (CostMicroUsd, 1)]) EnforcedCeiling) now) >>= (@?= Left (ResourceExhausted CostMicroUsd))
+        run env (beginAttempt rid (fixtureRevision 0) (AttemptRequest (AttemptId "b") (OperationId "one") (Map.fromList [(ActiveWork, 1), (ModelAttempts, 1), (Tokens, 10), (CostMicroUsd, 1)]) EnforcedCeiling) now) >>= (@?= Left (ResourceExhausted CostMicroUsd))
         run env (reconcileAttempt rid (AttemptId "a") (Map.fromList [(Tokens, 4), (CostMicroUsd, 3)])) >>= (@?= Left SettlementConflict)
         run env (reconcileAttempt rid (AttemptId "a") (Map.fromList [(Tokens, 3), (CostMicroUsd, 3)])) >>= (@?= Right Accepted)
         final <- root env
@@ -265,13 +266,13 @@ child :: String -> OperationRequest
 child key = OperationRequest (OperationId (fromString key)) Nothing ChildOperation (Map.singleton LifetimeDescendants 1) "child-v1"
 
 reserveModel :: AppEnv -> String -> IO ()
-reserveModel env key = run env (reserveOperation rid 0 (model key) now) >>= (@?= Right Accepted)
+reserveModel env key = run env (reserveOperation rid (fixtureRevision 0) (model key) now) >>= (@?= Right Accepted)
 
 attempt :: String -> String -> Integer -> AttemptRequest
 attempt key operation tokens = AttemptRequest (AttemptId (fromString key)) (OperationId (fromString operation)) (Map.fromList [(ActiveWork, 1), (ModelAttempts, 1), (Tokens, tokens), (CostMicroUsd, 0)]) EnforcedCeiling
 
 begin :: String -> String -> Eff AppEffects (Either ResourceError Admission)
-begin key operation = beginAttempt rid 0 (attempt key operation 10) now
+begin key operation = beginAttempt rid (fixtureRevision 0) (attempt key operation 10) now
 
 settle :: AppEnv -> String -> Integer -> IO ()
 settle env key tokens = run env (settleAttempt rid (AttemptId (fromString key)) (KnownUsage (Map.fromList [(Tokens, tokens), (CostMicroUsd, 0)]))) >>= (@?= Right Accepted)
@@ -292,3 +293,6 @@ fromString = Data.Text.pack
 
 measure :: Integer -> Quantities
 measure n = Map.fromList [(Tokens, n), (CostMicroUsd, 0)]
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

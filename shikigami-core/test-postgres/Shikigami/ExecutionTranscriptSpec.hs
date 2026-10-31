@@ -870,7 +870,7 @@ tests fixture =
         withFixture fixture \env snapshot access -> do
           (_, operation) <- expectRight =<< run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput)
           receipt <- reserveCall env snapshot operation
-          run env (Roots.setRootControl rootId 0 True Nothing) >>= (@?= Right ())
+          run env (Roots.setRootControl rootId (fixtureRevision 0) True Nothing) >>= (@?= Right ())
           run env (Store.recordOutcomeAndAdvance access 1 operation.specification.operationId modelOutcome NeedModel (Just (receipt, terminal))) >>= (@?= Right R.Accepted)
           result <- run env (Store.acceptOperation access 2 (spec snapshot 1) secretInput)
           result @?= Left (ResourceAdmissionRefused "RootCancelled")
