@@ -45,6 +45,7 @@ import Shikigami.Execution.Selection qualified as Selection
 import Shikigami.Objective.Keys qualified as Objective
 import Shikigami.Execution.Identity qualified as Entity
 import Shikigami.Execution.Counter
+import Shikigami.Decision.Contract qualified as Decision
 import Shikigami.Execution.Quantity
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Capability (WorkerCommand (CancelWorker))
@@ -60,6 +61,15 @@ import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ('decision-call-values', 'identity :: Text -> Either Text Decision.DecisionCallId\nidentity = Decision.parseDecisionCallId\nordinal :: Integer -> Either Text Decision.DecisionCallOrdinal\nordinal = Decision.parseDecisionCallOrdinal\n', True),
+    ('decision-call-constructor', 'value = Decision.DecisionCallId\n', False),
+    ('decision-call-coercion', 'value :: KindID.KindID "shikigami_decision_call" -> Decision.DecisionCallId\nvalue = coerce\n', False),
+    ('decision-call-literal', 'value :: Decision.DecisionCallId\nvalue = fromString "bad"\n', False),
+    ('execution-attempt-is-not-decision-call', 'value :: Entity.AttemptId -> Decision.DecisionCallId\nvalue = id\n', False),
+    ('decision-ordinal-constructor', 'value = Decision.DecisionCallOrdinal\n', False),
+    ('decision-ordinal-coercion', 'value :: Int64 -> Decision.DecisionCallOrdinal\nvalue = coerce\n', False),
+    ('decision-ordinal-numeric', 'value :: Decision.DecisionCallOrdinal\nvalue = 0\n', False),
+    ('selection-ordinal-is-not-decision-ordinal', 'value :: CallOrdinal -> Decision.DecisionCallOrdinal\nvalue = id\n', False),
     ('logical-operation-locator', 'parse :: Text -> Either Text Entity.OperationId\nparse = Entity.parseOperationId\nrender :: Entity.OperationId -> Text\nrender = Entity.operationIdText\n', True),
     ('operation-constructor', 'value :: Text -> Entity.OperationId\nvalue = Entity.OperationId\n', False),
     ('operation-coercion', 'value :: Text -> Entity.OperationId\nvalue = coerce\n', False),
@@ -415,6 +425,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
             fragments.update({'operation-constructor': ['OperationId'], 'operation-coercion': ['OperationId', 'Text'], 'operation-literal': ['OperationId', 'IsString'], 'root-is-not-operation': ["Couldn't match", 'ExecutionRootId', 'OperationId']})
             fragments.update({'resource-ExecutionRootId-constructor': ['ExecutionRootId'], 'resource-ExecutionRootId-coercion': ['ExecutionRootId'], 'resource-ExecutionRootId-literal': ['ExecutionRootId', 'IsString'], 'resource-AttemptId-constructor': ['AttemptId'], 'resource-AttemptId-coercion': ['AttemptId'], 'resource-AttemptId-literal': ['AttemptId', 'IsString'], 'resource-AllocationId-constructor': ['AllocationId'], 'resource-AllocationId-coercion': ['AllocationId'], 'resource-AllocationId-literal': ['AllocationId', 'IsString'], 'resource-ExecutionRootId-is-not-AttemptId': ["Couldn't match", 'ExecutionRootId', 'AttemptId'], 'resource-AttemptId-is-not-AllocationId': ["Couldn't match", 'AttemptId', 'AllocationId'], 'resource-AllocationId-is-not-ExecutionRootId': ["Couldn't match", 'AllocationId', 'ExecutionRootId']})
             fragments.update({'review-kindid-coercion': ['ReviewId'], 'resolution-kindid-coercion': ['ResolutionId'], 'review-id-constructor': ['ReviewId'], 'resolution-id-constructor': ['ResolutionId'], 'review-id-coercion': ['ReviewId', 'Text'], 'resolution-id-coercion': ['ResolutionId', 'Text'], 'review-id-literal': ['ReviewId', 'IsString'], 'resolution-id-literal': ['ResolutionId', 'IsString'], 'resolution-is-not-review': ["Couldn't match", 'ResolutionId', 'ReviewId'], 'unchecked-review-PracticeKey-coercion': ['PracticeKey', 'Text'], 'unchecked-review-PracticeKey-constructor': ['PracticeKey'], 'unchecked-review-PracticeKey-literal': ['PracticeKey', 'IsString'], 'unchecked-review-OwnerPrincipal-coercion': ['OwnerPrincipal', 'Text'], 'unchecked-review-OwnerPrincipal-constructor': ['OwnerPrincipal'], 'unchecked-review-OwnerPrincipal-literal': ['OwnerPrincipal', 'IsString'], 'unchecked-review-EvidenceId-coercion': ['EvidenceId', 'Text'], 'unchecked-review-EvidenceId-constructor': ['EvidenceId'], 'unchecked-review-EvidenceId-literal': ['EvidenceId', 'IsString'], 'unchecked-review-ClaimId-coercion': ['ClaimId', 'Text'], 'unchecked-review-ClaimId-constructor': ['ClaimId'], 'unchecked-review-ClaimId-literal': ['ClaimId', 'IsString'], 'unchecked-review-ContentHash-coercion': ['ContentHash', 'Text'], 'unchecked-review-ContentHash-constructor': ['ContentHash'], 'unchecked-review-ContentHash-literal': ['ContentHash', 'IsString'], 'unchecked-review-Confidence-coercion': ['Confidence', 'Int'], 'unchecked-review-Confidence-constructor': ['Confidence'], 'unchecked-review-Confidence-literal': ['Confidence', 'Num'], 'practice-is-not-owner': ["Couldn't match", 'PracticeKey', 'OwnerPrincipal'], 'evidence-is-not-claim': ["Couldn't match", 'EvidenceId', 'ClaimId'], 'hash-is-not-evidence': ["Couldn't match", 'ContentHash', 'EvidenceId'], 'call-ordinal-is-not-confidence': ["Couldn't match", 'CallOrdinal', 'Confidence']})
+            fragments.update({'decision-call-constructor': ['DecisionCallId'], 'decision-call-coercion': ['DecisionCallId'], 'decision-call-literal': ['DecisionCallId', 'IsString'], 'execution-attempt-is-not-decision-call': ["Couldn't match", 'AttemptId', 'DecisionCallId'], 'decision-ordinal-constructor': ['DecisionCallOrdinal'], 'decision-ordinal-coercion': ['DecisionCallOrdinal', 'Int64'], 'decision-ordinal-numeric': ['DecisionCallOrdinal', 'Num'], 'selection-ordinal-is-not-decision-ordinal': ["Couldn't match", 'CallOrdinal', 'DecisionCallOrdinal']})
             if name.endswith("-constructor"):
                 assert any(marker in result.stderr.lower() for marker in ["not in scope", "does not export", "illegal term-level"]), (name, result.stderr)
             assert all(fragment in result.stderr for fragment in fragments[name]), (name, result.stderr)

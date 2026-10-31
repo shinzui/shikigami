@@ -5,6 +5,7 @@ import Control.Lens ((&), (.~))
 import Data.Aeson (FromJSON, ToJSON, Value (..), eitherDecode, encode, object, (.=))
 import Data.Either (isLeft)
 import Data.Generics.Labels ()
+import Data.Int (Int64)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -47,7 +48,30 @@ tests :: TestTree
 tests =
   testGroup
     "typed decision contracts"
-    [ testCase "typed lookup checks immutable descriptor and type witnesses" do
+    [ testCase "allocated call identity and positive ordinal keep exact primitive codecs" do
+        token <- newAttemptToken firstDecisionCallOrdinal
+        let identifier = attemptId token
+            rendered = decisionCallIdText identifier
+        assertBool "allocated kind" ("shikigami_decision_call_" `Text.isPrefixOf` rendered)
+        parseDecisionCallId rendered @?= Right identifier
+        encode identifier @?= encode rendered
+        eitherDecode (encode identifier) @?= Right identifier
+        mapM_
+          (\invalid -> assertBool "invalid call identity refused" (isLeft (parseDecisionCallId invalid)))
+          [ "",
+            Text.toUpper rendered,
+            " " <> rendered,
+            "shikigami_decision_call_5q2yqxm4kkaka84gadcrsgwfyk",
+            Text.replace "shikigami_decision_call_" "shikigami_execution_attempt_" rendered
+          ]
+        mapM_
+          (\invalid -> assertBool "invalid ordinal refused" (isLeft (parseDecisionCallOrdinal invalid)))
+          [-1, 0, toInteger (maxBound :: Int64) + 1]
+        assertBool "zero JSON refused" (isLeft (eitherDecode @DecisionCallOrdinal "0"))
+        assertBool "fractional JSON refused" (isLeft (eitherDecode @DecisionCallOrdinal "1.5"))
+        encode firstDecisionCallOrdinal @?= "1"
+        eitherDecode (encode firstDecisionCallOrdinal) @?= Right firstDecisionCallOrdinal,
+      testCase "typed lookup checks immutable descriptor and type witnesses" do
         let registry = mustRight (programRegistry [SomeProgram original])
         assertBool "matching registration" (not (isLeft (lookupProgram registry (programRef original))))
         assertBool "unavailable immutable version" (isLeft (lookupProgram registry (programRef (registration "2" emptyParams))))
@@ -87,18 +111,19 @@ tests =
         first <- mustRight <$> hooks.beginCall (DecisionCallContext prepared model)
         second <- mustRight <$> hooks.beginCall (DecisionCallContext prepared model)
         assertBool "retry gets a different identity" (attemptId first /= attemptId second)
-        attemptOrdinal first @?= 1
-        attemptOrdinal second @?= 2
+        decisionCallOrdinalNumber (attemptOrdinal first) @?= 1
+        decisionCallOrdinalNumber (attemptOrdinal second) @?= 2
         calls <- inspect
         Map.size calls @?= 2
         Map.lookup (attemptId first) calls @?= Just (MemoryCall (DecisionCallContext prepared model) Nothing)
+        hooks.finishCall (withAttemptOrdinal (attemptOrdinal second) first) CallFailed Nothing >>= (assertBool "wrong ordinal refused" . isLeft)
         hooks.finishCall first CallFailed Nothing >>= (@?= Right ())
         hooks.finishCall first CallFailed Nothing >>= (@?= Right ())
         conflict <- hooks.finishCall first CallUnknown Nothing
         assertBool "conflicting terminal refused" (isLeft conflict)
         missing <- hooks.finishCall second CallSucceeded Nothing
         assertBool "confidence cannot replace provider evidence" (isLeft missing)
-        orphan <- newAttemptToken 3
+        orphan <- newAttemptToken (mustRight (parseDecisionCallOrdinal 3))
         refused <- hooks.finishCall orphan CallFailed Nothing
         assertBool "unknown attempt refused" (isLeft refused)
         let epoch = UTCTime (fromGregorian 2026 1 1) 0

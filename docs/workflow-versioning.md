@@ -64,6 +64,13 @@ compatibility. Current allocation, accounting, settlement and fencing remain
 qualified independently of the native diff.
 
 
+[ADR-96](adr/0096-decision-call-expectations-have-allocated-identities-and-positive-ordinals.md)
+changes retained decision-call identity and ordinal admission under the same unused
+first-release exception. Native labels, order and result declarations stay the
+same; a neutral diff does not assert compatibility for former UUIDv4 payloads.
+Current-call retry accounting and same-build recovery remain independently tested.
+
+
 ## What a durable workflow is, and why editing one is not like editing ordinary code
 
 Shikigami runs each agent run and each Danwa conversation as a **durable

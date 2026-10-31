@@ -244,6 +244,11 @@
           "rationale": "ADR-53 and actual execution/cursor, native-child, worker/Objective receipt and retained-handoff call sites establish concrete locator authorities separate from allocated accounting entities. Private non-Generic OperationId rejects empty admission while exact string bytes, prefixes and preimages remain. Owner length/scope/fingerprint/revision/authorization policies stay in place; operator flags refine before configuration IO. Malformed pending workspace keys return an owning refusal and preserve an unresolved fence before receipt publication. ADR-95, 582 pure/397 PostgreSQL/262 worker/95 server, 206 compiler, native/domain/diagram/84 CLI/live HTTP acceptance cover this clause. Complete scalar/identity and remaining decoder-owner review remain pending."
         },
         {
+          "id": "decision-call-identity-and-ordinal",
+          "disposition": "implemented",
+          "rationale": "ADR-96 retains application-owned actual-call expectations as private canonical KindID-v7 DecisionCallId values through tokens, outcomes, reports and memory maps. Distinct positive signed-int64 DecisionCallOrdinal values reject invalid JSON and cannot substitute for selection ordinals. SQL/correlation/provider adapters project explicitly; retained ownership, run locks and resource ceilings remain. Wrong-ordinal completion and malformed retained-ID controls refuse before successful state publication. Program/model and the complete scalar census remain pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -344,7 +349,11 @@
         "docs/evidence/keiro-0.22/operation-key-results.txt",
         "docs/evidence/keiro-0.22/operation-key-native-diff.json",
         "docs/evidence/keiro-0.22/operation-key-native-replay.json",
-        "docs/evidence/keiro-0.22/operation-key-fold-identities.json"
+        "docs/evidence/keiro-0.22/operation-key-fold-identities.json",
+        "docs/evidence/keiro-0.22/decision-call-results.txt",
+        "docs/evidence/keiro-0.22/decision-call-native-diff.json",
+        "docs/evidence/keiro-0.22/decision-call-native-replay.json",
+        "docs/evidence/keiro-0.22/decision-call-fold-identities.json"
       ]
     },
     {

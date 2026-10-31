@@ -103,6 +103,8 @@ tests fixture =
             length report.calls @?= 2
             report.complete @?= True
             report.assessment @?= Nothing
+            map (\call -> parseDecisionCallId (decisionCallIdText call.callId)) report.calls @?= map (Right . (\call -> call.callId)) report.calls
+            map (\call -> decisionCallOrdinalNumber call.ordinal) report.calls @?= [1, 2]
             map (\call -> call.evidence) report.calls @?= [Just (toJSON (terminal "provider-1")), Just (toJSON (terminal "provider-2"))]
             assertBool "input payload is not in operational binding" (all (not . containsPrompt) report.invocations)
             let changed = (prepared & #program .~ ((program & #parameterDigest .~ ("sha256:changed")))) :: PreparedDecision
@@ -137,6 +139,10 @@ tests fixture =
           let store = postgresDecisionEvidenceStore pool
               hooks = decisionCallHooks store Nothing
           token <- expectRight =<< hooks.beginCall context
+          let wrongOrdinal = mustRight (parseDecisionCallOrdinal 2)
+          hooks.finishCall (withAttemptOrdinal wrongOrdinal token) CallSucceeded (Just (terminal "provider-1")) >>= (assertBool "wrong ordinal refused" . isLeft)
+          before <- expectReport =<< readDecisionReport store prepared.runId
+          map (\call -> call.terminal) before.calls @?= [Nothing]
           hooks.finishCall token CallSucceeded (Just (terminal "provider-1")) >>= (@?= Right ())
           hooks.finishCall token CallSucceeded (Just (terminal "provider-1")) >>= (@?= Right ())
           hooks.finishCall token CallSucceeded (Just (terminal "provider-2")) >>= (assertBool "conflict refused" . isLeft)
@@ -163,6 +169,17 @@ tests fixture =
           sql pool "UPDATE shikigami.decision_attempts SET facts=jsonb_set(facts,'{format}','999'::jsonb)"
           result <- readDecisionReport store prepared.runId
           either (Right . failureCode) (const (Left ())) result @?= Right UnsupportedVersion,
+      testCase "malformed retained call identity is a data refusal before further admission" $
+        withShikigamiFreshDatabase fixture \connection -> withPool connection \pool -> do
+          let store = postgresDecisionEvidenceStore pool
+              hooks = decisionCallHooks store Nothing
+          _ <- expectRight =<< hooks.beginCall context
+          positive <- expectReport =<< readDecisionReport store prepared.runId
+          length positive.calls @?= 1
+          sql pool "UPDATE shikigami.decision_attempts SET call_id='a9de02c6-e1e1-4a0f-9e9a-0fa48b8114af'"
+          readDecisionReport store prepared.runId >>= (\result -> either (Right . failureCode) (const (Left ())) result @?= Right UnsupportedVersion)
+          listDecisionCalls store prepared.runId 0 10 >>= (\result -> either (Right . failureCode) (const (Left ())) result @?= Right UnsupportedVersion)
+          hooks.beginCall context >>= (\result -> either (Right . failureCode) (const (Left ())) result @?= Right UnsupportedVersion),
       testCase "run-wide call ceilings survive store reconstruction" $
         withShikigamiFreshDatabase fixture \connection -> do
           let policy = profile ((P.unlimitedProfileLimits & #maxCalls .~ (Just 1)))
@@ -186,7 +203,7 @@ tests fixture =
           results <- sequence [takeMVar a, takeMVar b]
           length [() | Right _ <- results] @?= 1
           report <- expectReport =<< readDecisionReport (postgresDecisionEvidenceStore pool) prepared.runId
-          map (\call -> call.ordinal) report.calls @?= [1],
+          map (\call -> decisionCallOrdinalNumber call.ordinal) report.calls @?= [1],
       testCase "unknown cost cannot become zero after a restart and live/resumed assessments agree" $
         withShikigamiFreshDatabase fixture \connection -> do
           let policy = profile ((P.unlimitedProfileLimits & #maxCostMicroUsd .~ (Just 1000)))
@@ -201,7 +218,7 @@ tests fixture =
                 hooks = decisionCallHooks store (Just policy)
             report <- expectReport =<< readDecisionReport store prepared.runId
             let facts = [fact | call <- report.calls, Just fact <- [call.facts]]
-                expected = [ExpectedCall (callCorrelationId prepared.runId call.callId 0) RootCall call.ordinal | call <- report.calls]
+                expected = [ExpectedCall (callCorrelationId prepared.runId (decisionCallIdText call.callId) 0) RootCall (decisionCallOrdinalNumber call.ordinal) | call <- report.calls]
             report.assessment @?= Just (evaluateCallFacts policy.profile expected facts)
             assertBool "uncertain cost blocks a clean assessment" (maybe False (not . (\assessment -> assessment.sanctioned)) report.assessment)
             hooks.beginCall pinnedContext >>= (assertBool "uncertainty is not reset" . isLeft)

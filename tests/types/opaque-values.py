@@ -49,7 +49,11 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''operation :: Text -> Either Text Entity.OperationId
+POSITIVE = '''decisionCall :: Text -> Either Text Decision.DecisionCallId
+decisionCall = Decision.parseDecisionCallId
+decisionOrdinal :: Integer -> Either Text Decision.DecisionCallOrdinal
+decisionOrdinal = Decision.parseDecisionCallOrdinal
+operation :: Text -> Either Text Entity.OperationId
 operation = Entity.parseOperationId
 root :: Text -> Either Text Entity.ExecutionRootId
 root = Entity.parseExecutionRootId
@@ -149,6 +153,8 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('Decision.DecisionCallId', 'generic'),
+    ('Decision.DecisionCallOrdinal', 'generic'),
     ('Entity.OperationId', 'generic'),
     ('Entity.ExecutionRootId', 'generic'),
     ('Entity.AttemptId', 'generic'),

@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Shikigami-owned wire contracts. Executables, prompts and credentials never
 -- belong in these descriptors; preparation alone contains the validated input.
 module Shikigami.Decision.Contract
@@ -17,6 +19,13 @@ module Shikigami.Decision.Contract
     DecisionCallContext (..),
     DecisionCallHooks (..),
     AttemptToken,
+    DecisionCallId,
+    parseDecisionCallId,
+    decisionCallIdText,
+    DecisionCallOrdinal,
+    parseDecisionCallOrdinal,
+    decisionCallOrdinalNumber,
+    firstDecisionCallOrdinal,
     newAttemptToken,
     attemptId,
     attemptOrdinal,
@@ -31,15 +40,16 @@ import Baikai.Evidence (ModelCallEvidence, commitmentDigest)
 import Baikai.ThinkingLevel (ThinkingLevel)
 import Control.Concurrent.MVar (modifyMVar, newMVar, readMVar)
 import Control.Lens ((&), (.~))
-import Data.Aeson (FromJSON (..), ToJSON (..), Value, object, withObject, (.:), (.=))
+import Data.Aeson (FromJSON (..), ToJSON (..), Value, object, withObject, withText, (.:), (.=))
 import Data.Aeson.KeyMap (KeyMap)
 import Data.Aeson.Types (Parser)
+import Data.Bifunctor (first)
 import Data.Generics.Labels ()
+import Data.Int (Int64)
+import Data.KindID.V7 qualified as KindID
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Data.UUID qualified as UUID
-import Data.UUID.V4 qualified as UUID
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
 import Shikigami.Attestation.Profile (SanctionedExecutionProfileRef)
@@ -144,7 +154,7 @@ data DecisionOutcome = DecisionOutcome
   { preparationId :: !Text,
     program :: !ProgramDescriptor,
     result :: !(Either DecisionFailure Value),
-    attempts :: ![Text]
+    attempts :: ![DecisionCallId]
   }
   deriving stock (Eq, Show, Generic)
 
@@ -219,21 +229,67 @@ data DecisionCallContext = DecisionCallContext
 
 -- | Tokens are created freshly before admission and persisted by beginCall.
 -- A store must verify ownership and expectation before accepting any finish.
-data AttemptToken = AttemptToken !Text !Natural
+data AttemptToken = AttemptToken !DecisionCallId !DecisionCallOrdinal
   deriving stock (Eq, Ord, Show)
 
-newAttemptToken :: Natural -> IO AttemptToken
-newAttemptToken ordinal = (\uuid -> AttemptToken (UUID.toText uuid) ordinal) <$> UUID.nextRandom
+-- | The application allocates the retained expectation, independently of the
+-- provider's own evidence call ID. Parsing never confers completion authority.
+newtype DecisionCallId = DecisionCallId (KindID.KindID "shikigami_decision_call")
+  deriving stock (Eq, Ord, Show)
 
-attemptId :: AttemptToken -> Text
+parseDecisionCallId :: Text -> Either Text DecisionCallId
+parseDecisionCallId input = do
+  value <- first (const "invalid decision call ID encoding or prefix") (KindID.parseText @"shikigami_decision_call" input)
+  case KindID.checkKindID value of
+    Just _ -> Left "decision call ID requires UUIDv7"
+    Nothing
+      | KindID.toText value == input -> Right (DecisionCallId value)
+      | otherwise -> Left "decision call ID requires canonical encoding"
+
+decisionCallIdText :: DecisionCallId -> Text
+decisionCallIdText (DecisionCallId value) = KindID.toText value
+
+instance ToJSON DecisionCallId where
+  toJSON = toJSON . decisionCallIdText
+  toEncoding = toEncoding . decisionCallIdText
+
+instance FromJSON DecisionCallId where
+  parseJSON = withText "decision call ID" (either (fail . Text.unpack) pure . parseDecisionCallId)
+
+-- | A run-wide one-based SQL position, separate from selection-call ordinals.
+newtype DecisionCallOrdinal = DecisionCallOrdinal Int64
+  deriving stock (Eq, Ord, Show)
+
+parseDecisionCallOrdinal :: Integer -> Either Text DecisionCallOrdinal
+parseDecisionCallOrdinal number
+  | number > 0 && number <= toInteger (maxBound :: Int64) = Right (DecisionCallOrdinal (fromInteger number))
+  | otherwise = Left "decision call ordinal must be positive and fit signed int64"
+
+firstDecisionCallOrdinal :: DecisionCallOrdinal
+firstDecisionCallOrdinal = DecisionCallOrdinal 1
+
+decisionCallOrdinalNumber :: DecisionCallOrdinal -> Natural
+decisionCallOrdinalNumber (DecisionCallOrdinal number) = fromIntegral number
+
+instance ToJSON DecisionCallOrdinal where
+  toJSON = toJSON . decisionCallOrdinalNumber
+  toEncoding = toEncoding . decisionCallOrdinalNumber
+
+instance FromJSON DecisionCallOrdinal where
+  parseJSON value = parseJSON value >>= either (fail . Text.unpack) pure . parseDecisionCallOrdinal
+
+newAttemptToken :: DecisionCallOrdinal -> IO AttemptToken
+newAttemptToken ordinal = (\identifier -> AttemptToken (DecisionCallId identifier) ordinal) <$> KindID.genKindID @"shikigami_decision_call"
+
+attemptId :: AttemptToken -> DecisionCallId
 attemptId (AttemptToken value _) = value
 
-attemptOrdinal :: AttemptToken -> Natural
+attemptOrdinal :: AttemptToken -> DecisionCallOrdinal
 attemptOrdinal (AttemptToken _ ordinal) = ordinal
 
 -- | A durable allocator assigns the ordinal under its serialization lock.
 -- Completion still verifies token ownership and the stored ordinal.
-withAttemptOrdinal :: Natural -> AttemptToken -> AttemptToken
+withAttemptOrdinal :: DecisionCallOrdinal -> AttemptToken -> AttemptToken
 withAttemptOrdinal ordinal (AttemptToken value _) = AttemptToken value ordinal
 
 data CallTerminal = CallSucceeded | CallFailed | CallUnknown
@@ -254,19 +310,23 @@ data MemoryCall = MemoryCall
   }
   deriving stock (Eq, Show, Generic)
 
-newMemoryCallHooks :: IO (DecisionCallHooks, IO (Map.Map Text MemoryCall))
+newMemoryCallHooks :: IO (DecisionCallHooks, IO (Map.Map DecisionCallId MemoryCall))
 newMemoryCallHooks = do
   calls <- newMVar Map.empty
   let begin context = modifyMVar calls \current -> do
-        token <- newAttemptToken (fromIntegral (Map.size current) + 1)
-        pure (Map.insert (attemptId token) (MemoryCall context Nothing) current, Right token)
+        case parseDecisionCallOrdinal (toInteger (Map.size current) + 1) of
+          Left _ -> pure (current, Left (decisionFailure CallLimitExceeded "decision call ordinal exhausted"))
+          Right ordinal -> do
+            token <- newAttemptToken ordinal
+            pure (Map.insert (attemptId token) (ordinal, MemoryCall context Nothing) current, Right token)
       finish token status evidence = modifyMVar calls \current -> do
         let payload = (status, toJSON <$> evidence)
             refuse = pure (current, Left (decisionFailure EvidenceFailure "decision attempt terminal refused"))
         case Map.lookup (attemptId token) current of
           Nothing -> refuse
-          Just call
+          Just (ordinal, call)
+            | ordinal /= attemptOrdinal token -> refuse
             | status == CallSucceeded && evidence == Nothing -> refuse
             | Just previous <- call.terminal, previous /= payload -> refuse
-            | otherwise -> pure (Map.insert (attemptId token) ((call & #terminal .~ (Just payload))) current, Right ())
-  pure (DecisionCallHooks begin finish, readMVar calls)
+            | otherwise -> pure (Map.insert (attemptId token) (ordinal, call & #terminal .~ Just payload) current, Right ())
+  pure (DecisionCallHooks begin finish, fmap (fmap snd) (readMVar calls))

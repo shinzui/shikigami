@@ -105,9 +105,9 @@ runDecisionProgram env prepared ref input =
             let localLimit = maybe env.callLimit (min env.callLimit . fromIntegral . max 0) (env.profile >>= (\p -> p.profile.limits.maxCalls))
             when (ordinal > localLimit) (abort CallLimitExceeded "decision provider call limit exceeded")
             token <- callback (env.hooks.beginCall (DecisionCallContext prepared prepared.model))
-            let correlation = callCorrelationId prepared.runId (attemptId token) 0
+            let correlation = callCorrelationId prepared.runId (decisionCallIdText (attemptId token)) 0
                 minimumStrength = maybe Evidence.EvidenceRequestedOnly (\p -> p.profile.minimumEvidenceStrength) env.profile
-                correlated = configureEvidenceCall prepared.runId correlation (attemptOrdinal token) Nothing minimumStrength effective
+                correlated = configureEvidenceCall prepared.runId correlation (decisionCallOrdinalNumber (attemptOrdinal token)) Nothing minimumStrength effective
                 -- These APIs do not accept arbitrary application metadata. The
                 -- durable token/evidence association remains in finishCall.
                 options = case Model.api selected of

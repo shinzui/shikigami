@@ -344,3 +344,15 @@ and [acceptance](operation-key-results.txt) retain 582 pure/397 PostgreSQL/
 84 CLI/live HTTP results. Current native findings are empty and four transducers
 are unchanged. The 320-module/902-declaration worklist remains unclassified;
 complete scalar/identity and remaining decoder-owner review remain open.
+
+Actual decision calls now retain private allocated IDs independently of Baikai's
+provider evidence IDs, with distinct checked positive SQL ordinals through tokens,
+outcomes and reports. Memory hooks retain and verify the assigned ordinal.
+[ADR-96](../../adr/0096-decision-call-expectations-have-allocated-identities-and-positive-ordinals.md)
+and [acceptance](decision-call-results.txt) record 583 pure/398 PostgreSQL cases,
+217 compiler clients, all-enabled compilation and native/domain/diagram gates.
+A real malformed retained-ID control refuses reporting and further admission;
+wrong-ordinal completion leaves the expectation unresolved. Native findings
+against 448f047 are empty and four transducers are unchanged. The updated
+320-module/904-declaration worklist remains unclassified. Complete scalar/identity,
+program/model descriptor and remaining decoder-owner review remain open.

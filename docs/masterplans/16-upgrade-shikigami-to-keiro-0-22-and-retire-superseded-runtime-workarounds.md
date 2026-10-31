@@ -90,16 +90,14 @@ a checked allocated TypeID; objective content, worker/workspace ownership,
 execution policies, counters, decisions and assignment locators retain their
 nominal checked meanings.
 
-Latest logical-key acceptance passed 582 pure, 397 serial PostgreSQL,
-262 worker, 95 server, all API/client/agent suites, 206 compiler clients,
-84 CLI checks and live HTTP. ADR-95 seals logical operation locators while
-retaining their exact technical/caller coordinates and owner policies. A real
-malformed pending workspace row preserves an unresolved fence. Native/domain/
-diagram checks pass with zero findings against 0919688 and unchanged
-transducers. The unclassified census has 320 modules and 902 declarations.
-Complete scalar/identity, decision/program/model values and remaining decoder-
-owner review keep EP-5 In Progress. EP-6's frozen closure, packaged Linux/runtime
-and inventory gates have not started.
+Latest decision-call acceptance passed 583 pure and 398 serial PostgreSQL cases,
+217 compiler clients, all-enabled compilation and the native/domain/diagram
+gates. ADR-96 allocates actual-call expectation IDs and retains positive ordinals;
+malformed retained IDs and wrong-ordinal completion refuse. Strict native findings
+against 448f047 are empty with unchanged transducers. The unclassified census has
+320 modules and 904 declarations. Complete scalar/identity, decision/program/model
+values and remaining decoder-owner review keep EP-5 In Progress. EP-6's frozen
+closure, packaged Linux/runtime and inventory gates have not started.
 
 ## Surprises & Discoveries
 

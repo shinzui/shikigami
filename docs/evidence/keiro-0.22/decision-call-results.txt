@@ -1,0 +1,22 @@
+Allocated decision-call expectations — ExecPlan 107
+Source parent: 448f047cab8f18ec6fae1b8d53dd633d9155320f (master).
+Selected GHC 9.12.4/frozen cohort; arm64 macOS and real PostgreSQL fixtures.
+Decision: docs/adr/0096-decision-call-expectations-have-allocated-identities-and-positive-ordinals.md.
+
+Contract
+ADR-43/44 establish the additive decision ledger as the owner of application actual-call expectations. These are allocated entities, separate from invocation locators and Baikai's independent evidence call IDs. Private canonical KindID-v7 DecisionCallId values use shikigami_decision_call and remain typed through tokens, memory maps, outcomes and reports. SQL/correlation adapters render explicitly. Parsing checks prefix/version/variant/canonical bytes without current-clock admission. No Generic, literal or coercion escape is exposed.
+Distinct private DecisionCallOrdinal values are positive signed-int64 positions. The serialized run lock assigns them; the separate 10,000-call/resource ceilings remain. JSON is an exact primitive number. Provider and compliance adapters explicitly project Natural. Selection ordinals cannot substitute. Memory hooks now retain/check the assigned ordinal before terminal publication, matching the durable owner.
+No DDL or DSL declaration changes. Actual retries allocate fresh expectations, including after a lost result append. Retained authority, terminal convergence, unresolved accounting and exact provider evidence remain. The first-release payload reset is explicit; a neutral native diff does not imply old UUIDv4 payload compatibility.
+
+Acceptance
+All enabled components build, including the inspection library and workspace fixture.
+Full core suites: 583 pure PASS (5.83s), 398 serial PostgreSQL PASS (119.28s). This includes real decision providers, streaming, retries, independent concurrent credentials, resource ceilings, unknown accounting, fresh connection/store reconstruction, lost append and completed-outcome replay.
+New pure controls cover allocated ID uniqueness through hooks; prefix/version/private domain, exact string JSON/toEncoding/round-trip, wrong prefix, uppercase, whitespace and same-prefix UUIDv5 refusal; positive/exact numeric ordinal JSON; zero/negative/fractional/overflow refusal. The initial focused run reproduced memory completion accepting a changed ordinal; the retained-ordinal correction passes the full suite.
+Real PostgreSQL positive reads precede injected raw UUIDv4 call_id corruption. Report, page and further admission return UnsupportedVersion as a data refusal. A wrong ordinal leaves terminal Nothing before the correct token converges. Provider-owned evidence JSON remains exact.
+Selected-compiler positive-first clients: 161 nominal + 56 opaque = 217 PASS. Constructor/coercion/literal/numeric/Generic and cross-ledger substitutions are rejected for the intended diagnostics.
+just keiro-gate 448f047: PASS. Native check, ten-member inspection, idempotent scaffold and 156 conformance rows pass; strict diff has zero findings. Domain assertions and six diagram checks pass. Four transducer fingerprints and source hashes are unchanged; native diff/replay/fold evidence is retained.
+All 124 frozen guide hashes verified. Current source/tool hashes and unique compiled worklist checked: 320 modules, 904 declarations (692 data, 175 newtypes, 37 aliases), 14 entrypoints. This remains an unclassified worklist, not complete domain compliance.
+Haskell conventions, thirteen checker mutations and git diff --check pass. Generated sources remain untouched.
+
+Scope
+Worker/server/API/client/agent/CLI/live HTTP behavioral results from the preceding operation-key acceptance remain historical applicable evidence; they were compiled but not rerun in this focused change. No Linux/package/runtime qualification is claimed. Complete scalar/identity, program/model descriptor and remaining decoder-owner review keep plan107 M1 open; plan95 has not started.

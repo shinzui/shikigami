@@ -16,6 +16,7 @@ where
 import Baikai.Evidence qualified as Baikai
 import Control.Lens ((&), (.~))
 import Data.Aeson (FromJSON, Result (..), ToJSON, Value (..), fromJSON, object, toJSON, (.=))
+import Data.Bifunctor (first)
 import Data.Generics.Labels ()
 import Data.Int (Int64)
 import Data.Maybe (fromMaybe, isJust, isNothing)
@@ -44,10 +45,10 @@ postgresDecisionEvidenceStore :: Pool -> DecisionEvidenceStore
 postgresDecisionEvidenceStore = DecisionEvidenceStore
 
 data StoredDecisionCall = StoredDecisionCall
-  { callId :: !Text,
+  { callId :: !DecisionCallId,
     correlationId :: !Text,
     invocationId :: !Text,
-    ordinal :: !Natural,
+    ordinal :: !DecisionCallOrdinal,
     model :: !ModelDescriptor,
     terminal :: !(Maybe CallTerminal),
     facts :: !(Maybe CallComplianceFacts),
@@ -105,9 +106,9 @@ decisionCallHooks :: DecisionEvidenceStore -> Maybe ResolvedProfile -> DecisionC
 decisionCallHooks store profile = DecisionCallHooks begin finish
   where
     begin context = do
-      -- UUID generation is outside retryable SQL transactions. Run ordinal and
+      -- Entity allocation is outside retryable SQL transactions. Run ordinal and
       -- expectation commit together under the database lock.
-      token <- newAttemptToken 1
+      token <- newAttemptToken firstDecisionCallOrdinal
       transaction store do
         ensured <- ensureTx profile context.prepared
         case ensured of
@@ -119,11 +120,10 @@ decisionCallHooks store profile = DecisionCallHooks begin finish
             previous <- Tx.statement (renderRunCorrelationId prepared.runId) allCalls
             case decodeCalls previous of
               Left err -> pure (Left err)
-              Right calls -> case admit now started profile calls of
+              Right calls -> case admit now started profile calls >> first (const (decisionFailure CallLimitExceeded "decision call ordinal exhausted")) (parseDecisionCallOrdinal (toInteger (length calls) + 1)) of
                 Left err -> pure (Left err)
-                Right () -> do
-                  let ordinal = fromIntegral (length calls) + 1
-                      correlation = callCorrelationId prepared.runId (attemptId token) 0
+                Right ordinal -> do
+                  let correlation = callCorrelationId prepared.runId (decisionCallIdText (attemptId token)) 0
                       row =
                         object
                           [ "callId" .= attemptId token,
@@ -137,10 +137,10 @@ decisionCallHooks store profile = DecisionCallHooks begin finish
                     then pure (refuse ContractMismatch "decision attempt tuple differs from preparation")
                     else do
                       Tx.statement row insertAttempt
-                      -- Preserve the UUID while assigning the serialized ordinal.
+                      -- Preserve the allocated ID while assigning the serialized ordinal.
                       pure (Right (withAttemptOrdinal ordinal token))
     finish token terminal evidence = transaction store do
-      found <- Tx.statement (attemptId token) findAttemptForUpdate
+      found <- Tx.statement (decisionCallIdText (attemptId token)) findAttemptForUpdate
       case found of
         Nothing -> pure (refuse EvidenceFailure "unknown decision attempt")
         Just (runId, _invocationId, ordinal, modelJson, oldTerminal) -> do
@@ -148,7 +148,7 @@ decisionCallHooks store profile = DecisionCallHooks begin finish
           case decode modelJson of
             Left err -> pure (Left err)
             Right (model :: ModelDescriptor) -> do
-              let correlation = callCorrelationId (runCorrelationId runId) (attemptId token) 0
+              let correlation = callCorrelationId (runCorrelationId runId) (decisionCallIdText (attemptId token)) 0
                   facts =
                     ( \ev ->
                         factsFromTerminal
@@ -161,7 +161,7 @@ decisionCallHooks store profile = DecisionCallHooks begin finish
                       <$> evidence
                   normalized = (\fact -> (fact & #relationshipKnown .~ (False))) <$> facts
                   payload = object ["terminal" .= terminal, "facts" .= normalized, "evidence" .= (toJSON <$> evidence)]
-              if fromIntegral ordinal /= attemptOrdinal token
+              if toInteger ordinal /= toInteger (decisionCallOrdinalNumber (attemptOrdinal token))
                 then pure (refuse ContractMismatch "decision attempt ordinal differs")
                 else
                   if terminal == CallSucceeded && isNothing evidence
@@ -222,7 +222,7 @@ reportTx runId = do
         calls <- decodeCalls raw
         whenTooManyInvocations invocations
         let facts = [facts | call <- calls, Just facts <- [call.facts]]
-            expected = [ExpectedCall (callCorrelationId runId call.callId 0) RootCall call.ordinal | call <- calls]
+            expected = [ExpectedCall (callCorrelationId runId (decisionCallIdText call.callId) 0) RootCall (decisionCallOrdinalNumber call.ordinal) | call <- calls]
         Right
           ( Just
               ( DecisionEvidenceReport
