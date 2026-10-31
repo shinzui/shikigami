@@ -45,7 +45,7 @@ import Shikigami.Program.Decision.Examples (exampleCodecs, examplePrograms)
 import Shikigami.Program.DecisionRunner
 import Shikigami.Router.Catalog (CandidateCatalog)
 import Shikigami.Router.Decision (RouteDecision, validateRouteDecision)
-import Shikigami.Router.Declaration (ValidatedRouterDeclaration (..), validateRouterDeclaration)
+import Shikigami.Router.Declaration (RouterDeclarationView (policy), validateRouterDeclaration, validatedRouterDeclaration)
 
 data DecisionLabel = Triage | Investigation
   deriving stock (Eq, Ord, Show)
@@ -213,7 +213,7 @@ runDecision env action = do
           journal env (StepName "decision-catalog-investigate") (liftIO (env.routing.resolveCatalog validated))
         ValidateInvestigationRoute catalog decision -> do
           validated <- either (const (throwIO (DecisionAbort (decisionFailure InvalidSlot "decision router declaration is invalid")))) pure (validateRouterDeclaration env.agent)
-          case validateRouteDecision validated.policy catalog decision of
+          case validateRouteDecision (validatedRouterDeclaration validated).policy catalog decision of
             Left _ -> throwIO (DecisionAbort (decisionFailure OutputValidationFailure "investigation route proposal is invalid"))
             Right _ -> pure decision
     )

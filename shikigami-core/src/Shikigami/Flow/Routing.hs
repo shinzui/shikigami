@@ -48,7 +48,7 @@ import Shikigami.Directory (DirectoryHandle, readDirectorySnapshot, renderDirect
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Router.Catalog (CandidateAvailability (..), CandidateCatalog (..), CandidateEntry (..), CatalogVersion (..), buildCandidateCatalog)
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..), RoutingError, renderRoutingError, validateRouteDecision)
-import Shikigami.Router.Declaration (RouterDeclarationError, ValidatedRouterDeclaration (..), renderRouterDeclarationError, validateRouterDeclaration)
+import Shikigami.Router.Declaration (RouterDeclarationError, RouterDeclarationView (policy), ValidatedRouterDeclaration, renderRouterDeclarationError, validateRouterDeclaration, validatedRouterDeclaration)
 
 -- | Closed registry of routing call sites.  A constructor maps to two literal
 -- declared step names; payload data can never become a durable label.
@@ -136,7 +136,7 @@ runRouting RoutingEnv {agent = routerDecl@AgentDecl {name = routerAgent}, sessio
         case Aeson.fromJSON rawDecision of
           Aeson.Error detail -> throwIO (RoutingDecisionDecodeFailed (boundedDetail (Text.pack detail)))
           Aeson.Success decoded -> pure decoded
-      case validateRouteDecision ((.policy) validatedDeclaration) catalog decision of
+      case validateRouteDecision (validatedRouterDeclaration validatedDeclaration).policy catalog decision of
         Left refusals -> throwIO (RoutingDecisionInvalid refusals)
         Right _ -> do
           recordDecisionAttributes traceSpan decision

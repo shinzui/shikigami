@@ -1,7 +1,9 @@
 module Shikigami.Router.Declaration
   ( RouterDeclarationError (..),
     SelectionLimit,
-    ValidatedRouterDeclaration (..),
+    ValidatedRouterDeclaration,
+    RouterDeclarationView (..),
+    validatedRouterDeclaration,
     renderRouterDeclarationError,
     routerDeclarationErrors,
     selectionLimitInt,
@@ -38,7 +40,13 @@ data RouterDeclarationError
 newtype SelectionLimit = SelectionLimit Natural
   deriving stock (Eq, Ord, Show)
 
-data ValidatedRouterDeclaration = ValidatedRouterDeclaration
+newtype ValidatedRouterDeclaration = ValidatedRouterDeclaration RouterDeclarationView
+  deriving stock (Eq, Show)
+
+validatedRouterDeclaration :: ValidatedRouterDeclaration -> RouterDeclarationView
+validatedRouterDeclaration (ValidatedRouterDeclaration view) = view
+
+data RouterDeclarationView = RouterDeclarationView
   { declaration :: !AgentDecl,
     policy :: !RouterPolicy,
     selectionLimit :: !SelectionLimit
@@ -79,12 +87,7 @@ validateRouterDeclaration declaration@AgentDecl {routing} =
     (Nothing, errors) -> Left (errors <> [RouterPolicyMissing])
     (Just _, errors@(_ : _)) -> Left errors
     (Just policy@RouterPolicy {maxSelections}, []) ->
-      Right
-        ValidatedRouterDeclaration
-          { declaration,
-            policy,
-            selectionLimit = SelectionLimit maxSelections
-          }
+      Right (ValidatedRouterDeclaration (RouterDeclarationView declaration policy (SelectionLimit maxSelections)))
 
 renderRouterDeclarationError :: RouterDeclarationError -> Text
 renderRouterDeclarationError = \case

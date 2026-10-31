@@ -23,7 +23,9 @@ module Shikigami.PracticeReview.Evidence
     mkRedactionRule,
     EvidenceProblem (..),
     EvidenceSource (..),
-    ValidatedPinnedDiff (..),
+    ValidatedPinnedDiff,
+    PinnedDiffView (..),
+    validatedPinnedDiff,
     UpstreamSelection (..),
     DependencyPinResolver (..),
     EvidenceCompleteness (..),
@@ -290,7 +292,13 @@ instance ToJSON EvidenceSource where toJSON = genericToJSON defaultOptions
 
 instance FromJSON EvidenceSource where parseJSON = genericParseJSON defaultOptions
 
-data ValidatedPinnedDiff = ValidatedPinnedDiff
+newtype ValidatedPinnedDiff = ValidatedPinnedDiff PinnedDiffView
+  deriving stock (Eq, Show)
+
+validatedPinnedDiff :: ValidatedPinnedDiff -> PinnedDiffView
+validatedPinnedDiff (ValidatedPinnedDiff view) = view
+
+data PinnedDiffView = PinnedDiffView
   { repository :: !RepositoryId,
     baseRevision :: !Revision,
     headRevision :: !Revision,
@@ -441,17 +449,18 @@ validatePinnedDiff limits requestedRepository requestedBase requestedHead reques
   unlessEither
     (response ^. #declaredSize <= byteLimit ((.diffBytes) limits))
     (EvidenceLimitExceeded "diff-bytes" (byteLimit ((.diffBytes) limits)) (response ^. #declaredSize) True)
-  pure
-    ValidatedPinnedDiff
-      { repository = requestedRepository,
-        baseRevision = requestedBase,
-        headRevision = requestedHead,
-        path = returnedPath,
-        changedPaths = normalizedChangedPaths,
-        contentHash = response ^. #contentHash,
-        mirrorObservedAt = response ^. #provenance . #mirrorObservedAt,
-        excerpt = renderExcerpt limits (response ^. #bytes)
-      }
+  pure $
+    ValidatedPinnedDiff $
+      PinnedDiffView
+        { repository = requestedRepository,
+          baseRevision = requestedBase,
+          headRevision = requestedHead,
+          path = returnedPath,
+          changedPaths = normalizedChangedPaths,
+          contentHash = response ^. #contentHash,
+          mirrorObservedAt = response ^. #provenance . #mirrorObservedAt,
+          excerpt = renderExcerpt limits (response ^. #bytes)
+        }
 
 data ReadResult = ReadResult
   { source :: !EvidenceSource,
@@ -526,7 +535,7 @@ acquireTargetDiff limits reader project range =
         Right response ->
           case validatePinnedDiff limits repository base targetHead Nothing response of
             Left problem -> pure ([], [problem])
-            Right validated -> pure (validated ^. #changedPaths, [])
+            Right validated -> pure ((validatedPinnedDiff validated).changedPaths, [])
 
 readRequiredSource :: EvidenceLimits -> EvidenceReader -> EvidenceRole -> ProjectRef -> RepoRef -> RelativePath -> IO (Either EvidenceProblem ReadResult)
 readRequiredSource limits reader role project requested path = do

@@ -164,6 +164,11 @@
           "rationale": "Actual selected-compiler and runtime probes demonstrated thirteen opaque Generic parse/render bypasses, including zero ports, unpinned revisions and type-only credential disclosure paths. Remove those thirteen instances while preserving factories/codecs. Fourteen positive-first opaque clients and 37 nominal clients pass with exact main-library unit selection, all enabled components build, 559 pure/95 server tests pass, and native diff/replay is neutral under ADR-80. Refreshed worklist is 310 modules/882 declarations; complete scalar/identity review remains pending."
         },
         {
+          "id": "validated-results-and-residual-private-construction",
+          "disposition": "implemented",
+          "rationale": "Validated router declarations and pinned diffs use private non-Generic seals with Generic read views. Constructors, representation coercion, generic conversion and unchecked JSON admission are rejected after positive public controls. DecisionFailure, instruction bundles and run/call correlations lose residual Generic construction. The explicit bundle codec preserves valid bytes and validator ownership. Workflow reads project the same policy without step/journal changes. ADR-81, 63 compiler clients and full 559 pure/383 PostgreSQL/260 worker/95 server/30 API/9 client/37 agent plus native/domain/diagram acceptance cover this clause. The complete scalar/identity census remains pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -191,7 +196,9 @@
         "docs/evidence/keiro-0.22/worker-input-results.txt",
         "docs/adr/0080-opaque-checked-values-do-not-expose-generic-construction.md",
         "docs/evidence/keiro-0.22/opaque-values-results.txt",
-        "tests/types/opaque-values.py"
+        "tests/types/opaque-values.py",
+        "docs/adr/0081-validated-results-use-private-seals-and-public-read-views.md",
+        "docs/evidence/keiro-0.22/validated-results-results.txt"
       ]
     },
     {

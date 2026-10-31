@@ -34,7 +34,7 @@ import Shikigami.Directory
   )
 import Shikigami.Directory qualified as Directory
 import Shikigami.Prelude hiding ((.=))
-import Shikigami.Router.Declaration (ValidatedRouterDeclaration (..))
+import Shikigami.Router.Declaration (RouterDeclarationView (declaration), ValidatedRouterDeclaration, validatedRouterDeclaration)
 
 -- | A stable identifier for every model-visible input in a candidate catalog.
 newtype CatalogVersion = CatalogVersion {value :: Text}
@@ -125,7 +125,7 @@ buildCandidateCatalog report snapshot validated =
     }
   where
     AgentLoadReport {entries} = report
-    ValidatedRouterDeclaration {declaration = routerDeclaration} = validated
+    routerDeclaration = (validatedRouterDeclaration validated).declaration
     AgentDecl {name = routerName, delegates} = routerDeclaration
     declarationsByName = loadedDeclarationsByName entries
     lifecycleIndex = indexSnapshot snapshot

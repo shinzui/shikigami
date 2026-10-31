@@ -48,6 +48,8 @@ tests =
         reversed <- right (mkInstructionBundle 65536 repository base [("AGENTS.md", "root"), ("src/AGENTS.md", "nested")])
         bundle @?= reversed
         Aeson.fromJSON (Aeson.toJSON bundle) @?= Aeson.Success bundle
+        let expected = Aeson.object ["repository" .= repository, "base" .= base, "files" .= bundleFiles bundle, "digest" .= bundleDigest bundle]
+        Aeson.encode bundle @?= Aeson.encode expected
         let tampered = case Aeson.toJSON bundle of
               Aeson.Object fields -> Aeson.Object (KeyMap.insert "digest" (Aeson.String "forged") fields)
               value -> value

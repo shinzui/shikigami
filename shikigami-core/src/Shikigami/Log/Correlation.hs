@@ -71,7 +71,7 @@ import Shikigami.Prelude
 -- Construct it with 'runCorrelationId' rather than by coercion, so that every
 -- call site is forced to name the value it is passing.
 newtype RunCorrelationId = RunCorrelationId Text
-  deriving stock (Eq, Ord, Show, Generic)
+  deriving stock (Eq, Ord, Show)
   deriving newtype (ToJSON, FromJSON)
 
 -- | Name a run by its idempotency key (equivalently, its keiro workflow id).
@@ -94,7 +94,7 @@ renderRunCorrelationId (RunCorrelationId t) = t
 -- reproducible after a resume, which is the one property this type exists to
 -- guarantee.
 newtype CallCorrelationId = CallCorrelationId Text
-  deriving stock (Eq, Ord, Show, Generic)
+  deriving stock (Eq, Ord, Show)
   deriving newtype (ToJSON, FromJSON)
 
 -- | Derive the identifier of one call from the run it belongs to, the journaled

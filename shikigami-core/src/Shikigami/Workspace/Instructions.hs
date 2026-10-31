@@ -21,6 +21,7 @@ module Shikigami.Workspace.Instructions
   )
 where
 
+import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as Bytes
 import Data.ByteString.Lazy qualified as Lazy
@@ -30,7 +31,7 @@ import Data.Text.Encoding qualified as Encoding
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.StateRevision
 import Shikigami.Workspace.Reference (WorkspaceRef)
 
@@ -43,16 +44,21 @@ instance Show RepositoryInstruction where show _ = "RepositoryInstruction <prote
 
 data InstructionBundle = InstructionBundle
   {repository :: !Text, base :: !Text, files :: ![RepositoryInstruction], digest :: !Text}
-  deriving stock (Eq, Generic)
-  deriving anyclass (ToJSON)
+  deriving stock (Eq)
+
+instance ToJSON InstructionBundle where
+  toJSON bundle = Aeson.object ["repository" .= bundle.repository, "base" .= bundle.base, "files" .= bundle.files, "digest" .= bundle.digest]
 
 instance Show InstructionBundle where show _ = "InstructionBundle <protected>"
 
 instance FromJSON InstructionBundle where
-  parseJSON value = do
-    stored <- Aeson.genericParseJSON Aeson.defaultOptions value
-    actual <- either (fail . show) pure (mkInstructionBundle 65536 stored.repository stored.base [(entry.path, entry.text) | entry <- stored.files])
-    unless (stored == actual) (fail "repository instruction identity mismatch")
+  parseJSON = Aeson.withObject "InstructionBundle" \fields -> do
+    repository <- fields .: "repository"
+    base <- fields .: "base"
+    files <- fields .: "files"
+    digest <- fields .: "digest"
+    actual <- either (fail . show) pure (mkInstructionBundle 65536 repository base [(entry.path, entry.text) | entry <- (files :: [RepositoryInstruction])])
+    unless (files == actual.files && digest == actual.digest) (fail "repository instruction identity mismatch")
     pure actual
 
 data InstructionError = InstructionPathRefused | InstructionBudgetExceeded | InstructionSourceRefused

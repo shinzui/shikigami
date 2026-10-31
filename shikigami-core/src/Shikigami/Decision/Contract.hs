@@ -187,7 +187,7 @@ data FailureCode
   deriving anyclass (ToJSON, FromJSON)
 
 data DecisionFailure = DecisionFailure !FailureCode !Text
-  deriving stock (Eq, Show, Generic)
+  deriving stock (Eq, Show)
 
 instance ToJSON DecisionFailure where
   toJSON (DecisionFailure code detail) = toJSON (code, detail)

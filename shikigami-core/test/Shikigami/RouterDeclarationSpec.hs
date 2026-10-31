@@ -21,6 +21,7 @@ import Shikigami.Router.Declaration
     routerDeclarationErrors,
     selectionLimitNatural,
     validateRouterDeclaration,
+    validatedRouterDeclaration,
   )
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -32,7 +33,7 @@ tests =
     [ testCase "accepts a bounded router over its declared delegates" do
         case validateRouterDeclaration baseRouter of
           Left errors -> assertFailure ("expected valid router, got " <> show errors)
-          Right validated -> selectionLimitNatural (validated ^. #selectionLimit) @?= 2,
+          Right validated -> selectionLimitNatural (validatedRouterDeclaration validated ^. #selectionLimit) @?= 2,
       testCase "ordinary specialists may declare expertise without routing" do
         let specialist = baseRouter & #routing .~ Nothing & #delegates .~ []
         routerDeclarationErrors specialist @?= []

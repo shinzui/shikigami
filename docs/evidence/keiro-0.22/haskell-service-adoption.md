@@ -181,7 +181,7 @@ complete scalar/identity census remain open.
 
 The [compiled declaration worklist](domain-declarations.json) and
 [census acquisition results](domain-census-results.txt) enumerate 310 hand-owned
-modules, 882 declarations and 14 separately listed role entrypoints. The source
+modules, 884 declarations and 14 separately listed role entrypoints. The source
 and interface hashes preserve the actual candidate; the worklist does not assign
 automatic domain/boundary exemptions or certify the remaining review.
 
@@ -204,3 +204,10 @@ bypasses, fourteen positive-first compiler clients, exact core-library unit
 selection and current 559 pure/95 server cases. The preceding worker-input result
 owns full PostgreSQL/worker acceptance. The declaration worklist is refreshed;
 complete scalar/identity review and final exact-candidate qualification remain open.
+
+Validated router declarations and pinned diffs now have private seals and public
+read views under ADR-81. Instruction bundles retain an explicit validating codec;
+residual generic construction is closed. [Validated-result acceptance](validated-results-results.txt)
+records 63 compiler clients, exact bundle bytes, neutral native reports and the
+full affected package suites, including 383 PostgreSQL and 260 worker cases.
+No workflow step shape changes. Complete scalar/identity review remains open.

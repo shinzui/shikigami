@@ -60,18 +60,19 @@ import Shikigami.PracticeReview.Evidence
     PageRequest (..),
     PinnedContent (..),
     PinnedDiff (..),
+    PinnedDiffView (changedPaths),
     PinnedMatch (..),
     PinnedMatchPage (..),
     PinnedProvenance (..),
     PinnedTreePage (..),
     UpstreamSelection (..),
-    ValidatedPinnedDiff (..),
     acquireEvidence,
     mkEvidenceLimits,
     mkRedactionRule,
     summarizeEvidenceBundle,
     validatePinnedContent,
     validatePinnedDiff,
+    validatedPinnedDiff,
   )
 import Shikigami.Repository
   ( RelativePath,
@@ -168,8 +169,8 @@ tests =
       testCase "normalizes a pinned diff's changed paths" do
         case validatePinnedDiff testLimits targetRepository baseCommit headCommit Nothing validDiff of
           Left problem -> assertFailure ("expected valid diff, got " <> show problem)
-          Right ValidatedPinnedDiff {changedPaths} ->
-            assertEqual "changed paths" ["docs/adr/0001.md", "cabal.project"] (relativePathText <$> changedPaths),
+          Right validated ->
+            assertEqual "changed paths" ["docs/adr/0001.md", "cabal.project"] (relativePathText <$> (validatedPinnedDiff validated).changedPaths),
       testCase "rejects a diff with too many changed paths" do
         let response = diff ["one", "two", "three"] baseSha headSha
         assertProblem isLimitExceeded (validatePinnedDiff twoPathLimits targetRepository baseCommit headCommit Nothing response),
