@@ -38,6 +38,14 @@ also an intentional unused first-release identity reset; unchanged native helper
 references do not imply old producer-key compatibility.
 
 
+[ADR-92](adr/0092-review-values-are-checked-and-source-citations-use-structured-coordinates.md)
+versions fresh source-citation labels after a collision in two admitted opaque
+path/hash pairs. The Flow keeps its labels, order, effects and valid scalar
+codecs. Fresh acquired citation identities intentionally change under the unused
+first-release exception; neutral native helper references do not imply old
+producer-identity compatibility. No old citation factory fallback is introduced.
+
+
 ## What a durable workflow is, and why editing one is not like editing ordinary code
 
 Shikigami runs each agent run and each Danwa conversation as a **durable

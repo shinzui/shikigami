@@ -295,3 +295,14 @@ and [execution-value acceptance](execution-values-results.txt) retain complete
 operation/accepted-receipt byte controls and 578 pure/390 PostgreSQL/262 worker/95
 server plus 141 compiler cases. Native/domain/diagram, 82 CLI and live HTTP pass.
 The 318-module/898-declaration worklist and full scalar/identity review remain open.
+
+Six review values now have private checked constructors and stable valid string/
+numeric codecs. Raw content-plane hash replies refine at admission; whole graph,
+owner and authorization rules remain. An admitted path/hash citation collision
+requires a v2 length-prefixed factory under the unused first-release exception.
+[ADR-92](../../adr/0092-review-values-are-checked-and-source-citations-use-structured-coordinates.md)
+and [review acceptance](practice-values-results.txt) retain the failed control,
+frozen vectors, complete fixture byte controls, 581 pure/390 PostgreSQL/262 worker/
+95 server and 170 compiler cases. Affected tests, native/domain/diagram and live
+HTTP rerun after removing redundant scalar rechecks. No live Mori or Linux
+qualification is claimed; full scalar/identity review remains open.

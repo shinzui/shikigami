@@ -101,14 +101,16 @@ cases. The language checker and thirteen style/ownership mutation tests pass.
 [The adoption record](../evidence/keiro-0.22/haskell-service-adoption.md) links each
 implemented domain-value wave and its exact candidate/evidence.
 
-Latest execution-value acceptance rebuilt all enabled components and passed 578
-pure, 390 serial PostgreSQL, 262 worker, 95 server, 31 API, nine client and 37 agent
-cases. All 141 compiler clients, 143 domain assertions, six diagrams, 156 native
-conformance rows, 82 CLI checks and live HTTP including outages pass. ADR-91 keeps
-explicit operation uncertainty and private positive receipt ordinals with complete
-valid byte controls and unchanged call-limit priority. Native generation/diff is
-neutral against 4a53e3c; all four transducer hashes are unchanged. Earlier deliberate
-resets remain retained. Forty-two of 46 assigned sources have implemented
+Latest review-value acceptance passed 581 pure, 390 serial PostgreSQL, 262
+worker, 95 server, 31 API, nine client and 37 agent cases, plus 170 compiler
+clients, 143 domain assertions, six diagrams, 156 native rows, 82 CLI checks and
+live HTTP. ADR-92 keeps six checked review values and complete valid fixture
+bytes. A before admitted-coordinate case reproduces citation aliasing; a v2
+length-prefixed factory separates it under the unused first-release exception.
+Redundant scalar rechecks were removed; affected 581/390, native/domain/diagram
+and HTTP checks reran. The native gate has no findings against fbde25d and four
+transducer hashes remain unchanged; this is not old producer-identity compatibility
+or live Mori qualification. Forty-two of 46 assigned sources have implemented
 dispositions. Complete scalar/allocated-identity, other owners' decoder review and
 three final-profile clauses remain open. M1 is incomplete; this is not packaged
 Linux qualification.

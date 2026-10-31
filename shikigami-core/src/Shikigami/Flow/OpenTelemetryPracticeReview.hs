@@ -22,14 +22,11 @@ import Kioku.Id (MemoryId, idText)
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Flow.Capability (Sink, emitSignal)
 import Shikigami.PracticeReview
-  ( ClaimId (..),
-    ClaimKind (Inference),
-    Confidence (..),
+  ( ClaimKind (Inference),
     ContentReference (..),
     EvidenceItem (..),
     ExceptionApproval (..),
     PracticeAdoptionBinding (..),
-    PracticeKey (..),
     PracticeReviewClaim (..),
     PracticeReviewClassification (..),
     PracticeReviewResolution (..),
@@ -47,11 +44,14 @@ import Shikigami.PracticeReview
     ValidatedPracticeReviewTrigger,
     ValidatedPracticeReviewVerdict,
     deriveReviewId,
+    evidenceProblemClaimId,
+    practiceKeyText,
     validateTrigger,
     validateVerdict,
     validatedResolutionValue,
     validatedTriggerValue,
     validatedVerdictValue,
+    zeroConfidence,
   )
 import Shikigami.PracticeReview.Authorization
   ( AuthorizedPracticeReviewResolution,
@@ -269,8 +269,8 @@ selectOpenTelemetryAdoption PracticeReviewTrigger {adoptions} =
     [] -> Left "practice-review trigger has no opentelemetry adoption"
     _ -> Left "practice-review trigger has more than one opentelemetry adoption"
   where
-    isOpenTelemetry PracticeAdoptionBinding {practice = PracticeKey practice} =
-      Text.toCaseFold (Text.strip practice) == "opentelemetry"
+    isOpenTelemetry PracticeAdoptionBinding {practice} =
+      Text.toCaseFold (Text.strip (practiceKeyText practice)) == "opentelemetry"
 
 reviewRecallContext :: PracticeReviewTrigger -> PracticeAdoptionBinding -> ReviewRecallContext
 reviewRecallContext PracticeReviewTrigger {target, changedDecisionPaths} PracticeAdoptionBinding {practice, upstreamProjects} =
@@ -326,7 +326,7 @@ incompleteVerdict
             referenceEvidence = citations evidenceReferences,
             upstreamEvidence = citations evidenceUpstream,
             claims = problemClaims evidenceProblems,
-            confidence = Confidence 0,
+            confidence = zeroConfidence,
             routingRationale = "OpenTelemetry adoption selected by the recorded architecture-practice router delegation",
             classification = Unresolved,
             recommendedOwner = Just RecommendedOwner {role = TriageOwner, principals = [triageOwner]},
@@ -352,7 +352,7 @@ trustedOwner PracticeAdoptionBinding {owners = ReviewOwners {targetOwner, practi
 problemClaims :: [EvidenceProblem] -> [PracticeReviewClaim]
 problemClaims problems =
   [ PracticeReviewClaim
-      { claimId = ClaimId ("evidence-problem-" <> Text.justifyRight 3 '0' (Text.pack (show ordinal))),
+      { claimId = evidenceProblemClaimId ordinal,
         kind = Inference,
         statement = Text.take 512 (Text.pack (show problem)),
         material = True,

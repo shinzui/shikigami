@@ -20,6 +20,8 @@ import Data.Int (Int64)
 import Data.String (fromString)
 import Data.Text (Text)
 import Numeric.Natural (Natural)
+import Shikigami.PracticeReview qualified as Review
+import Shikigami.PracticeReview.Evidence qualified as ReviewEvidence
 import Shikigami.Agent.Name qualified as Name
 import Shikigami.Agent.ExpertiseKey qualified as Expertise
 import Shikigami.Agent.Delegate.Depth qualified as Depth
@@ -56,6 +58,29 @@ import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ('retained-review-scalar-fields', 'practice :: Review.PracticeReviewVerdict -> Review.PracticeKey\npractice value = value.practice\nowner :: Review.PracticeReviewResolution -> Review.OwnerPrincipal\nowner value = value.resolver\nlabel :: Review.EvidenceItem -> Review.EvidenceId\nlabel value = value.evidenceId\nclaim :: Review.PracticeReviewClaim -> Review.ClaimId\nclaim value = value.claimId\nhash :: Review.ContentReference -> Review.ContentHash\nhash value = value.contentHash\nconfidence :: Review.PracticeReviewVerdict -> Review.Confidence\nconfidence value = value.confidence\nrawHash :: ReviewEvidence.PinnedContent -> Text\nrawHash value = value.contentHash\nparsed :: Integer -> Either Text Review.Confidence\nparsed = Review.parseConfidence\n', True),
+    ('unchecked-review-PracticeKey-coercion', 'value :: Text -> Review.PracticeKey\nvalue = coerce\n', False),
+    ('unchecked-review-PracticeKey-constructor', 'value :: Text -> Review.PracticeKey\nvalue = Review.PracticeKey\n', False),
+    ('unchecked-review-PracticeKey-literal', 'value :: Review.PracticeKey\nvalue = fromString "invalid"\n', False),
+    ('unchecked-review-OwnerPrincipal-coercion', 'value :: Text -> Review.OwnerPrincipal\nvalue = coerce\n', False),
+    ('unchecked-review-OwnerPrincipal-constructor', 'value :: Text -> Review.OwnerPrincipal\nvalue = Review.OwnerPrincipal\n', False),
+    ('unchecked-review-OwnerPrincipal-literal', 'value :: Review.OwnerPrincipal\nvalue = fromString "invalid"\n', False),
+    ('unchecked-review-EvidenceId-coercion', 'value :: Text -> Review.EvidenceId\nvalue = coerce\n', False),
+    ('unchecked-review-EvidenceId-constructor', 'value :: Text -> Review.EvidenceId\nvalue = Review.EvidenceId\n', False),
+    ('unchecked-review-EvidenceId-literal', 'value :: Review.EvidenceId\nvalue = fromString "invalid"\n', False),
+    ('unchecked-review-ClaimId-coercion', 'value :: Text -> Review.ClaimId\nvalue = coerce\n', False),
+    ('unchecked-review-ClaimId-constructor', 'value :: Text -> Review.ClaimId\nvalue = Review.ClaimId\n', False),
+    ('unchecked-review-ClaimId-literal', 'value :: Review.ClaimId\nvalue = fromString "invalid"\n', False),
+    ('unchecked-review-ContentHash-coercion', 'value :: Text -> Review.ContentHash\nvalue = coerce\n', False),
+    ('unchecked-review-ContentHash-constructor', 'value :: Text -> Review.ContentHash\nvalue = Review.ContentHash\n', False),
+    ('unchecked-review-ContentHash-literal', 'value :: Review.ContentHash\nvalue = fromString "invalid"\n', False),
+    ('unchecked-review-Confidence-coercion', 'value :: Int -> Review.Confidence\nvalue = coerce\n', False),
+    ('unchecked-review-Confidence-constructor', 'value :: Int -> Review.Confidence\nvalue = Review.Confidence\n', False),
+    ('unchecked-review-Confidence-literal', 'value :: Review.Confidence\nvalue = -1\n', False),
+    ('practice-is-not-owner', 'value :: Review.PracticeKey -> Review.OwnerPrincipal\nvalue = id\n', False),
+    ('evidence-is-not-claim', 'value :: Review.EvidenceId -> Review.ClaimId\nvalue = id\n', False),
+    ('hash-is-not-evidence', 'value :: Review.ContentHash -> Review.EvidenceId\nvalue = id\n', False),
+    ('call-ordinal-is-not-confidence', 'value :: CallOrdinal -> Review.Confidence\nvalue = id\n', False),
     ('execution-uncertainty-and-call-ordinal', 'uncertainty :: Execution.Operation -> Execution.OperationUncertainty\nuncertainty value = value.uncertain\nordinal :: Calls.CallReceipt -> CallOrdinal\nordinal value = value.ordinal\nfirst :: Either Text CallOrdinal\nfirst = nextCallOrdinal noAttempts\n', True),
     ('boolean-is-not-operation-uncertainty', 'value :: Bool -> Execution.OperationUncertainty\nvalue = id\n', False),
     ('cancellation-is-not-operation-uncertainty', 'value :: Resources.Cancellation -> Execution.OperationUncertainty\nvalue = id\n', False),
@@ -355,6 +380,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
             fragments.update({'unchecked-full-run-key-coercion': ['RunKey', 'Text'], 'unchecked-full-run-key-constructor': ['RunKey'], 'unchecked-full-run-key-literal': ['RunKey', 'IsString'], 'unchecked-addressed-request-key-coercion': ['RequestKey', 'Text'], 'unchecked-addressed-request-key-constructor': ['RequestKey'], 'unchecked-addressed-request-key-literal': ['RequestKey', 'IsString'], 'http-request-key-is-not-addressed': ["Couldn't match", 'RequestKey'], 'full-run-key-is-not-addressed': ["Couldn't match", 'RunKey', 'RequestKey']})
             fragments.update({'unchecked-PayloadId-coercion': ['PayloadId', 'Text'], 'unchecked-PayloadId-constructor': ['PayloadId'], 'unchecked-PayloadId-literal': ['PayloadId', 'IsString'], 'unchecked-PayloadDigest-coercion': ['PayloadDigest', 'Text'], 'unchecked-PayloadDigest-constructor': ['PayloadDigest'], 'unchecked-PayloadDigest-literal': ['PayloadDigest', 'IsString'], 'unchecked-PayloadByteCount-coercion': ['PayloadByteCount', 'Integer'], 'unchecked-PayloadByteCount-constructor': ['PayloadByteCount'], 'unchecked-PayloadByteCount-literal': ['PayloadByteCount', 'Num'], 'payload-id-is-not-digest': ["Couldn't match", 'PayloadId', 'PayloadDigest'], 'resource-amount-is-not-payload-bytes': ["Couldn't match", 'ResourceAmount', 'PayloadByteCount']})
             fragments.update({'boolean-is-not-operation-uncertainty': ["Couldn't match", 'Bool', 'OperationUncertainty'], 'cancellation-is-not-operation-uncertainty': ["Couldn't match", 'Cancellation', 'OperationUncertainty'], 'attempt-count-is-not-call-ordinal': ["Couldn't match", 'AttemptCount', 'CallOrdinal'], 'unchecked-call-ordinal-coercion': ['Int64', 'CallOrdinal'], 'unchecked-call-ordinal-constructor': ['CallOrdinal'], 'unchecked-call-ordinal-numeric': ['CallOrdinal', 'Num']})
+            fragments.update({'unchecked-review-PracticeKey-coercion': ['PracticeKey', 'Text'], 'unchecked-review-PracticeKey-constructor': ['PracticeKey'], 'unchecked-review-PracticeKey-literal': ['PracticeKey', 'IsString'], 'unchecked-review-OwnerPrincipal-coercion': ['OwnerPrincipal', 'Text'], 'unchecked-review-OwnerPrincipal-constructor': ['OwnerPrincipal'], 'unchecked-review-OwnerPrincipal-literal': ['OwnerPrincipal', 'IsString'], 'unchecked-review-EvidenceId-coercion': ['EvidenceId', 'Text'], 'unchecked-review-EvidenceId-constructor': ['EvidenceId'], 'unchecked-review-EvidenceId-literal': ['EvidenceId', 'IsString'], 'unchecked-review-ClaimId-coercion': ['ClaimId', 'Text'], 'unchecked-review-ClaimId-constructor': ['ClaimId'], 'unchecked-review-ClaimId-literal': ['ClaimId', 'IsString'], 'unchecked-review-ContentHash-coercion': ['ContentHash', 'Text'], 'unchecked-review-ContentHash-constructor': ['ContentHash'], 'unchecked-review-ContentHash-literal': ['ContentHash', 'IsString'], 'unchecked-review-Confidence-coercion': ['Confidence', 'Int'], 'unchecked-review-Confidence-constructor': ['Confidence'], 'unchecked-review-Confidence-literal': ['Confidence', 'Num'], 'practice-is-not-owner': ["Couldn't match", 'PracticeKey', 'OwnerPrincipal'], 'evidence-is-not-claim': ["Couldn't match", 'EvidenceId', 'ClaimId'], 'hash-is-not-evidence': ["Couldn't match", 'ContentHash', 'EvidenceId'], 'call-ordinal-is-not-confidence': ["Couldn't match", 'CallOrdinal', 'Confidence']})
             if name.endswith("-constructor"):
                 assert any(marker in result.stderr.lower() for marker in ["not in scope", "does not export", "illegal term-level"]), (name, result.stderr)
             assert all(fragment in result.stderr for fragment in fragments[name]), (name, result.stderr)

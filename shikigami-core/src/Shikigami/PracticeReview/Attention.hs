@@ -51,19 +51,16 @@ import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.PracticeReview
   ( Applicability (..),
-    ClaimId (..),
-    ContentHash (..),
     ContentReference (..),
-    EvidenceId (..),
     EvidenceItem (..),
-    OwnerPrincipal (..),
-    PracticeKey (..),
     PracticeReviewClaim (..),
     PracticeReviewVerdict (..),
     ProjectRef (..),
     RecommendedOwner (..),
     ReviewId (..),
     ValidatedPracticeReviewVerdict,
+    ownerPrincipalText,
+    practiceKeyText,
     validatedVerdictValue,
   )
 import Shikigami.PracticeReview.Capability
@@ -115,7 +112,7 @@ resolveAttentionRecipient recipients PracticeReviewVerdict {recommendedOwner} =
   case recommendedOwner of
     Nothing -> Left "actionable practice review has no recommended owner"
     Just RecommendedOwner {principals} ->
-      let owners = [value | OwnerPrincipal value <- principals]
+      let owners = map ownerPrincipalText principals
        in maybe
             (Left ("no attention recipient configured for owners: " <> Text.intercalate "+" (sortOn id owners)))
             Right
@@ -127,7 +124,7 @@ deriveAttentionKey recipients validated = do
   pure key
 
 attentionProjection :: AttentionRecipientMap -> PracticeReviewVerdict -> Either Text AttentionProjection
-attentionProjection recipients verdict@PracticeReviewVerdict {reviewId = ReviewId reviewId, practice = PracticeKey practiceKey, classification, recommendedOwner, recommendedAction} = do
+attentionProjection recipients verdict@PracticeReviewVerdict {reviewId = ReviewId reviewId, practice = practiceKey, classification, recommendedOwner, recommendedAction} = do
   recipient <- resolveAttentionRecipient recipients verdict
   (ownerRole, _) <- case recommendedOwner of
     Nothing -> Left "actionable practice review has no owner role"
@@ -137,7 +134,7 @@ attentionProjection recipients verdict@PracticeReviewVerdict {reviewId = ReviewI
         Aeson.object
           [ "schemaVersion" .= (1 :: Int),
             "targetProject" .= targetProject,
-            "practiceKey" .= Text.toCaseFold (Text.strip practiceKey),
+            "practiceKey" .= Text.toCaseFold (Text.strip (practiceKeyText practiceKey)),
             "classification" .= enumText classification,
             "ownerRole" .= ownerRole,
             "recipient" .= recipient,
@@ -159,7 +156,7 @@ attentionProjection recipients verdict@PracticeReviewVerdict {reviewId = ReviewI
       { key = attentionKey,
         schemaVersion = 1,
         targetProject,
-        practiceKey = Text.toCaseFold (Text.strip practiceKey),
+        practiceKey = Text.toCaseFold (Text.strip (practiceKeyText practiceKey)),
         classification = enumText classification,
         ownerRole,
         recipient,
@@ -184,11 +181,11 @@ materialClaimProjection PracticeReviewVerdict {claims} =
         "statement" .= normalizeWords statement,
         "evidenceIds" .= sortOn id evidenceIds
       ]
-  | PracticeReviewClaim {claimId = ClaimId claimId, kind, statement, material = True, evidenceIds = rawEvidenceIds} <- sortOn claimKey claims,
-    let evidenceIds = [value | EvidenceId value <- rawEvidenceIds]
+  | PracticeReviewClaim {claimId, kind, statement, material = True, evidenceIds = rawEvidenceIds} <- sortOn claimKey claims,
+    let evidenceIds = rawEvidenceIds
   ]
   where
-    claimKey PracticeReviewClaim {claimId = ClaimId claimId} = claimId
+    claimKey PracticeReviewClaim {claimId} = claimId
 
 citedEvidenceProjection :: PracticeReviewVerdict -> [Value]
 citedEvidenceProjection PracticeReviewVerdict {targetEvidence, referenceEvidence, upstreamEvidence, claims} =
@@ -205,7 +202,7 @@ citedEvidenceProjection PracticeReviewVerdict {targetEvidence, referenceEvidence
             { project = ProjectRef {repository = RepositoryId repository},
               provenance = RepoRef {revision},
               path,
-              contentHash = ContentHash contentHash
+              contentHash
             }
       } <-
       sortOn evidenceKey (targetEvidence <> referenceEvidence <> upstreamEvidence),
@@ -213,7 +210,7 @@ citedEvidenceProjection PracticeReviewVerdict {targetEvidence, referenceEvidence
   ]
   where
     citedIds = Set.fromList [evidenceId | PracticeReviewClaim {material = True, evidenceIds} <- claims, evidenceId <- evidenceIds]
-    evidenceKey EvidenceItem {evidenceId = EvidenceId evidenceId} = evidenceId
+    evidenceKey EvidenceItem {evidenceId} = evidenceId
 
 runPracticeReviewAttentionAtomic ::
   (Workflow :> es, Store :> es, IOE :> es) =>

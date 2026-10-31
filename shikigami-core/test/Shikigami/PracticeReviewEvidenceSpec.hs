@@ -20,12 +20,11 @@ import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
 import Shikigami.PracticeReview
   ( Applicability (..),
     ChangedReference (..),
-    ContentHash (..),
     EvidenceItem (..),
     EvidenceRole (..),
-    OwnerPrincipal (..),
+    OwnerPrincipal,
     PracticeAdoptionBinding (..),
-    PracticeKey (..),
+    PracticeKey,
     PracticeReviewResolution (..),
     PracticeReviewTrigger (..),
     PracticeReviewTriggerKind (..),
@@ -40,7 +39,11 @@ import Shikigami.PracticeReview
     RevisionRange (..),
     ValidatedPracticeReviewResolution,
     ValidatedPracticeReviewTrigger,
+    contentHashText,
     deriveResolutionId,
+    evidenceIdText,
+    parseOwnerPrincipal,
+    parsePracticeKey,
     practiceReviewSchemaVersion,
     validateResolution,
     validateTrigger,
@@ -93,7 +96,16 @@ tests :: TestTree
 tests =
   testGroup
     "practice review evidence"
-    [ testCase "accepts an exact pinned blob and redacts its bounded excerpt" do
+    [ testCase "opaque content coordinates retain distinct citation ids" do
+        let one = validatePinnedContent testLimits TargetEvidence targetProject targetRef (relativePath "docs/adr/claim:a") (blob "repo_target" headSha "docs/adr/claim:a" "h" 1 "x")
+            two = validatePinnedContent testLimits TargetEvidence targetProject targetRef (relativePath "docs/adr/claim") (blob "repo_target" headSha "docs/adr/claim" "a:h" 1 "x")
+        case (one, two) of
+          (Right first, Right second) -> do
+            assertBool "distinct admitted source coordinates require distinct citation ids" (first.citation.evidenceId /= second.citation.evidenceId)
+            assertEqual "frozen first source coordinate" "evidence-v2:367267c4-8a3e-57aa-9e49-d34e8824bf16" (evidenceIdText first.citation.evidenceId)
+            assertEqual "frozen second source coordinate" "evidence-v2:1f9ac525-f932-548e-8976-9279784b0d59" (evidenceIdText second.citation.evidenceId)
+          other -> assertFailure ("expected two valid opaque source responses: " <> show other),
+      testCase "accepts an exact pinned blob and redacts its bounded excerpt" do
         let result = validatePinnedContent testLimits TargetEvidence targetProject targetRef decisionPath validBlob
         case result of
           Left problem -> assertFailure ("expected valid evidence, got " <> show problem)
@@ -274,16 +286,16 @@ completeOpenTelemetryTrigger triggerKey =
   where
     openTelemetryBinding =
       PracticeAdoptionBinding
-        { practice = PracticeKey "opentelemetry",
+        { practice = fixturePracticeKey "opentelemetry",
           references = [practiceReference1],
-          claimedApplicability = Applicability [targetProject] [] ["libfoo"] [PracticeKey "opentelemetry"],
+          claimedApplicability = Applicability [targetProject] [] ["libfoo"] [fixturePracticeKey "opentelemetry"],
           mode = Advisory,
           owners =
             ReviewOwners
-              { targetOwner = OwnerPrincipal "team-example-service",
-                practiceOwner = OwnerPrincipal "team-haskell-platform",
-                triageOwner = OwnerPrincipal "architecture-council",
-                exceptionApprover = Just (OwnerPrincipal "architecture-council")
+              { targetOwner = fixtureOwnerPrincipal "team-example-service",
+                practiceOwner = fixtureOwnerPrincipal "team-haskell-platform",
+                triageOwner = fixtureOwnerPrincipal "architecture-council",
+                exceptionApprover = Just (fixtureOwnerPrincipal "architecture-council")
               },
           upstreamProjects = [RegisteredUpstreamProject {project = upstreamProject, dependency = "libfoo"}]
         }
@@ -401,15 +413,15 @@ bindingWithReferences references = bindingWith references [RegisteredUpstreamPro
 bindingWith :: [RegisteredPracticeReference] -> [RegisteredUpstreamProject] -> PracticeAdoptionBinding
 bindingWith references upstreamProjects =
   PracticeAdoptionBinding
-    { practice = PracticeKey "practice-1",
+    { practice = fixturePracticeKey "practice-1",
       references,
-      claimedApplicability = Applicability [targetProject] [] [] [PracticeKey "practice-1"],
+      claimedApplicability = Applicability [targetProject] [] [] [fixturePracticeKey "practice-1"],
       mode = Advisory,
       owners =
         ReviewOwners
-          { targetOwner = OwnerPrincipal "principal-target",
-            practiceOwner = OwnerPrincipal "principal-practice",
-            triageOwner = OwnerPrincipal "principal-triage",
+          { targetOwner = fixtureOwnerPrincipal "principal-target",
+            practiceOwner = fixtureOwnerPrincipal "principal-practice",
+            triageOwner = fixtureOwnerPrincipal "principal-triage",
             exceptionApprover = Nothing
           },
       upstreamProjects
@@ -613,7 +625,7 @@ fixtureBlob reference path contentHash bytes =
   PinnedContent
     { provenance = provenanceFor reference,
       path = relativePathText path,
-      contentHash = ContentHash contentHash,
+      contentHash,
       declaredSize = ByteString8.length bytes,
       bytes
     }
@@ -633,9 +645,7 @@ sourcePath :: EvidenceSource -> Text
 sourcePath source = relativePathText (source ^. #citation . #content . #path)
 
 sourceHash :: EvidenceSource -> Text
-sourceHash source =
-  case source ^. #citation . #content . #contentHash of
-    ContentHash value -> value
+sourceHash source = contentHashText (source ^. #citation . #content . #contentHash)
 
 readContentPlaneSnapshot :: FilePath -> IO ByteString
 readContentPlaneSnapshot relativeFixturePath = do
@@ -676,7 +686,7 @@ validatedResolution outcome resultingApplicability commandKey =
           idempotencyKey = commandKey,
           reviewId,
           outcome,
-          resolver = OwnerPrincipal "principal-resolver",
+          resolver = fixtureOwnerPrincipal "principal-resolver",
           reason = "fixture resolution",
           resolvedAt = observedAt,
           resultingApplicability,
@@ -753,7 +763,7 @@ blob repository revision path contentHash declaredSize bytes =
             mirrorObservedAt = observedAt
           },
       path,
-      contentHash = ContentHash contentHash,
+      contentHash,
       declaredSize,
       bytes
     }
@@ -775,7 +785,7 @@ diff changedPaths baseRevision headRevision =
           headRevision,
           path = Nothing,
           changedPaths,
-          contentHash = ContentHash "sha256:diff",
+          contentHash = "sha256:diff",
           declaredSize = ByteString8.length bytes,
           bytes
         }
@@ -836,3 +846,9 @@ isReadFailure _ = False
 isGrepPageLimit :: EvidenceProblem -> Bool
 isGrepPageLimit (EvidenceLimitExceeded "grep-pages" _ _ _) = True
 isGrepPageLimit _ = False
+
+fixturePracticeKey :: Text -> PracticeKey
+fixturePracticeKey = either (error . show) id . parsePracticeKey
+
+fixtureOwnerPrincipal :: Text -> OwnerPrincipal
+fixtureOwnerPrincipal = either (error . show) id . parseOwnerPrincipal

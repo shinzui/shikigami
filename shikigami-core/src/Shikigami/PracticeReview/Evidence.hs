@@ -51,9 +51,9 @@ import Data.Text.Encoding qualified as TextEncoding
 import Data.Text.Encoding.Error qualified as TextEncodingError
 import Shikigami.PracticeReview
   ( Applicability (..),
-    ContentHash (..),
+    ContentHash,
     ContentReference (..),
-    EvidenceId (..),
+    EvidenceId,
     EvidenceItem (..),
     EvidenceRole (..),
     PracticeAdoptionBinding (..),
@@ -66,6 +66,8 @@ import Shikigami.PracticeReview
     RevisionRange (..),
     ValidatedPracticeReviewResolution,
     ValidatedPracticeReviewTrigger,
+    parseContentHash,
+    sourceEvidenceIdV2,
     validatedResolutionValue,
     validatedTriggerValue,
   )
@@ -122,7 +124,7 @@ data PinnedProvenance = PinnedProvenance
 data PinnedContent = PinnedContent
   { provenance :: !PinnedProvenance,
     path :: !Text,
-    contentHash :: !ContentHash,
+    contentHash :: !Text,
     declaredSize :: !Int,
     bytes :: !ByteString
   }
@@ -136,7 +138,7 @@ data PinnedDiff = PinnedDiff
     headRevision :: !Text,
     path :: !(Maybe Text),
     changedPaths :: ![Text],
-    contentHash :: !ContentHash,
+    contentHash :: !Text,
     declaredSize :: !Int,
     bytes :: !ByteString
   }
@@ -147,7 +149,7 @@ data PinnedTreeEntry = PinnedTreeEntry
   { path :: !Text,
     kind :: !Text,
     declaredSize :: !Int,
-    contentHash :: !ContentHash
+    contentHash :: !Text
   }
   deriving stock (Eq, Show, Generic)
 
@@ -401,7 +403,7 @@ validatePinnedContent limits role project requested requestedPath response = do
   unlessEither
     (returnedPath == requestedPath)
     (PathMismatch (relativePathText requestedPath) (response ^. #path) True)
-  validateHash True (response ^. #path) (response ^. #contentHash)
+  hash <- validateHash True (response ^. #path) (response ^. #contentHash)
   validateSize True "blob-bytes" (byteLimit ((.blobBytes) limits)) responsePath (response ^. #declaredSize) (ByteString.length (response ^. #bytes))
   unlessEither
     (response ^. #declaredSize <= byteLimit ((.blobBytes) limits))
@@ -409,14 +411,14 @@ validatePinnedContent limits role project requested requestedPath response = do
   let stamp = response ^. #provenance
       citation =
         EvidenceItem
-          { evidenceId = sourceEvidenceId role requested requestedPath (response ^. #contentHash),
+          { evidenceId = sourceEvidenceIdV2 role requested requestedPath hash,
             role,
             content =
               ContentReference
                 { project,
                   provenance = requested,
                   path = requestedPath,
-                  contentHash = response ^. #contentHash
+                  contentHash = hash
                 }
           }
   pure
@@ -444,7 +446,7 @@ validatePinnedDiff limits requestedRepository requestedBase requestedHead reques
   unlessEither
     (length normalizedChangedPaths <= countLimit ((.pathCount) limits))
     (EvidenceLimitExceeded "changed-paths" (countLimit ((.pathCount) limits)) (length normalizedChangedPaths) True)
-  validateHash True "<diff>" (response ^. #contentHash)
+  hash <- validateHash True "<diff>" (response ^. #contentHash)
   validateSize True "diff-bytes" (byteLimit ((.diffBytes) limits)) "<diff>" (response ^. #declaredSize) (ByteString.length (response ^. #bytes))
   unlessEither
     (response ^. #declaredSize <= byteLimit ((.diffBytes) limits))
@@ -457,7 +459,7 @@ validatePinnedDiff limits requestedRepository requestedBase requestedHead reques
           headRevision = requestedHead,
           path = returnedPath,
           changedPaths = normalizedChangedPaths,
-          contentHash = response ^. #contentHash,
+          contentHash = hash,
           mirrorObservedAt = response ^. #provenance . #mirrorObservedAt,
           excerpt = renderExcerpt limits (response ^. #bytes)
         }
@@ -859,36 +861,15 @@ validatePath required raw =
     (\reason -> InvalidReturnedPath raw reason required)
     (mkRelativePath raw)
 
-validateHash :: Bool -> Text -> ContentHash -> Either EvidenceProblem ()
-validateHash required path (ContentHash raw) =
-  unlessEither
-    (not (Text.null (Text.strip raw)))
-    (MissingContentHash path required)
+validateHash :: Bool -> Text -> Text -> Either EvidenceProblem ContentHash
+validateHash required path raw =
+  either (const (Left (MissingContentHash path required))) Right (parseContentHash raw)
 
 validateSize :: Bool -> Text -> Int -> Text -> Int -> Int -> Either EvidenceProblem ()
 validateSize required _limitName _maximum path declared actual
   | declared < 0 = Left (InvalidDeclaredSize path declared required)
   | declared /= actual = Left (ContentSizeMismatch path declared actual required)
   | otherwise = Right ()
-
-sourceEvidenceId :: EvidenceRole -> RepoRef -> RelativePath -> ContentHash -> EvidenceId
-sourceEvidenceId role RepoRef {repository = RepositoryId repository, revision} path (ContentHash contentHash) =
-  EvidenceId
-    ( Text.intercalate
-        ":"
-        [ "evidence",
-          roleText role,
-          repository,
-          revisionText revision,
-          relativePathText path,
-          contentHash
-        ]
-    )
-
-roleText :: EvidenceRole -> Text
-roleText TargetEvidence = "target"
-roleText ReferenceEvidence = "reference"
-roleText UpstreamEvidence = "upstream"
 
 renderExcerpt :: EvidenceLimits -> ByteString -> Text
 renderExcerpt EvidenceLimits {excerptCharacters = CountLimit excerptLimit, redactions} =

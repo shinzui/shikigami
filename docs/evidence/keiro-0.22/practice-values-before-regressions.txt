@@ -1,0 +1,18 @@
+Opaque source-citation coordinate regression
+Source parent: fbde25dec983975757ea2e632e5ad8c5a4a8630a
+Production sources are unchanged. Three real pure-validator coordinate cases selected: two existing controls pass; the new citation case admits both source responses but collides their citation ids.
+This exercises Shikigami's published abstract EvidenceReader contract, not a live Mori content-plane adapter. ContentHash is opaque/nonblank in that contract; no universal hash algorithm is asserted.
+
+Test suite shikigami-core-test: RUNNING...
+shikigami
+  DelegationBatch
+    separator-bearing delegation coordinates retain distinct child identities: OK (0.02s)
+  EnqueueHardening
+    caller keys retain agent and route coordinates:                            OK
+  practice review evidence
+    opaque content coordinates retain distinct citation ids:                   FAIL
+      test/Shikigami/PracticeReviewEvidenceSpec.hs:100:
+      distinct admitted source coordinates require distinct citation ids
+      Use -p '/coordinates/&&/opaque content coordinates retain distinct citation ids/' to rerun this test only.
+
+1 out of 3 tests failed (0.03s)

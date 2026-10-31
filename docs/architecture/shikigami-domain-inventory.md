@@ -305,3 +305,17 @@ The [native findings](../evidence/keiro-0.22/module-placement-diff.json),
 [acceptance](../evidence/keiro-0.22/module-placement-results.txt) retain this distinction.
 All four remain Never without a state codec. This is a first-release baseline
 change; it does not qualify an old populated deployment or invent a cache consumer.
+
+## Practice-review scalar and citation boundary
+
+PracticeKey, OwnerPrincipal, EvidenceId, ClaimId, ContentHash and Confidence now
+retain private checked meanings. Exact valid fixture bytes and existing graph,
+owner, scope and authorization behavior remain. Raw content-plane hash replies
+are explicit Text until admission; the abstract reader's hash stays opaque. Two
+admitted path/hash coordinates previously shared one citation id. Their fresh
+source labels now use a purpose/versioned length-prefixed commitment, with no old
+factory fallback under the unused first-release baseline. [ADR-92](../adr/0092-review-values-are-checked-and-source-citations-use-structured-coordinates.md)
+and [review acceptance](../evidence/keiro-0.22/practice-values-results.txt) retain
+the failure, vectors and complete codec/recovery controls. These citation labels
+are verdict-local locators. Review/resolution entity allocation remains open; no
+live Mori content-plane adapter qualification is claimed.

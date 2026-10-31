@@ -90,16 +90,16 @@ a checked allocated TypeID; objective content, worker/workspace ownership,
 execution policies, counters, decisions and assignment locators retain their
 nominal checked meanings.
 
-Latest execution-value acceptance rebuilt all enabled components and passed 578
-pure, 390 serial PostgreSQL, 262 worker and 95 server cases, all API/client/agent
-suites, 141 compiler clients, 82 CLI checks and live HTTP including outages. ADR-91
-keeps explicit operation uncertainty and private positive receipt ordinals with
-exact valid bytes and unchanged admission priority. Native generation/diff is
-neutral against 4a53e3c; four transducer hashes are unchanged. Earlier deliberate
-resets remain retained. Complete scalar/allocated-identity and other owners'
-decoder review keep EP-5 In Progress. Three rows retain final-profile clauses
-owned by EP-6; its frozen closure, Linux/runtime and inventory gates have not
-started.
+Latest review-value acceptance passed 581 pure, 390 serial PostgreSQL, 262
+worker, 95 server, all API/client/agent suites, 170 compiler clients, 82 CLI checks
+and live HTTP. ADR-92 keeps six private scalar meanings and exact valid fixture
+bytes, while a real admitted citation collision requires a v2 coordinate factory.
+The unused first-release identity reset is explicit; neutral native findings do
+not imply old producer compatibility. Affected tests and native/domain/diagram/
+HTTP gates reran after redundant-check removal. Four transducer hashes remain
+unchanged against fbde25d. Full scalar/allocated-identity and other owners' decoder
+review keep EP-5 In Progress. Three rows retain final-profile clauses owned by
+EP-6; its frozen closure, Linux/runtime and inventory gates have not started.
 
 ## Surprises & Discoveries
 

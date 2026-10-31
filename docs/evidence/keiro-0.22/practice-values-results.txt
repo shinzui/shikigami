@@ -1,0 +1,29 @@
+Checked review values and versioned source citations — ExecPlan 107
+Source parent: fbde25dec983975757ea2e632e5ad8c5a4a8630a (master); current source/interface hashes are retained in domain-declarations.json.
+Compiler: selected GHC 9.12.4/frozen Cabal cohort, arm64 macOS.
+Decision: docs/adr/0092-review-values-are-checked-and-source-citations-use-structured-coordinates.md.
+
+Observed failure
+The retained before run selects three real pure-validator coordinate cases against unchanged parent production sources: two existing controls pass, and the new source-citation case admits two path/hash responses but gives them one citation id. Inputs are docs/adr/claim:a + h and docs/adr/claim + a:h under the same role/provenance. This is the abstract EvidenceReader contract, not live Mori content-plane qualification. Its hash is opaque/nonblank; no universal hash algorithm is asserted.
+
+Resulting contract
+Private PracticeKey, OwnerPrincipal, EvidenceId, ClaimId and ContentHash reject blank values and retain exact nonblank strings; private Confidence admits integer percentages 0..100. No Generic/Num/Integral/IsString/enumeration construction is exposed. Redundant whole-document scalar checks are removed; graph, normalization, owner cardinality/classification and authorization checks remain.
+Raw PinnedContent/PinnedDiff/PinnedTreeEntry hash fields are explicit wire Text. Blob/diff admission refines once into ContentHash with the existing MissingContentHash refusal. Validated citation/diff values stay nominal. Provenance, exact requested path, declared size, redaction and limits remain authoritative; scalar syntax does not authenticate content.
+Fresh source labels use evidence-v2: plus a UUIDv5 over explicit length-prefixed purpose/version/role/repository/revision/path/hash fields. Repeats are stable and roles differ. Two collision vectors and a role vector are retained. Diagnostic claim labels and zero confidence retain their existing bytes through total factories.
+These are external/registry locators and verdict-local citation labels, not allocated review/resolution entity ids. Review/resource identity authority remains open. Fresh source-citation identity meaning intentionally changes under ADR-27; no old factory fallback or populated cross-build compatibility is claimed. A neutral native helper-reference diff is a separate fact.
+
+Acceptance
+Before regression: one of three coordinate controls fails as described. Corrected focused practice run: 39 cases PASS, including complete trigger, five-classification verdict and four-outcome resolution fixture byte controls; exact scalar strings/numbers; blank/out-of-range rejection; admitted citation separation and frozen v2 vectors.
+cabal build all --enable-tests -j2: PASS, all enabled components including fixture source, before removal of unreachable redundant scalar rechecks.
+Full application suites PASS: 581 pure (5.90s), 390 serial PostgreSQL (108.79s), 262 worker (166.59s), 95 server (19.08s), 31 API, nine client and 37 agent cases.
+After removing those redundant checks, affected pure/serial PostgreSQL suites rerun: 581 (5.91s) / 390 (108.48s) PASS. Private field/factory types and reachable valid behavior remain unchanged; unaffected worker/server/API/client/agent suites were not repeated for that cleanup.
+Selected-compiler checks: 124 nominal + 46 opaque = 170 PASS. Positive typed fields/factories and the raw-wire/admitted-hash distinction precede constructor/coercion/literal/substitution/Generic rejection. These unchanged public construction types were checked before the unreachable-check cleanup.
+Post-cleanup just keiro-gate fbde25d: PASS, check/inspect/idempotent scaffold, zero findings and 156 native conformance rows. Native diff/replay and four unchanged generated transducer hashes/fingerprints are retained.
+Post-cleanup domain/diagrams: 143 assertions and six diagrams PASS.
+Live Hurl passes both full and post-cleanup profiles: fresh task-owned database/server/worker, 4/2/1 files and 13/15/3 requests across three phases, zero failed files including outage checks.
+CLI contracts: 82 real-process checks PASS in the full profile, without database/vendor.
+Haskell conventions, 13 style/ownership mutation tests, formatter and whitespace checks PASS.
+Compiled current worklist: 318 modules, 898 declarations, 14 role entrypoints; source/tool hashes and declaration uniqueness verified. It remains unclassified.
+
+Scope
+The full scalar/allocated-identity census and other owners' decoder classifications remain open. Plan95's exact packaged closure/Linux/runtime/inventory qualification has not started. No live Mori content-plane or Linux runtime qualification is claimed.

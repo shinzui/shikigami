@@ -6,8 +6,12 @@
 module Shikigami.PracticeReview
   ( practiceReviewSchemaVersion,
     ReviewId (..),
-    PracticeKey (..),
-    OwnerPrincipal (..),
+    PracticeKey,
+    parsePracticeKey,
+    practiceKeyText,
+    OwnerPrincipal,
+    parseOwnerPrincipal,
+    ownerPrincipalText,
     ProjectRef (..),
     RevisionChangeKind (..),
     RevisionRange (..),
@@ -21,10 +25,21 @@ module Shikigami.PracticeReview
     ChangedReference (..),
     PracticeReviewTrigger (..),
     ResolutionId (..),
-    EvidenceId (..),
-    ClaimId (..),
-    ContentHash (..),
-    Confidence (..),
+    EvidenceId,
+    parseEvidenceId,
+    evidenceIdText,
+    ClaimId,
+    parseClaimId,
+    claimIdText,
+    ContentHash,
+    parseContentHash,
+    contentHashText,
+    Confidence,
+    parseConfidence,
+    confidencePercent,
+    zeroConfidence,
+    evidenceProblemClaimId,
+    sourceEvidenceIdV2,
     ClaimKind (..),
     EvidenceRole (..),
     ContentReference (..),
@@ -54,7 +69,7 @@ module Shikigami.PracticeReview
   )
 where
 
-import Data.Aeson (Value (Object))
+import Data.Aeson (Value (Object), withText)
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString qualified as ByteString
 import Data.Set qualified as Set
@@ -63,7 +78,7 @@ import Data.Text.Encoding qualified as TextEncoding
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUIDv5
 import Shikigami.Prelude
-import Shikigami.Repository (RelativePath, RepoRef (..), RepositoryId (..), Revision)
+import Shikigami.Repository (RelativePath, RepoRef (..), RepositoryId (..), Revision, relativePathText, revisionText)
 
 -- | The only schema version accepted by the first contract release.
 practiceReviewSchemaVersion :: Int
@@ -76,13 +91,13 @@ newtype ReviewId = ReviewId {value :: Text}
 
 -- | Stable key for one registered architecture practice.
 newtype PracticeKey = PracticeKey {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON)
 
 -- | Resolved identity of a person or approved artifact workflow.
 newtype OwnerPrincipal = OwnerPrincipal {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON)
 
 -- | Human-readable project name beside its canonical Mori repository identity.
 data ProjectRef = ProjectRef
@@ -248,24 +263,24 @@ newtype ResolutionId = ResolutionId {value :: Text}
 
 -- | Identity of one pinned evidence item within a verdict.
 newtype EvidenceId = EvidenceId {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON)
 
 -- | Identity of one claim within a verdict.
 newtype ClaimId = ClaimId {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON)
 
 -- | Digest supplied by the revision-pinned content plane.
 newtype ContentHash = ContentHash {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON)
 
 -- | Integer confidence percentage. Validation accepts values from 0 through
 -- 100 inclusive.
 newtype Confidence = Confidence {value :: Int}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON)
 
 -- | Whether cited content states a claim directly or supports a conclusion.
 data ClaimKind = Fact | Inference
@@ -599,9 +614,6 @@ applicabilityErrors requireBounded prefix Applicability {projects, paths, depend
     "must bound at least one project, path, dependency, or practice"
     <> concatMap (uncurry projectErrors) (indexedFields (prefix <> ".projects") projects)
     <> concatMap (uncurry blankErrors) (indexedFields (prefix <> ".dependencies") dependencies)
-    <> concatMap practiceKeyErrors (indexedFields (prefix <> ".practices") practices)
-  where
-    practiceKeyErrors (fieldName, PracticeKey practice) = blankErrors fieldName practice
 
 triggerErrors :: PracticeReviewTrigger -> [ReviewContractError]
 triggerErrors
@@ -647,19 +659,15 @@ adoptionErrors :: Text -> PracticeAdoptionBinding -> [ReviewContractError]
 adoptionErrors
   prefix
   PracticeAdoptionBinding
-    { practice = PracticeKey practice,
-      references,
+    { references,
       claimedApplicability,
       mode,
-      owners,
       upstreamProjects
     } =
-    blankErrors (prefix <> ".practice") practice
-      <> check (null references) (prefix <> ".references") "must contain at least one registered reference"
+    check (null references) (prefix <> ".references") "must contain at least one registered reference"
       <> concatMap (uncurry registeredReferenceErrors) (indexedFields (prefix <> ".references") references)
       <> applicabilityErrors True (prefix <> ".claimedApplicability") claimedApplicability
       <> check (mode /= Advisory) (prefix <> ".mode") "version 1 supports advisory mode only"
-      <> ownerErrors (prefix <> ".owners") owners
       <> concatMap (uncurry upstreamProjectErrors) (indexedFields (prefix <> ".upstreamProjects") upstreamProjects)
 
 registeredReferenceErrors :: Text -> RegisteredPracticeReference -> [ReviewContractError]
@@ -679,13 +687,6 @@ registeredReferenceErrors
       <> check (null documentIds) (prefix <> ".documentIds") "must contain at least one document id"
       <> concatMap (uncurry blankErrors) (indexedFields (prefix <> ".documentIds") documentIds)
 
-ownerErrors :: Text -> ReviewOwners -> [ReviewContractError]
-ownerErrors prefix ReviewOwners {targetOwner = OwnerPrincipal target, practiceOwner = OwnerPrincipal practice, triageOwner = OwnerPrincipal triage, exceptionApprover} =
-  blankErrors (prefix <> ".targetOwner") target
-    <> blankErrors (prefix <> ".practiceOwner") practice
-    <> blankErrors (prefix <> ".triageOwner") triage
-    <> maybe [] (\(OwnerPrincipal approver) -> blankErrors (prefix <> ".exceptionApprover") approver) exceptionApprover
-
 upstreamProjectErrors :: Text -> RegisteredUpstreamProject -> [ReviewContractError]
 upstreamProjectErrors prefix RegisteredUpstreamProject {project, dependency} =
   projectErrors (prefix <> ".project") project
@@ -697,14 +698,13 @@ verdictErrors
     { schemaVersion,
       reviewId = actualReviewId@(ReviewId reviewValue),
       triggerIdempotencyKey,
-      practice = practiceKey@(PracticeKey practice),
+      practice = practiceKey,
       specialist,
       lineage,
       targetEvidence,
       referenceEvidence,
       upstreamEvidence,
       claims,
-      confidence = Confidence confidence,
       routingRationale,
       classification,
       recommendedOwner,
@@ -716,7 +716,6 @@ verdictErrors
     schemaErrors "verdict" schemaVersion
       <> blankErrors "verdict.reviewId" reviewValue
       <> blankErrors "verdict.triggerIdempotencyKey" triggerIdempotencyKey
-      <> blankErrors "verdict.practice" practice
       <> blankErrors "verdict.specialist" specialist
       <> check
         (actualReviewId /= deriveReviewIdFromParts triggerIdempotencyKey practiceKey specialist)
@@ -731,7 +730,6 @@ verdictErrors
       <> duplicateEvidenceErrors allEvidence
       <> concatMap (uncurry (claimErrors (classification == Unresolved) knownEvidence)) (indexedFields "verdict.claims" claims)
       <> duplicateClaimErrors claims
-      <> check (confidence < 0 || confidence > 100) "verdict.confidence" "must be between 0 and 100"
       <> blankErrors "verdict.routingRationale" routingRationale
       <> blankErrors "verdict.recommendedAction" recommendedAction
       <> recommendedOwnerErrors recommendedOwner
@@ -755,9 +753,8 @@ evidenceCollectionErrors expected prefix =
   concatMap (uncurry (evidenceItemErrors expected)) . indexedFields prefix
 
 evidenceItemErrors :: EvidenceRole -> Text -> EvidenceItem -> [ReviewContractError]
-evidenceItemErrors expected prefix EvidenceItem {evidenceId = EvidenceId evidence, role, content} =
-  blankErrors (prefix <> ".evidenceId") evidence
-    <> check (role /= expected) (prefix <> ".role") "does not match its evidence collection"
+evidenceItemErrors expected prefix EvidenceItem {role, content} =
+  check (role /= expected) (prefix <> ".role") "does not match its evidence collection"
     <> contentReferenceErrors (prefix <> ".content") content
 
 contentReferenceErrors :: Text -> ContentReference -> [ReviewContractError]
@@ -765,8 +762,7 @@ contentReferenceErrors
   prefix
   ContentReference
     { project = project@ProjectRef {repository = projectRepository},
-      provenance = provenance@RepoRef {repository = provenanceRepository},
-      contentHash = ContentHash contentHash
+      provenance = provenance@RepoRef {repository = provenanceRepository}
     } =
     projectErrors (prefix <> ".project") project
       <> repoRefErrors (prefix <> ".provenance") provenance
@@ -774,7 +770,6 @@ contentReferenceErrors
         (projectRepository /= provenanceRepository)
         (prefix <> ".provenance.repository")
         "must match the content project repository"
-      <> blankErrors (prefix <> ".contentHash") contentHash
 
 duplicateEvidenceErrors :: [EvidenceItem] -> [ReviewContractError]
 duplicateEvidenceErrors items =
@@ -789,9 +784,8 @@ duplicateClaimErrors claims =
   ]
 
 claimErrors :: Bool -> Set.Set EvidenceId -> Text -> PracticeReviewClaim -> [ReviewContractError]
-claimErrors allowProblemDerived known prefix PracticeReviewClaim {claimId = ClaimId claim, statement, evidenceIds} =
-  blankErrors (prefix <> ".claimId") claim
-    <> blankErrors (prefix <> ".statement") statement
+claimErrors allowProblemDerived known prefix PracticeReviewClaim {statement, evidenceIds} =
+  blankErrors (prefix <> ".statement") statement
     <> check (not allowProblemDerived && null evidenceIds) (prefix <> ".evidenceIds") "must cite at least one evidence item"
     <> [ contractError (prefix <> ".evidenceIds") ("references unknown evidence id: " <> evidence)
        | evidenceId@(EvidenceId evidence) <- evidenceIds,
@@ -804,9 +798,6 @@ recommendedOwnerErrors (Just RecommendedOwner {role, principals}) =
   check (null principals) "verdict.recommendedOwner.principals" "must contain at least one principal"
     <> check (role == JointOwners && length principals < 2) "verdict.recommendedOwner.principals" "joint-owners requires at least two principals"
     <> check (role /= JointOwners && length principals /= 1) "verdict.recommendedOwner.principals" "this owner role requires exactly one principal"
-    <> concatMap principalErrors (indexedFields "verdict.recommendedOwner.principals" principals)
-  where
-    principalErrors (fieldName, OwnerPrincipal principal) = blankErrors fieldName principal
 
 classificationErrors :: PracticeReviewClassification -> Maybe RecommendedOwner -> ExceptionApproval -> Applicability -> [PracticeReviewClaim] -> [ReviewContractError]
 classificationErrors classification recommendedOwner exceptionApproval applicability claims =
@@ -870,7 +861,6 @@ resolutionErrors
       idempotencyKey,
       reviewId = reviewId@(ReviewId reviewValue),
       outcome,
-      resolver = OwnerPrincipal resolver,
       reason,
       resultingApplicability,
       supersedingReviewId
@@ -883,7 +873,6 @@ resolutionErrors
         (actualResolutionId /= deriveResolutionId reviewId idempotencyKey)
         "resolution.resolutionId"
         "does not match the deterministic review/command identity"
-      <> blankErrors "resolution.resolver" resolver
       <> blankErrors "resolution.reason" reason
       <> resolutionOutcomeErrors outcome resultingApplicability supersedingReviewId reviewId
 
@@ -1102,3 +1091,93 @@ practiceReviewEnumAesonOptions =
       allNullaryToStringTag = True,
       tagSingleConstructors = True
     }
+
+parsePracticeKey :: Text -> Either Text PracticeKey
+parsePracticeKey = checkedReviewText "practice key" PracticeKey
+
+practiceKeyText :: PracticeKey -> Text
+practiceKeyText (PracticeKey value) = value
+
+instance FromJSON PracticeKey where
+  parseJSON = withText "practice key" (either (fail . Text.unpack) pure . parsePracticeKey)
+
+parseOwnerPrincipal :: Text -> Either Text OwnerPrincipal
+parseOwnerPrincipal = checkedReviewText "owner principal" OwnerPrincipal
+
+ownerPrincipalText :: OwnerPrincipal -> Text
+ownerPrincipalText (OwnerPrincipal value) = value
+
+instance FromJSON OwnerPrincipal where
+  parseJSON = withText "owner principal" (either (fail . Text.unpack) pure . parseOwnerPrincipal)
+
+parseEvidenceId :: Text -> Either Text EvidenceId
+parseEvidenceId = checkedReviewText "evidence label" EvidenceId
+
+evidenceIdText :: EvidenceId -> Text
+evidenceIdText (EvidenceId value) = value
+
+instance FromJSON EvidenceId where
+  parseJSON = withText "evidence label" (either (fail . Text.unpack) pure . parseEvidenceId)
+
+parseClaimId :: Text -> Either Text ClaimId
+parseClaimId = checkedReviewText "claim label" ClaimId
+
+claimIdText :: ClaimId -> Text
+claimIdText (ClaimId value) = value
+
+instance FromJSON ClaimId where
+  parseJSON = withText "claim label" (either (fail . Text.unpack) pure . parseClaimId)
+
+parseContentHash :: Text -> Either Text ContentHash
+parseContentHash = checkedReviewText "content hash" ContentHash
+
+contentHashText :: ContentHash -> Text
+contentHashText (ContentHash value) = value
+
+instance FromJSON ContentHash where
+  parseJSON = withText "content hash" (either (fail . Text.unpack) pure . parseContentHash)
+
+checkedReviewText :: Text -> (Text -> value) -> Text -> Either Text value
+checkedReviewText label constructor raw
+  | Text.null (Text.strip raw) = Left (label <> " must not be blank")
+  | otherwise = Right (constructor raw)
+
+parseConfidence :: Integer -> Either Text Confidence
+parseConfidence number
+  | number >= 0 && number <= 100 = Right (Confidence (fromInteger number))
+  | otherwise = Left "confidence must be between 0 and 100"
+
+confidencePercent :: Confidence -> Int
+confidencePercent (Confidence number) = number
+
+zeroConfidence :: Confidence
+zeroConfidence = Confidence 0
+
+instance FromJSON Confidence where
+  parseJSON value = parseJSON value >>= either (fail . Text.unpack) pure . parseConfidence
+
+-- | A local citation label for a bounded diagnostic claim, not an entity id.
+evidenceProblemClaimId :: Int -> ClaimId
+evidenceProblemClaimId ordinal = ClaimId ("evidence-problem-" <> Text.justifyRight 3 '0' (Text.pack (show ordinal)))
+
+-- | Commit separate opaque source coordinates with explicit purpose/version.
+-- This identifies a citation, not an allocated review or resolution entity.
+sourceEvidenceIdV2 :: EvidenceRole -> RepoRef -> RelativePath -> ContentHash -> EvidenceId
+sourceEvidenceIdV2 role RepoRef {repository = RepositoryId repository, revision} path (ContentHash hash) =
+  EvidenceId
+    ( "evidence-v2:"
+        <> uuidText
+          [ "source-evidence",
+            "2",
+            roleToken,
+            repository,
+            revisionText revision,
+            relativePathText path,
+            hash
+          ]
+    )
+  where
+    roleToken = case role of
+      TargetEvidence -> "target"
+      ReferenceEvidence -> "reference"
+      UpstreamEvidence -> "upstream"

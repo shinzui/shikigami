@@ -1,7 +1,7 @@
 module Shikigami.PracticeReviewSpec (tests) where
 
 import Control.Monad (forM_)
-import Data.Aeson (FromJSON (..), Value (..), eitherDecode, eitherDecodeStrict', encode, withObject, (.:), (.:?))
+import Data.Aeson (FromJSON (..), ToJSON, Value (..), eitherDecode, eitherDecodeStrict', encode, withObject, (.:), (.:?))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString qualified as ByteString
@@ -13,7 +13,7 @@ import Data.Text qualified as Text
 import Data.Vector ((!?), (//))
 import Data.Vector qualified as Vector
 import Shikigami.PracticeReview
-  ( PracticeKey (..),
+  ( PracticeKey,
     PracticeReviewClassification (..),
     PracticeReviewResolution (..),
     PracticeReviewTrigger,
@@ -23,11 +23,13 @@ import Shikigami.PracticeReview
     ReviewId (..),
     deriveResolutionId,
     deriveReviewId,
+    parsePracticeKey,
     validateResolution,
     validateTrigger,
     validateVerdict,
     validatedTriggerValue,
   )
+import Shikigami.PracticeReview qualified as Review
 import Shikigami.Repository
   ( mkRelativePath,
     mkRevision,
@@ -43,7 +45,8 @@ tests :: TestTree
 tests =
   testGroup
     "practice review"
-    [ repositoryContractTests,
+    [ scalarValueTests,
+      repositoryContractTests,
       triggerContractTests,
       verdictContractTests,
       resolutionContractTests,
@@ -79,6 +82,8 @@ triggerContractTests =
         trigger <- decodeStrictOrFail @PracticeReviewTrigger bytes
         decodedAgain <- decodeLazyOrFail @PracticeReviewTrigger (encode trigger)
         decodedAgain @?= trigger
+        fixtureWire <- decodeStrictOrFail @Value bytes
+        encode trigger @?= encode fixtureWire
         validated <- expectRight (validateTrigger trigger)
         validatedTriggerValue validated @?= trigger,
       testCase "rejects a producer-selected specialist" do
@@ -95,8 +100,8 @@ triggerContractTests =
         bytes <- readFixture "trigger-valid.json"
         trigger <- decodeStrictOrFail @PracticeReviewTrigger bytes
         let expected = ReviewId "b717afda-1273-54d4-8241-4d66330e3fd3"
-        deriveReviewId trigger (PracticeKey "opentelemetry") "opentelemetry-practice-reviewer" @?= expected
-        deriveReviewId trigger (PracticeKey " OpenTelemetry ") " OPENTELEMETRY-PRACTICE-REVIEWER " @?= expected,
+        deriveReviewId trigger (fixturePracticeKey "opentelemetry") "opentelemetry-practice-reviewer" @?= expected
+        deriveReviewId trigger (fixturePracticeKey " OpenTelemetry ") " OPENTELEMETRY-PRACTICE-REVIEWER " @?= expected,
       testCase "reference ordering does not change identity but a material trigger key does" do
         bytes <- readFixture "trigger-valid.json"
         trigger <- decodeStrictOrFail @PracticeReviewTrigger bytes
@@ -132,6 +137,8 @@ verdictContractTests =
           @?= [Consistent, TargetSuspect, ReferenceSuspect, LegitimateException, Unresolved]
         decodedAgain <- decodeLazyOrFail @[PracticeReviewVerdict] (encode verdicts)
         decodedAgain @?= verdicts
+        fixtureWire <- decodeStrictOrFail @Value bytes
+        encode verdicts @?= encode fixtureWire
         forM_ verdicts (expectRight . validateVerdict)
     ]
 
@@ -145,6 +152,8 @@ resolutionContractTests =
         fmap resolutionOutcome resolutions @?= [Accepted, Rejected, Narrowed, Superseded]
         decodedAgain <- decodeLazyOrFail @[PracticeReviewResolution] (encode resolutions)
         decodedAgain @?= resolutions
+        fixtureWire <- decodeStrictOrFail @Value bytes
+        encode resolutions @?= encode fixtureWire
         forM_ resolutions (expectRight . validateResolution)
         case resolutions of
           firstResolution : _ ->
@@ -181,7 +190,7 @@ resolutionIdentity PracticeReviewResolution {resolutionId} = resolutionId
 
 deriveReviewIdFromFixture :: PracticeReviewTrigger -> ReviewId
 deriveReviewIdFromFixture trigger =
-  deriveReviewId trigger (PracticeKey "opentelemetry") "opentelemetry-practice-reviewer"
+  deriveReviewId trigger (fixturePracticeKey "opentelemetry") "opentelemetry-practice-reviewer"
 
 data InvalidFixture = InvalidFixture
   { name :: !Text,
@@ -333,3 +342,39 @@ expectRight = either (assertFailure . ("expected Right, got Left: " <>) . show) 
 
 expectLeft :: (Show value) => Either error value -> IO ()
 expectLeft = either (const (pure ())) (assertFailure . ("expected Left, got Right: " <>) . show)
+
+fixturePracticeKey :: Text -> PracticeKey
+fixturePracticeKey = either (error . show) id . parsePracticeKey
+
+scalarValueTests :: TestTree
+scalarValueTests =
+  testGroup
+    "checked review values"
+    [ testCase "review text units preserve exact strings and refuse blank values" do
+        assertTextValue Review.parsePracticeKey Review.practiceKeyText
+        assertTextValue Review.parseOwnerPrincipal Review.ownerPrincipalText
+        assertTextValue Review.parseEvidenceId Review.evidenceIdText
+        assertTextValue Review.parseClaimId Review.claimIdText
+        assertTextValue Review.parseContentHash Review.contentHashText
+        Review.claimIdText (Review.evidenceProblemClaimId 1) @?= "evidence-problem-001",
+      testCase "confidence retains bounded integer percentage bytes" do
+        Review.confidencePercent Review.zeroConfidence @?= 0
+        forM_ [0, 73, 100] \number -> do
+          value <- expectRight (Review.parseConfidence number)
+          Review.confidencePercent value @?= fromInteger number
+          encode value @?= encode number
+          eitherDecode (encode value) @?= Right value
+        forM_ [-1, 101, 100000000000000000000] (expectLeft . Review.parseConfidence)
+        forM_ ["-1", "101", "1.5", "\"95\""] \raw -> expectLeft (eitherDecode @Review.Confidence raw)
+    ]
+
+assertTextValue :: forall value. (Eq value, Show value, ToJSON value, FromJSON value) => (Text -> Either Text value) -> (value -> Text) -> IO ()
+assertTextValue parse render = do
+  forM_ ["label:a", " 名前 "] \raw -> do
+    value <- expectRight (parse raw)
+    render value @?= raw
+    encode value @?= encode raw
+    eitherDecode (encode value) @?= Right value
+  forM_ ["", " ", "\t\n"] \raw -> do
+    expectLeft (parse raw)
+    expectLeft (eitherDecode @value (encode raw))

@@ -38,6 +38,7 @@ import Shikigami.Execution.AssignmentKey qualified as Assignment
 import Shikigami.Execution.ToolPosition qualified as Position
 import Shikigami.Decision.Contract qualified as Decision
 import Shikigami.Log.Correlation qualified as Correlation
+import Shikigami.PracticeReview qualified as Review
 import Shikigami.PracticeReview.Evidence qualified as Evidence
 import Shikigami.Router.Declaration qualified as Declaration
 import Shikigami.Workspace.Instructions qualified as Instructions
@@ -46,7 +47,19 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''callOrdinal :: Integer -> Either Text Counter.CallOrdinal
+POSITIVE = '''practiceKey :: Text -> Either Text Review.PracticeKey
+practiceKey = Review.parsePracticeKey
+ownerPrincipal :: Text -> Either Text Review.OwnerPrincipal
+ownerPrincipal = Review.parseOwnerPrincipal
+evidenceId :: Text -> Either Text Review.EvidenceId
+evidenceId = Review.parseEvidenceId
+claimId :: Text -> Either Text Review.ClaimId
+claimId = Review.parseClaimId
+contentHash :: Text -> Either Text Review.ContentHash
+contentHash = Review.parseContentHash
+confidence :: Integer -> Either Text Review.Confidence
+confidence = Review.parseConfidence
+callOrdinal :: Integer -> Either Text Counter.CallOrdinal
 callOrdinal = Counter.parseCallOrdinal
 payloadId :: Text -> Either Text Payload.PayloadId
 payloadId = Payload.parsePayloadId
@@ -122,6 +135,12 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('Review.PracticeKey', 'parse'),
+    ('Review.OwnerPrincipal', 'parse'),
+    ('Review.EvidenceId', 'parse'),
+    ('Review.ClaimId', 'parse'),
+    ('Review.ContentHash', 'parse'),
+    ('Review.Confidence', 'parse'),
     ('Counter.CallOrdinal', 'parse'),
     ('Payload.PayloadId', 'parse'),
     ('Payload.PayloadDigest', 'parse'),

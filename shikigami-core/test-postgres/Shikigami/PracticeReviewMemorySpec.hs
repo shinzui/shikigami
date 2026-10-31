@@ -44,7 +44,7 @@ import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWrite
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.PracticeReview
   ( Applicability (..),
-    PracticeKey (..),
+    PracticeKey,
     PracticeReviewResolution (..),
     PracticeReviewVerdict (..),
     ProjectRef (..),
@@ -54,6 +54,7 @@ import Shikigami.PracticeReview
     ValidatedPracticeReviewResolution,
     ValidatedPracticeReviewVerdict,
     deriveResolutionId,
+    parsePracticeKey,
     validateResolution,
     validateVerdict,
     validatedResolutionValue,
@@ -162,7 +163,7 @@ applicabilityTests =
         path <- expectRight (mkRelativePath "docs/adr/0001.md")
         assertBool "fully empty scope is a wildcard" (appliesTo emptyApplicability (recallContext (Just path) Set.empty))
         let wrongProject = Applicability [ProjectRef "other" (RepositoryId "repo_other")] [] [] []
-            wrongPractice = Applicability [] [] [] [PracticeKey "logging"]
+            wrongPractice = Applicability [] [] [] [fixturePracticeKey "logging"]
             wrongDependency = Applicability [] [] ["other-package"] []
             context = recallContext (Just path) (Set.singleton "hs-opentelemetry-api")
         assertBool "project mismatch excludes" (not (appliesTo wrongProject context))
@@ -237,7 +238,7 @@ postgresTests databaseFixture =
           tags @?= practiceReviewTags (ProvisionalReview verdict)
           decodePracticeReviewMemory content @?= Right (ProvisionalReview verdict)
 
-          scopeRows <- activePracticeRows appEnv (PracticeKey "opentelemetry")
+          scopeRows <- activePracticeRows appEnv (fixturePracticeKey "opentelemetry")
           length scopeRows @?= 1
           journal <- loadReviewStepIndex appEnv workflowId
           assertBool "fixed remember step is journaled" (Map.member "practice-review-remember-provisional" journal)
@@ -296,7 +297,7 @@ postgresTests databaseFixture =
           let RecalledPracticeReviews {guiding = outsideGuidance} = outsideView
           length outsideGuidance @?= 0
 
-          activeRows <- activePracticeRows appEnv (PracticeKey "opentelemetry")
+          activeRows <- activePracticeRows appEnv (fixturePracticeKey "opentelemetry")
           Set.fromList (idText <$> resolvedIds) @?= Set.fromList (rowMemoryId <$> activeRows),
       testCase "a newer review retires the prior resolution and preserves the full chain" do
         (withReviewEnv databaseFixture) \appEnv session -> do
@@ -353,14 +354,14 @@ postgresTests databaseFixture =
             seedReviewContent
               appEnv
               session
-              (PracticeKey "logging")
+              (fixturePracticeKey "logging")
               (encodePracticeReviewMemory (ProvisionalReview verdict))
           recalled <-
             runRecall
               appEnv
               session
               (WorkflowId "practice-review-recall-wrong-scope")
-              (recallContextFor (PracticeKey "logging") Nothing Set.empty)
+              (recallContextFor (fixturePracticeKey "logging") Nothing Set.empty)
           let RecalledPracticeReviews {guiding, doNotRepeat, pending, retired, diagnostics} = recalled
           guiding @?= []
           doNotRepeat @?= []
@@ -407,7 +408,7 @@ postgresTests databaseFixture =
             ([winner], [conflictWinner]) -> conflictWinner @?= winner
             other -> assertFailure ("expected one winner and one typed conflict, got " <> show other)
 
-          activeRows <- activePracticeRows appEnv (PracticeKey "opentelemetry")
+          activeRows <- activePracticeRows appEnv (fixturePracticeKey "opentelemetry")
           length activeRows @?= 1
           let PracticeReviewVerdict {reviewId} = validatedVerdictValue verdict
           chain <- runChain appEnv session (WorkflowId "practice-review-race-chain") reviewId
@@ -586,7 +587,7 @@ seedMalformedMemory appEnv session =
   seedReviewContent
     appEnv
     session
-    (PracticeKey "opentelemetry")
+    (fixturePracticeKey "opentelemetry")
     "{\"schemaVersion\":99}"
 
 seedReviewContent :: AppEnv -> SessionId -> PracticeKey -> Text -> IO MemoryId
@@ -647,7 +648,7 @@ boundedApplicability path =
     { projects = [ProjectRef "target" (RepositoryId "repo_target")],
       paths = [path],
       dependencies = ["hs-opentelemetry-api"],
-      practices = [PracticeKey "opentelemetry"]
+      practices = [fixturePracticeKey "opentelemetry"]
     }
 
 pathOnly :: RelativePath -> Applicability
@@ -657,7 +658,7 @@ emptyApplicability :: Applicability
 emptyApplicability = Applicability [] [] [] []
 
 recallContext :: Maybe RelativePath -> Set.Set Text -> ReviewRecallContext
-recallContext = recallContextFor (PracticeKey "opentelemetry")
+recallContext = recallContextFor (fixturePracticeKey "opentelemetry")
 
 recallContextFor :: PracticeKey -> Maybe RelativePath -> Set.Set Text -> ReviewRecallContext
 recallContextFor practice path dependencies =
@@ -713,3 +714,6 @@ isLeft = \case
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+fixturePracticeKey :: Text -> PracticeKey
+fixturePracticeKey = either (error . show) id . parsePracticeKey

@@ -224,6 +224,11 @@
           "rationale": "OperationUncertainty retains explicit states and exact boolean JSON; private positive int64 CallOrdinal stays distinct from the observed selection count. Checked next-ordinal admission preserves refusal priority and SQL/SDK rendering stays explicit. Complete operation and actual accepted-receipt byte controls precede invalid values; 141 compiler clients prevent substitution/private construction/Generic bypasses. ADR-91 and 578 pure/390 PostgreSQL/262 worker/95 server plus native/domain/diagram/82 CLI/live HTTP checks cover this clause; complete scalar/identity review remains pending."
         },
         {
+          "id": "checked-review-values-and-source-citation-coordinates",
+          "disposition": "implemented",
+          "rationale": "Six private review types reject blank/out-of-range values without Generic/Num/IsString construction, retaining complete valid fixture and scalar bytes. Explicit raw content-plane hash Text refines once; graph/owner/authorization checks remain. A before public-validator case reproduces opaque path/hash citation aliasing; v2 length-prefixed commitments separate admitted coordinates with frozen vectors. ADR-92 and 581 pure/390 PostgreSQL/262 worker/95 server plus 170 compiler/native/domain/diagram/82 CLI/live HTTP checks cover this clause. Fresh source identity meaning intentionally resets under ADR-27, without a historical factory fallback or live Mori claim. Complete scalar/allocated-identity review remains pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -297,7 +302,14 @@
         "docs/evidence/keiro-0.22/execution-values-results.txt",
         "docs/evidence/keiro-0.22/execution-values-native-diff.json",
         "docs/evidence/keiro-0.22/execution-values-native-replay.json",
-        "docs/evidence/keiro-0.22/execution-values-fold-identities.json"
+        "docs/evidence/keiro-0.22/execution-values-fold-identities.json",
+        "docs/adr/0092-review-values-are-checked-and-source-citations-use-structured-coordinates.md",
+        "docs/evidence/keiro-0.22/practice-values-results.txt",
+        "docs/evidence/keiro-0.22/practice-values-before-regressions.txt",
+        "docs/evidence/keiro-0.22/practice-values-vectors.json",
+        "docs/evidence/keiro-0.22/practice-values-native-diff.json",
+        "docs/evidence/keiro-0.22/practice-values-native-replay.json",
+        "docs/evidence/keiro-0.22/practice-values-fold-identities.json"
       ]
     },
     {

@@ -79,10 +79,9 @@ import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWrite
 import Shikigami.Memory.Scope (shikigamiNamespace)
 import Shikigami.PracticeReview
   ( Applicability (..),
-    Confidence (..),
     ContentReference (..),
     EvidenceItem (..),
-    PracticeKey (..),
+    PracticeKey,
     PracticeReviewResolution (..),
     PracticeReviewVerdict (..),
     ProjectRef (..),
@@ -91,6 +90,8 @@ import Shikigami.PracticeReview
     ReviewId (..),
     ValidatedPracticeReviewResolution,
     ValidatedPracticeReviewVerdict,
+    confidencePercent,
+    practiceKeyText,
     validateResolution,
     validateVerdict,
     validatedResolutionValue,
@@ -310,8 +311,8 @@ lengthPrefixed = Text.intercalate "|" . fmap (\part -> Text.pack (show (Text.len
 
 -- | Shared cross-agent scope for one normalized practice.
 practiceReviewScope :: PracticeKey -> MemoryScope
-practiceReviewScope (PracticeKey practice) =
-  ScopeEntity shikigamiNamespace (ScopeKind "practice-review") (normalizeToken practice)
+practiceReviewScope practice =
+  ScopeEntity shikigamiNamespace (ScopeKind "practice-review") (normalizeToken (practiceKeyText practice))
 
 -- | Stable indexed metadata duplicated from the authoritative envelope.
 practiceReviewTags :: PracticeReviewMemoryEnvelope -> Set Text
@@ -320,7 +321,7 @@ practiceReviewTags envelope =
     ( [ "practice-review",
         "practice-review:v1",
         "state:" <> stateTag,
-        "practice:" <> practiceValue,
+        "practice:" <> practiceKeyText practiceKey,
         "review:" <> reviewValue,
         "classification:" <> enumText classification
       ]
@@ -343,7 +344,7 @@ practiceReviewTags envelope =
                 Just (enumText outcome),
                 maybe (verdictApplicability verdict) id resultingApplicability
               )
-    rawVerdict@PracticeReviewVerdict {reviewId = ReviewId reviewValue, practice = PracticeKey practiceValue, classification} =
+    rawVerdict@PracticeReviewVerdict {reviewId = ReviewId reviewValue, practice = practiceKey, classification} =
       validatedVerdictValue validatedVerdict
     Applicability {paths = tagPaths, dependencies = tagDependencies} = applicabilityForTags
     projectValues = repositoryValues rawVerdict applicabilityForTags
@@ -406,8 +407,8 @@ matchesDependencies allowed current =
 
 matchesPractices :: [PracticeKey] -> PracticeKey -> Bool
 matchesPractices [] _ = True
-matchesPractices allowed (PracticeKey wanted) =
-  any (\(PracticeKey candidate) -> normalizeToken candidate == normalizeToken wanted) allowed
+matchesPractices allowed wanted =
+  any (\candidate -> normalizeToken (practiceKeyText candidate) == normalizeToken (practiceKeyText wanted)) allowed
 
 -- | Capability environment installed by the agent-run workflow.
 data PracticeReviewMemoryEnv = PracticeReviewMemoryEnv
@@ -587,7 +588,8 @@ firstReviewError memoryId = either (Left . ReviewMemoryMalformed memoryId) Right
 
 verdictConfidence :: ValidatedPracticeReviewVerdict -> Kioku.Confidence
 verdictConfidence validated =
-  let PracticeReviewVerdict {confidence = Confidence percentage} = validatedVerdictValue validated
+  let PracticeReviewVerdict {confidence} = validatedVerdictValue validated
+      percentage = confidencePercent confidence
    in if percentage >= 80
         then Kioku.HighConfidence
         else

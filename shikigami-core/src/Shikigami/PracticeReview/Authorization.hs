@@ -29,10 +29,11 @@ import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Agent.RunJob (RunRouteKind (AgentWorkflowRoute))
 import Shikigami.PracticeReview
-  ( OwnerPrincipal (..),
+  ( OwnerPrincipal,
     PracticeReviewResolution (..),
     ResolutionId (..),
     ValidatedPracticeReviewResolution,
+    ownerPrincipalText,
     validateResolution,
     validatedResolutionValue,
   )
@@ -169,14 +170,14 @@ validateSource raw
     normalized = Text.strip raw
 
 expectedAuthorizationId :: ValidatedPracticeReviewResolution -> AuthorizedResolutionReceipt -> Text
-expectedAuthorizationId validated AuthorizedResolutionReceipt {authorityKind, verifiedSubject = OwnerPrincipal subject, sourceReference, authorizedAt} =
+expectedAuthorizationId validated AuthorizedResolutionReceipt {authorityKind, verifiedSubject = subject, sourceReference, authorizedAt} =
   let PracticeReviewResolution {resolutionId = ResolutionId resolutionId} = validatedResolutionValue validated
       preimage =
         Text.intercalate
           "|"
           [ "practice-review-resolution-authorization-v1",
             enumText authorityKind,
-            subject,
+            ownerPrincipalText subject,
             Text.strip sourceReference,
             Text.pack (iso8601Show authorizedAt),
             resolutionId

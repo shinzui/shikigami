@@ -1,0 +1,46 @@
+{
+  "breaking": false,
+  "coordinationImpact": [],
+  "findings": [],
+  "gate": [
+    "private-history-read",
+    "snapshot-hydration",
+    "public-consumer",
+    "persisted-identity",
+    "consumer-build"
+  ],
+  "schema": "keiro-dsl/diff-report/1",
+  "semanticImpact": {
+    "declarations": []
+  },
+  "workspace": {
+    "adoptionBaseline": false,
+    "identity": "shikigami",
+    "manifest": "domain/shikigami.keiro-workspace",
+    "membersNew": [
+      "shikigami/agent-run.keiro",
+      "shikigami/approval.keiro",
+      "shikigami/continuing-worker.keiro",
+      "shikigami/conversation.keiro",
+      "shikigami/execution-driver.keiro",
+      "shikigami/execution.keiro",
+      "shikigami/objective.keiro",
+      "shikigami/run-evidence.keiro",
+      "shikigami/run-jobs.keiro",
+      "shikigami/worker-session.keiro"
+    ],
+    "membersOld": [
+      "shikigami/agent-run.keiro",
+      "shikigami/approval.keiro",
+      "shikigami/continuing-worker.keiro",
+      "shikigami/conversation.keiro",
+      "shikigami/execution-driver.keiro",
+      "shikigami/execution.keiro",
+      "shikigami/objective.keiro",
+      "shikigami/run-evidence.keiro",
+      "shikigami/run-jobs.keiro",
+      "shikigami/worker-session.keiro"
+    ],
+    "since": "fbde25d"
+  }
+}

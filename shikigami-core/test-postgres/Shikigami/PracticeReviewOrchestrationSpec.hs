@@ -60,14 +60,14 @@ import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.PracticeReview
-  ( ClaimId (..),
+  ( ClaimId,
     ClaimKind (Fact),
     ContentReference (..),
     EvidenceItem (..),
     ExceptionApproval (..),
-    OwnerPrincipal (..),
+    OwnerPrincipal,
     PracticeAdoptionBinding (..),
-    PracticeKey (..),
+    PracticeKey,
     PracticeReviewClaim (..),
     PracticeReviewClassification (..),
     PracticeReviewResolution (..),
@@ -78,6 +78,9 @@ import Shikigami.PracticeReview
     ReviewLineage (..),
     deriveResolutionId,
     deriveReviewId,
+    parseClaimId,
+    parseOwnerPrincipal,
+    parsePracticeKey,
     validateResolution,
     validateVerdict,
     validatedVerdictValue,
@@ -164,7 +167,7 @@ authorizationTests =
       testCase "subject mismatch, disallowed source, and altered receipt are refused" do
         resolution <- firstResolution
         validated <- expectRight (validateResolution resolution)
-        mismatched <- expectRight (mkAuthorizedResolutionReceipt Human (OwnerPrincipal "different-subject") "activity://approval/1" (resolvedAtOf resolution) validated)
+        mismatched <- expectRight (mkAuthorizedResolutionReceipt Human (fixtureOwnerPrincipal "different-subject") "activity://approval/1" (resolvedAtOf resolution) validated)
         let mismatchedEnvelope = AuthorizedPracticeReviewResolution {schemaVersion = 1, resolution, authorization = mismatched}
         assertBool "subject mismatch was accepted" (isSubjectMismatch (validateAuthorizedPracticeReviewResolution mismatchedEnvelope))
         assertBool
@@ -259,7 +262,7 @@ completeClassificationTests databaseFixture =
         reReviewEvaluatorCalls <- newIORef 0
         reReviewAttentionCalls <- newIORef 0
         let priorTrigger = completeOpenTelemetryTrigger "complete-consistent"
-            priorReviewId = deriveReviewId priorTrigger (PracticeKey "opentelemetry") reviewerAgent
+            priorReviewId = deriveReviewId priorTrigger (fixturePracticeKey "opentelemetry") reviewerAgent
             reReviewTrigger = completeOpenTelemetryReferenceChangeTrigger "complete-reference-change" priorReviewId
             reReviewRuntime = completeRuntime reReviewEvidenceCalls reReviewEvaluatorCalls reReviewAttentionCalls referenceSuspect
             reReviewWorkflowId = WorkflowId "practice-review-complete-reference-change"
@@ -289,14 +292,14 @@ completeClassificationTests databaseFixture =
           evaluatorCalls <- newIORef 0
           attentionCalls <- newIORef 0
           let reviewedTrigger@PracticeReviewTrigger {adoptions} = completeOpenTelemetryTrigger ("complete-" <> reviewLabel)
-              reviewId = deriveReviewId reviewedTrigger (PracticeKey "opentelemetry") reviewerAgent
+              reviewId = deriveReviewId reviewedTrigger (fixturePracticeKey "opentelemetry") reviewerAgent
               resultingApplicability =
                 case adoptions of
                   PracticeAdoptionBinding {claimedApplicability} : _
                     | retainsApplicability -> Just claimedApplicability
                   _ -> Nothing
               supersedingReviewId
-                | isSuperseded = Just (deriveReviewId (completeOpenTelemetryTrigger "complete-superseding-review") (PracticeKey "opentelemetry") reviewerAgent)
+                | isSuperseded = Just (deriveReviewId (completeOpenTelemetryTrigger "complete-superseding-review") (fixturePracticeKey "opentelemetry") reviewerAgent)
                 | otherwise = Nothing
               commandKey = "complete-resolution-" <> resolutionLabel
               resolution =
@@ -306,7 +309,7 @@ completeClassificationTests databaseFixture =
                     idempotencyKey = commandKey,
                     reviewId,
                     outcome,
-                    resolver = OwnerPrincipal "architecture-council",
+                    resolver = fixtureOwnerPrincipal "architecture-council",
                     reason = "Verified orchestration resolution fixture.",
                     resolvedAt = UTCTime (fromGregorian 2026 8 26) 0,
                     resultingApplicability,
@@ -317,7 +320,7 @@ completeClassificationTests databaseFixture =
             expectRight
               ( mkAuthorizedResolutionReceipt
                   Human
-                  (OwnerPrincipal "architecture-council")
+                  (fixtureOwnerPrincipal "architecture-council")
                   ("activity://approval/" <> resolutionLabel)
                   (resolvedAtOf resolution)
                   validatedResolution
@@ -475,7 +478,7 @@ replayTests databaseFixture =
                 assertBool "attention step is absent" (Map.member "practice-review-attention" index)
                 assertBool "incomplete evidence invoked the evaluator" (Map.notMember "practice-review-evaluate" index)
 
-            let reviewId = deriveReviewId contractTrigger (PracticeKey "opentelemetry") reviewerAgent
+            let reviewId = deriveReviewId contractTrigger (fixturePracticeKey "opentelemetry") reviewerAgent
                 resolution =
                   PracticeReviewResolution
                     { schemaVersion = 1,
@@ -483,7 +486,7 @@ replayTests databaseFixture =
                       idempotencyKey = "resolution-command-fixture",
                       reviewId,
                       outcome = Rejected,
-                      resolver = OwnerPrincipal "architecture-council",
+                      resolver = fixtureOwnerPrincipal "architecture-council",
                       reason = "The incomplete advisory review was explicitly rejected by its verified resolver.",
                       resolvedAt = UTCTime (fromGregorian 2026 8 26) 0,
                       resultingApplicability = Nothing,
@@ -498,7 +501,7 @@ replayTests databaseFixture =
               expectRight
                 ( mkAuthorizedResolutionReceipt
                     Human
-                    (OwnerPrincipal "architecture-council")
+                    (fixtureOwnerPrincipal "architecture-council")
                     "activity://approval/practice-review-fixture"
                     (resolvedAtOf resolution)
                     validatedResolution
@@ -724,7 +727,7 @@ proposalWithEvidence EvidenceBundle {target, references, upstream} proposal =
       & #upstreamEvidence .~ ([])
       & #claims
         .~ ( [ PracticeReviewClaim
-                 { claimId = ClaimId "claim-complete-orchestration",
+                 { claimId = fixtureClaimId "claim-complete-orchestration",
                    kind = Fact,
                    statement = "The bounded evidence supports the proposed architecture-practice classification.",
                    material = True,
@@ -970,3 +973,12 @@ fixtureDelegationDepth = either (error . show) id . parseDelegationDepth . toInt
 
 fixtureRunKey :: Text -> RunKey
 fixtureRunKey = either (error . show) id . parseRunKey
+
+fixturePracticeKey :: Text -> PracticeKey
+fixturePracticeKey = either (error . show) id . parsePracticeKey
+
+fixtureOwnerPrincipal :: Text -> OwnerPrincipal
+fixtureOwnerPrincipal = either (error . show) id . parseOwnerPrincipal
+
+fixtureClaimId :: Text -> ClaimId
+fixtureClaimId = either (error . show) id . parseClaimId
