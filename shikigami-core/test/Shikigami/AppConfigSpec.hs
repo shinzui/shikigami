@@ -57,6 +57,7 @@ import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa, ViaKizashi))
 import Shikigami.Agent.Decl (delegationBudgetNatural)
 import Shikigami.App.Config
 import Shikigami.App.Config.Load
+import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Objective.Types (ObjectiveSettings (..), defaultObjectiveSettings)
 import Shikigami.PracticeReview.Capability (renderAttentionRecipientMap)
@@ -356,8 +357,8 @@ precedenceTests =
             (optionsWith [] [cliOverride behaviorHarnessKey "{\"maxModelTurns\":3,\"outputRepairs\":1,\"output\":{\"tag\":\"NonemptyReply\"}}"])
             [yaml "file" "behavior:\n  harness:\n    maxModelTurns: 7\n"]
             [("SHIKIGAMI_BEHAVIOR_HARNESS", "{\"maxModelTurns\":5}")]
-        config.harness.maxModelTurns @?= 3
-        config.harness.outputRepairs @?= 1
+        config.harness.maxModelTurns @?= (fixturePolicy 3)
+        config.harness.outputRepairs @?= (fixturePolicy 1)
         config.harness.output @?= Harness.NonemptyReply
         mapM_
           (\invalid -> assertBool "invalid harness configuration refused" ((runWith (optionsWith [] [cliOverride behaviorHarnessKey invalid]) [] []).exitCode /= 0))
@@ -986,3 +987,6 @@ objectiveConfigurationTests =
         forM_ ["{\"enabled\":true,\"operator\":\"\"}", "{\"agentCreation\":[\"worker\"]}", "{\"administration\":\"AdministerAll\"}"] \value ->
           (runWith (diagnosticOptions CheckConfig) [] [("SHIKIGAMI_OBJECTIVES", value)]).exitCode @?= resolutionExitCode
     ]
+
+fixturePolicy :: (PolicyNumber a) => Integer -> a
+fixturePolicy number = either (error . show) id (parsePolicyNumber number)

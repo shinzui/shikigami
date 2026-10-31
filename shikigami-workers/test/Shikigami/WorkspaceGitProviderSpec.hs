@@ -26,6 +26,7 @@ import Shikigami.Execution.Counter (AttemptCount, parseAttemptCount)
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy.Types
+import Shikigami.Execution.Progress (ProgressNumber (..))
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Runner (DispatchContext (..))
@@ -168,11 +169,11 @@ tests fixture =
         readIORef writes >>= (@?= 1)
         (_, before) <- right =<< run env (Execution.loadExecution access)
         before.cursor @?= (fixtureRevision 2)
-        before.pendingReceipts @?= 1
+        before.pendingReceipts @?= (fixtureProgress 1)
         publishGitReceipt env reference.operationId >>= (@?= Right GitReceiptAcknowledged)
         (_, after) <- right =<< run env (Execution.loadExecution access)
         after.cursor @?= before.cursor
-        after.pendingReceipts @?= 0
+        after.pendingReceipts @?= (fixtureProgress 0)
         Just retained <- run env (runTransaction (Git.inspectGitTx reference.operationId))
         retained.attemptId @?= reference.attemptId,
       testCase "status and diff are bounded admitted observations with no commit registration" $
@@ -378,3 +379,6 @@ fixtureRevision value = either (error . show) id (parseRevision value)
 
 fixtureCount :: Integer -> AttemptCount scope
 fixtureCount number = either (error . show) id (parseAttemptCount number)
+
+fixtureProgress :: (ProgressNumber a) => Integer -> a
+fixtureProgress number = either (error . show) id (parseProgress number)

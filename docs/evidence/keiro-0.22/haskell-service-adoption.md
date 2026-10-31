@@ -184,3 +184,10 @@ The [compiled declaration worklist](domain-declarations.json) and
 modules, 868 declarations and 14 separately listed role entrypoints. The source
 and interface hashes preserve the actual candidate; the worklist does not assign
 automatic domain/boundary exemptions or certify the remaining review.
+
+Execution policy ceilings and durable model-turn/repair/pending-receipt counts now
+have distinct private checked types under ADR-78. [Policy/progress acceptance](policy-progress-results.txt)
+records unchanged numeric bytes, configuration refinement, 31 compiler clients and
+atomic refusal at the existing receipt capacity. Full affected acceptance is 557
+pure, 383 PostgreSQL, 260 worker and 95 server tests. The complete scalar/identity
+census remains open.

@@ -105,7 +105,9 @@ library
     Shikigami.Execution.Identity
     Shikigami.Execution.Live
     Shikigami.Execution.Policy
+    Shikigami.Execution.Policy.Limits
     Shikigami.Execution.Policy.Types
+    Shikigami.Execution.Progress
     Shikigami.Execution.Quantity
     Shikigami.Execution.Request
     Shikigami.Execution.Resources

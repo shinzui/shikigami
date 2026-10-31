@@ -8,9 +8,11 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Either (isLeft)
 import Data.Generics.Labels ()
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
 import Shikigami.Execution.Policy
+import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
 import Shikigami.Execution.Transcript
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Workspace.Instructions (instructionPrompt, mkInstructionBundle)
@@ -30,6 +32,34 @@ tests =
         Aeson.eitherDecode @ToolBinding legacy @?= Right binding
         Aeson.eitherDecode @Aeson.Value legacy @?= Right (Aeson.toJSON binding)
         assertBool "a zero-invoice declaration changes immutable scope" (toolScopeDigest binding /= toolScopeDigest (binding & #invoiceCost .~ NoInvoiceCost)),
+      testCase "checked policy fields keep exact numeric bytes and reject each invalid bound" do
+        let policy = defaultHarnessPolicy & #summaryTokens .~ Just (fixturePolicy 64)
+            expected =
+              Aeson.object
+                [ "format" .= (1 :: Int),
+                  "maxModelTurns" .= (8 :: Int),
+                  "outputRepairs" .= (0 :: Int),
+                  "contextBytes" .= (262144 :: Int),
+                  "keepRecentMessages" .= (4 :: Int),
+                  "deniedTools" .= ([] :: [Text]),
+                  "humanTools" .= ([] :: [Text]),
+                  "permissionSeconds" .= (900 :: Int),
+                  "output" .= AnyReply,
+                  "recoveryAttempts" .= (2 :: Int),
+                  "summaryTokens" .= (64 :: Int)
+                ]
+        Aeson.eitherDecode (Aeson.encode policy) @?= Right policy
+        Aeson.encode policy @?= Aeson.encode expected
+        case Aeson.toJSON policy of
+          Aeson.Object fields ->
+            mapM_
+              ( \(key, number) ->
+                  assertBool
+                    "invalid policy bound refused"
+                    (case Aeson.fromJSON (Aeson.Object (KeyMap.insert key (Aeson.toJSON (number :: Integer)) fields)) :: Aeson.Result HarnessPolicy of Aeson.Error _ -> True; Aeson.Success _ -> False)
+              )
+              [(key, bad) | (key, lower, upper) <- [("maxModelTurns", 1, 10000), ("outputRepairs", 0, 10), ("contextBytes", 1024, 1048576), ("keepRecentMessages", 1, 1000), ("permissionSeconds", 1, 86400), ("recoveryAttempts", 0, 100), ("summaryTokens", 1, 32768)], bad <- [lower - 1, upper + 1]]
+          _ -> assertFailure "policy did not encode as an object",
       testCase "old policy bytes and empty snapshots keep their digest inputs" do
         let policy = defaultHarnessPolicy
         Aeson.eitherDecode (Aeson.encode policy) @?= Right policy
@@ -39,13 +69,13 @@ tests =
         Aeson.eitherDecode @HarnessOverrides "{}" @?= Right emptyHarnessOverrides
         assertBool "unknown policy options refused" (isLeft (Aeson.eitherDecode @HarnessOverrides "{\"grantTool\":true}")),
       testCase "historical policy bytes do not gain recovery authority" do
-        let legacy = defaultHarnessPolicy & #recoveryAttempts .~ 0
+        let legacy = defaultHarnessPolicy & #recoveryAttempts .~ (fixturePolicy 0)
         case Aeson.toJSON legacy of
           Aeson.Object fields -> assertBool "absent recovery authority omitted" (not (KeyMap.member "recoveryAttempts" fields))
           _ -> assertFailure "expected policy object"
         Aeson.eitherDecode (Aeson.encode legacy) @?= Right legacy
         narrowed <- expectRight (narrowHarnessPolicy defaultHarnessPolicy (Just (emptyHarnessOverrides & #recoveryAttempts .~ Just 100)))
-        narrowed.recoveryAttempts @?= 2
+        narrowed.recoveryAttempts @?= (fixturePolicy 2)
         assertBool "unbounded recovery refused" (isLeft (applyHarnessOptions defaultHarnessPolicy (emptyHarnessOverrides & #recoveryAttempts .~ Just 101))),
       testCase "historical model input bytes omit the new provenance extension" do
         context <- expectRight (selectContextView defaultHarnessPolicy (ReplayContext 1 Nothing [UserTurn [TextBlock "request"] Nothing]))
@@ -54,12 +84,12 @@ tests =
         Aeson.fromJSON legacy @?= Aeson.Success input
         Aeson.toJSON input @?= legacy,
       testCase "an enabled summary refuses a source it cannot faithfully include" do
-        let policy = defaultHarnessPolicy & #contextBytes .~ 1024 & #keepRecentMessages .~ 1 & #summaryTokens .~ Just 64
+        let policy = defaultHarnessPolicy & #contextBytes .~ (fixturePolicy 1024) & #keepRecentMessages .~ (fixturePolicy 1) & #summaryTokens .~ Just (fixturePolicy 64)
             source = ReplayContext 1 Nothing [UserTurn [TextBlock "request"] Nothing, UserTurn [TextBlock (Text.replicate 3000 "x")] Nothing, AssistantTurn (answer "latest")]
         prepareModelOperationInput policy ModelTurn source Nothing Nothing @?= Left (ExecutionPolicyRefused "summary source exceeds the context ceiling"),
       testCase "version-2 summary requests and accepted summaries retain the actual request" do
         bundle <- expectRight (mkInstructionBundle 65536 "mori://fixture/repo" (Text.replicate 40 "a") [("AGENTS.md", "frozen repository requirements")])
-        let policy = defaultHarnessPolicy & #contextBytes .~ 3600 & #keepRecentMessages .~ 1 & #summaryTokens .~ Just 64
+        let policy = defaultHarnessPolicy & #contextBytes .~ (fixturePolicy 3600) & #keepRecentMessages .~ (fixturePolicy 1) & #summaryTokens .~ Just (fixturePolicy 64)
             request = RequestTurn [TextBlock "current request"] Nothing
             source = ReplayContext 2 (Just (instructionPrompt bundle)) [UserTurn [TextBlock (Text.replicate 1000 "x")] Nothing, AssistantTurn (answer (Text.replicate 1000 "y")), request, AssistantTurn (answer (Text.replicate 1000 "z"))]
             execution = ExecutionId "summary-fixture"
@@ -78,7 +108,7 @@ tests =
         contextRequest accepted.view.context.messages @?= Just request
         assertBool "accepted summary is referenced" (maybe False (maybe False (const True) . (.summary)) accepted.provenance),
       testCase "an accepted summary with unsupported provenance is refused rather than resampled" do
-        let policy = defaultHarnessPolicy & #contextBytes .~ 1024 & #keepRecentMessages .~ 1 & #summaryTokens .~ Just 64
+        let policy = defaultHarnessPolicy & #contextBytes .~ (fixturePolicy 1024) & #keepRecentMessages .~ (fixturePolicy 1) & #summaryTokens .~ Just (fixturePolicy 64)
             source = ReplayContext 1 Nothing [UserTurn [TextBlock "request"] Nothing, UserTurn [TextBlock (Text.replicate 3000 "x")] Nothing, AssistantTurn (answer "latest")]
             execution = ExecutionId "summary-fixture"
             specification = OperationSpec (operationIdFor execution (fixtureRevision 0)) ModelSummary RepeatableObservation "summary" "policy" "scope" Nothing
@@ -88,12 +118,12 @@ tests =
         let old = ModelOperationInput 1 selected (Just 64) Nothing
         prepareModelOperationInput policy ModelTurn source Nothing (Just (operation, old, answer "accepted")) @?= Left UnsupportedReplay,
       testCase "declaration can only narrow operator ceilings and cannot enable summaries" do
-        let base = defaultHarnessPolicy & #outputRepairs .~ 2 & #output .~ JsonFields ["accepted"] & #deniedTools .~ ["delete"]
+        let base = defaultHarnessPolicy & #outputRepairs .~ (fixturePolicy 2) & #output .~ JsonFields ["accepted"] & #deniedTools .~ ["delete"]
             overrides = emptyHarnessOverrides & #maxModelTurns .~ Just 200 & #outputRepairs .~ Just 9 & #permissionSeconds .~ Just 1 & #output .~ Just AnyReply & #deniedTools .~ ["write"] & #summaryTokens .~ Just 50
         narrowed <- expectRight (narrowHarnessPolicy base (Just overrides))
-        narrowed.maxModelTurns @?= 8
-        narrowed.outputRepairs @?= 2
-        narrowed.permissionSeconds @?= 1
+        narrowed.maxModelTurns @?= (fixturePolicy 8)
+        narrowed.outputRepairs @?= (fixturePolicy 2)
+        narrowed.permissionSeconds @?= (fixturePolicy 1)
         narrowed.deniedTools @?= ["delete", "write"]
         narrowed.output @?= JsonFields ["accepted"]
         narrowed.summaryTokens @?= Nothing
@@ -117,7 +147,7 @@ tests =
       testCase "compaction preserves anchors and complete tool groups with provenance" do
         let pair = [AssistantTurn (toolReply [("id", "observe", Aeson.object [])]), ToolTurn "id" "observe" [TextBlock (Text.replicate 500 "x")] False Nothing]
             source = ReplayContext 1 (Just "instructions") ([UserTurn [TextBlock "initial request"] Nothing] <> pair <> [UserTurn [TextBlock (Text.replicate 1500 "y")] Nothing, AssistantTurn (answer "latest")])
-            policy = defaultHarnessPolicy & #contextBytes .~ 1024 & #keepRecentMessages .~ 1
+            policy = defaultHarnessPolicy & #contextBytes .~ (fixturePolicy 1024) & #keepRecentMessages .~ (fixturePolicy 1)
         view <- expectRight (selectContextView policy source)
         view.kept @?= [0, 4]
         view.omitted @?= [1, 2, 3]
@@ -127,7 +157,7 @@ tests =
       testCase "version-2 request anchors survive compaction after newer messages" do
         let request = RequestTurn [TextBlock "current request"] Nothing
             source = ReplayContext 2 (Just "instructions") [UserTurn [TextBlock (Text.replicate 2000 "old")] Nothing, AssistantTurn (answer "old reply"), request, UserTurn [TextBlock (Text.replicate 2000 "repair")] Nothing, AssistantTurn (answer "latest")]
-            policy = defaultHarnessPolicy & #contextBytes .~ 1024 & #keepRecentMessages .~ 1
+            policy = defaultHarnessPolicy & #contextBytes .~ (fixturePolicy 1024) & #keepRecentMessages .~ (fixturePolicy 1)
         selected <- expectRight (selectContextView policy source)
         selected.context.format @?= 2
         contextRequest selected.context.messages @?= Just request
@@ -145,7 +175,7 @@ tests =
         let opaque = ThinkingBlock "signed" (Just "sig") True (Just (ProviderReplay OpenAIResponses "model" [Aeson.String "opaque"]))
             assistant = (toolReply [("id", "observe", Aeson.object [])]) & #blocks %~ (opaque :)
             source = ReplayContext 1 Nothing [UserTurn [TextBlock "request"] Nothing, AssistantTurn assistant]
-            policy = defaultHarnessPolicy & #contextBytes .~ 1024 & #keepRecentMessages .~ 1
+            policy = defaultHarnessPolicy & #contextBytes .~ (fixturePolicy 1024) & #keepRecentMessages .~ (fixturePolicy 1)
         view <- expectRight (selectContextView policy source)
         view.kept @?= [0, 1]
         view.context @?= source
@@ -173,3 +203,6 @@ expectRight = either (\err -> assertFailure (show err) >> fail "expected Right")
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixturePolicy :: (PolicyNumber a) => Integer -> a
+fixturePolicy number = either (error . show) id (parsePolicyNumber number)

@@ -40,6 +40,7 @@ import Shikigami.Capability.Catalog (ExecutionMode (Durable))
 import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider
 import Shikigami.Execution.Ephemeral (EphemeralResult (..), runEphemeralBehavior)
+import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
 import Shikigami.Execution.Policy.Types
 import Shikigami.Log qualified as Log
 import Shikumi.Error (ShikumiError (BudgetExceeded))
@@ -84,7 +85,7 @@ ephemeralTests =
         (env, decl) <- ephemeralFixture (mkRegistry []) \_ _ _ -> do
           position <- next calls
           pure (textResponse (if position == 0 then "" else "accepted"))
-        let policy = defaultHarnessPolicy & #output .~ NonemptyReply & #outputRepairs .~ 1
+        let policy = defaultHarnessPolicy & #output .~ NonemptyReply & #outputRepairs .~ (fixturePolicy 1)
         result <- runEphemeralBehavior 30 policy env decl (triggerOnly Aeson.Null)
         case result of
           Right accepted -> do
@@ -138,7 +139,7 @@ ephemeralTests =
       testCase "a repair cannot exceed the model ceiling" do
         calls <- newIORef (0 :: Int)
         (env, decl) <- ephemeralFixture (mkRegistry []) (\_ _ _ -> modifyIORef' calls (+ 1) >> pure (textResponse ""))
-        let policy = defaultHarnessPolicy & #maxModelTurns .~ 1 & #outputRepairs .~ 2 & #output .~ NonemptyReply
+        let policy = defaultHarnessPolicy & #maxModelTurns .~ (fixturePolicy 1) & #outputRepairs .~ (fixturePolicy 2) & #output .~ NonemptyReply
         result <- runEphemeralBehavior 30 policy env decl (triggerOnly Aeson.Null)
         result @?= Left (SkillToolTurnLimitExceeded 1)
         readIORef calls >>= (@?= 1)
@@ -540,3 +541,6 @@ repositoryRoot = go [".", ".."]
     go (candidate : rest) = do
       exists <- doesFileExist (candidate </> "cabal.project")
       if exists then pure candidate else go rest
+
+fixturePolicy :: (PolicyNumber a) => Integer -> a
+fixturePolicy number = either (error . show) id (parsePolicyNumber number)

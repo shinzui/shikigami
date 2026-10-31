@@ -15,6 +15,7 @@ import Shikigami.App (AppEffects)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Progress (noPendingReceipts)
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript qualified as Execution
 import Shikigami.Prelude
@@ -114,7 +115,7 @@ resumeHandoff services session = do
                 Left err -> pure (Left err)
                 Right references -> do
                   facts <- traverse Execution.inspectExecution references
-                  pure (Right (all (\case Right (Just (execution, binding, _)) -> binding.rootId == Just intent.rootId && execution.pendingReceipts == 0 && execution.phase `elem` [Execution.Succeeded, Execution.Failed, Execution.Cancelled]; _ -> False) facts))
+                  pure (Right (all (\case Right (Just (execution, binding, _)) -> binding.rootId == Just intent.rootId && execution.pendingReceipts == noPendingReceipts && execution.phase `elem` [Execution.Succeeded, Execution.Failed, Execution.Cancelled]; _ -> False) facts))
               case settled of
                 Left err -> pure (Left err)
                 Right False -> pure (Right HandoffPending)

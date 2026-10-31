@@ -37,6 +37,7 @@ import Shikigami.Execution.Counter (AttemptCount, parseAttemptCount)
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy.Types
+import Shikigami.Execution.Progress (ProgressNumber (..))
 import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
@@ -94,7 +95,7 @@ tests fixture =
         original.phase @?= Attempt.AttemptCommitted
         Just (state, _, _) <- right =<< run env (Execution.inspectExecution snapshot.executionId)
         state.cursor @?= (fixtureRevision 2)
-        state.pendingReceipts @?= 0
+        state.pendingReceipts @?= (fixtureProgress 0)
         scan <- right =<< scanFileReceipts env Nothing
         scan.inspected @?= 1
         scan.acknowledged @?= 1
@@ -118,7 +119,7 @@ tests fixture =
         original.phase @?= Attempt.AttemptSuperseded
         assertBool "original late receipt retained" (maybe False (const True) original.lateReceipt)
         Just (state, _, _) <- right =<< run env (Execution.inspectExecution snapshot.executionId)
-        state.pendingReceipts @?= 0
+        state.pendingReceipts @?= (fixtureProgress 0)
         state.cursor @?= (fixtureRevision 1),
       testCase "independent recovery preserves uncertainty when prepared bytes were never published" $ withEffect fixture \env binding snapshot _ reference runtime _ -> do
         calls <- newIORef (0 :: Int)
@@ -225,7 +226,7 @@ tests fixture =
         getModificationTime path >>= (@?= published)
         (_, resumed) <- right =<< run env (Execution.loadExecution access)
         resumed.cursor @?= (fixtureRevision 2)
-        resumed.pendingReceipts @?= 0
+        resumed.pendingReceipts @?= (fixtureProgress 0)
         Just original <- right =<< run env (Execution.inspectExecutionAttempt reference.attemptId)
         assertBool "independent receipt settles original claim" (maybe False (const True) original.lateReceipt)
         root <- right =<< run env (Roots.inspectRoot binding.request.rootId)
@@ -254,7 +255,7 @@ tests fixture =
         (_, retained) <- right =<< run env (Execution.loadExecution access)
         retained.phase @?= Unresolved
         retained.cursor @?= (fixtureRevision 1)
-        retained.pendingReceipts @?= 1
+        retained.pendingReceipts @?= (fixtureProgress 1)
         readFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") >>= (@?= "old dependency\n")
         Just original <- right =<< run env (Execution.inspectExecutionAttempt reference.attemptId)
         original.lateReceipt @?= Nothing,
@@ -484,3 +485,6 @@ fixtureAmount amount = either (error . show) id (parseResourceAmount amount)
 
 fixtureCount :: Integer -> AttemptCount scope
 fixtureCount count = either (error . show) id (parseAttemptCount count)
+
+fixtureProgress :: (ProgressNumber a) => Integer -> a
+fixtureProgress number = either (error . show) id (parseProgress number)

@@ -23,6 +23,7 @@ import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile), R
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..))
 import Shikigami.Decision.ModelCatalog
+import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Execution.Request
 import Shikigami.Execution.Resources qualified as Resources
@@ -90,7 +91,7 @@ tests =
       testCase "Dhall agent harness narrows the shared policy and survives JSON replay" do
         declaration <- mustRight <$> loadAgent "test/fixtures/harness-agent.dhall"
         policy <- pure (mustRight (Harness.narrowHarnessPolicy Harness.defaultHarnessPolicy declaration.harness))
-        policy.maxModelTurns @?= 2
+        policy.maxModelTurns @?= (fixturePolicy 2)
         policy.deniedTools @?= ["write"]
         policy.output @?= Harness.NonemptyReply
         Aeson.eitherDecode (Aeson.encode declaration) @?= Right declaration,
@@ -174,3 +175,6 @@ profileFor exact limits =
             signerRequirements = Profile.noSignerRequirements
           }
    in ResolvedProfile content (Profile.SanctionedExecutionProfileRef content.profileId content.version (profileDigest content))
+
+fixturePolicy :: (PolicyNumber a) => Integer -> a
+fixturePolicy number = either (error . show) id (parsePolicyNumber number)

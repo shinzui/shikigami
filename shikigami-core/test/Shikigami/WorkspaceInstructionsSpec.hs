@@ -10,6 +10,7 @@ import Data.Text qualified as Text
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.Execution.Identity (ExecutionRootId (..))
 import Shikigami.Execution.Policy
+import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
 import Shikigami.Execution.Transcript
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Workspace.Instructions
@@ -63,11 +64,11 @@ tests =
         bundle <- right (mkInstructionBundle 65536 repository base [("AGENTS.md", "PRIVATE_ROOT"), ("src/AGENTS.md", "PRIVATE_NESTED")])
         let prompt = Just ("Operator restrictions" <> instructionPrompt bundle)
             context = ReplayContext 2 prompt [RequestTurn [TextBlock "work"] Nothing, UserTurn [TextBlock (Text.replicate 3000 "old")] Nothing, UserTurn [TextBlock "recent"] Nothing]
-            policy = defaultHarnessPolicy & #contextBytes .~ 2048 & #keepRecentMessages .~ 1
+            policy = defaultHarnessPolicy & #contextBytes .~ (fixturePolicy 2048) & #keepRecentMessages .~ (fixturePolicy 1)
         selected <- right (selectContextView policy context)
         selected.context.systemPrompt @?= prompt
         assertBool "history compacted" (not (null selected.omitted))
-        assertBool "cannot drop fixed instructions" (isLeft (selectContextView (policy & #contextBytes .~ 1024) (context & #systemPrompt .~ Just (Text.replicate 2000 "x" <> instructionPrompt bundle))))
+        assertBool "cannot drop fixed instructions" (isLeft (selectContextView (policy & #contextBytes .~ (fixturePolicy 1024)) (context & #systemPrompt .~ Just (Text.replicate 2000 "x" <> instructionPrompt bundle))))
     ]
   where
     repository = "mori://fixture/repo"
@@ -77,3 +78,6 @@ tests =
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixturePolicy :: (PolicyNumber a) => Integer -> a
+fixturePolicy number = either (error . show) id (parsePolicyNumber number)

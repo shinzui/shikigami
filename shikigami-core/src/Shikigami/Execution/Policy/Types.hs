@@ -7,6 +7,7 @@ import Data.List (nub)
 import Data.Text qualified as Text
 import Dhall (FromDhall)
 import Numeric.Natural (Natural)
+import Shikigami.Execution.Policy.Limits
 import Shikigami.Prelude
 
 data RecoveryClass = RepeatableObservation | IdempotentEffect | UncertainEffect
@@ -50,22 +51,22 @@ emptyHarnessOverrides = HarnessOverrides Nothing Nothing Nothing Nothing [] [] N
 
 data HarnessPolicy = HarnessPolicy
   { format :: !Int,
-    maxModelTurns :: !Int,
-    outputRepairs :: !Int,
-    contextBytes :: !Int,
-    keepRecentMessages :: !Int,
+    maxModelTurns :: !ModelTurnLimit,
+    outputRepairs :: !RepairLimit,
+    contextBytes :: !ContextByteLimit,
+    keepRecentMessages :: !RecentMessageMinimum,
     deniedTools :: ![Text],
     humanTools :: ![Text],
-    permissionSeconds :: !Int,
+    permissionSeconds :: !PermissionLifetime,
     output :: !OutputRequirement,
-    recoveryAttempts :: !Int,
-    summaryTokens :: !(Maybe Int)
+    recoveryAttempts :: !RecoveryAttemptLimit,
+    summaryTokens :: !(Maybe SummaryTokenLimit)
   }
   deriving stock (Eq, Show, Generic)
 
 instance ToJSON HarnessPolicy where
   toJSON policy = case Aeson.genericToJSON Aeson.defaultOptions policy of
-    Aeson.Object fields -> Aeson.Object ((if policy.recoveryAttempts == 0 then KeyMap.delete "recoveryAttempts" else id) ((if isNothing policy.summaryTokens then KeyMap.delete "summaryTokens" else id) fields))
+    Aeson.Object fields -> Aeson.Object ((if policyNumber policy.recoveryAttempts == 0 then KeyMap.delete "recoveryAttempts" else id) ((if isNothing policy.summaryTokens then KeyMap.delete "summaryTokens" else id) fields))
     value -> value
 
 instance FromJSON HarnessPolicy where
@@ -74,16 +75,11 @@ instance FromJSON HarnessPolicy where
     either (fail . Text.unpack) (const (pure policy)) (validateHarnessPolicy policy)
 
 defaultHarnessPolicy :: HarnessPolicy
-defaultHarnessPolicy = HarnessPolicy 1 8 0 262144 4 [] [] 900 AnyReply 2 Nothing
+defaultHarnessPolicy = HarnessPolicy 1 defaultModelTurns defaultRepairs defaultContextBytes defaultRecentMessages [] [] defaultPermissionLifetime AnyReply defaultRecoveryAttempts Nothing
 
 validateHarnessPolicy :: HarnessPolicy -> Either Text ()
 validateHarnessPolicy policy = do
   unless (policy.format == 1) (Left "unsupported harness policy version")
-  unless (policy.maxModelTurns >= 1 && policy.maxModelTurns <= 10000 && policy.outputRepairs >= 0 && policy.outputRepairs <= 10) (Left "invalid model/repair ceiling")
-  unless (policy.contextBytes >= 1024 && policy.contextBytes <= 1048576 && policy.keepRecentMessages >= 1 && policy.keepRecentMessages <= 1000) (Left "invalid context policy")
-  unless (policy.recoveryAttempts >= 0 && policy.recoveryAttempts <= 100) (Left "invalid recovery attempt ceiling")
-  unless (policy.permissionSeconds >= 1 && policy.permissionSeconds <= 86400) (Left "invalid permission duration")
-  unless (maybe True (\n -> n >= 1 && n <= 32768) policy.summaryTokens) (Left "invalid summary output ceiling")
   unless (all validNames [policy.deniedTools, policy.humanTools]) (Left "invalid tool permission list")
   case policy.output of
     JsonFields names -> unless (validNames names) (Left "invalid output field list")
@@ -95,22 +91,16 @@ validateHarnessPolicy policy = do
 -- ceilings and add restrictions. Neither path grants a tool or model binding.
 applyHarnessOptions :: HarnessPolicy -> HarnessOverrides -> Either Text HarnessPolicy
 applyHarnessOptions base options = do
-  turns <- number 10000 base.maxModelTurns options.maxModelTurns
-  recovery <- number 100 base.recoveryAttempts options.recoveryAttempts
-  repairs <- number 10 base.outputRepairs options.outputRepairs
-  context <- number 1048576 base.contextBytes options.contextBytes
-  recent <- number 1000 base.keepRecentMessages options.keepRecentMessages
-  seconds <- number 86400 base.permissionSeconds options.permissionSeconds
-  summary <- case options.summaryTokens of Nothing -> Right base.summaryTokens; Just 0 -> Right Nothing; Just n -> Just <$> number 32768 1 (Just n)
+  turns <- overridePolicyNumber base.maxModelTurns options.maxModelTurns
+  recovery <- overridePolicyNumber base.recoveryAttempts options.recoveryAttempts
+  repairs <- overridePolicyNumber base.outputRepairs options.outputRepairs
+  context <- overridePolicyNumber base.contextBytes options.contextBytes
+  recent <- overridePolicyNumber base.keepRecentMessages options.keepRecentMessages
+  seconds <- overridePolicyNumber base.permissionSeconds options.permissionSeconds
+  summary <- case options.summaryTokens of Nothing -> Right base.summaryTokens; Just 0 -> Right Nothing; Just n -> Just <$> parsePolicyNumber (toInteger n)
   let policy = base & #maxModelTurns .~ turns & #outputRepairs .~ repairs & #recoveryAttempts .~ recovery & #contextBytes .~ context & #keepRecentMessages .~ recent & #permissionSeconds .~ seconds & #deniedTools .~ nub (base.deniedTools <> options.deniedTools) & #humanTools .~ nub (base.humanTools <> options.humanTools) & #output .~ fromMaybe base.output options.output & #summaryTokens .~ summary
   validateHarnessPolicy policy
   pure policy
-  where
-    number :: Int -> Int -> Maybe Natural -> Either Text Int
-    number maximumValue fallback = \case
-      Nothing -> Right fallback
-      Just value | value <= fromIntegral maximumValue -> Right (fromIntegral value)
-      _ -> Left "harness option exceeds the supported ceiling"
 
 narrowHarnessPolicy :: HarnessPolicy -> Maybe HarnessOverrides -> Either Text HarnessPolicy
 narrowHarnessPolicy base Nothing = validateHarnessPolicy base >> Right base

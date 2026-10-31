@@ -149,6 +149,11 @@
           "rationale": "Private nominal AttemptCount separates root active/unknown and selection call/active/unknown values. AttemptLimit separates finite call/retry/concurrency ceilings, with ResourceAmount token caps and typed profile refinement failure before provider setup. Exact codecs, scope compiler failures and four real coupled root/assignment underflow refusals pass. Full acceptance is 556 pure/382 PostgreSQL/260 workers/95 server plus 23 compiler clients under ADR-77. Other counters/policies and complete identity/scalar census remain pending."
         },
         {
+          "id": "execution-policy-and-durable-progress",
+          "disposition": "implemented",
+          "rationale": "Seven private policy ceilings and three separate bounded durable progress counts retain their meanings and numeric JSON/bytes. Override refinement is once at configuration admission. Pre-inline checked progress rejects full receipt capacity without changing native/application/accounting/queue participants; public native stream/queue observations replace private SQL. ADR-78, full codec controls, 31 compiler clients and 557 pure/383 PostgreSQL/260 workers/95 server cases cover this change. The complete scalar/identity census remains pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -169,7 +174,9 @@
         "docs/adr/0076-resource-amounts-are-checked-before-accounting-publication.md",
         "docs/evidence/keiro-0.22/resource-amount-results.txt",
         "docs/adr/0077-attempt-counters-and-call-ceilings-retain-their-scopes.md",
-        "docs/evidence/keiro-0.22/attempt-count-results.txt"
+        "docs/evidence/keiro-0.22/attempt-count-results.txt",
+        "docs/adr/0078-execution-policy-and-durable-progress-use-checked-distinct-values.md",
+        "docs/evidence/keiro-0.22/policy-progress-results.txt"
       ]
     },
     {

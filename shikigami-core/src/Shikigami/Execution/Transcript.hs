@@ -37,6 +37,7 @@ import Shikigami.Capability.Overlay (ResolvedCapabilitySet)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Execution.Policy.Types
+import Shikigami.Execution.Progress
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Prelude hiding (Options)
 import Shikigami.StateRevision
@@ -288,23 +289,23 @@ data ExecutionState = ExecutionState
     snapshot :: !PayloadRef,
     activeOperation :: !(Maybe OperationId),
     result :: !(Maybe PayloadRef),
-    repairs :: !Int,
-    modelTurns :: !Int,
+    repairs :: !RepairCount,
+    modelTurns :: !ModelTurnCount,
     wake :: !(Maybe PayloadRef),
     failure :: !(Maybe ExecutionError),
-    pendingReceipts :: !Integer
+    pendingReceipts :: !PendingReceiptCount
   }
   deriving stock (Eq, Show, Generic)
 
 instance ToJSON ExecutionState where
   toJSON state = case Aeson.genericToJSON Aeson.defaultOptions state of
-    Aeson.Object raw -> let fields = if state.pendingReceipts == 0 then KeyMap.delete "pendingReceipts" raw else raw in Aeson.Object (if isNothing state.failure then KeyMap.delete "failure" (if isNothing state.wake then KeyMap.delete "wake" fields else fields) else if isNothing state.wake then KeyMap.delete "wake" fields else fields)
+    Aeson.Object raw -> let fields = if state.pendingReceipts == noPendingReceipts then KeyMap.delete "pendingReceipts" raw else raw in Aeson.Object (if isNothing state.failure then KeyMap.delete "failure" (if isNothing state.wake then KeyMap.delete "wake" fields else fields) else if isNothing state.wake then KeyMap.delete "wake" fields else fields)
     value -> value
 
 instance FromJSON ExecutionState where
   parseJSON = Aeson.withObject "ExecutionState" \fields -> do
     state <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (foldr (\key current -> if KeyMap.member key current then current else KeyMap.insert key Aeson.Null current) (if KeyMap.member "pendingReceipts" fields then fields else KeyMap.insert "pendingReceipts" (toJSON (0 :: Int)) fields) ["wake", "failure"]))
-    unless (state.format == 1 && revisionNumber state.cursor <= 10000 && state.pendingReceipts >= 0 && state.pendingReceipts <= 1000000) (fail "unsupported execution state version or cursor")
+    unless (state.format == 1 && revisionNumber state.cursor <= 10000) (fail "unsupported execution state version or cursor")
     pure state
 
 data OperationKind = ModelTurn | ToolOperation | ModelSummary | ModelRepair

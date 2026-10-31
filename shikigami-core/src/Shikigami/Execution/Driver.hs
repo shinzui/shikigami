@@ -42,6 +42,8 @@ import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Executor (ExecutionRuntime (..), modelContext, runExecutionStore)
 import Shikigami.Execution.Identity (AttemptId (..))
 import Shikigami.Execution.Policy
+import Shikigami.Execution.Policy.Limits (policyNumber)
+import Shikigami.Execution.Progress (repairLimitReached)
 import Shikigami.Execution.Resources (AttemptRequest (..), Envelope (..), Root (..))
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.SelectionRuntime (preparePinnedExecutionCall)
@@ -205,7 +207,7 @@ decide runtime start wake = do
                   case outcome of
                     ModelReturned assistant _ -> case validateTerminalOutput snapshot.policy assistant of
                       Right value -> checked (owned (Store.finishExecution access fresh.revision value)) >> pure RotateExecution
-                      Left _ | fresh.repairs < snapshot.policy.outputRepairs -> admitModel access snapshot fresh ModelRepair
+                      Left _ | not (repairLimitReached fresh.repairs snapshot.policy.outputRepairs) -> admitModel access snapshot fresh ModelRepair
                       _ -> throwError ExecutionOutputInvalid
                     _ -> throwError ExecutionOutputInvalid
                 NeedModel -> admitModel access snapshot fresh ModelTurn
@@ -253,7 +255,7 @@ decide runtime start wake = do
       proposed <- tryError @ExecutionError do
         (access, snapshot, state) <- replay identity
         operation <- checked (owned (Store.inspectOperation attempt.operationId)) >>= maybe (throwError OperationMissing) pure
-        unless (operation.specification.recovery `elem` [RepeatableObservation, IdempotentEffect] && snapshot.policy.recoveryAttempts > 0) (throwError UnresolvedOperation)
+        unless (operation.specification.recovery `elem` [RepeatableObservation, IdempotentEffect] && policyNumber snapshot.policy.recoveryAttempts > 0) (throwError UnresolvedOperation)
         authority <- liftIO (runtime.authorize snapshot)
         either (const (throwError (ExecutionPolicyRefused "fresh recovery authority refused"))) pure authority
         submit (Just attempt.request.attemptId) access snapshot state operation

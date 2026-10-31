@@ -20,6 +20,9 @@ import Shikigami.WorkerSession.Types qualified as WorkerSession
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.Transcript qualified as Execution
 import Shikigami.Execution.SelectionStore qualified as Calls
+import Shikigami.Execution.Progress
+import Shikigami.Execution.Policy.Limits
+import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
     ("valid", '''value :: StateRevision "objective"
@@ -41,6 +44,30 @@ executionRevision root = root.revision
 ''', False),
     ("operation-is-not-execution-revision", '''executionRevision :: Execution.ExecutionState -> StateRevision "execution"
 executionRevision state = state.cursor
+''', False),
+    ("model-turn-count", '''turns :: Execution.ExecutionState -> ModelTurnCount
+turns state = state.modelTurns
+''', True),
+    ("repair-is-not-turn-count", '''turns :: Execution.ExecutionState -> ModelTurnCount
+turns state = state.repairs
+''', False),
+    ("unchecked-progress-arithmetic", '''large :: PendingReceiptCount
+large = 1000001
+''', False),
+    ("unchecked-progress-coercion", '''unchecked :: Integer -> PendingReceiptCount
+unchecked = coerce
+''', False),
+    ("model-turn-limit", '''turns :: Policy.HarnessPolicy -> ModelTurnLimit
+turns policy = policy.maxModelTurns
+''', True),
+    ("context-is-not-turn-limit", '''turns :: Policy.HarnessPolicy -> ModelTurnLimit
+turns policy = policy.contextBytes
+''', False),
+    ("unchecked-policy-arithmetic", '''zero :: ModelTurnLimit
+zero = 0
+''', False),
+    ("unchecked-policy-coercion", '''unchecked :: Int -> ModelTurnLimit
+unchecked = coerce
 ''', False),
     ("selection-call-limit", '''calls :: Calls.CallLimits -> Maybe (AttemptLimit "selection-calls")
 calls limits = limits.calls
@@ -109,6 +136,12 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
                 "event-is-not-message-sequence": ["Couldn't match type", "worker-message", "worker-event"],
                 "execution-root-is-not-execution": ["Couldn't match type", "execution-root", "execution"],
                 "operation-is-not-execution-revision": ["Couldn't match type", "execution-operation", "execution"],
+                "repair-is-not-turn-count": ["Couldn't match", "ModelTurnCount", "RepairCount"],
+                "unchecked-progress-arithmetic": ["PendingReceiptCount", "Num"],
+                "unchecked-progress-coercion": ["PendingReceiptCount", "Integer"],
+                "context-is-not-turn-limit": ["Couldn't match", "ModelTurnLimit", "ContextByteLimit"],
+                "unchecked-policy-arithmetic": ["ModelTurnLimit", "Num"],
+                "unchecked-policy-coercion": ["ModelTurnLimit", "Int"],
                 "active-limit-is-not-call-limit": ["Couldn't match type", "selection-active", "selection-calls"],
                 "root-unknown-is-not-active": ["Couldn't match type", "root-active", "root-unknown"],
                 "attempt-count-scope-coercion": ["Couldn't match type", "root-active", "root-unknown"],

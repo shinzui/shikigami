@@ -92,7 +92,9 @@ import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Catalog (withLiveExecution)
 import Shikigami.Execution.Identity (AttemptId (..), ExecutionRootId, OperationId (..))
 import Shikigami.Execution.Policy (ContextView (..), ModelOperationInput (..), validateTerminalOutput, validateToolInvocation)
+import Shikigami.Execution.Policy.Limits (policyNumber)
 import Shikigami.Execution.Policy.Types (HarnessPolicy (..), RecoveryClass (..), ToolInvoiceCost (..))
+import Shikigami.Execution.Progress
 import Shikigami.Execution.Quantity (oneAmount, zeroAmount)
 import Shikigami.Execution.Resources (Admission (..))
 import Shikigami.Execution.Resources qualified as Resources
@@ -175,7 +177,7 @@ admitExecution snapshot
       Right ref -> do
         let execution = snapshot.executionId
             binding = ExecutionBinding snapshot.identity snapshot.selection.rootId snapshot.selection.assignmentId snapshot.selection.descriptor ref.digest (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy))
-            state = ExecutionState 1 execution initialRevision Active initialRevision NeedModel ref Nothing Nothing 0 0 Nothing Nothing 0
+            state = ExecutionState 1 execution initialRevision Active initialRevision NeedModel ref Nothing Nothing noRepairs noModelTurns Nothing Nothing noPendingReceipts
         result <- persistChecked
           execution
           (Generated.AdmitExecution (Generated.AdmitExecutionData execution ref.digest))
@@ -329,18 +331,20 @@ acceptOperation access@(ReplayAccess execution _ _) expected specification input
                   unless (specification.policyDigest == actualBinding.policyDigest) (throwE OperationConflict)
                   snapshot <- checkedPayload access actualBinding "snapshot" current.snapshot
                   let modelOperation = specification.kind `elem` [ModelTurn, ModelSummary, ModelRepair]
-                  when (modelOperation && current.modelTurns >= (snapshot :: ExecutionSnapshot).policy.maxModelTurns) (throwE (ResourceAdmissionRefused "model-turn limit exhausted"))
-                  when (specification.kind == ModelRepair && current.repairs >= snapshot.policy.outputRepairs) (throwE ExecutionOutputInvalid)
+                  when (modelOperation && modelTurnLimitReached current.modelTurns (snapshot :: ExecutionSnapshot).policy.maxModelTurns) (throwE (ResourceAdmissionRefused "model-turn limit exhausted"))
+                  when (specification.kind == ModelRepair && repairLimitReached current.repairs snapshot.policy.outputRepairs) (throwE ExecutionOutputInvalid)
                   when (specification.kind == ModelSummary && isNothing snapshot.policy.summaryTokens) (throwE (ExecutionPolicyRefused "model summaries are disabled"))
                   checkedOperationInput access actualBinding current snapshot specification input
                   checkedAdmissionRoot actualBinding.rootId
-                  pure (current, modelOperation)
+                  turns <- if modelOperation then except (either (Left . ExecutionPolicyRefused) Right (advanceProgress current.modelTurns)) else pure current.modelTurns
+                  repairs <- if specification.kind == ModelRepair then except (either (Left . ExecutionPolicyRefused) Right (advanceProgress current.repairs)) else pure current.repairs
+                  pure (current, turns, repairs)
               )
-              \(current, modelOperation) -> do
+              \(current, turns, repairs) -> do
                 actual <- writePayload execution body
                 unless (actual == ref) (abort CorruptReplay)
                 Tx.statement (operationKey specification.operationId, execution.value, fromInteger (revisionNumber current.cursor), operation) insertOperation
-                saveExecution (current & #revision .~ (advanceRevision expected) & #activeOperation .~ Just specification.operationId & #modelTurns .~ (current.modelTurns + if modelOperation then 1 else 0) & #repairs .~ (current.repairs + if specification.kind == ModelRepair then 1 else 0))
+                saveExecution (current & #revision .~ (advanceRevision expected) & #activeOperation .~ Just specification.operationId & #modelTurns .~ turns & #repairs .~ repairs)
             case result of
               Right () -> pure (Right (Accepted, operation))
               Left EventRejected -> do
@@ -380,7 +384,7 @@ parkOperationPermission access@(ReplayAccess execution _ _) expected operationId
               unless (operation.specification.kind == ToolOperation && operation.specification.name `elem` (snapshot :: ExecutionSnapshot).policy.humanTools && operation.specification.name `notElem` snapshot.policy.deniedTools) (throwE (ExecutionPolicyRefused "tool permission is outside the pinned policy"))
               now <- checkedStatement () currentTime
               let review = reviewRequestIdFor (WorkflowName "shikigami.execution") (executionWorkflowId execution) 0 (operationKey operationId <> ":" <> operation.fingerprint)
-                  permission = PermissionBinding review operation.fingerprint operation.specification.scopeDigest operation.specification.policyDigest (addUTCTime (fromIntegral snapshot.policy.permissionSeconds) now) Nothing
+                  permission = PermissionBinding review operation.fingerprint operation.specification.scopeDigest operation.specification.policyDigest (addUTCTime (fromIntegral (policyNumber snapshot.policy.permissionSeconds)) now) Nothing
               pure (state, current, permission)
           )
           \(state, current, permission) -> do
@@ -505,7 +509,7 @@ submitAttempt retired access@(ReplayAccess execution _ _) expected submission en
                 previous <- checkedAttempt (Attempt.JobReference 1 execution operation.specification.operationId previousId)
                 unless (previous.phase == Attempt.AttemptUncertain && isNothing previous.lateReceipt && isJust previous.uncertainty && operation.outcome == previous.uncertainty) (throwE AttemptConflict)
                 attempts <- checkedStatement (operationKey operation.specification.operationId) listOperationAttempts
-                unless (length (filter (\attempt -> attempt.phase == Attempt.AttemptSuperseded) attempts) < snapshot.policy.recoveryAttempts) (throwE (ExecutionPolicyRefused "recovery attempt ceiling exhausted"))
+                unless (length (filter (\attempt -> attempt.phase == Attempt.AttemptSuperseded) attempts) < policyNumber snapshot.policy.recoveryAttempts) (throwE (ExecutionPolicyRefused "recovery attempt ceiling exhausted"))
                 pure (Just previous)
             void (checkedStatement ("shikigami.execution-attempt:" <> attemptKey submission.request.attemptId) lockAttemptIdentity)
             collision <- checkedStatement (attemptKey submission.request.attemptId) selectExecutionAttempt
@@ -523,9 +527,10 @@ submitAttempt retired access@(ReplayAccess execution _ _) expected submission en
             now <- checkedStatement () currentTime
             checkedDispatchPermission now operation snapshot
             checkedSubmission access actualBinding snapshot operation submission
-            pure (current, actualBinding, snapshot, retiring, resumeNext, now)
+            pendingReceipts <- if isJust retiring then except (either (Left . ExecutionPolicyRefused) Right (advanceProgress current.pendingReceipts)) else pure current.pendingReceipts
+            pure (current, actualBinding, snapshot, retiring, resumeNext, now, pendingReceipts)
         )
-        \(current, actualBinding, snapshot, retiring, resumeNext, now) -> do
+        \(current, actualBinding, snapshot, retiring, resumeNext, now, pendingReceipts) -> do
           forM_ retiring \previous -> do
             saveAttempt (previous & #phase .~ Attempt.AttemptSuperseded)
             Tx.statement (operationKey operation.specification.operationId, operation & #outcome .~ Nothing & #continuation .~ Nothing & #uncertain .~ False) updateOperation
@@ -552,7 +557,7 @@ submitAttempt retired access@(ReplayAccess execution _ _) expected submission en
           let attempt = Attempt.ExecutionAttempt 1 execution operation.specification.operationId submission.request fingerprint receipt wakeRef Attempt.AwaitingDispatch Nothing 0 Nothing Nothing Nothing Nothing
           Tx.statement (attemptKey submission.request.attemptId, execution.value, operationKey operation.specification.operationId, attempt) insertExecutionAttempt
           enqueue reference
-          saveExecution (current & #revision .~ (advanceRevision expected) & #phase .~ Active & #next .~ resumeNext & #pendingReceipts .~ (current.pendingReceipts + if isJust retired then 1 else 0))
+          saveExecution (current & #revision .~ (advanceRevision expected) & #phase .~ Active & #next .~ resumeNext & #pendingReceipts .~ pendingReceipts)
       case result of
         Left (CheckFailed err) -> pure (Left err)
         _ -> do
@@ -609,7 +614,7 @@ stopExecution identity execution expected cancelled reason = catchExecutionWith 
   if stored.phase `elem` [Failed, Cancelled] && stored.failure == Just reason
     then pure (Right AlreadyAccepted)
     else do
-      let command = if stored.pendingReceipts > 0 then (if cancelled then Generated.CancelExecutionPendingReceipts (Generated.CancelExecutionPendingReceiptsData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected)))) else Generated.FailExecutionPendingReceipts (Generated.FailExecutionPendingReceiptsData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected))))) else if cancelled then Generated.CancelExecution (Generated.CancelExecutionData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected)))) else Generated.FailExecution (Generated.FailExecutionData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected))))
+      let command = if stored.pendingReceipts /= noPendingReceipts then (if cancelled then Generated.CancelExecutionPendingReceipts (Generated.CancelExecutionPendingReceiptsData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected)))) else Generated.FailExecutionPendingReceipts (Generated.FailExecutionPendingReceiptsData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected))))) else if cancelled then Generated.CancelExecution (Generated.CancelExecutionData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected)))) else Generated.FailExecution (Generated.FailExecutionData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected))))
       result <- persistChecked
         execution
         command
@@ -663,7 +668,7 @@ loadModelReplayWindow access@(ReplayAccess execution _ _) = protected do
         ModelReturned assistant _ -> pure (input.view.context & #messages %~ (<> [AssistantTurn assistant]), revisionNumber operation.position, Just operation.input)
         _ -> abort CorruptReplay
   tail <- Tx.statement (execution.value, fromInteger after) acceptedOperationsAfter
-  (context, summary, _) <- foldM (append binding snapshot.policy.contextBytes) (base, Nothing, []) tail
+  (context, summary, _) <- foldM (append binding (policyNumber snapshot.policy.contextBytes)) (base, Nothing, []) tail
   pure (context, predecessor, summary)
   where
     append binding byteLimit (context, summary, group) operation = case operation.specification.kind of
@@ -983,26 +988,27 @@ recordSupersededReceipt access@(ReplayAccess execution _ _) expected claim recei
     Nothing -> do
       result <- persistChecked
         execution
-        (Generated.SettleExecutionReceipt (Generated.SettleExecutionReceiptData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected))) (stored.pendingReceipts - 1)))
+        (Generated.SettleExecutionReceipt (Generated.SettleExecutionReceiptData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected))) (progressNumber stored.pendingReceipts - 1)))
         ( do
             checkedLockRoot binding.rootId
             (state, actualBinding) <- checkedExecution execution
             checkedOutcomeIdentity access actualBinding
             checkedRevision expected state
-            unless (state.pendingReceipts > 0 && state.pendingReceipts == stored.pendingReceipts) (throwE AttemptConflict)
+            unless (state.pendingReceipts /= noPendingReceipts && state.pendingReceipts == stored.pendingReceipts) (throwE AttemptConflict)
             current <- checkedAttempt claim.reference
             unless (current == previous && claimMatches claim current) (throwE AttemptClaimLost)
             operation <- checkedStatement (operationKey current.operationId) lockOperation >>= maybe (throwE OperationMissing) pure
             checkedAttemptReceipt operation receipt
-            pure (state, actualBinding, current)
+            pendingReceipts <- except (either (const (Left AttemptConflict)) Right (previousProgress state.pendingReceipts))
+            pure (state, actualBinding, current, pendingReceipts)
         )
-        \(state, actualBinding, current) -> do
+        \(state, actualBinding, current, pendingReceipts) -> do
           settleRetainedReceipt actualBinding current receipt
           actual <- writePayload execution body
           unless (actual == ref) (abort CorruptReplay)
           resultRef <- writePayload execution (envelope "attempt-result" (toJSON receipt))
           saveAttempt (current & #lateReceipt .~ Just ref & #outcome .~ Just resultRef)
-          saveExecution (state & #revision .~ (advanceRevision expected) & #pendingReceipts .~ (state.pendingReceipts - 1))
+          saveExecution (state & #revision .~ (advanceRevision expected) & #pendingReceipts .~ pendingReceipts)
       pure (case result of Right () -> Right Accepted; Left (CheckFailed err) -> Left err; Left EventRejected -> Left ExecutionRevisionConflict)
   where
     body = envelope "late-attempt-receipt" (toJSON receipt)
@@ -1173,7 +1179,7 @@ finishExecution access@(ReplayAccess execution _ _) expected result = catchExecu
       Just (state, _) | state.phase == Succeeded && state.result == Just ref -> pure (Right AlreadyAccepted)
       Nothing -> pure (Left ExecutionMissing)
       Just (stored, binding) -> do
-        let command = if stored.pendingReceipts > 0 then Generated.FinishExecutionPendingReceipts (Generated.FinishExecutionPendingReceiptsData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected)))) else Generated.FinishExecution (Generated.FinishExecutionData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected))))
+        let command = if stored.pendingReceipts /= noPendingReceipts then Generated.FinishExecutionPendingReceipts (Generated.FinishExecutionPendingReceiptsData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected)))) else Generated.FinishExecution (Generated.FinishExecutionData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected))))
         committed <- persistChecked
           execution
           command

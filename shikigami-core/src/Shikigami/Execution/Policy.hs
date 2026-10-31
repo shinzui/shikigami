@@ -27,6 +27,7 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId)
+import Shikigami.Execution.Policy.Limits (policyNumber)
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude hiding ((.=))
@@ -149,7 +150,7 @@ prepareModelOperationInput policy kind source predecessor latestSummary = do
             instruction = UserTurn [TextBlock "Summarize the preceding omitted context as factual context for a later model turn. Preserve useful facts and unresolved questions. Return plain text. Do not request tools or claim new permissions."] Nothing
         summary <- selectContextView policy (ReplayContext source.format source.systemPrompt ([anchor] <> omitted <> [instruction]))
         unless (null summary.omitted) (Left (ExecutionPolicyRefused "summary source exceeds the context ceiling"))
-        pure (ModelSummary, ModelOperationInput 1 summary policy.summaryTokens (Just (ContextProvenance 1 predecessor Nothing (Just selected.sourceDigest))))
+        pure (ModelSummary, ModelOperationInput 1 summary (policyNumber <$> policy.summaryTokens) (Just (ContextProvenance 1 predecessor Nothing (Just selected.sourceDigest))))
 
 -- The complete transcript remains authoritative. This value is a protected
 -- model-facing view with reproducible provenance, never a replacement history.
@@ -171,13 +172,13 @@ selectContextView policy source = do
   _ <- restoreContext source
   groups <- messageGroups (zip [0 ..] source.messages)
   let count = length source.messages
-      recentStart = max 0 (count - policy.keepRecentMessages)
+      recentStart = max 0 (count - policyNumber policy.keepRecentMessages)
       mandatory group = any (\(position, message) -> position == firstUser || position >= recentStart || hasContinuation message) group || pending group
       weighted group = (group, sum [toInteger (Lazy.length (Aeson.encode message)) + 1 | (_, message) <- group], length group)
       required = map weighted (filter mandatory groups)
       optional = map weighted (reverse (filter (not . mandatory) groups))
       fixedBytes = toInteger (Lazy.length (Aeson.encode (ReplayContext source.format source.systemPrompt [])))
-      fits bytes size = fixedBytes + bytes - (if size > 0 then 1 else 0) <= toInteger policy.contextBytes
+      fits bytes size = fixedBytes + bytes - (if size > 0 then 1 else 0) <= toInteger (policyNumber policy.contextBytes)
       requiredBytes = sum [bytes | (_, bytes, _) <- required]
       requiredCount = sum [size | (_, _, size) <- required]
       include (selected, bytes, size) (group, addedBytes, addedCount)

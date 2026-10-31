@@ -24,6 +24,7 @@ import Shikigami.Behavior.Run (BehaviorEnv (..), BehaviorInput, completeBehavior
 import Shikigami.Behavior.Skill (SkillDir (..), SkillManifest (..), loadSkillManifest, skillRequestText)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Policy
+import Shikigami.Execution.Policy.Limits (policyNumber)
 import Shikigami.Execution.SelectionRuntime (narrowOutput)
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude
@@ -65,7 +66,7 @@ runEphemeralBehavior duration base env decl input = case narrowHarnessPolicy bas
     refused = Left . HarnessPolicyRefused . boundedBehaviorDetail
     loop journal policy calls toolCount repairs kind source summary
       | length tools > 128 = pure (refused "offered tool menu exceeds its supported ceiling")
-      | calls >= policy.maxModelTurns = pure (Left (SkillToolTurnLimitExceeded policy.maxModelTurns))
+      | calls >= policyNumber policy.maxModelTurns = pure (Left (SkillToolTurnLimitExceeded (policyNumber policy.maxModelTurns)))
       | otherwise = case prepareModelOperationInput policy kind source Nothing summary of
           Left err -> pure (refused (Text.pack (show err)))
           Right (_, accepted) | not (withinPayload (toJSON accepted)) -> pure (refused "accepted model input exceeds the payload ceiling")
@@ -107,7 +108,7 @@ runEphemeralBehavior duration base env decl input = case narrowHarnessPolicy bas
                                       Right messages -> loop (map toJSON messages <> retained) policy calls' (toolCount + length messages) repairs ModelTurn (transcript & #messages %~ (<> messages)) Nothing
                                   else case validateTerminalOutput policy assistant of
                                     Right output -> pure (Right (EphemeralResult output calls' toolCount (EphemeralRecording retained)))
-                                    Left _ | repairs < policy.outputRepairs -> loop retained policy calls' toolCount (repairs + 1) ModelRepair transcript Nothing
+                                    Left _ | repairs < policyNumber policy.outputRepairs -> loop retained policy calls' toolCount (repairs + 1) ModelRepair transcript Nothing
                                     Left _ -> pure (refused "accepted reply failed output validation")
             _ -> pure (refused "model context or output ceiling is unsupported")
     runTools policy assistant = go [] (zip [0 ..] (toolInvocations assistant))

@@ -11,6 +11,7 @@ import Shikigami.App (runAppIO)
 import Shikigami.Capability.Catalog
 import Shikigami.Capability.Overlay (CapabilityDescriptor (..))
 import Shikigami.Capability.Provider
+import Shikigami.Execution.Policy.Limits (policyNumber)
 import Shikigami.Execution.Policy.Types (HarnessPolicy (..))
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
@@ -86,7 +87,7 @@ workspaceHostFor transferable runtime selected historical prepare storageRoot se
           fresh <- gate assignment root
           case (authority, fresh) of
             (Right (), Right ()) -> do
-              loaded <- loadWorkspaceAdmission binding assignment.selection.assignmentId (min 65536 policy.contextBytes)
+              loaded <- loadWorkspaceAdmission binding assignment.selection.assignmentId (min 65536 (policyNumber policy.contextBytes))
               case loaded of
                 Left _ -> pure refused
                 Right original -> do
@@ -118,7 +119,7 @@ workspaceHostFor transferable runtime selected historical prepare storageRoot se
                     ready <- runAppIO runtime.appEnv (runTransaction (Store.markWorkspaceReadyTx binding))
                     case ready of
                       Right (Right ()) -> do
-                        loaded <- loadWorkspaceAdmission binding assignment.selection.assignmentId (min 65536 policy.contextBytes)
+                        loaded <- loadWorkspaceAdmission binding assignment.selection.assignmentId (min 65536 (policyNumber policy.contextBytes))
                         case loaded of
                           Left _ -> pure refused
                           Right original -> do
