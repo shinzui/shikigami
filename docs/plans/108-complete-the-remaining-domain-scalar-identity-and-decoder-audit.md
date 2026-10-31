@@ -54,10 +54,13 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 Implementation is under way. The schema-2 census and coverage/freshness checker
 pass 24 positive/mutation tests against a successful GHC 9.12.4 macOS build.
 The refreshed census has 3,989 declaration/member keys. Initial classification
-covers 248 keys with 34 explicit violations; 3,741 keys remain unreviewed, and the
+covers 248 keys with 32 explicit violations; 3,741 keys remain unreviewed, and the
 coverage gate correctly refuses completion. Process-profile and Objective row
 decoding and the closed process-policy format have focused evidence: 8 pure,
-31 serial core PostgreSQL, 19 worker and 277 compiler checks pass. These are
+31 serial core PostgreSQL, 19 worker and 277 compiler checks pass. The one-off
+workspace scope now also has a private construction boundary, with 15 existing
+agent cases and five public compiler clients passing; its two violations are
+resolved under ADR-80. These are
 partial M1/M2 deliverables, not milestone completion. Continue semantic review
 and the remaining decoder owners before M3; see
 [the current evidence](../evidence/plan-108/acceptance.md) and its source snapshot.
@@ -82,6 +85,12 @@ than becoming `Nothing`; neither condition may retain a definitive negative
 command receipt. Current Keiro `currentRunGeneration` returns `Int`, not an
 opaque generation type. FRIC-36 in `docs/friction-log/` records compiler-gate
 startup/buffered-progress cost; it did not change acceptance.
+
+2026-10-31: The one-off workspace root already had a nominal scope type. Its
+constructor/Generic exposure, rather than a missing entity identity, bypassed
+the canonical-root resolver. Keep that locator as a private newtype with an
+explicit renderer; do not allocate an entity or introduce another root wrapper.
+Its runtime filesystem rechecks remain necessary after construction.
 
 ## Decision Log
 
@@ -111,7 +120,8 @@ holds this durable owner boundary; it does not exempt the remaining scalars.
 
 Partial implementation acceptance is recorded in
 [the current evidence](../evidence/plan-108/acceptance.md): the coverage tooling,
-two owner-decoding paths and one policy scalar pass focused checks. The complete
+two owner-decoding paths, one policy scalar and one-off scope construction pass
+focused checks. The complete
 classification, unresolved violations, remaining owners and M3 acceptance remain
 unfinished; all three milestone checkboxes stay open and the frozen guide stays
 deferred. FRIC-36 remains logged for triage when the plan completes.

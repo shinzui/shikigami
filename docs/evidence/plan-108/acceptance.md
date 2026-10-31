@@ -45,8 +45,8 @@ source/interface/tool hashes match the current checkout-local build.
 The initial semantic classification records 248 keys in `Decision.Contract`,
 `Workspace.ProcessPolicy`, `StateRevision`, `Objective.Store` and the explicitly
 reviewed Agent/AgentRun/API/problem HTTP declarations and one-off capability
-errors/workspace tool boundaries: 194 compliant entries,
-20 constraint/route/media-type exclusions, and 34 explicit violations. HTTP views
+errors/workspace tool boundaries: 196 compliant entries,
+20 constraint/route/media-type exclusions, and 32 explicit violations. HTTP views
 were traced to `agentView`, `accepted`, `statusView`, `requestView` and `requestRun`;
 their internal source owners retain independent audit obligations. A structural
 composition verdict does not certify its nested members. The other 3,741 keys
@@ -116,7 +116,7 @@ This is focused batch evidence, not M3's final full suites. No workflow body,
 generated domain specification, migration SQL or HTTP representation changed.
 The policy commitment is unchanged. No new Linux runtime qualification is
 claimed for the adapted prototype. Remaining work includes complete semantic
-classification, the 34 currently recorded scalar/construction violations, remaining decoder
+classification, the 32 currently recorded scalar/construction violations, remaining decoder
 owners and final-candidate behavioral acceptance. The dependency-native workflow
 generation API was verified as `Int`; it must not be described as an opaque ID.
 
@@ -124,3 +124,25 @@ generation API was verified as `Int`; it must not be described as an opaque ID.
 records the accepted owner boundary. FRIC-36 in `docs/friction-log/` records the
 compiler gate's per-probe Cabal startup/buffered progress cost and remains logged
 for completion-time triage.
+
+A second, separate scope-construction batch is bound by `scope-source.json`
+against parent `013a578`. The one-off `WorkspaceScope` already represents the
+canonical Git-root locator; it now hides its constructor/root field and exposes
+no `Generic` instance. Its single representation is a newtype; `workspaceRoot`
+renders a resolved root. The existing
+15 worktree discovery, containment, tool dispatch and resource-bound cases pass.
+`nix develop --no-write-lock-file -c python3 tests/types/workspace-scope.py`
+passes a positive public resolver/renderer client followed by four constructor,
+coercion, record-update and Generic refusal clients. The gate builds the agent
+library and runs these probes as well as the existing 277 compiler checks, whose
+evidence is unchanged by this agent-only abstraction correction. This resolves
+the two scope-construction entries from the initial 34 violations; 32 remain.
+The filesystem still rechecks mutable paths and symlinks at use. There is no new
+serialized format or identity. [ADR-80](../../adr/0080-opaque-checked-values-do-not-expose-generic-construction.md)
+records this additional evidence.
+
+The same batch extends the reader's existing unsupported-syntax test to type
+families and operator aliases. Both forms now fail with their source path;
+ordinary `type instance` adapters and role annotations remain deliberate
+non-declaration forms. The 24 tooling tests still pass, and the census is
+refreshed with the changed reader hash after the successful coherent build.

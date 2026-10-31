@@ -1,0 +1,13 @@
+{
+  "sourceParent": "013a57809a32d110630699e1c68143a2c124da19",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "files": {
+    "Justfile": "d98a4adb1cd4f3533a120bae584c4eefe8f6d4e140438d6a0b075ce247230c17",
+    "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
+    "shikigami-agent/test/Shikigami/Agent/Capability/WorkspaceSpec.hs": "f91ac673588b545a313fb62e1cb0dff4a0d4ee88e30ae653cde951760bbf76d6",
+    "tests/types/workspace-scope.py": "1556d5e4b1fc639bc0579d718ba497bff19735a692bc45f1d96f534b606beb79",
+    "tools/domain/source_declarations.py": "5551c0083986c07db347c51562c2bda517d6f662595e66b390f205c22576bb84",
+    "tools/domain/test_classification.py": "8bc107771709de97239c21c6df9dcc51829a16af5ec7c4730f0201ec19787c8c"
+  }
+}

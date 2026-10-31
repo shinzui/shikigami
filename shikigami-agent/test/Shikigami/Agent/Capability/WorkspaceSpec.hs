@@ -67,7 +67,7 @@ scopeTests =
         withFixture \Fixture {repository} -> do
           expected <- canonicalizePath repository
           resolved <- resolveWorkspaceScope (Just (repository </> "nested"))
-          resolved @?= Right WorkspaceScope {root = expected},
+          fmap workspaceRoot resolved @?= Right expected,
       testCase "a non-repository directory is a typed refusal" $
         withFixture \Fixture {container} -> do
           resolved <- resolveWorkspaceScope (Just container)

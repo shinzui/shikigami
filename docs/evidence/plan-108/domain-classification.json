@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "censusSha256": "215f585dc650cfb57ca97f4d1b434d4980ccff274e85086ae0252e180e59e285",
+  "censusSha256": "bc6a0c55850bc463d1ea6efab4d4ff990d15a096b37855169897a5d54e6fae1a",
   "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
   "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
   "sourcePath": "runtime-patterns/architecture/domain-newtypes-and-typeids.md",
@@ -107,7 +107,7 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceError",
       "member": "$self",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "structural",
       "disposition": "compliant",
       "invariant": "Composition of the individually reviewed constructor arguments; this verdict does not certify the members.",
@@ -123,7 +123,7 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceError",
       "member": "InvalidWorkspacePath.#1",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "incidental",
       "disposition": "compliant",
       "invariant": "A rejected path, pattern or explanatory diagnostic, rendered for the caller.",
@@ -139,7 +139,7 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceError",
       "member": "InvalidWorkspaceRoot.#1",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "incidental",
       "disposition": "compliant",
       "invariant": "A rejected path, pattern or explanatory diagnostic, rendered for the caller.",
@@ -155,7 +155,7 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceError",
       "member": "NotGitWorktree.#1",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "incidental",
       "disposition": "compliant",
       "invariant": "A rejected path, pattern or explanatory diagnostic, rendered for the caller.",
@@ -171,7 +171,7 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceError",
       "member": "WorkspaceBinaryFile.#1",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "incidental",
       "disposition": "compliant",
       "invariant": "A rejected path, pattern or explanatory diagnostic, rendered for the caller.",
@@ -187,7 +187,7 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceError",
       "member": "WorkspaceExcludedPath.#1",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "incidental",
       "disposition": "compliant",
       "invariant": "A rejected path, pattern or explanatory diagnostic, rendered for the caller.",
@@ -203,7 +203,7 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceError",
       "member": "WorkspaceInvalidPattern.#1",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "incidental",
       "disposition": "compliant",
       "invariant": "A rejected path, pattern or explanatory diagnostic, rendered for the caller.",
@@ -219,7 +219,7 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceError",
       "member": "WorkspaceIoFailed.#1",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "incidental",
       "disposition": "compliant",
       "invariant": "A rejected path, pattern or explanatory diagnostic, rendered for the caller.",
@@ -235,7 +235,7 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceError",
       "member": "WorkspaceLimitExceeded.#1",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "incidental",
       "disposition": "compliant",
       "invariant": "A rejected path, pattern or explanatory diagnostic, rendered for the caller.",
@@ -251,7 +251,7 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceError",
       "member": "WorkspaceNotADirectory.#1",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "incidental",
       "disposition": "compliant",
       "invariant": "A rejected path, pattern or explanatory diagnostic, rendered for the caller.",
@@ -267,7 +267,7 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceError",
       "member": "WorkspaceNotAFile.#1",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "incidental",
       "disposition": "compliant",
       "invariant": "A rejected path, pattern or explanatory diagnostic, rendered for the caller.",
@@ -283,7 +283,7 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceError",
       "member": "WorkspaceNotFound.#1",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "incidental",
       "disposition": "compliant",
       "invariant": "A rejected path, pattern or explanatory diagnostic, rendered for the caller.",
@@ -299,7 +299,7 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceError",
       "member": "WorkspacePathEscapes.#1",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "incidental",
       "disposition": "compliant",
       "invariant": "A rejected path, pattern or explanatory diagnostic, rendered for the caller.",
@@ -315,7 +315,7 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceError",
       "member": "WorkspaceSymlinkRefused.#1",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "incidental",
       "disposition": "compliant",
       "invariant": "A rejected path, pattern or explanatory diagnostic, rendered for the caller.",
@@ -331,13 +331,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceGlobRequest",
       "member": "$self",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceGlobRequest"
       ]
@@ -347,13 +347,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceGlobRequest",
       "member": "WorkspaceGlobRequest.path",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceGlobRequest"
       ]
@@ -363,13 +363,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceGlobRequest",
       "member": "WorkspaceGlobRequest.patternText",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceGlobRequest"
       ]
@@ -379,13 +379,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceGlobResponse",
       "member": "$self",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceGlobResponse"
       ]
@@ -395,13 +395,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceGlobResponse",
       "member": "WorkspaceGlobResponse.paths",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceGlobResponse"
       ]
@@ -411,13 +411,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceGrepMatch",
       "member": "$self",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceGrepMatch"
       ]
@@ -427,13 +427,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceGrepMatch",
       "member": "WorkspaceGrepMatch.file",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceGrepMatch"
       ]
@@ -443,13 +443,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceGrepMatch",
       "member": "WorkspaceGrepMatch.line",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceGrepMatch"
       ]
@@ -459,13 +459,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceGrepMatch",
       "member": "WorkspaceGrepMatch.text",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceGrepMatch"
       ]
@@ -475,13 +475,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceGrepRequest",
       "member": "$self",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceGrepRequest"
       ]
@@ -491,13 +491,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceGrepRequest",
       "member": "WorkspaceGrepRequest.ignoreCase",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceGrepRequest"
       ]
@@ -507,13 +507,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceGrepRequest",
       "member": "WorkspaceGrepRequest.path",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceGrepRequest"
       ]
@@ -523,13 +523,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceGrepRequest",
       "member": "WorkspaceGrepRequest.patternText",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceGrepRequest"
       ]
@@ -539,13 +539,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceGrepResponse",
       "member": "$self",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceGrepResponse"
       ]
@@ -555,13 +555,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceGrepResponse",
       "member": "WorkspaceGrepResponse.matches",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceGrepResponse"
       ]
@@ -571,13 +571,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceReadRequest",
       "member": "$self",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceReadRequest"
       ]
@@ -587,13 +587,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceReadRequest",
       "member": "WorkspaceReadRequest.path",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceReadRequest"
       ]
@@ -603,13 +603,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceReadResponse",
       "member": "$self",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceReadResponse"
       ]
@@ -619,13 +619,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceReadResponse",
       "member": "WorkspaceReadResponse.bytesRead",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceReadResponse"
       ]
@@ -635,13 +635,13 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceReadResponse",
       "member": "WorkspaceReadResponse.content",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "boundary-dto",
       "disposition": "compliant",
       "invariant": "A Shikumi tool request or bounded read/grep/glob response. Paths are refined at the native IO adapter; counts/line numbers render observations.",
       "authority": "workspaceReadProvider / readWorkspaceFile / grepWorkspace / globWorkspace / resolveExistingPath",
       "boundaryOwner": "Agent.Capability.Workspace FromModel/ToJSON/native filesystem boundary",
-      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction remains an explicit separate violation; DTO classification does not exempt it.",
+      "rationale": "These records carry tool input/output only. The native adapter validates containment, symlinks, exclusions and response budgets. WorkspaceScope construction is separately reviewed and admitted only through the canonical Git-root resolver; DTO classification does not supply filesystem authority.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceReadResponse"
       ]
@@ -651,16 +651,17 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceScope",
       "member": "$self",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "locator",
-      "disposition": "violation",
+      "disposition": "compliant",
       "invariant": "A canonical absolute Git worktree root, resolved by resolveWorkspaceScope and rechecked before tool IO.",
       "authority": "resolveWorkspaceScopeUnchecked.validateRoot / validateScopeStillPresent",
       "boundaryOwner": "Agent.Capability.Workspace native filesystem adapter",
-      "rationale": "The record is already a distinct locator type, but its exported constructor/Generic permit bypassing the canonical-root invariant. Repair its construction boundary; do not mint a TypeID or add a second wrapper.",
+      "rationale": "The record is already a distinct locator type. Its constructor and root field are private, Generic is absent, and workspaceRoot only renders an admitted root. Public compiler clients reject construction, coercion, record update and Generic bypasses. Existing filesystem rechecks remain; no TypeID or second wrapper is needed.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceScope",
-        "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#resolveExistingPath"
+        "shikigami-agent/test/Shikigami/Agent/Capability/WorkspaceSpec.hs",
+        "tests/types/workspace-scope.py"
       ]
     },
     {
@@ -668,16 +669,17 @@
       "module": "Shikigami.Agent.Capability.Workspace",
       "declaration": "WorkspaceScope",
       "member": "WorkspaceScope.root",
-      "sourceSha256": "73758926234813d49d77eb3d7f10d03b91e0bf3faa0e19bab80c5cfecd4b467f",
+      "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "classification": "locator",
-      "disposition": "violation",
+      "disposition": "compliant",
       "invariant": "A canonical absolute Git worktree root, resolved by resolveWorkspaceScope and rechecked before tool IO.",
       "authority": "resolveWorkspaceScopeUnchecked.validateRoot / validateScopeStillPresent",
       "boundaryOwner": "Agent.Capability.Workspace native filesystem adapter",
-      "rationale": "The record is already a distinct locator type, but its exported constructor/Generic permit bypassing the canonical-root invariant. Repair its construction boundary; do not mint a TypeID or add a second wrapper.",
+      "rationale": "The record is already a distinct locator type. Its constructor and root field are private, Generic is absent, and workspaceRoot only renders an admitted root. Public compiler clients reject construction, coercion, record update and Generic bypasses. Existing filesystem rechecks remain; no TypeID or second wrapper is needed.",
       "evidence": [
         "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#WorkspaceScope",
-        "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs#resolveExistingPath"
+        "shikigami-agent/test/Shikigami/Agent/Capability/WorkspaceSpec.hs",
+        "tests/types/workspace-scope.py"
       ]
     },
     {

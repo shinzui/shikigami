@@ -59,6 +59,16 @@ its missing Generic instance. Existing public constructor/codec and authenticati
 cases remain runtime controls. This decision does not certify every scalar or
 identity authority in the wider census; those reviews remain explicit work.
 
+Plan 108 applies the same rule to the one-off agent's `WorkspaceScope`. Its
+canonical absolute Git root is established by `resolveWorkspaceScope`, so the
+record constructor and `Generic` must not admit arbitrary paths. `workspaceRoot`
+renders the resolved path at the native filesystem boundary. The 15 existing
+discovery/containment/tool-bound tests pass, and a positive public compiler client
+precedes constructor, coercion, record-update and Generic refusal probes in
+`tests/types/workspace-scope.py`. Filesystem/symlink rechecks still run because
+the filesystem can change after scope resolution. No entity ID or second root
+wrapper is introduced, and no serialized workflow representation changes.
+
 ## References
 
 [ADR-74](0074-domain-state-revisions-keep-their-scope-at-application-boundaries.md),

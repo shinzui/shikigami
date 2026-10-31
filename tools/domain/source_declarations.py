@@ -198,7 +198,8 @@ def source_declarations(text, source_path="<input>"):
         for block in blocks:
             match = re.match(r"(data|newtype|type)\s+([A-Z][\w']*)\b", block)
             if not match:
-                if re.match(r"(?:data|newtype)\s", block):
+                if (re.match(r"(?:data|newtype|type)\s", block) and
+                        not re.match(r"type\s+(?:instance|role)\b", block)):
                     raise DeclarationError("unsupported declaration: " + compact(block)[:160])
                 continue
             kind, name = match[1], match[2]

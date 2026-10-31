@@ -43,7 +43,8 @@ class DeclarationTests(unittest.TestCase):
                                      'main = pure ()\n'), ["Migrate.#1"])
 
     def test_unsupported_syntax_names_source(self):
-        for source in ["data T = Int :*: Int\n", "data T = T { x :: Int\n", "data family F a\n"]:
+        for source in ["data T = Int :*: Int\n", "data T = T { x :: Int\n", "data family F a\n",
+                       "type family F a\n", "type (:+:) a b = (a, b)\n"]:
             with self.subTest(source=source), self.assertRaisesRegex(DeclarationError, "fixture.hs"):
                 source_declarations(source, "fixture.hs")
 

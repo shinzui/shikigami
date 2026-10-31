@@ -3,7 +3,8 @@
 
 -- | A bounded, read-only workspace capability for one-off agent runs.
 module Shikigami.Agent.Capability.Workspace
-  ( WorkspaceScope (..),
+  ( WorkspaceScope,
+    workspaceRoot,
     WorkspaceError (..),
     renderWorkspaceError,
     resolveWorkspaceScope,
@@ -74,10 +75,15 @@ import Text.Regex.TDFA
   )
 
 -- | The canonical absolute root of one Git worktree.
-data WorkspaceScope = WorkspaceScope
-  { root :: !FilePath
+newtype WorkspaceScope = WorkspaceScope
+  { root :: FilePath
   }
-  deriving stock (Eq, Show, Generic)
+  deriving stock (Eq, Show)
+
+-- | Render the canonical root at the native filesystem boundary. Construction
+-- stays with the Git/canonical-path resolver; a path alone grants no scope.
+workspaceRoot :: WorkspaceScope -> FilePath
+workspaceRoot scope = scope.root
 
 data WorkspaceError
   = WorkspaceNotFound !FilePath
