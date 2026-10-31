@@ -85,7 +85,8 @@ cases, with 90 positive-first compiler clients, 143 domain-driver assertions, si
 diagrams and 156 native conformance rows. All 73 offline CLI checks and the live
 Hurl fixture pass. Two deliberate native WorkflowBodyChanged findings remain
 retained for the reviewed first-release identity reset; all four aggregate folds
-are unchanged. Forty-two of the 46 assigned sources have implemented dispositions.
+are unchanged. The reset is committed at 5ed5adf and its subsequent ordinary native
+gate passes with no findings and all 156 conformance rows. Forty-two of the 46 assigned sources have implemented dispositions.
 One local review remains: the complete scalar and identity census. Three sources
 retain only final-profile clauses owned by plan95. M1 and final source dispositions
 remain open; this is not completion or packaged Linux qualification.
