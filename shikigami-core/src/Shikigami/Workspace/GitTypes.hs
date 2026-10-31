@@ -13,9 +13,10 @@ import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Claim
 import Shikigami.Execution.Identity (AttemptId (..), OperationId (..))
+import Shikigami.Execution.Payload (PayloadDigest)
 import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Execution.ToolPosition
-import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadRef (..))
+import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..))
 import Shikigami.Prelude
 import Shikigami.StateRevision
 import Shikigami.Workspace.Instructions (validWorkspacePath)
@@ -42,7 +43,7 @@ data GitPhase = GitReserved | GitPrepared | GitPublishRequested | GitApplied | G
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data GitRouting = GitRouting {executionId :: !ExecutionId, identity :: !AgentIdentity, inputDigest :: !Text, next :: !NextWork}
+data GitRouting = GitRouting {executionId :: !ExecutionId, identity :: !AgentIdentity, inputDigest :: !PayloadDigest, next :: !NextWork}
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -77,14 +78,14 @@ validGitCandidate :: GitCandidate -> Bool
 validGitCandidate value = all validGitObject [value.parent, value.tree, value.result] && value.result /= value.parent && not (null value.paths) && length value.paths <= 256 && sort (nub value.paths) == value.paths && all (\path -> validWorkspacePath path && Text.all (< '\DEL') path) value.paths
 
 validGitRecord :: GitRecord -> Bool
-validGitRecord record = record.format == 1 && bounded operation && bounded execution && bounded attempt && record.operation.idempotencyKey == operation && digestText record.operation.fingerprint && digestText record.operation.scopeDigest && record.generation > initialRevision && all digestText [record.bindingDigest, record.instructionDigest, record.profileDigest, record.fingerprint, record.routing.inputDigest] && bounded record.target && Text.length record.target <= 128 && validGitObject record.expectedParent && record.routing.executionId == record.operation.executionId && validRouting && validPhase && Bytes.length (Aeson.encode record) <= 65536
+validGitRecord record = record.format == 1 && bounded operation && bounded execution && bounded attempt && record.operation.idempotencyKey == operation && digestText record.operation.fingerprint && digestText record.operation.scopeDigest && record.generation > initialRevision && all digestText [record.bindingDigest, record.instructionDigest, record.profileDigest, record.fingerprint] && bounded record.target && Text.length record.target <= 128 && validGitObject record.expectedParent && record.routing.executionId == record.operation.executionId && validRouting && validPhase && Bytes.length (Aeson.encode record) <= 65536
   where
     OperationId operation = record.operation.operationId
     ExecutionId execution = record.operation.executionId
     AttemptId attempt = record.attemptId
     validRouting = either (const False) bounded (identityText record.routing.identity) && validNext record.routing.next && Bytes.length (Aeson.encode record.routing) <= 4096
     validNext NeedModel = True
-    validNext (NeedTool response position) = position > firstToolPosition && digestText response.digest && bounded response.payloadId && response.bytes > 0
+    validNext (NeedTool _ position) = position > firstToolPosition
     validNext _ = False
     validCandidate value = validGitCandidate value && value.parent == record.expectedParent
     validPhase = case record.phase of

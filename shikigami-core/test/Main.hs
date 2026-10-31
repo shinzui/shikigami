@@ -51,6 +51,7 @@ import Shikigami.Log qualified as Log
 import Shikigami.LogSpec qualified as LogSpec
 import Shikigami.ObjectiveSpec qualified as ObjectiveSpec
 import Shikigami.PackageArchitectureSpec qualified as PackageArchitectureSpec
+import Shikigami.PayloadValueSpec qualified as PayloadValueSpec
 import Shikigami.PracticeReviewEvidenceSpec qualified as PracticeReviewEvidenceSpec
 import Shikigami.PracticeReviewSpec qualified as PracticeReviewSpec
 import Shikigami.RouterCatalogSpec qualified as RouterCatalogSpec
@@ -95,6 +96,7 @@ main =
         [ testGroup "Sink" [kizashiTests, kawaTests, danwaTests, traceHeaderTests],
           testGroup "Trigger" [scheduleTests, streamTests, danwaIntegrationTests],
           AgentValueSpec.tests,
+          PayloadValueSpec.tests,
           WorkspaceCatalogSpec.tests,
           WorkspaceInstructionsSpec.tests,
           WorkspaceProcessPolicySpec.tests,

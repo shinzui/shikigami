@@ -57,6 +57,7 @@ import Control.Monad.Trans.Except (ExceptT (..), except, runExceptT, throwE)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Bifunctor (first)
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
@@ -93,6 +94,7 @@ import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Catalog (withLiveExecution)
 import Shikigami.Execution.Claim
 import Shikigami.Execution.Identity (AttemptId (..), ExecutionRootId, OperationId (..))
+import Shikigami.Execution.Payload
 import Shikigami.Execution.Policy (ContextView (..), ModelOperationInput (..), validateTerminalOutput, validateToolInvocation)
 import Shikigami.Execution.Policy.Limits (policyNumber)
 import Shikigami.Execution.Policy.Types (HarnessPolicy (..), RecoveryClass (..), ToolInvoiceCost (..))
@@ -120,7 +122,7 @@ data ExecutionBinding = ExecutionBinding
     rootId :: !(Maybe ExecutionRootId),
     assignmentId :: !AssignmentKey,
     descriptor :: !ModelDescriptor,
-    snapshotDigest :: !Text,
+    snapshotDigest :: !PayloadDigest,
     policyDigest :: !Text
   }
   deriving stock (Eq, Show, Generic)
@@ -153,10 +155,13 @@ require = either abort pure
 
 payloadReference :: Aeson.Value -> Either ExecutionError PayloadRef
 payloadReference body = do
-  let bytes = toInteger (Lazy.length (Aeson.encode body))
-      digest = versionedDigest "shikigami.execution-payload/1" body
-  when (bytes > 1048576) (Left PayloadTooLarge)
-  pure (PayloadRef ("payload:" <> digest) digest bytes)
+  let encodedBytes = toInteger (Lazy.length (Aeson.encode body))
+  when (encodedBytes > 1048576) (Left PayloadTooLarge)
+  first (const (CorruptReplay)) do
+    digest <- parsePayloadDigest (versionedDigest "shikigami.execution-payload/1" body)
+    payloadId <- parsePayloadId ("payload:" <> payloadDigestText digest)
+    bytes <- parsePayloadByteCount encodedBytes
+    pure (PayloadRef payloadId digest bytes)
 
 envelope :: (ToJSON a) => Text -> a -> Aeson.Value
 envelope kind value = toJSON (PayloadEnvelope 1 kind (toJSON value))
@@ -167,9 +172,9 @@ outcomeReference = payloadReference . envelope "operation-outcome"
 writePayload :: ExecutionId -> Aeson.Value -> Transaction PayloadRef
 writePayload execution body = do
   ref <- require (payloadReference body)
-  Tx.statement (execution.value, ref.payloadId, ref.digest, fromInteger ref.bytes, body) insertPayload
+  Tx.statement (execution.value, ref.payloadId, ref.digest, ref.bytes, body) insertPayload
   stored <- Tx.statement (execution.value, ref.payloadId) selectPayload
-  unless (stored == Just (ref.digest, ref.bytes, body)) (abort CorruptReplay)
+  unless (stored == Just (Right (ref.digest, ref.bytes, body))) (abort CorruptReplay)
   pure ref
 
 admitExecution :: (ExecutionEffects es) => ExecutionSnapshot -> Eff es (Either ExecutionError Admission)
@@ -183,7 +188,7 @@ admitExecution snapshot
             state = ExecutionState 1 execution initialRevision Active initialRevision NeedModel ref Nothing Nothing noRepairs noModelTurns Nothing Nothing noPendingReceipts
         result <- persistChecked
           execution
-          (Generated.AdmitExecution (Generated.AdmitExecutionData execution ref.digest))
+          (Generated.AdmitExecution (Generated.AdmitExecutionData execution (payloadDigestText ref.digest)))
           ( do
               checkedLockRoot binding.rootId
               checkedAdmissionRoot binding.rootId
@@ -298,7 +303,7 @@ readPayload access binding kind ref = do
   execution <- checkAccess access binding
   stored <- Tx.statement (execution.value, ref.payloadId) selectPayload
   case stored of
-    Just (digest, bytes, body) | digest == ref.digest && bytes == ref.bytes -> do
+    Just (Right (digest, bytes, body)) | digest == ref.digest && bytes == ref.bytes -> do
       actual <- require (payloadReference body)
       unless (actual == ref) (abort CorruptReplay)
       PayloadEnvelope format actualKind content <- decode body
@@ -1313,11 +1318,21 @@ saveExecution state = Tx.statement (state.executionId.value, state) updateExecut
 updateExecution :: Statement (Text, ExecutionState) ()
 updateExecution = preparable "UPDATE shikigami.executions SET state=$2,updated_at=now() WHERE execution_id=$1" (contrazip2 textParam jsonParam) D.noResult
 
-insertPayload :: Statement (Text, Text, Text, Int64, Aeson.Value) ()
-insertPayload = preparable "INSERT INTO shikigami.execution_payloads(execution_id,payload_id,digest,bytes,body) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING" (contrazip5 textParam textParam textParam (E.param (E.nonNullable E.int8)) jsonParam) D.noResult
+insertPayload :: Statement (Text, PayloadId, PayloadDigest, PayloadByteCount, Aeson.Value) ()
+insertPayload = preparable "INSERT INTO shikigami.execution_payloads(execution_id,payload_id,digest,bytes,body) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING" (contrazip5 textParam (payloadIdText >$< textParam) (payloadDigestText >$< textParam) (payloadByteCountInt64 >$< E.param (E.nonNullable E.int8)) jsonParam) D.noResult
 
-selectPayload :: Statement (Text, Text) (Maybe (Text, Integer, Aeson.Value))
-selectPayload = preparable "SELECT digest,bytes,body FROM shikigami.execution_payloads WHERE execution_id=$1 AND payload_id=$2" (contrazip2 textParam textParam) (D.rowMaybe ((,,) <$> D.column (D.nonNullable D.text) <*> (toInteger <$> D.column (D.nonNullable D.int8)) <*> D.column (D.nonNullable D.jsonb)))
+selectPayload :: Statement (Text, PayloadId) (Maybe (Either Text (PayloadDigest, PayloadByteCount, Aeson.Value)))
+selectPayload = preparable "SELECT digest,bytes,body FROM shikigami.execution_payloads WHERE execution_id=$1 AND payload_id=$2" (contrazip2 textParam (payloadIdText >$< textParam)) (D.rowMaybe payloadRow)
+
+-- Decode owned payload metadata as data, so malformed values remain corruption
+-- refusals rather than being reported as database transport unavailability.
+payloadRow :: D.Row (Either Text (PayloadDigest, PayloadByteCount, Aeson.Value))
+payloadRow = capture <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.jsonb)
+  where
+    capture rawDigest rawBytes body = do
+      digest <- parsePayloadDigest rawDigest
+      bytes <- parsePayloadByteCount (toInteger rawBytes)
+      pure (digest, bytes, body)
 
 insertOperation :: Statement (Text, Text, Int64, Operation) ()
 insertOperation = preparable "INSERT INTO shikigami.execution_transcript_operations(operation_id,execution_id,position,state) VALUES ($1,$2,$3,$4)" (contrazip4 textParam textParam (E.param (E.nonNullable E.int8)) jsonParam) D.noResult

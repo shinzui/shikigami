@@ -108,6 +108,7 @@ library
     Shikigami.Execution.Foreground
     Shikigami.Execution.Identity
     Shikigami.Execution.Live
+    Shikigami.Execution.Payload
     Shikigami.Execution.Policy
     Shikigami.Execution.Policy.Limits
     Shikigami.Execution.Policy.Types
@@ -463,6 +464,7 @@ test-suite shikigami-core-test
     Shikigami.LogSpec
     Shikigami.ObjectiveSpec
     Shikigami.PackageArchitectureSpec
+    Shikigami.PayloadValueSpec
     Shikigami.PracticeReviewEvidenceSpec
     Shikigami.PracticeReviewSpec
     Shikigami.RouterCatalogSpec

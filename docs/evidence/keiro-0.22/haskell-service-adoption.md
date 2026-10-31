@@ -266,3 +266,13 @@ records 573 pure/386 PostgreSQL/262 worker/95 server cases, all other package su
 gates. HTTP v2 and delegated-child bytes remain unchanged; the other fresh producer
 identities deliberately reset under the unused first-release exception. The
 complete scalar/allocated-identity census remains open.
+
+Protected-payload values now retain private locator, canonical SHA-256 and byte-count
+units through owner stores, execution bindings and retained workspace routing. Exact
+wire values and owner verification remain unchanged. The body-table corruption
+controls preserve domain refusals, including a retained failed classification control
+and its corrected branch. [ADR-89](../../adr/0089-protected-payload-references-retain-checked-units.md)
+and [payload acceptance](payload-values-results.txt) record 577 pure, 388 PostgreSQL,
+262 worker, 95 server and 133 compiler cases. Native/domain/diagram, 82 CLI and live
+Hurl checks pass. The 318-module/896-declaration worklist remains unclassified; the
+complete scalar/identity and remaining owned JSON-row classification review stay open.

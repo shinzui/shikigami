@@ -13,6 +13,7 @@ import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.AssignmentKey (AssignmentKey)
 import Shikigami.Execution.Claim
 import Shikigami.Execution.Identity (AttemptId, OperationId)
+import Shikigami.Execution.Payload (PayloadDigest)
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.StateRevision
@@ -237,16 +238,16 @@ workspaceGitActionFor transferable binding admission dispatch profile record = d
       revision = (if transferable then "git2-" else "git1-") <> Text.replace ":" "-" (workspaceBindingDigest binding)
   either (const (Left FileEffectRefused)) (Right . InvokeCapabilityTool) (mkCapabilityToolTarget "shikigami.workspace" revision ("commit-" <> digest))
 
-workspaceGitObservationAction :: WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> ProcessProfile -> Text -> Text -> Text -> Either FileEffectError AgentAction
+workspaceGitObservationAction :: WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> ProcessProfile -> Text -> PayloadDigest -> Text -> Either FileEffectError AgentAction
 workspaceGitObservationAction = workspaceGitObservationActionFor False
 
-workspaceTransferredGitObservationAction :: WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> ProcessProfile -> Text -> Text -> Text -> Either FileEffectError AgentAction
+workspaceTransferredGitObservationAction :: WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> ProcessProfile -> Text -> PayloadDigest -> Text -> Either FileEffectError AgentAction
 workspaceTransferredGitObservationAction = workspaceGitObservationActionFor True
 
-workspaceGitObservationActionFor :: Bool -> WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> ProcessProfile -> Text -> Text -> Text -> Either FileEffectError AgentAction
+workspaceGitObservationActionFor :: Bool -> WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> ProcessProfile -> Text -> PayloadDigest -> Text -> Either FileEffectError AgentAction
 workspaceGitObservationActionFor transferable binding admission dispatch profile kind inputDigest target = do
   unless (admission.filePolicy == Just (if transferable then transferableFilePolicy else supervisedFilePolicy) && matchesWorkspaceAdmission binding admission && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base) (Left FileEffectRefused)
-  unless (validProcessProfile profile && profile.bindingDigest == workspaceBindingDigest binding && profile.instructionDigest == bundleDigest admission.instructions && processPolicyIdentity profile.policy == binding.policyRevision && "" `elem` profile.policy.readPaths && kind `elem` ["status", "diff"] && digestText inputDigest && bounded target && Text.length target <= 128 && dispatch.generation > initialRevision) (Left FileEffectRefused)
+  unless (validProcessProfile profile && profile.bindingDigest == workspaceBindingDigest binding && profile.instructionDigest == bundleDigest admission.instructions && processPolicyIdentity profile.policy == binding.policyRevision && "" `elem` profile.policy.readPaths && kind `elem` ["status", "diff"] && bounded target && Text.length target <= 128 && dispatch.generation > initialRevision) (Left FileEffectRefused)
   let coordinates = Aeson.object (["binding" .= workspaceBindingDigest binding, "instructions" .= bundleDigest admission.instructions, "filePolicy" .= admission.filePolicy, "assignment" .= admission.assignmentId, "owner" .= admission.owner, "epoch" .= admission.epoch, "profile" .= profile, "operation" .= dispatch.operation, "attempt" .= dispatch.attemptId, "claimOwner" .= dispatch.owner, "generation" .= dispatch.generation, "kind" .= kind, "input" .= inputDigest, "target" .= target] <> ["run" .= admission.runId | transferable])
       digest = Text.replace ":" "-" (versionedDigest (if transferable then "shikigami.workspace-git-observation/2" else "shikigami.workspace-git-observation/1") coordinates)
       revision = (if transferable then "git2-" else "git1-") <> Text.replace ":" "-" (workspaceBindingDigest binding)
@@ -254,7 +255,7 @@ workspaceGitObservationActionFor transferable binding admission dispatch profile
 
 -- The exact source receipts are part of the grant, not caller-selected paths.
 -- Reading artifacts grants no authority over their worktrees or HEADs.
-workspaceIntegrationAction :: WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> ProcessProfile -> Text -> Text -> [(WorkspaceBinding, Git.GitRecord)] -> Either FileEffectError AgentAction
+workspaceIntegrationAction :: WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> ProcessProfile -> PayloadDigest -> Text -> [(WorkspaceBinding, Git.GitRecord)] -> Either FileEffectError AgentAction
 workspaceIntegrationAction binding admission dispatch profile input target sources = do
   _ <- workspaceTransferredGitObservationAction binding admission dispatch profile "status" input target
   unless (length sources >= 2 && length sources <= 8 && length (nub (map (workspaceBindingDigest . fst) sources)) == length sources) (Left FileEffectRefused)

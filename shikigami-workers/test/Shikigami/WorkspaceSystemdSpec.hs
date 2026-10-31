@@ -13,6 +13,7 @@ import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (CompatibilityIdentity))
 import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Identity
+import Shikigami.Execution.Payload (PayloadDigest, parsePayloadDigest)
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (NeedModel))
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision qualified as Generation
@@ -82,7 +83,7 @@ withRecord use = do
   identity <- systemdProfileIdentity profile
   let command = ProcessCommand "validate" identity "/bin/validate" ["$HOME", "%n", "", "line\né"] "" (Map.singleton "HOME" "/scratch") 30 1024
       operation = OperationId "process-operation"
-      record = ProcessRecord operation (AttemptId "original-attempt") (fixtureOwner "claim") (fixtureGeneration 1) digest digest digest command (addUTCTime 30 now) (processUnit operation digest) (Just "11111111-1111-4111-8111-111111111111") Nothing ProcessLaunchRequested Nothing (Just (ProcessRouting 1 (ExecutionId "transport-execution") (CompatibilityIdentity (fixtureAgentName "worker")) digest NeedModel))
+      record = ProcessRecord operation (AttemptId "original-attempt") (fixtureOwner "claim") (fixtureGeneration 1) digest digest digest command (addUTCTime 30 now) (processUnit operation digest) (Just "11111111-1111-4111-8111-111111111111") Nothing ProcessLaunchRequested Nothing (Just (ProcessRouting 1 (ExecutionId "transport-execution") (CompatibilityIdentity (fixtureAgentName "worker")) (fixturePayloadDigest digest) NeedModel))
   use profile record
 
 now :: UTCTime
@@ -103,3 +104,6 @@ fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+fixturePayloadDigest :: Text -> PayloadDigest
+fixturePayloadDigest = either (error . show) id . parsePayloadDigest

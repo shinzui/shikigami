@@ -47,7 +47,15 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "WorkerSessionStore"
-    [ testCase "find-or-create freezes scope and delegation snapshot without resetting limits" $
+    [ testCase "malformed protected session metadata remains a binding refusal" do
+        mapM_
+          ( \assignment -> withFixture fixture \env admission access -> do
+              let statement = preparable ("UPDATE shikigami.worker_session_payloads SET " <> assignment <> " WHERE session_id=$1") (E.param (E.nonNullable E.text)) D.noResult
+              run env (runTransaction (Tx.statement (sessionIdFor admission).value statement))
+              run env (Store.loadAdmission access) >>= (@?= Left SessionBindingConflict)
+          )
+          ["digest='invalid'", "bytes=0"],
+      testCase "find-or-create freezes scope and delegation snapshot without resetting limits" $
         withFixture fixture \env admission _ -> do
           (accepted, state) <- expectRight =<< run env (Store.openSession admission)
           accepted @?= AlreadyAccepted

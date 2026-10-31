@@ -54,6 +54,16 @@ input bytes are covered by ExecutionPositionSpec. This scalar refactor changes n
 workflow step or declared DSL body; counters and other scalar findings retain
 their separate open census in plan 107.
 
+Protected payload references retain private PayloadId, PayloadDigest and
+PayloadByteCount values through execution/session stores, bindings and retained
+Git/process routing. Valid JSON and owner hash namespaces remain unchanged.
+The scalar checks establish syntax and units; body authenticity, scope, kind and
+authorization remain owner checks. Database metadata refinement stays a typed
+corruption refusal, distinct from transport unavailability. Persistent owners
+retain their 1 MiB policy; ephemeral inputs retain their own size policy.
+[ADR-89](../adr/0089-protected-payload-references-retain-checked-units.md)
+records this boundary; the complete scalar/identity census remains open.
+
 Resource vectors now retain private checked ResourceAmount values, indexed by
 Dimension, through finite limits, reservations, usage and settlement. Numeric
 wire values remain unchanged. Checked arithmetic and preflight accumulation

@@ -11,6 +11,7 @@ import Data.Generics.Labels ()
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
+import Shikigami.Execution.Payload (parsePayloadByteCount, parsePayloadDigest, parsePayloadId)
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
 import Shikigami.Execution.ToolPosition (ToolPosition, parseToolPosition)
@@ -95,7 +96,7 @@ tests =
             source = ReplayContext 2 (Just (instructionPrompt bundle)) [UserTurn [TextBlock (Text.replicate 1000 "x")] Nothing, AssistantTurn (answer (Text.replicate 1000 "y")), request, AssistantTurn (answer (Text.replicate 1000 "z"))]
             execution = ExecutionId "summary-fixture"
             specification = OperationSpec (operationIdFor execution (fixtureRevision 0)) ModelSummary RepeatableObservation "summary" "policy" "scope" Nothing
-            ref = PayloadRef "payload" "digest" 1
+            ref = fixturePayloadRef "payload" ("sha256:" <> Text.replicate 64 "a") 1
             operation = Operation 1 execution (fixtureRevision 0) specification "fingerprint" ref (Just ref) (Just NeedModel) False Nothing
         (kind, input) <- expectRight (prepareModelOperationInput policy ModelTurn source Nothing Nothing)
         kind @?= ModelSummary
@@ -113,7 +114,7 @@ tests =
             source = ReplayContext 1 Nothing [UserTurn [TextBlock "request"] Nothing, UserTurn [TextBlock (Text.replicate 3000 "x")] Nothing, AssistantTurn (answer "latest")]
             execution = ExecutionId "summary-fixture"
             specification = OperationSpec (operationIdFor execution (fixtureRevision 0)) ModelSummary RepeatableObservation "summary" "policy" "scope" Nothing
-            ref = PayloadRef "payload" "digest" 1
+            ref = fixturePayloadRef "payload" ("sha256:" <> Text.replicate 64 "a") 1
             operation = Operation 1 execution (fixtureRevision 0) specification "fingerprint" ref (Just ref) (Just NeedModel) False Nothing
         selected <- expectRight (selectContextView policy source)
         let old = ModelOperationInput 1 selected (Just 64) Nothing
@@ -137,7 +138,7 @@ tests =
         let assistant = toolReply [("first", "observe", Aeson.object []), ("second", "observe", Aeson.object [])]
             held = defaultHarnessPolicy & #humanTools .~ ["observe"]
         validateToolInvocation held [binding] [binding] assistant (fixtureToolPosition 1) @?= Right (ToolNeedsPermission binding)
-        let response = PayloadRef "response" "digest" 1
+        let response = fixturePayloadRef "response" ("sha256:" <> Text.replicate 64 "a") 1
             first = ToolOperationInput response (fixtureToolPosition 0) (ToolInvocation "first" "observe" (Aeson.object [])) binding
         toolContinuation first assistant @?= NeedTool response (fixtureToolPosition 1)
         toolContinuation (first & #position .~ fixtureToolPosition 1) assistant @?= NeedModel
@@ -214,3 +215,10 @@ fixturePolicy number = either (error . show) id (parsePolicyNumber number)
 
 fixtureToolPosition :: Integer -> ToolPosition
 fixtureToolPosition value = either (error . show) id (parseToolPosition value)
+
+fixturePayloadRef :: Text -> Text -> Integer -> PayloadRef
+fixturePayloadRef locator digest size =
+  PayloadRef
+    (either (error . show) id (parsePayloadId locator))
+    (either (error . show) id (parsePayloadDigest digest))
+    (either (error . show) id (parsePayloadByteCount size))

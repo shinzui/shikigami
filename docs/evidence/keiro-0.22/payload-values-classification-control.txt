@@ -1,0 +1,10 @@
+Implementation regression control, source parent 28e31ea.
+The initial metadata-capture implementation incorrectly fell through to missing-payload refusal.
+The new regression was retained and the explicit malformed-row branch corrected to preserve SessionBindingConflict.
+This is not a failure of the committed parent or a database transport exception.
+
+    malformed protected session metadata remains a binding refusal:                                            FAIL (0.23s)
+      test-postgres/Shikigami/WorkerSessionStoreSpec.hs:55:
+      expected: Left SessionBindingConflict
+       but got: Left (SessionInputRefused "session payload is unavailable")
+      Use -p '/malformed protected session metadata remains a binding refusal/' to rerun this test only.

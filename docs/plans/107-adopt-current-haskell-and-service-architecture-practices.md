@@ -78,6 +78,13 @@ addressed caller keys retain distinct meanings through store/SQL boundaries;
 versioned structured producers retain agent, route and source coordinates.
 Native inbox redelivery and same-caller retries retain their expected identities.
 
+The remaining review-identity audit must account for ADR-31: practice reviews
+outlive their producing workflow, and competing resolutions converge across
+workflow instances. Existing ReviewId/ResolutionId UUIDv5 derivations cannot be
+exempted merely because Kioku memory rows use deterministic lookup coordinates.
+Any allocation change must retain logical-key receipts, record-before-retire and
+losing-candidate cleanup; that work remains open.
+
 ## Decision Log
 
 2026-10-30: Apply the user's first-release policy and exhaustive current-guide adoption. Replace old-history qualification with fresh provisioning and same-build recovery. Preserve real transaction, authority and privacy invariants.
@@ -90,18 +97,18 @@ cases. The language checker and thirteen style/ownership mutation tests pass.
 [The adoption record](../evidence/keiro-0.22/haskell-service-adoption.md) links each
 implemented domain-value wave and its exact candidate/evidence.
 
-Latest trigger-key acceptance rebuilt all enabled components and passed 573 pure,
-386 serial PostgreSQL, 262 worker, 95 server, 31 API, nine client and 37 agent
-cases. All 118 positive-first compiler clients, 143 domain assertions, six diagrams,
-156 native conformance rows, 82 offline CLI checks and live Hurl pass. Two failed
-before queue/inbox controls now separate identities and retain retry/redelivery.
-The native gate has no findings against 76f5c8d. ADR-88 separately records the
-intentional fresh-producer namespace changes; HTTP v2 and delegated child bytes
-remain unchanged. ADR-86's earlier native workflow-body breaks and ADR-87's
-compatibility-scope reset remain retained. Forty-two of 46 assigned sources have
-implemented dispositions. Complete scalar/allocated-identity review and three
-final-profile clauses remain open. M1 is incomplete, and this is not packaged
-Linux qualification.
+Latest payload-value acceptance rebuilt all enabled components and passed 577
+pure, 388 serial PostgreSQL, 262 worker, 95 server, 31 API, nine client and 37 agent
+cases. All 133 positive-first compiler clients, 143 domain assertions, six diagrams,
+156 native conformance rows, 82 offline CLI checks and live Hurl pass. ADR-89 keeps
+checked payload units through stores and retained routing with exact valid bytes.
+Real body-table corruption controls retain explicit domain refusals; the initially
+failed session classification control and corrected branch are retained. The native
+gate has no findings against 28e31ea and all four aggregate transducer hashes remain
+unchanged. Earlier deliberate baseline resets remain retained. Forty-two of 46
+assigned sources have implemented dispositions. Complete scalar/allocated-identity
+and remaining owned JSON-row classification review plus three final-profile clauses
+remain open. M1 is incomplete; this is not packaged Linux qualification.
 
 ## Context and Orientation
 

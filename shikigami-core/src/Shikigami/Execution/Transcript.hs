@@ -37,6 +37,7 @@ import Shikigami.Capability.Overlay (ResolvedCapabilitySet)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.AssignmentKey (AssignmentKey)
 import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Payload (PayloadByteCount, PayloadDigest, PayloadId)
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Progress
 import Shikigami.Execution.Selection (ExecutionSelection (..))
@@ -63,9 +64,9 @@ operationIdFor :: ExecutionId -> StateRevision "execution-operation" -> Operatio
 operationIdFor execution cursor = OperationId ("operation:" <> versionedDigest "shikigami.execution-operation/1" (toJSON (execution, cursor)))
 
 data PayloadRef = PayloadRef
-  { payloadId :: !Text,
-    digest :: !Text,
-    bytes :: !Integer
+  { payloadId :: !PayloadId,
+    digest :: !PayloadDigest,
+    bytes :: !PayloadByteCount
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)

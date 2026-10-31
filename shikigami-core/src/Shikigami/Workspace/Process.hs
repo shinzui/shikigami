@@ -14,9 +14,10 @@ import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Claim
 import Shikigami.Execution.Identity (AttemptId, OperationId)
+import Shikigami.Execution.Payload (PayloadDigest)
 import Shikigami.Execution.Runner (OperationContext)
 import Shikigami.Execution.ToolPosition
-import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadRef (..))
+import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..))
 import Shikigami.Prelude
 import Shikigami.StateRevision
 import Shikigami.Workspace.Instructions (validWorkspacePath)
@@ -83,7 +84,7 @@ data ProcessRouting = ProcessRouting
   { format :: !Int,
     executionId :: !ExecutionId,
     identity :: !AgentIdentity,
-    inputDigest :: !Text,
+    inputDigest :: !PayloadDigest,
     next :: !NextWork
   }
   deriving stock (Eq, Generic)
@@ -92,10 +93,10 @@ data ProcessRouting = ProcessRouting
 instance Show ProcessRouting where show _ = "ProcessRouting <protected>"
 
 validProcessRouting :: ProcessRouting -> Bool
-validProcessRouting routing = routing.format == 1 && bounded routing.executionId.value && either (const False) bounded (identityText routing.identity) && digestText routing.inputDigest && validNext routing.next && Bytes.length (Aeson.encode routing) <= 4096
+validProcessRouting routing = routing.format == 1 && bounded routing.executionId.value && either (const False) bounded (identityText routing.identity) && validNext routing.next && Bytes.length (Aeson.encode routing) <= 4096
   where
     validNext NeedModel = True
-    validNext (NeedTool response position) = position > firstToolPosition && digestText response.digest && bounded response.payloadId && response.bytes > 0
+    validNext (NeedTool _ position) = position > firstToolPosition
     validNext _ = False
 
 data ProcessRecord = ProcessRecord

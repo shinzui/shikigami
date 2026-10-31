@@ -90,17 +90,16 @@ a checked allocated TypeID; objective content, worker/workspace ownership,
 execution policies, counters, decisions and assignment locators retain their
 nominal checked meanings.
 
-Latest trigger-key acceptance rebuilt all enabled components and passed 573 pure,
-386 serial PostgreSQL, 262 worker and 95 server cases, plus 118 compiler clients,
-all API/client/agent suites, 82 CLI checks and live Hurl. Private run/caller keys
-and structured producer coordinates fix two real queue/inbox collisions while
-preserving retries and native redelivery under ADR-88. HTTP v2 and delegated
-child coordinates remain unchanged. The native gate passes against 76f5c8d with
-no findings and unchanged aggregate folds. Earlier intentional baseline resets
-remain retained. Complete scalar/allocated-identity review keeps EP-5 In Progress.
-Three source rows retain only final-profile clauses owned by EP-6. Its exact
-frozen artifacts, Linux/runtime integration and final inventory gate have not
-started; all implementation children must complete first.
+Latest payload-value acceptance rebuilt all enabled components and passed 577
+pure, 388 serial PostgreSQL, 262 worker and 95 server cases, plus 133 compiler
+clients, all API/client/agent suites, 82 CLI checks and live Hurl. Private payload
+units retain their meanings and valid bytes while body-table corruption retains
+explicit domain refusals under ADR-89. Native generation/diff is neutral against
+28e31ea; all four aggregate transducer hashes remain unchanged. Earlier deliberate
+baseline resets remain retained. Complete scalar/allocated-identity and remaining
+owned JSON-row classification review keep EP-5 In Progress. Three source rows
+retain only final-profile clauses owned by EP-6. Its exact frozen artifacts,
+Linux/runtime integration and final inventory gate have not started.
 
 ## Surprises & Discoveries
 

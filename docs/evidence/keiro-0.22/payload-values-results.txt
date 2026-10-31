@@ -1,0 +1,28 @@
+Checked protected-payload units — ExecPlan 107
+Source parent: 28e31ea95b524d1b511e680a9565c16b24c7058a (master); current source/interface hashes are retained in domain-declarations.json.
+Compiler: selected GHC 9.12.4/frozen Cabal cohort, arm64 macOS.
+Decision: docs/adr/0089-protected-payload-references-retain-checked-units.md.
+
+Contract
+Private PayloadId retains exact 1..256-character/no-C0 locators. Private PayloadDigest retains canonical sha256: plus 64 lowercase hex digits. Private PayloadByteCount retains positive signed-int64 JSON byte counts, distinct from resource amounts.
+PayloadRef, execution bindings and retained process/Git routing retain these values. SQL/native/capability adapters render explicitly. Valid complete reference JSON bytes and scalar numeric bytes round-trip unchanged.
+Existing protected-body hash namespaces, body rechecks, scope, kind, access and transaction authority remain. A structurally valid reference is not an authenticated body or existence proof. Persistent owners enforce their own 1 MiB limit; ephemeral inputs retain their existing separate policy.
+Protected-body table digest/count decoding captures refinement as Either, preserving CorruptReplay/SessionBindingConflict rather than database transport errors. These locators are content-addressed or ephemeral technical lookup coordinates, not allocated entities.
+
+Regression control
+The new execution corruption case passed. The first session case exposed an implementation fallthrough from malformed metadata to missing-payload refusal; the exact failed control is retained in payload-values-classification-control.txt. The corrected explicit malformed-row branch preserves SessionBindingConflict. Both cases inject invalid digests and zero bytes into real owned body tables. This evidence does not classify every other owned JSON row's decoder-failure behavior.
+
+Acceptance
+cabal build all --enable-tests -j2: PASS after the classification correction, all enabled components.
+Application suites: 577 pure (final rerun 0.64s), 388 serial PostgreSQL (107.95s), 262 worker (167.16s), 95 server (18.93s), 31 API, nine client and 37 agent cases PASS.
+Selected-compiler positive-first checks: 94 nominal + 39 opaque/generic = 133 PASS. New payload clients reject private constructors, representation coercion, literals, locator/digest substitution, resource/byte substitution and Generic bypasses after positive typed fields/factories.
+CLI contracts: 82 real-process checks PASS, without database/vendor.
+just keiro-gate 28e31ea: PASS, check/inspect/idempotent scaffold, zero diff findings and 156 native conformance rows. Native diff/replay and four unchanged generated transducer hashes/fingerprints are retained separately.
+Domain/diagram suites: 143 domain assertions and six diagrams PASS.
+just hurl: PASS, fresh task-owned database/server/worker, 4/2/1 files and 13/15/3 requests across three phases; zero failed files.
+Haskell conventions, 13 style/ownership mutation tests, formatter and whitespace checks PASS.
+Compiled audit worklist: 318 modules, 896 declarations (688 data, 171 newtypes, 37 aliases), 14 role entrypoints. Source/tool hashes and per-module declaration uniqueness verified. This is still an unclassified worklist, not semantic compliance.
+All 124 frozen guide hashes remain current; denominator unchanged.
+
+Scope
+Complete scalar/allocated-identity review remains open under plan107, including review identity allocation and the remaining owned JSON-row corruption classifications. Plan95's exact packaged closure/Linux/runtime/inventory qualification has not started.

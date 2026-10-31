@@ -34,6 +34,8 @@ import Shikigami.AgentRun.RequestKey
 import Shikigami.Agent.Principal (AgentPrincipal)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Claim
+import Shikigami.Execution.Payload qualified as Payload
+import Shikigami.Execution.Store qualified as PayloadStore
 import Shikigami.Execution.AssignmentKey
 import Shikigami.Execution.Selection qualified as Selection
 import Shikigami.Objective.Keys qualified as Objective
@@ -53,6 +55,18 @@ import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ('retained-payload-values', 'locator :: Execution.PayloadRef -> Payload.PayloadId\nlocator ref = ref.payloadId\ndigest :: Execution.PayloadRef -> Payload.PayloadDigest\ndigest ref = ref.digest\nbytes :: Execution.PayloadRef -> Payload.PayloadByteCount\nbytes ref = ref.bytes\nbinding :: PayloadStore.ExecutionBinding -> Payload.PayloadDigest\nbinding ref = ref.snapshotDigest\n', True),
+    ('unchecked-PayloadId-coercion', 'value :: Text -> Payload.PayloadId\nvalue = coerce\n', False),
+    ('unchecked-PayloadId-constructor', 'value :: Text -> Payload.PayloadId\nvalue = Payload.PayloadId\n', False),
+    ('unchecked-PayloadId-literal', 'value :: Payload.PayloadId\nvalue = fromString "value"\n', False),
+    ('unchecked-PayloadDigest-coercion', 'value :: Text -> Payload.PayloadDigest\nvalue = coerce\n', False),
+    ('unchecked-PayloadDigest-constructor', 'value :: Text -> Payload.PayloadDigest\nvalue = Payload.PayloadDigest\n', False),
+    ('unchecked-PayloadDigest-literal', 'value :: Payload.PayloadDigest\nvalue = fromString "value"\n', False),
+    ('unchecked-PayloadByteCount-coercion', 'value :: Integer -> Payload.PayloadByteCount\nvalue = coerce\n', False),
+    ('unchecked-PayloadByteCount-constructor', 'value :: Integer -> Payload.PayloadByteCount\nvalue = Payload.PayloadByteCount\n', False),
+    ('unchecked-PayloadByteCount-literal', 'value :: Payload.PayloadByteCount\nvalue = 1\n', False),
+    ('payload-id-is-not-digest', 'value :: Payload.PayloadId -> Payload.PayloadDigest\nvalue key = key\n', False),
+    ('resource-amount-is-not-payload-bytes', 'value :: ResourceAmount -> Payload.PayloadByteCount\nvalue amount = amount\n', False),
     ('full-run-key-fields', 'full :: Ledger.RunRequestRow -> RunKey\nfull row = row.runKey\nskip :: Directory.RunSkip -> RunKey\nskip row = row.idempotencyKey\ncaller :: Text -> Either Text Addressed.RequestKey\ncaller = Addressed.parseRequestKey\n', True),
     ('unchecked-full-run-key-coercion', 'value :: Text -> FullKey.RunKey\nvalue = coerce\n', False),
     ('unchecked-full-run-key-constructor', 'value :: Text -> FullKey.RunKey\nvalue = FullKey.RunKey\n', False),
@@ -331,6 +345,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
                 fragments["unchecked-" + kind + "-constructor"] = [kind]
                 fragments["unchecked-" + kind + ("-literal" if raw == "Text" else "-numeric")] = [kind, "IsString" if raw == "Text" else "Num"]
             fragments.update({'unchecked-full-run-key-coercion': ['RunKey', 'Text'], 'unchecked-full-run-key-constructor': ['RunKey'], 'unchecked-full-run-key-literal': ['RunKey', 'IsString'], 'unchecked-addressed-request-key-coercion': ['RequestKey', 'Text'], 'unchecked-addressed-request-key-constructor': ['RequestKey'], 'unchecked-addressed-request-key-literal': ['RequestKey', 'IsString'], 'http-request-key-is-not-addressed': ["Couldn't match", 'RequestKey'], 'full-run-key-is-not-addressed': ["Couldn't match", 'RunKey', 'RequestKey']})
+            fragments.update({'unchecked-PayloadId-coercion': ['PayloadId', 'Text'], 'unchecked-PayloadId-constructor': ['PayloadId'], 'unchecked-PayloadId-literal': ['PayloadId', 'IsString'], 'unchecked-PayloadDigest-coercion': ['PayloadDigest', 'Text'], 'unchecked-PayloadDigest-constructor': ['PayloadDigest'], 'unchecked-PayloadDigest-literal': ['PayloadDigest', 'IsString'], 'unchecked-PayloadByteCount-coercion': ['PayloadByteCount', 'Integer'], 'unchecked-PayloadByteCount-constructor': ['PayloadByteCount'], 'unchecked-PayloadByteCount-literal': ['PayloadByteCount', 'Num'], 'payload-id-is-not-digest': ["Couldn't match", 'PayloadId', 'PayloadDigest'], 'resource-amount-is-not-payload-bytes': ["Couldn't match", 'ResourceAmount', 'PayloadByteCount']})
             if name.endswith("-constructor"):
                 assert any(marker in result.stderr.lower() for marker in ["not in scope", "does not export", "illegal term-level"]), (name, result.stderr)
             assert all(fragment in result.stderr for fragment in fragments[name]), (name, result.stderr)

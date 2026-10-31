@@ -209,6 +209,11 @@
           "rationale": "Private nonempty RunKey remains in run acceptance, lifecycle refusals, SQL and status joins; a separate addressed caller RequestKey retains its own existing policy, distinct from the bounded HTTP key. Real queue/inbox controls reproduced equal caller keys across agents and agent/message delimiter collisions; v2 structured factories retain agent/route/source coordinates and native redelivery. CLI empty-key admission fails before configuration/stdin, and one-off invocation uses a native UUID nonce rather than allocating an unused Kioku session id. HTTP v2 and delegated child key bytes remain unchanged. ADR-88, 573 pure/386 PostgreSQL/262 worker/95 server cases, 118 compiler clients and 82 CLI checks cover this clause. Fresh producer identities intentionally reset under the unused first-release exception; full scalar/allocated-identity review remains pending."
         },
         {
+          "id": "checked-protected-payload-units",
+          "disposition": "implemented",
+          "rationale": "Private PayloadId, PayloadDigest and PayloadByteCount retain locator, canonical hash and positive int64 byte units through references, execution bindings, stores and retained Git/process routing. Complete valid JSON bytes remain unchanged; owner body/scope/kind/access checks remain authoritative and persistent size policy stays separate from ephemeral inputs. Real body-table corruption regressions preserve CorruptReplay/SessionBindingConflict. ADR-89, 577 pure/388 PostgreSQL/262 worker/95 server cases and 133 compiler clients cover this clause; complete scalar/identity and other JSON-row corruption review remain pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -264,7 +269,14 @@
         "docs/evidence/keiro-0.22/trigger-key-before-regressions.txt",
         "docs/evidence/keiro-0.22/trigger-key-vectors.json",
         "docs/evidence/keiro-0.22/trigger-key-native-diff.json",
-        "docs/evidence/keiro-0.22/trigger-key-native-replay.json"
+        "docs/evidence/keiro-0.22/trigger-key-native-replay.json",
+        "docs/adr/0089-protected-payload-references-retain-checked-units.md",
+        "docs/evidence/keiro-0.22/payload-values-results.txt",
+        "docs/evidence/keiro-0.22/payload-values-classification-control.txt",
+        "docs/evidence/keiro-0.22/payload-values-native-diff.json",
+        "docs/evidence/keiro-0.22/payload-values-native-replay.json",
+        "docs/evidence/keiro-0.22/payload-values-fold-identities.json",
+        "shikigami-core/test/Shikigami/PayloadValueSpec.hs"
       ]
     },
     {

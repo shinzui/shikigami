@@ -27,6 +27,7 @@ import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Identity
+import Shikigami.Execution.Payload (PayloadDigest, parsePayloadByteCount, parsePayloadDigest, parsePayloadId)
 import Shikigami.Execution.Runner
 import Shikigami.Execution.ToolPosition (ToolPosition, parseToolPosition)
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadRef (..))
@@ -111,7 +112,7 @@ tests =
             boot = "11111111-1111-4111-8111-111111111111"
             recordFor b a d c =
               let fingerprint = processFingerprint b (bundleDigest a.instructions) d.operation c
-               in ProcessRecord d.operation.operationId d.attemptId d.owner d.generation (workspaceBindingDigest b) (bundleDigest a.instructions) fingerprint c expiry (processUnit d.operation.operationId fingerprint) Nothing Nothing ProcessReserved Nothing (Just (ProcessRouting 1 d.operation.executionId b.request.owner ("sha256:" <> Text.replicate 64 "a") NeedModel))
+               in ProcessRecord d.operation.operationId d.attemptId d.owner d.generation (workspaceBindingDigest b) (bundleDigest a.instructions) fingerprint c expiry (processUnit d.operation.operationId fingerprint) Nothing Nothing ProcessReserved Nothing (Just (ProcessRouting 1 d.operation.executionId b.request.owner (fixturePayloadDigest ("sha256:" <> Text.replicate 64 "a")) NeedModel))
             record = recordFor binding processAdmission dispatch command
         workspaceProcessAction binding admission dispatch record boot "device:parent" @?= Left FileEffectRefused
         workspaceFileAction binding processAdmission dispatch "replace" "src/file" "device:parent" "input-hash" @?= Left FileEffectRefused
@@ -150,8 +151,8 @@ tests =
                      workspaceProcessAction binding processAdmission dispatch record "22222222-2222-4222-8222-222222222222" "device:parent",
                      workspaceProcessAction binding processAdmission dispatch record boot "device:other-parent",
                      workspaceProcessAction binding (processAdmission & #assignmentId .~ (fixtureAssignment "other-assignment")) dispatch record boot "device:parent",
-                     workspaceProcessAction binding processAdmission dispatch (record & #routing .~ Just (ProcessRouting 1 logical.executionId owner ("sha256:" <> Text.replicate 64 "b") NeedModel)) boot "device:parent",
-                     workspaceProcessAction binding processAdmission dispatch (record & #routing .~ Just (ProcessRouting 1 logical.executionId owner ("sha256:" <> Text.replicate 64 "a") (NeedTool (PayloadRef "response" ("sha256:" <> Text.replicate 64 "a") 1) (fixtureToolPosition 1)))) boot "device:parent"
+                     workspaceProcessAction binding processAdmission dispatch (record & #routing .~ Just (ProcessRouting 1 logical.executionId owner (fixturePayloadDigest ("sha256:" <> Text.replicate 64 "b")) NeedModel)) boot "device:parent",
+                     workspaceProcessAction binding processAdmission dispatch (record & #routing .~ Just (ProcessRouting 1 logical.executionId owner (fixturePayloadDigest ("sha256:" <> Text.replicate 64 "a")) (NeedTool (fixturePayloadRef "response" ("sha256:" <> Text.replicate 64 "a") 1) (fixtureToolPosition 1)))) boot "device:parent"
                    ]
             )
         processBindingActions <-
@@ -228,7 +229,7 @@ tests =
         let gitLogical = logical & #fingerprint .~ command.profile & #scopeDigest .~ command.profile
             gitDispatch = dispatch & #operation .~ gitLogical
             candidate = Git.GitCandidate provisionBinding.base (Text.replicate 40 "b") (Text.replicate 40 "c") ["src/file"]
-            rawGit = Git.GitRecord 1 gitLogical gitDispatch.attemptId gitDispatch.owner gitDispatch.generation (workspaceBindingDigest provisionBinding) (bundleDigest provisionAdmission.instructions) (Git.gitProfileDigest profile) "device:files" provisionBinding.base command.profile now (Git.GitRouting gitLogical.executionId owner command.profile NeedModel) Git.GitPrepared (Just candidate)
+            rawGit = Git.GitRecord 1 gitLogical gitDispatch.attemptId gitDispatch.owner gitDispatch.generation (workspaceBindingDigest provisionBinding) (bundleDigest provisionAdmission.instructions) (Git.gitProfileDigest profile) "device:files" provisionBinding.base command.profile now (Git.GitRouting gitLogical.executionId owner (fixturePayloadDigest command.profile) NeedModel) Git.GitPrepared (Just candidate)
             seal value = value & #fingerprint .~ Git.gitFingerprint provisionBinding value
             gitRecord = seal rawGit
             gitAction a d p value = workspaceGitAction provisionBinding a d p (seal value)
@@ -250,7 +251,7 @@ tests =
               gitAction provisionAdmission gitDispatch profile (gitRecord & #candidate .~ Just (candidate & #result .~ Text.replicate 40 "d")),
               gitAction provisionAdmission gitDispatch profile (gitRecord & #candidate .~ Just (candidate & #paths .~ ["src/other"])),
               gitAction provisionAdmission gitDispatch profile (gitRecord & #expectedParent .~ Text.replicate 40 "d" & #candidate .~ Just (candidate & #parent .~ Text.replicate 40 "d")),
-              gitAction provisionAdmission gitDispatch profile (gitRecord & #routing . #inputDigest .~ ("sha256:" <> Text.replicate 64 "b")),
+              gitAction provisionAdmission gitDispatch profile (gitRecord & #routing . #inputDigest .~ fixturePayloadDigest ("sha256:" <> Text.replicate 64 "b")),
               gitAction (provisionAdmission & #assignmentId .~ (fixtureAssignment "other-assignment")) gitDispatch profile gitRecord,
               gitAction provisionAdmission (gitDispatch & #attemptId .~ AttemptId "other-attempt") profile (gitRecord & #attemptId .~ AttemptId "other-attempt"),
               gitAction provisionAdmission (gitDispatch & #owner .~ (fixtureOwner "other-claim")) profile (gitRecord & #claimOwner .~ (fixtureOwner "other-claim")),
@@ -264,7 +265,7 @@ tests =
         workspaceGitAction provisionBinding provisionAdmission gitDispatch profile (gitRecord & #attemptId .~ AttemptId "unmatched") @?= Left FileEffectRefused
         gitAction provisionAdmission gitDispatch profile (gitRecord & #candidate .~ Just (candidate & #paths .~ ["outside-policy"])) @?= Left FileEffectRefused
         let observation a d p kind input target = workspaceGitObservationAction provisionBinding a d p kind input target
-        statusAction <- right (observation provisionAdmission gitDispatch profile "status" command.profile "device:files")
+        statusAction <- right (observation provisionAdmission gitDispatch profile "status" (fixturePayloadDigest command.profile) "device:files")
         let statusRequest = commitRequest & #action .~ statusAction
             statusGrant = commitGrant & #object .~ ObjectRef (ObjectType (Kikan.actionObjectType statusAction)) (Kikan.actionObjectId statusAction)
         statusMinted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed statusGrant
@@ -274,15 +275,15 @@ tests =
         changedObservations <-
           mapM
             right
-            [ observation provisionAdmission gitDispatch profile "diff" command.profile "device:files",
-              observation provisionAdmission gitDispatch profile "status" ("sha256:" <> Text.replicate 64 "b") "device:files",
-              observation provisionAdmission gitDispatch profile "status" command.profile "device:other-files",
-              observation (provisionAdmission & #assignmentId .~ (fixtureAssignment "other-assignment")) gitDispatch profile "status" command.profile "device:files",
-              observation provisionAdmission (gitDispatch & #generation .~ (fixtureGeneration 2)) profile "status" command.profile "device:files",
-              observation provisionAdmission gitDispatch changedProfile "status" command.profile "device:files"
+            [ observation provisionAdmission gitDispatch profile "diff" (fixturePayloadDigest command.profile) "device:files",
+              observation provisionAdmission gitDispatch profile "status" (fixturePayloadDigest ("sha256:" <> Text.replicate 64 "b")) "device:files",
+              observation provisionAdmission gitDispatch profile "status" (fixturePayloadDigest command.profile) "device:other-files",
+              observation (provisionAdmission & #assignmentId .~ (fixtureAssignment "other-assignment")) gitDispatch profile "status" (fixturePayloadDigest command.profile) "device:files",
+              observation provisionAdmission (gitDispatch & #generation .~ (fixtureGeneration 2)) profile "status" (fixturePayloadDigest command.profile) "device:files",
+              observation provisionAdmission gitDispatch changedProfile "status" (fixturePayloadDigest command.profile) "device:files"
             ]
         mapM_ (\action -> verifyIssuedAction verifier now (statusRequest & #action .~ action) statusIssued >>= \answer -> assertBool "Git observation proof binds kind, input, anchor, assignment, actual claim and profile" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) changedObservations
-        observation provisionAdmission gitDispatch profile "commit" command.profile "device:files" @?= Left FileEffectRefused
+        observation provisionAdmission gitDispatch profile "commit" (fixturePayloadDigest command.profile) "device:files" @?= Left FileEffectRefused
         let workerSession = WorkerSessionId "retained-session"
             transferBinding = provisionBinding & #request . #assignment .~ Just (workerSession, AssignmentId "retained-assignment")
             intent = TransferIntent 1 workerSession (ObjectiveRef "checkpoints" "objective") owner (OperationId "handoff") (ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) owner True transferBinding.request.rootId expiry) owner (CompatibilityIdentity (fixtureAgentName "successor")) (fixtureAgentName "successor") (fixtureRevision 0) (fixtureRevision 1) transferBinding.request.rootId transferBinding.workspace
@@ -310,7 +311,7 @@ tests =
         workspaceTransferAction provisionBinding intent @?= Left FileEffectRefused
         let successorAdmission = provisionAdmission & #bindingDigest .~ workspaceBindingDigest transferBinding & #runId .~ "successor-run" & #assignmentId .~ (fixtureAssignment "successor-assignment") & #owner .~ intent.newOwner & #epoch .~ (fixtureRevision 1) & #filePolicy .~ Just transferableFilePolicy
             retainedProfile = profile & #bindingDigest .~ workspaceBindingDigest transferBinding
-            successorProcess = recordFor transferBinding successorAdmission dispatch command & #routing .~ Just (ProcessRouting 1 logical.executionId intent.newOwner command.profile NeedModel)
+            successorProcess = recordFor transferBinding successorAdmission dispatch command & #routing .~ Just (ProcessRouting 1 logical.executionId intent.newOwner (fixturePayloadDigest command.profile) NeedModel)
             successorGit raw = let changed = raw & #bindingDigest .~ workspaceBindingDigest transferBinding & #profileDigest .~ Git.gitProfileDigest retainedProfile & #routing . #identity .~ intent.newOwner in changed & #fingerprint .~ Git.gitFingerprint transferBinding changed
             proposedGit = successorGit gitRecord
             verifyTargets exact changed = do
@@ -337,8 +338,8 @@ tests =
         successorCommit <- right (workspaceTransferredGitAction transferBinding successorAdmission gitDispatch retainedProfile proposedGit)
         changedSuccessorCommit <- right (workspaceTransferredGitAction transferBinding (successorAdmission & #epoch .~ (fixtureRevision 2)) gitDispatch retainedProfile proposedGit)
         verifyTargets successorCommit [commitAction, changedSuccessorCommit]
-        successorStatus <- right (workspaceTransferredGitObservationAction transferBinding successorAdmission gitDispatch retainedProfile "status" command.profile "device:files")
-        changedSuccessorStatus <- right (workspaceTransferredGitObservationAction transferBinding (successorAdmission & #epoch .~ (fixtureRevision 2)) gitDispatch retainedProfile "status" command.profile "device:files")
+        successorStatus <- right (workspaceTransferredGitObservationAction transferBinding successorAdmission gitDispatch retainedProfile "status" (fixturePayloadDigest command.profile) "device:files")
+        changedSuccessorStatus <- right (workspaceTransferredGitObservationAction transferBinding (successorAdmission & #epoch .~ (fixtureRevision 2)) gitDispatch retainedProfile "status" (fixturePayloadDigest command.profile) "device:files")
         verifyTargets successorStatus [statusAction, changedSuccessorStatus]
         successorAction <- right (workspaceSuccessorAdmissionAction transferBinding successorAdmission retainedProfile)
         changedSuccessorAction <- right (workspaceSuccessorAdmissionAction transferBinding (successorAdmission & #epoch .~ (fixtureRevision 2)) retainedProfile)
@@ -346,7 +347,7 @@ tests =
         workspaceSupervisedFileAction retainedProfile transferBinding successorAdmission dispatch "replace" "src/file" "device:parent" "input-hash" @?= Left FileEffectRefused
         workspaceProcessAction transferBinding successorAdmission dispatch successorProcess boot "device:parent" @?= Left FileEffectRefused
         workspaceGitAction transferBinding successorAdmission gitDispatch retainedProfile proposedGit @?= Left FileEffectRefused
-        workspaceGitObservationAction transferBinding successorAdmission gitDispatch retainedProfile "status" command.profile "device:files" @?= Left FileEffectRefused
+        workspaceGitObservationAction transferBinding successorAdmission gitDispatch retainedProfile "status" (fixturePayloadDigest command.profile) "device:files" @?= Left FileEffectRefused
         workspaceProvisionAction transferBinding successorAdmission retainedProfile boot "device:files" "device:scratch" @?= Left FileEffectRefused
         let followup = successorAdmission & #owner .~ transferBinding.request.owner & #epoch .~ transferBinding.request.epoch
         followupAction <- right (workspaceFollowupAdmissionAction transferBinding followup retainedProfile)
@@ -358,7 +359,7 @@ tests =
             sourceOne = sourceBinding "d"
             sourceTwo = sourceBinding "e"
             sources = [(sourceOne, sourceRecord sourceOne), (sourceTwo, sourceRecord sourceTwo)]
-            integrationAction admission selected = workspaceIntegrationAction transferBinding admission gitDispatch retainedProfile command.profile "device:files" selected
+            integrationAction admission selected = workspaceIntegrationAction transferBinding admission gitDispatch retainedProfile (fixturePayloadDigest command.profile) "device:files" selected
         exactIntegration <- right (integrationAction successorAdmission sources)
         changedIntegrationRun <- right (integrationAction (successorAdmission & #runId .~ "other-integration-run") sources)
         let changedArtifact = (sourceOne, let raw = sourceRecord sourceOne & #candidate .~ Just (candidate & #result .~ Text.replicate 40 "f") in raw & #fingerprint .~ Git.gitFingerprint sourceOne raw)
@@ -387,3 +388,13 @@ fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+fixturePayloadRef :: Text -> Text -> Integer -> PayloadRef
+fixturePayloadRef locator digest size =
+  PayloadRef
+    (either (error . show) id (parsePayloadId locator))
+    (either (error . show) id (parsePayloadDigest digest))
+    (either (error . show) id (parsePayloadByteCount size))
+
+fixturePayloadDigest :: Text -> PayloadDigest
+fixturePayloadDigest = either (error . show) id . parsePayloadDigest

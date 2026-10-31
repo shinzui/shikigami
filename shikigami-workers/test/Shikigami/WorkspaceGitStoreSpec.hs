@@ -19,6 +19,7 @@ import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Identity
+import Shikigami.Execution.Payload (PayloadDigest, parsePayloadDigest)
 import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (NeedModel))
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
@@ -127,7 +128,7 @@ withGit fixture use = Fixture.withFixture fixture \env _ root repository -> do
   run env (Store.markWorkspaceReadyTx binding) >>= (@?= Right ())
   now <- getCurrentTime
   let logical = OperationContext (ExecutionId "git-execution") (OperationId "git-operation") "git-operation" digest digest
-      record = GitRecord 1 logical (AttemptId "original-attempt") (fixtureOwner "original-claim") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest "device:parent" candidate.parent digest now (GitRouting logical.executionId owner digest NeedModel) GitReserved Nothing
+      record = GitRecord 1 logical (AttemptId "original-attempt") (fixtureOwner "original-claim") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest "device:parent" candidate.parent digest now (GitRouting logical.executionId owner (fixturePayloadDigest digest) NeedModel) GitReserved Nothing
   use env binding (record & #fingerprint .~ gitFingerprint binding record)
 
 candidate :: GitCandidate
@@ -156,3 +157,6 @@ fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+fixturePayloadDigest :: Text -> PayloadDigest
+fixturePayloadDigest = either (error . show) id . parsePayloadDigest

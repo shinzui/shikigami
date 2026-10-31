@@ -49,6 +49,7 @@ import Control.Exception (Exception, fromException, throw)
 import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
+import Data.Bifunctor (first)
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
@@ -80,6 +81,7 @@ import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.App (CommandEffects, commandOptions)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId (..))
+import Shikigami.Execution.Payload
 import Shikigami.Execution.Resources (Admission (..))
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
@@ -118,24 +120,27 @@ body kind value = Aeson.object ["format" .= (1 :: Int), "kind" .= kind, "content
 
 payloadReference :: Aeson.Value -> Either SessionError PayloadRef
 payloadReference value = do
-  let bytes = toInteger (Lazy.length (Aeson.encode value))
-      digest = versionedDigest "shikigami.worker-session-payload/1" value
-  when (bytes > 1048576) (Left SessionPayloadTooLarge)
-  pure (PayloadRef ("payload:" <> digest) digest bytes)
+  let encodedBytes = toInteger (Lazy.length (Aeson.encode value))
+  when (encodedBytes > 1048576) (Left SessionPayloadTooLarge)
+  first (const (SessionInputRefused "invalid payload reference")) do
+    digest <- parsePayloadDigest (versionedDigest "shikigami.worker-session-payload/1" value)
+    payloadId <- parsePayloadId ("payload:" <> payloadDigestText digest)
+    bytes <- parsePayloadByteCount encodedBytes
+    pure (PayloadRef payloadId digest bytes)
 
 writePayload :: WorkerSessionId -> Aeson.Value -> Transaction PayloadRef
 writePayload session value = do
   ref <- require (payloadReference value)
-  Tx.statement (session.value, ref.payloadId, ref.digest, fromInteger ref.bytes, value) insertPayload
+  Tx.statement (session.value, ref.payloadId, ref.digest, ref.bytes, value) insertPayload
   stored <- Tx.statement (session.value, ref.payloadId) selectPayload
-  unless (stored == Just (ref.digest, ref.bytes, value)) (abort SessionBindingConflict)
+  unless (stored == Just (Right (ref.digest, ref.bytes, value))) (abort SessionBindingConflict)
   pure ref
 
 readPayload :: (FromJSON a) => WorkerSessionId -> Text -> PayloadRef -> Transaction a
 readPayload session kind ref = do
   stored <- Tx.statement (session.value, ref.payloadId) selectPayload
   case stored of
-    Just (digest, bytes, value@(Aeson.Object fields)) -> do
+    Just (Right (digest, bytes, value@(Aeson.Object fields))) -> do
       actual <- require (payloadReference value)
       unless (actual == ref && digest == ref.digest && bytes == ref.bytes) (abort SessionBindingConflict)
       let decoded = do
@@ -146,6 +151,7 @@ readPayload session kind ref = do
       case parseEither (const decoded) value of
         Right result -> pure result
         Left _ -> abort (SessionInputRefused "session payload is unreadable")
+    Just (Left _) -> abort SessionBindingConflict
     _ -> abort (SessionInputRefused "session payload is unavailable")
 
 openSession :: (SessionEffects es) => SessionAdmission -> Eff es (Either SessionError (Admission, SessionState))
@@ -167,7 +173,7 @@ openSessionWithLimit maximumSessions admission = guarded do
   case existing of
     Just _ -> pure (matching existing)
     Nothing -> do
-      result <- persist session (Generated.AdmitWorkerSession (Generated.AdmitWorkerSessionData session ref.digest)) do
+      result <- persist session (Generated.AdmitWorkerSession (Generated.AdmitWorkerSessionData session (payloadDigestText ref.digest))) do
         validateRoot True root
         void (Tx.statement (versionedDigest "shikigami.worker-session-scope-lock/1" (toJSON (admission.scope.parent, admission.context.identity))) lockScope)
         existingScope <- Tx.statement (admission.scope.parent, toJSON admission.context.identity) selectScopeBinding
@@ -901,11 +907,21 @@ insertSession = preparable "INSERT INTO shikigami.worker_sessions(session_id,sco
 updateSession :: Statement (Text, SessionState) ()
 updateSession = preparable "UPDATE shikigami.worker_sessions SET state=$2,updated_at=clock_timestamp() WHERE session_id=$1" (contrazip2 textParam jsonParam) D.noResult
 
-insertPayload :: Statement (Text, Text, Text, Int64, Aeson.Value) ()
-insertPayload = preparable "INSERT INTO shikigami.worker_session_payloads(session_id,payload_id,digest,bytes,body) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING" (contrazip5 textParam textParam textParam (E.param (E.nonNullable E.int8)) jsonParam) D.noResult
+insertPayload :: Statement (Text, PayloadId, PayloadDigest, PayloadByteCount, Aeson.Value) ()
+insertPayload = preparable "INSERT INTO shikigami.worker_session_payloads(session_id,payload_id,digest,bytes,body) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING" (contrazip5 textParam (payloadIdText >$< textParam) (payloadDigestText >$< textParam) (payloadByteCountInt64 >$< E.param (E.nonNullable E.int8)) jsonParam) D.noResult
 
-selectPayload :: Statement (Text, Text) (Maybe (Text, Integer, Aeson.Value))
-selectPayload = preparable "SELECT digest,bytes,body FROM shikigami.worker_session_payloads WHERE session_id=$1 AND payload_id=$2" (contrazip2 textParam textParam) (D.rowMaybe ((,,) <$> D.column (D.nonNullable D.text) <*> (toInteger <$> D.column (D.nonNullable D.int8)) <*> D.column (D.nonNullable D.jsonb)))
+selectPayload :: Statement (Text, PayloadId) (Maybe (Either Text (PayloadDigest, PayloadByteCount, Aeson.Value)))
+selectPayload = preparable "SELECT digest,bytes,body FROM shikigami.worker_session_payloads WHERE session_id=$1 AND payload_id=$2" (contrazip2 textParam (payloadIdText >$< textParam)) (D.rowMaybe payloadRow)
+
+-- Decode owned payload metadata as data, so malformed values remain corruption
+-- refusals rather than being reported as database transport unavailability.
+payloadRow :: D.Row (Either Text (PayloadDigest, PayloadByteCount, Aeson.Value))
+payloadRow = capture <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.jsonb)
+  where
+    capture rawDigest rawBytes body = do
+      digest <- parsePayloadDigest rawDigest
+      bytes <- parsePayloadByteCount (toInteger rawBytes)
+      pure (digest, bytes, body)
 
 insertMessage :: Statement (Text, Int64, Text, Text, MessageReceipt) ()
 insertMessage = preparable "INSERT INTO shikigami.worker_session_messages(session_id,sequence,assignment_id,operation_id,state) VALUES ($1,$2,$3,$4,$5)" (contrazip5 textParam (E.param (E.nonNullable E.int8)) textParam textParam jsonParam) D.noResult

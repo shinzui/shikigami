@@ -7,12 +7,14 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Either (isLeft)
 import Data.Map.Strict qualified as Map
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Claim
 import Shikigami.Execution.Identity (AttemptId (..), OperationId (..))
+import Shikigami.Execution.Payload (parsePayloadByteCount, parsePayloadDigest, parsePayloadId)
 import Shikigami.Execution.Policy.Types (RecoveryClass (RepeatableObservation), ToolInvoiceCost (NoInvoiceCost))
 import Shikigami.Execution.Progress
 import Shikigami.Execution.Resources qualified as Resources
@@ -102,7 +104,7 @@ tests =
     ]
   where
     execution = ExecutionId "execution:position-codec"
-    payload = PayloadRef "payload:fixture" "digest" 1
+    payload = fixturePayloadRef "payload:fixture" ("sha256:" <> Text.replicate 64 "a") 1
     refusedState value = case Aeson.fromJSON value :: Aeson.Result ExecutionState of
       Aeson.Error _ -> pure ()
       Aeson.Success _ -> assertFailure "invalid state admitted"
@@ -123,3 +125,10 @@ assertWire :: (Eq a, Show a, Aeson.ToJSON a, Aeson.FromJSON a) => a -> Aeson.Val
 assertWire value expected = do
   Aeson.eitherDecode (Aeson.encode value) @?= Right value
   Aeson.encode value @?= Aeson.encode expected
+
+fixturePayloadRef :: Text -> Text -> Integer -> PayloadRef
+fixturePayloadRef locator digest size =
+  PayloadRef
+    (either (error . show) id (parsePayloadId locator))
+    (either (error . show) id (parsePayloadDigest digest))
+    (either (error . show) id (parsePayloadByteCount size))

@@ -41,6 +41,7 @@ import Shikigami.App (AppEffects)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
+import Shikigami.Execution.Payload (payloadDigestText)
 import Shikigami.Execution.Request (ExecutionRequest)
 import Shikigami.Execution.Resources (Admission (..), Root (..), checkRoot)
 import Shikigami.Execution.ResourcesStore qualified as Roots
@@ -327,7 +328,7 @@ authorizeExact authorizer scope label input = case identityText scope.run.identi
 authorizeAdmissionRead :: ActionAuthorizer -> (AgentIdentity -> IO (Either Text ())) -> WorkerSessionId -> SessionBinding -> IO (Either Text ())
 authorizeAdmissionRead authorizer lifecycle session binding = do
   current <- lifecycle binding.parentIdentity
-  case (current, identityText binding.parentIdentity, mkCapabilityToolTarget "shikigami.worker-sessions" ("admission-1-" <> Text.replace ":" "-" binding.admission.digest) ("read-admission-" <> session.value)) of
+  case (current, identityText binding.parentIdentity, mkCapabilityToolTarget "shikigami.worker-sessions" ("admission-1-" <> Text.replace ":" "-" (payloadDigestText binding.admission.digest)) ("read-admission-" <> session.value)) of
     (Right (), Right principal, Right target) ->
       authorizer.authorize principal (InvokeCapabilityTool target) >>= \case
         Right _ -> pure (Right ())

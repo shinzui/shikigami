@@ -49,6 +49,7 @@ import Shikigami.Agent.Principal (identityText)
 import Shikigami.App (CommandEffects, commandOptions)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Payload (parsePayloadDigest)
 import Shikigami.Execution.Transcript (PayloadRef (..))
 import Shikigami.Objective.Acceptance
 import Shikigami.Objective.Authority (Access (..))
@@ -369,7 +370,8 @@ validateSources objective mutation = do
       stored <- Tx.statement (receipt.sessionId.value, receipt.assignmentId.value) selectWorkerResult
       case stored of
         Just (actual, payload) -> pure do
-          unless (bound && actual == receipt && versionedDigest "shikigami.worker-session-payload/1" payload == receipt.output.digest) (Left ObjectiveInvalidEvidence)
+          expectedDigest <- either (const (Left ObjectiveInvalidEvidence)) Right (parsePayloadDigest (versionedDigest "shikigami.worker-session-payload/1" payload))
+          unless (bound && actual == receipt && expectedDigest == receipt.output.digest) (Left ObjectiveInvalidEvidence)
           result <- case payload of
             Aeson.Object fields -> case Aeson.parseMaybe (\o -> o .: "content") fields of
               Just value -> Right (value :: WS.AssignmentResult)

@@ -23,6 +23,7 @@ import Shikigami.Behavior.Error (RunError (..), boundedBehaviorDetail)
 import Shikigami.Behavior.Run (BehaviorEnv (..), BehaviorInput, completeBehaviorRequest, runBehavior)
 import Shikigami.Behavior.Skill (SkillDir (..), SkillManifest (..), loadSkillManifest, skillRequestText)
 import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Execution.Payload
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Policy.Limits (policyNumber)
 import Shikigami.Execution.SelectionRuntime (narrowOutput)
@@ -97,9 +98,16 @@ runEphemeralBehavior duration base env decl input = case narrowHarnessPolicy bas
                                   let execution = ExecutionId "ephemeral"
                                       position = advanceRevisions (fromIntegral calls) initialRevision
                                       specification = OperationSpec (operationIdFor execution position) ModelSummary RepeatableObservation "summary" "ephemeral" "ephemeral" Nothing
-                                      reference value = PayloadRef "ephemeral" (versionedDigest "shikigami.ephemeral-payload/1" value) (fromIntegral (Lazy.length (Aeson.encode value)))
-                                      operation = Operation 1 execution position specification "ephemeral" (reference (toJSON accepted)) (Just (reference (toJSON assistant))) (Just NeedModel) False Nothing
-                                  loop retained policy calls' toolCount repairs kind source (Just (operation, accepted, assistant))
+                                      reference value = do
+                                        payloadId <- parsePayloadId "ephemeral"
+                                        digest <- parsePayloadDigest (versionedDigest "shikigami.ephemeral-payload/1" value)
+                                        bytes <- parsePayloadByteCount (fromIntegral (Lazy.length (Aeson.encode value)))
+                                        pure (PayloadRef payloadId digest bytes)
+                                  case (reference (toJSON accepted), reference (toJSON assistant)) of
+                                    (Right input, Right output) -> do
+                                      let operation = Operation 1 execution position specification "ephemeral" input (Just output) (Just NeedModel) False Nothing
+                                      loop retained policy calls' toolCount repairs kind source (Just (operation, accepted, assistant))
+                                    _ -> pure (refused "ephemeral payload reference is invalid")
                               else
                                 if assistant.stopReason == ToolUse
                                   then do

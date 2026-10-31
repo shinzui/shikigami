@@ -979,6 +979,13 @@ tests fixture =
           run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput) >>= (@?= Left ProjectionUnavailable)
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
           root.usage @?= R.emptyUsage,
+      testCase "malformed protected payload metadata remains corruption before context access" do
+        mapM_
+          ( \corrupt -> withFixture fixture \env snapshot access -> do
+              run env (runTransaction (Tx.statement snapshot.executionId.value corrupt))
+              run env (Store.loadExecution access) >>= (@?= Left CorruptReplay)
+          )
+          [corruptPayloadDigest, zeroPayloadBytes],
       testCase "corrupt protected replay fails before the runtime can obtain a context" $
         withFixture fixture \env snapshot access -> do
           run env (runTransaction (Tx.statement snapshot.executionId.value corruptPayload))
@@ -1473,3 +1480,9 @@ fixtureAgentName = either (error . show) id . mkAgentName
 
 fixtureRunKey :: Text -> RunKey
 fixtureRunKey = either (error . show) id . parseRunKey
+
+corruptPayloadDigest :: Statement Text ()
+corruptPayloadDigest = preparable "UPDATE shikigami.execution_payloads SET digest='invalid' WHERE execution_id=$1" (E.param (E.nonNullable E.text)) D.noResult
+
+zeroPayloadBytes :: Statement Text ()
+zeroPayloadBytes = preparable "UPDATE shikigami.execution_payloads SET bytes=0 WHERE execution_id=$1" (E.param (E.nonNullable E.text)) D.noResult
