@@ -202,8 +202,9 @@ executionInspection config store steps =
                 "bindingAvailability" .= (if available then "available" else "PinnedBindingUnavailable" :: Text),
                 "calls" .= case facts of
                   Left _ -> object ["status" .= ("unavailable" :: Text)]
-                  Right Nothing -> object ["attempts" .= (0 :: Int)]
-                  Right (Just (assignment, calls)) -> object ["attempts" .= assignment.attempts, "active" .= assignment.active, "unknown" .= assignment.unknown, "usage" .= assignment.usage, "facts" .= calls]
+                  Right (Left refusal) -> object ["status" .= ("refused" :: Text), "reason" .= refusal]
+                  Right (Right Nothing) -> object ["attempts" .= (0 :: Int)]
+                  Right (Right (Just (assignment, calls))) -> object ["attempts" .= assignment.attempts, "active" .= assignment.active, "unknown" .= assignment.unknown, "usage" .= assignment.usage, "facts" .= calls]
               ]
           )
 

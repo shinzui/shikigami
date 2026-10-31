@@ -90,15 +90,14 @@ a checked allocated TypeID; objective content, worker/workspace ownership,
 execution policies, counters, decisions and assignment locators retain their
 nominal checked meanings.
 
-Latest resource-row acceptance passed 584 pure, 403 serial PostgreSQL, 262 worker
-and 95 server cases plus native/domain/diagram gates. ADR-98 classifies owned
-resource JSON corruption inside the transaction while preserving coupled/batch
-rollback and accounting holds. Five committed-decoder controls reproduce the old
-store-error classification. Strict native findings against 3181122 are empty,
-with unchanged transducers. The unclassified census has 320 modules and 907
-declarations. Complete scalar/identity, model/other decision values and remaining
-decoder-owner review keep EP-5 In Progress. EP-6's frozen closure, packaged
-Linux/runtime and inventory gates have not started.
+Latest assignment-call acceptance passed 584 pure, 405 serial PostgreSQL,
+262 worker and 95 server cases plus native/domain/diagram gates. ADR-99 retains
+owning corruption refusals, complete bounded facts, coupled rollback and distinct
+outer SQL failures through inspection. Strict native findings against 1541cb1
+are empty, with unchanged transducers. The unclassified census has 320 modules
+and 907 declarations. Complete scalar/identity, model/other decision values and
+remaining decoder-owner review keep EP-5 In Progress. EP-6's frozen closure,
+packaged Linux/runtime and inventory gates have not started.
 
 ## Surprises & Discoveries
 

@@ -10,7 +10,6 @@ import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.Int (Int64)
 import Data.Map.Strict qualified as Map
-import Data.Text qualified as Text
 import Data.Time (addUTCTime)
 import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
@@ -116,6 +115,7 @@ data CallAdmissionFailure
   | CallResourcesRefused !ResourceError
   | CallIdentityConflict
   | CallMissing
+  | CallStateCorrupt
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -142,17 +142,19 @@ reserveSelectionCallTx selection limits request fingerprint now = do
         Left err -> pure (Left (CallResourcesRefused err))
         Right state -> do
           Tx.statement (assignmentId, Assignment selection limits noAttempts noAttempts emptyUsage noAttempts) insertAssignment
-          stored <- Tx.statement assignmentId lockAssignment
+          stored <- readRows assignmentId lockAssignment
           case stored of
-            Nothing -> pure (Left AssignmentConflict)
-            Just assignment
+            Left err -> pure (Left err)
+            Right Nothing -> pure (Left AssignmentConflict)
+            Right (Just assignment)
               | assignment.selection /= selection || assignment.limits /= limits -> pure (Left AssignmentConflict)
               | otherwise -> do
                   oldCall <- readCall request.attemptId
                   case oldCall of
-                    Just old | old.receipt.assignmentId == assignmentId && old.receipt.request == request && old.receipt.fingerprint == fingerprint -> pure (Right (ExistingCall old.receipt))
-                    Just _ -> pure (Left CallIdentityConflict)
-                    Nothing
+                    Left err -> pure (Left err)
+                    Right (Just old) | old.receipt.assignmentId == assignmentId && old.receipt.request == request && old.receipt.fingerprint == fingerprint -> pure (Right (ExistingCall old.receipt))
+                    Right (Just _) -> pure (Left CallIdentityConflict)
+                    Right Nothing
                       | maybe False (now >=) limits.cutoff -> pure (Left AssignmentCutoffReached)
                       | maybe False (attemptLimitReached assignment.active) limits.concurrency -> pure (Left AssignmentConcurrencyExceeded)
                       | maybe False (attemptLimitReached assignment.attempts) limits.calls -> pure (Left AssignmentCallLimitExceeded)
@@ -197,39 +199,45 @@ finishSelectionCallTx receipt outcome = do
   case sequence root of
     Left err -> pure (Left (CallResourcesRefused err))
     Right _ -> do
-      assignment <- Tx.statement receipt.assignmentId lockAssignment
-      stored <- readCall receipt.request.attemptId
-      case stored of
-        Nothing -> pure (Left CallMissing)
-        Just call
-          | isNothing assignment -> pure (Left CallMissing)
-          | call.receipt /= receipt -> pure (Left CallIdentityConflict)
-          | call.outcome == Just outcome -> pure (Right AlreadyAccepted)
-          | isJust call.outcome -> pure (Left CallIdentityConflict)
-          | otherwise -> do
-              let settlement = case outcome.phase of
-                    CallTransportUnknown -> UnknownUsage "transport outcome unavailable"
-                    CallRefused -> KnownUsage (Map.fromList [(Tokens, zeroAmount), (CostMicroUsd, zeroAmount)])
-                    CallTerminal | null outcome.missing -> KnownUsage outcome.known
-                    CallTerminal -> PartialUsage outcome.known outcome.missing "terminal billing facts unavailable"
-              let prepare current = do
-                    usage <- settleAssignment receipt.request.quantities settlement current.usage
-                    active <- if outcome.phase == CallTransportUnknown then Right current.active else either (Left . InvalidResourceRequest) Right (previousAttempt current.active)
-                    let unknown = if outcome.phase == CallTransportUnknown || not (null outcome.missing) then nextAttempt current.unknown else current.unknown
-                    pure (usage, active, unknown)
-              case maybe (Left (InvalidResourceRequest "assignment missing")) prepare assignment of
-                Left err -> pure (Left (CallResourcesRefused err))
-                Right (usage, active, unknown) -> do
-                  settled <- case receipt.rootId of
-                    Nothing -> pure (Right Accepted)
-                    Just rootId -> Resources.settleAttemptTx rootId receipt.request.attemptId settlement
-                  case settled of
-                    Left err -> Tx.condemn >> pure (Left (CallResourcesRefused err))
-                    Right _ -> do
-                      forM_ assignment \current -> do
-                        Tx.statement (receipt.assignmentId, current & #active .~ active & #usage .~ usage & #unknown .~ unknown) updateAssignment
-                      writeCall (SelectionCall receipt (Just outcome))
-                      pure (Right Accepted)
+      checkedAssignment <- readRows receipt.assignmentId lockAssignment
+      case checkedAssignment of
+        Left err -> pure (Left err)
+        Right assignment -> do
+          checkedCall <- readCall receipt.request.attemptId
+          case checkedCall of
+            Left err -> pure (Left err)
+            Right stored -> do
+              case stored of
+                Nothing -> pure (Left CallMissing)
+                Just call
+                  | isNothing assignment -> pure (Left CallMissing)
+                  | call.receipt /= receipt -> pure (Left CallIdentityConflict)
+                  | call.outcome == Just outcome -> pure (Right AlreadyAccepted)
+                  | isJust call.outcome -> pure (Left CallIdentityConflict)
+                  | otherwise -> do
+                      let settlement = case outcome.phase of
+                            CallTransportUnknown -> UnknownUsage "transport outcome unavailable"
+                            CallRefused -> KnownUsage (Map.fromList [(Tokens, zeroAmount), (CostMicroUsd, zeroAmount)])
+                            CallTerminal | null outcome.missing -> KnownUsage outcome.known
+                            CallTerminal -> PartialUsage outcome.known outcome.missing "terminal billing facts unavailable"
+                      let prepare current = do
+                            usage <- settleAssignment receipt.request.quantities settlement current.usage
+                            active <- if outcome.phase == CallTransportUnknown then Right current.active else either (Left . InvalidResourceRequest) Right (previousAttempt current.active)
+                            let unknown = if outcome.phase == CallTransportUnknown || not (null outcome.missing) then nextAttempt current.unknown else current.unknown
+                            pure (usage, active, unknown)
+                      case maybe (Left (InvalidResourceRequest "assignment missing")) prepare assignment of
+                        Left err -> pure (Left (CallResourcesRefused err))
+                        Right (usage, active, unknown) -> do
+                          settled <- case receipt.rootId of
+                            Nothing -> pure (Right Accepted)
+                            Just rootId -> Resources.settleAttemptTx rootId receipt.request.attemptId settlement
+                          case settled of
+                            Left err -> Tx.condemn >> pure (Left (CallResourcesRefused err))
+                            Right _ -> do
+                              forM_ assignment \current -> do
+                                Tx.statement (receipt.assignmentId, current & #active .~ active & #usage .~ usage & #unknown .~ unknown) updateAssignment
+                              writeCall (SelectionCall receipt (Just outcome))
+                              pure (Right Accepted)
 
 -- Reconcile retained terminal evidence without replacing any previously known
 -- measurement or observed identity. Active work is released only once.
@@ -239,23 +247,29 @@ reconcileSelectionCallTx receipt outcome = do
   case sequence root of
     Left err -> pure (Left (CallResourcesRefused err))
     Right _ -> do
-      assignment <- Tx.statement receipt.assignmentId lockAssignment
-      stored <- readCall receipt.request.attemptId
-      case (assignment, stored) of
-        (Just current, Just call)
-          | call.receipt /= receipt -> pure (Left CallIdentityConflict)
-          | call.outcome == Just outcome -> pure (Right AlreadyAccepted)
-          | Just previous <- call.outcome -> case reconcileUsage current previous of
-              Left err -> pure (Left err)
-              Right (usage, active, unknown, settlement) -> do
-                reconciled <- case receipt.rootId of Nothing -> pure (Right Accepted); Just rootId -> Resources.reconcileSettlementTx rootId receipt.request.attemptId settlement
-                case reconciled of
-                  Left err -> Tx.condemn >> pure (Left (CallResourcesRefused err))
-                  Right _ -> do
-                    Tx.statement (receipt.assignmentId, current & #usage .~ usage & #active .~ active & #unknown .~ unknown) updateAssignment
-                    writeCall (SelectionCall receipt (Just outcome))
-                    pure (Right Accepted)
-        _ -> pure (Left CallMissing)
+      checkedAssignment <- readRows receipt.assignmentId lockAssignment
+      case checkedAssignment of
+        Left err -> pure (Left err)
+        Right assignment -> do
+          checkedCall <- readCall receipt.request.attemptId
+          case checkedCall of
+            Left err -> pure (Left err)
+            Right stored -> do
+              case (assignment, stored) of
+                (Just current, Just call)
+                  | call.receipt /= receipt -> pure (Left CallIdentityConflict)
+                  | call.outcome == Just outcome -> pure (Right AlreadyAccepted)
+                  | Just previous <- call.outcome -> case reconcileUsage current previous of
+                      Left err -> pure (Left err)
+                      Right (usage, active, unknown, settlement) -> do
+                        reconciled <- case receipt.rootId of Nothing -> pure (Right Accepted); Just rootId -> Resources.reconcileSettlementTx rootId receipt.request.attemptId settlement
+                        case reconciled of
+                          Left err -> Tx.condemn >> pure (Left (CallResourcesRefused err))
+                          Right _ -> do
+                            Tx.statement (receipt.assignmentId, current & #usage .~ usage & #active .~ active & #unknown .~ unknown) updateAssignment
+                            writeCall (SelectionCall receipt (Just outcome))
+                            pure (Right Accepted)
+                _ -> pure (Left CallMissing)
   where
     reconcileUsage assignment previous = do
       let fromUnknown = previous.phase == CallTransportUnknown
@@ -288,12 +302,15 @@ settleAssignment reservation settlement usage = case settlement of
     settleUsage (Map.filterWithKey (\d _ -> d `notElem` missing) reservation) known usage
 
 -- | At most 100 facts; the aggregate count also exposes omitted history.
-inspectSelection :: (Store :> es) => AssignmentKey -> Eff es (Maybe (Assignment, [SelectionCall]))
+inspectSelection :: (Store :> es) => AssignmentKey -> Eff es (Either CallAdmissionFailure (Maybe (Assignment, [SelectionCall])))
 inspectSelection key = runTransaction do
-  assignment <- Tx.statement key lockAssignment
+  assignment <- readRows key lockAssignment
   case assignment of
-    Nothing -> pure Nothing
-    Just value -> Just . (value,) <$> Tx.statement key listCalls
+    Left err -> pure (Left err)
+    Right Nothing -> pure (Right Nothing)
+    Right (Just value) -> do
+      calls <- readRows key listCalls
+      pure ((Just . (value,)) <$> calls)
 
 assignmentParam :: E.Params AssignmentKey
 assignmentParam = assignmentKeyText >$< textParam
@@ -304,24 +321,33 @@ textParam = E.param (E.nonNullable E.text)
 jsonParam :: (ToJSON a) => E.Params a
 jsonParam = toJSON >$< E.param (E.nonNullable E.jsonb)
 
-jsonRow :: (FromJSON a) => D.Row a
-jsonRow = D.column (D.nonNullable (D.refine decode D.jsonb))
+jsonRow :: (FromJSON a) => D.Row (Either () a)
+jsonRow = decode <$> D.column (D.nonNullable D.jsonb)
   where
-    decode value = case Aeson.fromJSON value of Aeson.Error err -> Left (Text.pack err); Aeson.Success v -> Right v
+    decode value = case Aeson.fromJSON value of Aeson.Error _ -> Left (); Aeson.Success v -> Right v
+
+-- Refuse the complete optional/list result inside the transaction. Inspection
+-- may be coupled to earlier writes, so corruption must condemn even a reader.
+readRows :: (Traversable rows) => parameters -> Statement parameters (rows (Either () a)) -> Transaction (Either CallAdmissionFailure (rows a))
+readRows parameters statement = do
+  rows <- Tx.statement parameters statement
+  case traverse id rows of
+    Left () -> Tx.condemn >> pure (Left CallStateCorrupt)
+    Right values -> pure (Right values)
 
 insertAssignment :: Statement (AssignmentKey, Assignment) ()
 insertAssignment = preparable "INSERT INTO shikigami.execution_selections (assignment_id,state) VALUES ($1,$2) ON CONFLICT DO NOTHING" (contrazip2 assignmentParam jsonParam) D.noResult
 
-lockAssignment :: Statement AssignmentKey (Maybe Assignment)
+lockAssignment :: Statement AssignmentKey (Maybe (Either () Assignment))
 lockAssignment = preparable "SELECT state FROM shikigami.execution_selections WHERE assignment_id=$1 FOR UPDATE" assignmentParam (D.rowMaybe jsonRow)
 
 updateAssignment :: Statement (AssignmentKey, Assignment) ()
 updateAssignment = preparable "UPDATE shikigami.execution_selections SET state=$2 WHERE assignment_id=$1" (contrazip2 assignmentParam jsonParam) D.noResult
 
-readCall :: AttemptId -> Transaction (Maybe SelectionCall)
-readCall identifier = Tx.statement (attemptIdText identifier) getCall
+readCall :: AttemptId -> Transaction (Either CallAdmissionFailure (Maybe SelectionCall))
+readCall identifier = readRows (attemptIdText identifier) getCall
 
-getCall :: Statement Text (Maybe SelectionCall)
+getCall :: Statement Text (Maybe (Either () SelectionCall))
 getCall = preparable "SELECT state FROM shikigami.execution_selection_calls WHERE attempt_id=$1 FOR UPDATE" textParam (D.rowMaybe jsonRow)
 
 writeCall :: SelectionCall -> Transaction ()
@@ -330,7 +356,7 @@ writeCall call = Tx.statement (call.receipt.assignmentId, attemptIdText call.rec
 putCall :: Statement (AssignmentKey, Text, Text, Int64, SelectionCall) ()
 putCall = preparable "INSERT INTO shikigami.execution_selection_calls (assignment_id,attempt_id,operation_id,ordinal,state) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (attempt_id) DO UPDATE SET state=EXCLUDED.state" (contrazip5 assignmentParam textParam textParam (E.param (E.nonNullable E.int8)) jsonParam) D.noResult
 
-listCalls :: Statement AssignmentKey [SelectionCall]
+listCalls :: Statement AssignmentKey [Either () SelectionCall]
 listCalls = preparable "SELECT state FROM shikigami.execution_selection_calls WHERE assignment_id=$1 ORDER BY ordinal LIMIT 100" assignmentParam (D.rowList jsonRow)
 
 operationKey :: OperationId -> Text

@@ -259,6 +259,11 @@
           "rationale": "ADR-98 captures ResourcesStore root/operation/attempt/allocation FromJSON refusals as typed row data and condemns the transaction before returning ResourceStateCorrupt. Concrete SQL failures keep StoreError. Five positive-first PostgreSQL corruption cases fail against the original decoder and pass with explicit refusal, preserved holds and coupled/batch rollback. Valid queries, locks, limits and native owners remain; other stores and the full scalar/identity census remain pending."
         },
         {
+          "id": "owned-assignment-call-row-decoding",
+          "disposition": "implemented",
+          "rationale": "ADR-99 captures SelectionStore assignment/call/bounded-list FromJSON refusals as typed row data, condemns inside the read and returns CallStateCorrupt. Admission, completion, reconciliation and inspection preserve that ownership; CLI inspection distinguishes it from outer StoreError and absent valid history. Positive two-call PostgreSQL controls reject a malformed whole set without dropping a member, preserve holds and roll back coupled root publication; SQL-failure controls remain outer store errors. Other stores and the full scalar/identity census remain pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -372,7 +377,11 @@
         "docs/evidence/keiro-0.22/resource-row-before-regressions.txt",
         "docs/evidence/keiro-0.22/resource-row-native-diff.json",
         "docs/evidence/keiro-0.22/resource-row-native-replay.json",
-        "docs/evidence/keiro-0.22/resource-row-fold-identities.json"
+        "docs/evidence/keiro-0.22/resource-row-fold-identities.json",
+        "docs/evidence/keiro-0.22/selection-row-results.txt",
+        "docs/evidence/keiro-0.22/selection-row-native-diff.json",
+        "docs/evidence/keiro-0.22/selection-row-native-replay.json",
+        "docs/evidence/keiro-0.22/selection-row-fold-identities.json"
       ]
     },
     {

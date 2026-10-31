@@ -96,6 +96,12 @@ scalar/identity and remaining decoder-owner classifications remain open.
 
 ## Decision Log
 
+2026-10-31: ADR-99 keeps assignment-call decoding ownership distinct from resource
+failures and outer StoreError. Condemn on complete optional/list decode failure,
+return CallStateCorrupt and make inspection preserve its explicit Either through
+the CLI. Two-call controls preserve holds, refuse partial facts and roll back a
+coupled root publication; genuine SQL failures retain their outer error channel.
+
 2026-10-31: Five committed-decoder PostgreSQL controls reproduce resource JSON
 corruption reaching StoreError. ADR-98 captures typed row decoding and condemns
 inside the resource read boundary before returning ResourceStateCorrupt. Preserve
@@ -142,12 +148,12 @@ cases. The language checker and thirteen style/ownership mutation tests pass.
 [The adoption record](../evidence/keiro-0.22/haskell-service-adoption.md) links each
 implemented domain-value wave and its exact candidate/evidence.
 
-Latest resource-row acceptance passed 584 pure, 403 serial PostgreSQL, 262 worker
-and 95 server cases plus native/domain/diagram gates.
-[Acceptance](../evidence/keiro-0.22/resource-row-results.txt) records five committed-
-decoder failures followed by owning corruption refusals, preserved holds and
-coupled/batch rollback. Strict native findings against 3181122 are empty; four
-transducers remain unchanged. The current 320-module/907-declaration worklist,
+Latest assignment-call acceptance passed 584 pure, 405 serial PostgreSQL,
+262 worker and 95 server cases plus native/domain/diagram gates.
+[Acceptance](../evidence/keiro-0.22/selection-row-results.txt) records owning
+corruption refusals, complete bounded facts, preserved holds, coupled rollback
+and distinct SQL failures. Strict native findings against 1541cb1 are empty;
+four transducers remain unchanged. The current 320-module/907-declaration worklist,
 source/tool hashes and all 124 frozen guide hashes are verified. Earlier 230
 compiler-client and other role/CLI/live HTTP results remain in their individual
 wave records. Forty-two of 46 assigned sources have implemented dispositions.

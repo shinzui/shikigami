@@ -8,6 +8,7 @@ import Baikai.Models.Generated (allModels)
 import Baikai.Options qualified as Options
 import Baikai.Response (Response (..), responseError)
 import Baikai.ThinkingLevel (ThinkingLevel (ThinkingHigh, ThinkingLow, ThinkingMedium))
+import Contravariant.Extras (contrazip2)
 import Control.Concurrent.Async (concurrently)
 import Control.Exception (SomeException, try)
 import Control.Monad (when)
@@ -101,7 +102,9 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "ExecutionSelectionWorkflow"
-    [ testCase "three admitted aliases reach HTTP with distinct model and thinking tuples" $
+    [ testCase "malformed selection assignment is an owning refusal with coupled rollback" (malformedSelectionRow fixture AssignmentRow),
+      testCase "malformed selection call refuses the whole bounded facts set with coupled rollback" (malformedSelectionRow fixture CallRow),
+      testCase "three admitted aliases reach HTTP with distinct model and thinking tuples" $
         withRuntime fixture \app store base -> withHttp \bindings observed -> do
           now <- getCurrentTime
           root <- seed app now []
@@ -113,7 +116,7 @@ tests fixture =
                   selected <- expectRight =<< buildExecutionEnv (runtime app store base catalog) selection
                   response <- completeBehaviorRequest selected selected.model (systemUser "system" "marker") selected.options
                   responseError response @?= Nothing
-                  Just (assignment, facts) <- run app (Calls.inspectSelection selection.assignmentId)
+                  Just (assignment, facts) <- expectRight =<< run app (Calls.inspectSelection selection.assignmentId)
                   assignment.attempts @?= (fixtureCount 1)
                   assignment.active @?= (fixtureCount 0)
                   assignment.unknown @?= (fixtureCount 1)
@@ -253,7 +256,7 @@ tests fixture =
           rootState <- expectRight =<< run app (Roots.inspectRoot root)
           rootState.active @?= (fixtureCount 0)
           rootState.unknown @?= (fixtureCount 1)
-          Just (assignment, [call]) <- run app (Calls.inspectSelection selection.assignmentId)
+          Just (assignment, [call]) <- expectRight =<< run app (Calls.inspectSelection selection.assignmentId)
           assignment.active @?= (fixtureCount 0)
           case call.outcome of Just outcome -> outcome.phase @?= Calls.CallTerminal; _ -> assertFailure "missing terminal call facts",
       testCase "fresh authority refusal after reservation sends no request" $
@@ -330,7 +333,7 @@ tests fixture =
           retried <- case next of Calls.NewCall r -> pure r; _ -> assertFailure "new actual retry required"
           run app (Calls.finishSelectionCall retried terminal) >>= (@?= Right Accepted)
           reserve "exhausted" >>= (@?= Left Calls.CallRetryLimitExceeded)
-          Just (assignment, facts) <- run app (Calls.inspectSelection selection.assignmentId)
+          Just (assignment, facts) <- expectRight =<< run app (Calls.inspectSelection selection.assignmentId)
           assignment.attempts @?= (fixtureCount 2)
           assignment.active @?= (fixtureCount 0)
           length facts @?= 2
@@ -606,7 +609,7 @@ refusedAssignmentSettlement fixture reconcile = withRuntime fixture \app _ _ -> 
   if reconcile
     then run app (Calls.finishSelectionCall receipt (Calls.CallOutcome Calls.CallTransportUnknown Map.empty [Tokens, CostMicroUsd] Nothing Nothing Nothing)) >>= (@?= Right Accepted)
     else pure ()
-  Just (before, facts) <- run app (Calls.inspectSelection selection.assignmentId)
+  Just (before, facts) <- expectRight =<< run app (Calls.inspectSelection selection.assignmentId)
   beforeRoot <- expectRight =<< run app (Roots.inspectRoot root)
   let invalid = if reconcile then before & #unknown .~ noAttempts else before & #active .~ noAttempts
   run
@@ -623,7 +626,7 @@ refusedAssignmentSettlement fixture reconcile = withRuntime fixture \app _ _ -> 
     )
   result <- run app (if reconcile then runTransaction (Calls.reconcileSelectionCallTx receipt terminal) else Calls.finishSelectionCall receipt terminal)
   assertBool "count underflow refused" (case result of Left (Calls.CallResourcesRefused (InvalidResourceRequest _)) -> True; _ -> False)
-  run app (Calls.inspectSelection selection.assignmentId) >>= (@?= Just (invalid, facts))
+  run app (Calls.inspectSelection selection.assignmentId) >>= (@?= Right (Just (invalid, facts)))
   afterRoot <- expectRight =<< run app (Roots.inspectRoot root)
   afterRoot @?= beforeRoot
 
@@ -635,3 +638,67 @@ fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+-- Positive admissions and inspection precede each isolated application-row
+-- mutation. A valid second call prevents silently dropping the bad list member.
+data CorruptSelectionRow = AssignmentRow | CallRow
+
+malformedSelectionRow :: DatabaseFixture -> CorruptSelectionRow -> IO ()
+malformedSelectionRow fixture row = withRuntime fixture \app _ _ -> do
+  now <- getCurrentTime
+  root <- seed app now []
+  let catalog = mustRight (modelCatalog [])
+      fallback = mustRight (defaultBinding stubModel Options.emptyOptions)
+      selection = mustRight (resolveExecutionSelection (fixtureAssignment "corrupt-selection") catalog (Right fallback) Nothing Nothing Nothing Nothing (Just root) now)
+      limits = mustRight (Calls.callLimitsFor selection Nothing)
+      request = AttemptRequest (fixtureAttemptId "corrupt-selection-1") (fixtureOperationId "corrupt-operation") (Map.fromList [(ActiveWork, fixtureAmount 1), (ModelAttempts, fixtureAmount 1), (Tokens, fixtureAmount 10), (CostMicroUsd, fixtureAmount 0)]) EnforcedCeiling
+      terminal = Calls.CallOutcome Calls.CallTerminal (Map.fromList [(Tokens, fixtureAmount 3), (CostMicroUsd, fixtureAmount 0)]) [] Nothing Nothing Nothing
+      reserve call = run app (Calls.reserveSelectionCall selection limits call "corrupt-fingerprint" now)
+  admitted <- expectRight =<< reserve request
+  receipt <- case admitted of Calls.NewCall value -> pure value; _ -> assertFailure "new admitted call expected"
+  _ <- expectRight =<< reserve (request & #attemptId .~ fixtureAttemptId "corrupt-selection-2")
+  Just (_, calls) <- expectRight =<< run app (Calls.inspectSelection selection.assignmentId)
+  length calls @?= 2
+  beforeRoot <- expectRight =<< run app (Roots.inspectRoot root)
+  run
+    app
+    ( runTransaction
+        ( Tx.sql
+            ( case row of
+                AssignmentRow -> "UPDATE shikigami.execution_selections SET state='{}'::jsonb"
+                CallRow -> "UPDATE shikigami.execution_selection_calls SET state='{}'::jsonb WHERE ordinal=1"
+            )
+        )
+    )
+  run app (Calls.inspectSelection selection.assignmentId) >>= (@?= Left Calls.CallStateCorrupt)
+  reserve request >>= (@?= Left Calls.CallStateCorrupt)
+  run app (Calls.finishSelectionCall receipt terminal) >>= (@?= Left Calls.CallStateCorrupt)
+  run app (runTransaction (Calls.reconcileSelectionCallTx receipt terminal)) >>= (@?= Left Calls.CallStateCorrupt)
+  run app (Roots.inspectRoot root) >>= (@?= Right beforeRoot)
+  let other = fixtureRootId "selection-coupled-publication"
+      insert =
+        preparable
+          "INSERT INTO shikigami.execution_roots(root_id,state) VALUES ($1,$2)"
+          (contrazip2 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.jsonb)))
+          D.noResult
+  run
+    app
+    ( runTransaction do
+        Tx.statement (executionRootIdText other, toJSON beforeRoot) insert
+        Calls.finishSelectionCallTx receipt terminal
+    )
+    >>= (@?= Left Calls.CallStateCorrupt)
+  run app (Roots.inspectRoot other) >>= (@?= Left RootMissing)
+  run app (Roots.inspectRoot root) >>= (@?= Right beforeRoot)
+  run
+    app
+    ( runTransaction
+        ( Tx.sql
+            ( case row of
+                AssignmentRow -> "ALTER TABLE shikigami.execution_selections RENAME TO fixture_unavailable_selections"
+                CallRow -> "ALTER TABLE shikigami.execution_selection_calls RENAME TO fixture_unavailable_calls"
+            )
+        )
+    )
+  unavailable <- runAppIO app (Calls.inspectSelection selection.assignmentId)
+  assertBool "SQL failure remains an outer store error" (case unavailable of Left _ -> True; _ -> False)

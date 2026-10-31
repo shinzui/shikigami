@@ -377,3 +377,15 @@ then 584 pure/403 PostgreSQL/262 worker/95 server cases and native/domain/diagra
 gates. Native findings against 3181122 are empty; four transducers remain unchanged.
 The 320-module/907-declaration worklist remains unclassified, and complete scalar/
 identity, model/other decision and remaining decoder-owner review remain open.
+
+Assignment-call rows now preserve their own CallStateCorrupt result through
+admission, completion, reconciliation and explicit bounded inspection. The CLI
+keeps that refusal separate from outer store failure and absent valid history.
+[ADR-99](../../adr/0099-assignment-call-readers-preserve-corruption-and-transaction-ownership.md)
+and [acceptance](selection-row-results.txt) record two positive-first corruption/
+SQL-failure controls, then 584 pure/405 PostgreSQL/262 worker/95 server cases and
+native/domain/diagram gates. Complete facts and root holds remain; coupled root
+publication rolls back. Native findings against 1541cb1 are empty and four
+transducers unchanged. The 320-module/907-declaration worklist remains unclassified;
+complete scalar/identity, model/other decision and other decoder-owner review
+remain open.
