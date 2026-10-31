@@ -56,7 +56,7 @@ workspaceTransferProvider runtime = WorkspaceProvider reconcile admit
             case frozen of
               Just proof -> pure (FencedAndSettled proof)
               Nothing -> do
-                pending <- transaction env (Transfers.pendingWorkspaceOperationsTx binding)
+                pending <- transaction env (Transfers.pendingWorkspaceOperationsTx binding) >>= either (const (abort FenceUnresolved)) pure
                 forM_ pending \(operation, kind) -> case kind of
                   "file" -> void (publishFileReceipt env operation)
                   "git" -> void (publishGitReceipt env operation)

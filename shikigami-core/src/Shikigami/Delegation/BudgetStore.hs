@@ -20,6 +20,7 @@ where
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4)
 import Data.Foldable (traverse_)
 import Data.Functor.Contravariant ((>$<))
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
@@ -36,7 +37,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Numeric.Natural (Natural)
 import Shikigami.Agent.Decl (DelegationBudget, delegationBudgetInt)
 import Shikigami.Agent.Delegate.Context (DelegationBudgetId (..))
-import Shikigami.Execution.Identity (ExecutionRootId, OperationId (..), executionRootIdText, parseExecutionRootId)
+import Shikigami.Execution.Identity (ExecutionRootId, OperationId, executionRootIdText, operationIdWithPrefix, parseExecutionRootId)
 import Shikigami.Execution.Quantity (oneAmount)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Resources
@@ -165,7 +166,7 @@ reserveEnrolledDelegationSlots root budgetId seed childIds now = runTransaction 
                 then pure result
                 else Tx.condemn >> pure (Left (DelegationResourceRefused Resources.IdentityConflict))
   where
-    request (WorkflowId child) = Resources.OperationRequest (OperationId ("delegate:" <> child)) Nothing Resources.ChildOperation (Map.singleton Resources.LifetimeDescendants oneAmount) "delegation-v1"
+    request (WorkflowId child) = Resources.OperationRequest (operationIdWithPrefix ('d' :| "elegate:") child) Nothing Resources.ChildOperation (Map.singleton Resources.LifetimeDescendants oneAmount) "delegation-v1"
 
 bindRootStatement :: Statement (DelegationBudgetId, Text, Bool) Bool
 bindRootStatement =

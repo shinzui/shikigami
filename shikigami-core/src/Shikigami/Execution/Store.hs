@@ -93,7 +93,7 @@ import Shikigami.Execution.AssignmentKey (AssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Catalog (withLiveExecution)
 import Shikigami.Execution.Claim
-import Shikigami.Execution.Identity (AttemptId, ExecutionRootId, OperationId (..), attemptIdText)
+import Shikigami.Execution.Identity (AttemptId, ExecutionRootId, OperationId, attemptIdText, operationIdText)
 import Shikigami.Execution.Payload
 import Shikigami.Execution.Policy (ContextView (..), ModelOperationInput (..), validateTerminalOutput, validateToolInvocation)
 import Shikigami.Execution.Policy.Limits (policyNumber)
@@ -1289,7 +1289,7 @@ decode :: (FromJSON a) => Aeson.Value -> Transaction a
 decode value = case Aeson.fromJSON value of Aeson.Success result -> pure result; Aeson.Error _ -> abort CorruptReplay
 
 operationKey :: OperationId -> Text
-operationKey (OperationId key) = key
+operationKey = operationIdText
 
 textParam :: E.Params Text
 textParam = E.param (E.nonNullable E.text)

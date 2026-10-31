@@ -56,7 +56,7 @@ import Shikigami.App.Config.Load
     usageExitCode,
   )
 import Shikigami.App.Version (versionOption)
-import Shikigami.Execution.Identity (parseExecutionRootId)
+import Shikigami.Execution.Identity (parseExecutionRootId, parseOperationId)
 import Shikigami.Server.Command.Agents (runAgentsList, runAgentsSync)
 import Shikigami.Server.Command.DanwaSpike (runDanwaSpike)
 import Shikigami.Server.Command.EnqueueRun (runEnqueueRun)
@@ -181,7 +181,7 @@ workersInfo = info (subparser commands <**> helper) (progDesc "Inspect continuin
         <> command "reconcile" (info (reconcile <**> helper) (progDesc "Reconcile the retained transfer without replacing its operation"))
         <> command "integrate" (info (integrate <**> helper) (progDesc "Integrate retained events through the authoritative checkpoint owner"))
     session = strArgument (metavar "SESSION" <> help "Retained worker session id")
-    operation = strOption (long "operation" <> metavar "KEY" <> help "Stable caller operation key; reuse it after a lost acknowledgement")
+    operation = option (eitherReader (either (Left . Text.unpack) Right . parseOperationId . Text.pack)) (long "operation" <> metavar "KEY" <> help "Stable caller operation key; reuse it after a lost acknowledgement")
     revision = option revisionReader (long "expected-revision" <> metavar "REVISION" <> help "Expected session revision")
     epoch = option revisionReader (long "epoch" <> metavar "EPOCH" <> help "Expected owner epoch")
     instruction = strOption (long "instruction-file" <> metavar "PATH" <> help "Bounded WorkerInstruction JSON: text, objectiveRevision, assignmentRevision, criteriaRevision and optional selection")

@@ -1,3 +1,5 @@
+{-# LANGUAGE ViewPatterns #-}
+
 -- | Every mutation locks the root before any operation/allocation/attempt.
 -- Transaction-level hooks let an executor commit its outcome and usage together.
 module Shikigami.Execution.ResourcesStore
@@ -409,13 +411,13 @@ updateRoot :: Statement (Text, Root) ()
 updateRoot = preparable "UPDATE shikigami.execution_roots SET state=$2 WHERE root_id=$1" (contrazip2 textParam jsonParam) D.noResult
 
 readOperation :: ExecutionRootId -> OperationId -> Transaction (Maybe OperationRequest)
-readOperation root (OperationId key) = Tx.statement (executionRootIdText root, key) getOperation
+readOperation root (operationIdText -> key) = Tx.statement (executionRootIdText root, key) getOperation
 
 getOperation :: Statement (Text, Text) (Maybe OperationRequest)
 getOperation = preparable "SELECT request FROM shikigami.execution_operations WHERE root_id=$1 AND operation_id=$2" (contrazip2 textParam textParam) (D.rowMaybe jsonRow)
 
 writeOperation :: ExecutionRootId -> OperationRequest -> Transaction ()
-writeOperation root request = let OperationId key = request.operationId in Tx.statement (executionRootIdText root, key, request) putOperation
+writeOperation root request = let key = operationIdText request.operationId in Tx.statement (executionRootIdText root, key, request) putOperation
 
 putOperation :: Statement (Text, Text, OperationRequest) ()
 putOperation = preparable "INSERT INTO shikigami.execution_operations (root_id,operation_id,request) VALUES ($1,$2,$3)" (contrazip3 textParam textParam jsonParam) D.noResult

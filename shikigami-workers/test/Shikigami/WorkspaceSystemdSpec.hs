@@ -15,7 +15,7 @@ import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Payload (PayloadDigest, parsePayloadDigest)
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (NeedModel))
-import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId)
+import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision qualified as Generation
 import Shikigami.Workspace.Process
@@ -83,7 +83,7 @@ withRecord use = do
   let profile = SystemdProfile "/private/root" digest "/bin/env" "/bin/deadline" "/bin/shikigami-workspace-collector" 62001 62001
   identity <- systemdProfileIdentity profile
   let command = ProcessCommand "validate" identity "/bin/validate" ["$HOME", "%n", "", "line\né"] "" (Map.singleton "HOME" "/scratch") 30 1024
-      operation = OperationId "process-operation"
+      operation = fixtureOperationId "process-operation"
       record = ProcessRecord operation (fixtureAttemptId "original-attempt") (fixtureOwner "claim") (fixtureGeneration 1) digest digest digest command (addUTCTime 30 now) (processUnit operation digest) (Just "11111111-1111-4111-8111-111111111111") Nothing ProcessLaunchRequested Nothing (Just (ProcessRouting 1 (ExecutionId "transport-execution") (CompatibilityIdentity (fixtureAgentName "worker")) (fixturePayloadDigest digest) NeedModel))
   use profile record
 

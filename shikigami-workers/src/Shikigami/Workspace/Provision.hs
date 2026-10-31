@@ -15,6 +15,7 @@ import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as Bytes
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
 import Hasql.Transaction (Transaction)
@@ -23,7 +24,7 @@ import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.Principal (identityText)
 import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Decision.Contract (versionedDigest)
-import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Identity (OperationId, operationIdFromNonEmpty)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Prelude
@@ -99,7 +100,7 @@ provisionWorkspaceProfile runtime binding admission policy pool = protect do
     withWorkspaceLock metadata $
       Right <$> do
         checkCurrent runtime binding
-        available <- transact runtime (Store.checkWorkspaceOperationTx binding admission.owner admission.epoch (OperationId "workspace-profile-admission"))
+        available <- transact runtime (Store.checkWorkspaceOperationTx binding admission.owner admission.epoch (operationIdFromNonEmpty ('w' :| "orkspace-profile-admission")))
         either (const (abort ProvisionRefused)) pure available
         files <- withContainedFile (workspaceFiles binding.storageRoot binding) ".shikigami-profile-target" \filesRoot ->
           Right <$> do

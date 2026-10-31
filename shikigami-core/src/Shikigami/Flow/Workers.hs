@@ -14,6 +14,7 @@ module Shikigami.Flow.Workers
 where
 
 import Data.Char (isAlphaNum, isAscii)
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text qualified as Text
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, (:>))
 import Effectful.Dispatch.Dynamic (interpret, send)
@@ -23,7 +24,7 @@ import Kiroku.Store.Effect (Store)
 import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.App (AppEffects, runAppIO)
 import Shikigami.Decision.Contract (versionedDigest)
-import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Identity (OperationId, operationIdWithPrefix)
 import Shikigami.Prelude
 import Shikigami.StateRevision (StateRevision)
 import Shikigami.WorkerSession.Capability
@@ -111,7 +112,7 @@ runWorkers configured authorizer run policy = interpret \_ -> \case
     operation label suffix = do
       (WorkflowName name, WorkflowId workflow) <- currentWorkflow
       generation <- currentRunGeneration
-      pure (OperationId ("workers:" <> versionedDigest "shikigami.flow-worker-command/1" (toJSON (name, workflow, generation, label, suffix :: Text))))
+      pure (operationIdWithPrefix ('w' :| "orkers:") (versionedDigest "shikigami.flow-worker-command/1" (toJSON (name, workflow, generation, label, suffix :: Text))))
     events = \case Right (WorkerEvents values) -> Right values; Left err -> Left err; _ -> Left SessionBindingConflict
 
 owned :: CoordinationHost -> Eff AppEffects (Either SessionError a) -> IO (Either SessionError a)

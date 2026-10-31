@@ -18,6 +18,7 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.List (nub, sort)
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Maybe (listToMaybe)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
@@ -36,7 +37,7 @@ import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Capability.Overlay (ResolvedCapabilitySet)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.AssignmentKey (AssignmentKey)
-import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Identity (OperationId, operationIdWithPrefix)
 import Shikigami.Execution.Payload (PayloadByteCount, PayloadDigest, PayloadId)
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Progress
@@ -61,7 +62,7 @@ executionWorkflowId :: ExecutionId -> WorkflowId
 executionWorkflowId execution = WorkflowId (UUID.toText (UUID.generateNamed UUID.namespaceURL (nameBytes ("shikigami.execution:" <> execution.value))))
 
 operationIdFor :: ExecutionId -> StateRevision "execution-operation" -> OperationId
-operationIdFor execution cursor = OperationId ("operation:" <> versionedDigest "shikigami.execution-operation/1" (toJSON (execution, cursor)))
+operationIdFor execution cursor = operationIdWithPrefix ('o' :| "peration:") (versionedDigest "shikigami.execution-operation/1" (toJSON (execution, cursor)))
 
 data PayloadRef = PayloadRef
   { payloadId :: !PayloadId,

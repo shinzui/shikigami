@@ -18,7 +18,7 @@ import Shikigami.App.Config (AppConfig (..), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Directory qualified as Directory
-import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Identity (OperationId)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.StateRevision (StateRevision)
@@ -40,17 +40,17 @@ runWorkersInspect key after limit _asJson config = do
     Right (Right Nothing) -> die "worker session was not found"
     _ -> die "worker session inspection was refused; verify the catalog and page bounds"
 
-runWorkersSend :: Text -> Text -> StateRevision "worker-session" -> StateRevision "worker-owner" -> FilePath -> AppConfig -> IO ()
+runWorkersSend :: Text -> OperationId -> StateRevision "worker-session" -> StateRevision "worker-owner" -> FilePath -> AppConfig -> IO ()
 runWorkersSend session key revision epoch path config = do
   instruction <- readInstruction path
   runWorkersControl key (SendWorker (WorkerSessionId session) revision epoch instruction) config
 
-runWorkersInterrupt :: Text -> Text -> StateRevision "worker-session" -> StateRevision "worker-owner" -> Text -> FilePath -> AppConfig -> IO ()
+runWorkersInterrupt :: Text -> OperationId -> StateRevision "worker-session" -> StateRevision "worker-owner" -> Text -> FilePath -> AppConfig -> IO ()
 runWorkersInterrupt session key revision epoch assignment path config = do
   instruction <- readInstruction path
   runWorkersControl key (InterruptWorker (WorkerSessionId session) revision epoch (AssignmentId assignment) instruction) config
 
-runWorkersControl :: Text -> WorkerCommand -> AppConfig -> IO ()
+runWorkersControl :: OperationId -> WorkerCommand -> AppConfig -> IO ()
 runWorkersControl key command config = do
   env <- environment "workers control" config
   directory <- Directory.startDirectory Log.silentLogger config.directorySettings >>= either (const (die "worker control directory unavailable")) pure
@@ -74,7 +74,7 @@ runWorkersControl key command config = do
       authority = CoordinationAuthority (\requested -> pure (if requested == run then Right (Just scope) else Left "foreign control scope")) (\requested pinned -> pure (if requested == run && pinned == scopeFingerprint scope then Right scope else Left "control scope unavailable"))
       sessions = SessionRuntime env agents directory.handle (Directory.identityLifecycleAdmission directory.handle) Nothing
       host = CoordinationHost (TransferServices sessions Nothing Nothing) authority
-  result <- executeWorkerControl host authorizer scope (OperationId key) command
+  result <- executeWorkerControl host authorizer scope key command
   case result of
     Right reply -> LazyChar.putStrLn (Aeson.encode reply)
     Left _ -> die "worker command refused; fresh parent authority and any required objective/workspace providers must be configured"

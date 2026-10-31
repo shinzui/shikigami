@@ -12,7 +12,7 @@ import Data.Text qualified as Text
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Claim
-import Shikigami.Execution.Identity (AttemptId, OperationId (..), attemptIdText)
+import Shikigami.Execution.Identity (AttemptId, OperationId, attemptIdText, operationIdText)
 import Shikigami.Execution.Payload (PayloadDigest)
 import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Execution.ToolPosition
@@ -80,7 +80,7 @@ validGitCandidate value = all validGitObject [value.parent, value.tree, value.re
 validGitRecord :: GitRecord -> Bool
 validGitRecord record = record.format == 1 && bounded operation && bounded execution && bounded attempt && record.operation.idempotencyKey == operation && digestText record.operation.fingerprint && digestText record.operation.scopeDigest && record.generation > initialRevision && all digestText [record.bindingDigest, record.instructionDigest, record.profileDigest, record.fingerprint] && bounded record.target && Text.length record.target <= 128 && validGitObject record.expectedParent && record.routing.executionId == record.operation.executionId && validRouting && validPhase && Bytes.length (Aeson.encode record) <= 65536
   where
-    OperationId operation = record.operation.operationId
+    operation = operationIdText record.operation.operationId
     ExecutionId execution = record.operation.executionId
     attempt = attemptIdText record.attemptId
     validRouting = either (const False) bounded (identityText record.routing.identity) && validNext record.routing.next && Bytes.length (Aeson.encode record.routing) <= 4096

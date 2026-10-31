@@ -40,14 +40,14 @@ import Shikigami.Capability.Overlay (CapabilityDescriptor (..))
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Driver (ExecutionStart (..))
 import Shikigami.Execution.Foreground (driveExecutionForeground)
-import Shikigami.Execution.Identity (ExecutionRootId, OperationId (..))
+import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Execution.Policy.Types (defaultHarnessPolicy)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript (ExecutionSnapshot (..), executionIdFor)
-import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
+import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId, fixtureRootId)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
@@ -146,7 +146,7 @@ tests fixture =
       testCase "terminal cleanup refuses a prepared mutation without inferring settlement from a free lock" $
         withWorkflow fixture \env root job _ deps _ -> do
           binding <- finishWorkspace env job deps
-          run env (runTransaction (Store.reserveWorkspaceEffectTx binding job.identity (fixtureRevision 0) (OperationId "pending-cleanup-effect") "pending")) >>= (@?= Right Nothing)
+          run env (runTransaction (Store.reserveWorkspaceEffectTx binding job.identity (fixtureRevision 0) (fixtureOperationId "pending-cleanup-effect") "pending")) >>= (@?= Right Nothing)
           cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
           run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Nothing)
           doesPathExist (workspaceFiles root binding) >>= (@?= True),

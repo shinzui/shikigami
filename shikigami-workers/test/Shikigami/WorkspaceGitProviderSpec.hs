@@ -39,7 +39,7 @@ import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Runner (DispatchContext (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
-import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId)
+import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision (StateRevision, parseRevision)
@@ -221,7 +221,7 @@ tests fixture =
         publishGitReceipt env reference.operationId >>= (@?= Right AwaitingGitReceipt)
         Just record <- run env (runTransaction (Git.inspectGitTx reference.operationId))
         record.phase @?= GitUnresolved
-        run env (runTransaction (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "successor"))) >>= (@?= Left WorkspaceBindingConflict)
+        run env (runTransaction (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "successor"))) >>= (@?= Left WorkspaceBindingConflict)
         (_, state) <- right =<< run env (Execution.loadExecution access)
         state.phase @?= Unresolved,
       testCase "unsettled processes block Git observations and commits before capture" $
@@ -229,7 +229,7 @@ tests fixture =
           ( \name -> withGit fixture name \env binding snapshot _ reference runtime profile backend -> do
               profileReady env binding profile
               now <- getCurrentTime
-              let operation = OperationId "pending-validation"
+              let operation = fixtureOperationId "pending-validation"
                   digest = profile.instructionDigest
                   command = commandFor digest (head profile.policy.rules)
                   record = ProcessRecord operation (fixtureAttemptId "pending-attempt") (fixtureOwner "pending-owner") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest command (addUTCTime 30 now) (processUnit operation digest) Nothing Nothing ProcessReserved Nothing Nothing

@@ -97,7 +97,7 @@ preparePlan upgrade env authorizer current client binding admission mode = do
   void (right =<< run env (Execution.admitExecution snapshot))
   access <- right =<< run env (Execution.authorizeReplay snapshot.executionId snapshot.identity (current snapshot))
   (_, operation) <- right =<< run env (Execution.acceptOperation access (fixtureRevision 0) model (Aeson.object []))
-  let OperationId key = operation.specification.operationId
+  let key = operationIdText operation.specification.operationId
       request = Resources.AttemptRequest (fixtureAttemptId ("model:" <> key)) operation.specification.operationId (Map.fromList [(Resources.ActiveWork, (fixtureAmount 1)), (Resources.ModelAttempts, (fixtureAmount 1)), (Resources.Tokens, (fixtureAmount 10)), (Resources.CostMicroUsd, (fixtureAmount 0))]) Resources.EnforcedCeiling
   reservation <- right =<< run env (Calls.reserveSelectionCall selection (Calls.CallLimits Nothing Nothing Nothing Nothing Nothing) request "fixture-model" now)
   call <- case reservation of Calls.NewCall value -> pure value; _ -> fail "new fixture model call required"
@@ -135,7 +135,7 @@ submit env snapshot access input = do
   (_, state) <- right =<< run env (Execution.loadExecution access)
   let position = state.cursor
       specification = OperationSpec (operationIdFor snapshot.executionId position) ToolOperation input.binding.recovery input.binding.name (policyDigest snapshot) (toolScopeDigest input.binding) (Just input.position)
-      OperationId key = specification.operationId
+      key = operationIdText specification.operationId
       reference = Attempt.JobReference 1 snapshot.executionId specification.operationId (fixtureAttemptId ("tool:" <> key))
   void (right =<< run env (Execution.acceptOperation access state.revision specification (Aeson.toJSON input)))
   (_, accepted) <- right =<< run env (Execution.loadExecution access)
@@ -212,7 +212,7 @@ appendTools env current snapshot calls = do
       model = OperationSpec (operationIdFor snapshot.executionId state.cursor) ModelTurn RepeatableObservation "model" (policyDigest snapshot) "fixture-model" Nothing
   (_, operation) <- right =<< run env (Execution.acceptOperation access state.revision model (Aeson.object []))
   now <- getCurrentTime
-  let OperationId key = operation.specification.operationId
+  let key = operationIdText operation.specification.operationId
       request = Resources.AttemptRequest (fixtureAttemptId ("model:" <> key)) operation.specification.operationId (Map.fromList [(Resources.ActiveWork, (fixtureAmount 1)), (Resources.ModelAttempts, (fixtureAmount 1)), (Resources.Tokens, (fixtureAmount 10)), (Resources.CostMicroUsd, (fixtureAmount 0))]) Resources.EnforcedCeiling
   reserved <- right =<< run env (Calls.reserveSelectionCall snapshot.selection (Calls.CallLimits Nothing Nothing Nothing Nothing Nothing) request "fixture-model" now)
   call <- case reserved of Calls.NewCall value -> pure value; _ -> fail "expected new fixture call"

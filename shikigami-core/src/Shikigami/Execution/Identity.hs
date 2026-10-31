@@ -15,19 +15,46 @@ module Shikigami.Execution.Identity
     parseAllocationId,
     allocationIdText,
     newAllocationId,
-    OperationId (..),
+    OperationId,
+    parseOperationId,
+    operationIdText,
+    operationIdWithPrefix,
+    operationIdFromNonEmpty,
   )
 where
 
 import Data.Aeson (withText)
 import Data.Bifunctor (first)
 import Data.KindID.V7 qualified as KindID
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text qualified as Text
 import Shikigami.Prelude
 
+-- | A logical retry/position locator, not an allocated accounting entity.
+-- Concrete write owners retain their existing length and scope policies.
 newtype OperationId = OperationId Text
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
+  deriving stock (Eq, Ord, Show)
+
+parseOperationId :: Text -> Either Text OperationId
+parseOperationId value
+  | Text.null value = Left "operation key must not be empty"
+  | otherwise = Right (OperationId value)
+
+operationIdText :: OperationId -> Text
+operationIdText (OperationId value) = value
+
+operationIdWithPrefix :: NonEmpty Char -> Text -> OperationId
+operationIdWithPrefix prefix suffix = OperationId (Text.pack (NonEmpty.toList prefix) <> suffix)
+
+operationIdFromNonEmpty :: NonEmpty Char -> OperationId
+operationIdFromNonEmpty = OperationId . Text.pack . NonEmpty.toList
+
+instance ToJSON OperationId where
+  toJSON = toJSON . operationIdText
+  toEncoding = toEncoding . operationIdText
+
+instance FromJSON OperationId where
+  parseJSON = withText "operation key" (either (fail . Text.unpack) pure . parseOperationId)
 
 newtype ExecutionRootId = ExecutionRootId (KindID.KindID "shikigami_execution_root")
   deriving stock (Eq, Ord, Show)

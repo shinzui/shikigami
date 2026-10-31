@@ -19,6 +19,7 @@ import Control.Exception (fromException)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, raise, (:>))
@@ -40,7 +41,7 @@ import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
 import Shikigami.App (AppEffects, AppEnv)
 import Shikigami.ContinuingWorker.Generated.WorkflowRuntime qualified as Generated
 import Shikigami.Directory (DirectoryHandle)
-import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Identity (OperationId, operationIdWithPrefix)
 import Shikigami.Execution.SelectionRuntime qualified as Selection
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript (executionIdFor)
@@ -109,7 +110,7 @@ sessionWorkflow runtime initial = do
     state <- currentState accepted.sessionId
     if state.phase `elem` [Failed, Cancelled]
       then pure state
-      else snd <$> (Store.observeSession access state.revision state.epoch (OperationId ("observe:" <> Text.pack (show generation))) (SessionWake token generation) >>= require)
+      else snd <$> (Store.observeSession access state.revision state.epoch (operationIdWithPrefix ('o' :| "bserve:") (Text.pack (show generation))) (SessionWake token generation) >>= require)
   action <- step (StepName "select-assignment") (raise (selectAssignment runtime accepted.sessionId) >>= require)
   case action of
     SessionDone phase -> void (cancelAwakeable token) >> pure (WorkerSessionClosed accepted.sessionId phase)
@@ -137,7 +138,7 @@ sessionWorkflow runtime initial = do
           current <- liftIO (currentAssignmentAuthority runtime admission state instruction)
           case current of
             Left _ -> do
-              _ <- Store.setAssignmentStatus access state.revision state.epoch (OperationId ("unresolved:" <> message.assignmentId.value)) message.assignmentId AssignmentUnresolved >>= require
+              _ <- Store.setAssignmentStatus access state.revision state.epoch (operationIdWithPrefix ('u' :| "nresolved:") message.assignmentId.value) message.assignmentId AssignmentUnresolved >>= require
               continueAsNew (WorkerSessionSeed (Just accepted))
             Right () -> spawnAssignment accepted message childId access admission instruction findings
   where
@@ -186,7 +187,7 @@ sessionWorkflow runtime initial = do
               Right (Just (_, binding, _)) | binding.identity == state.owner -> pure (Just executionId)
               Right Nothing -> pure Nothing
               _ -> throwIO (userError "assignment execution reference is unavailable")
-            snd <$> (Store.recordResult access state.revision message.epoch (OperationId ("result:" <> message.assignmentId.value)) (AssignmentResult 1 message.assignmentId disposition reference output []) >>= require)
+            snd <$> (Store.recordResult access state.revision message.epoch (operationIdWithPrefix ('r' :| "esult:") message.assignmentId.value) (AssignmentResult 1 message.assignmentId disposition reference output []) >>= require)
       continueAsNew (WorkerSessionSeed (Just accepted))
 
 selectAssignment :: SessionRuntime -> WorkerSessionId -> Eff AppEffects (Either SessionError SessionAction)
@@ -215,7 +216,7 @@ selectAssignment runtime session = do
                   (Right admitted, Right input) ->
                     liftIO (currentAssignmentAuthority runtime admitted state input) >>= \case
                       Left _ -> pure (Right SessionBlocked)
-                      Right () -> fmap (RunAssignment . snd) <$> Store.startAssignment access state.revision state.epoch (OperationId ("start:" <> message.assignmentId.value)) message.assignmentId
+                      Right () -> fmap (RunAssignment . snd) <$> Store.startAssignment access state.revision state.epoch (operationIdWithPrefix ('s' :| "tart:") message.assignmentId.value) message.assignmentId
                   (Left err, _) -> pure (Left err)
                   (_, Left err) -> pure (Left err)
         Right Nothing -> pure (Left SessionMissing)

@@ -333,3 +333,14 @@ schema objects are added. Neutral native helper/fold reports do not assert old
 opaque-payload compatibility. The 320-module/902-declaration worklist remains
 unclassified; logical operation locators, complete scalar/identity and other
 owner decoder review remain open.
+
+Logical operation keys retain their concrete execution/cursor, native-child,
+caller-receipt and retained-handoff authorities. Private non-Generic construction
+rejects empty keys while exact string bytes and owner policies remain. A real
+malformed pending workspace row blocks fencing before receipt publication.
+[ADR-95](../../adr/0095-logical-operation-keys-retain-their-coordinate-contract.md)
+and [acceptance](operation-key-results.txt) retain 582 pure/397 PostgreSQL/
+262 worker/95 server, 206 compiler, 156 native, 143 domain/six diagram and
+84 CLI/live HTTP results. Current native findings are empty and four transducers
+are unchanged. The 320-module/902-declaration worklist remains unclassified;
+complete scalar/identity and remaining decoder-owner review remain open.

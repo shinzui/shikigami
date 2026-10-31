@@ -35,7 +35,7 @@ import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Claim
-import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Identity (OperationId, operationIdText)
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Policy.Limits (policyNumber)
 import Shikigami.Execution.Resources (Admission (..))
@@ -246,7 +246,7 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
         Left err -> pure (Left err)
         _ -> pure (Left AttemptMissing)
     requireIO = either (Exception.throwIO . userError . show) pure
-    operationKey (OperationId key) = key
+    operationKey = operationIdText
 
 modelContext :: ExecutionSnapshot -> Operation -> ModelOperationInput -> Either ExecutionError Context.Context
 modelContext snapshot operation input = do

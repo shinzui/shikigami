@@ -1,3 +1,5 @@
+{-# LANGUAGE ViewPatterns #-}
+
 -- | Commit intent and the single conditional publication transition. Factual
 -- settlement preserves the original actual claim after authority is revoked.
 module Shikigami.Workspace.GitStore
@@ -27,7 +29,7 @@ import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
 import Shikigami.Agent.Principal (AgentIdentity)
-import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Identity (OperationId, operationIdText, parseOperationId)
 import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Prelude
 import Shikigami.Workspace.GitTypes
@@ -65,7 +67,7 @@ reserveGitFor owner checkOperation binding proposed
                   retained <- inspectGitTx proposed.operation.operationId
                   pure (maybe (Left WorkspaceBindingConflict) (\actual -> if sameReservation actual proposed then Right actual else Left WorkspaceBindingConflict) retained)
   where
-    OperationId key = proposed.operation.operationId
+    key = operationIdText proposed.operation.operationId
 
 prepareGitTx :: WorkspaceBinding -> GitRecord -> GitCandidate -> Transaction (Either WorkspaceError GitRecord)
 prepareGitTx binding = prepareGitFor (Store.checkWorkspaceOperationTx binding binding.request.owner binding.request.epoch) binding
@@ -130,13 +132,13 @@ refuseGitBeforePublicationTx expected = factual expected \actual ->
     else if actual.phase == GitRefused then pure (Right actual) else pure (Left WorkspaceBindingConflict)
 
 inspectGitTx :: OperationId -> Transaction (Maybe GitRecord)
-inspectGitTx (OperationId key) = Tx.statement key selectGit
+inspectGitTx (operationIdText -> key) = Tx.statement key selectGit
 
 inspectRegisteredGitTx :: OperationId -> Transaction (Maybe (WorkspaceBinding, GitRecord))
-inspectRegisteredGitTx (OperationId key) = Tx.statement key selectRegisteredGit
+inspectRegisteredGitTx (operationIdText -> key) = Tx.statement key selectRegisteredGit
 
 inspectGitPageTx :: Maybe OperationId -> Transaction [OperationId]
-inspectGitPageTx cursor = Tx.statement (maybe "" (\(OperationId key) -> key) cursor) selectGitPage
+inspectGitPageTx cursor = Tx.statement (maybe "" operationIdText cursor) selectGitPage
 
 factual :: GitRecord -> (GitRecord -> Transaction (Either WorkspaceError GitRecord)) -> Transaction (Either WorkspaceError GitRecord)
 factual expected apply = do
@@ -155,7 +157,7 @@ save :: GitRecord -> GitRecord -> Transaction (Either WorkspaceError GitRecord)
 save previous next
   | not (validGitRecord next && sameOrigin previous next) = pure (Left WorkspaceBindingConflict)
   | otherwise = do
-      let OperationId key = previous.operation.operationId
+      let key = operationIdText previous.operation.operationId
       changed <- Tx.statement (key, previous, next) updateGit
       pure (if changed then Right next else Left WorkspaceBindingConflict)
 
@@ -184,7 +186,7 @@ selectRegisteredGit :: Statement Text (Maybe (WorkspaceBinding, GitRecord))
 selectRegisteredGit = preparable "SELECT b.binding,e.receipt FROM shikigami.workspace_effects e JOIN shikigami.workspace_bindings b ON b.resource=e.resource WHERE e.operation_id=$1 AND e.kind='git' AND b.state='ready'" textParam (D.rowMaybe ((,) <$> jsonRow <*> jsonRow))
 
 selectGitPage :: Statement Text [OperationId]
-selectGitPage = preparable "SELECT operation_id FROM shikigami.workspace_effects WHERE kind='git' AND operation_id>$1 ORDER BY operation_id LIMIT 64" textParam (D.rowList (OperationId <$> D.column (D.nonNullable D.text)))
+selectGitPage = preparable "SELECT operation_id FROM shikigami.workspace_effects WHERE kind='git' AND operation_id>$1 ORDER BY operation_id LIMIT 64" textParam (D.rowList (D.column (D.nonNullable (D.refine parseOperationId D.text))))
 
 updateGit :: Statement (Text, GitRecord, GitRecord) Bool
 updateGit = preparable "UPDATE shikigami.workspace_effects SET receipt=$3,settled=($3->>'phase' IN ('GitApplied','GitRefused')) WHERE operation_id=$1 AND kind='git' AND receipt=$2 RETURNING true" (contrazip3 textParam jsonParam jsonParam) (maybe False id <$> D.rowMaybe (D.column (D.nonNullable D.bool)))

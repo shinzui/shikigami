@@ -44,6 +44,8 @@ with tempfile.TemporaryDirectory(prefix="shikigami-cli-contract-") as directory:
             assert output
     output = run("shikigami", ["--config", str(poison), "resources", "inspect", "root"], 2, env=clean)
     assert b"ExecutionRootId" in output
+    output = run("shikigami", ["--config", str(poison), "workers", "cancel", "session", "--operation", ""], 2, env=clean)
+    assert b"operation key must not be empty" in output
     client = "shikigami-client"
     for flag in ["--check-config", "--explain-config", "--explain-config-json"]:
         run(client, [flag], env=clean)

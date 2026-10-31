@@ -205,7 +205,7 @@ effectiveLimits root = case root.activeLimit of
 
 validateOperation :: OperationRequest -> Either ResourceError ()
 validateOperation request = do
-  let OperationId key = request.operationId
+  let key = operationIdText request.operationId
   validateKey key
   validateKey request.fingerprint
   case request.kind of

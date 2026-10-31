@@ -7,7 +7,8 @@ import Data.Text.Encoding qualified as Encoding
 import Data.Time (UTCTime (..), fromGregorian)
 import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUID
-import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Identity (OperationId)
+import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId)
 import Shikigami.Workspace.ContainedFile (ensurePrivateDirectory)
 import Shikigami.Workspace.Git (runWorkspaceGit, runWorkspaceGitInput)
 import Shikigami.Workspace.GitObjects
@@ -37,9 +38,9 @@ tests =
       testCase "immutable artifacts remain readable after source HEAD advances" $ fixture \_ metadata parent -> do
         blob <- right =<< storeBlob metadata "first\n"
         tree <- right =<< storeFlatTree metadata [GitEntry "dependency.txt" "100644" blob]
-        first <- right =<< storeCommit metadata parent tree author now (OperationId "first") "First"
+        first <- right =<< storeCommit metadata parent tree author now (fixtureOperationId "first") "First"
         publishCommit metadata parent first >>= (@?= Right ())
-        second <- right =<< storeCommit metadata first tree author now (OperationId "second") "Second"
+        second <- right =<< storeCommit metadata first tree author now (fixtureOperationId "second") "Second"
         publishCommit metadata first second >>= (@?= Right ())
         readCommit metadata first >>= (@?= Right (tree, [parent]))
         readHead metadata >>= (@?= Right second),
@@ -54,7 +55,7 @@ tests =
         blob <- right =<< storeBlob metadata "new dependency\r\n"
         attributes <- right =<< storeBlob metadata "* filter=hostile diff=hostile\n"
         tree <- right =<< storeTree metadata [GitEntry "dependency.txt" "100755" blob, GitEntry ".gitattributes" "100644" attributes]
-        result <- right =<< storeCommit metadata parent tree author now (OperationId "upgrade") "Upgrade dependency"
+        result <- right =<< storeCommit metadata parent tree author now (fixtureOperationId "upgrade") "Upgrade dependency"
         git root ["--git-dir=" <> metadata, "show", Text.unpack result <> ":dependency.txt"] >>= (@?= "new dependency\r\n")
         entries <- git root ["--git-dir=" <> metadata, "ls-tree", Text.unpack tree]
         assertBool "mode retained" ("100755 blob " `Bytes.isInfixOf` entries)
@@ -76,8 +77,8 @@ tests =
         marker <- armHelpers root metadata
         blob <- right =<< storeBlob metadata "upgrade\n"
         tree <- right =<< storeTree metadata [GitEntry "dependency.txt" "100644" blob]
-        result <- right =<< storeCommit metadata parent tree author now (OperationId "accepted-operation") "Upgrade"
-        storeCommit metadata parent tree author now (OperationId "accepted-operation") "Upgrade" >>= (@?= Right result)
+        result <- right =<< storeCommit metadata parent tree author now (fixtureOperationId "accepted-operation") "Upgrade"
+        storeCommit metadata parent tree author now (fixtureOperationId "accepted-operation") "Upgrade" >>= (@?= Right result)
         publishCommit metadata parent result >>= (@?= Right ())
         publishCommit metadata parent result >>= (@?= Right ())
         readHead metadata >>= (@?= Right result)
@@ -86,8 +87,8 @@ tests =
       testCase "a competing parent cannot overwrite a published commit" $ fixture \_ metadata parent -> do
         blob <- right =<< storeBlob metadata "upgrade\n"
         tree <- right =<< storeTree metadata [GitEntry "dependency.txt" "100644" blob]
-        one <- right =<< storeCommit metadata parent tree author now (OperationId "one") "Upgrade"
-        two <- right =<< storeCommit metadata parent tree author now (OperationId "two") "Upgrade"
+        one <- right =<< storeCommit metadata parent tree author now (fixtureOperationId "one") "Upgrade"
+        two <- right =<< storeCommit metadata parent tree author now (fixtureOperationId "two") "Upgrade"
         assertBool "operation identity retained" (one /= two)
         publishCommit metadata parent one >>= (@?= Right ())
         publishCommit metadata parent two >>= assertLeft
@@ -95,7 +96,7 @@ tests =
       testCase "publication refuses an unretained additional parent" $ fixture \root metadata parent -> do
         blob <- right =<< storeBlob metadata "upgrade\n"
         tree <- right =<< storeTree metadata [GitEntry "dependency.txt" "100644" blob]
-        other <- right =<< storeCommit metadata parent tree author now (OperationId "other") "Other"
+        other <- right =<< storeCommit metadata parent tree author now (fixtureOperationId "other") "Other"
         merged <- Text.strip . Encoding.decodeUtf8 <$> git root ["--git-dir=" <> metadata, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit-tree", Text.unpack tree, "-p", Text.unpack parent, "-p", Text.unpack other, "-m", "Unexpected merge"]
         publishCommit metadata parent merged >>= assertLeft
         readHead metadata >>= (@?= Right parent),

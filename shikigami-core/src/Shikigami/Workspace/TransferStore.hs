@@ -33,7 +33,7 @@ import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
-import Shikigami.Execution.Identity (ExecutionRootId, OperationId (..))
+import Shikigami.Execution.Identity (ExecutionRootId, OperationId, operationIdText, parseOperationId)
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Transcript (ExecutionId (..), executionIdFor)
 import Shikigami.Prelude hiding ((.=))
@@ -126,8 +126,11 @@ retainFenceTx binding intent = do
         else pure (Left WorkspaceBindingConflict)
     _ -> pure (Left WorkspaceBindingConflict)
 
-pendingWorkspaceOperationsTx :: WorkspaceBinding -> Transaction [(OperationId, Text)]
-pendingWorkspaceOperationsTx binding = Tx.statement binding.workspace.resource pendingOperations
+pendingWorkspaceOperationsTx :: WorkspaceBinding -> Transaction (Either WorkspaceError [(OperationId, Text)])
+pendingWorkspaceOperationsTx binding = fmap (traverse checked) (Tx.statement binding.workspace.resource pendingOperations)
+  where
+    checked (Left _, _) = Left WorkspaceBindingConflict
+    checked (Right operation, kind) = Right (operation, kind)
 
 -- The checked session owner has already received its separately owned objective
 -- receipt. Only its actual new child can receive this explicit admission. The
@@ -260,7 +263,7 @@ jsonRow :: (FromJSON a) => D.Row a
 jsonRow = D.column (D.nonNullable (D.refine (\value -> case Aeson.fromJSON value of Aeson.Success result -> Right result; Aeson.Error err -> Left (Text.pack err)) D.jsonb))
 
 operationKey :: OperationId -> Text
-operationKey (OperationId key) = key
+operationKey = operationIdText
 
 selectChild :: Statement Text [(SessionState, SessionBinding, MessageReceipt)]
 selectChild = preparable "SELECT s.state,s.binding,m.state FROM shikigami.worker_session_messages m JOIN shikigami.worker_sessions s USING(session_id) WHERE m.state->>'childWorkflowId'=$1 LIMIT 2" textParam (D.rowList ((,,) <$> jsonRow <*> jsonRow <*> jsonRow))
@@ -283,8 +286,8 @@ saveFence = preparable "UPDATE shikigami.workspace_transfers SET proof=$3 WHERE 
 settledWorkspace :: Statement Text Bool
 settledWorkspace = preparable "SELECT NOT EXISTS(SELECT 1 FROM shikigami.workspace_effects WHERE resource=$1 AND NOT settled) AND NOT EXISTS(SELECT 1 FROM shikigami.workspace_processes WHERE resource=$1 AND NOT settled) AND NOT EXISTS(SELECT 1 FROM shikigami.workspace_cleanup WHERE resource=$1)" textParam (D.singleRow (D.column (D.nonNullable D.bool)))
 
-pendingOperations :: Statement Text [(OperationId, Text)]
-pendingOperations = preparable "SELECT operation_id,kind FROM (SELECT operation_id,kind FROM shikigami.workspace_effects WHERE resource=$1 AND NOT settled UNION ALL SELECT operation_id,'process' AS kind FROM shikigami.workspace_processes WHERE resource=$1 AND NOT settled) pending ORDER BY operation_id LIMIT 64" textParam (D.rowList ((,) <$> (OperationId <$> D.column (D.nonNullable D.text)) <*> D.column (D.nonNullable D.text)))
+pendingOperations :: Statement Text [(Either Text OperationId, Text)]
+pendingOperations = preparable "SELECT operation_id,kind FROM (SELECT operation_id,kind FROM shikigami.workspace_effects WHERE resource=$1 AND NOT settled UNION ALL SELECT operation_id,'process' AS kind FROM shikigami.workspace_processes WHERE resource=$1 AND NOT settled) pending ORDER BY operation_id LIMIT 64" textParam (D.rowList ((,) <$> (parseOperationId <$> D.column (D.nonNullable D.text)) <*> D.column (D.nonNullable D.text)))
 
 establishControl :: Statement (Text, Aeson.Value, StateRevision "worker-owner") ()
 establishControl = preparable "UPDATE shikigami.workspace_controls SET owner=$2,epoch=$3,frozen=false WHERE resource=$1" (contrazip3 textParam (E.param (E.nonNullable E.jsonb)) epochParam) D.noResult

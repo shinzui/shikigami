@@ -28,7 +28,7 @@ import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Execution.Transcript (ExecutionId (..))
-import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureRootId)
+import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision (StateRevision, parseRevision)
@@ -51,14 +51,14 @@ tests fixture =
   testGroup
     "workspace process registrations"
     [ testCase "bounded factual scans advance past unresolved registrations and include unacknowledged settled facts" $ withProcess fixture \env binding proposed -> do
-        let identifiers = [OperationId ("page-" <> Text.justifyRight 3 '0' (Text.pack (show index))) | index <- [1 .. 66 :: Int]]
+        let identifiers = [fixtureOperationId ("page-" <> Text.justifyRight 3 '0' (Text.pack (show index))) | index <- [1 .. 66 :: Int]]
         forM_ identifiers \operation -> do
           let candidate = proposed & #operationId .~ operation & #unit .~ processUnit operation proposed.fingerprint
           retained <- right =<< run env (reserveProcessTx binding candidate)
           run env (refuseReservedProcessTx retained) >>= (@?= Right ())
         -- A stuck registration sorts first. Recovery must not repeatedly
         -- select it instead of reaching the final two settled receipts.
-        let stuckId = OperationId "000-unresolved"
+        let stuckId = fixtureOperationId "000-unresolved"
             stuck = proposed & #operationId .~ stuckId & #unit .~ processUnit stuckId proposed.fingerprint
         _ <- right =<< run env (reserveProcessTx binding stuck)
         run env (requestProcessLaunchTx binding stuck boot) >>= (@?= Right True)
@@ -83,10 +83,10 @@ tests fixture =
         two @?= Right proposed
         let changed = proposed & #command . #arguments .~ ["different"]
         run env (reserveProcessTx binding changed) >>= (@?= Left WorkspaceBindingConflict)
-        let otherId = OperationId "other-operation"
+        let otherId = fixtureOperationId "other-operation"
             other = proposed & #operationId .~ otherId & #unit .~ processUnit otherId proposed.fingerprint
         run env (reserveProcessTx binding other) >>= (@?= Left WorkspaceBindingConflict)
-        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "read")) >>= (@?= Left WorkspaceBindingConflict)
+        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "read")) >>= (@?= Left WorkspaceBindingConflict)
         (a, b) <- concurrently (run env (requestProcessLaunchTx binding proposed boot)) (run env (requestProcessLaunchTx binding proposed boot))
         granted <- traverse right [a, b]
         sort granted @?= [False, True]
@@ -104,11 +104,11 @@ tests fixture =
           ProcessRefused -> do
             launch @?= Left WorkspaceBindingConflict
             refused @?= Right ()
-            run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "later")) >>= (@?= Right ())
+            run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "later")) >>= (@?= Right ())
           ProcessLaunchRequested -> do
             launch @?= Right True
             refused @?= Left WorkspaceBindingConflict
-            run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "later")) >>= (@?= Left WorkspaceBindingConflict)
+            run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "later")) >>= (@?= Left WorkspaceBindingConflict)
           other -> assertFailure ("unexpected launch/refusal race: " <> show other),
       testCase "missing launch evidence stays unresolved and blocks file reuse until a matching receipt" $ withProcess fixture \env binding proposed -> do
         _ <- right =<< run env (reserveProcessTx binding proposed)
@@ -116,11 +116,11 @@ tests fixture =
         run env (markProcessUnresolvedTx proposed) >>= (@?= Right ())
         run env (requestProcessLaunchTx binding proposed boot) >>= (@?= Right False)
         run env (observeProcessInvocationTx proposed otherBoot invocation) >>= (@?= Left WorkspaceBindingConflict)
-        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "later")) >>= (@?= Left WorkspaceBindingConflict)
+        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "later")) >>= (@?= Left WorkspaceBindingConflict)
         run env (observeProcessInvocationTx proposed boot invocation) >>= (@?= Right ())
         run env (observeProcessInvocationTx proposed boot otherBoot) >>= (@?= Left WorkspaceBindingConflict)
         run env (recordProcessReceiptTx (receiptFor proposed)) >>= (@?= Right ())
-        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "later")) >>= (@?= Right ()),
+        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "later")) >>= (@?= Right ()),
       testCase "factual receipts settle after freeze but cannot replace invocation, output or descendant evidence" $ withProcess fixture \env binding proposed -> do
         _ <- right =<< run env (reserveProcessTx binding proposed)
         run env (requestProcessLaunchTx binding proposed boot) >>= (@?= Right True)
@@ -186,13 +186,13 @@ tests fixture =
         directory <- collectorDirectory binding
         Lazy.writeFile (directory </> "observed.json") (Aeson.encode (Aeson.object ["bootId" .= boot, "invocationId" .= invocation]))
         reconcileCollector env directory record >>= (@?= Right Nothing)
-        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "later")) >>= (@?= Left WorkspaceBindingConflict)
+        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "later")) >>= (@?= Left WorkspaceBindingConflict)
         writeCollector directory record ["invocationId" .= otherBoot]
         reconcileCollector env directory record >>= (@?= Left CollectorEvidenceConflict)
         run env (markProcessUnresolvedTx record) >>= (@?= Right ())
         writeCollector directory record []
         Just _ <- right =<< reconcileCollector env directory record
-        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "later")) >>= (@?= Right ()),
+        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "later")) >>= (@?= Right ()),
       testCase "timeout settlement preserves unavailable status and cannot be interpreted as successful validation" $ withProcess fixture \env binding proposed -> do
         record <- launchRecord env binding proposed
         directory <- collectorDirectory binding
@@ -207,7 +207,7 @@ tests fixture =
         receipt.termination @?= ProcessTimedOut
         assertBool "missing status is never validation success" (not (processSucceeded receipt))
         assertBool "timeout remains failure even with a zero exit status" (not (processSucceeded (receipt & #exitCode .~ Just 0)))
-        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "later")) >>= (@?= Right ())
+        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "later")) >>= (@?= Right ())
     ]
 
 -- These JSON fixtures exercise receipt validation and database ownership; only
@@ -258,7 +258,7 @@ withProcess fixture use = Fixture.withFixture fixture \env _ root repository -> 
   run env (Store.markWorkspaceReadyTx binding) >>= (@?= Right ())
   now <- getCurrentTime
   let command = ProcessCommand "validate" digest "/bin/validate" [] "" (Map.fromList [("HOME", "/scratch"), ("TMPDIR", "/scratch")]) 30 1024
-      operation = OperationId "process-operation"
+      operation = fixtureOperationId "process-operation"
       logical = OperationContext (ExecutionId "process-execution") operation "process-operation" "input-fingerprint" "scope"
       fingerprint = processFingerprint binding digest logical command
       record = ProcessRecord operation (fixtureAttemptId "original-attempt") (fixtureOwner "original-claim") (fixtureGeneration 1) (workspaceBindingDigest binding) digest fingerprint command (addUTCTime 30 now) (processUnit operation fingerprint) Nothing Nothing ProcessReserved Nothing Nothing

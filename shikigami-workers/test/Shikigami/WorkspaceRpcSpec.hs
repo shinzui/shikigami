@@ -17,8 +17,8 @@ import Network.Socket qualified as Socket
 import Network.Socket.ByteString qualified as SocketBytes
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
-import Shikigami.Execution.Identity (AttemptId, ExecutionRootId, OperationId (..))
-import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureRootId)
+import Shikigami.Execution.Identity (AttemptId, ExecutionRootId, OperationId)
+import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.StateRevision qualified as Generation
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
@@ -47,7 +47,7 @@ tests =
             request = RpcFence intent
         Aeson.eitherDecode (Aeson.encode request) @?= Right request
         withAsync (serveRpc (RpcPolicy [uid] 1 2) listener (const (pure (RpcFenceResult (FencedAndSettled proof))))) \_ -> callRpc path uid 3 request >>= (@?= Right (RpcFenceResult (FencedAndSettled proof)))
-        let wrong = FenceProof 1 workspace (OperationId "other-operation") (transferFingerprint intent) (fixtureRevision 0) (fixtureRevision 1) "retained-fence"
+        let wrong = FenceProof 1 workspace (fixtureOperationId "other-operation") (transferFingerprint intent) (fixtureRevision 0) (fixtureRevision 1) "retained-fence"
         mapM_ (\value -> withAsync (serveRpc (RpcPolicy [uid] 1 2) listener (const (pure value))) \_ -> callRpc path uid 3 request >>= (@?= Left RpcMalformed)) [RpcFenceResult (FencedAndSettled wrong), RpcWriteResult True, reply]
         withAsync (serveRpc (RpcPolicy [uid] 1 2) listener (const (pure (RpcWriteResult True)))) \_ -> callRpc path uid 3 (RpcAdmitWrite workspace intent.sessionId owner (fixtureRevision 0) operation) >>= (@?= Right (RpcWriteResult True)),
       testCase "authenticates real Unix peers and returns only retained process metadata" $ withListener \path listener uid -> do
@@ -110,7 +110,7 @@ tests =
           assertBool "timed-out handlers provide no completion proof" (all isLeft results)
           readIORef counts >>= (@?= (4, 0)),
       testCase "client refuses unrelated operation and invalid settled evidence" $ withListener \path listener uid -> do
-        let wrong = RpcView (ProcessView (OperationId "other") (fixtureAttemptId "actual") (fixtureGeneration 1) digest ProcessReserved Nothing)
+        let wrong = RpcView (ProcessView (fixtureOperationId "other") (fixtureAttemptId "actual") (fixtureGeneration 1) digest ProcessReserved Nothing)
             incomplete = RpcView (ProcessView operation (fixtureAttemptId "actual") (fixtureGeneration 1) digest ProcessSettled Nothing)
         mapM_ (\value -> withAsync (serveRpc (RpcPolicy [uid] 1 2) listener (const (pure value))) \_ -> callRpc path uid 3 request >>= (@?= Left RpcMalformed)) [wrong, incomplete],
       testCase "TCP listeners cannot enter peer-credential transport" $
@@ -162,7 +162,7 @@ counted calls actual = do
   pure reply
 
 operation :: OperationId
-operation = OperationId "operation"
+operation = fixtureOperationId "operation"
 
 request :: RpcRequest
 request = RpcObserve operation

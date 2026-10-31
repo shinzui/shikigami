@@ -1,6 +1,7 @@
--- | Synthetic, fixed-timestamp UUIDv7 fixture data. The seed selects a fixture;
--- this deterministic test helper is never an application identity allocator.
-module FixtureIdentity (fixtureRootId, fixtureAttemptId, fixtureAllocationId) where
+-- | Checked accounting-entity fixtures and exact logical operation keys.
+-- Entity selectors produce synthetic fixed-timestamp UUIDv7 test data; these
+-- deterministic fixtures are never application identity allocators.
+module FixtureIdentity (fixtureOperationId, fixtureRootId, fixtureAttemptId, fixtureAllocationId) where
 
 import Data.Aeson (toJSON)
 import Data.Text (Text)
@@ -27,3 +28,6 @@ fixtureText prefix seed =
         _ -> error "invalid synthetic identity fixture digest"
   where
     alphabet = "0123456789abcdefghjkmnpqrstvwxyz"
+
+fixtureOperationId :: Text -> OperationId
+fixtureOperationId = either (error . Text.unpack) id . parseOperationId

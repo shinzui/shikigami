@@ -14,7 +14,7 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
-import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Identity (OperationId, operationIdText)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Workspace.Allocation (workspaceMetadata)
 import Shikigami.Workspace.GitObjects qualified as Objects
@@ -47,7 +47,7 @@ schema = Aeson.object ["type" .= ("object" :: Text), "properties" .= Aeson.objec
 validRequest :: Request -> Bool
 validRequest request = validGitObject request.expectedParent && length request.artifacts >= 2 && length request.artifacts <= 8 && length (nub (map (.operationId) request.artifacts)) == length request.artifacts && all valid request.artifacts
   where
-    valid artifact = let OperationId operation = artifact.operationId in not (Text.null operation) && Text.length operation <= 256 && Text.length artifact.bindingDigest <= 256 && all validGitObject [artifact.base, artifact.revision]
+    valid artifact = let operation = operationIdText artifact.operationId in not (Text.null operation) && Text.length operation <= 256 && Text.length artifact.bindingDigest <= 256 && all validGitObject [artifact.base, artifact.revision]
 
 -- A source contributes its delta against the common base. Equal overlapping
 -- deltas converge; unequal overlapping deltas are reported without any writes.

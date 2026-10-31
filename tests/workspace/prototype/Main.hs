@@ -28,7 +28,7 @@ import En.Check (CheckDecision (Allowed))
 import En.Revision qualified as En
 import En.Schema (ObjectType (..), RelationName (..))
 import En.Tuple (ObjectRef (..), Subject (SubjectId))
-import FixtureIdentity (fixtureRootId)
+import FixtureIdentity (fixtureOperationId, fixtureRootId)
 import GHC.Generics (Generic)
 import GHC.Stack (HasCallStack, callStack, prettyCallStack)
 import Hasql.Transaction (Transaction)
@@ -50,7 +50,7 @@ import Shikigami.Directory (DirectoryRuntime (..), identityLifecycleAdmission, s
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Counter (noAttempts)
-import Shikigami.Execution.Identity (ExecutionRootId, OperationId (..))
+import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Store qualified as Execution
@@ -355,7 +355,7 @@ verifyCase env _prefix _name expected item = do
   case expected of
     "unresolved" -> do
       unless (process.phase == ProcessUnresolved && process.receipt == Nothing && actual.phase `elem` [Attempt.DispatchStarted, Attempt.AttemptUncertain] && (root.active > noAttempts || root.unknown > noAttempts)) (fail "missing evidence released capacity")
-      blocked <- transact env (Workspaces.checkWorkspaceOperationTx item.binding item.binding.request.owner item.binding.request.epoch (OperationId "fixture-successor"))
+      blocked <- transact env (Workspaces.checkWorkspaceOperationTx item.binding item.binding.request.owner item.binding.request.epoch (fixtureOperationId "fixture-successor"))
       unless (case blocked of Left _ -> True; _ -> False) (fail "unresolved process opened the file barrier")
     "refused" -> unless (process.phase == ProcessRefused && process.receipt == Nothing && actual.phase == Attempt.AttemptCommitted && state.cursor == (fixtureRevision 3) && root.active == noAttempts && root.unknown == noAttempts) (fail "pre-launch refusal did not settle its actual")
     _ -> case process.receipt of

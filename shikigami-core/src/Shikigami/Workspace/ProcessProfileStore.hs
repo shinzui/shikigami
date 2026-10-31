@@ -5,12 +5,13 @@ module Shikigami.Workspace.ProcessProfileStore (reserveProcessProfileTx, inspect
 import Contravariant.Extras (contrazip2, contrazip3)
 import Data.Aeson qualified as Aeson
 import Data.Functor.Contravariant ((>$<))
+import Data.List.NonEmpty (NonEmpty (..))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
-import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Identity (OperationId, operationIdFromNonEmpty)
 import Shikigami.Prelude
 import Shikigami.Workspace.Process (digestText)
 import Shikigami.Workspace.ProcessPolicy
@@ -31,7 +32,7 @@ reserveProcessProfileTx binding instructions policy range
             Just retained@(profile, _) | matches profile -> pure (Right retained)
             Just _ -> pure (Left WorkspaceBindingConflict)
             Nothing -> do
-              available <- Store.checkWorkspaceOperationTx binding binding.request.owner binding.request.epoch (OperationId "workspace-profile-admission")
+              available <- Store.checkWorkspaceOperationTx binding binding.request.owner binding.request.epoch (operationIdFromNonEmpty ('w' :| "orkspace-profile-admission"))
               case available of
                 Left err -> pure (Left err)
                 Right () -> do
@@ -59,7 +60,7 @@ readyProcessProfileTx :: WorkspaceBinding -> ProcessProfile -> Transaction (Eith
 readyProcessProfileTx binding profile
   | not (validProcessProfile profile && profile.bindingDigest == workspaceBindingDigest binding && processPolicyIdentity profile.policy == binding.policyRevision) = pure (Left WorkspaceBindingConflict)
   | otherwise = do
-      checked <- Store.checkWorkspaceOperationTx binding binding.request.owner binding.request.epoch (OperationId "workspace-profile-admission")
+      checked <- Store.checkWorkspaceOperationTx binding binding.request.owner binding.request.epoch (operationIdFromNonEmpty ('w' :| "orkspace-profile-admission"))
       case checked of
         Left err -> pure (Left err)
         Right () -> do

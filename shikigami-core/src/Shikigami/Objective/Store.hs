@@ -48,7 +48,7 @@ import Kiroku.Store.Error (StoreError)
 import Shikigami.Agent.Principal (identityText)
 import Shikigami.App (CommandEffects, commandOptions)
 import Shikigami.Decision.Contract (versionedDigest)
-import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Identity (OperationId, operationIdText)
 import Shikigami.Execution.Payload (parsePayloadDigest)
 import Shikigami.Execution.Transcript (PayloadRef (..))
 import Shikigami.Objective.Acceptance
@@ -459,7 +459,7 @@ guarded action = do
   pure (either (const (Left ObjectiveUnavailable)) id outcome)
 
 operationKey :: OperationId -> Text
-operationKey (OperationId key) = key
+operationKey = operationIdText
 
 textParam :: E.Params Text
 textParam = E.param (E.nonNullable E.text)

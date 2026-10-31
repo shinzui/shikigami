@@ -31,7 +31,7 @@ import Shikigami.Execution.Payload (PayloadDigest, parsePayloadByteCount, parseP
 import Shikigami.Execution.Runner
 import Shikigami.Execution.ToolPosition (ToolPosition, parseToolPosition)
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadRef (..))
-import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureRootId)
+import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.StateRevision qualified as Generation
@@ -61,7 +61,7 @@ tests =
         let owner = VerifiedIdentity actor
             request = WorkspaceRequest "run" Nothing (fixtureRootId "root") owner owner (fixtureRevision 0)
             binding = WorkspaceBinding request (WorkspaceRef "shikigami.workspace/1" "resource") "mori://fixture/repo" (Text.replicate 40 "a") "policy-1" "/private/workspaces" "/operator/source"
-            logical = OperationContext (ExecutionId "execution") (OperationId "operation") "operation" "fingerprint" "scope"
+            logical = OperationContext (ExecutionId "execution") (fixtureOperationId "operation") "operation" "fingerprint" "scope"
             dispatch = DispatchContext logical (fixtureAttemptId "attempt") (fixtureOwner "claim-owner") (fixtureGeneration 1)
             now = read "2026-10-29 12:00:00 UTC"
             expiry = addUTCTime 30 now
@@ -91,7 +91,7 @@ tests =
               workspaceFileAction binding admission (dispatch & #attemptId .~ fixtureAttemptId "other-attempt") "replace" "src/file" "device:parent" "input-hash",
               workspaceFileAction binding admission (dispatch & #owner .~ (fixtureOwner "other-claim")) "replace" "src/file" "device:parent" "input-hash",
               workspaceFileAction binding admission (dispatch & #generation .~ (fixtureGeneration 2)) "replace" "src/file" "device:parent" "input-hash",
-              workspaceFileAction binding admission (dispatch & #operation . #operationId .~ OperationId "other-operation") "replace" "src/file" "device:parent" "input-hash",
+              workspaceFileAction binding admission (dispatch & #operation . #operationId .~ fixtureOperationId "other-operation") "replace" "src/file" "device:parent" "input-hash",
               workspaceFileAction binding admission (dispatch & #operation . #fingerprint .~ "other-fingerprint") "replace" "src/file" "device:parent" "input-hash",
               workspaceFileAction binding admission (dispatch & #operation . #scopeDigest .~ "other-scope") "replace" "src/file" "device:parent" "input-hash",
               workspaceFileAction binding admission dispatch "read" "src/file" "device:parent" "input-hash",
@@ -139,7 +139,7 @@ tests =
               [ dispatch & #attemptId .~ fixtureAttemptId "other-attempt",
                 dispatch & #owner .~ (fixtureOwner "other-claim"),
                 dispatch & #generation .~ (fixtureGeneration 2),
-                dispatch & #operation . #operationId .~ OperationId "other-operation",
+                dispatch & #operation . #operationId .~ fixtureOperationId "other-operation",
                 dispatch & #operation . #fingerprint .~ "other-fingerprint",
                 dispatch & #operation . #scopeDigest .~ "other-scope"
               ]
@@ -287,7 +287,7 @@ tests =
         observation provisionAdmission gitDispatch profile "commit" (fixturePayloadDigest command.profile) "device:files" @?= Left FileEffectRefused
         let workerSession = WorkerSessionId "retained-session"
             transferBinding = provisionBinding & #request . #assignment .~ Just (workerSession, AssignmentId "retained-assignment")
-            intent = TransferIntent 1 workerSession (ObjectiveRef "checkpoints" "objective") owner (OperationId "handoff") (ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) owner True transferBinding.request.rootId expiry) owner (CompatibilityIdentity (fixtureAgentName "successor")) (fixtureAgentName "successor") (fixtureRevision 0) (fixtureRevision 1) transferBinding.request.rootId transferBinding.workspace
+            intent = TransferIntent 1 workerSession (ObjectiveRef "checkpoints" "objective") owner (fixtureOperationId "handoff") (ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) owner True transferBinding.request.rootId expiry) owner (CompatibilityIdentity (fixtureAgentName "successor")) (fixtureAgentName "successor") (fixtureRevision 0) (fixtureRevision 1) transferBinding.request.rootId transferBinding.workspace
         fenceAction <- right (workspaceTransferAction transferBinding intent)
         let fenceRequest = commitRequest & #action .~ fenceAction
             fenceGrant = commitGrant & #object .~ ObjectRef (ObjectType (Kikan.actionObjectType fenceAction)) (Kikan.actionObjectId fenceAction)
@@ -298,7 +298,7 @@ tests =
         changedFences <-
           mapM
             (right . workspaceTransferAction transferBinding)
-            [ intent & #operationId .~ OperationId "other-transfer",
+            [ intent & #operationId .~ fixtureOperationId "other-transfer",
               intent & #actor .~ CompatibilityIdentity (fixtureAgentName "other-parent"),
               intent & #newOwner .~ CompatibilityIdentity (fixtureAgentName "other-successor"),
               intent & #newWorker .~ fixtureAgentName "other-worker",
@@ -307,7 +307,7 @@ tests =
               intent & #expected . #cutoff .~ addUTCTime 1 expiry,
               intent & #oldEpoch .~ (fixtureRevision 1) & #newEpoch .~ (fixtureRevision 2)
             ]
-        writeAdmission <- right (workspaceWriteAdmissionAction transferBinding transferBinding.workspace workerSession intent.newOwner (fixtureRevision 1) (OperationId "write"))
+        writeAdmission <- right (workspaceWriteAdmissionAction transferBinding transferBinding.workspace workerSession intent.newOwner (fixtureRevision 1) (fixtureOperationId "write"))
         mapM_ (\action -> verifyIssuedAction verifier now (fenceRequest & #action .~ action) fenceIssued >>= \answer -> assertBool "fence proof binds complete transfer and cannot authorize writes" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) (writeAdmission : changedFences)
         workspaceTransferAction provisionBinding intent @?= Left FileEffectRefused
         let successorAdmission = provisionAdmission & #bindingDigest .~ workspaceBindingDigest transferBinding & #runId .~ "successor-run" & #assignmentId .~ (fixtureAssignment "successor-assignment") & #owner .~ intent.newOwner & #epoch .~ (fixtureRevision 1) & #filePolicy .~ Just transferableFilePolicy

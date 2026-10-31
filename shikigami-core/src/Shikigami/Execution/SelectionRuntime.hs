@@ -23,6 +23,7 @@ import Data.Aeson (object, toJSON, (.=))
 import Data.Bifunctor (first)
 import Data.Generics.Labels ()
 import Data.IORef (atomicModifyIORef', newIORef, readIORef, writeIORef)
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as Text
@@ -232,7 +233,7 @@ buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = c
                           else pure (Left Calls.CallIdentityConflict)
                       Nothing -> do
                         attemptId <- newAttemptId
-                        let request = Resources.AttemptRequest attemptId (OperationId ("model:" <> fingerprint)) quantities policy
+                        let request = Resources.AttemptRequest attemptId (operationIdWithPrefix ('m' :| "odel:") fingerprint) quantities policy
                         admissionTime <- getCurrentTime
                         transaction (Calls.reserveSelectionCallTx selection limits request fingerprint admissionTime)
                     case admitted of

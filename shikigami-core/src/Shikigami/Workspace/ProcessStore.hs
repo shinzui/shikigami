@@ -1,3 +1,5 @@
+{-# LANGUAGE ViewPatterns #-}
+
 -- | Launch intent precedes systemd IO. A duplicate never receives another
 -- launch grant; factual observations/receipts remain writable after revocation.
 module Shikigami.Workspace.ProcessStore
@@ -25,7 +27,7 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
-import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Identity (OperationId, operationIdText, parseOperationId)
 import Shikigami.Prelude
 import Shikigami.StateRevision
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..))
@@ -63,7 +65,7 @@ reserveProcessFor checkOwner checkOperation binding proposed
                   pure (maybe (Left WorkspaceBindingConflict) (\actual -> if sameReservation actual proposed then Right actual else Left WorkspaceBindingConflict) retained)
                 _ -> pure (Left WorkspaceBindingConflict)
   where
-    OperationId key = proposed.operationId
+    key = operationIdText proposed.operationId
     valid = proposed.bindingDigest == workspaceBindingDigest binding && digestText proposed.instructionDigest && digestText proposed.fingerprint && bounded key && proposed.generation > initialRevision && validProcessCommand proposed.command && maybe True validProcessRouting proposed.routing && proposed.unit == processUnit proposed.operationId proposed.fingerprint && proposed.phase == ProcessReserved && isNothing proposed.bootId && isNothing proposed.invocationId && isNothing proposed.receipt
     sameReservation actual candidate = actual.operationId == candidate.operationId && actual.bindingDigest == candidate.bindingDigest && actual.instructionDigest == candidate.instructionDigest && actual.fingerprint == candidate.fingerprint && actual.command == candidate.command && actual.unit == candidate.unit && actual.routing == candidate.routing
 
@@ -139,23 +141,23 @@ refuseReservedProcessTx expected = do
     _ -> pure (Left WorkspaceBindingConflict)
 
 inspectProcessTx :: OperationId -> Transaction (Maybe ProcessRecord)
-inspectProcessTx (OperationId key) = Tx.statement key selectProcess
+inspectProcessTx (operationIdText -> key) = Tx.statement key selectProcess
 
 -- Factual recovery derives the provider directory from the immutable database
 -- association, never a path supplied by a worker or socket request.
 inspectRegisteredProcessTx :: OperationId -> Transaction (Maybe (WorkspaceBinding, ProcessRecord))
-inspectRegisteredProcessTx (OperationId key) = Tx.statement key selectRegisteredProcess
+inspectRegisteredProcessTx (operationIdText -> key) = Tx.statement key selectRegisteredProcess
 
 -- Bounded keyset scan for the independent factual owner. Advancing past an
 -- unresolved registration prevents it from starving later receipts. Include
 -- settled rows: a crash can separate receipt persistence from acknowledgement.
 -- A complete sweep is safe to repeat; publication is independently idempotent.
 inspectProcessPageTx :: Maybe OperationId -> Transaction [OperationId]
-inspectProcessPageTx cursor = Tx.statement (maybe "" (\(OperationId key) -> key) cursor) selectProcessPage
+inspectProcessPageTx cursor = Tx.statement (maybe "" operationIdText cursor) selectProcessPage
 
 save :: ProcessRecord -> ProcessRecord -> Transaction (Either WorkspaceError ())
 save expected changed = do
-  let OperationId key = expected.operationId
+  let key = operationIdText expected.operationId
   accepted <- Tx.statement (key, expected, changed) updateProcess
   pure (if accepted then Right () else Left WorkspaceBindingConflict)
 
@@ -172,7 +174,7 @@ selectRegisteredProcess :: Statement Text (Maybe (WorkspaceBinding, ProcessRecor
 selectRegisteredProcess = preparable "SELECT b.binding,p.record FROM shikigami.workspace_processes p JOIN shikigami.workspace_bindings b ON b.resource=p.resource WHERE p.operation_id=$1 AND b.state='ready'" textParam (D.rowMaybe ((,) <$> jsonColumn <*> jsonColumn))
 
 selectProcessPage :: Statement Text [OperationId]
-selectProcessPage = preparable "SELECT operation_id FROM shikigami.workspace_processes WHERE operation_id>$1 ORDER BY operation_id LIMIT 64" textParam (D.rowList (OperationId <$> D.column (D.nonNullable D.text)))
+selectProcessPage = preparable "SELECT operation_id FROM shikigami.workspace_processes WHERE operation_id>$1 ORDER BY operation_id LIMIT 64" textParam (D.rowList (D.column (D.nonNullable (D.refine parseOperationId D.text))))
 
 jsonColumn :: (FromJSON a) => D.Row a
 jsonColumn = D.column (D.nonNullable (D.refine decode D.jsonb))

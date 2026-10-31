@@ -239,6 +239,11 @@
           "rationale": "Private KindID-v7 ExecutionRootId/AttemptId/AllocationId replace arbitrary-text/UUIDv4/derived-root identity. Native-run origin receipts bind creator, agent and immutable envelope and publish atomically with roots; real races, lost-response recovery, binding refusals, zero-row rollback and retry pass. Existing conservation, fencing, inheritance and settlement retain their rules. Delegation captures checked root restoration; operator arguments refine before configuration IO. ADR-94, 581 pure/397 PostgreSQL/262 worker/95 server, 200 compiler clients, native/domain/diagram/83 CLI/live HTTP and twelve reviewed schema additions cover this clause. Native neutrality does not establish old opaque-payload compatibility. Logical operation locators, complete scalar/identity and remaining decoder-owner review remain pending."
         },
         {
+          "id": "checked-logical-operation-locators",
+          "disposition": "implemented",
+          "rationale": "ADR-53 and actual execution/cursor, native-child, worker/Objective receipt and retained-handoff call sites establish concrete locator authorities separate from allocated accounting entities. Private non-Generic OperationId rejects empty admission while exact string bytes, prefixes and preimages remain. Owner length/scope/fingerprint/revision/authorization policies stay in place; operator flags refine before configuration IO. Malformed pending workspace keys return an owning refusal and preserve an unresolved fence before receipt publication. ADR-95, 582 pure/397 PostgreSQL/262 worker/95 server, 206 compiler, native/domain/diagram/84 CLI/live HTTP acceptance cover this clause. Complete scalar/identity and remaining decoder-owner review remain pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -334,7 +339,12 @@
         "docs/evidence/keiro-0.22/resource-identity-native-replay.json",
         "docs/evidence/keiro-0.22/resource-identity-fold-identities.json",
         "shikigami-core/src/Shikigami/Execution/Identity.hs",
-        "shikigami-core/src/Shikigami/Execution/ResourcesStore.hs"
+        "shikigami-core/src/Shikigami/Execution/ResourcesStore.hs",
+        "docs/adr/0095-logical-operation-keys-retain-their-coordinate-contract.md",
+        "docs/evidence/keiro-0.22/operation-key-results.txt",
+        "docs/evidence/keiro-0.22/operation-key-native-diff.json",
+        "docs/evidence/keiro-0.22/operation-key-native-replay.json",
+        "docs/evidence/keiro-0.22/operation-key-fold-identities.json"
       ]
     },
     {

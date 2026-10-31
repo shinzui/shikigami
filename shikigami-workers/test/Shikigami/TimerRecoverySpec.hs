@@ -37,10 +37,10 @@ import Kiroku.Store.Types (EventId (..))
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Attempt (ExecutionWake (..), JobReference (..))
-import Shikigami.Execution.Identity (AttemptId, OperationId (..))
+import Shikigami.Execution.Identity (AttemptId, OperationId)
 import Shikigami.Execution.Timer (armObservation)
 import Shikigami.Execution.Transcript (ExecutionId (..))
-import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId)
+import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (SkipMissed))
@@ -62,7 +62,7 @@ tests fixture =
                 scheduler = testSchedulerEnv (StoreConnection.pool store)
                 name = WorkflowName "shikigami.execution"
                 workflowId = WorkflowId "timer-execution-fixture"
-                reference = JobReference 1 (ExecutionId "execution-fixture") (OperationId "operation-fixture") (fixtureAttemptId "attempt-fixture")
+                reference = JobReference 1 (ExecutionId "execution-fixture") (fixtureOperationId "operation-fixture") (fixtureAttemptId "attempt-fixture")
                 body :: Eff (Workflow : AppEffects) JobReference
                 body = do
                   generation <- currentRunGeneration

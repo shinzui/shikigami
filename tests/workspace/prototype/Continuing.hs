@@ -13,7 +13,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
-import FixtureIdentity (fixtureRootId)
+import FixtureIdentity (fixtureOperationId, fixtureRootId)
 import GHC.Generics (Generic)
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (genSessionId)
@@ -81,11 +81,11 @@ continuingCase config prefix stage = withQualification config prefix \q -> case 
     successor <- VerifiedIdentity <$> right (mkAgentPrincipal "agent_01h000000000000000successor")
     now <- getCurrentTime
     let expected = ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) item.admission.owner True item.admission.rootId (addUTCTime 3600 now)
-    (_, intent) <- right =<< run q.env (Sessions.requestTransfer access state.revision (fixtureRevision 0) (OperationId "native-freeze") expected item.binding.workspace (fixtureAgentName "successor") successor)
+    (_, intent) <- right =<< run q.env (Sessions.requestTransfer access state.revision (fixtureRevision 0) (fixtureOperationId "native-freeze") expected item.binding.workspace (fixtureAgentName "successor") successor)
     Lazy.writeFile (prefix </> "continuing-intent.json") (Aeson.encode intent)
     outcome <- (workspaceTransferClient q.client).reconcile intent
     unless (outcome == FenceUnresolved) (fail "held collector unexpectedly established a fence")
-    refused =<< (workspaceTransferClient q.client).admitWrite item.binding.workspace item.session successor (fixtureRevision 1) (OperationId "premature-successor-write")
+    refused =<< (workspaceTransferClient q.client).admitWrite item.binding.workspace item.session successor (fixtureRevision 1) (fixtureOperationId "premature-successor-write")
     putStrLn "PASS a real in-flight descendant and held collector keep the transfer fence unresolved"
   "settled" -> withCase q \item -> do
     intent <- right . Aeson.eitherDecodeStrict @TransferIntent =<< Bytes.readFile (prefix </> "continuing-intent.json")
@@ -107,9 +107,9 @@ continuingCase config prefix stage = withQualification config prefix \q -> case 
     putStrLn "PASS provider restart recovers the original actual and exact settled fence after authority denial"
   "late" -> withCase q \item -> do
     let provider = workspaceTransferClient q.client
-    refused =<< provider.admitWrite item.binding.workspace item.session item.admission.owner item.admission.epoch (OperationId "late-old-owner-write")
+    refused =<< provider.admitWrite item.binding.workspace item.session item.admission.owner item.admission.epoch (fixtureOperationId "late-old-owner-write")
     intent <- right . Aeson.eitherDecodeStrict @TransferIntent =<< Bytes.readFile (prefix </> "continuing-intent.json")
-    refused =<< provider.admitWrite item.binding.workspace item.session intent.newOwner intent.newEpoch (OperationId "unestablished-owner-write")
+    refused =<< provider.admitWrite item.binding.workspace item.session intent.newOwner intent.newEpoch (fixtureOperationId "unestablished-owner-write")
     late <- continueTools q.env q.current item.prepared [edit "src/dependency.txt" "new dependency\n" "LATE_OLD_OWNER_WRITE\n"]
     executeConfigured q late
     access <- right =<< run q.env (Execution.authorizeReplay late.snapshot.executionId late.snapshot.identity (q.current late.snapshot))
@@ -136,10 +136,10 @@ followup q = do
   access <- right =<< run q.env (Sessions.authorizeSession session actor (q.lifecycle actor))
   Just (active, _) <- right =<< run q.env (Sessions.inspectSession session)
   originalAssignment <- maybe (fail "original assignment absent") pure active.activeAssignment
-  void (right =<< run q.env (Sessions.recordResult access active.revision (fixtureRevision 0) (OperationId "followup-original-result") (AssignmentResult 1 originalAssignment AssignmentFailed (Just first.snapshot.executionId) Aeson.Null [])))
+  void (right =<< run q.env (Sessions.recordResult access active.revision (fixtureRevision 0) (fixtureOperationId "followup-original-result") (AssignmentResult 1 originalAssignment AssignmentFailed (Just first.snapshot.executionId) Aeson.Null [])))
   Just (idle, _) <- right =<< run q.env (Sessions.inspectSession session)
-  (_, message) <- right =<< run q.env (Sessions.acceptMessage access idle.revision (fixtureRevision 0) (OperationId "followup-next-message") (Instruction 1 FollowUp (fixtureInstruction "continue accepted repository") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
-  (_, started) <- right =<< run q.env (Sessions.startAssignment access (advanceRevision idle.revision) (fixtureRevision 0) (OperationId "followup-next-start") message.assignmentId)
+  (_, message) <- right =<< run q.env (Sessions.acceptMessage access idle.revision (fixtureRevision 0) (fixtureOperationId "followup-next-message") (Instruction 1 FollowUp (fixtureInstruction "continue accepted repository") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+  (_, started) <- right =<< run q.env (Sessions.startAssignment access (advanceRevision idle.revision) (fixtureRevision 0) (fixtureOperationId "followup-next-start") message.assignmentId)
   nextRun <- maybe (fail "followup child absent") pure started.childWorkflowId
   next <- loadAssignment q root nextRun original.owner
   unless (next.workspace == original.workspace && next.bindingDigest == original.bindingDigest && next.instructions == original.instructions && next.epoch == original.epoch) (fail "followup allocation or accepted instructions changed")
@@ -151,12 +151,12 @@ followup q = do
   unless (after == before) (fail "followup changed the ready Unix profile")
   terminal q secondLast
   Just (running, _) <- right =<< run q.env (Sessions.inspectSession session)
-  void (right =<< run q.env (Sessions.recordResult access running.revision (fixtureRevision 0) (OperationId "followup-result") (AssignmentResult 1 message.assignmentId AssignmentFailed (Just second.snapshot.executionId) Aeson.Null [])))
+  void (right =<< run q.env (Sessions.recordResult access running.revision (fixtureRevision 0) (fixtureOperationId "followup-result") (AssignmentResult 1 message.assignmentId AssignmentFailed (Just second.snapshot.executionId) Aeson.Null [])))
   let maintenance = MaintenanceRuntime q.env binding.storageRoot q.authorizer q.lifecycle (pure ())
   retained <- cleanupWorkspace maintenance actor binding.workspace
   unless (retained == Left CleanupRefused) (fail "idle continuing session was cleaned")
   Just (finished, _) <- right =<< run q.env (Sessions.inspectSession session)
-  void (right =<< run q.env (Sessions.closeSession access finished.revision (fixtureRevision 0) (OperationId "followup-close") AssignmentFailed))
+  void (right =<< run q.env (Sessions.closeSession access finished.revision (fixtureRevision 0) (fixtureOperationId "followup-close") AssignmentFailed))
   right =<< cleanupWorkspace maintenance actor binding.workspace
   right =<< cleanupWorkspace maintenance actor binding.workspace
   files <- doesDirectoryExist (workspaceFiles binding.storageRoot binding)
@@ -184,8 +184,8 @@ openNativeSession q name = do
   void (right =<< run q.env (Roots.enrollRoot root (Resources.Envelope (Map.fromList [(dimension, Resources.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now))))
   void (right =<< run q.env (Sessions.openSession admission))
   access <- right =<< run q.env (Sessions.authorizeSession (sessionIdFor admission) actor (q.lifecycle actor))
-  (_, message) <- right =<< run q.env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (OperationId (name <> "-message")) (Instruction 1 FollowUp (fixtureInstruction "native workspace fixture") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
-  (_, started) <- right =<< run q.env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (OperationId (name <> "-start")) message.assignmentId)
+  (_, message) <- right =<< run q.env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId (name <> "-message")) (Instruction 1 FollowUp (fixtureInstruction "native workspace fixture") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+  (_, started) <- right =<< run q.env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId (name <> "-start")) message.assignmentId)
   child <- maybe (fail "native child absent") pure started.childWorkflowId
   pure (sessionIdFor admission, actor, child, root)
 

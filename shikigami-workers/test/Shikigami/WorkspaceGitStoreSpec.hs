@@ -22,7 +22,7 @@ import Shikigami.Execution.Identity
 import Shikigami.Execution.Payload (PayloadDigest, parsePayloadDigest)
 import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (NeedModel))
-import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureRootId)
+import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision (StateRevision, parseRevision)
@@ -79,10 +79,10 @@ tests fixture =
         prepared <- right =<< run env (prepareGitTx binding proposed candidate)
         run env (recordGitAppliedTx prepared) >>= (@?= Left WorkspaceBindingConflict)
         assertBlocked env binding
-        run env (Store.reserveWorkspaceEffectTx binding binding.request.owner (fixtureRevision 0) (OperationId "file-operation") digest) >>= (@?= Left WorkspaceBindingConflict)
+        run env (Store.reserveWorkspaceEffectTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "file-operation") digest) >>= (@?= Left WorkspaceBindingConflict)
         refused <- right =<< run env (refuseGitBeforePublicationTx prepared)
         refused.phase @?= GitRefused
-        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "successor")) >>= (@?= Right ())
+        run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "successor")) >>= (@?= Right ())
         run env (requestGitPublicationTx binding prepared) >>= (@?= Left WorkspaceBindingConflict),
       testCase "historical file receipts stay typed and cannot be reinterpreted as Git records" $ withGit fixture \env binding proposed -> do
         let operation = proposed.operation.operationId
@@ -97,7 +97,7 @@ tests fixture =
         let keys = [Text.pack ("git-page-" <> show index) | index <- [1 .. 66 :: Int]]
         mapM_
           ( \key -> do
-              let logical = proposed.operation & #operationId .~ OperationId key & #idempotencyKey .~ key
+              let logical = proposed.operation & #operationId .~ fixtureOperationId key & #idempotencyKey .~ key
                   value = proposed & #operation .~ logical
                   entry = value & #fingerprint .~ gitFingerprint binding value
               retained <- right =<< run env (reserveGitTx binding entry)
@@ -106,9 +106,9 @@ tests fixture =
           )
           keys
         first <- run env (inspectGitPageTx Nothing)
-        first @?= take 64 (sort (map OperationId keys))
+        first @?= take 64 (sort (map fixtureOperationId keys))
         second <- run env (inspectGitPageTx (Just (last first)))
-        second @?= drop 64 (sort (map OperationId keys))
+        second @?= drop 64 (sort (map fixtureOperationId keys))
         run env (inspectGitPageTx (Just (last second))) >>= (@?= []),
       testCase "malformed records and changed candidate evidence refuse without replacing intent" $ withGit fixture \env binding proposed -> do
         run env (reserveGitTx binding (proposed & #generation .~ (fixtureGeneration 0))) >>= (@?= Left InvalidWorkspaceRequest)
@@ -128,7 +128,7 @@ withGit fixture use = Fixture.withFixture fixture \env _ root repository -> do
   allocateWorkspace root binding Reserved >>= (@?= Right ())
   run env (Store.markWorkspaceReadyTx binding) >>= (@?= Right ())
   now <- getCurrentTime
-  let logical = OperationContext (ExecutionId "git-execution") (OperationId "git-operation") "git-operation" digest digest
+  let logical = OperationContext (ExecutionId "git-execution") (fixtureOperationId "git-operation") "git-operation" digest digest
       record = GitRecord 1 logical (fixtureAttemptId "original-attempt") (fixtureOwner "original-claim") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest "device:parent" candidate.parent digest now (GitRouting logical.executionId owner (fixturePayloadDigest digest) NeedModel) GitReserved Nothing
   use env binding (record & #fingerprint .~ gitFingerprint binding record)
 
@@ -139,7 +139,7 @@ digest :: Text.Text
 digest = "sha256:" <> Text.replicate 64 "a"
 
 assertBlocked :: AppEnv -> WorkspaceBinding -> Assertion
-assertBlocked env binding = run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (OperationId "successor")) >>= (@?= Left WorkspaceBindingConflict)
+assertBlocked env binding = run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "successor")) >>= (@?= Left WorkspaceBindingConflict)
 
 run :: AppEnv -> Transaction a -> IO a
 run env action = runAppIO env (runTransaction action) >>= right

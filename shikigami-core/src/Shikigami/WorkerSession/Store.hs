@@ -80,7 +80,7 @@ import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.App (CommandEffects, commandOptions)
 import Shikigami.Decision.Contract (versionedDigest)
-import Shikigami.Execution.Identity (ExecutionRootId, OperationId (..))
+import Shikigami.Execution.Identity (ExecutionRootId, OperationId, operationIdText)
 import Shikigami.Execution.Payload
 import Shikigami.Execution.Resources (Admission (..))
 import Shikigami.Execution.Resources qualified as Resources
@@ -846,7 +846,7 @@ saveMessage :: MessageReceipt -> Transaction ()
 saveMessage message = Tx.statement (message.sessionId.value, message.assignmentId.value, message) updateMessage
 
 operationKey :: OperationId -> Text
-operationKey (OperationId key) = key
+operationKey = operationIdText
 
 persist :: (SessionEffects es) => WorkerSessionId -> Generated.WorkerSessionLifecycleCommand -> Transaction () -> Eff es (Either SessionError ())
 persist session command action = guarded do

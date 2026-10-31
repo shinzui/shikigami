@@ -41,7 +41,7 @@ import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider (DurableAdapter (..), DurableToolContract (..))
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
-import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Identity (OperationId, operationIdText)
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Execution.Selection (ExecutionSelection (..))
@@ -258,7 +258,7 @@ withAccess mode runtime snapshot dispatch logical input perform = catch work (\(
                   accepted <- owned (Execution.recordLateExecutionReceipt permit state.revision original (Attempt.AttemptResult output next Nothing))
                   pure (either (const (Left FileEffectUnresolved)) (const (Right ())) accepted)
             _ -> pure (Left FileEffectUnresolved)
-    operationKey (OperationId key) = key
+    operationKey = operationIdText
     wireName name = "overlay__workspace-edit__" <> name
     isLeft (Left _) = True
     isLeft _ = False
@@ -528,7 +528,7 @@ publishFileReceipt env operationId = protectRecovery do
     Right completed -> do
       let routing = registration.routing
           original = registration.receipt
-          OperationId key = operationId
+          key = operationIdText operationId
       (state, retained, _) <- recoveryExecution env (Execution.inspectExecution routing.executionId) >>= maybe (recoveryAbort FileEffectUnresolved) pure
       operation <- recoveryExecution env (Execution.inspectOperation operationId) >>= maybe (recoveryAbort FileEffectUnresolved) pure
       -- Match the executor's immutable specification and original claim before

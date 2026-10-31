@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- | Reserve before filesystem effects. Matching duplicate requests converge;
 -- reservation metadata remains immutable after the workspace becomes ready.
@@ -15,7 +16,7 @@ import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Decision.Contract (versionedDigest)
-import Shikigami.Execution.Identity (OperationId (..), executionRootIdText)
+import Shikigami.Execution.Identity (OperationId, executionRootIdText, operationIdText, parseOperationId)
 import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Prelude
 import Shikigami.StateRevision
@@ -98,7 +99,7 @@ checkWorkspaceOwnerTx binding owner epoch = do
 -- An unresolved effect blocks reuse by another logical operation, including
 -- ordinary reads. Only that effect's reconciliation can inspect its target.
 checkWorkspaceOperationTx :: WorkspaceBinding -> AgentIdentity -> StateRevision "worker-owner" -> OperationId -> Transaction (Either WorkspaceError ())
-checkWorkspaceOperationTx binding owner epoch (OperationId operation) = do
+checkWorkspaceOperationTx binding owner epoch (operationIdText -> operation) = do
   current <- checkWorkspaceOwnerTx binding owner epoch
   case current of
     Left err -> pure (Left err)
@@ -108,8 +109,8 @@ checkWorkspaceOperationTx binding owner epoch (OperationId operation) = do
       pure (if pending || processes then Left WorkspaceBindingConflict else Right ())
 
 reserveWorkspaceEffectTx :: WorkspaceBinding -> AgentIdentity -> StateRevision "worker-owner" -> OperationId -> Text -> Transaction (Either WorkspaceError (Maybe FileReceipt))
-reserveWorkspaceEffectTx binding owner epoch (OperationId operation) fingerprint = do
-  checked <- checkWorkspaceOperationTx binding owner epoch (OperationId operation)
+reserveWorkspaceEffectTx binding owner epoch identifier@(operationIdText -> operation) fingerprint = do
+  checked <- checkWorkspaceOperationTx binding owner epoch identifier
   case checked of
     Left err -> pure (Left err)
     Right () -> do
@@ -134,7 +135,7 @@ recordWorkspaceReceiptTx :: WorkspaceBinding -> FileReceipt -> Transaction (Eith
 recordWorkspaceReceiptTx binding receipt
   | receipt.bindingDigest /= workspaceBindingDigest binding || receipt.generation <= initialRevision = pure (Left WorkspaceBindingConflict)
   | otherwise = do
-      let OperationId operation = receipt.operationId
+      let operation = operationIdText receipt.operationId
       changed <- Tx.statement (operation, binding.workspace.resource, receipt.fingerprint, receipt) saveReceipt
       pure (if changed then Right () else Left WorkspaceBindingConflict)
 
@@ -147,7 +148,7 @@ registerFileForOwnerTx :: WorkspaceBinding -> AgentIdentity -> StateRevision "wo
 registerFileForOwnerTx binding owner epoch registration = do
   current <- checkWorkspaceOwnerTx binding owner epoch
   let receipt = registration.receipt
-      OperationId key = receipt.operationId
+      key = operationIdText receipt.operationId
   existing <- Tx.statement key selectEffect
   if current == Right () && validProcessRouting registration.routing && registration.routing.identity == owner && registration.routing.executionId == registration.operation.executionId && registration.operation.operationId == receipt.operationId && receipt.bindingDigest == workspaceBindingDigest binding && receipt.generation > initialRevision && receipt.state == EditPrepared && maybe False (\(resource, fingerprint, _) -> resource == binding.workspace.resource && fingerprint == receipt.fingerprint) existing
     then do
@@ -157,10 +158,10 @@ registerFileForOwnerTx binding owner epoch registration = do
     else pure (Left WorkspaceBindingConflict)
 
 inspectRegisteredFileTx :: OperationId -> Transaction (Maybe (WorkspaceBinding, FileRegistration, Maybe FileReceipt))
-inspectRegisteredFileTx (OperationId key) = Tx.statement key selectRegisteredFile
+inspectRegisteredFileTx (operationIdText -> key) = Tx.statement key selectRegisteredFile
 
 inspectFilePageTx :: Maybe OperationId -> Transaction [OperationId]
-inspectFilePageTx cursor = Tx.statement (maybe "" (\(OperationId key) -> key) cursor) selectFilePage
+inspectFilePageTx cursor = Tx.statement (maybe "" operationIdText cursor) selectFilePage
 
 freezeWorkspaceTx :: WorkspaceBinding -> AgentIdentity -> StateRevision "worker-owner" -> Transaction (Either WorkspaceError ())
 freezeWorkspaceTx binding owner epoch = do
@@ -218,4 +219,4 @@ selectRegisteredFile = preparable "SELECT b.binding,r.registration,e.receipt FRO
     decode value = case Aeson.fromJSON value of Aeson.Success result -> Right result; Aeson.Error err -> Left (Text.pack err)
 
 selectFilePage :: Statement Text [OperationId]
-selectFilePage = preparable "SELECT operation_id FROM shikigami.workspace_file_registrations WHERE operation_id>$1 ORDER BY operation_id LIMIT 20" (E.param (E.nonNullable E.text)) (D.rowList (OperationId <$> D.column (D.nonNullable D.text)))
+selectFilePage = preparable "SELECT operation_id FROM shikigami.workspace_file_registrations WHERE operation_id>$1 ORDER BY operation_id LIMIT 20" (E.param (E.nonNullable E.text)) (D.rowList (D.column (D.nonNullable (D.refine parseOperationId D.text))))

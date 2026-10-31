@@ -79,7 +79,7 @@ import Shikigami.Execution.SelectionStore qualified as Calls
 import Shikigami.Execution.Store qualified as Durable
 import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as DriverGenerated
-import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureRootId)
+import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Integration.Danwa (AddressedMessage (..))
@@ -303,7 +303,7 @@ tests fixture =
               fallback = mustRight (defaultBinding stubModel Options.emptyOptions)
               selection = mustRight (resolveExecutionSelection (fixtureAssignment "ledger-assignment") catalog (Right fallback) Nothing Nothing Nothing Nothing (Just root) now)
               limits = Calls.CallLimits (Just (fixtureLimit 3)) (Just (fixtureLimit 1)) (Just (fixtureLimit 1)) Nothing Nothing
-              request key = AttemptRequest (fixtureAttemptId key) (OperationId "logical") (Map.fromList [(ActiveWork, (fixtureAmount 1)), (ModelAttempts, (fixtureAmount 1))]) AdmittedUnknownUsage
+              request key = AttemptRequest (fixtureAttemptId key) (fixtureOperationId "logical") (Map.fromList [(ActiveWork, (fixtureAmount 1)), (ModelAttempts, (fixtureAmount 1))]) AdmittedUnknownUsage
               reserve key = run app (Calls.reserveSelectionCall selection limits (request key) "digest" now)
           (a, b) <- concurrently (reserve "one") (reserve "two")
           receipt <- case (a, b) of
@@ -599,7 +599,7 @@ refusedAssignmentSettlement fixture reconcile = withRuntime fixture \app _ _ -> 
       fallback = mustRight (defaultBinding stubModel Options.emptyOptions)
       selection = mustRight (resolveExecutionSelection (fixtureAssignment "counter-refusal") catalog (Right fallback) Nothing Nothing Nothing Nothing (Just root) now)
       limits = mustRight (Calls.callLimitsFor selection Nothing)
-      request = AttemptRequest (fixtureAttemptId "counter-refusal") (OperationId "counter-operation") (Map.fromList [(ActiveWork, fixtureAmount 1), (ModelAttempts, fixtureAmount 1), (Tokens, fixtureAmount 10), (CostMicroUsd, fixtureAmount 0)]) EnforcedCeiling
+      request = AttemptRequest (fixtureAttemptId "counter-refusal") (fixtureOperationId "counter-operation") (Map.fromList [(ActiveWork, fixtureAmount 1), (ModelAttempts, fixtureAmount 1), (Tokens, fixtureAmount 10), (CostMicroUsd, fixtureAmount 0)]) EnforcedCeiling
       terminal = Calls.CallOutcome Calls.CallTerminal (Map.fromList [(Tokens, fixtureAmount 3), (CostMicroUsd, fixtureAmount 0)]) [] Nothing Nothing Nothing
   admitted <- expectRight =<< run app (Calls.reserveSelectionCall selection limits request "counter-fingerprint" now)
   receipt <- case admitted of Calls.NewCall value -> pure value; _ -> assertFailure "new admitted call expected"

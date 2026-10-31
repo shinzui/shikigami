@@ -204,7 +204,7 @@ loadAcceptedTool transferable descriptor expected runtime snapshot dispatch inpu
   (retained, _) <- execute runtime.appEnv (Execution.loadExecution access)
   operation <- execute runtime.appEnv (Execution.inspectOperation dispatch.operation.operationId) >>= maybe (abort FileEffectRefused) pure
   admission <- maybe (abort FileEffectRefused) pure snapshot.workspace
-  let OperationId key = dispatch.operation.operationId
+  let key = operationIdText dispatch.operation.operationId
   unless (retained == snapshot && admission.filePolicy == Just (if transferable then transferableFilePolicy else supervisedFilePolicy) && descriptor `elem` resolvedCapabilities snapshot.capabilities && dispatch.operation == OperationContext snapshot.executionId dispatch.operation.operationId key operation.fingerprint operation.specification.scopeDigest && operation.executionId == snapshot.executionId && operation.specification.kind == ToolOperation && operation.specification.name == expected.name && operation.specification.recovery == expected.recovery && operation.specification.scopeDigest == toolScopeDigest expected && operation.specification.policyDigest == versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) (abort FileEffectRefused)
   tool <- execute runtime.appEnv (Execution.readReplayPayload @ToolOperationInput access "operation-input" operation.input)
   unless (tool.binding == expected && expected `elem` snapshot.toolBindings && tool.invocation.name == expected.name && tool.invocation.arguments == input && operation.specification.responsePosition == Just tool.position) (abort FileEffectRefused)
@@ -400,7 +400,7 @@ publishGitReceipt env operationId = protect do
       expected <- case filter (\tool -> operation.specification.scopeDigest == toolScopeDigest tool) [gitBinding "commit", transferredGitBinding "commit"] of
         [tool] -> pure tool
         _ -> abort FileEffectUnresolved
-      let OperationId key = operationId
+      let key = operationIdText operationId
       unless (routing.identity == retained.identity && retained.rootId == Just binding.request.rootId && record.operation == OperationContext routing.executionId operationId key operation.fingerprint operation.specification.scopeDigest && operation.executionId == routing.executionId && operation.specification.kind == ToolOperation && operation.specification.name == expected.name && operation.specification.recovery == expected.recovery && operation.specification.scopeDigest == toolScopeDigest expected && operation.input.digest == routing.inputDigest) (abort FileEffectUnresolved)
       actual <- execute env (Execution.inspectExecutionAttempt record.attemptId) >>= maybe (abort FileEffectUnresolved) pure
       unless (actual.executionId == routing.executionId && actual.operationId == operationId && actual.owner == Just record.claimOwner && actual.generation == record.generation && isNothing actual.call) (abort FileEffectUnresolved)

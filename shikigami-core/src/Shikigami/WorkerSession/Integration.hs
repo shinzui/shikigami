@@ -2,11 +2,12 @@
 -- the retained request, then atomically accept its receipt with the local cursor.
 module Shikigami.WorkerSession.Integration (IntegrationOutcome (..), integrateEvents) where
 
+import Data.List.NonEmpty (NonEmpty (..))
 import Effectful (Eff)
 import Effectful.Exception (trySync)
 import Shikigami.App (AppEffects)
 import Shikigami.Decision.Contract (versionedDigest)
-import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Identity (OperationId, operationIdWithPrefix)
 import Shikigami.Prelude
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Checkpoint
@@ -57,4 +58,4 @@ integrateEvents runtime session operation = case runtime.checkpoints of
           Right Nothing -> pure (Left SessionMissing)
           Left err -> pure (Left err)
   where
-    acknowledgement = OperationId ("checkpoint-ack:" <> versionedDigest "shikigami.worker-session-checkpoint-ack/1" (toJSON operation))
+    acknowledgement = operationIdWithPrefix ('c' :| "heckpoint-ack:") (versionedDigest "shikigami.worker-session-checkpoint-ack/1" (toJSON operation))

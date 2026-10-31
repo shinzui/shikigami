@@ -6,6 +6,7 @@ module Shikigami.WorkerSession.Handoff (TransferServices (..), TransferOutcome (
 
 import Data.Aeson qualified as Aeson
 import Data.List (find)
+import Data.List.NonEmpty (NonEmpty (..))
 import Effectful (Eff)
 import Effectful.Exception (trySync)
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
@@ -14,7 +15,7 @@ import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.App (AppEffects)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Directory qualified as Directory
-import Shikigami.Execution.Identity (OperationId (..))
+import Shikigami.Execution.Identity (OperationId, operationIdWithPrefix)
 import Shikigami.Execution.Progress (noPendingReceipts)
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript qualified as Execution
@@ -136,4 +137,4 @@ resumeHandoff services session = do
             Right (Just _) -> pure (Right HandoffPending)
             Right Nothing -> pure (Left SessionMissing)
             Left err -> pure (Left err)
-    key intent label value = OperationId ("handoff-" <> label <> ":" <> versionedDigest "shikigami.worker-session-handoff-command/1" (toJSON (intent.operationId, value)))
+    key intent label value = operationIdWithPrefix ('h' :| "andoff-") (label <> ":" <> versionedDigest "shikigami.worker-session-handoff-command/1" (toJSON (intent.operationId, value)))

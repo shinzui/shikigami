@@ -13,7 +13,7 @@ import Data.Time (UTCTime (..), fromGregorian)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Claim
-import Shikigami.Execution.Identity (AttemptId, OperationId (..))
+import Shikigami.Execution.Identity (AttemptId, OperationId, operationIdText, parseOperationId)
 import Shikigami.Execution.Identity qualified as Entity
 import Shikigami.Execution.Payload (parsePayloadByteCount, parsePayloadDigest, parsePayloadId)
 import Shikigami.Execution.Policy.Types (RecoveryClass (RepeatableObservation), ToolInvoiceCost (NoInvoiceCost))
@@ -21,7 +21,7 @@ import Shikigami.Execution.Progress
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
-import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId)
+import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId)
 import Shikigami.StateRevision
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -30,7 +30,18 @@ tests :: TestTree
 tests =
   testGroup
     "execution revision and operation positions"
-    [ testCase "accounting entities allocate distinct checked UUIDv7 domains" do
+    [ testCase "logical operation locators retain exact bytes and reject empty admission" do
+        mapM_
+          ( \raw -> do
+              value <- either (assertFailure . show) pure (Entity.parseOperationId raw)
+              Entity.operationIdText value @?= raw
+              Aeson.encode value @?= Aeson.encode raw
+              Aeson.eitherDecode (Aeson.encode value) @?= Right value
+          )
+          ["operation:a", " 名前 ", Text.replicate 400 "x"]
+        assertBool "empty operation key admitted" (isLeft (Entity.parseOperationId ""))
+        assertBool "empty operation JSON admitted" (isLeft (Aeson.eitherDecode @Entity.OperationId "\"\"")),
+      testCase "accounting entities allocate distinct checked UUIDv7 domains" do
         assertEntityDomain Entity.parseExecutionRootId Entity.executionRootIdText Entity.newExecutionRootId "shikigami_execution_root"
         assertEntityDomain Entity.parseAttemptId Entity.attemptIdText Entity.newAttemptId "shikigami_execution_attempt"
         assertEntityDomain Entity.parseAllocationId Entity.allocationIdText Entity.newAllocationId "shikigami_execution_allocation"
@@ -40,7 +51,7 @@ tests =
       testCase "attempt claim owners and generations preserve complete retained bytes" do
         let owner = either (error . show) id (parseClaimOwner "fixture")
             generation = revision 3
-            reference = Attempt.JobReference 1 execution (OperationId "operation") (fixtureAttemptId "attempt")
+            reference = Attempt.JobReference 1 execution (fixtureOperationId "operation") (fixtureAttemptId "attempt")
             request = Resources.AttemptRequest reference.attemptId reference.operationId Map.empty Resources.AdmittedUnknownUsage
             now = UTCTime (fromGregorian 2026 10 30) 0
             claim = Attempt.AttemptClaim reference owner generation

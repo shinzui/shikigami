@@ -89,10 +89,18 @@ ADR-94 separates allocated accounting entities from their native run coordinate.
 Root origins publish atomically with roots, while actual attempt producers use
 private UUIDv7 allocation. Real races, missing-response recovery, creator/envelope
 binding and zero-row publication rollback pass. Conservation, inherited roots,
-unknown holds and settlement remain their own authorities. Logical operation
-coordinate construction and other decoder-owner classifications remain open.
+unknown holds and settlement remain their own authorities. ADR-95 now seals logical operation locators behind checked construction while
+retaining exact execution/cursor, caller receipt and handoff coordinates. A real
+malformed pending workspace row remains unresolved until repaired. Complete
+scalar/identity and remaining decoder-owner classifications remain open.
 
 ## Decision Log
+
+2026-10-31: ADR-53 and actual store call sites establish logical operation keys
+as execution/cursor, native-child, worker-action or caller receipt locators.
+Keep their exact bytes and owner length/scope policies, close empty/Generic
+construction globally, and retain explicit total owner-prefix factories. Do not
+reuse accounting entity allocation for those technical/caller coordinates.
 
 2026-10-31: Resource roots, exclusive allocations and actual transport attempts
 are application-owned accounting entities under ADR-51. Continue M1 with private
@@ -118,20 +126,19 @@ cases. The language checker and thirteen style/ownership mutation tests pass.
 [The adoption record](../evidence/keiro-0.22/haskell-service-adoption.md) links each
 implemented domain-value wave and its exact candidate/evidence.
 
-Latest accounting-identity acceptance passed 581 pure, 397 serial PostgreSQL,
-262 worker, 95 server, 31 API, nine client and 37 agent cases; 200 compiler
-clients, nine migration composition and eleven live migration smoke cases,
-143 domain assertions, six diagrams, 156 native rows, 83 CLI checks and live
-HTTP also pass. [Acceptance](../evidence/keiro-0.22/resource-identity-results.txt)
-records phase boundaries, fixture controls and the explicit ADR-27/94 identity
-reset. Exactly twelve origin-table schema objects are added with no removals.
-The strict gate against ab847d7 has zero findings and unchanged transducers;
-that does not make old opaque identity payloads compatible. The current
-320-module/902-declaration worklist and all 124 frozen source hashes are
-verified. Forty-two of 46 assigned sources have implemented dispositions.
-Logical operation locators, complete scalar/identity and remaining decoder-owner
-review keep M1 incomplete. Three final-profile clauses and plan95's packaged
-Linux/runtime qualification remain open.
+Latest logical-key acceptance passed 582 pure, 397 serial PostgreSQL,
+262 worker, 95 server, 31 API, nine client and 37 agent cases; 206 compiler
+clients, 143 domain assertions, six diagrams, 156 native rows, 84 CLI checks and
+live HTTP also pass. [Acceptance](../evidence/keiro-0.22/operation-key-results.txt)
+records complete valid bytes, concrete locator authorities and a real malformed
+pending-row/fence refusal. The strict gate against 0919688 has zero findings and
+unchanged transducers; valid workflow prefix factories retain labels, order,
+effects and bytes. The current 320-module/902-declaration worklist, source/tool
+hashes and all 124 frozen guide hashes are verified. Forty-two of 46 assigned
+sources have implemented dispositions. Complete scalar/identity, decision/
+program/model values and remaining decoder-owner review keep M1 incomplete.
+Three final-profile clauses and plan95's packaged Linux/runtime qualification
+remain open.
 
 ## Context and Orientation
 

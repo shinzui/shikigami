@@ -219,7 +219,7 @@ loadAccepted runtime request = do
   (command, profile) <- runtime.selectRule binding admission rule >>= either (const (abort SupervisorRefused)) pure
   profileIdentity <- Systemd.systemdProfileIdentity profile
   unless (validProcessCommand command && command.rule == rule && command.profile == profileIdentity) (abort SupervisorRefused)
-  let OperationId key = request.operationId
+  let key = operationIdText request.operationId
       context = OperationContext snapshot.executionId request.operationId key operation.fingerprint operation.specification.scopeDigest
       dispatch = DispatchContext context request.attemptId request.owner request.generation
   pure (AcceptedProcess snapshot access binding admission dispatch command profile routing)
@@ -396,7 +396,7 @@ publishProcessReceipt runtime operationId = protect do
       metadata <- execute runtime (Execution.inspectExecution routing.executionId) >>= maybe (abort SupervisorUnresolved) pure
       let (state, retained, _) = metadata
       operation <- execute runtime (Execution.inspectOperation operationId) >>= maybe (abort SupervisorUnresolved) pure
-      let OperationId key = operationId
+      let key = operationIdText operationId
           context = OperationContext routing.executionId operationId key operation.fingerprint operation.specification.scopeDigest
       unless (routing.identity == retained.identity && retained.rootId == Just binding.request.rootId && operation.executionId == routing.executionId && operation.specification.kind == ToolOperation && operation.specification.name == workspaceExecBinding.name && operation.specification.scopeDigest `elem` map toolScopeDigest [workspaceExecBinding, transferredWorkspaceExecBinding] && operation.specification.recovery == UncertainEffect && operation.input.digest == routing.inputDigest && record.fingerprint == processFingerprint binding record.instructionDigest context record.command) (abort SupervisorUnresolved)
       actual <- execute runtime (Execution.inspectExecutionAttempt record.attemptId) >>= maybe (abort SupervisorUnresolved) pure
@@ -441,7 +441,7 @@ waitReady directory remaining = do
 validRequest :: SupervisorRequest -> Bool
 validRequest request = bounded request.executionId.value && bounded operation && bounded attempt && request.generation > initialRevision && revisionNumber request.generation < 9223372036854775808
   where
-    OperationId operation = request.operationId; attempt = attemptIdText request.attemptId
+    operation = operationIdText request.operationId; attempt = attemptIdText request.attemptId
 
 execute :: SupervisorRuntime -> Eff AppEffects (Either ExecutionError a) -> IO a
 execute runtime action = do

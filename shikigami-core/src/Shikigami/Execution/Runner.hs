@@ -15,7 +15,7 @@ where
 
 import Effectful (Eff)
 import Shikigami.Execution.Claim
-import Shikigami.Execution.Identity (AttemptId, OperationId (..))
+import Shikigami.Execution.Identity (AttemptId, OperationId, operationIdText)
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Store qualified as Store
 import Shikigami.Execution.ToolPosition
@@ -103,7 +103,7 @@ validatePreparedTool now stopped cutoff snapshot state operation tool assistant 
   unless (take 1 (drop (toolPositionNumber tool.position) (toolInvocations assistant)) == [tool.invocation]) (Left OperationConflict)
   let ready binding = do
         unless (binding == tool.binding) (Left OperationConflict)
-        let OperationId key = specification.operationId
+        let key = operationIdText specification.operationId
             context = OperationContext state.executionId specification.operationId key operation.fingerprint specification.scopeDigest
         pure (ToolReady (PreparedTool context state.revision tool))
   case admission of

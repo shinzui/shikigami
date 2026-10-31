@@ -334,7 +334,7 @@ listCalls :: Statement AssignmentKey [SelectionCall]
 listCalls = preparable "SELECT state FROM shikigami.execution_selection_calls WHERE assignment_id=$1 ORDER BY ordinal LIMIT 100" assignmentParam (D.rowList jsonRow)
 
 operationKey :: OperationId -> Text
-operationKey (OperationId key) = key
+operationKey = operationIdText
 
 countOperationCalls :: Statement (AssignmentKey, Text) Integer
 countOperationCalls = preparable "SELECT count(*) FROM shikigami.execution_selection_calls WHERE assignment_id=$1 AND operation_id=$2" (contrazip2 assignmentParam textParam) (D.singleRow (toInteger <$> D.column (D.nonNullable D.int8)))

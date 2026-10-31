@@ -109,7 +109,7 @@ import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as DriverGenerated
 import Shikigami.ExecutionLifecycle.Generated.Domain qualified as Lifecycle
 import Shikigami.ExecutionLifecycle.Generated.EventStream (executionLifecycleCategory, executionLifecycleEventStream, executionLifecycleEventStreamDef)
-import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureRootId)
+import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
 import Shikigami.Log qualified as Log
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
@@ -217,7 +217,7 @@ tests fixture =
                   )
               tool = mkDynTool "edit" "Edit fixture." (object []) (\_ -> unsafeEff_ (assertFailure "description invoked a mutation") >> pure (Right (ToolOutput.textToolOutput "unused")))
               native = Tools.NativeToolFactory (\_ -> pure (Right [])) (\_ _ _ -> pure (Right []))
-              logical = Runner.OperationContext snapshot.executionId (OperationId "fixture-operation") "fixture-operation" "fingerprint" "scope"
+              logical = Runner.OperationContext snapshot.executionId (fixtureOperationId "fixture-operation") "fixture-operation" "fingerprint" "scope"
               dispatch = Runner.DispatchContext logical (fixtureAttemptId "fixture-attempt") (fixtureOwner "owner") (fixtureGeneration 1)
               describe registry accepted = Tools.describeExecutionTools Log.silentLogger denyAllActionAuthorizer registry native accepted
               prepare registry context accepted = Tools.withExecutionTools Log.silentLogger denyAllActionAuthorizer registry native accepted context (Just (overlayToolName capability "edit")) (pure . map (.binding))
@@ -722,7 +722,7 @@ tests fixture =
                     [observationBinding]
                     ( \context -> do
                         context.operationId @?= specification.operationId
-                        let OperationId key = specification.operationId
+                        let key = operationIdText specification.operationId
                         context.idempotencyKey @?= key
                         pure (Right ())
                     )
@@ -1107,7 +1107,7 @@ nativeExecutorCase fixture billing = testCase (show billing <> " preserves rich 
                     actual.phase @?= Attempt.DispatchStarted
                   Nothing -> assertFailure "dispatch had no retained attempt"
                 context.operation.operationId @?= specification.operationId
-                let OperationId key = specification.operationId
+                let key = operationIdText specification.operationId
                 context.operation.idempotencyKey @?= key
                 _ <- use [Executor.BoundTool binding tool]
                 pure (Left (ExecutionPolicyRefused "fixture lease release failed"))
@@ -1236,7 +1236,7 @@ toolRecoveryCase fixture recovery = testCase (show recovery <> " retains its log
             (const selectedRuntime)
             ( \_ context _ use -> do
                 context.operation.operationId @?= specification.operationId
-                let OperationId expectedKey = specification.operationId
+                let expectedKey = operationIdText specification.operationId
                 context.operation.idempotencyKey @?= expectedKey
                 let tool = mkDynTool "observe" "Accepted native message." (object []) \_ -> unsafeEff_ do
                       modifyIORef' keys (<> [context.operation.idempotencyKey])
@@ -1351,7 +1351,7 @@ spec snapshot cursor = OperationSpec (operationIdFor snapshot.executionId (fixtu
 reserveCall :: AppEnv -> ExecutionSnapshot -> Operation -> IO Calls.CallReceipt
 reserveCall env snapshot operation = do
   now <- getCurrentTime
-  let OperationId operationKey = operation.specification.operationId
+  let operationKey = operationIdText operation.specification.operationId
       request = R.AttemptRequest (fixtureAttemptId ("attempt:" <> operationKey)) operation.specification.operationId (Map.fromList [(R.ActiveWork, (fixtureAmount 1)), (R.ModelAttempts, (fixtureAmount 1)), (R.Tokens, (fixtureAmount 10)), (R.CostMicroUsd, (fixtureAmount 0))]) R.EnforcedCeiling
       limits = Calls.CallLimits (Just (fixtureLimit 8)) (Just (fixtureLimit 2)) (Just (fixtureLimit 1)) Nothing (Just (fixtureAmount 1000))
   result <- expectRight =<< run env (Calls.reserveSelectionCall snapshot.selection limits request "actual-request-digest" now)
