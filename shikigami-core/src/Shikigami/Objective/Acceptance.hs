@@ -20,7 +20,7 @@ validateGraph graph = do
       invalid = Left (ObjectiveInvalid "invalid assignment graph")
   unless (length graph <= 128 && length (nub keys) == length keys) invalid
   forM_ graph \node -> do
-    unless (validKey node.assignmentId.value && Text.length node.instructions <= 32768 && length node.dependencies <= 128 && length (nub node.dependencies) == length node.dependencies && all (`elem` keys) node.dependencies) invalid
+    unless (Text.length node.instructions <= 32768 && length node.dependencies <= 128 && length (nub node.dependencies) == length node.dependencies && all (`elem` keys) node.dependencies) invalid
     unless (either (const False) validKey (identityText node.owner)) invalid
     unless (isJust node.rootId == isJust node.cutoff && (isNothing node.sessionId || isJust node.rootId)) invalid
   unless (acyclic [] graph) invalid
@@ -30,7 +30,7 @@ validateGraph graph = do
       let ready = filter (all (`elem` visited) . (.dependencies)) remaining
        in not (null ready) && acyclic (visited <> map (.assignmentId) ready) (filter (\a -> a.assignmentId `notElem` map (.assignmentId) ready) remaining)
 
-evidenceArtifact :: EvidenceInput -> Text
+evidenceArtifact :: EvidenceInput -> ArtifactRef
 evidenceArtifact = \case
   ResultEvidence {result} -> case result of WorkerResult {artifact} -> artifact; RetainedResult {artifact} -> artifact
   Attestation {artifact} -> artifact
@@ -42,7 +42,7 @@ validateAcceptance :: Objective -> CompletionProposal -> Either ObjectiveError (
 validateAcceptance objective proposal = do
   unless (objective.status == Open && objective.revision == advanceRevision proposal.objectiveRevision && objective.instructionsRevision == proposal.instructionsRevision && objective.criteriaRevision == proposal.criteriaRevision) (Left ObjectiveConflict)
   unless (null objective.unresolved) (Left ObjectiveUnresolved)
-  unless (not (null proposal.artifacts) && length proposal.artifacts <= 128 && all validKey proposal.artifacts && length (nub proposal.artifacts) == length proposal.artifacts && length proposal.checks <= 256 && length (nub proposal.checks) == length proposal.checks && length proposal.limitations <= 64 && all ((<= 4096) . Text.length) proposal.limitations) invalid
+  unless (not (null proposal.artifacts) && length proposal.artifacts <= 128 && length (nub proposal.artifacts) == length proposal.artifacts && length proposal.checks <= 256 && length (nub proposal.checks) == length proposal.checks && length proposal.limitations <= 64 && all ((<= 4096) . Text.length) proposal.limitations) invalid
   forM_ objective.assignments \assignment -> do
     unless (assignment.definition.state `elem` [Done, Withdrawn]) invalid
     when (assignment.definition.state == Done) $

@@ -133,7 +133,8 @@ readVersion access reference = protected do
   identifier <- either (const (abort ObjectiveUnavailable)) pure (parseObjectiveId objective)
   current <- locked identifier
   checkAccess access current
-  require (versionFor current (ObjectiveAssignmentId assignment))
+  key <- either (const (abort ObjectiveUnavailable)) pure (parseObjectiveAssignmentId assignment)
+  require (versionFor current key)
 
 readReceipt :: (ObjectiveEffects es) => Access -> ObjectiveId -> OperationId -> Eff es (Either ObjectiveError (Maybe (Either ObjectiveError Receipt)))
 readReceipt access objective operation = protected do
@@ -244,7 +245,7 @@ execute access identifier expected operation mutation = guarded do
                 saveSnapshot next
                 writePayload identifier digest payload
                 case mutation of
-                  Internal (IngestCheckpoint assignment intent _ _) -> Tx.statement ((objectiveIdText identifier), assignment.value, intent.sessionId.value, fromInteger intent.throughCursor) saveCursor
+                  Internal (IngestCheckpoint assignment intent _ _) -> Tx.statement ((objectiveIdText identifier), (objectiveAssignmentIdText assignment), intent.sessionId.value, fromInteger intent.throughCursor) saveCursor
                   Public (BindConversation conversation) -> Tx.statement (conversation, (objectiveIdText identifier), toJSON receipt) bindConversation
                   _ -> pure ()
                 writeReceipt receipt (Right receipt)
@@ -291,7 +292,7 @@ validateTransition _now access expected mutation current = do
     withEvidence objective key inputs = do
       assignment <- maybe (Left ObjectiveMissing) Right (find ((== key) . (.definition.assignmentId)) objective.assignments)
       records <- forM inputs \input -> do
-        unless (all ((/= input.key) . (.input.key)) objective.evidence && any ((== input.criterion) . (.key)) objective.criteria && validKey (evidenceArtifact input)) (Left ObjectiveInvalidEvidence)
+        unless (all ((/= input.key) . (.input.key)) objective.evidence && any ((== input.criterion) . (.key)) objective.criteria) (Left ObjectiveInvalidEvidence)
         disposition <- maybe (Left ObjectiveInvalidEvidence) Right (lookup input access.checks)
         case input of
           Attestation {statement} -> unless (not (Text.null statement) && Text.length statement <= 4096 && any (\criterion -> criterion.key == input.criterion && criterion.kind == HumanVerifiable) objective.criteria) (Left ObjectiveInvalidEvidence)
@@ -375,7 +376,7 @@ validateSources objective mutation = do
               Just value -> Right (value :: WS.AssignmentResult)
               Nothing -> Left ObjectiveInvalidEvidence
             _ -> Left ObjectiveInvalidEvidence
-          unless (artifact `elem` result.artifacts && result.assignmentId == receipt.assignmentId && result.disposition == receipt.disposition) (Left ObjectiveInvalidEvidence)
+          unless (artifactRefText artifact `elem` result.artifacts && result.assignmentId == receipt.assignmentId && result.disposition == receipt.disposition) (Left ObjectiveInvalidEvidence)
         Nothing -> pure (Left ObjectiveInvalidEvidence)
     _ -> pure (Right ())
   bindings <- case mutation of
@@ -392,7 +393,7 @@ validateSources objective mutation = do
     Internal (IngestCheckpoint key intent inputs _) -> do
       storedIntent <- Tx.statement (intent.sessionId.value, operationKey intent.operationId) selectCheckpoint
       let original = storedIntent >>= \value -> case Aeson.fromJSON value of Aeson.Success decoded -> Just decoded; _ -> Nothing
-      cursor <- fromMaybe 0 <$> Tx.statement ((objectiveIdText objective.objectiveId), key.value, intent.sessionId.value) selectCursor
+      cursor <- fromMaybe 0 <$> Tx.statement ((objectiveIdText objective.objectiveId), (objectiveAssignmentIdText key), intent.sessionId.value) selectCursor
       case find ((== key) . (.definition.assignmentId)) objective.assignments of
         Just assignment -> pure do
           unless (assignment.definition.sessionId == Just intent.sessionId && intent.actor `matchesActor` objective && original == Just intent && intent.objective == referenceFor objective.objectiveId key && cursor == intent.previousCursor && intent.throughCursor > cursor && intent.throughCursor - cursor <= 100 && map (.cursor) intent.events == [cursor + 1 .. intent.throughCursor]) (Left ObjectiveConflict)
@@ -415,7 +416,7 @@ locked identifier = Tx.statement (objectiveIdText identifier) lockObjective >>= 
 saveSnapshot :: Objective -> Transaction ()
 saveSnapshot objective = do
   Tx.statement ((objectiveIdText objective.objectiveId), objective) updateObjective
-  forM_ objective.assignments \assignment -> Tx.statement ((objectiveIdText objective.objectiveId), assignment.definition.assignmentId.value, (referenceFor objective.objectiveId assignment.definition.assignmentId).key, assignment) saveAssignment
+  forM_ objective.assignments \assignment -> Tx.statement ((objectiveIdText objective.objectiveId), (objectiveAssignmentIdText assignment.definition.assignmentId), (referenceFor objective.objectiveId assignment.definition.assignmentId).key, assignment) saveAssignment
 
 writePayload :: ObjectiveId -> Text -> Aeson.Value -> Transaction ()
 writePayload objective digest payload = Tx.statement ((objectiveIdText objective), digest, payload) insertPayload

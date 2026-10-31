@@ -38,7 +38,7 @@
         {
           "id": "distinct-objective-locators",
           "disposition": "implemented",
-          "rationale": "CriterionKey and EvidenceKey are distinct abstract checked types with unchanged JSON strings. Objective assignment IDs are nominal user-authored locators, not independently allocated entities."
+          "rationale": "CriterionKey, EvidenceKey, ObjectiveAssignmentId and ArtifactRef are distinct abstract checked types without Generic/Num/IsString. Assignment keys remain user-authored locators with their established object codec; the other three retain JSON strings. Domain/provider/SQL adapters convert explicitly; all core/PostgreSQL and exact codec acceptance pass."
         },
         {
           "id": "revision-domains",

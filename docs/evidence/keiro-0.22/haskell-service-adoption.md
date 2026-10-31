@@ -84,3 +84,10 @@ IsString or Generic instance. Valid JSON remains numeric, including its byte enc
 The source-owned compile fixture first proves a valid client, then rejects scope
 coercion, raw representation coercion and unchecked arithmetic. Transaction guards,
 receipt recovery and checkpoint authority remain the existing production paths.
+
+Objective assignment locators and artifact references now join criterion/evidence
+keys behind checked private constructors. All four omit Generic, Num and IsString.
+The assignment locator retains its established `{"value":"a"}` object codec;
+artifact, criterion and evidence references retain JSON strings. Database/provider
+adapters refine inputs and unwrap explicitly. Existing concurrent creation,
+checkpoint, verifier-backed completion and lost-receipt cases pass unchanged.

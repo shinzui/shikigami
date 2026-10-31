@@ -32,3 +32,5 @@ Live Hurl default/perimeter/write/outage suites all passed again, including pois
 Packaged shell completion generation is implemented but awaits final artifact qualification in plan95.
 Core PostgreSQL: all 375 passed serially (106.31s). Workers: all 260 passed serially (168.42s), with actual fixture databases, no required database skips.
 just keiro-gate 0208d32: passed strict Language 6 checks, idempotent scaffold, all 151 generated conformance assertions and replay-neutral/non-breaking diff.
+
+Checked assignment/artifact locator extension: 544 core pure and 375 serial PostgreSQL tests passed (101.58s). The extended eight-case Objectives subset passes exact assignment object encoding and invalid locator admission; all enabled components compile.

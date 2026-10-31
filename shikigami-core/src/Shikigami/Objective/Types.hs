@@ -17,10 +17,6 @@ import Shikigami.Prelude
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Types (AssignmentId, ResultReceipt, WorkerSessionId)
 
-newtype ObjectiveAssignmentId = ObjectiveAssignmentId {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
-
 data AccessPrincipal = VerifiedCaller !Text | RecordedAgent !AgentIdentity | LocalOperator !Text
   deriving stock (Eq, Ord, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -88,14 +84,14 @@ data Assignment = Assignment
 -- | Immutable sources are resolved by their owner, not by model-authored
 -- pass/fail flags. Worker results are additionally checked in the SQL boundary.
 data ResultReference
-  = WorkerResult {receipt :: !ResultReceipt, artifact :: !Text}
-  | RetainedResult {runId :: !Text, executionId :: !Text, digest :: !Text, artifact :: !Text}
+  = WorkerResult {receipt :: !ResultReceipt, artifact :: !ArtifactRef}
+  | RetainedResult {runId :: !Text, executionId :: !Text, digest :: !Text, artifact :: !ArtifactRef}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
 data EvidenceInput
   = ResultEvidence {key :: !EvidenceKey, criterion :: !CriterionKey, result :: !ResultReference, journey :: !Bool}
-  | Attestation {key :: !EvidenceKey, criterion :: !CriterionKey, artifact :: !Text, statement :: !Text, journey :: !Bool}
+  | Attestation {key :: !EvidenceKey, criterion :: !CriterionKey, artifact :: !ArtifactRef, statement :: !Text, journey :: !Bool}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -130,7 +126,7 @@ data CompletionProposal = CompletionProposal
   { objectiveRevision :: !(StateRevision "objective"),
     instructionsRevision :: !(StateRevision "objective-instructions"),
     criteriaRevision :: !(StateRevision "objective-criteria"),
-    artifacts :: ![Text],
+    artifacts :: ![ArtifactRef],
     checks :: ![EvidenceKey],
     limitations :: ![Text]
   }

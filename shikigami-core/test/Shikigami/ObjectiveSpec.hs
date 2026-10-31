@@ -28,12 +28,16 @@ tests =
         mapM_
           (assertBool "invalid objective identity refused" . either (const True) (const False) . parseObjectiveId)
           ["", "objective-digest", "shikigami_run_evidence_01h455vb4pex5vsknk084sn02q", "SHIKIGAMI_OBJECTIVE_01h455vb4pex5vsknk084sn02q", "shikigami_objective_0000000000a000000000000000"],
-      testCase "criterion and evidence locators validate at admission and retain JSON strings" do
+      testCase "objective locators validate at admission and retain their wire codecs" do
         Aeson.toJSON (criterionKey "build") @?= Aeson.String "build"
         Aeson.toJSON (evidenceKey "check") @?= Aeson.String "check"
+        Aeson.encode (objectiveAssignment "a") @?= "{\"value\":\"a\"}"
+        Aeson.toJSON (artifact "artifact") @?= Aeson.String "artifact"
         forM_ ["", "space key", Data.Text.replicate 257 "x"] \invalid -> do
           assertBool "criterion admission refused" (either (const True) (const False) (parseCriterionKey invalid))
           assertBool "evidence admission refused" (either (const True) (const False) (parseEvidenceKey invalid))
+          assertBool "assignment admission refused" (either (const True) (const False) (parseObjectiveAssignmentId invalid))
+          assertBool "artifact admission refused" (either (const True) (const False) (parseArtifactRef invalid))
           assertBool "criterion JSON refused" (case Aeson.fromJSON (Aeson.String invalid) :: Aeson.Result CriterionKey of Aeson.Error _ -> True; _ -> False)
           assertBool "evidence JSON refused" (case Aeson.fromJSON (Aeson.String invalid) :: Aeson.Result EvidenceKey of Aeson.Error _ -> True; _ -> False),
       testCase "revision admission is nonnegative and preserves numeric JSON" do
@@ -45,12 +49,12 @@ tests =
         Aeson.fromJSON (Aeson.toJSON value) @?= Aeson.Success value
         assertBool "negative revision refused" (case Aeson.fromJSON (Aeson.toJSON (-1 :: Integer)) :: Aeson.Result (StateRevision "objective") of Aeson.Error _ -> True; _ -> False),
       testCase "bounded graphs reject cycles, duplicates and dangling dependencies" do
-        validateGraph [draft "a" [], draft "b" [ObjectiveAssignmentId "a"]] @?= Right ()
+        validateGraph [draft "a" [], draft "b" [objectiveAssignment "a"]] @?= Right ()
         mapM_
           (assertBool "graph refused" . either (const True) (const False) . validateGraph)
-          [[draft "a" [ObjectiveAssignmentId "b"], draft "b" [ObjectiveAssignmentId "a"]], [draft "a" [ObjectiveAssignmentId "missing"]], [draft "a" [], draft "a" []]],
+          [[draft "a" [objectiveAssignment "b"], draft "b" [objectiveAssignment "a"]], [draft "a" [objectiveAssignment "missing"]], [draft "a" [], draft "a" []]],
       testCase "dense acyclic graph stays bounded and validates" do
-        validateGraph [draft (showText n) [ObjectiveAssignmentId (showText p) | p <- [1 .. n - 1]] | n <- [1 .. 128 :: Int]] @?= Right (),
+        validateGraph [draft (showText n) [objectiveAssignment (showText p) | p <- [1 .. n - 1]] | n <- [1 .. 128 :: Int]] @?= Right (),
       testCase "internal checkpoint and transfer tags are absent from public JSON" do
         forM_ ["IngestCheckpoint", "TransferOwnership"] \tag ->
           assertBool "private command refused" (case Aeson.fromJSON (Aeson.object ["tag" .= (tag :: Text)]) :: Aeson.Result Command of Aeson.Error _ -> True; _ -> False),
@@ -69,13 +73,13 @@ tests =
   where
     criterion = Criterion (criterionKey "human") "integrated user journey" HumanVerifiable False
     actor = VerifiedCaller "fixture"
-    proposal = CompletionProposal (revision 0) (revision 0) (revision 0) ["artifact"] [evidenceKey "check"] []
+    proposal = CompletionProposal (revision 0) (revision 0) (revision 0) [artifact "artifact"] [evidenceKey "check"] []
     assignment = Assignment (draft "a" [] & #state .~ Done) initialRevision initialRevision initialRevision []
-    evidence = Evidence (Attestation (evidenceKey "check") (criterionKey "human") "artifact" "reviewed" False) (EvidenceVerification CheckPassed (Just (criterionKey "human")) False) (ObjectiveAssignmentId "a") (assignmentMeaning assignment) actor initialRevision initialRevision initialRevision
+    evidence = Evidence (Attestation (evidenceKey "check") (criterionKey "human") (artifact "artifact") "reviewed" False) (EvidenceVerification CheckPassed (Just (criterionKey "human")) False) (objectiveAssignment "a") (assignmentMeaning assignment) actor initialRevision initialRevision initialRevision
     objective = Objective (either (error . show) id (parseObjectiveId "shikigami_objective_01h455vb4pex5vsknk084sn02q")) actor [Member actor [Owner]] "title" "goal" "instructions" (revision 1) initialRevision initialRevision [criterion] Open [assignment] [evidence] [] [] [] [] [] (Just (proposal, actor)) Nothing
 
 draft :: Text -> [ObjectiveAssignmentId] -> AssignmentDraft
-draft key dependencies = AssignmentDraft (ObjectiveAssignmentId key) "work" dependencies (compatibilityIdentity "worker") Pending Nothing (Just (ExecutionRootId "root")) (Just (UTCTime (fromGregorian 2027 1 1) 0))
+draft key dependencies = AssignmentDraft (objectiveAssignment key) "work" dependencies (compatibilityIdentity "worker") Pending Nothing (Just (ExecutionRootId "root")) (Just (UTCTime (fromGregorian 2027 1 1) 0))
 
 showText :: Int -> Text
 showText = Data.Text.pack . show
@@ -88,3 +92,9 @@ evidenceKey = either (error . show) id . parseEvidenceKey
 
 revision :: Integer -> StateRevision scope
 revision = either (error . show) id . parseRevision
+
+objectiveAssignment :: Text -> ObjectiveAssignmentId
+objectiveAssignment = either (error . show) id . parseObjectiveAssignmentId
+
+artifact :: Text -> ArtifactRef
+artifact = either (error . show) id . parseArtifactRef
