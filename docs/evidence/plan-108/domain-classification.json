@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "censusSha256": "bc6a0c55850bc463d1ea6efab4d4ff990d15a096b37855169897a5d54e6fae1a",
+  "censusSha256": "d9b4c64597e044a063810e5e6aca4b7e1e80dc2c0eb891f6960e3e36521a3397",
   "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
   "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
   "sourcePath": "runtime-patterns/architecture/domain-newtypes-and-typeids.md",
@@ -3623,6 +3623,114 @@
       ]
     },
     {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/CleanupStore.hs",
+      "module": "Shikigami.Workspace.CleanupStore",
+      "declaration": "CleanupPlan",
+      "member": "$self",
+      "sourceSha256": "0b62998a96d1e406528b6db5994b727d5f65fbdf7694cbdab78fe7a7460365b8",
+      "classification": "structural",
+      "disposition": "compliant",
+      "invariant": "Retained cleanup intent composes the separately reviewed members.",
+      "authority": "prepareCleanupTx owns admission and inspectCleanupTx owns retained decoding.",
+      "boundaryOwner": "Shikigami.Workspace.CleanupStore",
+      "rationale": "The record is durable domain intent; persistence is not a DTO exemption.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Workspace/CleanupStore.hs#CleanupPlan",
+        "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs",
+        "shikigami-core/test-postgres/Shikigami/WorkspaceTransferSpec.hs"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/CleanupStore.hs",
+      "module": "Shikigami.Workspace.CleanupStore",
+      "declaration": "CleanupPlan",
+      "member": "CleanupPlan.bindingDigest",
+      "sourceSha256": "0b62998a96d1e406528b6db5994b727d5f65fbdf7694cbdab78fe7a7460365b8",
+      "classification": "domain-value",
+      "disposition": "violation",
+      "invariant": "Must equal workspaceBindingDigest of the immutable binding.",
+      "authority": "workspaceBindingDigest and validPlan",
+      "boundaryOwner": "Shikigami.Workspace.CleanupStore",
+      "rationale": "Bare Text permits substitution with instruction or policy digests; runtime comparison is insufficient nominal separation.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Workspace/CleanupStore.hs#CleanupPlan",
+        "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs",
+        "shikigami-core/test-postgres/Shikigami/WorkspaceTransferSpec.hs"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/CleanupStore.hs",
+      "module": "Shikigami.Workspace.CleanupStore",
+      "declaration": "CleanupPlan",
+      "member": "CleanupPlan.filesTarget",
+      "sourceSha256": "0b62998a96d1e406528b6db5994b727d5f65fbdf7694cbdab78fe7a7460365b8",
+      "classification": "locator",
+      "disposition": "violation",
+      "invariant": "Retain the files inode/device anchor across cleanup retries.",
+      "authority": "cleanup anchor and cleanupContainedRoot; validPlan retains the established 128-character numeric/colon rule.",
+      "boundaryOwner": "Shikigami.Workspace.CleanupStore",
+      "rationale": "Bare Text can be interchanged with scratch target or arbitrary text; the OS anchor needs a checked nominal representation.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Workspace/CleanupStore.hs#CleanupPlan",
+        "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs",
+        "shikigami-core/test-postgres/Shikigami/WorkspaceTransferSpec.hs"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/CleanupStore.hs",
+      "module": "Shikigami.Workspace.CleanupStore",
+      "declaration": "CleanupPlan",
+      "member": "CleanupPlan.ownership",
+      "sourceSha256": "0b62998a96d1e406528b6db5994b727d5f65fbdf7694cbdab78fe7a7460365b8",
+      "classification": "structural",
+      "disposition": "compliant",
+      "invariant": "Optional current ownership; absence preserves historical cleanup bytes.",
+      "authority": "currentWorkspaceRequestTx; prepareCleanupTx",
+      "boundaryOwner": "Shikigami.Workspace.CleanupStore",
+      "rationale": "Maybe composes WorkspaceRequest, whose members retain their separate audit obligations; absence does not invent ownership.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Workspace/CleanupStore.hs#CleanupPlan",
+        "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs",
+        "shikigami-core/test-postgres/Shikigami/WorkspaceTransferSpec.hs"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/CleanupStore.hs",
+      "module": "Shikigami.Workspace.CleanupStore",
+      "declaration": "CleanupPlan",
+      "member": "CleanupPlan.scratchTarget",
+      "sourceSha256": "0b62998a96d1e406528b6db5994b727d5f65fbdf7694cbdab78fe7a7460365b8",
+      "classification": "locator",
+      "disposition": "violation",
+      "invariant": "Retain the scratch inode/device anchor across cleanup retries.",
+      "authority": "cleanup anchor and cleanupContainedRoot; validPlan retains the established 128-character numeric/colon rule.",
+      "boundaryOwner": "Shikigami.Workspace.CleanupStore",
+      "rationale": "Bare Text allows substitution with other targets without explicit domain conversion.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Workspace/CleanupStore.hs#CleanupPlan",
+        "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs",
+        "shikigami-core/test-postgres/Shikigami/WorkspaceTransferSpec.hs"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/CleanupStore.hs",
+      "module": "Shikigami.Workspace.CleanupStore",
+      "declaration": "CleanupPlan",
+      "member": "CleanupPlan.userId",
+      "sourceSha256": "0b62998a96d1e406528b6db5994b727d5f65fbdf7694cbdab78fe7a7460365b8",
+      "classification": "external-identity",
+      "disposition": "violation",
+      "invariant": "Unix user identity must be in the existing admitted 0..2147483647 range.",
+      "authority": "ProcessProfile.userId or getEffectiveUserID; prepareCleanupTx and inspectCleanupTx",
+      "boundaryOwner": "Shikigami.Workspace.CleanupStore",
+      "rationale": "The native unistd identity is converted to bare Int and retained for destructive filesystem ownership checks; it requires an explicit nominal authority.",
+      "evidence": [
+        "shikigami-core/src/Shikigami/Workspace/CleanupStore.hs#CleanupPlan",
+        "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs",
+        "shikigami-core/test-postgres/Shikigami/WorkspaceTransferSpec.hs"
+      ]
+    },
+    {
       "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
       "module": "Shikigami.Workspace.ProcessPolicy",
       "declaration": "CommandRule",
@@ -4191,6 +4299,168 @@
       "rationale": "The allocation state is a closed sum; readiness remains a conditional retained-store transition.",
       "evidence": [
         "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs#ProfileState"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs",
+      "module": "Shikigami.Workspace.Cleanup",
+      "declaration": "CleanupAbort",
+      "member": "$self",
+      "sourceSha256": "b86269fde85892d6bd7d298a12b1dbd77cc98f5a7ca582b0faa59d8db3b8e124",
+      "classification": "structural",
+      "disposition": "compliant",
+      "invariant": "Private exception transports only the closed CleanupError.",
+      "authority": "abort and protect",
+      "boundaryOwner": "Shikigami.Workspace.Cleanup",
+      "rationale": "This wrapper controls IO exit and does not allocate an entity or carry a primitive value.",
+      "evidence": [
+        "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs#CleanupAbort",
+        "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs",
+        "shikigami-core/test-postgres/Shikigami/WorkspaceTransferSpec.hs"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs",
+      "module": "Shikigami.Workspace.Cleanup",
+      "declaration": "CleanupAbort",
+      "member": "CleanupAbort.#1",
+      "sourceSha256": "b86269fde85892d6bd7d298a12b1dbd77cc98f5a7ca582b0faa59d8db3b8e124",
+      "classification": "structural",
+      "disposition": "compliant",
+      "invariant": "Preserve the exact CleanupError through the private exception.",
+      "authority": "abort and protect",
+      "boundaryOwner": "Shikigami.Workspace.Cleanup",
+      "rationale": "The member already uses the closed owner error type.",
+      "evidence": [
+        "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs#CleanupAbort",
+        "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs",
+        "shikigami-core/test-postgres/Shikigami/WorkspaceTransferSpec.hs"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs",
+      "module": "Shikigami.Workspace.Cleanup",
+      "declaration": "CleanupError",
+      "member": "$self",
+      "sourceSha256": "b86269fde85892d6bd7d298a12b1dbd77cc98f5a7ca582b0faa59d8db3b8e124",
+      "classification": "structural",
+      "disposition": "compliant",
+      "invariant": "Closed distinction between refusal, store unavailability and unresolved filesystem work.",
+      "authority": "CleanupError constructors and protect",
+      "boundaryOwner": "Shikigami.Workspace.Cleanup",
+      "rationale": "Nullary alternatives carry no interchangeable scalar payload.",
+      "evidence": [
+        "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs#CleanupError",
+        "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs",
+        "shikigami-core/test-postgres/Shikigami/WorkspaceTransferSpec.hs"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs",
+      "module": "Shikigami.Workspace.Cleanup",
+      "declaration": "MaintenanceRuntime",
+      "member": "$self",
+      "sourceSha256": "b86269fde85892d6bd7d298a12b1dbd77cc98f5a7ca582b0faa59d8db3b8e124",
+      "classification": "structural",
+      "disposition": "compliant",
+      "invariant": "Runtime services and operator-selected root for maintenance.",
+      "authority": "MaintenanceRuntime and maintenance fixture",
+      "boundaryOwner": "Shikigami.Workspace.Cleanup",
+      "rationale": "Runtime composition is reviewed by member; it is not a serialized entity.",
+      "evidence": [
+        "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs#MaintenanceRuntime",
+        "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs",
+        "shikigami-core/test-postgres/Shikigami/WorkspaceTransferSpec.hs"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs",
+      "module": "Shikigami.Workspace.Cleanup",
+      "declaration": "MaintenanceRuntime",
+      "member": "MaintenanceRuntime.afterFiles",
+      "sourceSha256": "b86269fde85892d6bd7d298a12b1dbd77cc98f5a7ca582b0faa59d8db3b8e124",
+      "classification": "incidental",
+      "disposition": "not-applicable",
+      "invariant": "Observation/fault-injection hook runs between files and scratch deletion.",
+      "authority": "cleanupWorkspace; production runtime and interruption fixture",
+      "boundaryOwner": "Shikigami.Workspace.Cleanup",
+      "rationale": "IO () contains no domain scalar or identity and cannot supply permission or settlement evidence.",
+      "evidence": [
+        "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs#MaintenanceRuntime",
+        "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs",
+        "shikigami-core/test-postgres/Shikigami/WorkspaceTransferSpec.hs"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs",
+      "module": "Shikigami.Workspace.Cleanup",
+      "declaration": "MaintenanceRuntime",
+      "member": "MaintenanceRuntime.appEnv",
+      "sourceSha256": "b86269fde85892d6bd7d298a12b1dbd77cc98f5a7ca582b0faa59d8db3b8e124",
+      "classification": "structural",
+      "disposition": "compliant",
+      "invariant": "Use the acquired application environment for runTransaction.",
+      "authority": "transact and runAppIO",
+      "boundaryOwner": "Shikigami.Workspace.Cleanup",
+      "rationale": "AppEnv composes managed services, reviewed separately in its own declaration.",
+      "evidence": [
+        "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs#MaintenanceRuntime",
+        "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs",
+        "shikigami-core/test-postgres/Shikigami/WorkspaceTransferSpec.hs"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs",
+      "module": "Shikigami.Workspace.Cleanup",
+      "declaration": "MaintenanceRuntime",
+      "member": "MaintenanceRuntime.authorizer",
+      "sourceSha256": "b86269fde85892d6bd7d298a12b1dbd77cc98f5a7ca582b0faa59d8db3b8e124",
+      "classification": "structural",
+      "disposition": "compliant",
+      "invariant": "Perform fresh maintenance capability authorization.",
+      "authority": "grant and ActionAuthorizer.authorize",
+      "boundaryOwner": "Shikigami.Workspace.Cleanup",
+      "rationale": "The member is a named capability interface; its own fields remain separately auditable.",
+      "evidence": [
+        "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs#MaintenanceRuntime",
+        "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs",
+        "shikigami-core/test-postgres/Shikigami/WorkspaceTransferSpec.hs"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs",
+      "module": "Shikigami.Workspace.Cleanup",
+      "declaration": "MaintenanceRuntime",
+      "member": "MaintenanceRuntime.current",
+      "sourceSha256": "b86269fde85892d6bd7d298a12b1dbd77cc98f5a7ca582b0faa59d8db3b8e124",
+      "classification": "structural",
+      "disposition": "compliant",
+      "invariant": "Recheck the actor before and after authorization; a Left refuses.",
+      "authority": "grant; current callback supplied by runtime owner",
+      "boundaryOwner": "Shikigami.Workspace.Cleanup",
+      "rationale": "AgentIdentity is nominal. Left Text is a diagnostic from the authority callback and is discarded into CleanupRefused; it is not an identifier or persisted decision.",
+      "evidence": [
+        "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs#MaintenanceRuntime",
+        "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs",
+        "shikigami-core/test-postgres/Shikigami/WorkspaceTransferSpec.hs"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs",
+      "module": "Shikigami.Workspace.Cleanup",
+      "declaration": "MaintenanceRuntime",
+      "member": "MaintenanceRuntime.storageRoot",
+      "sourceSha256": "b86269fde85892d6bd7d298a12b1dbd77cc98f5a7ca582b0faa59d8db3b8e124",
+      "classification": "locator",
+      "disposition": "violation",
+      "invariant": "The configured private root selects listing and confines cleanup metadata paths.",
+      "authority": "configured maintenance runtime and checkPrivateDirectory",
+      "boundaryOwner": "Shikigami.Workspace.Cleanup",
+      "rationale": "Bare FilePath is a String alias and lacks a nominal construction boundary; use-site checks remain required after any correction.",
+      "evidence": [
+        "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs#MaintenanceRuntime",
+        "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs",
+        "shikigami-core/test-postgres/Shikigami/WorkspaceTransferSpec.hs"
       ]
     }
   ]

@@ -5,6 +5,7 @@ module Shikigami.WorkspaceTransferSpec (tests) where
 import Contravariant.Extras (contrazip2)
 import Control.Concurrent.Async (concurrently)
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Generics.Labels ()
 import Data.Text qualified as AssignmentText
 import Data.Text qualified as Text
@@ -34,6 +35,7 @@ import Shikigami.WorkerSession.Transfer
 import Shikigami.WorkerSession.Types hiding (assignmentIdFor)
 import Shikigami.WorkerSessionStoreSpec qualified as Fixture
 import Shikigami.Workspace.Catalog
+import Shikigami.Workspace.CleanupStore
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Provider
 import Shikigami.Workspace.Store qualified as Workspaces
@@ -46,7 +48,47 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace transfer store"
-    [ testCase "only retained child mappings supply session assignment coordinates" $ withWorkspace fixture \env _ _ binding original -> do
+    [ testCase "cleanup absence and SQL failure remain distinct" $ withWorkspace fixture \env _ _ binding _ -> do
+        run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Right Nothing)
+        run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing)) >>= (@?= Right [binding])
+        failed <-
+          runAppIO
+            env
+            ( runTransaction do
+                Tx.sql "ALTER TABLE shikigami.workspace_cleanup RENAME TO unavailable_cleanup_fixture"
+                inspectCleanupTx binding
+            )
+        case failed of Left _ -> pure (); Right _ -> assertFailure "SQL failure became a domain result"
+        run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Right Nothing),
+      testCase "cleanup listing refuses a corrupt member beside a valid allocation and rolls back" $ withWorkspace fixture \env _ _ binding _ -> do
+        catalog <- right (mkWorkspaceCatalog [RepositoryPolicy binding.repository binding.source [binding.base] binding.base binding.policyRevision])
+        repository <- right (resolveRepository catalog binding.repository Nothing)
+        (second, _) <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx binding.storageRoot (binding.request & #runId .~ "cleanup-list-second" & #assignment .~ Nothing) repository))
+        listed <- right =<< run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing))
+        length listed @?= 2
+        let replace value = run env (runTransaction (Tx.statement (second.workspace.resource, value) (preparable "UPDATE shikigami.workspace_bindings SET binding=$2 WHERE resource=$1" (contrazip2 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.jsonb))) D.noResult)))
+        -- Preserve the indexed listing selector while corrupting another required field.
+        replace
+          ( case Aeson.toJSON second of
+              Aeson.Object fields -> Aeson.Object (KeyMap.insert "repository" Aeson.Null fields)
+              _ -> error "complete fixture binding must be an object"
+          )
+        (frozen, refused) <-
+          run
+            env
+            ( runTransaction do
+                frozen <- Workspaces.freezeWorkspaceTx binding binding.request.owner binding.request.epoch
+                refused <- listWorkspacesTx binding.storageRoot Nothing
+                pure (frozen, refused)
+            )
+        frozen @?= Right ()
+        refused @?= Left WorkspaceBindingConflict
+        control <- run env (runTransaction (Workspaces.inspectWorkspaceControlTx binding))
+        fmap (.frozen) control @?= Just False
+        replace (Aeson.toJSON second)
+        recovered <- right =<< run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing))
+        length recovered @?= 2,
+      testCase "only retained child mappings supply session assignment coordinates" $ withWorkspace fixture \env _ _ binding original -> do
         current <- right =<< run env (runTransaction (lookupSessionChildTx binding.request.runId))
         case current of
           Just child -> do

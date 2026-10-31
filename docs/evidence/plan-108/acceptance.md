@@ -146,3 +146,59 @@ families and operator aliases. Both forms now fail with their source path;
 ordinary `type instance` adapters and role annotations remain deliberate
 non-declaration forms. The 24 tooling tests still pass, and the census is
 refreshed with the changed reader hash after the successful coherent build.
+
+A third batch implements the cleanup-owner read boundary and is bound by
+`cleanup-source.json` against parent `d5063c1`. `inspectCleanupTx` and
+`listWorkspacesTx` now return an owning `Either WorkspaceError`; malformed JSON
+condemns the transaction and returns `WorkspaceBindingConflict`, while missing
+cleanup rows remain `Right Nothing` and SQL failures stay store failures.
+Inspection reapplies the existing preparation invariants (binding digest, user
+range and target spelling), and completion inspects retained intent before
+changing its completion bit. Maintenance maps corruption to `CleanupRefused`
+before another deletion or listing publication. Historical absent ownership and
+valid plan bytes are unchanged.
+
+The terminal workflow fixture persists a complete plan through public cleanup,
+interrupts after files deletion, reads it back and replays preparation. Mutations
+then cover JSON null, negative user identity, invalid target and wrong binding
+digest. Inspection/preparation/completion all refuse, ignored inspection refuses
+and rolls back an earlier control update, maintenance refuses and scratch stays
+present. Restoring the exact original plan completes cleanup and retains that
+same plan. Core PostgreSQL controls cover absence, SQL failure and rollback of a
+tentative freeze after listing a corrupted complete binding beside a valid member;
+repair restores both entries. [ADR-107](../../adr/0107-profile-and-objective-corruption-refuses-within-the-owning-transaction.md)
+records this owner boundary. The terminal eligibility SQL and the other workspace
+stores retain their separate audit obligations.
+
+The refreshed classification has 263 reviewed keys, 37 explicit violations and
+3,726 unreviewed keys out of 3,989. The 15 new reviews include five violations:
+cleanup binding digest, two filesystem targets, Unix user identity and maintenance
+storage root. Decoder remediation does not certify these primitive domain fields.
+The exhaustive coverage and resolved gates must still refuse completion. The
+frozen guide remains deferred, and M1/M2/M3 remain open.
+
+Cleanup batch validation on arm64 macOS/GHC 9.12.4 succeeded:
+
+```bash
+nix develop --no-write-lock-file -c cabal build all --enable-tests -j1
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test shikigami-workers-test --enable-tests -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/workspace transfer store/||/workspace governed parent and child/'
+python3 -m unittest discover -s tools/domain -p 'test_*.py'
+python3 tools/style/check_haskell.py
+git diff --check
+```
+
+The selected suites report 7 core PostgreSQL and 14 worker cases passing; the
+core fixture supplies disposable PostgreSQL rather than a developer database.
+All 24 domain-tool tests pass. The successful full build precedes census refresh.
+This is focused M2 batch evidence, not final M3 suite acceptance. No workflow
+body, generated identity, migration SQL, dependency bound or HTTP wire format
+changed. No additional Linux runtime qualification is claimed.
+
+Census refresh reports 322 modules, 914 declarations and 14 role entrypoints;
+independent freshness validation enumerates 3,989 keys with matching current
+source, compiled-source fingerprints, interface and tool hashes. Both checker
+modes fail at `missing 3726 classification keys` as expected for this incomplete
+audit. Neither failure is reported as milestone acceptance.
+
+`nix develop --no-write-lock-file -c just keiro-upgrade-audit` also passes with
+21 mutation tests, preserving the frozen inventory and its existing deferral.

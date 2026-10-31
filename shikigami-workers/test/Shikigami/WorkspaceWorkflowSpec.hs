@@ -6,6 +6,7 @@ import Baikai.Provider.Registry qualified as Provider
 import Baikai.StopReason (StopReason (ToolUse))
 import Baikai.Stream (liftCompleteToStream)
 import Control.Exception (throwIO)
+import Control.Monad (forM_)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
@@ -16,6 +17,10 @@ import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
 import Data.Vector qualified as Vector
 import Effectful (Eff)
+import Hasql.Decoders qualified as D
+import Hasql.Encoders qualified as E
+import Hasql.Statement (preparable)
+import Hasql.Transaction qualified as Tx
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Kiroku.Store.Transaction (runTransaction)
@@ -105,14 +110,14 @@ tests fixture =
           cleanupWorkspace interrupted job.identity binding.workspace >>= (@?= Left CleanupUnresolved)
           doesPathExist (workspaceFiles root binding) >>= (@?= False)
           doesPathExist (workspaceScratch root binding) >>= (@?= True)
-          Just (_, False) <- run env (runTransaction (inspectCleanupTx binding))
+          Right (Just (_, False)) <- run env (runTransaction (inspectCleanupTx binding))
           cleanupWorkspace runtime job.identity binding.workspace >>= (@?= Right ())
           cleanupWorkspace runtime job.identity binding.workspace >>= (@?= Right ())
           doesPathExist (workspaceScratch root binding) >>= (@?= False)
           doesPathExist (workspaceMetadata root binding) >>= (@?= True)
           readFile (binding.source </> "dependency.txt") >>= (@?= "old dependency\n")
           readFile (root </> "retained-sibling") >>= (@?= "sibling")
-          Just (_, True) <- run env (runTransaction (inspectCleanupTx binding))
+          Right (Just (_, True)) <- run env (runTransaction (inspectCleanupTx binding))
           catalog <- right (WorkspaceCatalog.mkWorkspaceCatalog [WorkspaceCatalog.RepositoryPolicy binding.repository binding.source [binding.base] binding.base binding.policyRevision])
           repository <- right (WorkspaceCatalog.resolveRepository catalog binding.repository Nothing)
           run env (runTransaction (Store.reserveWorkspaceTx root binding.request repository)) >>= (@?= Left WorkspaceBindingConflict)
@@ -120,12 +125,42 @@ tests fixture =
           listing <- right =<< listWorkspaces runtime job.identity Nothing
           assertBool "operator listing omits other storage roots, local paths and private instructions" (all (\secret -> not (secret `Text.isInfixOf` Text.pack (show (Aeson.encode listing)))) [Text.pack root, Text.pack binding.source, "PRIVATE_WORKFLOW_POLICY", foreignBinding.workspace.resource])
           Agent.runAgentRunWorkflow deps job >>= assertCompleted,
+      testCase "corrupt cleanup refuses ignored reads and resumes the retained plan after repair" $
+        withWorkflow fixture \env root job _ deps _ -> do
+          binding <- finishWorkspace env job deps
+          run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Right Nothing)
+          let runtime = maintenance env root
+              interrupted = runtime & #afterFiles .~ throwIO (userError "hold cleanup before scratch")
+          cleanupWorkspace interrupted job.identity binding.workspace >>= (@?= Left CleanupUnresolved)
+          Right (Just (plan, False)) <- run env (runTransaction (inspectCleanupTx binding))
+          run env (runTransaction (prepareCleanupTx binding plan)) >>= (@?= Right False)
+          let replace value = run env (runTransaction (Tx.statement value (preparable "UPDATE shikigami.workspace_cleanup SET plan=$1" (E.param (E.nonNullable E.jsonb)) D.noResult)))
+          forM_ [Aeson.Null, Aeson.toJSON (plan & #userId .~ (-1)), Aeson.toJSON (plan & #filesTarget .~ "invalid"), Aeson.toJSON (plan & #bindingDigest .~ "wrong")] \invalid -> do
+            replace invalid
+            run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Left WorkspaceBindingConflict)
+            run env (runTransaction (prepareCleanupTx binding plan)) >>= (@?= Left WorkspaceBindingConflict)
+            run env (runTransaction (completeCleanupTx binding plan)) >>= (@?= Left WorkspaceBindingConflict)
+            run
+              env
+              ( runTransaction do
+                  Tx.sql "UPDATE shikigami.workspace_controls SET frozen=false"
+                  _ <- inspectCleanupTx binding
+                  pure ()
+              )
+            control <- run env (runTransaction (Store.inspectWorkspaceControlTx binding))
+            fmap (.frozen) control @?= Just True
+            cleanupWorkspace runtime job.identity binding.workspace >>= (@?= Left CleanupRefused)
+            listWorkspaces runtime job.identity Nothing >>= (@?= Left CleanupRefused)
+            doesPathExist (workspaceScratch root binding) >>= (@?= True)
+          replace (Aeson.toJSON plan)
+          cleanupWorkspace runtime job.identity binding.workspace >>= (@?= Right ())
+          run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Right (Just (plan, True))),
       testCase "active execution and denied cleanup leave the worktree untouched" $
         withWorkflow fixture \env root job _ deps _ -> do
           Agent.runAgentRunWorkflow deps job >>= assertSuspended
           binding <- admittedBinding env job
           cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
-          run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Nothing)
+          run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Right Nothing)
           _ <- finishWorkspace env job deps
           let denied = (maintenance env root) & #authorizer .~ denyAllActionAuthorizer
           cleanupWorkspace denied job.identity binding.workspace >>= (@?= Left CleanupRefused)
@@ -141,14 +176,14 @@ tests fixture =
               admission = Sessions.SessionAdmission 1 (Sessions.SessionScope parentSession "worker") (Sessions.ObjectiveRef "fixture" "objective") (parent & #name .~ fixtureAgentName "cleanup-coordinator" & #delegates .~ map fixtureAgentName ["workspace-worker"]) (DelegateCtx (fixtureDelegationDepth 0) coordinator (Just snapshot.sessionId) Nothing (Just (WorkflowId "cleanup-parent")) [fixtureAgentName "cleanup-coordinator"] Nothing (Just binding.request.rootId) Nothing defaultDelegationBudget) (fixtureAgentName "workspace-worker") job.identity (fixtureLimit 10) (fixtureLimit 4)
           _ <- right =<< run env (Sessions.openSession admission)
           cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
-          run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Nothing)
+          run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Right Nothing)
           readFile (workspaceFiles root binding </> "dependency.txt") >>= (@?= "workflow replacement\n"),
       testCase "terminal cleanup refuses a prepared mutation without inferring settlement from a free lock" $
         withWorkflow fixture \env root job _ deps _ -> do
           binding <- finishWorkspace env job deps
           run env (runTransaction (Store.reserveWorkspaceEffectTx binding job.identity (fixtureRevision 0) (fixtureOperationId "pending-cleanup-effect") "pending")) >>= (@?= Right Nothing)
           cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
-          run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Nothing)
+          run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Right Nothing)
           doesPathExist (workspaceFiles root binding) >>= (@?= True),
       testCase "hostile terminal tree is never followed or partly deleted" $
         withWorkflow fixture \env root job _ deps _ -> do

@@ -45,6 +45,18 @@ rejects unsupported formats at decoding. It is separate from Git-record and
 process-routing formats. This changes neither valid policy commitments nor
 workflow steps or identities; other policy scalars remain under audit.
 
+Cleanup-plan inspection and bounded workspace listing follow the same boundary:
+raw JSON is decoded in the owning transaction, missing cleanup rows remain
+`Right Nothing`, and malformed retained values return `WorkspaceBindingConflict`
+and condemn the transaction. Inspection reuses the existing preparation rules
+for binding digest, Unix user range and filesystem target spelling; it does not
+invent stronger target syntax. Completion reads the retained plan before changing
+its completion bit. The maintenance IO adapter maps the domain refusal to
+`CleanupRefused` before filesystem deletion or public listing publication, while
+SQL failures retain `CleanupUnavailable`. Historical plans without ownership
+retain their exact encoding. Cleanup's terminal eligibility query and the other
+workspace stores remain separate audit obligations.
+
 ## Alternatives rejected
 
 Mapping every database failure to corruption hides outages. Refining owned JSON
@@ -63,6 +75,14 @@ snapshots, command and creation receipts, checkpoint intent and result joins,
 preserving native event/receipt counts and allowing recovery after repair.
 Existing Objective-store and worker profile/provisioning/transfer groups pass.
 Complete policy/profile codecs preserve old bytes and the policy commitment.
+
+Cleanup controls additionally persist a real terminal plan through interrupted
+filesystem cleanup, then corrupt its JSON shape or an existing admitted invariant.
+Inspection, preparation, completion and maintenance refuse; an ignored inspection
+refusal rolls back an earlier control change. Scratch remains present until the
+original plan is restored and resumed. A valid listing member beside a corrupt
+binding proves whole-page refusal, rollback and recovery; absence and a renamed
+table distinguish missing metadata from SQL failure.
 
 These results qualify the selected macOS metadata boundaries. They do not certify
 the remaining stores, the exhaustive scalar classification, native Linux process

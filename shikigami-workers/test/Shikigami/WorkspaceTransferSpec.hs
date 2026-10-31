@@ -126,7 +126,7 @@ tests fixture =
           _ <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceEffectTx binding binding.request.owner (fixtureRevision 0) operation digest))
           run env (runTransaction (Workspaces.recordWorkspaceReceiptTx binding prepared)) >>= (@?= Right ())
           host.load assignment >>= \case Left _ -> pure (); Right _ -> assertFailure "unknown effect was bypassed"
-          length <$> run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing)) >>= (@?= 1)
+          fmap length <$> run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing)) >>= (@?= Right 1)
           run env (runTransaction (Workspaces.recordWorkspaceReceiptTx binding (prepared & #state .~ EditRefused))) >>= (@?= Right ())
           admission <- right =<< host.load assignment
           admission.workspace @?= binding.workspace

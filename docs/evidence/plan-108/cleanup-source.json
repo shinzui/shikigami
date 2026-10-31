@@ -1,0 +1,12 @@
+{
+  "sourceParent": "d5063c103cba5e6c3f074aef15ad2bb8267a029e",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "files": {
+    "shikigami-core/src/Shikigami/Workspace/CleanupStore.hs": "0b62998a96d1e406528b6db5994b727d5f65fbdf7694cbdab78fe7a7460365b8",
+    "shikigami-core/test-postgres/Shikigami/WorkspaceTransferSpec.hs": "c87c4953edb314fb8e85248bd57f3f8b1f24cae05980b888dec2a9577c1bc2df",
+    "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs": "b86269fde85892d6bd7d298a12b1dbd77cc98f5a7ca582b0faa59d8db3b8e124",
+    "shikigami-workers/test/Shikigami/WorkspaceTransferSpec.hs": "64468ade1ec5689b711cc0eecad4c2b33b51020b4cadbf10be1c3bb6d45081f2",
+    "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs": "03c77eb19f479bcfbf463ae11089962aaf3df848784b32d0ad76e0d3799fed51"
+  }
+}

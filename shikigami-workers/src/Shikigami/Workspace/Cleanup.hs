@@ -54,9 +54,9 @@ listWorkspaces :: MaintenanceRuntime -> AgentIdentity -> Maybe Text -> IO (Eithe
 listWorkspaces runtime actor cursor = protect do
   unless (maybe True validResource cursor) (abort CleanupRefused)
   grant runtime actor "list" (toJSON (runtime.storageRoot, cursor))
-  page <- transact runtime (listWorkspacesTx runtime.storageRoot cursor)
+  page <- transact runtime (listWorkspacesTx runtime.storageRoot cursor) >>= either (const (abort CleanupRefused)) pure
   rows <- forM (filter ((== runtime.storageRoot) . (.storageRoot)) page) \binding -> do
-    retired <- transact runtime (inspectCleanupTx binding)
+    retired <- transact runtime (inspectCleanupTx binding) >>= either (const (abort CleanupRefused)) pure
     eligible <- transact runtime (cleanupEligibleTx binding)
     pure (Aeson.object ["workspace" .= binding.workspace, "repository" .= binding.repository, "base" .= binding.base, "eligible" .= eligible, "cleanup" .= (case retired of Nothing -> "retained"; Just (_, False) -> "pending"; Just (_, True) -> "complete" :: Text)])
   pure (Aeson.object ["workspaces" .= rows, "next" .= (if length page == 20 then (.resource) . (.workspace) <$> listToMaybe (reverse page) else Nothing)])
@@ -74,7 +74,7 @@ cleanupWorkspace runtime actor ref = protect do
   locked <-
     withWorkspaceLock metadata $
       Right <$> do
-        retained <- transact runtime (inspectCleanupTx binding)
+        retained <- transact runtime (inspectCleanupTx binding) >>= either (const (abort CleanupRefused)) pure
         plan <- case retained of
           Just (original, _) -> pure original
           Nothing -> do
