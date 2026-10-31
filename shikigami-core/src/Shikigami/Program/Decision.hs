@@ -37,7 +37,6 @@ import Data.Kind (Type)
 import Data.List (find, nub)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
-import Data.Text qualified as Text
 import Data.Typeable (Typeable, cast)
 import Shikigami.Decision.Contract
 import Shikumi.Program (Params (..), Program (..), nodeInstructionsIndexed, programParams)
@@ -99,12 +98,17 @@ registerProgram ::
   (i -> Either Text i) ->
   (o -> Either Text o) ->
   Either DecisionFailure (RegisteredProgram i o)
-registerProgram programId version implementationDigest inputSchemaVersion resultSchemaVersion validatorVersion derivationVersion localState program codec inputValidator resultValidator
-  | any Text.null [programId, version, implementationDigest, inputSchemaVersion, resultSchemaVersion, validatorVersion, derivationVersion] =
-      Left (decisionFailure ContractMismatch "decision registration identities must be nonempty")
-  | hasSignatureDemos program =
-      Left (decisionFailure ContractMismatch "decision demonstrations must be registered in Params")
-  | otherwise =
+registerProgram rawProgramId rawVersion rawImplementationDigest rawInputSchemaVersion rawResultSchemaVersion rawValidatorVersion rawDerivationVersion localState program codec inputValidator resultValidator = do
+  programId <- checked rawProgramId
+  version <- checked rawVersion
+  implementationDigest <- checked rawImplementationDigest
+  inputSchemaVersion <- checked rawInputSchemaVersion
+  resultSchemaVersion <- checked rawResultSchemaVersion
+  validatorVersion <- checked rawValidatorVersion
+  derivationVersion <- checked rawDerivationVersion
+  if hasSignatureDemos program
+    then Left (decisionFailure ContractMismatch "decision demonstrations must be registered in Params")
+    else
       Right
         RegisteredProgram
           { ref =
@@ -116,8 +120,8 @@ registerProgram programId version implementationDigest inputSchemaVersion result
                     inputSchemaVersion,
                     resultSchemaVersion,
                     validatorVersion,
-                    parameterFormat = 1,
-                    parameterDigest = versionedDigest "shikigami.decision-parameters/1" (effectiveParameterState program localState),
+                    parameterFormat = ParametersV1,
+                    parameterDigest = programParameterDigest (effectiveParameterState program localState),
                     derivationVersion
                   },
             program,
@@ -126,6 +130,9 @@ registerProgram programId version implementationDigest inputSchemaVersion result
             inputValidator,
             resultValidator
           }
+  where
+    checked :: Text -> Either DecisionFailure (ProgramIdentity scope)
+    checked = either (const (Left (decisionFailure ContractMismatch "decision registration identities must be nonempty"))) Right . parseProgramIdentity
 
 -- | Params includes instruction overrides and ordered demos. Resolve base
 -- instructions explicitly, so changing a default changes the commitment too.

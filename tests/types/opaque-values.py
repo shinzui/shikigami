@@ -11,7 +11,8 @@ CORE_UNITS = [entry["id"] for entry in PLAN["install-plan"]
               if entry["pkg-name"] == "shikigami-core" and entry.get("component-name") == "lib"]
 assert len(CORE_UNITS) == 1, CORE_UNITS
 CORE_UNIT = CORE_UNITS[0]
-HEADER = '''{-# LANGUAGE ImportQualifiedPost #-}
+HEADER = '''{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ImportQualifiedPost #-}
 module OpaqueBoundary where
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (Parser)
@@ -49,7 +50,11 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''decisionCall :: Text -> Either Text Decision.DecisionCallId
+POSITIVE = '''programIdentity :: Text -> Either Text (Decision.ProgramIdentity "program-id")
+programIdentity = Decision.parseProgramIdentity
+programDigest :: Text -> Either Text Decision.ProgramParameterDigest
+programDigest = Decision.parseProgramParameterDigest
+decisionCall :: Text -> Either Text Decision.DecisionCallId
 decisionCall = Decision.parseDecisionCallId
 decisionOrdinal :: Integer -> Either Text Decision.DecisionCallOrdinal
 decisionOrdinal = Decision.parseDecisionCallOrdinal
@@ -153,6 +158,8 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('Decision.ProgramIdentity "program-id"', 'generic'),
+    ('Decision.ProgramParameterDigest', 'generic'),
     ('Decision.DecisionCallId', 'generic'),
     ('Decision.DecisionCallOrdinal', 'generic'),
     ('Entity.OperationId', 'generic'),
@@ -221,13 +228,13 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
             body = 'bypass :: ' + kind + ' -> ()\nbypass value = Generic.from value `seq` ()\n'
         result = compile(body)
         assert result.returncode != 0, (kind, 'generic bypass still compiles')
-        assert all(fragment in result.stderr for fragment in ['Generic', kind.split('.')[-1]]), (kind, result.stderr)
+        assert all(fragment in result.stderr for fragment in ['Generic', kind.split('.')[-1].split()[0]]), (kind, result.stderr)
         print('opaque boundary: ' + kind + ' generic ' + operation + ' refused: passed', flush=True)
 
     for kind, view in [('Declaration.ValidatedRouterDeclaration', 'Declaration.RouterDeclarationView'), ('Evidence.ValidatedPinnedDiff', 'Evidence.PinnedDiffView')]:
         result = compile('bypass :: ' + view + ' -> ' + kind + '\nbypass = ' + kind + '\n')
         assert result.returncode != 0, (kind, 'constructor is public')
-        assert kind.split('.')[-1] in result.stderr and any(fragment in result.stderr.lower() for fragment in ['not in scope', 'does not export', 'illegal term-level use']), (kind, result.stderr)
+        assert kind.split('.')[-1].split()[0] in result.stderr and any(fragment in result.stderr.lower() for fragment in ['not in scope', 'does not export', 'illegal term-level use']), (kind, result.stderr)
         print('opaque boundary: ' + kind + ' constructor refused: passed', flush=True)
         result = compile('bypass :: ' + view + ' -> ' + kind + '\nbypass = coerce\n')
         assert result.returncode != 0, (kind, 'representation coercion is public')
@@ -235,5 +242,5 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         print('opaque boundary: ' + kind + ' coercion refused: passed', flush=True)
         result = compile('bypass :: Aeson.Value -> Parser ' + kind + '\nbypass = Aeson.parseJSON\n')
         assert result.returncode != 0, (kind, 'context-free JSON admission is public')
-        assert all(fragment in result.stderr for fragment in ['FromJSON', kind.split('.')[-1]]), (kind, result.stderr)
+        assert all(fragment in result.stderr for fragment in ['FromJSON', kind.split('.')[-1].split()[0]]), (kind, result.stderr)
         print('opaque boundary: ' + kind + ' unchecked JSON refused: passed', flush=True)

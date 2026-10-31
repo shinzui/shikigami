@@ -1,8 +1,12 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.DecisionContractSpec (tests) where
 
 import Baikai.Evidence qualified as Evidence
 import Control.Lens ((&), (.~))
-import Data.Aeson (FromJSON, ToJSON, Value (..), eitherDecode, encode, object, (.=))
+import Control.Monad (forM_)
+import Data.Aeson (FromJSON, ToJSON, Value (..), eitherDecode, encode, object, toJSON, (.=))
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Either (isLeft)
 import Data.Generics.Labels ()
 import Data.Int (Int64)
@@ -48,7 +52,30 @@ tests :: TestTree
 tests =
   testGroup
     "typed decision contracts"
-    [ testCase "allocated call identity and positive ordinal keep exact primitive codecs" do
+    [ testCase "program identity scopes and computed parameter contracts retain checked wire values" do
+        let raw = " \nλ:opaque-version "
+            identity = mustRight (parseProgramIdentity raw :: Either Text (ProgramIdentity "implementation-digest"))
+            digest = programParameterDigest (object ["state" .= ("fixture" :: Text)])
+        programIdentityText identity @?= raw
+        encode identity @?= encode raw
+        eitherDecode (encode identity) @?= Right identity
+        assertBool "empty identity refused" (isLeft (parseProgramIdentity "" :: Either Text (ProgramIdentity "program-id")))
+        parseProgramParameterDigest (programParameterDigestText digest) @?= Right digest
+        encode digest @?= encode (programParameterDigestText digest)
+        eitherDecode (encode digest) @?= Right digest
+        forM_ ["", "sha256:implementation", Text.toUpper (programParameterDigestText digest), "sha256:" <> Text.replicate 64 "g"] \invalid ->
+          assertBool "invalid parameter digest refused" (isLeft (parseProgramParameterDigest invalid))
+        encode ParametersV1 @?= "1"
+        eitherDecode (encode ParametersV1) @?= Right ParametersV1
+        case toJSON (descriptor (programRef original)) of
+          Object fields -> do
+            forM_ ["programId", "version", "implementationDigest", "inputSchemaVersion", "resultSchemaVersion", "validatorVersion", "derivationVersion"] \key ->
+              assertBool "complete descriptor refuses empty identity" (isLeft (eitherDecode @ProgramDescriptor (encode (Object (KeyMap.insert key (String "") fields)))))
+            forM_ [Number 0, Number 2, Number (-1), Number 1.5] \invalid ->
+              assertBool "complete descriptor refuses unsupported parameter format" (isLeft (eitherDecode @ProgramDescriptor (encode (Object (KeyMap.insert "parameterFormat" invalid fields)))))
+            assertBool "complete descriptor refuses malformed parameter digest" (isLeft (eitherDecode @ProgramDescriptor (encode (Object (KeyMap.insert "parameterDigest" (String "sha256:parameters") fields)))))
+          _ -> assertFailure "expected descriptor object",
+      testCase "allocated call identity and positive ordinal keep exact primitive codecs" do
         token <- newAttemptToken firstDecisionCallOrdinal
         let identifier = attemptId token
             rendered = decisionCallIdText identifier

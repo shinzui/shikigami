@@ -184,7 +184,7 @@ tests =
         env <- environment twoNodes handler hooks
         let prepared = preparedFor twoNodes bindingA
             changed :: PreparedDecision
-            changed = (prepared & #program .~ ((prepared.program) {parameterDigest = "sha256:other"}))
+            changed = (prepared & #program .~ ((prepared.program) {parameterDigest = programParameterDigest (Aeson.String "other")}))
         runDecisionProgram env changed (programRef twoNodes) input >>= (assertBool "state refused" . isLeft)
         runDecisionProgram env prepared (programRef twoNodes) (Answer "changed" 0.1) >>= (assertBool "input refused" . isLeft)
         observed >>= (@?= []),

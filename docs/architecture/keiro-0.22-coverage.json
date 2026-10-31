@@ -249,6 +249,11 @@
           "rationale": "ADR-96 retains application-owned actual-call expectations as private canonical KindID-v7 DecisionCallId values through tokens, outcomes, reports and memory maps. Distinct positive signed-int64 DecisionCallOrdinal values reject invalid JSON and cannot substitute for selection ordinals. SQL/correlation/provider adapters project explicitly; retained ownership, run locks and resource ceilings remain. Wrong-ordinal completion and malformed retained-ID controls refuse before successful state publication. Program/model and the complete scalar census remain pending."
         },
         {
+          "id": "program-registration-values",
+          "disposition": "implemented",
+          "rationale": "ADR-97 retains seven registration identities/versions as private nominal-scoped ProgramIdentity values after boundary refinement; complete descriptor decoding rejects emptiness. The computed ProgramParameterDigest has its concrete canonical SHA-256 encoding and preserves the existing domain/preimage. A closed ParametersV1 format retains numeric one. Opaque implementation/version labels preserve admitted bytes without invented hash/version syntax. Complete immutable binding and Haskell type-witness checks remain; unrelated model/decision values and the complete census stay pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -353,7 +358,11 @@
         "docs/evidence/keiro-0.22/decision-call-results.txt",
         "docs/evidence/keiro-0.22/decision-call-native-diff.json",
         "docs/evidence/keiro-0.22/decision-call-native-replay.json",
-        "docs/evidence/keiro-0.22/decision-call-fold-identities.json"
+        "docs/evidence/keiro-0.22/decision-call-fold-identities.json",
+        "docs/evidence/keiro-0.22/program-values-results.txt",
+        "docs/evidence/keiro-0.22/program-values-native-diff.json",
+        "docs/evidence/keiro-0.22/program-values-native-replay.json",
+        "docs/evidence/keiro-0.22/program-values-fold-identities.json"
       ]
     },
     {

@@ -356,3 +356,14 @@ wrong-ordinal completion leaves the expectation unresolved. Native findings
 against 448f047 are empty and four transducers are unchanged. The updated
 320-module/904-declaration worklist remains unclassified. Complete scalar/identity,
 program/model descriptor and remaining decoder-owner review remain open.
+
+Program registration coordinates retain private nominal scopes after boundary
+refinement; complete descriptors reject empty identities. The computed parameter
+commitment has its concrete SHA-256 encoding, and format is closed numeric one.
+[ADR-97](../../adr/0097-program-registration-values-retain-scoped-identity-and-parameter-contracts.md)
+and [acceptance](program-values-results.txt) record 584 pure/398 PostgreSQL cases,
+230 compiler clients, all-enabled compilation and native/domain/diagram gates.
+Valid metadata bytes/preimages and complete immutable binding/type witnesses
+remain. Native findings against 6d8d74e are empty and four transducers unchanged.
+The 320-module/907-declaration worklist remains unclassified; model/other decision
+values, complete scalar/identity and decoder-owner review remain open.

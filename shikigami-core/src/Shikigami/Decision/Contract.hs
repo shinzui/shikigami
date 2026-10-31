@@ -1,10 +1,20 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE RoleAnnotations #-}
 
 -- | Shikigami-owned wire contracts. Executables, prompts and credentials never
 -- belong in these descriptors; preparation alone contains the validated input.
 module Shikigami.Decision.Contract
   ( ModelAlias (..),
     ProgramDescriptor (..),
+    ProgramIdentity,
+    parseProgramIdentity,
+    programIdentityText,
+    ProgramParameterFormat (..),
+    ProgramParameterDigest,
+    parseProgramParameterDigest,
+    programParameterDigest,
+    programParameterDigestText,
     ModelDescriptor (..),
     DecisionSlot (..),
     DecisionPolicySnapshot (..),
@@ -51,6 +61,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import GHC.Generics (Generic)
+import GHC.TypeLits (Symbol)
 import Numeric.Natural (Natural)
 import Shikigami.Attestation.Profile (SanctionedExecutionProfileRef)
 import Shikigami.Log.Correlation (RunCorrelationId)
@@ -59,18 +70,78 @@ newtype ModelAlias = ModelAlias Text
   deriving stock (Eq, Ord, Show, Generic)
   deriving newtype (ToJSON, FromJSON)
 
+-- | Immutable operator/program registration coordinates. Each field has a
+-- nominal scope; opaque versions and implementation labels are not assumed to
+-- use a particular versioning scheme or digest algorithm.
+type role ProgramIdentity nominal
+
+newtype ProgramIdentity (scope :: Symbol) = ProgramIdentity Text
+  deriving stock (Eq, Ord, Show)
+
+parseProgramIdentity :: Text -> Either Text (ProgramIdentity scope)
+parseProgramIdentity value
+  | Text.null value = Left "decision program identity must not be empty"
+  | otherwise = Right (ProgramIdentity value)
+
+programIdentityText :: ProgramIdentity scope -> Text
+programIdentityText (ProgramIdentity value) = value
+
+instance ToJSON (ProgramIdentity scope) where
+  toJSON = toJSON . programIdentityText
+  toEncoding = toEncoding . programIdentityText
+
+instance FromJSON (ProgramIdentity scope) where
+  parseJSON = withText "decision program identity" (either (fail . Text.unpack) pure . parseProgramIdentity)
+
+data ProgramParameterFormat = ParametersV1
+  deriving stock (Eq, Show)
+
+instance ToJSON ProgramParameterFormat where
+  toJSON ParametersV1 = toJSON (1 :: Int)
+  toEncoding ParametersV1 = toEncoding (1 :: Int)
+
+instance FromJSON ProgramParameterFormat where
+  parseJSON value = do
+    number <- parseJSON @Integer value
+    if number == 1 then pure ParametersV1 else fail "unsupported decision parameter format"
+
+-- | Unlike the supplied implementation label, this commitment has a concrete
+-- producer: versionedDigest over the effective parameter state below.
+newtype ProgramParameterDigest = ProgramParameterDigest Text
+  deriving stock (Eq, Ord, Show)
+
+parseProgramParameterDigest :: Text -> Either Text ProgramParameterDigest
+parseProgramParameterDigest value
+  | Text.length value == 71 && "sha256:" `Text.isPrefixOf` value && Text.all hex (Text.drop 7 value) = Right (ProgramParameterDigest value)
+  | otherwise = Left "decision parameter digest requires sha256 and 64 lowercase hexadecimal digits"
+  where
+    hex character = (character >= '0' && character <= '9') || (character >= 'a' && character <= 'f')
+
+programParameterDigest :: Value -> ProgramParameterDigest
+programParameterDigest = ProgramParameterDigest . versionedDigest "shikigami.decision-parameters/1"
+
+programParameterDigestText :: ProgramParameterDigest -> Text
+programParameterDigestText (ProgramParameterDigest value) = value
+
+instance ToJSON ProgramParameterDigest where
+  toJSON = toJSON . programParameterDigestText
+  toEncoding = toEncoding . programParameterDigestText
+
+instance FromJSON ProgramParameterDigest where
+  parseJSON = withText "decision parameter digest" (either (fail . Text.unpack) pure . parseProgramParameterDigest)
+
 -- | An immutable registration includes opaque code identity as well as all
 -- serializable state. Equal request hashes cannot stand in for this identity.
 data ProgramDescriptor = ProgramDescriptor
-  { programId :: !Text,
-    version :: !Text,
-    implementationDigest :: !Text,
-    inputSchemaVersion :: !Text,
-    resultSchemaVersion :: !Text,
-    validatorVersion :: !Text,
-    parameterFormat :: !Natural,
-    parameterDigest :: !Text,
-    derivationVersion :: !Text
+  { programId :: !(ProgramIdentity "program-id"),
+    version :: !(ProgramIdentity "program-version"),
+    implementationDigest :: !(ProgramIdentity "implementation-digest"),
+    inputSchemaVersion :: !(ProgramIdentity "input-schema-version"),
+    resultSchemaVersion :: !(ProgramIdentity "result-schema-version"),
+    validatorVersion :: !(ProgramIdentity "validator-version"),
+    parameterFormat :: !ProgramParameterFormat,
+    parameterDigest :: !ProgramParameterDigest,
+    derivationVersion :: !(ProgramIdentity "derivation-version")
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON)
@@ -78,19 +149,16 @@ data ProgramDescriptor = ProgramDescriptor
 instance FromJSON ProgramDescriptor where
   parseJSON = withObject "ProgramDescriptor" \o -> do
     parameterFormat <- o .: "parameterFormat"
-    if parameterFormat /= (1 :: Natural)
-      then fail "unsupported decision parameter format"
-      else
-        ProgramDescriptor
-          <$> o .: "programId"
-          <*> o .: "version"
-          <*> o .: "implementationDigest"
-          <*> o .: "inputSchemaVersion"
-          <*> o .: "resultSchemaVersion"
-          <*> o .: "validatorVersion"
-          <*> pure parameterFormat
-          <*> o .: "parameterDigest"
-          <*> o .: "derivationVersion"
+    ProgramDescriptor
+      <$> o .: "programId"
+      <*> o .: "version"
+      <*> o .: "implementationDigest"
+      <*> o .: "inputSchemaVersion"
+      <*> o .: "resultSchemaVersion"
+      <*> o .: "validatorVersion"
+      <*> pure parameterFormat
+      <*> o .: "parameterDigest"
+      <*> o .: "derivationVersion"
 
 -- | Public metadata shared with whole-run selection. Binding versions describe
 -- authority/endpoint semantics, not individual secret rotations.

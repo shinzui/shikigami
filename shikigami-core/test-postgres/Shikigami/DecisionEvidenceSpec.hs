@@ -28,7 +28,9 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 program :: ProgramDescriptor
-program = ProgramDescriptor "fixture" "1" "sha256:implementation" "input/1" "result/1" "validator/1" 1 "sha256:parameters" "derive/1"
+program = ProgramDescriptor (identity "fixture") (identity "1") (identity "sha256:implementation") (identity "input/1") (identity "result/1") (identity "validator/1") ParametersV1 (programParameterDigest (String "fixture")) (identity "derive/1")
+  where
+    identity = mustRight . parseProgramIdentity
 
 model :: ModelDescriptor
 model = ModelDescriptor (ModelAlias "triage") "1" "sha256:model" "stub" "stub" "in-process" "model-a" Nothing "binding" "1"
@@ -107,7 +109,7 @@ tests fixture =
             map (\call -> decisionCallOrdinalNumber call.ordinal) report.calls @?= [1, 2]
             map (\call -> call.evidence) report.calls @?= [Just (toJSON (terminal "provider-1")), Just (toJSON (terminal "provider-2"))]
             assertBool "input payload is not in operational binding" (all (not . containsPrompt) report.invocations)
-            let changed = (prepared & #program .~ ((program & #parameterDigest .~ ("sha256:changed")))) :: PreparedDecision
+            let changed = (prepared & #program .~ ((program & #parameterDigest .~ (programParameterDigest (String "changed"))))) :: PreparedDecision
             ensureInvocation (postgresDecisionEvidenceStore pool) Nothing changed >>= (assertBool "changed state refused" . isLeft),
       testCase "a later decision keeps its own program label and different model" $
         withShikigamiFreshDatabase fixture \connection -> withPool connection \pool -> do

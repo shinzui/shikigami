@@ -1,0 +1,21 @@
+Checked program registration values — ExecPlan 107
+Source parent: 6d8d74e4239f33f7d9bd4bab243ac4b1cbf58fa4 (master).
+Selected GHC 9.12.4/frozen cohort; arm64 macOS and real PostgreSQL fixtures.
+Decision: docs/adr/0097-program-registration-values-retain-scoped-identity-and-parameter-contracts.md.
+
+Contract
+Seven immutable registration coordinates retain private nominal-scoped ProgramIdentity values: program ID/version, implementation, input/result schema, validator and derivation identities. The registration boundary refines its textual arguments once. Complete decoded descriptors preserve the nonempty rule. No Generic/coercion/literal escape, normalization, SemVer syntax or universal length/hash rule is introduced for opaque registration labels.
+ProgramParameterDigest has a concrete canonical SHA-256 producer and checked string encoding; the domain shikigami.decision-parameters/1 and complete effective-state preimage are unchanged. ProgramParameterFormat is closed at ParametersV1 and encodes numeric one. Registries and retained codecs preserve complete immutable binding and Haskell witness checks. Program/version is the authored registration lookup coordinate under ADR-41, distinct from allocated actual-call entities.
+Valid descriptor JSON, keys and parameter commitments retain their existing meaning and bytes. SQL/registry bindings retain typed fields. No DDL, DSL declaration, workflow label/order/effect or result declaration changes; no patch is needed for these representation-preserving values.
+
+Acceptance
+Focused suites: 37 pure and 29 PostgreSQL decision cases PASS. All enabled components subsequently build, including inspection and workspace fixture.
+Full core suites: 584 pure PASS (5.81s), 398 serial PostgreSQL PASS (119.85s). Actual provider, retry, streaming, local derivation, pending immutable state, missing-state refusal, completed-outcome reuse, lost append, accounting and all five workflow families remain exercised.
+New pure controls cover exact Unicode/whitespace opaque identity strings, primitive JSON/toEncoding/round-trips, empty identity refusal, generated parameter digest parsing, malformed/uppercase/nonhex digest refusal and numeric-one format. Complete descriptor mutations reject every empty identity field, zero/negative/fractional/unsupported formats and malformed parameter digest. Existing immutable registration/state collision and retained-codec controls remain.
+Compiler clients: 172 nominal + 58 opaque = 230 PASS. Positive public factory/field clients precede constructor, Text/scoped coercion, literal/numeric/Generic and input/result-schema/payload-digest substitution rejections for their intended diagnostics. Scoped Generic diagnostics retain the type-constructor check independently of GHC's printed type argument.
+just keiro-gate 6d8d74e: PASS. Native check, ten-member inspection, idempotent scaffold and 156 conformance rows pass. Strict diff has zero findings; domain and six diagram checks pass. Four transducer fingerprints/source hashes are unchanged; native diff/replay/fold evidence is retained.
+All 124 frozen guide hashes verified. Current unique worklist/module source/tool hashes verified: 320 modules, 907 declarations (693 data, 177 newtypes, 37 aliases), 14 entrypoints. This remains an unclassified audit worklist.
+Haskell conventions, thirteen checker mutation tests and git diff --check pass; generated sources remain untouched.
+
+Scope
+Other role suites/CLI/live HTTP were compiled; this wave did not rerun their behavioral fixtures. Their preceding records remain historical applicable evidence. Model aliases/descriptors, remaining decision coordinates, the complete scalar/identity census and other decoder owners keep plan107 M1 open. No packaged/Linux/runtime qualification is claimed; plan95 has not started.
