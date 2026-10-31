@@ -63,9 +63,9 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 
 Implementation is under way. The schema-2 census and coverage/freshness checker
 pass 24 positive/mutation tests against a successful full GHC 9.12.4 macOS build.
-The current census has 3,996 declaration/member keys. Semantic classification
-covers 726 keys: 633 compliant entries, 25 exclusions and 68 explicit violations;
-3,270 keys remain unreviewed, and both coverage modes correctly refuse completion.
+The current census has 4,022 declaration/member keys. Semantic classification
+covers 759 keys: 664 compliant entries, 27 exclusions and 68 explicit violations;
+3,263 keys remain unreviewed, and both coverage modes correctly refuse completion.
 
 Process-profile, Objective, cleanup/listing, directory, sink, HTTP acceptance and
 workspace binding/file/transfer read boundaries now have owning transactional
@@ -90,8 +90,10 @@ preserve earlier/later rollback and original records after repair; the actual
 pending provider is not called while retained metadata is unreadable. The latest
 owner groups pass 52 PostgreSQL cases after a 62-core/22-worker pass, and all 82
 compiler controls pass. Workspace fold payloads are forced to preserve bounded
-accumulators. See `decision-evidence-source.json`; coherent declaration refresh
-and classification reconciliation follow the implementation commit.
+accumulators. See `decision-evidence-source.json`. The coherent full build and declaration
+refresh pass on `92fdf2e`: 922 module declarations and 4,022 keys. The private
+SQL/terminal adapters have concrete typed conversions; the report
+retains exact raw JSON only after validation.
 
 The native workflow gate passes on `400cdc0` against `af76f1b`, with no findings
 and a replay-neutral native verdict. Exact reports accompany the current evidence.
@@ -233,9 +235,8 @@ Decision preparation, slot and generation coordinates now have checked nominal
 representations and retain native workflow identity. Remaining concrete work
 starts with owned profile policy scalars and attestation commitments in
 `shikigami-core/src/Shikigami/Attestation/Profile.hs` and
-`shikigami-core/src/Shikigami/Attestation/Envelope.hs`, plus typed invocation
-bindings and composable corruption refusal in
-`shikigami-core/src/Shikigami/Decision/Evidence.hs`. Continue worker/session
+`shikigami-core/src/Shikigami/Attestation/Envelope.hs`, while the named decision-evidence reads now have typed invocation bindings
+and composable corruption refusal. Continue worker/session
 identity lifetime; workspace paths, native identities and scalars; review
 material/evidence values; and tool binding/policy values. The census, not this illustrative list, defines coverage.
 Review identity lifetimes and actual runtime types before selecting TypeID or a

@@ -545,3 +545,23 @@ native containment performance claim. No Agent/Flow body, workflow label,
 durable identity formula, migration, dependency or valid wire representation
 changes. Full build, declaration refresh and semantic source reconciliation
 follow the implementation commit; exhaustive M1/M2/M3 acceptance remains open.
+
+The full build passes on committed source `92fdf2e`. Census refresh and independent
+freshness checks report 322 modules, 922 module declarations, fourteen entrypoints
+and 4,022 keys. The four substantively reviewed owner source hashes are renewed.
+The classification adds 33 entries for the private checked invocation/input
+commitment, concrete SQL/terminal transfer adapters, native call correlation,
+ephemeral store handle and exact output/cache fields. Each adapter identifies
+its producer, typed conversion and consumer; no persisted domain record receives
+a blanket DTO exemption.
+
+There are 759 reviewed keys: 664 compliant, 27 not applicable and 68 explicit
+violations, leaving 3,263 missing keys. Report format/completeness are derived
+output/cache values; no report decoder, cached fallback or domain authorization
+consumes those primitive summaries. Typed calls and validated source metadata
+remain the authority. This is a concrete producer/consumer boundary, not a
+correction based only on representation or missing platform tests.
+
+The complete classifier still refuses missing coverage in both modes. These
+focused results qualify the named macOS read boundaries and do not close M1,
+M2, M3, the remaining policy scalars or native Linux/cross-build qualification.
