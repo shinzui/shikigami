@@ -22,6 +22,11 @@ provenance:
       at: 2026-10-31T19:16:14Z
       mode: "update"
       note: "Address review: define classification schema and coverage/freshness gates, runnable isolated PostgreSQL and compiler acceptance, milestone completion criteria, and direct ADR links."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-31T19:29:51Z
+      mode: "implement"
+      note: "Implement declaration/member coverage tooling and audit the remaining domain owners."
 ---
 
 # Complete the remaining domain scalar identity and decoder audit
@@ -46,7 +51,11 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 - [ ] M2: Resolve applicable scalar/identity/decoder findings in cohesive concept batches and verify actual refusal, rollback and recovery behavior.
 - [ ] M3: Accept the refreshed classification with zero unresolved violations, passing final behavioral evidence, and an updated guide disposition.
 
-Implementation not started. This standalone plan is ready for its own execution; it does not reopen the bounded upgrade completion.
+Implementation is under way. The schema-2 census and coverage/freshness checker
+pass 24 positive/mutation tests against a successful GHC 9.12.4 macOS build.
+There are 3,988 declaration/member keys, including the migration entrypoint's
+`Command`. Semantic classification and remediation remain unfinished; see
+[the current evidence](../evidence/plan-108/acceptance.md).
 
 ## Surprises & Discoveries
 
@@ -55,6 +64,11 @@ The original upgrade expanded into many individual domain-value waves. Repeated
 full macOS/serial PostgreSQL checks dominated elapsed time. The accepted code
 already has broad nominal/value/transaction improvements; the remaining
 322-module/913-declaration worklist is explicitly unclassified.
+
+2026-10-31: GHC/Cabal can retain byte-identical interfaces whose modification
+times predate touched source files. The census now compares the interface's
+embedded source fingerprint with actual source bytes, in addition to binding
+source/interface/tool bytes with SHA-256. Executable interfaces are checked too.
 
 ## Decision Log
 
