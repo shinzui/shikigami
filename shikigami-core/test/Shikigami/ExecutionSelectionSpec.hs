@@ -23,6 +23,7 @@ import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile), ResolvedProfile (..))
+import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Decision.Contract (ModelAlias, ModelDescriptor (..), versionedDigest)
 import Shikigami.Decision.ModelAlias qualified as Alias
@@ -116,7 +117,7 @@ tests =
         let coordinator = select "coordinator"
             workerA = select "worker-a"
             workerB = select "worker-b"
-        map (\s -> s.descriptor.modelId) [coordinator, workerA, workerB] @?= ["stub-coordinator", "stub-worker-a", "stub-worker-b"]
+        map (\s -> Coordinate.providerCoordinateText s.descriptor.modelId) [coordinator, workerA, workerB] @?= ["stub-coordinator", "stub-worker-a", "stub-worker-b"]
         mapM_ (\selection -> Aeson.eitherDecode (Aeson.encode selection) @?= Right selection) [coordinator, workerA, workerB],
       testCase "user and parent restrictions cannot widen declaration authority" do
         let req alias = Just (ExecutionRequest (Just (fixtureModelAlias alias)) Nothing Nothing)
@@ -223,7 +224,7 @@ profileFor exact limits =
             lifecycle = Profile.Active,
             validFrom = fixedTime,
             validUntil = Nothing,
-            allowedCalls = Profile.AllowedCall "stub" "stub" "in-process" exact Profile.ThinkingHigh :| [],
+            allowedCalls = Profile.AllowedCall (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "in-process") (Coordinate.providerCoordinate exact) Profile.ThinkingHigh :| [],
             prohibitions = Profile.defaultProhibitions & #defaultedThinkingAllowed .~ True,
             limits,
             minimumEvidenceStrength = Profile.EvidenceRequestedOnly,

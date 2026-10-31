@@ -23,6 +23,7 @@ import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Evidence (CallRelationship (RootCall), ExpectedCall (..))
 import Shikigami.Attestation.Profile qualified as P
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Decision.Contract
 import Shikigami.Decision.Contract qualified as Model
 import Shikigami.Decision.Evidence
@@ -38,7 +39,7 @@ program = ProgramDescriptor (identity "fixture") (identity "1") (identity "sha25
     identity = mustRight . parseProgramIdentity
 
 model :: ModelDescriptor
-model = ModelDescriptor (fixtureModelAlias "triage") (fixtureModelRegistration "1") (modelDescriptorDigest (toJSON ("model" :: Text))) "stub" "stub" "in-process" "model-a" Nothing (fixtureModelRegistration "binding") (fixtureModelRegistration "1")
+model = ModelDescriptor (fixtureModelAlias "triage") (fixtureModelRegistration "1") (modelDescriptorDigest (toJSON ("model" :: Text))) (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "in-process") (Coordinate.providerCoordinate "model-a") Nothing (fixtureModelRegistration "binding") (fixtureModelRegistration "1")
 
 prepared :: PreparedDecision
 prepared =
@@ -84,7 +85,7 @@ profile limits = ResolvedProfile content (P.SanctionedExecutionProfileRef (P.Pro
           lifecycle = P.Active,
           validFrom = epoch,
           validUntil = Nothing,
-          allowedCalls = P.AllowedCall "stub" "stub" "in-process" "model-a" P.ThinkingHigh :| [],
+          allowedCalls = P.AllowedCall (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "in-process") (Coordinate.providerCoordinate "model-a") P.ThinkingHigh :| [],
           prohibitions = (P.defaultProhibitions & #defaultedThinkingAllowed .~ (True)),
           limits,
           minimumEvidenceStrength = P.EvidenceRequestedOnly,
@@ -120,7 +121,7 @@ tests fixture =
         withShikigamiFreshDatabase fixture \connection -> withPool connection \pool -> do
           let store = postgresDecisionEvidenceStore pool
               hooks = decisionCallHooks store Nothing
-              secondModel = (model & #modelId .~ ("model-b") & #alias .~ (fixtureModelAlias "investigate")) :: ModelDescriptor
+              secondModel = (model & #modelId .~ (Coordinate.providerCoordinate "model-b") & #alias .~ (fixtureModelAlias "investigate")) :: ModelDescriptor
               secondPrepared = (prepared & #identity .~ ("invocation-b") & #label .~ ("investigate") & #model .~ (secondModel)) :: PreparedDecision
               secondEvidence = (terminal "provider-b") {B.requestedModel = "model-b"}
           first <- expectRight =<< hooks.beginCall context
@@ -128,7 +129,7 @@ tests fixture =
           second <- expectRight =<< hooks.beginCall (DecisionCallContext secondPrepared secondModel)
           hooks.finishCall second CallSucceeded (Just secondEvidence) >>= (@?= Right ())
           report <- expectReport =<< readDecisionReport store prepared.runId
-          map (\call -> call.model.modelId) report.calls @?= ["model-a", "model-b"]
+          map (\call -> Coordinate.providerCoordinateText call.model.modelId) report.calls @?= ["model-a", "model-b"]
           length report.invocations @?= 2,
       testCase "unresolved expectation survives loss of all process-local hooks" $
         withShikigamiFreshDatabase fixture \connection -> do

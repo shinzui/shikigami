@@ -27,6 +27,11 @@ provenance:
       at: 2026-10-30T19:46:17Z
       mode: "update"
       note: "Expand unused-service adoption to six children, current domain census, HTTP/live inspection, Haskell corpus and first-release qualification."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-31T18:13:09Z
+      mode: "implement"
+      note: "User limits final qualification to macOS and requests bounded completion"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -53,6 +58,8 @@ The October 28 scope assumed a deployed population and an older domain census. T
 
 ## Decision Log
 
+2026-10-31: The user explicitly accepts macOS-only verification and requests completion after twelve hours. Stop Linux/container qualification and new open-ended refactoring; freeze the current candidate and batch final checks. Remaining exhaustive-audit scope is being reconciled separately.
+
 2026-10-30: Apply the user's first-release policy and exhaustive current-guide adoption. Replace old-history qualification with fresh provisioning and same-build recovery. Preserve real transaction, authority and privacy invariants.
 
 ## Outcomes & Retrospective
@@ -73,7 +80,7 @@ The frozen guide inventory is `docs/architecture/keiro-0.22-coverage.json`: cano
 
 M1 uses an isolated coherent final source snapshot and fresh native PostgreSQL. Build representative histories and queues with this same candidate, suspend and restart every registered workflow family, compare independent folds with live state, exercise stale/corrupt snapshot fallback, duplicate/conflicting submissions and loss of committed responses. Assert no repeated provider/tool/accounting action; unknown outcomes remain unresolved and late receipts retain their original authority. Run the reviewed pre-inline typed refusal and post-write rollback cases, checking every participant. Keep protected live-only rows intact during lifecycle audit; do not assert replay can reconstruct absent rich data. Include the real administrative listener/feed tests and a command→event→projection/query plus enqueue→worker roundtrip before broad qualification.
 
-M2 runs all suites and migration isolation, exports the final successful solve and checks source archives, revised descriptors, flags and compiler. Rebuild CLI/server/worker/migration roles and qualify outside-checkout assets/startup. No sibling checkout may supply runtime code silently. Preserve explicitly documented immutable non-registry artifacts and report them as such. Use native ARM64 Apple containers for Linux validation and the documented fallback for stalled builds. Distinguish compilation, runtime containment and live provider qualification. Freeze source/dirty diff, binary hashes, tool/cohort identity, corpus revisions and exact executed profile.
+M2 runs all suites and migration isolation, exports the final successful solve and checks source archives, revised descriptors, flags and compiler. Rebuild CLI/server/worker/migration roles and qualify outside-checkout assets/startup. No sibling checkout may supply runtime code silently. Preserve explicitly documented immutable non-registry artifacts and report them as such. The user explicitly limited acceptance to macOS on 2026-10-31. Do not run Apple-container, remote-builder or other Linux qualification for this initiative. Distinguish macOS compilation/startup/recovery from Linux containment and live-provider claims. Freeze source/dirty diff, binary hashes, tool/cohort identity, corpus revisions and exact executed profile.
 
 M3 implements an inventory validator under `tools/` and a just recipe selecting the current inventories. It rejects missing/duplicate/source-changed rows, pending findings, unowned clauses, unsupported exclusions and nonexistent evidence. Test those rejections. Enumerate every release item across 0.19, 0.19.0.1, 0.20, 0.21 and 0.22, including errata and dependency obligations; if release metadata adds an item, refresh the frozen denominator explicitly. Check source docs without canonical metadata rather than silently dropping normative content: indexes/logs are navigation/history, but a normative unregistered document must be added with project URI and relative path pending artifact URI. Final statuses require actual code and executed evidence, not links to plans.
 
@@ -95,7 +102,7 @@ nix build --no-link .#shikigami .#shikigami-server .#shikigami-worker .#shikigam
 git diff --check
 ```
 
-Record actual cases and concise output under `docs/evidence/keiro-0.22/`. Database tests that skip are not accepted. Before claiming Linux is unavailable, inspect `container --help`, `container list --all` and `tests/workspace/build-apple.sh`; use native ARM64 Apple containers, retaining the documented remote-builder fallback only when needed. Do not claim runtime containment from compilation alone.
+Record actual cases and concise output under `docs/evidence/keiro-0.22/`. Database tests that skip are not accepted. macOS is the accepted platform by the user’s 2026-10-31 instruction. Linux qualification is excluded from this completion pass; retain historical Linux evidence without rerunning it or claiming current qualification.
 
 ## Validation and Acceptance
 

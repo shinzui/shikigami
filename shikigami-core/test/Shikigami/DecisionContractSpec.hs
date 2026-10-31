@@ -19,6 +19,7 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Dhall qualified
 import GHC.Generics (Generic)
+import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Decision.Contract
 import Shikigami.Decision.Contract qualified as Model
 import Shikigami.Decision.ModelAlias qualified as Alias
@@ -49,7 +50,7 @@ original :: RegisteredProgram Request Answer
 original = registration "1" emptyParams
 
 model :: ModelDescriptor
-model = ModelDescriptor (fixtureModelAlias "triage") (fixtureModelRegistration "1") (modelDescriptorDigest (toJSON ("model" :: Text))) "stub" "stub" "in-process" "stub-a" Nothing (fixtureModelRegistration "stub-binding") (fixtureModelRegistration "1")
+model = ModelDescriptor (fixtureModelAlias "triage") (fixtureModelRegistration "1") (modelDescriptorDigest (toJSON ("model" :: Text))) (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "in-process") (Coordinate.providerCoordinate "stub-a") Nothing (fixtureModelRegistration "stub-binding") (fixtureModelRegistration "1")
 
 prepared :: PreparedDecision
 prepared = PreparedDecision "prepare-1" (runCorrelationId "run-1") "workflow-1" 0 "triage" (descriptor (programRef original)) (object ["request" .= ("hello" :: Text)]) model Nothing
@@ -58,7 +59,14 @@ tests :: TestTree
 tests =
   testGroup
     "typed decision contracts"
-    [ testCase "model alias codecs keep exact names and reject empty lookup keys" do
+    [ testCase "provider coordinates preserve the exact foreign vocabulary" do
+        forM_ ["", "日本", " ", "custom+api", Text.replicate 1000 "x"] \raw -> do
+          let value = Coordinate.providerCoordinate raw :: Coordinate.ProviderCoordinate "provider-api"
+          Coordinate.providerCoordinateText value @?= raw
+          toJSON value @?= toJSON raw
+          eitherDecode (encode value) @?= Right value
+        assertBool "non-string provider metadata refuses" (isLeft (eitherDecode @(Coordinate.ProviderCoordinate "provider-name") "1")),
+      testCase "model alias codecs keep exact names and reject empty lookup keys" do
         forM_ ["triage", "日本", " ", "alias\0suffix", Text.replicate 1000 "x"] \text -> do
           let alias = fixtureModelAlias text
           modelAliasText alias @?= text

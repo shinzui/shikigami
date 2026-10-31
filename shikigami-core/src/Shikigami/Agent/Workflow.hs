@@ -109,6 +109,7 @@ import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile (..), renderProfileResolutionError)
 import Shikigami.Behavior.Error (RunError, TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Behavior.Provider (ProfileViolation, constrainBehaviorEnv, renderProfileViolation)
+import Shikigami.Behavior.Provider.Coordinate (providerCoordinateText)
 import Shikigami.Behavior.Run (BehaviorEnv (..), BehaviorInput (..), behaviorModelId, runBehavior, runBehaviorAttemptWith, withCapabilityTools)
 import Shikigami.Behavior.Skill (SkillDir (..))
 import Shikigami.Capability.Catalog qualified as Capability
@@ -475,12 +476,12 @@ selectionRefusalDetail deps job decl profile selected refusal =
     (Text.pack (show refusal) <> " model " <> model <> maybe "" (\p -> " profile " <> Text.pack (show p.ref)) profile)
   where
     model = case selected of
-      Just pinned -> pinned.descriptor.modelId
+      Just pinned -> providerCoordinateText pinned.descriptor.modelId
       Nothing -> case decl.execution of
         Nothing -> behaviorModelId deps.behaviorEnv
         Just permission ->
           let alias = fromMaybe permission.defaultAlias (job.executionRequest >>= (.alias))
-           in maybe (DecisionContract.modelAliasText alias) (.modelId) (find (\d -> d.alias == alias) (ModelCatalog.catalogDescriptors deps.decisions.catalog))
+           in maybe (DecisionContract.modelAliasText alias) (providerCoordinateText . (.modelId)) (find (\d -> d.alias == alias) (ModelCatalog.catalogDescriptors deps.decisions.catalog))
 
 -- The queue executor and the future driver share these process-owned
 -- dependencies. No live function or credential enters an execution snapshot.
@@ -632,7 +633,7 @@ runSessionedAgent deps activeBehaviorEnv durableSelection resolvedProfile resolv
                   )
   case behaviorE of
     Left err -> finishRunFailure deps recordedIdentity decl sid err
-    Right output -> finishSuccessfulRun deps (maybe (behaviorModelId activeBehaviorEnv) (\selection -> selection.descriptor.modelId) durableSelection) approvalPolicyForRun recordedIdentity job decl sid prior output
+    Right output -> finishSuccessfulRun deps (maybe (behaviorModelId activeBehaviorEnv) (\selection -> providerCoordinateText selection.descriptor.modelId) durableSelection) approvalPolicyForRun recordedIdentity job decl sid prior output
 
 -- The new branch journals admission metadata and awaits a registered child.
 -- The terminal body is a protected read; memory and sinks retain their existing

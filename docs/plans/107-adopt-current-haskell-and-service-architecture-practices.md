@@ -96,6 +96,12 @@ scalar/identity and remaining decoder-owner classifications remain open.
 
 ## Decision Log
 
+2026-10-31: ADR-105 keeps provider/API/endpoint/vendor-model meanings nominal
+through SDK capture, signed permissions and evidence comparisons. Total capture
+preserves foreign custom vocabulary without inventing syntax or allocated IDs.
+Existing profile bytes and exact tuple authority remain. Other profile/decision
+values, decoder owners and complete classification remain open.
+
 2026-10-31: ADR-104 retains model version and credential-binding key/version as
 private nominal-scoped coordinates after existing boundary capture. Preserve
 opaque labels and complete immutable binding authority. The separately computed
@@ -181,17 +187,17 @@ cases. The language checker and thirteen style/ownership mutation tests pass.
 [The adoption record](../evidence/keiro-0.22/haskell-service-adoption.md) links each
 implemented domain-value wave and its exact candidate/evidence.
 
-Latest model-registration acceptance passed the all-enabled build, 592 pure,
-405 serial PostgreSQL, 274 worker and 95 server cases, 263 compiler clients and
-native/domain/diagram gates. ADR-104 retains scoped model/credential-binding
-registration coordinates and checked computed commitments. Complete descriptor
-codecs and the former raw-value preimage pass; valid bytes/digests remain.
-Native findings against ac5cc43 are empty with unchanged transducers. The
-unclassified census has 321 modules and 912 declarations. Complete scalar/
-identity, provider tuple/other decision values and remaining decoder-owner review
+Latest provider-tuple acceptance passed the all-enabled build, 593 pure, 405
+serial PostgreSQL, 274 worker and 95 server cases, 272 compiler clients and
+native/domain/diagram gates. ADR-105 retains nominal foreign tuple coordinates
+through SDK capture, dispatch, signed profiles, model descriptors and evidence
+checks. The unchanged literal profile byte golden and exact HTTP/CLI/model checks
+pass. Native findings against ee79dc3 are empty with unchanged transducers.
+The unclassified census has 322 modules and 913 declarations. Complete scalar/
+identity, profile/signing/other decision values and remaining decoder-owner review
 keep M1 incomplete. Plan95's frozen closure, packaged Linux/runtime and inventory
 gates have not started.
-[Acceptance](../evidence/keiro-0.22/model-registration-results.txt) retains exact
+[Acceptance](../evidence/keiro-0.22/provider-coordinates-results.txt) retains exact
 results and scope. Forty-two of 46 assigned sources have implemented dispositions.
 
 

@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | One pure tuple projection and profile predicate for response, decision and
 -- whole-run selection. Admission and final transport checks share these rules.
 module Shikigami.Behavior.Provider.Call
@@ -21,15 +23,16 @@ import Data.Text qualified as Text
 import GHC.Generics (Generic)
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Behavior.Provider.Coordinate
 
 -- | The exact model-call tuple a 'BehaviorEnv' would put on the provider seam.
 -- Thinking is optional because leaving it to the SDK is itself a policy fact,
 -- not an invisible default.
 data ProviderCall = ProviderCall
-  { provider :: !Text,
-    api :: !Text,
-    endpointClass :: !Text,
-    modelId :: !Text,
+  { provider :: !(ProviderCoordinate "provider-name"),
+    api :: !(ProviderCoordinate "provider-api"),
+    endpointClass :: !(ProviderCoordinate "endpoint-class"),
+    modelId :: !(ProviderCoordinate "provider-model-id"),
     thinking :: !(Maybe ThinkingLevel)
   }
   deriving stock (Eq, Show, Generic)
@@ -49,7 +52,7 @@ validateProfileCall :: ResolvedProfile -> ProviderCall -> Either ProfileViolatio
 validateProfileCall ResolvedProfile {profile, ref} call =
   let restrictions = profile.prohibitions
       permitted = any (matchesCall restrictions call) profile.allowedCalls
-   in if call.endpointClass == "cli" && not restrictions.cliTransportsAllowed
+   in if call.endpointClass == providerCoordinate "cli" && not restrictions.cliTransportsAllowed
         then Left (CliTransportForbidden call ref)
         else case call.thinking of
           Nothing | not restrictions.defaultedThinkingAllowed -> Left (DefaultedThinkingForbidden call ref)
@@ -79,10 +82,10 @@ providerCallFor model options =
         | defaultEndpointClass == "https", not (Text.null (Model.baseUrl model)) = Text.takeWhile (/= ':') (Model.baseUrl model)
         | otherwise = defaultEndpointClass
    in ProviderCall
-        { provider = Model.provider model,
-          api,
-          endpointClass,
-          modelId = Model.modelId model,
+        { provider = providerCoordinate (Model.provider model),
+          api = providerCoordinate api,
+          endpointClass = providerCoordinate endpointClass,
+          modelId = providerCoordinate (Model.modelId model),
           thinking = Options.thinking options
         }
 
@@ -109,13 +112,13 @@ matchesCall restrictions call allowed =
 renderProviderCall :: ProviderCall -> Text
 renderProviderCall call =
   "(provider="
-    <> (.provider) call
+    <> providerCoordinateText ((.provider) call)
     <> ", api="
-    <> (.api) call
+    <> providerCoordinateText ((.api) call)
     <> ", endpointClass="
-    <> (.endpointClass) call
+    <> providerCoordinateText ((.endpointClass) call)
     <> ", model="
-    <> (.modelId) call
+    <> providerCoordinateText ((.modelId) call)
     <> ", thinking="
     <> maybe "defaulted" renderThinkingLevel ((.thinking) call)
     <> ")"

@@ -43,6 +43,7 @@ import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Compatibility (validateResponseRequest)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
 import Shikigami.Behavior.Provider.Call (providerCallFor, validateProfileCall)
+import Shikigami.Behavior.Provider.Coordinate (providerCoordinateText)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Decision.StubProvider (decisionStubProvider)
@@ -127,9 +128,9 @@ runDecisionProgram env prepared ref input =
                 let minimumStrength = maybe Evidence.EvidenceRequestedOnly (\p -> p.profile.minimumEvidenceStrength) env.profile
                 unless
                   ( terminal.strength >= minimumStrength
-                      && terminal.requestedModel == prepared.model.modelId
-                      && terminal.endpoint.provider == prepared.model.provider
-                      && terminal.endpoint.api == prepared.model.api
+                      && terminal.requestedModel == providerCoordinateText prepared.model.modelId
+                      && terminal.endpoint.provider == providerCoordinateText prepared.model.provider
+                      && terminal.endpoint.api == providerCoordinateText prepared.model.api
                       && terminal.status == Evidence.CallSucceeded
                   )
                   (abort EvidenceFailure "decision provider terminal does not uphold its admitted contract")

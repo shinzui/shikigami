@@ -42,6 +42,7 @@ import Shikigami.Attestation.Compliance (ComplianceRollUp (..))
 import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv)
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Decision.Contract
@@ -406,7 +407,7 @@ mustRight = either (error . show) id
 profileFor :: [Text] -> ResolvedProfile
 profileFor models = ResolvedProfile content (Profile.SanctionedExecutionProfileRef (Profile.ProfileId "decision-profile") (Profile.ProfileVersion "1") (profileDigest content))
   where
-    allowed = [Profile.AllowedCall "stub" "stub" "in-process" model Profile.ThinkingHigh | model <- models]
+    allowed = [Profile.AllowedCall (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "in-process") (Coordinate.providerCoordinate model) Profile.ThinkingHigh | model <- models]
     content =
       Profile.SanctionedExecutionProfile
         { profileId = Profile.ProfileId "decision-profile",

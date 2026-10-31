@@ -36,6 +36,7 @@ import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Error (TransientBehaviorFailure)
+import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Decision.ModelCatalog
@@ -324,7 +325,7 @@ forbiddenProfile = ResolvedProfile content (Profile.SanctionedExecutionProfileRe
           lifecycle = Profile.Active,
           validFrom = UTCTime (fromGregorian 2026 1 1) 0,
           validUntil = Nothing,
-          allowedCalls = Profile.AllowedCall "anthropic" "messages" "https" "forbidden-selected-model" Profile.ThinkingHigh :| [],
+          allowedCalls = Profile.AllowedCall (Coordinate.providerCoordinate "anthropic") (Coordinate.providerCoordinate "messages") (Coordinate.providerCoordinate "https") (Coordinate.providerCoordinate "forbidden-selected-model") Profile.ThinkingHigh :| [],
           prohibitions = (Profile.defaultProhibitions & #defaultedThinkingAllowed .~ (True)),
           limits = Profile.unlimitedProfileLimits,
           minimumEvidenceStrength = Profile.EvidenceRequestedOnly,

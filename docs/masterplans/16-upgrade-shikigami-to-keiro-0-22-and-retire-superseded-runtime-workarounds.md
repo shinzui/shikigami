@@ -90,14 +90,14 @@ a checked allocated TypeID; objective content, worker/workspace ownership,
 execution policies, counters, root control decisions and assignment locators retain their
 nominal checked meanings.
 
-Latest model-registration acceptance passed the all-enabled build, 592 pure,
-405 serial PostgreSQL, 274 worker and 95 server cases, 263 compiler clients and
-native/domain/diagram gates. ADR-104 retains scoped model/credential-binding
-registration coordinates and checked computed commitments. Complete descriptor
-codecs and the former raw-value preimage pass; valid bytes/digests remain.
-Native findings against ac5cc43 are empty with unchanged transducers. The
-unclassified census has 321 modules and 912 declarations. Complete scalar/
-identity, provider tuple/other decision values and remaining decoder-owner review
+Latest provider-tuple acceptance passed the all-enabled build, 593 pure, 405
+serial PostgreSQL, 274 worker and 95 server cases, 272 compiler clients and
+native/domain/diagram gates. ADR-105 retains nominal foreign tuple coordinates
+through SDK capture, dispatch, signed profiles, model descriptors and evidence
+checks. The unchanged literal profile byte golden and exact HTTP/CLI/model checks
+pass. Native findings against ee79dc3 are empty with unchanged transducers.
+The unclassified census has 322 modules and 913 declarations. Complete scalar/
+identity, profile/signing/other decision values and remaining decoder-owner review
 keep EP-5 In Progress. EP-6's frozen closure, packaged Linux/runtime and inventory
 gates have not started.
 
@@ -113,6 +113,8 @@ worker lifecycle and final release-tooling clauses remain with their consumers.
 The previous plan hardcoded six workspace members/two aggregates; the current workspace has ten members including new objective work. RunJobs is currently schema version 4 with three historical upcasters; they are cleanup candidates under the unused-service confirmation. Trigger.Consumer directly constructs Shibuya AppConfig. Ops already uses emptyAppHooks and the native tree; Kotei's duplicated-parser finding does not apply here. Rich evidence is not reconstructible from lifecycle events, so first-release freedom does not license destructive replay of those live-only targets.
 
 ## Decision Log
+
+2026-10-31: The user limits qualification to macOS and requests completion after twelve hours. Linux/container verification is excluded from this initiative’s acceptance. Freeze the current implementation and batch final checks rather than opening more refactoring waves; report remaining audit scope explicitly.
 
 2026-10-30: Supersede October 28's retained-history/old-build requirement and CLI-only exclusion under the user's explicit unused-service confirmation. Preserve the earlier review's late-write rollback correction. Add dedicated inspection and Haskell/service implementation children, preserving existing plan identities and intention. Every applicable guide/release capability must be implemented or verified; exclusions need a real product/capability reason.
 

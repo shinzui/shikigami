@@ -97,6 +97,7 @@ import Shikigami.Attestation.Profile
   )
 import Shikigami.Attestation.Resolve (ProfileResolutionError (..), ResolvedProfile (..), postgresProfileStore, resolveProfile)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
+import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv, newBehaviorEnvWithTraceSink)
 import Shikigami.Capability.Catalog qualified as CapabilityCatalog
 import Shikigami.Capability.Overlay qualified as CapabilityOverlay
@@ -3037,10 +3038,10 @@ workflowProfileWith prohibitions version =
       allowedCalls =
         NonEmpty.singleton
           AllowedCall
-            { provider = "anthropic",
-              api = "messages",
-              endpointClass = "https",
-              modelId = "claude-sonnet-4-6",
+            { provider = Coordinate.providerCoordinate ("anthropic"),
+              api = Coordinate.providerCoordinate ("messages"),
+              endpointClass = Coordinate.providerCoordinate ("https"),
+              modelId = Coordinate.providerCoordinate ("claude-sonnet-4-6"),
               thinking = ThinkingHigh
             },
       prohibitions,

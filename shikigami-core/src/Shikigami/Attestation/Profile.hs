@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | The sanctioned execution profile: the immutable, versioned policy that says
 -- how a run is allowed to execute.
 --
@@ -57,6 +59,7 @@ where
 
 import Baikai.Evidence (EvidenceStrength (..))
 import Baikai.ThinkingLevel (ThinkingLevel (..))
+import Shikigami.Behavior.Provider.Coordinate
 import Shikigami.Prelude
 
 -- ---------------------------------------------------------------------------
@@ -123,16 +126,16 @@ instance FromJSON ProfileLifecycle where parseJSON = genericParseJSON eventAeson
 -- tuples, not to independent allow-lists.
 data AllowedCall = AllowedCall
   { -- | The service that runs the model, e.g. @anthropic@.
-    provider :: !Text,
+    provider :: !(ProviderCoordinate "provider-name"),
     -- | The API family reached, e.g. @messages@.
-    api :: !Text,
+    api :: !(ProviderCoordinate "provider-api"),
     -- | How the provider is reached — an HTTP endpoint class or a command-line
     -- transport. Recorded separately from 'api' because a profile may permit an
     -- API over HTTP while prohibiting the same API over a CLI transport.
-    endpointClass :: !Text,
+    endpointClass :: !(ProviderCoordinate "endpoint-class"),
     -- | An exact model identifier. Never an alias: an alias can be repointed
     -- after the profile was resolved, which is one of UC-8's reject cases.
-    modelId :: !Text,
+    modelId :: !(ProviderCoordinate "provider-model-id"),
     -- | The canonical reasoning effort this tuple permits.
     thinking :: !ThinkingLevel
   }

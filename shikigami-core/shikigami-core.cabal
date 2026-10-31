@@ -81,6 +81,7 @@ library
     Shikigami.Behavior.Input
     Shikigami.Behavior.Provider
     Shikigami.Behavior.Provider.Call
+    Shikigami.Behavior.Provider.Coordinate
     Shikigami.Behavior.Run
     Shikigami.Behavior.Skill
     Shikigami.Behavior.StubProvider

@@ -74,6 +74,7 @@ import GHC.Generics (Generic)
 import GHC.TypeLits (Symbol)
 import Numeric.Natural (Natural)
 import Shikigami.Attestation.Profile (SanctionedExecutionProfileRef)
+import Shikigami.Behavior.Provider.Coordinate
 import Shikigami.Decision.ModelAlias
 import Shikigami.Log.Correlation (RunCorrelationId)
 
@@ -219,10 +220,10 @@ data ModelDescriptor = ModelDescriptor
   { alias :: !ModelAlias,
     version :: !(ModelRegistration "model-version"),
     digest :: !ModelDescriptorDigest,
-    provider :: !Text,
-    api :: !Text,
-    endpointClass :: !Text,
-    modelId :: !Text,
+    provider :: !(ProviderCoordinate "provider-name"),
+    api :: !(ProviderCoordinate "provider-api"),
+    endpointClass :: !(ProviderCoordinate "endpoint-class"),
+    modelId :: !(ProviderCoordinate "provider-model-id"),
     thinking :: !(Maybe ThinkingLevel),
     bindingId :: !(ModelRegistration "credential-binding-id"),
     bindingVersion :: !(ModelRegistration "credential-binding-version")

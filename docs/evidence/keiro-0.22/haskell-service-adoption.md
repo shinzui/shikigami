@@ -451,3 +451,16 @@ are empty and four transducers unchanged. Valid strings/digests retain bytes;
 invalid first-release metadata refuses. Provider tuple/other decision values,
 decoder owners and complete M1 review remain open. The 321-module/912-declaration
 worklist remains unclassified; plan95 remains not started.
+
+
+Foreign provider/API/endpoint/model tuple coordinates now remain nominal through
+SDK capture, dispatch, signed profiles, model descriptors and evidence checks.
+[ADR-105](../../adr/0105-provider-tuples-retain-nominal-foreign-coordinates.md)
+and [acceptance](provider-coordinates-results.txt) record the unchanged literal
+profile bytes, exact HTTP/CLI tuple refusals and real model/thinking dispatch.
+The all-enabled build, 593 pure/405 PostgreSQL/274 worker/95 server, 272 compiler
+clients and native/domain/diagram gates pass. Findings against ee79dc3 are empty
+and four transducers unchanged. Native evidence remains native, and opaque/custom
+vocabulary retains exact strings. Profile/signing/other decision values and
+remaining decoder owners keep M1 open. The 322-module/913-declaration worklist
+remains unclassified; plan95 has not started.

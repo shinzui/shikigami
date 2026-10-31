@@ -80,6 +80,7 @@ import Shikigami.Attestation.Strength
     parseAttestationStrength,
     renderAttestationStrength,
   )
+import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase)
 
@@ -212,10 +213,10 @@ fullProfile =
 sampleAllowedCall :: AllowedCall
 sampleAllowedCall =
   AllowedCall
-    { provider = "anthropic",
-      api = "messages",
-      endpointClass = "https",
-      modelId = "claude-opus-5-20260401",
+    { provider = Coordinate.providerCoordinate ("anthropic"),
+      api = Coordinate.providerCoordinate ("messages"),
+      endpointClass = Coordinate.providerCoordinate ("https"),
+      modelId = Coordinate.providerCoordinate ("claude-opus-5-20260401"),
       thinking = ThinkingHigh
     }
 

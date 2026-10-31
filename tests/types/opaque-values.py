@@ -47,6 +47,7 @@ import Shikigami.Router.Declaration qualified as Declaration
 import Shikigami.Workspace.Instructions qualified as Instructions
 import Shikigami.Workspace.Types qualified as Workspace
 import Shikigami.Decision.ModelAlias qualified as Alias
+import Shikigami.Behavior.Provider.Coordinate qualified as ProviderCoordinate
 import Shikigami.Inspection.Settings qualified as Inspection
 import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
@@ -166,6 +167,7 @@ CASES = [
     ('Decision.DecisionCallOrdinal', 'generic'),
     ('Decision.ModelRegistration "model-version"', 'generic'),
     ('Decision.ModelDescriptorDigest', 'generic'),
+    ('ProviderCoordinate.ProviderCoordinate "provider-model-id"', 'generic'),
     ('Alias.ModelAlias', 'generic'),
     ('Workspace.WorkspaceId', 'generic'),
     ('Entity.OperationId', 'generic'),

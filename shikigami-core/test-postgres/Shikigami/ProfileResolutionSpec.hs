@@ -19,6 +19,7 @@ import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, wit
 import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Profile
 import Shikigami.Attestation.Resolve
+import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
@@ -106,10 +107,10 @@ sampleProfile lifecycle validUntil version =
       allowedCalls =
         NonEmpty.singleton
           AllowedCall
-            { provider = "anthropic",
-              api = "messages",
-              endpointClass = "https",
-              modelId = "claude-sonnet-4-6",
+            { provider = Coordinate.providerCoordinate ("anthropic"),
+              api = Coordinate.providerCoordinate ("messages"),
+              endpointClass = Coordinate.providerCoordinate ("https"),
+              modelId = Coordinate.providerCoordinate ("claude-sonnet-4-6"),
               thinking = ThinkingHigh
             },
       prohibitions = defaultProhibitions,

@@ -91,6 +91,7 @@ import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Compatibility
 import Shikigami.Behavior.Error (RunError (..))
 import Shikigami.Behavior.Provider (ProfileViolation (..), ProviderCall (ProviderCall), constrainBehaviorEnv, describeProviderSelection, newBehaviorEnvFor, providerCall, renderProfileViolation)
+import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Behavior.Run (BehaviorEnv (..), defaultToolTurnLimit, newBehaviorEnv, triggerOnly)
 import Shikigami.Behavior.Run qualified as Behavior
 import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
@@ -234,11 +235,11 @@ profileConstraintTests =
                   call@(ProviderCall vendor api endpoint model _) = providerCall actual
                   allowed = Profile.AllowedCall vendor api endpoint model Profile.ThinkingHigh
                   profileFor permitsCli value =
-                    let template = stubProfile model ((Profile.defaultProhibitions & #cliTransportsAllowed .~ (permitsCli)))
+                    let template = stubProfile (Coordinate.providerCoordinateText model) ((Profile.defaultProhibitions & #cliTransportsAllowed .~ (permitsCli)))
                         content = (template.profile & #allowedCalls .~ (NonEmpty.singleton value))
                      in (template & #profile .~ (content) & #ref .~ ((template.ref & #digest .~ (profileDigest content))))
-              api @?= expectedApi
-              endpoint @?= expectedEndpoint
+              Coordinate.providerCoordinateText api @?= expectedApi
+              Coordinate.providerCoordinateText endpoint @?= expectedEndpoint
               case constrainBehaviorEnv (profileFor True allowed) actual of
                 Right _ -> pure ()
                 Left violation -> assertFailure (show violation)
@@ -248,8 +249,8 @@ profileConstraintTests =
                     Left other -> assertFailure ("expected exact tuple refusal: " <> show other)
                     Right _ -> assertFailure "mismatched tuple was admitted"
                 )
-                [(allowed & #provider .~ ("other")), (allowed & #api .~ ("other")), (allowed & #endpointClass .~ ("other")), (allowed & #modelId .~ ("other")), (allowed & #thinking .~ (Profile.ThinkingLow))]
-              if endpoint == "cli"
+                [(allowed & #provider .~ (Coordinate.providerCoordinate "other")), (allowed & #api .~ (Coordinate.providerCoordinate "other")), (allowed & #endpointClass .~ (Coordinate.providerCoordinate "other")), (allowed & #modelId .~ (Coordinate.providerCoordinate "other")), (allowed & #thinking .~ (Profile.ThinkingLow))]
+              if Coordinate.providerCoordinateText endpoint == "cli"
                 then case constrainBehaviorEnv (profileFor False allowed) actual of
                   Left (CliTransportForbidden attempted _) -> attempted @?= call
                   _ -> assertFailure "CLI prohibition was bypassed"
@@ -257,11 +258,11 @@ profileConstraintTests =
               if expectedEndpoint == "https"
                 then do
                   let plaintext = (actual & #model .~ ((actual.model & #baseUrl .~ ("http://127.0.0.1:12345/v1"))))
-                  providerCall plaintext @?= ProviderCall vendor api "http" model (Just Profile.ThinkingHigh)
+                  providerCall plaintext @?= ProviderCall vendor api (Coordinate.providerCoordinate "http") model (Just Profile.ThinkingHigh)
                   case constrainBehaviorEnv (profileFor True allowed) plaintext of
                     Left (ForbiddenCall _ _) -> pure ()
                     _ -> assertFailure "HTTPS-only profile admitted a plaintext endpoint"
-                  case constrainBehaviorEnv (profileFor True ((allowed & #endpointClass .~ ("http")))) plaintext of
+                  case constrainBehaviorEnv (profileFor True ((allowed & #endpointClass .~ (Coordinate.providerCoordinate "http")))) plaintext of
                     Right _ -> pure ()
                     Left violation -> assertFailure (show violation)
                 else pure ()
@@ -278,7 +279,7 @@ profileConstraintTests =
         let resolved = stubProfile "stub-v1" Profile.defaultProhibitions
         case constrainBehaviorEnv resolved env of
           Left violation@(DefaultedThinkingForbidden (ProviderCall _ _ _ attemptedModel attemptedThinking) _) -> do
-            attemptedModel @?= "stub-v1"
+            Coordinate.providerCoordinateText attemptedModel @?= "stub-v1"
             attemptedThinking @?= Nothing
             assertProfileViolationNamesDigest resolved violation
           Left other -> assertFailure ("expected DefaultedThinkingForbidden, got " <> show other)
@@ -294,7 +295,7 @@ profileConstraintTests =
             constrained = envWithThinking Profile.ThinkingHigh env
         case constrainBehaviorEnv resolved constrained of
           Left violation@(ForbiddenCall (ProviderCall _ _ _ attemptedModel _) _) -> do
-            attemptedModel @?= "stub-v1"
+            Coordinate.providerCoordinateText attemptedModel @?= "stub-v1"
             assertProfileViolationNamesDigest resolved violation
           Left other -> assertFailure ("expected ForbiddenCall, got " <> show other)
           Right _ -> assertFailure "expected ForbiddenCall, got an allowed environment"
@@ -326,10 +327,10 @@ stubProfile allowedModel prohibitions =
             Profile.allowedCalls =
               NonEmpty.singleton
                 Profile.AllowedCall
-                  { Profile.provider = "stub",
-                    Profile.api = "stub",
-                    Profile.endpointClass = "in-process",
-                    Profile.modelId = allowedModel,
+                  { Profile.provider = Coordinate.providerCoordinate ("stub"),
+                    Profile.api = Coordinate.providerCoordinate ("stub"),
+                    Profile.endpointClass = Coordinate.providerCoordinate ("in-process"),
+                    Profile.modelId = Coordinate.providerCoordinate (allowedModel),
                     Profile.thinking = Profile.ThinkingHigh
                   },
             Profile.prohibitions,

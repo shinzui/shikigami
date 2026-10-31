@@ -25,6 +25,7 @@ import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Provider.Call (providerCallFor)
+import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelAlias qualified as Alias
@@ -76,7 +77,7 @@ tests =
       testCase "whole-slot policy narrows to the pinned profile" do
         declaration <- allowedDeclaration
         let snapshot = mustRight (resolvePolicy registry [slot] catalog declaration (Just (profile "stub-triage")))
-        map (\model -> model.modelId) snapshot.models @?= ["stub-triage"]
+        map (\model -> Coordinate.providerCoordinateText model.modelId) snapshot.models @?= ["stub-triage"]
         snapshot.slots @?= [((slot & #models .~ ([fixtureModelAlias "triage"])) :: DecisionSlot)]
         assertBool "forbidden selected tuple" (isLeft (resolveModel catalog declaration (Just (profile "stub-triage")) (fixtureModelAlias "investigate"))),
       testCase "slot contracts and aliases validate before a runtime exists" do
@@ -101,7 +102,7 @@ tests =
         let run = configRun [("behavior.decisionModels", specList ["stub-triage", "stub-investigate"])] NoDiagnostic
         run.exitCode @?= 0
         case run.resolved of
-          Just config -> map (\model -> model.modelId) (catalogDescriptors (mustRight config.decisionModelCatalog)) @?= ["stub-triage", "stub-investigate"]
+          Just config -> map (\model -> Coordinate.providerCoordinateText model.modelId) (catalogDescriptors (mustRight config.decisionModelCatalog)) @?= ["stub-triage", "stub-investigate"]
           Nothing -> assertFailure (Text.unpack run.standardError)
         (configRun [("behavior.decisionModels", specList ["invented-model"])] CheckConfig).exitCode @?= 4,
       testCase "malformed nested credentials are redacted in diagnostic output" do
@@ -128,7 +129,7 @@ profile exact = ResolvedProfile content (Profile.SanctionedExecutionProfileRef (
           lifecycle = Profile.Active,
           validFrom = UTCTime (fromGregorian 2026 1 1) 0,
           validUntil = Nothing,
-          allowedCalls = Profile.AllowedCall "stub" "stub" "in-process" exact Profile.ThinkingHigh :| [],
+          allowedCalls = Profile.AllowedCall (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "in-process") (Coordinate.providerCoordinate exact) Profile.ThinkingHigh :| [],
           prohibitions = (Profile.defaultProhibitions & #defaultedThinkingAllowed .~ (True)),
           limits = Profile.unlimitedProfileLimits,
           minimumEvidenceStrength = Profile.EvidenceModelObserved,

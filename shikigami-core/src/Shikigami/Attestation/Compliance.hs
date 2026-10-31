@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Complete compliance roll-up over one closed run-evidence set.
 module Shikigami.Attestation.Compliance
   ( ComplianceRollUp (..),
@@ -24,6 +26,7 @@ import Shikigami.Attestation.Reviewed
     ResultDigest (..),
     ReviewedArtifact (..),
   )
+import Shikigami.Behavior.Provider.Coordinate
 import Shikigami.Log.Correlation
   ( CallCorrelationId,
     RunCorrelationId,
@@ -131,18 +134,21 @@ callReasons
         endpoint = recorded.endpoint
         thinking = recorded.thinking
         strength = recorded.strength
-        Baikai.EndpointIdentity {Baikai.provider, Baikai.api, Baikai.transport} = endpoint
-        endpointClass = endpointClassOf endpoint
+        Baikai.EndpointIdentity {Baikai.provider = rawProvider, Baikai.api = rawApi, Baikai.transport} = endpoint
+        provider = providerCoordinate rawProvider
+        api = providerCoordinate rawApi
+        endpointClass = providerCoordinate (endpointClassOf endpoint)
+        resolvedCoordinate = providerCoordinate resolvedModelId
         permitted = toList allowedCalls
         modelReasons =
           [ ModelNotPermitted renderedCallId resolvedModelId
-          | not (any (\allowed -> (.modelId) allowed == resolvedModelId) permitted)
+          | not (any (\allowed -> (.modelId) allowed == resolvedCoordinate) permitted)
           ]
         endpointReasons =
-          [ ProhibitedEndpoint renderedCallId endpointClass
+          [ ProhibitedEndpoint renderedCallId (providerCoordinateText endpointClass)
           | not (any (surfaceMatches provider api endpointClass) permitted)
           ]
-        thinkingReasons = thinkingTranslationReasons renderedCallId provider api endpointClass resolvedModelId permitted prohibitions thinking
+        thinkingReasons = thinkingTranslationReasons renderedCallId provider api endpointClass resolvedCoordinate permitted prohibitions thinking
         aliasReasons =
           [ ProhibitedAlias renderedCallId alias resolvedModelId
           | Just alias <- [requestedAlias],
@@ -172,16 +178,16 @@ callReasons
           <> strengthReasons
           <> correlationReasons
 
-surfaceMatches :: Text -> Text -> Text -> Profile.AllowedCall -> Bool
+surfaceMatches :: ProviderCoordinate "provider-name" -> ProviderCoordinate "provider-api" -> ProviderCoordinate "endpoint-class" -> Profile.AllowedCall -> Bool
 surfaceMatches provider api endpointClass Profile.AllowedCall {Profile.provider = allowedProvider, Profile.api = allowedApi, Profile.endpointClass = allowedEndpointClass} =
   provider == allowedProvider && api == allowedApi && endpointClass == allowedEndpointClass
 
 thinkingTranslationReasons ::
   Text ->
-  Text ->
-  Text ->
-  Text ->
-  Text ->
+  ProviderCoordinate "provider-name" ->
+  ProviderCoordinate "provider-api" ->
+  ProviderCoordinate "endpoint-class" ->
+  ProviderCoordinate "provider-model-id" ->
   [Profile.AllowedCall] ->
   Profile.Prohibitions ->
   Baikai.ThinkingTranslation ->

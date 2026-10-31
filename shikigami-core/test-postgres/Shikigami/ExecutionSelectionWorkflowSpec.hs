@@ -55,6 +55,7 @@ import Shikigami.Agent.Run (AgentRunResult)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
+import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest, newBehaviorEnv)
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
@@ -202,7 +203,7 @@ tests fixture =
           assertBool "one prepared attempt cannot dispatch twice" (responseError duplicate /= Nothing)
           bodies <- observed
           length bodies @?= 1
-          lookupField "model" (head bodies) @?= Just selection.descriptor.modelId
+          lookupField "model" (head bodies) @?= Just (Coordinate.providerCoordinateText selection.descriptor.modelId)
           (_, state) <- expectRight =<< run app (Durable.loadExecution access)
           state.cursor @?= (fixtureRevision 1)
           rootState <- expectRight =<< run app (Roots.inspectRoot root)

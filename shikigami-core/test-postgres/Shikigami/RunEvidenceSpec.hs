@@ -37,6 +37,7 @@ import Shikigami.Attestation.Evidence
 import Shikigami.Attestation.EvidenceStore
 import Shikigami.Attestation.Profile
 import Shikigami.Attestation.Reviewed
+import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
 import Shikigami.Log.Correlation
   ( CallCorrelationId,
@@ -936,10 +937,10 @@ profileWith allowedCalls prohibitions minimumEvidenceStrength requiredCorrelatio
 allowedCall :: Text -> Text -> Text -> AllowedCall
 allowedCall provider endpointClass modelId =
   AllowedCall
-    { provider,
-      api = "messages",
-      endpointClass,
-      modelId,
+    { provider = Coordinate.providerCoordinate provider,
+      api = Coordinate.providerCoordinate ("messages"),
+      endpointClass = Coordinate.providerCoordinate endpointClass,
+      modelId = Coordinate.providerCoordinate modelId,
       thinking = ThinkingMedium
     }
 

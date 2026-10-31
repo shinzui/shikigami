@@ -41,6 +41,7 @@ import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile (.
 import Shikigami.Behavior.Compatibility (validateResponseRequest)
 import Shikigami.Behavior.Provider (withModelBinding)
 import Shikigami.Behavior.Provider.Call (providerCallFor, validateProfileCall)
+import Shikigami.Behavior.Provider.Coordinate (providerCoordinateText)
 import Shikigami.Behavior.Run (BehaviorEnv (..))
 import Shikigami.Decision.Contract (ModelDescriptor (..), modelAliasText, versionedDigest)
 import Shikigami.Decision.ModelCatalog
@@ -280,7 +281,7 @@ buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = c
     finishTerminal receipt failed evidence response =
       let attempt = attemptIdText receipt.request.attemptId
           alias = modelAliasText selection.descriptor.alias
-          normalized = (\ev -> factsFromTerminal (callCorrelationId env.runId attempt 0) RootCall (fromMaybe selection.descriptor.modelId (Evidence.observedValue ev.observedModel)) (Just alias) ev & #relationshipKnown .~ False) <$> evidence
+          normalized = (\ev -> factsFromTerminal (callCorrelationId env.runId attempt 0) RootCall (fromMaybe (providerCoordinateText selection.descriptor.modelId) (Evidence.observedValue ev.observedModel)) (Just alias) ev & #relationshipKnown .~ False) <$> evidence
           outcome = outcomeFor failed evidence & #compliance .~ normalized
        in case preparedCall of
             Just prepared -> prepared.commit receipt outcome response

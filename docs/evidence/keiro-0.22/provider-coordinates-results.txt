@@ -1,0 +1,18 @@
+Nominal foreign provider tuple coordinates — ExecPlan 107
+Source parent: ee79dc3 (master); selected GHC 9.12.4/frozen cohort.
+arm64 macOS and real PostgreSQL fixtures.
+Decision: docs/adr/0105-provider-tuples-retain-nominal-foreign-coordinates.md.
+
+Contract
+ProviderCoordinate is private with nominal provider-name/provider-api/endpoint-class/provider-model-id scopes, no Generic/IsString/constructor/coercion escape. Total capture preserves the actual foreign SDK/protocol vocabulary without invented syntax, normalization or length limits. Exact text JSON retains empty/opaque/custom values where the prior representation did; non-string values refuse. Coordinates are not permission or local allocation identities.
+ProviderCall, signed-profile AllowedCall and ModelDescriptor retain these meanings. The model/options adapter captures once; registration copies the domain tuple; profile matching compares nominal fields. Compliance captures native evidence coordinates before its domain comparisons. SDK terminal checks, evidence projection and diagnostics explicitly render at their true foreign/output seams. Native Baikai evidence records and ThinkingLevel remain original types.
+
+Acceptance
+Focused 108 pure PASS (1.03s) and 59 PostgreSQL PASS (17.44s). The unchanged literal minimal-profile byte golden passes; populated/reference profile codecs and default prohibitions remain. Exact HTTP/CLI tuple tests compare actual provider/API/endpoint/model/thinking values, reject each tuple mismatch, preserve CLI prohibitions and reject plaintext against an HTTPS profile. Actual HTTP model/thinking dispatch, retained selection corruption/rollback and evidence checks pass. Exact foreign names including empty/Unicode/whitespace/custom/long values retain strings; non-string metadata refuses.
+All-enabled build PASS including Linux fixture compilation. Full suites PASS: 593 pure (5.94s), 405 serial PostgreSQL (115.44s), 274 worker (175.87s), 95 server (19.72s). Domain behavior and six diagrams PASS. Existing authority, accounting, cancellation, evidence, workspace/follow-up/transfer/recovery behavior remains qualified on macOS; no Linux runtime inference.
+Selected compiler: 209 nominal + 63 opaque = 272 PASS. Positive tuple/profile/descriptor clients precede scope/coercion/literal/constructor/Generic and operator-alias/registration substitution rejection.
+just keiro-gate ee79dc3 PASS: native check, ten-member inspection, idempotent scaffold and 156 conformance rows. Strict findings empty; four transducer fingerprints/source hashes unchanged. Diff/replay/fold reports retained. Valid wire/commitments, step labels/order/effects and producer identities are unchanged; no patch is needed.
+All 124 frozen guide hashes verified. Current compiled source/tool worklist verified: 322 modules, 913 declarations (695 data, 181 newtypes, 37 aliases), 14 entrypoints. Haskell conventions, thirteen mutation tests and git diff --check PASS. Generated files untouched; no dependency bound changes.
+
+Scope
+This closes the foreign provider tuple meanings shared by dispatch, profile matching and model descriptors. Profile identity/signing values, policy flags, remaining decision scalars and decoder owners still need their full review. The declaration worklist remains unclassified; M1 and plan95's final packaged/Linux/runtime qualification remain open.

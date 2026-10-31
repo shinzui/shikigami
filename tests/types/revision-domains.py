@@ -46,6 +46,9 @@ import Shikigami.Objective.Keys qualified as Objective
 import Shikigami.Execution.Identity qualified as Entity
 import Shikigami.Execution.Counter
 import Shikigami.Decision.Contract qualified as Decision
+import Shikigami.Behavior.Provider.Coordinate qualified as ProviderCoordinate
+import Shikigami.Behavior.Provider.Call qualified as ProviderCall
+import Shikigami.Attestation.Profile qualified as ProviderProfile
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Execution.Request qualified as AliasRequest
 import Shikigami.Agent.RunJob qualified as AliasJob
@@ -69,6 +72,15 @@ import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ('provider-coordinate-domains', 'capture :: Text -> ProviderCoordinate.ProviderCoordinate "provider-name"\ncapture = ProviderCoordinate.providerCoordinate\nprovider :: ProviderCall.ProviderCall -> ProviderCoordinate.ProviderCoordinate "provider-name"\nprovider call = call.provider\napi :: ProviderProfile.AllowedCall -> ProviderCoordinate.ProviderCoordinate "provider-api"\napi call = call.api\nendpoint :: Decision.ModelDescriptor -> ProviderCoordinate.ProviderCoordinate "endpoint-class"\nendpoint model = model.endpointClass\nmodel :: Decision.ModelDescriptor -> ProviderCoordinate.ProviderCoordinate "provider-model-id"\nmodel value = value.modelId\n', True),
+    ('provider-coordinate-constructor', 'value = ProviderCoordinate.ProviderCoordinate\n', False),
+    ('provider-coordinate-coercion', 'value :: Text -> ProviderCoordinate.ProviderCoordinate "provider-name"\nvalue = coerce\n', False),
+    ('provider-coordinate-literal', 'value :: ProviderCoordinate.ProviderCoordinate "provider-name"\nvalue = fromString ""\n', False),
+    ('provider-coordinate-scope-coercion', 'value :: ProviderCoordinate.ProviderCoordinate "provider-name" -> ProviderCoordinate.ProviderCoordinate "provider-api"\nvalue = coerce\n', False),
+    ('endpoint-is-not-provider-model', 'value :: ProviderCoordinate.ProviderCoordinate "endpoint-class" -> ProviderCoordinate.ProviderCoordinate "provider-model-id"\nvalue = id\n', False),
+    ('alias-is-not-provider-model', 'value :: Alias.ModelAlias -> ProviderCoordinate.ProviderCoordinate "provider-model-id"\nvalue = id\n', False),
+    ('registration-is-not-provider-name', 'value :: Decision.ModelRegistration "credential-binding-id" -> ProviderCoordinate.ProviderCoordinate "provider-name"\nvalue = id\n', False),
+
     ('retained-model-registration', 'version :: Decision.ModelDescriptor -> Decision.ModelRegistration "model-version"\nversion value = value.version\nbinding :: Decision.ModelDescriptor -> Decision.ModelRegistration "credential-binding-id"\nbinding value = value.bindingId\nrevision :: Decision.ModelDescriptor -> Decision.ModelRegistration "credential-binding-version"\nrevision value = value.bindingVersion\ndigest :: Decision.ModelDescriptor -> Decision.ModelDescriptorDigest\ndigest value = value.digest\nparse :: Text -> Either Text (Decision.ModelRegistration "model-version")\nparse = Decision.parseModelRegistration\n', True),
     ('model-registration-constructor', 'value = Decision.ModelRegistration\n', False),
     ('model-registration-coercion', 'value :: Text -> Decision.ModelRegistration "model-version"\nvalue = coerce\n', False),
@@ -483,6 +495,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
             fragments.update({'workspace-id-constructor': ['WorkspaceId'], 'workspace-id-kindid-coercion': ['WorkspaceId'], 'workspace-id-text-coercion': ['WorkspaceId', 'Text'], 'workspace-id-literal': ['WorkspaceId', 'IsString'], 'root-is-not-workspace': ["Couldn't match", 'ExecutionRootId', 'WorkspaceId']})
             fragments.update({'model-alias-constructor': ['ModelAlias'], 'model-alias-coercion': ['ModelAlias', 'Text'], 'model-alias-literal': ['ModelAlias', 'IsString'], 'agent-name-is-not-model-alias': ["Couldn't match", 'AgentName', 'ModelAlias']})
             fragments.update({'model-registration-constructor': ['ModelRegistration'], 'model-registration-coercion': ['ModelRegistration', 'Text'], 'model-registration-scope-coercion': ["Couldn't match", 'model-version', 'credential-binding-version'], 'model-registration-scope-substitution': ["Couldn't match", 'credential-binding-id', 'credential-binding-version'], 'model-registration-literal': ['ModelRegistration', 'IsString'], 'program-is-not-model-registration': ["Couldn't match", 'ProgramIdentity', 'ModelRegistration'], 'model-digest-constructor': ['ModelDescriptorDigest'], 'model-digest-coercion': ['ModelDescriptorDigest', 'Text'], 'model-digest-literal': ['ModelDescriptorDigest', 'IsString'], 'payload-is-not-model-digest': ["Couldn't match", 'PayloadDigest', 'ModelDescriptorDigest'], 'program-parameters-are-not-model-digest': ["Couldn't match", 'ProgramParameterDigest', 'ModelDescriptorDigest']})
+            fragments.update({'provider-coordinate-constructor': ['ProviderCoordinate'], 'provider-coordinate-coercion': ['ProviderCoordinate', 'Text'], 'provider-coordinate-literal': ['ProviderCoordinate', 'IsString'], 'provider-coordinate-scope-coercion': ["Couldn't match", 'provider-name', 'provider-api'], 'endpoint-is-not-provider-model': ["Couldn't match", 'endpoint-class', 'provider-model-id'], 'alias-is-not-provider-model': ["Couldn't match", 'ModelAlias', 'ProviderCoordinate'], 'registration-is-not-provider-name': ["Couldn't match", 'ModelRegistration', 'ProviderCoordinate']})
             if name.endswith("-constructor"):
                 assert any(marker in result.stderr.lower() for marker in ["not in scope", "does not export", "illegal term-level"]), (name, result.stderr)
             assert all(fragment in result.stderr for fragment in fragments[name]), (name, result.stderr)

@@ -36,6 +36,7 @@ import Shikigami.Attestation.Compliance (ComplianceRollUp, evaluateCallFacts)
 import Shikigami.Attestation.Evidence (CallRelationship (RootCall), ExpectedCall (..))
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Behavior.Provider.Coordinate (providerCoordinateText)
 import Shikigami.Decision.Contract
 import Shikigami.Log.Correlation (RunCorrelationId, callCorrelationId, renderCallCorrelationId, renderRunCorrelationId, runCorrelationId)
 
@@ -154,7 +155,7 @@ decisionCallHooks store profile = DecisionCallHooks begin finish
                         factsFromTerminal
                           correlation
                           RootCall
-                          (fromMaybe model.modelId (Baikai.observedValue ev.observedModel))
+                          (fromMaybe (providerCoordinateText model.modelId) (Baikai.observedValue ev.observedModel))
                           Nothing
                           ev
                     )
