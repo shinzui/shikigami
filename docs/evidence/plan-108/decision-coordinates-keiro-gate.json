@@ -1,0 +1,12 @@
+{
+  "sourceParent": "af76f1b",
+  "candidate": "400cdc0",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "command": "nix develop --no-write-lock-file -c just keiro-gate af76f1b",
+  "exitCode": 0,
+  "nativeDiff": "decision-coordinates-keiro-diff.json",
+  "replayImpact": "decision-coordinates-replay-impact.json",
+  "generatedConformance": "passed",
+  "limitations": "Native declarations retain their body and labels. Complete wire-codec and actual provider/replay controls are qualified separately in acceptance.md."
+}

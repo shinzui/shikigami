@@ -466,3 +466,25 @@ coverage. All M1/M2/M3 milestones remain open and the frozen guide stays deferre
 The declaration gate must run after the implementation commit because its
 scaffold step requires a clean committed Haskell layer; its result will be
 recorded separately before the next implementation batch.
+
+The native `just keiro-gate af76f1b` passes on committed candidate `400cdc0`,
+including ten language-6 workspace members, unchanged scaffold output and
+successful generated conformance. Exact native reports are retained in
+`decision-coordinates-keiro-diff.json` (no findings, no breaking change) and
+`decision-coordinates-replay-impact.json` (`replay-neutral`), with command and
+candidate identity in `decision-coordinates-keiro-gate.json`. No patch or
+first-release exception is needed: journal step shape, labels and admitted
+result meaning are unchanged, and the complete codec/provider controls qualify
+the opaque representation separately.
+
+Committing and running the gate rebuilds the Git-version-bearing dependency
+closure, which changes local interface fingerprints without changing audited
+source. A final coherent build/census refresh follows the gate before renewing
+the classification's census hash; no semantic verdict is renewed solely by
+copying interface hashes.
+
+The post-gate full build and census refresh pass. Source/interface/tool freshness
+independently enumerates the same 3,996 keys; all 726 semantic source identities
+still match, so only the census hash is renewed. Generated conformance reports
+156 passing checks. The upgrade inventory audit and its 21 mutation tests pass,
+retaining all 124 frozen sources and 93 release items.

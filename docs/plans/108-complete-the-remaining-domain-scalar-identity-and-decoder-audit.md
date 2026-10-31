@@ -84,6 +84,8 @@ workspace cases. Child/root attribution is decoded before filtering; without
 independent relational indexes, scans conservatively refuse unreadable
 attribution and may inspect all remaining metadata.
 
+The native workflow gate passes on `400cdc0` against `af76f1b`, with no findings
+and a replay-neutral native verdict. Exact reports accompany the current evidence.
 The full build, fresh census and focused checks are checkpoints, not milestone
 completion. Continue the remaining classification and applicable remediation
 before final M3 validation. See [the current evidence](../evidence/plan-108/acceptance.md)
