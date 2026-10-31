@@ -116,3 +116,36 @@ after the original executable and model bindings are removed. Between decisions,
 the whole-Flow snapshot selects the original retained derivation; removing that
 state refuses pending execution before dispatch. The result-codec registry alone
 is sufficient to read committed outcomes. [ADR 0045](0045-flow-policy-pins-pending-decisions-and-retains-completed-result-codecs.md) records the workflow integration boundary.
+
+
+## Preparation representation
+
+Plan 108 retains the preparation commitment as `DecisionPreparationId` through
+the preparation, outcome and actual-call report. It is the existing SHA-256
+commitment under `shikigami.prepared-decision/1`, not a separately allocated
+entity. Its factory and checked decoder share the canonical lowercase digest
+shape; no Generic or constructor bypass is public. Actual remote attempts still
+receive the independent allocated identities in ADR-96.
+
+`DecisionSlotLabel` checks the existing ASCII label grammar at construction and
+decoding, preserving arbitrary admitted labels rather than closing the domain
+to the two current compiled slots. `DecisionGeneration` distinguishes a runtime
+generation from attempt ordinals and resource counts. Keiro supplies an Int;
+retained JSON preserves its existing unbounded nonnegative Natural domain,
+including values above the host Int range. No new upper bound is inferred.
+
+The preparation retains Keiro's native `WorkflowId`. That type has no upstream
+JSON codec, so the preparation's narrow adapter preserves the historical string
+representation and its compatibility coordinates. It also preserves the former
+optional-policy decode behavior. There is no new journal-name restriction at
+this adapter. The upstream authority is `mori://shinzui/keiro/packages/keiro`;
+source symbols remain in the canonical project `mori://shinzui/keiro`, under
+`keiro/src/Keiro/Workflow/Types.hs` and `keiro/src/Keiro/Workflow.hs`
+(symbol-level URIs pending).
+
+Valid policy/preparation/outcome JSON, preparation hash input, labels, step order
+and provider effects retain their meaning and bytes. Corrupt slot labels and
+unproducible commitment strings now fail during complete-envelope decoding.
+This is validation of the existing admitted contracts, not an identity reset
+under the unused first-release exception. Native workflow gate evidence and
+actual replay/provider tests remain required alongside primitive codec checks.

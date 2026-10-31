@@ -19,6 +19,7 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Dhall qualified
 import GHC.Generics (Generic)
+import Keiro.Workflow.Types (WorkflowId (..))
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Decision.Contract
 import Shikigami.Decision.Contract qualified as Model
@@ -53,7 +54,7 @@ model :: ModelDescriptor
 model = ModelDescriptor (fixtureModelAlias "triage") (fixtureModelRegistration "1") (modelDescriptorDigest (toJSON ("model" :: Text))) (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "in-process") (Coordinate.providerCoordinate "stub-a") Nothing (fixtureModelRegistration "stub-binding") (fixtureModelRegistration "1")
 
 prepared :: PreparedDecision
-prepared = PreparedDecision "prepare-1" (runCorrelationId "run-1") "workflow-1" 0 "triage" (descriptor (programRef original)) (object ["request" .= ("hello" :: Text)]) model Nothing
+prepared = PreparedDecision (decisionPreparationId (String "prepare-1")) (runCorrelationId "run-1") (WorkflowId "workflow-1") initialDecisionGeneration triageDecisionSlot (descriptor (programRef original)) (object ["request" .= ("hello" :: Text)]) model Nothing
 
 tests :: TestTree
 tests =
@@ -165,8 +166,48 @@ tests =
             output = Answer "investigate" 0.73
         assertBool "executable absent" (isLeft (lookupProgram (mustRight (programRegistry [])) (programRef original)))
         decodeResult codec (encodeResult codec output) @?= Right output,
+      testCase "preparation coordinates preserve primitive bytes and the original commitment domain" do
+        let commitment = decisionPreparationId (object ["fixture" .= ("preparation" :: Text)])
+        decisionPreparationIdText commitment @?= "sha256:0aa7eb22843827bba4cd2e44f660dc4655fabc6cf45d4906b3b477795f2dedf3"
+        eitherDecode (encode commitment) @?= Right commitment
+        toJSON commitment @?= toJSON (decisionPreparationIdText commitment)
+        forM_ ["A", "triage", "other_slot-2", Text.replicate 1000 "x"] \raw -> do
+          let label = mustRight (parseDecisionSlotLabel raw)
+          decisionSlotLabelText label @?= raw
+          encode label @?= encode raw
+          eitherDecode (encode label) @?= Right label
+        forM_ [0, 1, toInteger (maxBound :: Int) + 1] \number -> do
+          let generation = mustRight (parseDecisionGeneration number)
+          toInteger (decisionGenerationNumber generation) @?= number
+          encode generation @?= encode number
+          eitherDecode (encode generation) @?= Right generation
+        assertBool "negative generation refused" (isLeft (parseDecisionGeneration (-1)))
+        forM_ ["", "-first", "_first", "has space", "日本", "label\0tail"] \raw ->
+          assertBool "existing slot grammar is checked at admission" (isLeft (parseDecisionSlotLabel raw))
+        forM_ ["", "prepare-1", "sha256:" <> Text.replicate 64 "A", "sha256:" <> Text.replicate 63 "a"] \raw ->
+          assertBool "unproducible preparation commitment refused" (isLeft (parseDecisionPreparationId raw)),
+      testCase "complete preparation codecs retain legacy fields and reject a substituted coordinate" do
+        let legacy = object ["identity" .= decisionPreparationIdText prepared.identity, "runId" .= prepared.runId, "workflowId" .= ("workflow-1" :: Text), "generation" .= (0 :: Integer), "label" .= ("triage" :: Text), "program" .= prepared.program, "input" .= prepared.input, "model" .= prepared.model, "policy" .= prepared.policy]
+            outcome = DecisionOutcome prepared.identity prepared.program (Right Null) []
+        encode prepared @?= encode legacy
+        eitherDecode (encode legacy) @?= Right prepared
+        case legacy of
+          Object fields -> do
+            eitherDecode (encode (Object (KeyMap.delete "policy" fields))) @?= Right prepared
+            forM_ [("identity", String "not-a-commitment"), ("label", String "invalid label"), ("generation", toJSON (-1 :: Integer)), ("generation", toJSON (0.5 :: Double))] \(key, invalid) ->
+              assertBool "complete preparation refuses the changed coordinate" (isLeft (eitherDecode @PreparedDecision (encode (Object (KeyMap.insert key invalid fields)))))
+          _ -> assertFailure "legacy control was not an object"
+        eitherDecode (encode outcome) @?= Right outcome
+        case toJSON outcome of
+          Object fields -> assertBool "outcome shares the checked preparation commitment" (isLeft (eitherDecode @DecisionOutcome (encode (Object (KeyMap.insert "preparationId" (String "not-a-commitment") fields)))))
+          _ -> assertFailure "outcome control was not an object"
+        -- The native runtime owns compatibility coordinates. The JSON adapter
+        -- keeps all historical strings rather than imposing new journal syntax.
+        forM_ ["", "legacy:workflow#1", "opaque λ"] \raw -> do
+          let value = prepared & #workflowId .~ WorkflowId raw
+          eitherDecode (encode value) @?= Right value,
       testCase "policy, preparation, outcome and failure round-trip" do
-        let policy = DecisionPolicySnapshot [DecisionSlot "triage" [descriptor (programRef original)] [fixtureModelAlias "triage"]] [model] Nothing
+        let policy = DecisionPolicySnapshot [DecisionSlot triageDecisionSlot [descriptor (programRef original)] [fixtureModelAlias "triage"]] [model] Nothing
             outcome = DecisionOutcome prepared.identity prepared.program (Right (object ["answer" .= ("return" :: Text), "confidence" .= (0.9 :: Double)])) []
             failure = decisionFailure InvalidInput (Text.replicate 800 "x")
         eitherDecode (encode policy) @?= Right policy

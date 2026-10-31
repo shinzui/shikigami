@@ -30,6 +30,7 @@ import Hasql.Pool qualified as Pool
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Tx
 import Hasql.Transaction.Sessions qualified as Sessions
+import Keiro.Workflow.Types (WorkflowId (..))
 import Numeric.Natural (Natural)
 import Shikigami.Attestation.CallFacts
 import Shikigami.Attestation.Compliance (ComplianceRollUp, evaluateCallFacts)
@@ -48,7 +49,7 @@ postgresDecisionEvidenceStore = DecisionEvidenceStore
 data StoredDecisionCall = StoredDecisionCall
   { callId :: !DecisionCallId,
     correlationId :: !Text,
-    invocationId :: !Text,
+    invocationId :: !DecisionPreparationId,
     ordinal :: !DecisionCallOrdinal,
     model :: !ModelDescriptor,
     terminal :: !(Maybe CallTerminal),
@@ -78,7 +79,7 @@ invocationBinding prepared =
     [ "format" .= (1 :: Int),
       "identity" .= prepared.identity,
       "runId" .= prepared.runId,
-      "workflowId" .= prepared.workflowId,
+      "workflowId" .= prepared.workflowId.unWorkflowId,
       "generation" .= prepared.generation,
       "label" .= prepared.label,
       "program" .= prepared.program,
@@ -100,7 +101,7 @@ ensureTx profile prepared = do
     then pure (refuse ContractMismatch "decision run profile binding conflicts")
     else do
       Tx.statement binding insertInvocation
-      stored <- Tx.statement prepared.identity findInvocation
+      stored <- Tx.statement (decisionPreparationIdText prepared.identity) findInvocation
       pure (if stored == binding then Right () else refuse ContractMismatch "decision invocation immutable binding conflicts")
 
 decisionCallHooks :: DecisionEvidenceStore -> Maybe ResolvedProfile -> DecisionCallHooks

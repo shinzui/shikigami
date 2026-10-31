@@ -17,6 +17,7 @@ import Data.Time (UTCTime (..), fromGregorian)
 import Hasql.Pool (Pool)
 import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Session
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Attestation.Compliance (ComplianceRollUp (..), evaluateCallFacts)
 import Shikigami.Attestation.Envelope (profileDigest)
@@ -44,11 +45,11 @@ model = ModelDescriptor (fixtureModelAlias "triage") (fixtureModelRegistration "
 prepared :: PreparedDecision
 prepared =
   PreparedDecision
-    "invocation-a"
+    (decisionPreparationId (String "invocation-a"))
     (runCorrelationId "run-evidence")
-    "workflow-evidence"
-    0
-    "triage"
+    (WorkflowId "workflow-evidence")
+    initialDecisionGeneration
+    triageDecisionSlot
     program
     (object ["private-input" .= ("PROMPT_MARKER" :: Text)])
     model
@@ -122,7 +123,7 @@ tests fixture =
           let store = postgresDecisionEvidenceStore pool
               hooks = decisionCallHooks store Nothing
               secondModel = (model & #modelId .~ (Coordinate.providerCoordinate "model-b") & #alias .~ (fixtureModelAlias "investigate")) :: ModelDescriptor
-              secondPrepared = (prepared & #identity .~ ("invocation-b") & #label .~ ("investigate") & #model .~ (secondModel)) :: PreparedDecision
+              secondPrepared = (prepared & #identity .~ (decisionPreparationId (String "invocation-b")) & #label .~ investigationDecisionSlot & #model .~ (secondModel)) :: PreparedDecision
               secondEvidence = (terminal "provider-b") {B.requestedModel = "model-b"}
           first <- expectRight =<< hooks.beginCall context
           hooks.finishCall first CallSucceeded (Just (terminal "provider-a")) >>= (@?= Right ())

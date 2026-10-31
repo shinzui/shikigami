@@ -26,6 +26,19 @@ module Shikigami.Decision.Contract
     modelDescriptorDigest,
     modelDescriptorDigestText,
     ModelDescriptor (..),
+    DecisionSlotLabel,
+    parseDecisionSlotLabel,
+    decisionSlotLabelText,
+    triageDecisionSlot,
+    investigationDecisionSlot,
+    DecisionPreparationId,
+    parseDecisionPreparationId,
+    decisionPreparationId,
+    decisionPreparationIdText,
+    DecisionGeneration,
+    parseDecisionGeneration,
+    decisionGenerationNumber,
+    initialDecisionGeneration,
     DecisionSlot (..),
     DecisionPolicySnapshot (..),
     PreparedDecision (..),
@@ -60,7 +73,7 @@ import Baikai.Evidence (ModelCallEvidence, commitmentDigest)
 import Baikai.ThinkingLevel (ThinkingLevel)
 import Control.Concurrent.MVar (modifyMVar, newMVar, readMVar)
 import Control.Lens ((&), (.~))
-import Data.Aeson (FromJSON (..), ToJSON (..), Value, object, withObject, withText, (.:), (.=))
+import Data.Aeson (FromJSON (..), ToJSON (..), Value, object, withObject, withText, (.:), (.:?), (.=))
 import Data.Aeson.KeyMap (KeyMap)
 import Data.Aeson.Types (Parser)
 import Data.Bifunctor (first)
@@ -72,6 +85,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import GHC.Generics (Generic)
 import GHC.TypeLits (Symbol)
+import Keiro.Workflow.Types (WorkflowId (..))
 import Numeric.Natural (Natural)
 import Shikigami.Attestation.Profile (SanctionedExecutionProfileRef)
 import Shikigami.Behavior.Provider.Coordinate
@@ -231,8 +245,77 @@ data ModelDescriptor = ModelDescriptor
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
+-- | The existing slot grammar, independently of the currently compiled slots.
+newtype DecisionSlotLabel = DecisionSlotLabel Text
+  deriving stock (Eq, Ord, Show)
+
+parseDecisionSlotLabel :: Text -> Either Text DecisionSlotLabel
+parseDecisionSlotLabel value = case Text.uncons value of
+  Just (firstCharacter, rest) | asciiAlphaNum firstCharacter && Text.all asciiWord rest -> Right (DecisionSlotLabel value)
+  _ -> Left "decision slot label requires an ASCII alphanumeric start and ASCII alphanumeric, hyphen or underscore suffix"
+  where
+    asciiAlphaNum c = c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
+    asciiWord c = asciiAlphaNum c || c == '-' || c == '_'
+
+decisionSlotLabelText :: DecisionSlotLabel -> Text
+decisionSlotLabelText (DecisionSlotLabel value) = value
+
+triageDecisionSlot, investigationDecisionSlot :: DecisionSlotLabel
+triageDecisionSlot = DecisionSlotLabel "triage"
+investigationDecisionSlot = DecisionSlotLabel "investigate"
+
+instance ToJSON DecisionSlotLabel where
+  toJSON = toJSON . decisionSlotLabelText
+  toEncoding = toEncoding . decisionSlotLabelText
+
+instance FromJSON DecisionSlotLabel where
+  parseJSON = withText "decision slot label" (either (fail . Text.unpack) pure . parseDecisionSlotLabel)
+
+-- | A commitment to a preparation, not an allocated entity or workflow id.
+newtype DecisionPreparationId = DecisionPreparationId Text
+  deriving stock (Eq, Ord, Show)
+
+parseDecisionPreparationId :: Text -> Either Text DecisionPreparationId
+parseDecisionPreparationId value = first (const "decision preparation commitment requires sha256 and 64 lowercase hexadecimal digits") (DecisionPreparationId . programParameterDigestText <$> parseProgramParameterDigest value)
+
+decisionPreparationId :: Value -> DecisionPreparationId
+decisionPreparationId = DecisionPreparationId . versionedDigest "shikigami.prepared-decision/1"
+
+decisionPreparationIdText :: DecisionPreparationId -> Text
+decisionPreparationIdText (DecisionPreparationId value) = value
+
+instance ToJSON DecisionPreparationId where
+  toJSON = toJSON . decisionPreparationIdText
+  toEncoding = toEncoding . decisionPreparationIdText
+
+instance FromJSON DecisionPreparationId where
+  parseJSON = withText "decision preparation commitment" (either (fail . Text.unpack) pure . parseDecisionPreparationId)
+
+-- | Keiro supplies an Int generation. Retained JSON keeps its existing Natural
+-- domain: no new upper bound or numeric representation is introduced here.
+newtype DecisionGeneration = DecisionGeneration Natural
+  deriving stock (Eq, Ord, Show)
+
+parseDecisionGeneration :: Integer -> Either Text DecisionGeneration
+parseDecisionGeneration value
+  | value >= 0 = Right (DecisionGeneration (fromInteger value))
+  | otherwise = Left "decision generation must not be negative"
+
+decisionGenerationNumber :: DecisionGeneration -> Natural
+decisionGenerationNumber (DecisionGeneration value) = value
+
+initialDecisionGeneration :: DecisionGeneration
+initialDecisionGeneration = DecisionGeneration 0
+
+instance ToJSON DecisionGeneration where
+  toJSON = toJSON . decisionGenerationNumber
+  toEncoding = toEncoding . decisionGenerationNumber
+
+instance FromJSON DecisionGeneration where
+  parseJSON value = parseJSON value >>= either (fail . Text.unpack) pure . parseDecisionGeneration
+
 data DecisionSlot = DecisionSlot
-  { label :: !Text,
+  { label :: !DecisionSlotLabel,
     programs :: ![ProgramDescriptor],
     models :: ![ModelAlias]
   }
@@ -257,23 +340,30 @@ instance FromJSON DecisionPolicySnapshot where
     DecisionPolicySnapshot <$> o .: "slots" <*> o .: "models" <*> o .: "policy"
 
 data PreparedDecision = PreparedDecision
-  { identity :: !Text,
+  { identity :: !DecisionPreparationId,
     runId :: !RunCorrelationId,
-    workflowId :: !Text,
-    generation :: !Natural,
-    label :: !Text,
+    workflowId :: !WorkflowId,
+    generation :: !DecisionGeneration,
+    label :: !DecisionSlotLabel,
     program :: !ProgramDescriptor,
     input :: !Value,
     model :: !ModelDescriptor,
     policy :: !(Maybe SanctionedExecutionProfileRef)
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+
+-- Keiro owns WorkflowId and exposes no JSON codec. This adapter preserves the
+-- historical string, including its admitted compatibility coordinates.
+instance ToJSON PreparedDecision where
+  toJSON value = object ["identity" .= value.identity, "runId" .= value.runId, "workflowId" .= value.workflowId.unWorkflowId, "generation" .= value.generation, "label" .= value.label, "program" .= value.program, "input" .= value.input, "model" .= value.model, "policy" .= value.policy]
+
+instance FromJSON PreparedDecision where
+  parseJSON = withObject "PreparedDecision" \o -> PreparedDecision <$> o .: "identity" <*> o .: "runId" <*> (WorkflowId <$> o .: "workflowId") <*> o .: "generation" <*> o .: "label" <*> o .: "program" <*> o .: "input" <*> o .: "model" <*> o .:? "policy"
 
 -- | A committed result is decoded by a retained pure codec, without executing
 -- the program or reapplying a deployment's current domain validator.
 data DecisionOutcome = DecisionOutcome
-  { preparationId :: !Text,
+  { preparationId :: !DecisionPreparationId,
     program :: !ProgramDescriptor,
     result :: !(Either DecisionFailure Value),
     attempts :: ![DecisionCallId]

@@ -49,7 +49,7 @@ catalog :: ModelCatalog
 catalog = mustRight (modelCatalog [binding "triage" "stub-triage", binding "investigate" "stub-investigate"])
 
 slot :: DecisionSlot
-slot = DecisionSlot "triage" [descriptor (programRef registered)] [fixtureModelAlias "triage", fixtureModelAlias "investigate"]
+slot = DecisionSlot triageDecisionSlot [descriptor (programRef registered)] [fixtureModelAlias "triage", fixtureModelAlias "investigate"]
 
 tests :: TestTree
 tests =

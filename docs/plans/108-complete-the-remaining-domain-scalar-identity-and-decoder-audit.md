@@ -63,16 +63,21 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 
 Implementation is under way. The schema-2 census and coverage/freshness checker
 pass 24 positive/mutation tests against a successful full GHC 9.12.4 macOS build.
-The current census has 3,990 declaration/member keys. Semantic classification
-covers 512 keys: 436 compliant entries, 25 exclusions and 51 explicit violations;
-3,478 keys remain unreviewed, and both coverage modes correctly refuse completion.
+The current census has 3,996 declaration/member keys. Semantic classification
+covers 726 keys: 633 compliant entries, 25 exclusions and 68 explicit violations;
+3,270 keys remain unreviewed, and both coverage modes correctly refuse completion.
 
 Process-profile, Objective, cleanup/listing, directory, sink, HTTP acceptance and
 workspace binding/file/transfer read boundaries now have owning transactional
 refusals. The latest ledger/worker-status/HTTP checks pass 6/10/9 cases; workspace
 checks pass nine core PostgreSQL and 27 worker transfer/file cases, after an
-intermediate 161-case broad worker pass. The 68 opaque compiler checks pass,
-including the new closed RunDisposition. Earlier policy, scope, worker and
+intermediate 161-case broad worker pass. Earlier 68 opaque compiler controls pass,
+including closed RunDisposition. The latest decision-coordinate candidate passes
+37 unit cases, 26 PostgreSQL cases and 81 public compiler controls. It resolves
+six previously recorded preparation/slot/native-coordinate violations, adds
+private checked values, and preserves valid journal bytes and the original
+preparation commitment domain. New owned-profile scalar findings remain
+explicit; typed composition entries do not certify their nested payloads. Earlier policy, scope, worker and
 compiler results remain identified separately in the evidence. The next workspace settlement checkpoint replaces JSON-derived SQL permission
 predicates with typed owner reads and passes 22 core PostgreSQL plus 162 worker
 workspace cases. Child/root attribution is decoded before filtering; without
@@ -82,7 +87,7 @@ attribution and may inspect all remaining metadata.
 The full build, fresh census and focused checks are checkpoints, not milestone
 completion. Continue the remaining classification and applicable remediation
 before final M3 validation. See [the current evidence](../evidence/plan-108/acceptance.md)
-and `workspace-settlement-source.json` for the latest tested source snapshot.
+and `decision-coordinates-source.json` for the latest tested source snapshot.
 
 ## Surprises & Discoveries
 
@@ -162,9 +167,9 @@ holds this durable owner boundary; it does not exempt the remaining scalars.
 
 Partial implementation acceptance is recorded in
 [the current evidence](../evidence/plan-108/acceptance.md): the coverage tooling,
-five owner-decoding paths, one policy scalar and one-off scope construction pass
-focused checks. The complete
-classification, 51 unresolved violations, remaining owners and M3 acceptance remain
+the named owner-decoding paths, closed policy format, one-off scope and checked
+decision preparation coordinates pass focused checks. The complete
+classification, 68 unresolved violations, remaining owners and M3 acceptance remain
 unfinished; all three milestone checkboxes stay open and the frozen guide stays
 deferred. FRIC-36 remains logged for triage when the plan completes.
 
@@ -213,17 +218,19 @@ identity changes. Preserve actual authorization, accounting, protected bodies
 and same-build recovery. Discover further relevant ADRs by their filenames and
 headings under `docs/adr/`; `docs/adr/README.md` describes their conventions.
 
-Remaining concrete work starts in
-`shikigami-core/src/Shikigami/Decision/Contract.hs` and
-`shikigami-core/src/Shikigami/Flow/Decision.hs` for preparation/slot/native
-generation values. Use the census source paths to locate profile/attestation
-identity, signing and policy values; worker/session identity lifetime; workspace
-paths, native identities and scalars; review material/evidence values; and tool
-binding/policy values. The census, not this illustrative list, defines coverage.
+Decision preparation, slot and generation coordinates now have checked nominal
+representations and retain native workflow identity. Remaining concrete work
+starts with owned profile policy scalars and attestation commitments in
+`shikigami-core/src/Shikigami/Attestation/Profile.hs` and
+`shikigami-core/src/Shikigami/Attestation/Envelope.hs`, plus typed invocation
+bindings and composable corruption refusal in
+`shikigami-core/src/Shikigami/Decision/Evidence.hs`. Continue worker/session
+identity lifetime; workspace paths, native identities and scalars; review
+material/evidence values; and tool binding/policy values. The census, not this illustrative list, defines coverage.
 Review identity lifetimes and actual runtime types before selecting TypeID or a
 technical/external locator representation. Native opaque IDs remain native.
 
-Remaining SQL JSON owners are
+SQL JSON surfaces under review include
 `shikigami-core/src/Shikigami/Workspace/Store.hs`,
 `shikigami-core/src/Shikigami/Workspace/CleanupStore.hs`,
 `shikigami-core/src/Shikigami/Workspace/TransferStore.hs`,

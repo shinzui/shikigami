@@ -1,0 +1,17 @@
+{
+  "sourceParent": "af76f1b",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "files": {
+    "shikigami-core/src/Shikigami/Decision/Contract.hs": "f37c1c537f9e21ab443d8312331fb94cef9144fa8226dbb5a7884df0ab8475e1",
+    "shikigami-core/src/Shikigami/Decision/Evidence.hs": "fbe3a035b12571a11ac258b6e4ce4a62b6191ae9224e4fe4d5b261ece2db154d",
+    "shikigami-core/src/Shikigami/Decision/ModelCatalog.hs": "5f819b614d159f5407cd4d39c6dd42ea481ea7e86229f6c468c91989a9ab2e4c",
+    "shikigami-core/src/Shikigami/Flow/Decision.hs": "971a90f1f25acde1d61c8bdcac3b04d674d980741bb188ebb52d6681e73dd91b",
+    "shikigami-core/test-postgres/Shikigami/DecisionEvidenceSpec.hs": "9fbafa94884f2eddc91c74853224e43eb848c07ba4045c9f44db204511f61810",
+    "shikigami-core/test-postgres/Shikigami/DecisionWorkflowSpec.hs": "7ed677eaf74004e01e34b19d0a08557ee2a6610c0a79ae8cf5c7647844eb4b52",
+    "shikigami-core/test/Shikigami/DecisionContractSpec.hs": "522a0177afb2aa916ad0edc30fcb8a5c0804ca42ad75e37c7f8df5322377d002",
+    "shikigami-core/test/Shikigami/DecisionModelCatalogSpec.hs": "881605f04ec902db2a5034d15c3ae3b1305f684a33f8e2fdd7985018c42d4e42",
+    "shikigami-core/test/Shikigami/DecisionRunnerSpec.hs": "56751fe411892eedd7815fa2c9c577159ef6df4ca9d39eda98add67cd9f3f99b",
+    "tests/types/opaque-values.py": "51764d8000b21d4acbc6ededed73e9b3b392634e15ef2c7fdc99c32ab52ac441"
+  }
+}

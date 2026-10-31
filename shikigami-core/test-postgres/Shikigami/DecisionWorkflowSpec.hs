@@ -155,9 +155,9 @@ tests fixture =
                     Aeson.Success (Right pinned) -> pure pinned
                     _ -> assertFailure "invalid prepared journal envelope"
                   Nothing -> assertFailure "missing preparation"
-                preparation.workflowId @?= (runJobWorkflowId request).unWorkflowId
-                preparation.generation @?= 0
-                preparation.label @?= label
+                preparation.workflowId @?= runJobWorkflowId request
+                preparation.generation @?= initialDecisionGeneration
+                decisionSlotLabelText preparation.label @?= label
                 preparation.program @?= program
                 preparation.model @?= model
                 outcome <- case Map.lookup ("decision-result-" <> label) index of
@@ -296,7 +296,7 @@ tests fixture =
         atRoot <- doesFileExist "domain/shikigami/agent-run.keiro"
         declared <- TextIO.readFile (if atRoot then "domain/shikigami/agent-run.keiro" else "../domain/shikigami/agent-run.keiro")
         let compiled = [slot.label | flow <- Flow.flowRegistry, slot <- flow.decisionSlots]
-        compiled @?= ["triage", "investigate"]
+        compiled @?= [triageDecisionSlot, investigationDecisionSlot]
         mapM_
           ( \label -> do
               let (StepName prepare, StepName result) = Decision.decisionStepNames label
@@ -326,7 +326,7 @@ tests fixture =
                 comparison.complete model context options
               captured = (comparison & #complete .~ (capture) & #stream .~ (liftCompleteToStream capture))
               input = InvestigationInput "Investigate the architecture practice" "original triage facts" (TE.decodeUtf8 (LBS.toStrict (encode Fixture.catalog)))
-              prepare registered = PreparedDecision "compare" (runCorrelationId "compare") "compare" 0 "investigate" (descriptor (programRef registered)) (toJSON input) (modelDescriptor b) Nothing
+              prepare registered = PreparedDecision (decisionPreparationId (Aeson.String "compare")) (runCorrelationId "compare") (WorkflowId "compare") initialDecisionGeneration investigationDecisionSlot (descriptor (programRef registered)) (toJSON input) (modelDescriptor b) Nothing
           (callHooks, _) <- newMemoryCallHooks
           let runner = DecisionRuntime behavior.runtime programs catalog Nothing callHooks [captured] 2_000_000 64
           old <- runDecisionProgram runner (prepare investigationProgram) (programRef investigationProgram) input

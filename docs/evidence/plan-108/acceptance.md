@@ -403,3 +403,66 @@ census refresh: 322 modules, 915 module declarations, fourteen entrypoints and
 Only the five substantively rereviewed owner source hashes are renewed; the
 512 classifications and 51 unresolved scalar violations are unchanged. Both
 classification checker modes still reject the 3,478 missing keys.
+
+The decision-coordinate candidate is bound by
+`decision-coordinates-source.json`, against parent `af76f1b`.
+`DecisionSlotLabel` enforces the existing ASCII slot grammar;
+`DecisionPreparationId` preserves the original canonical commitment under
+`shikigami.prepared-decision/1` through preparation, outcome and actual-call
+reports. `DecisionGeneration` preserves the former nonnegative Natural JSON
+domain, including numbers above host Int range. The runtime still supplies Int;
+no new ceiling or entity allocation is inferred. All three constructors are
+private and non-Generic.
+
+The preparation now retains native Keiro `WorkflowId`. Its explicit codec
+adapter preserves the historical Text representation, including compatibility
+coordinates and omitted optional policy. Complete valid preparation/outcome
+controls round-trip and retain exact bytes, then reject substituted labels,
+digests, negative or fractional generations. The fixed commitment vector keeps
+the original domain and canonical hash input. Native identity syntax is not
+narrowed by this adapter. Malformed labels and unproducible commitments were not
+produced by the admitted runtime; this is not another first-release identity
+reset. ADR-41 records this representation of the existing preparation contract.
+
+The formatted candidate passes 37 unit cases (contracts, model admission and
+runner) and 26 PostgreSQL cases (actual-attempt evidence and durable typed
+workflows), with serial disposable databases and no skipped cases:
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-test shikigami-core-postgres-test --enable-tests -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/typed decision contracts/||/decision model admission/||/governed decision runner/||/durable decision evidence/||/durable typed decisions/'
+nix develop --no-write-lock-file -c python3 tests/types/opaque-values.py
+```
+
+All 81 public compiler controls pass. A public-client positive control accepts
+the factories and native WorkflowId projection before constructor, Text/Natural
+coercion, unrelated digest/counter substitution and Generic bypass probes refuse.
+The workflow cases cover interrupted preparation/result recovery, committed
+result reuse, pinned pending implementation/derivation, provider call counts,
+permission intersection and evidence failure. Their passing results do not
+certify the native workflow declaration gate or unreviewed evidence-reader
+rollback boundaries. The 24 domain-tool mutation tests pass.
+
+The coherent full build passes. Refreshed census and independent freshness checks
+report 322 modules, 918 module declarations, fourteen entrypoints and 3,996 keys.
+Semantic review renews the changed Contract/Flow owner entries, resolves six
+recorded decision-coordinate violations and adds their six declaration/payload
+entries. A source review adds 177 typed composition entries and six entries for
+the existing FullCommit and Natural-backed duration/concurrency values. These
+composition verdicts cover preservation of named members and sum/product shapes;
+they do not certify nested scalar invariants, identity lifetimes or surrounding
+authorization transitions. The measurement codec tests are existing source
+references, not a claim that unchanged groups were rerun in this checkpoint.
+
+The same review records 23 explicit unresolved owned-profile findings: distinct
+resource units, permission axes, signer/retention/correlation keys, computed
+profile/payload commitments and the supported attestation schema. The profile
+limits are consumed directly in compliance and provider execution as well as
+converted by SelectionStore; they have no blanket boundary-DTO exemption.
+No signing algorithm, registry, numeric ceiling or digest scheme is invented.
+
+There are now 726 reviewed keys (633 compliant, 25 not applicable, 68 explicit
+violations) and 3,270 missing keys. Both classifier modes still reject incomplete
+coverage. All M1/M2/M3 milestones remain open and the frozen guide stays deferred.
+The declaration gate must run after the implementation commit because its
+scaffold step requires a clean committed Haskell layer; its result will be
+recorded separately before the next implementation batch.

@@ -161,12 +161,9 @@ slotErrors registry declaration slots =
   where
     labels = map (\slot -> slot.label) slots
     check slot =
-      ["invalid decision slot label" | Text.null slot.label || not (asciiAlphaNum (Text.head slot.label)) || Text.any (\c -> not (asciiWord c)) slot.label]
-        <> ["decision slot has no program or model" | null slot.programs || null slot.models]
+      ["decision slot has no program or model" | null slot.programs || null slot.models]
         <> ["decision slot program contract is not registered" | any (`notElem` programDescriptors registry) slot.programs]
         <> ["decision slot model alias is not declared by agent" | any (`notElem` declaration.decisionModels) slot.models]
-    asciiAlphaNum c = c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
-    asciiWord c = asciiAlphaNum c || c == '-' || c == '_'
 
 -- | Retained historical bindings serve pending snapshots without expanding the
 -- active alias catalog or declaration authority. Reusing an immutable alias /

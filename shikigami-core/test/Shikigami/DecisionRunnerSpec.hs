@@ -17,7 +17,7 @@ import Baikai.ThinkingLevel (ThinkingLevel (ThinkingHigh))
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (SomeException, throwIO, try)
-import Data.Aeson (FromJSON, ToJSON, Value (Null), toJSON)
+import Data.Aeson (FromJSON, ToJSON, Value (Null, String), toJSON)
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as LBS
 import Data.Either (isLeft)
@@ -32,6 +32,7 @@ import Data.Time (UTCTime (..), fromGregorian, getCurrentTime)
 import Data.Vector qualified as V
 import GHC.Generics (Generic)
 import Handan.Runtime (Runtime (..))
+import Keiro.Workflow.Types (WorkflowId (..))
 import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
@@ -75,7 +76,7 @@ binding alias model secret = mustRight (modelBinding (fixtureModelAlias alias) "
 input :: Answer
 input = Answer "investigate" 0.81
 
-preparedFor registered binding = PreparedDecision "preparation" (runCorrelationId "run-1") "workflow-1" 0 "triage" (descriptor (programRef registered)) (toJSON input) (modelDescriptor binding) Nothing
+preparedFor registered binding = PreparedDecision (decisionPreparationId (String "preparation")) (runCorrelationId "run-1") (WorkflowId "workflow-1") initialDecisionGeneration triageDecisionSlot (descriptor (programRef registered)) (toJSON input) (modelDescriptor binding) Nothing
 
 -- Each observed transport request, including its final schema and credential.
 data Seen = Seen !Text !(Maybe Text) !Bool

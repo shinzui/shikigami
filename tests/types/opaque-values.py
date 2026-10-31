@@ -12,6 +12,7 @@ CORE_UNITS = [entry["id"] for entry in PLAN["install-plan"]
 assert len(CORE_UNITS) == 1, CORE_UNITS
 CORE_UNIT = CORE_UNITS[0]
 HEADER = '''{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 module OpaqueBoundary where
 import Data.Aeson qualified as Aeson
@@ -19,7 +20,9 @@ import Data.Aeson.Types (Parser)
 import Data.Coerce (coerce)
 import Data.ByteString (ByteString)
 import Data.Text (Text)
+import Numeric.Natural (Natural)
 import GHC.Generics qualified as Generic
+import Keiro.Workflow.Types (WorkflowId)
 import Shikigami.Agent.Delegate.Depth qualified as Depth
 import Shikigami.Agent.ExpertiseKey qualified as Expertise
 import Shikigami.Agent.Name qualified as Name
@@ -56,7 +59,17 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''runDisposition :: Ledger.RunDisposition
+POSITIVE = '''preparation :: Text -> Either Text Decision.DecisionPreparationId
+preparation = Decision.parseDecisionPreparationId
+slotLabel :: Text -> Either Text Decision.DecisionSlotLabel
+slotLabel = Decision.parseDecisionSlotLabel
+decisionGeneration :: Integer -> Either Text Decision.DecisionGeneration
+decisionGeneration = Decision.parseDecisionGeneration
+attemptCount :: Integer -> Either Text (Counter.AttemptCount "selection-calls")
+attemptCount = Counter.parseAttemptCount
+nativeWorkflow :: Decision.PreparedDecision -> WorkflowId
+nativeWorkflow value = value.workflowId
+runDisposition :: Ledger.RunDisposition
 runDisposition = Ledger.RunAccepted
 runDispositionText :: Text
 runDispositionText = Ledger.renderRunDisposition Ledger.RunDeadLettered
@@ -170,6 +183,9 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('Decision.DecisionPreparationId', 'generic'),
+    ('Decision.DecisionSlotLabel', 'generic'),
+    ('Decision.DecisionGeneration', 'generic'),
     ('Decision.ProgramIdentity "program-id"', 'generic'),
     ('Decision.ProgramParameterDigest', 'generic'),
     ('ProcessPolicy.ProcessPolicyFormat', 'generic'),
@@ -245,6 +261,25 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         result = compile(body)
         assert result.returncode != 0 and 'RunDisposition' in result.stderr, (source_kind, result.stderr)
         print('opaque boundary: run disposition ' + source_kind + ' substitution refused: passed', flush=True)
+    for label, signature, expression in [
+        ('preparation Text', 'Text -> Decision.DecisionPreparationId', 'id'),
+        ('preparation coercion', 'Text -> Decision.DecisionPreparationId', 'coerce'),
+        ('slot Text', 'Text -> Decision.DecisionSlotLabel', 'id'),
+        ('slot coercion', 'Text -> Decision.DecisionSlotLabel', 'coerce'),
+        ('generation coercion', 'Natural -> Decision.DecisionGeneration', 'coerce'),
+        ('unrelated digest', 'Decision.ProgramParameterDigest -> Decision.DecisionPreparationId', 'id'),
+        ('unrelated generation', 'Counter.AttemptCount "selection-calls" -> Decision.DecisionGeneration', 'id')]:
+        result = compile('bypass :: ' + signature + '\nbypass = ' + expression + '\n')
+        assert result.returncode != 0 and 'Not in scope' not in result.stderr, (label, result.stderr)
+        print('opaque boundary: ' + label + ' substitution refused: passed', flush=True)
+    for kind, representation in [
+        ('Decision.DecisionPreparationId', 'Text'),
+        ('Decision.DecisionSlotLabel', 'Text'),
+        ('Decision.DecisionGeneration', 'Natural')]:
+        result = compile('bypass :: ' + representation + ' -> ' + kind + '\nbypass = ' + kind + '\n')
+        assert result.returncode != 0 and kind.split('.')[-1] in result.stderr, (kind, result.stderr)
+        assert any(fragment in result.stderr.lower() for fragment in ['not in scope', 'does not export', 'illegal term-level use']), (kind, result.stderr)
+        print('opaque boundary: ' + kind + ' constructor refused: passed', flush=True)
     for kind, operation in CASES:
         if operation == 'parse':
             body = 'bypass :: Aeson.Value -> Parser ' + kind + '\nbypass = Aeson.genericParseJSON Aeson.defaultOptions\n'

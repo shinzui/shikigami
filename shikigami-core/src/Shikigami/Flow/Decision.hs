@@ -25,7 +25,6 @@ import Control.Monad (unless, when)
 import Data.Aeson (FromJSON, Result (..), ToJSON, fromJSON, object, toJSON, (.=))
 import Data.IORef (atomicModifyIORef', newIORef)
 import Data.List (find)
-import Data.Text (Text)
 import Data.Typeable (Typeable)
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, liftIO, (:>))
 import Effectful.Dispatch.Dynamic (interpret, send)
@@ -56,11 +55,11 @@ decisionStep :: DecisionLabel -> DecisionProgramRef i o -> DecisionStep i o
 decisionStep = DecisionStep
 
 decisionSlot :: DecisionStep i o -> [ModelAlias] -> DecisionSlot
-decisionSlot (DecisionStep label ref) models = DecisionSlot (labelText label) [descriptor ref] models
+decisionSlot (DecisionStep label ref) models = DecisionSlot (slotLabel label) [descriptor ref] models
 
-labelText :: DecisionLabel -> Text
-labelText Triage = "triage"
-labelText Investigation = "investigate"
+slotLabel :: DecisionLabel -> DecisionSlotLabel
+slotLabel Triage = triageDecisionSlot
+slotLabel Investigation = investigationDecisionSlot
 
 decisionStepNames :: DecisionLabel -> (StepName, StepName)
 decisionStepNames Triage = (StepName "decision-prepare-triage", StepName "decision-result-triage")
@@ -129,14 +128,15 @@ runDecision env action = do
           when repeated (throwIO (DecisionAbort (decisionFailure InvalidSlot "decision slot repeated within one generation")))
           let (prepareName, resultName) = decisionStepNames label
           preparedResult <- journal env prepareName do
-            (_, WorkflowId workflowId) <- currentWorkflow
+            (_, nativeWorkflowId@(WorkflowId workflowId)) <- currentWorkflow
             generation <- currentRunGeneration
             pure do
+              checkedGeneration <- either (Left . decisionFailure ContractMismatch) Right (parseDecisionGeneration (toInteger generation))
               slot <-
                 maybe
                   (Left (decisionFailure InvalidSlot "decision slot is absent from pinned policy"))
                   Right
-                  (find (\slot -> slot.label == labelText label) policy.slots)
+                  (find (\slot -> slot.label == slotLabel label) policy.slots)
               unless (alias `elem` slot.models) (Left (decisionFailure ForbiddenModel "model alias is not allowed for this pinned slot"))
               selected <- maybe (Left (decisionFailure UnknownModel "pinned model alias is unavailable")) Right (find (\model -> model.alias == alias) policy.models)
               program <- case slot.programs of
@@ -146,19 +146,18 @@ runDecision env action = do
               registered <- lookupProgram env.services.programs ref
               checked <- validateInput registered input
               let identity =
-                    versionedDigest
-                      "shikigami.prepared-decision/1"
+                    decisionPreparationId
                       ( object
                           [ "workflow" .= workflowId,
                             "generation" .= generation,
-                            "label" .= labelText label,
+                            "label" .= slotLabel label,
                             "program" .= program,
                             "model" .= selected,
                             "input" .= toJSON checked,
                             "policy" .= policy.policy
                           ]
                       )
-              Right (PreparedDecision identity (runCorrelationId workflowId) workflowId (fromIntegral generation) (labelText label) program (toJSON checked) selected policy.policy)
+              Right (PreparedDecision identity (runCorrelationId workflowId) nativeWorkflowId checkedGeneration (slotLabel label) program (toJSON checked) selected policy.policy)
           prepared <- either (throwIO . DecisionAbort) pure preparedResult
           outcome <- journal env resultName do
             -- Only the action of an uncommitted result step may consult executables
