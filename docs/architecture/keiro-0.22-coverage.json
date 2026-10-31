@@ -124,8 +124,50 @@
       "sourceSha256": "81e5074a4615dc7d53edeb8d0e022171d4f9df1ce879ff028825b6e244134945",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
       "status": "pending",
-      "clauses": [],
-      "evidence": []
+      "clauses": [
+        {
+          "id": "scenario-first",
+          "disposition": "existing",
+          "rationale": "Accepted/refused, duplicate/lost-acknowledgement, concurrency, replay, timeout and recovery scenarios live with their owning concepts. Current affected acceptance is 375 isolated PostgreSQL, 260 worker and 95 server cases; generated checks complement these scenarios."
+        },
+        {
+          "id": "four-core-suites",
+          "disposition": "implemented",
+          "rationale": "Core owns pure, domain-driver, diagram and PostgreSQL suites. The domain driver was incomplete and now runs every aggregate through the same compiled generated facade, all four behavior collections and fifteen focused guard cases. All 143 driver and 545 pure assertions pass."
+        },
+        {
+          "id": "private-generation",
+          "disposition": "implemented",
+          "rationale": "Generated conformance remains a separate producer-owned package importing the compiled core facade. Hand-owned domain assertions live in concept Conformance modules and test-domain/Main.hs; generated modules were not exposed or duplicated into the test component."
+        },
+        {
+          "id": "package-owned-integration",
+          "disposition": "existing",
+          "rationale": "Migration suites compose and verify the public migration owners; server tests drive actual handlers, and worker suites retain Agent.RunJob.WorkerSpec and Health.WorkerSpec plus delivery, supervisor, inspection and workspace tests. Tests are aggregated by Tasty in each owning package."
+        },
+        {
+          "id": "isolated-databases-and-contention",
+          "disposition": "existing",
+          "rationale": "The public migrations:test-support wrapper supplies complete native migration components before per-example clones. Same-database contention uses independent resource-aware pools; current checkpoint/creation/receipt races and rollback cases pass without using a developer database."
+        },
+        {
+          "id": "optional-proof-and-migration-suites",
+          "disposition": "not-applicable",
+          "rationale": "This first-release reset has no deployed historical codec population and introduces no SBV/Z3 proof consumer. Retained reset/fold/diff artifacts and current codec examples are explicit evidence; no historical corpus or symbolic proof suite is fabricated."
+        },
+        {
+          "id": "final-qualified-profiles",
+          "disposition": "pending",
+          "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md",
+          "rationale": "Plan95 must qualify the final frozen role artifacts and actual selected Linux/transport profiles. Current PostgreSQL/native mock-adapter evidence is not a real Kafka-broker test; any selected Kafka profile needs its own broker-backed evidence."
+        }
+      ],
+      "evidence": [
+        "docs/evidence/keiro-0.22/domain-driver-results.txt",
+        "shikigami-core/test-domain/Main.hs",
+        "shikigami-core/shikigami-core.cabal",
+        "docs/evidence/keiro-0.22/worker-owner-revision-results.txt"
+      ]
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-vertical-slice-modules",

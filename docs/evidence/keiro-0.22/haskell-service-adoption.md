@@ -119,3 +119,10 @@ Prelude isolation and multiline literal use are implemented or verified in sourc
 Producer-only corpus maintenance is not applicable because no producer pattern
 document was changed. Existing timestamp-bound reviews remain historical; no
 independent review approval was invented.
+
+The core domain driver now covers all four aggregate witness collections through
+concept-owned public facades over the private generated contracts, and invokes the
+compiled generated service facade. All 143 assertions pass, including fifteen
+focused guard checks with accepted controls and successful replay seeds. Native
+unverified guard classifications remain visible. The 545 pure tests pass after
+the test-layout extension; see [domain-driver-results.txt](domain-driver-results.txt).

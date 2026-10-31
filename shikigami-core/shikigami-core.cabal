@@ -120,6 +120,7 @@ library
     Shikigami.Execution.Transcript
     Shikigami.ExecutionDriver.Generated.WorkflowFacts
     Shikigami.ExecutionDriver.Generated.WorkflowRuntime
+    Shikigami.ExecutionLifecycle.Conformance
     Shikigami.ExecutionLifecycle.Generated.Domain
     Shikigami.ExecutionLifecycle.Generated.EventStream
     Shikigami.Flow
@@ -154,6 +155,7 @@ library
     Shikigami.Objective.Store
     Shikigami.Objective.Types
     Shikigami.ObjectiveLifecycle.BehaviorHoles
+    Shikigami.ObjectiveLifecycle.Conformance
     Shikigami.ObjectiveLifecycle.Generated.BehaviorContract
     Shikigami.ObjectiveLifecycle.Generated.Codec
     Shikigami.ObjectiveLifecycle.Generated.Domain
@@ -220,6 +222,7 @@ library
     Shikigami.WorkerSession.Transfer
     Shikigami.WorkerSession.Types
     Shikigami.WorkerSession.Workflow
+    Shikigami.WorkerSessionLifecycle.Conformance
     Shikigami.Workflow.Registry
     Shikigami.Workflow.Versioning
     Shikigami.Workspace.Admission

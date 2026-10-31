@@ -1,0 +1,7 @@
+ExecPlan 107 domain-suite layout; source parent 96a5335; 2026-10-31 UTC.
+The database-free core domain driver now calls the generated service facade for all four aggregates/read models/structural contracts, plus the four hand-owned behavior witness collections. Three new concept-owned public Conformance facades keep generated modules private and use the same compiled core.
+All 143 driver assertions passed: 124 generated checks, four behavior checks and fifteen focused guard checks.
+Each focused rejection has a successfully replayed live state and a valid accepted control. Execution, worker-session and objective checks refuse another identity, stale expected revision and a non-advancing revision. RunEvidence checks refuse another identity and another run. Rejections require native NoMatchingEdge rather than any arbitrary failure.
+Native behavior coverage retains its verified/unverified classifications. Focused examples do not become a symbolic totality claim.
+All 545 core pure tests passed (0.62s, parallel pure suite), including package/specification inventories. Formatting, diff and language checks pass. No PostgreSQL or runtime body changed in this test-only extension.
+Final packaged/Linux and real-broker qualification belongs to plan95; this suite does not establish those profiles.
