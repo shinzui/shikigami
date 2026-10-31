@@ -1,14 +1,19 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.WorkspaceSystemdSpec (tests) where
 
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
+import Data.Text qualified as ClaimText
 import Data.Text qualified as Text
 import Data.Time (UTCTime, addUTCTime)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import Shikigami.Agent.Principal (AgentIdentity (CompatibilityIdentity))
+import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (NeedModel))
 import Shikigami.Prelude ((&), (.~))
+import Shikigami.StateRevision qualified as Generation
 import Shikigami.Workspace.Process
 import Shikigami.Workspace.Systemd
 import System.Info qualified as Platform
@@ -75,7 +80,7 @@ withRecord use = do
   identity <- systemdProfileIdentity profile
   let command = ProcessCommand "validate" identity "/bin/validate" ["$HOME", "%n", "", "line\né"] "" (Map.singleton "HOME" "/scratch") 30 1024
       operation = OperationId "process-operation"
-      record = ProcessRecord operation (AttemptId "original-attempt") "claim" 1 digest digest digest command (addUTCTime 30 now) (processUnit operation digest) (Just "11111111-1111-4111-8111-111111111111") Nothing ProcessLaunchRequested Nothing (Just (ProcessRouting 1 (ExecutionId "transport-execution") (CompatibilityIdentity "worker") digest NeedModel))
+      record = ProcessRecord operation (AttemptId "original-attempt") (fixtureOwner "claim") (fixtureGeneration 1) digest digest digest command (addUTCTime 30 now) (processUnit operation digest) (Just "11111111-1111-4111-8111-111111111111") Nothing ProcessLaunchRequested Nothing (Just (ProcessRouting 1 (ExecutionId "transport-execution") (CompatibilityIdentity "worker") digest NeedModel))
   use profile record
 
 now :: UTCTime
@@ -87,3 +92,9 @@ otherDigest = "sha256:" <> Text.replicate 64 "b"
 
 right :: (Show e) => Either e a -> IO a
 right = either (\err -> assertFailure (show err) >> fail "unreachable") pure
+
+fixtureGeneration :: Integer -> Generation.StateRevision "execution-attempt"
+fixtureGeneration value = either (error . show) id (Generation.parseRevision value)
+
+fixtureOwner :: ClaimText.Text -> Claim.ClaimOwner
+fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)

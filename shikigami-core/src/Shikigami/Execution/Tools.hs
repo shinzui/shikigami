@@ -28,6 +28,7 @@ import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Execution.Transcript
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude
+import Shikigami.StateRevision
 import Shikumi.Tool (ToolError (..), ToolRegistry, mkDynTool, mkRegistry, registryBaikai, registryTools, someToolDescription, someToolName, someToolSchema)
 
 -- Describing a menu cannot manufacture accepted operation coordinates. A
@@ -127,7 +128,7 @@ prepareGovernedTools registry snapshot context requested descriptors = do
       raw <- case context of
         Nothing -> pure (Right (mkDynTool contract.name contract.description contract.schema (\_ -> pure (Left (ToolRunFailed contract.name "description cannot execute")))))
         Just dispatch
-          | dispatch.operation.executionId /= snapshot.executionId || dispatch.generation <= 0 || Text.null dispatch.owner || emptyAttempt dispatch.attemptId -> pure refused
+          | dispatch.operation.executionId /= snapshot.executionId || dispatch.generation <= initialRevision || emptyAttempt dispatch.attemptId -> pure refused
           | otherwise -> adapter.prepare snapshot dispatch contract.name
       pure do
         tool <- raw

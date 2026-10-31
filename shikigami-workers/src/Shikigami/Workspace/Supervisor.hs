@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Conditional process admission and one-shot launch ownership. No model or
 -- socket caller supplies commands, host paths, Unix ids or systemd properties.
 -- Installation remains gated on the complete Linux supervisor qualification.
@@ -42,6 +44,7 @@ import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Capability.Overlay
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
+import Shikigami.Execution.Claim
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy.Types (RecoveryClass (..), ToolInvoiceCost (..))
 import Shikigami.Execution.Resources qualified as Resources
@@ -52,6 +55,7 @@ import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude hiding ((.=))
+import Shikigami.StateRevision
 import Shikigami.Workspace.Allocation (workspaceFiles, workspaceMetadata, workspaceScratch)
 import Shikigami.Workspace.Collector
 import Shikigami.Workspace.ContainedFile
@@ -80,8 +84,8 @@ data SupervisorRequest = SupervisorRequest
   { executionId :: !ExecutionId,
     operationId :: !OperationId,
     attemptId :: !AttemptId,
-    owner :: !Text,
-    generation :: !Integer
+    owner :: !ClaimOwner,
+    generation :: !(StateRevision "execution-attempt")
   }
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON)
@@ -435,7 +439,7 @@ waitReady directory remaining = do
     _ -> abort SupervisorUnresolved
 
 validRequest :: SupervisorRequest -> Bool
-validRequest request = bounded request.executionId.value && bounded operation && bounded attempt && bounded request.owner && request.generation > 0 && request.generation < 9223372036854775808
+validRequest request = bounded request.executionId.value && bounded operation && bounded attempt && request.generation > initialRevision && revisionNumber request.generation < 9223372036854775808
   where
     OperationId operation = request.operationId; AttemptId attempt = request.attemptId
 

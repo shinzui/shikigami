@@ -57,7 +57,7 @@ Execution assignment keys now retain a private locator type through selection,
 receipts, inspection, SQL and workspace authorization (ADR-84). Their existing
 workflow/message hash derivations and bytes are unchanged. The compiled declaration
 worklist retains source/interface hashes and current-component selection; it is
-not a semantic compliance claim. The complete scalar/identity review remains open.
+not a semantic compliance claim. Attempt fences now retain their private owner token and scoped generation without conflating native workflow generations or principals (ADR-85). The complete scalar/identity review remains open.
 
 ## Decision Log
 
@@ -71,8 +71,8 @@ cases. The language checker and thirteen style/ownership mutation tests pass.
 [The adoption record](../evidence/keiro-0.22/haskell-service-adoption.md) links each
 implemented domain-value wave and its exact candidate/evidence.
 
-Latest assignment-key acceptance rebuilt all enabled components and passed 561
-pure, 383 serial PostgreSQL, 260 worker and 95 server tests, with 77 positive-first
+Latest attempt-fence acceptance rebuilt all enabled components and passed 562
+pure, 383 serial PostgreSQL, 260 worker and 95 server tests, with 85 positive-first
 compiler clients, 143 domain-driver assertions, six diagrams and 156 native
 conformance rows. Its native diff/replay is neutral; this does not erase the
 previous retained identity/binding breaks. Forty-two of the 46 assigned sources

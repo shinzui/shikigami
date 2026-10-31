@@ -12,6 +12,7 @@ import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
+import Data.Text qualified as ClaimText
 import Data.Text qualified as Text
 import Effectful (Eff)
 import Effectful.Dispatch.Static (unsafeEff_)
@@ -22,6 +23,7 @@ import Shikigami.Agent.Principal (AgentIdentity (CompatibilityIdentity))
 import Shikigami.App (AppEffects, runAppIO)
 import Shikigami.Capability.Provider (DurableAdapter (..), DurableToolContract (..))
 import Shikigami.Execution.Attempt qualified as Attempt
+import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Counter (AttemptCount, parseAttemptCount)
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Policy.Types
@@ -34,6 +36,7 @@ import Shikigami.Execution.Transcript
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision (StateRevision, parseRevision)
+import Shikigami.StateRevision qualified as Generation
 import Shikigami.Workspace.FileProvider (FileRuntime (..))
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Process
@@ -140,7 +143,7 @@ tests fixture =
         Just receipt <- pure retained.receipt
         assertBool "only confirmed zero normal exit succeeds" (processSucceeded receipt)
         superviseProcess runtime request >>= (@?= Right retained)
-        superviseProcess runtime (request & #generation .~ (request.generation + 1)) >>= (@?= Right retained)
+        superviseProcess runtime (request & #generation .~ (Generation.advanceRevision request.generation)) >>= (@?= Right retained)
         publishProcessReceipt runtime reference.operationId >>= (@?= Right ProcessReceiptAcknowledged)
         readIORef calls >>= (@?= (1, 1)),
       testCase "lost launch acknowledgement reconciles facts after revocation without dispatching another command" $ withProcess fixture id False \file runtime observed calls snapshot reference -> do
@@ -165,7 +168,7 @@ tests fixture =
         let claim = Attempt.AttemptClaim reference request.owner request.generation
             invalid = Attempt.AttemptResult (OperationDenied "not a retained tool result") NeedModel Nothing
         runAppIO file.appEnv (Execution.recordIndependentToolReceipt (CompatibilityIdentity "other-principal") waiting.revision claim invalid) >>= (\value -> right value >>= (@?= Left ExecutionIdentityConflict))
-        runAppIO file.appEnv (Execution.recordIndependentToolReceipt snapshot.identity waiting.revision (claim & #generation .~ (claim.generation + 1)) invalid) >>= (\value -> right value >>= (@?= Left AttemptConflict))
+        runAppIO file.appEnv (Execution.recordIndependentToolReceipt snapshot.identity waiting.revision (claim & #generation .~ (Generation.advanceRevision claim.generation)) invalid) >>= (\value -> right value >>= (@?= Left AttemptConflict))
         runAppIO file.appEnv (Execution.recordIndependentToolReceipt snapshot.identity waiting.revision claim invalid) >>= (\value -> right value >>= (@?= Left AttemptConflict))
         publishProcessReceipt revoked reference.operationId >>= (@?= Right ProcessReceiptAcknowledged)
         publishProcessReceipt revoked reference.operationId >>= (@?= Right ProcessReceiptAcknowledged)
@@ -194,7 +197,7 @@ tests fixture =
       testCase "the independent owner waits for actual claim expiry before acknowledging its retained receipt" $ withProcess fixture id True \file runtime _ calls snapshot reference -> do
         access <- stored file (Execution.authorizeReplay snapshot.executionId snapshot.identity (pure (Right ())))
         Just (before, _, _) <- stored file (Execution.inspectExecution snapshot.executionId)
-        Attempt.ClaimGranted claim <- stored file (Execution.claimExecutionAttempt access before.revision reference "lost-worker" 3)
+        Attempt.ClaimGranted claim <- stored file (Execution.claimExecutionAttempt access before.revision reference (fixtureOwner "lost-worker") 3)
         Just (claimed, _, _) <- stored file (Execution.inspectExecution snapshot.executionId)
         _ <- stored file (Execution.startExecutionAttempt access claimed.revision claim)
         let request = SupervisorRequest snapshot.executionId reference.operationId reference.attemptId claim.owner claim.generation
@@ -231,7 +234,7 @@ tests fixture =
           actual.phase @?= Attempt.AttemptUncertain
           readIORef calls >>= (@?= (1, 0)),
       testCase "a substituted actual claim generation refuses before reserving or preparing capture" $ withProcess fixture id True \file runtime observed calls snapshot reference -> do
-        let changed request = request & #generation .~ (request.generation + 1)
+        let changed request = request & #generation .~ (Generation.advanceRevision request.generation)
         Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapterWithRequest changed runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         transaction file (Processes.inspectProcessTx reference.operationId) >>= (@?= Nothing)
         readIORef calls >>= (@?= (0, 0)),
@@ -407,3 +410,6 @@ fixtureCount number = either (error . show) id (parseAttemptCount number)
 
 fixtureToolPosition :: Integer -> ToolPosition
 fixtureToolPosition value = either (error . show) id (parseToolPosition value)
+
+fixtureOwner :: ClaimText.Text -> Claim.ClaimOwner
+fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)

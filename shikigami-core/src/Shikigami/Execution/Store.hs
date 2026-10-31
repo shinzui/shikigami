@@ -91,6 +91,7 @@ import Shikigami.Decision.Contract (ModelDescriptor, versionedDigest)
 import Shikigami.Execution.AssignmentKey (AssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Catalog (withLiveExecution)
+import Shikigami.Execution.Claim
 import Shikigami.Execution.Identity (AttemptId (..), ExecutionRootId, OperationId (..))
 import Shikigami.Execution.Policy (ContextView (..), ModelOperationInput (..), validateTerminalOutput, validateToolInvocation)
 import Shikigami.Execution.Policy.Limits (policyNumber)
@@ -556,7 +557,7 @@ submitAttempt retired access@(ReplayAccess execution _ _) expected submission en
             _ -> abort AttemptConflict
           actualWake <- writePayload execution wakeBody
           unless (actualWake == wakeRef) (abort CorruptReplay)
-          let attempt = Attempt.ExecutionAttempt 1 execution operation.specification.operationId submission.request fingerprint receipt wakeRef Attempt.AwaitingDispatch Nothing 0 Nothing Nothing Nothing Nothing
+          let attempt = Attempt.ExecutionAttempt 1 execution operation.specification.operationId submission.request fingerprint receipt wakeRef Attempt.AwaitingDispatch Nothing initialRevision Nothing Nothing Nothing Nothing
           Tx.statement (attemptKey submission.request.attemptId, execution.value, operationKey operation.specification.operationId, attempt) insertExecutionAttempt
           enqueue reference
           saveExecution (current & #revision .~ (advanceRevision expected) & #phase .~ Active & #next .~ resumeNext & #pendingReceipts .~ pendingReceipts)
@@ -738,9 +739,9 @@ refuseUndispatchedExecutionAttempt identity expected reference = catchExecutionW
   now <- liftIO getCurrentTime
   abandonExecutionAttempt (ReplayAccess reference.executionId identity now) expected reference
 
-claimExecutionAttempt :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> Attempt.JobReference -> Text -> Int -> Eff es (Either ExecutionError Attempt.ClaimResult)
+claimExecutionAttempt :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> Attempt.JobReference -> ClaimOwner -> Int -> Eff es (Either ExecutionError Attempt.ClaimResult)
 claimExecutionAttempt access@(ReplayAccess execution _ _) expected reference owner seconds = catchExecutionWith id do
-  unless (reference.format == 1 && reference.executionId == execution && not (Text.null owner) && Text.length owner <= 256 && seconds >= 1 && seconds <= 3600) (throwIO (ExecutionAbort AttemptConflict))
+  unless (reference.format == 1 && reference.executionId == execution && seconds >= 1 && seconds <= 3600) (throwIO (ExecutionAbort AttemptConflict))
   (_, binding) <- readMetadata (getExecution execution)
   previous <- readMetadata (Tx.statement (attemptKey reference.attemptId) selectExecutionAttempt) >>= maybe (throwIO (ExecutionAbort AttemptMissing)) pure
   unless (matchesReference reference previous) (throwIO (ExecutionAbort AttemptConflict))
@@ -769,11 +770,11 @@ claimExecutionAttempt access@(ReplayAccess execution _ _) expected reference own
             pure (state, current, instant)
         )
         \(state, current, instant) -> do
-          let claimed = current & #phase .~ Attempt.Claimed & #owner .~ Just owner & #generation .~ (current.generation + 1) & #expiresAt .~ Just (addUTCTime (fromIntegral seconds) instant)
+          let claimed = current & #phase .~ Attempt.Claimed & #owner .~ Just owner & #generation .~ (advanceRevision current.generation) & #expiresAt .~ Just (addUTCTime (fromIntegral seconds) instant)
           saveAttempt claimed
           saveExecution (state & #revision .~ (advanceRevision expected))
       pure case result of
-        Right () -> Right (Attempt.ClaimGranted (Attempt.AttemptClaim reference owner (previous.generation + 1)))
+        Right () -> Right (Attempt.ClaimGranted (Attempt.AttemptClaim reference owner (advanceRevision previous.generation)))
         Left (CheckFailed err) -> Left err
         Left EventRejected -> Left ExecutionRevisionConflict
 
@@ -891,7 +892,8 @@ markExpiredExecutionAttemptUncertain identity expected reference = catchExecutio
   attempt <- readMetadata (Tx.statement (attemptKey reference.attemptId) selectExecutionAttempt) >>= maybe (throwIO (ExecutionAbort AttemptMissing)) pure
   now <- liftIO getCurrentTime
   unless (matchesReference reference attempt && attempt.phase == Attempt.DispatchStarted && maybe False (now >=) attempt.expiresAt) (throwIO (ExecutionAbort AttemptClaimLost))
-  let claim = Attempt.AttemptClaim reference (fromMaybe "" attempt.owner) attempt.generation
+  owner <- maybe (throwIO (ExecutionAbort AttemptClaimLost)) pure attempt.owner
+  let claim = Attempt.AttemptClaim reference owner attempt.generation
   markExecutionAttemptUncertain (ReplayAccess reference.executionId identity now) expected claim
 
 markExecutionAttemptUncertain :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> Attempt.AttemptClaim -> Eff es (Either ExecutionError Admission)

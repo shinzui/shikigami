@@ -1,14 +1,18 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Application-owned attempt claims. Queue entries carry only JobReference;
 -- they never allocate an attempt or grant replay/dispatch authority.
 module Shikigami.Execution.Attempt where
 
 import Data.Text qualified as Text
 import Keiro.Workflow.Awakeable (AwakeableId)
+import Shikigami.Execution.Claim
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Resources (AttemptRequest (..))
 import Shikigami.Execution.SelectionStore (CallLimits, CallOutcome, CallReceipt (..))
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude
+import Shikigami.StateRevision
 
 data JobReference = JobReference
   { format :: !Int,
@@ -61,8 +65,8 @@ data ExecutionAttempt = ExecutionAttempt
     call :: !(Maybe CallReceipt),
     wake :: !PayloadRef,
     phase :: !AttemptPhase,
-    owner :: !(Maybe Text),
-    generation :: !Integer,
+    owner :: !(Maybe ClaimOwner),
+    generation :: !(StateRevision "execution-attempt"),
     expiresAt :: !(Maybe UTCTime),
     outcome :: !(Maybe PayloadRef),
     lateReceipt :: !(Maybe PayloadRef),
@@ -74,16 +78,16 @@ data ExecutionAttempt = ExecutionAttempt
 instance FromJSON ExecutionAttempt where
   parseJSON value = do
     attempt <- genericParseJSON defaultOptions value
-    unless (attempt.format == 1 && attempt.request.operationId == attempt.operationId && attempt.generation >= 0 && not (Text.null attempt.fingerprint) && Text.length attempt.fingerprint <= 256) (fail "unsupported execution attempt identity")
+    unless (attempt.format == 1 && attempt.request.operationId == attempt.operationId && not (Text.null attempt.fingerprint) && Text.length attempt.fingerprint <= 256) (fail "unsupported execution attempt identity")
     unless (maybe True (\receipt -> receipt.request == attempt.request) attempt.call) (fail "execution call receipt differs from its attempt")
     when (attempt.phase `elem` [Claimed, DispatchStarted, AttemptUncertain, AttemptSuperseded]) do
-      unless (attempt.generation > 0 && maybe False (\owner -> not (Text.null owner) && Text.length owner <= 256) attempt.owner && isJust attempt.expiresAt) (fail "execution claim has no owner")
+      unless (attempt.generation > initialRevision && isJust attempt.owner && isJust attempt.expiresAt) (fail "execution claim has no owner")
     pure attempt
 
 data AttemptClaim = AttemptClaim
   { reference :: !JobReference,
-    owner :: !Text,
-    generation :: !Integer
+    owner :: !ClaimOwner,
+    generation :: !(StateRevision "execution-attempt")
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)

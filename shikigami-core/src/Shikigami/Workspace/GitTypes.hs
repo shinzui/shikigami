@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Protected local-commit intent and factual recovery metadata. These values
 -- grant no Git IO, filesystem access or accepted-attempt accounting authority.
 module Shikigami.Workspace.GitTypes where
@@ -9,11 +11,13 @@ import Data.List (nub, sort)
 import Data.Text qualified as Text
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Execution.Claim
 import Shikigami.Execution.Identity (AttemptId (..), OperationId (..))
 import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadRef (..))
 import Shikigami.Prelude
+import Shikigami.StateRevision
 import Shikigami.Workspace.Instructions (validWorkspacePath)
 import Shikigami.Workspace.Process (bounded, digestText)
 import Shikigami.Workspace.ProcessPolicy (ProcessProfile)
@@ -48,8 +52,8 @@ data GitRecord = GitRecord
   { format :: !Int,
     operation :: !OperationContext,
     attemptId :: !AttemptId,
-    claimOwner :: !Text,
-    generation :: !Integer,
+    claimOwner :: !ClaimOwner,
+    generation :: !(StateRevision "execution-attempt"),
     bindingDigest :: !Text,
     instructionDigest :: !Text,
     profileDigest :: !Text,
@@ -73,7 +77,7 @@ validGitCandidate :: GitCandidate -> Bool
 validGitCandidate value = all validGitObject [value.parent, value.tree, value.result] && value.result /= value.parent && not (null value.paths) && length value.paths <= 256 && sort (nub value.paths) == value.paths && all (\path -> validWorkspacePath path && Text.all (< '\DEL') path) value.paths
 
 validGitRecord :: GitRecord -> Bool
-validGitRecord record = record.format == 1 && bounded operation && bounded execution && bounded attempt && record.operation.idempotencyKey == operation && digestText record.operation.fingerprint && digestText record.operation.scopeDigest && bounded record.claimOwner && record.generation > 0 && all digestText [record.bindingDigest, record.instructionDigest, record.profileDigest, record.fingerprint, record.routing.inputDigest] && bounded record.target && Text.length record.target <= 128 && validGitObject record.expectedParent && record.routing.executionId == record.operation.executionId && validRouting && validPhase && Bytes.length (Aeson.encode record) <= 65536
+validGitRecord record = record.format == 1 && bounded operation && bounded execution && bounded attempt && record.operation.idempotencyKey == operation && digestText record.operation.fingerprint && digestText record.operation.scopeDigest && record.generation > initialRevision && all digestText [record.bindingDigest, record.instructionDigest, record.profileDigest, record.fingerprint, record.routing.inputDigest] && bounded record.target && Text.length record.target <= 128 && validGitObject record.expectedParent && record.routing.executionId == record.operation.executionId && validRouting && validPhase && Bytes.length (Aeson.encode record) <= 65536
   where
     OperationId operation = record.operation.operationId
     ExecutionId execution = record.operation.executionId

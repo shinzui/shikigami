@@ -5,9 +5,17 @@ module Shikigami.ExecutionPositionSpec (tests) where
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Either (isLeft)
+import Data.Map.Strict qualified as Map
+import Data.Text qualified as Text
+import Data.Time (UTCTime (..), fromGregorian)
 import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Execution.Attempt qualified as Attempt
+import Shikigami.Execution.Claim
+import Shikigami.Execution.Identity (AttemptId (..), OperationId (..))
 import Shikigami.Execution.Policy.Types (RecoveryClass (RepeatableObservation), ToolInvoiceCost (NoInvoiceCost))
 import Shikigami.Execution.Progress
+import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
 import Shikigami.StateRevision
@@ -18,7 +26,30 @@ tests :: TestTree
 tests =
   testGroup
     "execution revision and operation positions"
-    [ testCase "tool positions retain full input, continuation and specification bytes" do
+    [ testCase "attempt claim owners and generations preserve complete retained bytes" do
+        let owner = either (error . show) id (parseClaimOwner "fixture")
+            generation = revision 3
+            reference = Attempt.JobReference 1 execution (OperationId "operation") (AttemptId "attempt")
+            request = Resources.AttemptRequest reference.attemptId reference.operationId Map.empty Resources.AdmittedUnknownUsage
+            now = UTCTime (fromGregorian 2026 10 30) 0
+            claim = Attempt.AttemptClaim reference owner generation
+            attempt = Attempt.ExecutionAttempt 1 execution reference.operationId request "fingerprint" Nothing payload Attempt.Claimed (Just owner) generation (Just now) Nothing Nothing Nothing
+            claimWire = Aeson.object ["reference" .= reference, "owner" .= Aeson.String "fixture", "generation" .= (3 :: Integer)]
+            attemptWire = Aeson.object ["format" .= (1 :: Int), "executionId" .= execution, "operationId" .= reference.operationId, "request" .= request, "fingerprint" .= Aeson.String "fingerprint", "call" .= Aeson.Null, "wake" .= payload, "phase" .= Attempt.Claimed, "owner" .= Aeson.String "fixture", "generation" .= (3 :: Integer), "expiresAt" .= now, "outcome" .= Aeson.Null, "lateReceipt" .= Aeson.Null, "uncertainty" .= Aeson.Null]
+        assertWire claim claimWire
+        assertWire attempt attemptWire
+        mapM_ (\value -> fmap claimOwnerText (Aeson.eitherDecode (Aeson.encode value)) @?= Right value) [" ", "日本", Text.replicate 256 "x"]
+        case attemptWire of
+          Aeson.Object fields -> do
+            mapM_
+              ( \bad -> do
+                  assertBool "invalid owner refused" (isLeft (parseClaimOwner bad))
+                  assertBool "invalid retained owner refused" (case Aeson.fromJSON (Aeson.Object (KeyMap.insert "owner" (Aeson.toJSON bad) fields)) :: Aeson.Result Attempt.ExecutionAttempt of Aeson.Error _ -> True; _ -> False)
+              )
+              ["", Text.replicate 257 "x"]
+            mapM_ (\bad -> assertBool "invalid active generation refused" (case Aeson.fromJSON (Aeson.Object (KeyMap.insert "generation" (Aeson.toJSON (bad :: Integer)) fields)) :: Aeson.Result Attempt.ExecutionAttempt of Aeson.Error _ -> True; _ -> False)) [-1, 0]
+          _ -> assertFailure "attempt control was not an object",
+      testCase "tool positions retain full input, continuation and specification bytes" do
         let position = checkedToolPosition 3
             invocation = ToolInvocation "call" "observe" (Aeson.object [])
             binding = ToolBinding "observe" "1" "schema" RepeatableObservation NoInvoiceCost

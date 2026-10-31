@@ -90,8 +90,8 @@ a checked allocated TypeID; objective content, worker/workspace ownership,
 execution policies, counters, decisions and assignment locators retain their
 nominal checked meanings.
 
-Latest assignment-key acceptance rebuilt all enabled components and passed 561
-pure, 383 serial PostgreSQL, 260 worker and 95 server cases, plus 77 compiler
+Latest attempt-fence acceptance rebuilt all enabled components and passed 562
+pure, 383 serial PostgreSQL, 260 worker and 95 server cases, plus 85 compiler
 clients, native/domain/diagram checks and neutral native diff/replay. The remaining
 scalar/identity census keeps EP-5 In Progress. Three further source rows retain
 only final-profile clauses owned by EP-6. EP-6's exact frozen artifacts,

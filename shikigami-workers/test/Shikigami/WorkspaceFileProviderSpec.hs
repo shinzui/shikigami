@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.WorkspaceFileProviderSpec (tests, withEffectAdapter, withEffectAdapterForTools, withEffectAdapterPolicyInput, withAcceptedWorkspaceTool, executorForAdapter) where
 
 import Baikai.Options (emptyOptions)
@@ -10,6 +12,7 @@ import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as AssignmentText
+import Data.Text qualified as ClaimText
 import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
 import Data.UUID qualified as UUID
@@ -35,6 +38,7 @@ import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Decision.ModelCatalog (modelCatalog)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
+import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Counter (AttemptCount, parseAttemptCount)
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity
@@ -55,6 +59,7 @@ import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.StateRevision (StateRevision, parseRevision)
+import Shikigami.StateRevision qualified as Generation
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.ContainedFile (withWorkspaceLock)
@@ -139,7 +144,7 @@ tests fixture =
         Just original <- right =<< run env (Execution.inspectExecutionAttempt reference.attemptId)
         original.lateReceipt @?= Nothing
         Just (_, registration, _) <- run env (runTransaction (Store.inspectRegisteredFileTx reference.operationId))
-        run env (runTransaction (Store.registerFileTx binding (registration & #claimOwner .~ "forged"))) >>= (@?= Left WorkspaceBindingConflict),
+        run env (runTransaction (Store.registerFileTx binding (registration & #claimOwner .~ (fixtureOwner "forged")))) >>= (@?= Left WorkspaceBindingConflict),
       testCase "independent recovery refuses a substituted target and never searches unregistered operations" $ withEffect fixture \env binding snapshot _ reference runtime _ -> do
         Executor.executeAcceptedAttempt (executorFor runtime (throwIO (userError "lost publication acknowledgement"))) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         let files = workspaceFiles binding.storageRoot binding
@@ -177,7 +182,7 @@ tests fixture =
         let operation = OperationId "pending-validation"
             digest = profile.instructionDigest
             command = commandFor digest (head profile.policy.rules)
-            record = ProcessRecord operation (AttemptId "pending-attempt") "pending-owner" 1 (workspaceBindingDigest binding) digest digest command (addUTCTime 30 now) (processUnit operation digest) Nothing Nothing ProcessReserved Nothing Nothing
+            record = ProcessRecord operation (AttemptId "pending-attempt") (fixtureOwner "pending-owner") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest command (addUTCTime 30 now) (processUnit operation digest) Nothing Nothing ProcessReserved Nothing Nothing
         _ <- right =<< run env (runTransaction (Processes.reserveProcessTx binding record))
         Executor.executeAcceptedAttempt (executorForAdapter supervisedWorkspaceEditAdapter runtime) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         Just observed <- right =<< run env (Execution.inspectOperation reference.operationId)
@@ -340,7 +345,7 @@ tests fixture =
               -- The rank-n capability field cannot be represented by Generic.
               normal
                 { Executor.withTools = \accepted context requested use -> do
-                    replaceWorkspaceFile runtime accepted (context & #generation .~ (context.generation + 1)) input >>= (@?= Left FileEffectRefused)
+                    replaceWorkspaceFile runtime accepted (context & #generation .~ (Generation.advanceRevision context.generation)) input >>= (@?= Left FileEffectRefused)
                     replaceWorkspaceFile runtime accepted context (Aeson.toJSON (Replacement "src/dependency.txt" Nothing "FORGED")) >>= (@?= Left FileEffectRefused)
                     case normal of Executor.ExecutionRuntime {Executor.withTools = actual} -> actual accepted context requested use
                 }
@@ -497,3 +502,9 @@ fixtureToolPosition value = either (error . show) id (parseToolPosition value)
 
 fixtureAssignment :: AssignmentText.Text -> AssignmentKey
 fixtureAssignment = either (error . show) id . parseAssignmentKey
+
+fixtureGeneration :: Integer -> Generation.StateRevision "execution-attempt"
+fixtureGeneration value = either (error . show) id (Generation.parseRevision value)
+
+fixtureOwner :: ClaimText.Text -> Claim.ClaimOwner
+fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)

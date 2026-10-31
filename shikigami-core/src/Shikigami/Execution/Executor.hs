@@ -24,7 +24,6 @@ import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.List (find, sort)
 import Data.Time (diffUTCTime)
-import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUID
 import Data.Vector qualified as Vector
 import Effectful (Eff, runEff)
@@ -35,6 +34,7 @@ import Shikigami.Behavior.Compatibility (validateResponseRequest)
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
+import Shikigami.Execution.Claim
 import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Policy.Limits (policyNumber)
@@ -98,15 +98,17 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
               case loaded of
                 Left err -> pure (Left err)
                 Right (snapshot, freshState) -> do
-                  owner <- UUID.toText <$> UUID.nextRandom
+                  owner <- claimOwnerFor <$> UUID.nextRandom
                   claim <- runExecutionStore env (Store.claimExecutionAttempt permit freshState.revision reference owner (max 1 (min 3500 env.timeoutSeconds) + 30))
                   case claim of
                     Right Attempt.AttemptFinished -> publish
                     Right Attempt.AttemptBusy -> waitFor current.expiresAt
-                    Right Attempt.AttemptNeedsReconciliation -> do
-                      let oldClaim = Attempt.AttemptClaim reference (fromMaybe "" current.owner) current.generation
-                      result <- runExecutionStore env (Store.markExecutionAttemptUncertain permit freshState.revision oldClaim)
-                      case result of Right _ -> publish; Left err -> pure (Left err)
+                    Right Attempt.AttemptNeedsReconciliation -> case current.owner of
+                      Nothing -> pure (Left AttemptClaimLost)
+                      Just formerOwner -> do
+                        let oldClaim = Attempt.AttemptClaim reference formerOwner current.generation
+                        result <- runExecutionStore env (Store.markExecutionAttemptUncertain permit freshState.revision oldClaim)
+                        case result of Right _ -> publish; Left err -> pure (Left err)
                     Left ResourceAdmissionRefused {} -> owned (Store.refuseUndispatchedExecutionAttempt identity freshState.revision reference) >>= \case Right _ -> publish; Left err -> pure (Left err)
                     Left err -> pure (Left err)
                     Right (Attempt.ClaimGranted lease) -> runClaim permit snapshot lease

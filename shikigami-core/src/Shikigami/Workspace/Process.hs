@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Protected process-owner contracts. Commands come from an immutable
 -- operator rule; neither a model nor a queue delivery chooses executables.
 module Shikigami.Workspace.Process where
@@ -10,11 +12,13 @@ import Data.Text qualified as Text
 import Data.UUID qualified as UUID
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Execution.Claim
 import Shikigami.Execution.Identity (AttemptId, OperationId)
 import Shikigami.Execution.Runner (OperationContext)
 import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadRef (..))
 import Shikigami.Prelude
+import Shikigami.StateRevision
 import Shikigami.Workspace.Instructions (validWorkspacePath)
 import Shikigami.Workspace.Types
 
@@ -52,7 +56,7 @@ instance Show CapturedOutput where show _ = "CapturedOutput <protected>"
 data ProcessReceipt = ProcessReceipt
   { operationId :: !OperationId,
     attemptId :: !AttemptId,
-    generation :: !Integer,
+    generation :: !(StateRevision "execution-attempt"),
     fingerprint :: !Text,
     bindingDigest :: !Text,
     unit :: !Text,
@@ -97,8 +101,8 @@ validProcessRouting routing = routing.format == 1 && bounded routing.executionId
 data ProcessRecord = ProcessRecord
   { operationId :: !OperationId,
     attemptId :: !AttemptId,
-    claimOwner :: !Text,
-    generation :: !Integer,
+    claimOwner :: !ClaimOwner,
+    generation :: !(StateRevision "execution-attempt"),
     bindingDigest :: !Text,
     instructionDigest :: !Text,
     fingerprint :: !Text,

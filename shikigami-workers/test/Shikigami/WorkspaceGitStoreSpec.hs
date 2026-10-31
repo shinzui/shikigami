@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- Registration/factual-receipt evidence only. No test here grants native Git
 -- authority, proves HEAD publication or acknowledges an execution attempt.
 module Shikigami.WorkspaceGitStoreSpec (tests) where
@@ -6,18 +8,21 @@ import Control.Concurrent.Async (concurrently)
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Data.List (sort)
+import Data.Text qualified as ClaimText
 import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
 import Hasql.Transaction (Transaction)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.App (AppEnv, runAppIO)
+import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (NeedModel))
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision (StateRevision, parseRevision)
+import Shikigami.StateRevision qualified as Generation
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.GitStore
 import Shikigami.Workspace.GitTypes
@@ -36,7 +41,7 @@ tests fixture =
         (a, b) <- concurrently (run env (reserveGitTx binding proposed)) (run env (reserveGitTx binding proposed))
         a @?= Right proposed
         b @?= a
-        let duplicate = proposed & #createdAt .~ addUTCTime 1 proposed.createdAt & #attemptId .~ AttemptId "replacement" & #generation .~ 2 & #claimOwner .~ "new-claim"
+        let duplicate = proposed & #createdAt .~ addUTCTime 1 proposed.createdAt & #attemptId .~ AttemptId "replacement" & #generation .~ (fixtureGeneration 2) & #claimOwner .~ (fixtureOwner "new-claim")
         run env (reserveGitTx binding duplicate) >>= (@?= Right proposed)
         let changed = proposed & #target .~ "other-target"
         run env (reserveGitTx binding (changed & #fingerprint .~ gitFingerprint binding changed)) >>= (@?= Left WorkspaceBindingConflict)
@@ -56,7 +61,7 @@ tests fixture =
         applied <- right =<< run env (recordGitAppliedTx unresolved)
         applied.phase @?= GitApplied
         applied.attemptId @?= proposed.attemptId
-        applied.generation @?= 1
+        applied.generation @?= fixtureGeneration 1
         run env (recordGitAppliedTx requested) >>= (@?= Right applied),
       testCase "pre-publication refusal races the publication transition without inventing completion" $ withGit fixture \env binding proposed -> do
         _ <- right =<< run env (reserveGitTx binding proposed)
@@ -79,7 +84,7 @@ tests fixture =
         let operation = proposed.operation.operationId
         run env (Store.reserveWorkspaceEffectTx binding binding.request.owner (fixtureRevision 0) operation digest) >>= (@?= Right Nothing)
         run env (reserveGitTx binding proposed) >>= (@?= Left WorkspaceBindingConflict)
-        let receipt = FileReceipt operation (AttemptId "file-attempt") 1 digest (workspaceBindingDigest binding) digest "dependency.txt" "device:parent" Nothing digest EditRefused
+        let receipt = FileReceipt operation (AttemptId "file-attempt") (fixtureGeneration 1) digest (workspaceBindingDigest binding) digest "dependency.txt" "device:parent" Nothing digest EditRefused
         run env (Store.recordWorkspaceReceiptTx binding receipt) >>= (@?= Right ())
         run env (Store.reserveWorkspaceEffectTx binding binding.request.owner (fixtureRevision 0) operation digest) >>= (@?= Right (Just receipt))
         run env (inspectGitTx operation) >>= (@?= Nothing)
@@ -102,12 +107,12 @@ tests fixture =
         second @?= drop 64 (sort (map OperationId keys))
         run env (inspectGitPageTx (Just (last second))) >>= (@?= []),
       testCase "malformed records and changed candidate evidence refuse without replacing intent" $ withGit fixture \env binding proposed -> do
-        run env (reserveGitTx binding (proposed & #generation .~ 0)) >>= (@?= Left InvalidWorkspaceRequest)
+        run env (reserveGitTx binding (proposed & #generation .~ (fixtureGeneration 0))) >>= (@?= Left InvalidWorkspaceRequest)
         _ <- right =<< run env (reserveGitTx binding proposed)
         run env (prepareGitTx binding proposed (candidate & #paths .~ ["../escape"])) >>= (@?= Left WorkspaceBindingConflict)
         prepared <- right =<< run env (prepareGitTx binding proposed candidate)
         run env (prepareGitTx binding proposed (candidate & #result .~ Text.replicate 40 "d")) >>= (@?= Left WorkspaceBindingConflict)
-        run env (recordGitAppliedTx (prepared & #generation .~ 2)) >>= (@?= Left WorkspaceBindingConflict)
+        run env (recordGitAppliedTx (prepared & #generation .~ (fixtureGeneration 2))) >>= (@?= Left WorkspaceBindingConflict)
         Aeson.eitherDecode @GitRecord (Aeson.encode prepared) @?= Right prepared
     ]
 
@@ -120,7 +125,7 @@ withGit fixture use = Fixture.withFixture fixture \env _ root repository -> do
   run env (Store.markWorkspaceReadyTx binding) >>= (@?= Right ())
   now <- getCurrentTime
   let logical = OperationContext (ExecutionId "git-execution") (OperationId "git-operation") "git-operation" digest digest
-      record = GitRecord 1 logical (AttemptId "original-attempt") "original-claim" 1 (workspaceBindingDigest binding) digest digest "device:parent" candidate.parent digest now (GitRouting logical.executionId owner digest NeedModel) GitReserved Nothing
+      record = GitRecord 1 logical (AttemptId "original-attempt") (fixtureOwner "original-claim") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest "device:parent" candidate.parent digest now (GitRouting logical.executionId owner digest NeedModel) GitReserved Nothing
   use env binding (record & #fingerprint .~ gitFingerprint binding record)
 
 candidate :: GitCandidate
@@ -140,3 +145,9 @@ right = either (\err -> assertFailure (show err) >> fail "unreachable") pure
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureGeneration :: Integer -> Generation.StateRevision "execution-attempt"
+fixtureGeneration value = either (error . show) id (Generation.parseRevision value)
+
+fixtureOwner :: ClaimText.Text -> Claim.ClaimOwner
+fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)

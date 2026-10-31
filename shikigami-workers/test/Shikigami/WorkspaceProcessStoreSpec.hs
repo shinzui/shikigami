@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- Database registration evidence only: these fixtures do not claim a real
 -- systemd invocation or establish a process fence.
 module Shikigami.WorkspaceProcessStoreSpec (tests) where
@@ -13,18 +15,21 @@ import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.List (sort)
 import Data.Map.Strict qualified as Map
+import Data.Text qualified as ClaimText
 import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
 import Hasql.Transaction (Transaction)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.App (AppEnv, runAppIO)
+import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Execution.Transcript (ExecutionId (..))
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision (StateRevision, parseRevision)
+import Shikigami.StateRevision qualified as Generation
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Collector
 import Shikigami.Workspace.ContainedFile (ensurePrivateDirectory)
@@ -82,7 +87,7 @@ tests fixture =
         (a, b) <- concurrently (run env (requestProcessLaunchTx binding proposed boot)) (run env (requestProcessLaunchTx binding proposed boot))
         granted <- traverse right [a, b]
         sort granted @?= [False, True]
-        let replacement = proposed & #attemptId .~ AttemptId "replacement" & #generation .~ 2 & #deadline .~ addUTCTime 3600 proposed.deadline
+        let replacement = proposed & #attemptId .~ AttemptId "replacement" & #generation .~ (fixtureGeneration 2) & #deadline .~ addUTCTime 3600 proposed.deadline
         retained <- right =<< run env (reserveProcessTx binding replacement)
         retained.attemptId @?= proposed.attemptId
         retained.deadline @?= proposed.deadline
@@ -123,7 +128,7 @@ tests fixture =
           (\invalid -> run env (recordProcessReceiptTx invalid) >>= (@?= Left WorkspaceBindingConflict))
           [ receipt & #bootId .~ otherBoot,
             receipt & #invocationId .~ otherBoot,
-            receipt & #generation .~ 2,
+            receipt & #generation .~ (fixtureGeneration 2),
             receipt & #descendantsEmpty .~ False,
             receipt & #outputComplete .~ False,
             receipt & #exitCode .~ Nothing,
@@ -253,7 +258,7 @@ withProcess fixture use = Fixture.withFixture fixture \env _ root repository -> 
       operation = OperationId "process-operation"
       logical = OperationContext (ExecutionId "process-execution") operation "process-operation" "input-fingerprint" "scope"
       fingerprint = processFingerprint binding digest logical command
-      record = ProcessRecord operation (AttemptId "original-attempt") "original-claim" 1 (workspaceBindingDigest binding) digest fingerprint command (addUTCTime 30 now) (processUnit operation fingerprint) Nothing Nothing ProcessReserved Nothing Nothing
+      record = ProcessRecord operation (AttemptId "original-attempt") (fixtureOwner "original-claim") (fixtureGeneration 1) (workspaceBindingDigest binding) digest fingerprint command (addUTCTime 30 now) (processUnit operation fingerprint) Nothing Nothing ProcessReserved Nothing Nothing
   use env binding record
 
 receiptFor :: ProcessRecord -> ProcessReceipt
@@ -275,3 +280,9 @@ right = either (\err -> assertFailure (show err) >> fail "unreachable") pure
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureGeneration :: Integer -> Generation.StateRevision "execution-attempt"
+fixtureGeneration value = either (error . show) id (Generation.parseRevision value)
+
+fixtureOwner :: ClaimText.Text -> Claim.ClaimOwner
+fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)

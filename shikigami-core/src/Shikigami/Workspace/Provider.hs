@@ -11,6 +11,7 @@ import Kikan.En.Action (AgentAction (InvokeCapabilityTool), mkCapabilityToolTarg
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.AssignmentKey (AssignmentKey)
+import Shikigami.Execution.Claim
 import Shikigami.Execution.Identity (AttemptId, OperationId)
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Prelude hiding ((.=))
@@ -42,7 +43,7 @@ data ReceiptState = EditPrepared | EditApplied | EditRefused
 data FileReceipt = FileReceipt
   { operationId :: !OperationId,
     attemptId :: !AttemptId,
-    generation :: !Integer,
+    generation :: !(StateRevision "execution-attempt"),
     fingerprint :: !Text,
     bindingDigest :: !Text,
     instructionDigest :: !Text,
@@ -62,7 +63,7 @@ instance Show FileReceipt where show _ = "FileReceipt <protected>"
 -- current replay authority or replacement worker to acknowledge the effect.
 data FileRegistration = FileRegistration
   { operation :: !OperationContext,
-    claimOwner :: !Text,
+    claimOwner :: !ClaimOwner,
     routing :: !ProcessRouting,
     receipt :: !FileReceipt
   }
@@ -150,7 +151,7 @@ workspaceFileActionFor transferable profile binding admission dispatch kind path
   case profile of
     Nothing -> unless (not transferable && admission.filePolicy == Just nativeFilePolicy) (Left FileEffectRefused)
     Just retained -> unless (admission.filePolicy == Just (if transferable then transferableFilePolicy else supervisedFilePolicy) && validProcessProfile retained && retained.bindingDigest == workspaceBindingDigest binding && retained.instructionDigest == bundleDigest admission.instructions && processPolicyIdentity retained.policy == binding.policyRevision && processFileAllowed retained.policy kind path) (Left FileEffectRefused)
-  unless (kind `elem` ["read", "replace"] && validWorkspacePath path && not (Text.null target) && Text.length target <= 128 && not (Text.null inputDigest) && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base && matchesWorkspaceAdmission binding admission && dispatch.generation > 0 && not (Text.null dispatch.owner)) (Left FileEffectRefused)
+  unless (kind `elem` ["read", "replace"] && validWorkspacePath path && not (Text.null target) && Text.length target <= 128 && not (Text.null inputDigest) && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base && matchesWorkspaceAdmission binding admission && dispatch.generation > initialRevision) (Left FileEffectRefused)
   let coordinates =
         Aeson.object $
           [ "binding" .= workspaceBindingDigest binding,
@@ -188,7 +189,7 @@ workspaceTransferredProcessAction = workspaceProcessActionFor True
 workspaceProcessActionFor :: Bool -> WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> ProcessRecord -> Text -> Text -> Either FileEffectError AgentAction
 workspaceProcessActionFor transferable binding admission dispatch record boot target = do
   unless (admission.filePolicy == Just (if transferable then transferableFilePolicy else supervisedFilePolicy) && matchesWorkspaceAdmission binding admission && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base) (Left FileEffectRefused)
-  unless (validProcessCommand record.command && record.phase `elem` [ProcessReserved, ProcessLaunchRequested] && record.operationId == dispatch.operation.operationId && record.attemptId == dispatch.attemptId && record.claimOwner == dispatch.owner && bounded dispatch.owner && record.generation == dispatch.generation && dispatch.generation > 0 && record.bindingDigest == workspaceBindingDigest binding && record.instructionDigest == bundleDigest admission.instructions && record.fingerprint == processFingerprint binding record.instructionDigest dispatch.operation record.command && record.unit == processUnit record.operationId record.fingerprint && hostIdentity boot && maybe True (== boot) record.bootId && isNothing record.invocationId && isNothing record.receipt && bounded target && Text.length target <= 128) (Left FileEffectRefused)
+  unless (validProcessCommand record.command && record.phase `elem` [ProcessReserved, ProcessLaunchRequested] && record.operationId == dispatch.operation.operationId && record.attemptId == dispatch.attemptId && record.claimOwner == dispatch.owner && record.generation == dispatch.generation && dispatch.generation > initialRevision && record.bindingDigest == workspaceBindingDigest binding && record.instructionDigest == bundleDigest admission.instructions && record.fingerprint == processFingerprint binding record.instructionDigest dispatch.operation record.command && record.unit == processUnit record.operationId record.fingerprint && hostIdentity boot && maybe True (== boot) record.bootId && isNothing record.invocationId && isNothing record.receipt && bounded target && Text.length target <= 128) (Left FileEffectRefused)
   routing <- maybe (Left FileEffectRefused) Right record.routing
   unless (validProcessRouting routing && routing.executionId == dispatch.operation.executionId && routing.identity == admission.owner) (Left FileEffectRefused)
   let coordinates =
@@ -245,7 +246,7 @@ workspaceTransferredGitObservationAction = workspaceGitObservationActionFor True
 workspaceGitObservationActionFor :: Bool -> WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> ProcessProfile -> Text -> Text -> Text -> Either FileEffectError AgentAction
 workspaceGitObservationActionFor transferable binding admission dispatch profile kind inputDigest target = do
   unless (admission.filePolicy == Just (if transferable then transferableFilePolicy else supervisedFilePolicy) && matchesWorkspaceAdmission binding admission && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base) (Left FileEffectRefused)
-  unless (validProcessProfile profile && profile.bindingDigest == workspaceBindingDigest binding && profile.instructionDigest == bundleDigest admission.instructions && processPolicyIdentity profile.policy == binding.policyRevision && "" `elem` profile.policy.readPaths && kind `elem` ["status", "diff"] && digestText inputDigest && bounded target && Text.length target <= 128 && dispatch.generation > 0 && bounded dispatch.owner) (Left FileEffectRefused)
+  unless (validProcessProfile profile && profile.bindingDigest == workspaceBindingDigest binding && profile.instructionDigest == bundleDigest admission.instructions && processPolicyIdentity profile.policy == binding.policyRevision && "" `elem` profile.policy.readPaths && kind `elem` ["status", "diff"] && digestText inputDigest && bounded target && Text.length target <= 128 && dispatch.generation > initialRevision) (Left FileEffectRefused)
   let coordinates = Aeson.object (["binding" .= workspaceBindingDigest binding, "instructions" .= bundleDigest admission.instructions, "filePolicy" .= admission.filePolicy, "assignment" .= admission.assignmentId, "owner" .= admission.owner, "epoch" .= admission.epoch, "profile" .= profile, "operation" .= dispatch.operation, "attempt" .= dispatch.attemptId, "claimOwner" .= dispatch.owner, "generation" .= dispatch.generation, "kind" .= kind, "input" .= inputDigest, "target" .= target] <> ["run" .= admission.runId | transferable])
       digest = Text.replace ":" "-" (versionedDigest (if transferable then "shikigami.workspace-git-observation/2" else "shikigami.workspace-git-observation/1") coordinates)
       revision = (if transferable then "git2-" else "git1-") <> Text.replace ":" "-" (workspaceBindingDigest binding)

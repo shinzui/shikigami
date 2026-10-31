@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- Accepted executor and real Git evidence. Only native host/tree enumeration
 -- is instrumented; native coupled Git qualification remains a separate gate.
 module Shikigami.WorkspaceGitProviderSpec (tests) where
@@ -10,6 +12,7 @@ import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as AssignmentText
+import Data.Text qualified as ClaimText
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
 import Data.Time (addUTCTime, getCurrentTime)
@@ -24,6 +27,7 @@ import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Capability.Provider (DurableAdapter (..))
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
+import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Counter (AttemptCount, parseAttemptCount)
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity
@@ -37,6 +41,7 @@ import Shikigami.Execution.Transcript
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision (StateRevision, parseRevision)
+import Shikigami.StateRevision qualified as Generation
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.ContainedFile
@@ -225,7 +230,7 @@ tests fixture =
               let operation = OperationId "pending-validation"
                   digest = profile.instructionDigest
                   command = commandFor digest (head profile.policy.rules)
-                  record = ProcessRecord operation (AttemptId "pending-attempt") "pending-owner" 1 (workspaceBindingDigest binding) digest digest command (addUTCTime 30 now) (processUnit operation digest) Nothing Nothing ProcessReserved Nothing Nothing
+                  record = ProcessRecord operation (AttemptId "pending-attempt") (fixtureOwner "pending-owner") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest command (addUTCTime 30 now) (processUnit operation digest) Nothing Nothing ProcessReserved Nothing Nothing
               _ <- right =<< run env (runTransaction (Processes.reserveProcessTx binding record))
               captured <- newIORef (0 :: Int)
               let counting = backend & #capture .~ (\b p target policy -> modifyIORef' captured (+ 1) >> backend.capture b p target policy)
@@ -254,7 +259,7 @@ tests fixture =
         profileReady env binding profile
         captured <- newIORef (0 :: Int)
         let counting = backend & #capture .~ (\b p target policy -> modifyIORef' captured (+ 1) >> backend.capture b p target policy)
-            broken r = let adapter = workspaceGitAdapterWithBackend counting r in DurableAdapter adapter.descriptor adapter.contracts (\s d name -> adapter.prepare s (d & #generation .~ (d.generation + 1)) name)
+            broken r = let adapter = workspaceGitAdapterWithBackend counting r in DurableAdapter adapter.descriptor adapter.contracts (\s d name -> adapter.prepare s (d & #generation .~ (Generation.advanceRevision d.generation)) name)
         execute (Fixture.executorForAdapter broken runtime) snapshot reference
         readIORef captured >>= (@?= 0)
         run env (runTransaction (Git.inspectGitTx reference.operationId)) >>= (@?= Nothing)
@@ -387,3 +392,9 @@ fixtureProgress number = either (error . show) id (parseProgress number)
 
 fixtureAssignment :: AssignmentText.Text -> AssignmentKey
 fixtureAssignment = either (error . show) id . parseAssignmentKey
+
+fixtureGeneration :: Integer -> Generation.StateRevision "execution-attempt"
+fixtureGeneration value = either (error . show) id (Generation.parseRevision value)
+
+fixtureOwner :: ClaimText.Text -> Claim.ClaimOwner
+fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)

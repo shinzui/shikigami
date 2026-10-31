@@ -48,6 +48,7 @@ import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude hiding ((.=))
+import Shikigami.StateRevision
 import Shikigami.Workspace.Allocation (workspaceFiles, workspaceMetadata)
 import Shikigami.Workspace.ContainedFile
 import Shikigami.Workspace.Instructions
@@ -340,7 +341,7 @@ replaceFileFor mode checkpoint runtime snapshot dispatch input = case parseEithe
       existing <- readPrivateReceipt metadata receiptName
       case existing of
         Left err -> pure (Left err)
-        Right (Just previous) | (previous & #attemptId .~ receipt.attemptId & #generation .~ receipt.generation & #state .~ receipt.state) /= receipt || previous.generation <= 0 -> pure (Left FileEffectUnresolved)
+        Right (Just previous) | (previous & #attemptId .~ receipt.attemptId & #generation .~ receipt.generation & #state .~ receipt.state) /= receipt || previous.generation <= initialRevision -> pure (Left FileEffectUnresolved)
         Right (Just previous) | previous.state == EditApplied -> do
           saved <- runTx runtime (Store.recordWorkspaceReceiptTx binding previous)
           case saved of
@@ -480,7 +481,7 @@ reconcileFileEffect env operation = protectRecovery do
   (binding, registration, completed) <- recoveryTx env (Store.inspectRegisteredFileTx operation) >>= maybe (recoveryAbort FileEffectUnresolved) pure
   let original = registration.receipt
       matches receipt = (receipt & #state .~ EditPrepared) == original
-      validate receipt = unless (original.state == EditPrepared && matches receipt && original.operationId == operation && original.bindingDigest == workspaceBindingDigest binding && original.generation > 0 && validWorkspacePath original.path && validProcessRouting registration.routing) (recoveryAbort FileEffectUnresolved)
+      validate receipt = unless (original.state == EditPrepared && matches receipt && original.operationId == operation && original.bindingDigest == workspaceBindingDigest binding && original.generation > initialRevision && validWorkspacePath original.path && validProcessRouting registration.routing) (recoveryAbort FileEffectUnresolved)
   validate original
   case completed of
     Just receipt | receipt.state `elem` [EditApplied, EditRefused] -> validate receipt >> pure receipt

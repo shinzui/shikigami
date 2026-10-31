@@ -16,7 +16,11 @@ HEADER = '''{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 module RevisionBoundary where
 import Data.Coerce (coerce)
+import Data.String (fromString)
 import Data.Text (Text)
+import Shikigami.Agent.Principal (AgentPrincipal)
+import Shikigami.Execution.Attempt qualified as Attempt
+import Shikigami.Execution.Claim
 import Shikigami.Execution.AssignmentKey
 import Shikigami.Execution.Selection qualified as Selection
 import Shikigami.Objective.Keys qualified as Objective
@@ -36,6 +40,31 @@ import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ("attempt-fence", '''generation :: Attempt.AttemptClaim -> StateRevision "execution-attempt"
+generation claim = claim.generation
+owner :: Attempt.AttemptClaim -> ClaimOwner
+owner claim = claim.owner
+wake :: Attempt.ExecutionWake -> Int
+wake value = value.generation
+''', True),
+    ("worker-epoch-is-not-attempt-generation", '''generation :: StateRevision "worker-owner" -> StateRevision "execution-attempt"
+generation value = value
+''', False),
+    ("native-generation-is-not-attempt-generation", '''generation :: Attempt.ExecutionWake -> StateRevision "execution-attempt"
+generation value = value.generation
+''', False),
+    ("unchecked-attempt-generation", '''generation :: StateRevision "execution-attempt"
+generation = 1
+''', False),
+    ("principal-is-not-claim-owner", '''owner :: AgentPrincipal -> ClaimOwner
+owner value = value
+''', False),
+    ("unchecked-claim-owner-literal", '''owner :: ClaimOwner
+owner = fromString "owner"
+''', False),
+    ("unchecked-claim-owner-coercion", '''owner :: Text -> ClaimOwner
+owner = coerce
+''', False),
     ("execution-assignment-key", '''key :: Selection.ExecutionSelection -> AssignmentKey
 key selection = selection.assignmentId
 ''', True),
@@ -200,6 +229,12 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
         assert (result.returncode == 0) == expected, (name, result.stdout, result.stderr)
         if not expected:
             fragments = {
+                "worker-epoch-is-not-attempt-generation": ["Couldn't match", "worker-owner", "execution-attempt"],
+                "native-generation-is-not-attempt-generation": ["Couldn't match", "StateRevision", "Int"],
+                "unchecked-attempt-generation": ["StateRevision", "Num"],
+                "principal-is-not-claim-owner": ["Couldn't match", "AgentPrincipal", "ClaimOwner"],
+                "unchecked-claim-owner-literal": ["ClaimOwner", "IsString"],
+                "unchecked-claim-owner-coercion": ["ClaimOwner", "Text"],
                 "objective-assignment-is-not-execution-key": ["Couldn't match", "ObjectiveAssignmentId", "AssignmentKey"],
                 "worker-assignment-is-not-execution-key": ["Couldn't match", "AssignmentId", "AssignmentKey"],
                 "unchecked-assignment-key-coercion": ["AssignmentKey", "Text"],

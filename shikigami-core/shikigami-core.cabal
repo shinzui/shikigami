@@ -98,6 +98,7 @@ library
     Shikigami.Execution.AssignmentKey
     Shikigami.Execution.Attempt
     Shikigami.Execution.Catalog
+    Shikigami.Execution.Claim
     Shikigami.Execution.Counter
     Shikigami.Execution.Driver
     Shikigami.Execution.Ephemeral

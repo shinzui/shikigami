@@ -21,6 +21,7 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as AssignmentText
+import Data.Text qualified as ClaimText
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TextEncoding
 import Data.Time (UTCTime, addUTCTime, getCurrentTime)
@@ -58,6 +59,7 @@ import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..), versi
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
+import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Counter (AttemptCount, AttemptLimit, noAttempts, parseAttemptCount, parseAttemptLimit)
 import Shikigami.Execution.Driver qualified as Driver
 import Shikigami.Execution.Executor qualified as Executor
@@ -175,7 +177,7 @@ tests fixture =
               reference = Attempt.JobReference 1 execution operationId request.attemptId
           (_, attempt) <- expectRight =<< run app (Durable.submitExecutionAttemptWith access (fixtureRevision 1) submission (\_ -> pure ()))
           claim <-
-            run app (Durable.claimExecutionAttempt access (fixtureRevision 2) reference "prepared-http-owner" 60) >>= \case
+            run app (Durable.claimExecutionAttempt access (fixtureRevision 2) reference (fixtureOwner "prepared-http-owner") 60) >>= \case
               Right (Attempt.ClaimGranted granted) -> pure granted
               other -> assertFailure (show other) >> fail "claim"
           run app (Durable.startExecutionAttempt access (fixtureRevision 3) claim) >>= (@?= Right Accepted)
@@ -616,3 +618,6 @@ refusedAssignmentSettlement fixture reconcile = withRuntime fixture \app _ _ -> 
 
 fixtureAssignment :: AssignmentText.Text -> AssignmentKey
 fixtureAssignment = either (error . show) id . parseAssignmentKey
+
+fixtureOwner :: ClaimText.Text -> Claim.ClaimOwner
+fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)

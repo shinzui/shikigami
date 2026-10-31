@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.ExecutionTranscriptSpec (tests) where
 
 import Baikai.Api (Api (OpenAIResponses))
@@ -27,6 +29,7 @@ import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text)
 import Data.Text qualified as AssignmentText
+import Data.Text qualified as ClaimText
 import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
 import Data.UUID qualified as UUID
@@ -80,6 +83,7 @@ import Shikigami.Decision.ModelCatalog (modelCatalog)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Catalog qualified as ExecutionCatalog
+import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Counter (AttemptCount, AttemptLimit, attemptNumber, parseAttemptCount, parseAttemptLimit)
 import Shikigami.Execution.Driver qualified as Driver
 import Shikigami.Execution.Executor qualified as Executor
@@ -111,6 +115,7 @@ import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshData
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.StateRevision (StateRevision, parseRevision)
+import Shikigami.StateRevision qualified as Generation
 import Shikigami.Trigger.Enqueue (addressedRunJob, enqueueRunJobTx, ensureRunQueue, runQueueName)
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
@@ -212,7 +217,7 @@ tests fixture =
               tool = mkDynTool "edit" "Edit fixture." (object []) (\_ -> unsafeEff_ (assertFailure "description invoked a mutation") >> pure (Right (ToolOutput.textToolOutput "unused")))
               native = Tools.NativeToolFactory (\_ -> pure (Right [])) (\_ _ _ -> pure (Right []))
               logical = Runner.OperationContext snapshot.executionId (OperationId "fixture-operation") "fixture-operation" "fingerprint" "scope"
-              dispatch = Runner.DispatchContext logical (AttemptId "fixture-attempt") "owner" 1
+              dispatch = Runner.DispatchContext logical (AttemptId "fixture-attempt") (fixtureOwner "owner") (fixtureGeneration 1)
               describe registry accepted = Tools.describeExecutionTools Log.silentLogger denyAllActionAuthorizer registry native accepted
               prepare registry context accepted = Tools.withExecutionTools Log.silentLogger denyAllActionAuthorizer registry native accepted context (Just (overlayToolName capability "edit")) (pure . map (.binding))
           registry <- expectRight (Capability.installDurableAdapters [adapter] emptyCapabilityProviderRegistry)
@@ -224,7 +229,7 @@ tests fixture =
           bindings <- expectRight =<< prepare registry dispatch snapshot
           bindings @?= menu.toolBindings
           readIORef prepared >>= (@?= 1)
-          _ <- prepare registry (dispatch & #generation .~ 0) snapshot >>= \case Left _ -> pure (); Right _ -> assertFailure "invalid generation reached callback"
+          _ <- prepare registry (dispatch & #generation .~ (fixtureGeneration 0)) snapshot >>= \case Left _ -> pure (); Right _ -> assertFailure "invalid generation reached callback"
           _ <- prepare registry (dispatch & #operation . #executionId .~ ExecutionId "wrong") snapshot >>= \case Left _ -> pure (); Right _ -> assertFailure "wrong execution reached callback"
           _ <- describe registry (snapshot & #workspace .~ Nothing) >>= \case Left _ -> pure (); Right _ -> assertFailure "historical snapshot gained mutation authority"
           _ <- describe emptyCapabilityProviderRegistry snapshot >>= \case Left _ -> pure (); Right _ -> assertFailure "descriptor alone gained mutation authority"
@@ -474,15 +479,15 @@ tests fixture =
           pure (),
       testCase "two executors obtain one claim and only one dispatch-start transition" $
         withPreparedModel fixture \env snapshot access operation reference -> do
-          (left, right) <- concurrently (run env (Store.claimExecutionAttempt access (fixtureRevision 2) reference "owner-a" 60)) (run env (Store.claimExecutionAttempt access (fixtureRevision 2) reference "owner-b" 60))
+          (left, right) <- concurrently (run env (Store.claimExecutionAttempt access (fixtureRevision 2) reference (fixtureOwner "owner-a") 60)) (run env (Store.claimExecutionAttempt access (fixtureRevision 2) reference (fixtureOwner "owner-b") 60))
           claim <- case [value | Right (Attempt.ClaimGranted value) <- [left, right]] of [value] -> pure value; other -> assertFailure (show other) >> fail "claim"
-          run env (Store.claimExecutionAttempt access (fixtureRevision 3) reference "third-owner" 60) >>= (@?= Right Attempt.AttemptBusy)
+          run env (Store.claimExecutionAttempt access (fixtureRevision 3) reference (fixtureOwner "third-owner") 60) >>= (@?= Right Attempt.AttemptBusy)
           run env (Store.startExecutionAttempt access (fixtureRevision 3) claim) >>= (@?= Right R.Accepted)
           run env (Store.startExecutionAttempt access (fixtureRevision 3) claim) >>= (@?= Right R.AlreadyAccepted)
           let result = terminalAttempt
           run env (Store.completeExecutionAttempt access (fixtureRevision 4) claim result) >>= (@?= Right R.Accepted)
           run env (Store.completeExecutionAttempt access (fixtureRevision 4) claim result) >>= (@?= Right R.AlreadyAccepted)
-          run env (Store.claimExecutionAttempt access (fixtureRevision 5) reference "redelivery" 60) >>= (@?= Right Attempt.AttemptFinished)
+          run env (Store.claimExecutionAttempt access (fixtureRevision 5) reference (fixtureOwner "redelivery") 60) >>= (@?= Right Attempt.AttemptFinished)
           (_, state) <- expectRight =<< run env (Store.loadExecution access)
           state.cursor @?= (fixtureRevision 1)
           state.activeOperation @?= Nothing
@@ -501,8 +506,8 @@ tests fixture =
           let submission = modelSubmission operation & #request . #attemptId .~ AttemptId "second-actual-attempt"
               retry = reference & #attemptId .~ submission.request.attemptId
           _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 3) submission (\_ -> pure ()))
-          run env (Store.claimExecutionAttempt access (fixtureRevision 4) reference "old-delivery" 60) >>= (@?= Right Attempt.AttemptFinished)
-          claim <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 4) retry "retry-owner" 60)
+          run env (Store.claimExecutionAttempt access (fixtureRevision 4) reference (fixtureOwner "old-delivery") 60) >>= (@?= Right Attempt.AttemptFinished)
+          claim <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 4) retry (fixtureOwner "retry-owner") 60)
           run env (Store.startExecutionAttempt access (fixtureRevision 5) claim) >>= (@?= Right R.Accepted)
           run env (Store.completeExecutionAttempt access (fixtureRevision 6) claim terminalAttempt) >>= (@?= Right R.Accepted)
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
@@ -511,10 +516,10 @@ tests fixture =
           root.active @?= (fixtureCount 0),
       testCase "claim expiry before dispatch permits replacement without another actual attempt" $
         withPreparedModel fixture \env _snapshot access _operation reference -> do
-          first <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) reference "first-owner" 1)
+          first <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) reference (fixtureOwner "first-owner") 1)
           threadDelay 1100000
-          replacement <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 3) reference "replacement" 60)
-          replacement.generation @?= 2
+          replacement <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 3) reference (fixtureOwner "replacement") 60)
+          replacement.generation @?= fixtureGeneration 2
           run env (Store.startExecutionAttempt access (fixtureRevision 4) first) >>= (@?= Left AttemptClaimLost)
           run env (Store.startExecutionAttempt access (fixtureRevision 4) replacement) >>= (@?= Right R.Accepted)
           run env (Store.completeExecutionAttempt access (fixtureRevision 5) replacement terminalAttempt) >>= (@?= Right R.Accepted)
@@ -522,10 +527,10 @@ tests fixture =
           Map.lookup R.ModelAttempts root.usage.settled @?= Just (fixtureAmount 1),
       testCase "expiry after dispatch holds accounting and retains a fenced late receipt" $
         withPreparedModel fixture \env _snapshot access _operation reference -> do
-          claim <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) reference "former-owner" 1)
+          claim <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) reference (fixtureOwner "former-owner") 1)
           run env (Store.startExecutionAttempt access (fixtureRevision 3) claim) >>= (@?= Right R.Accepted)
           threadDelay 1100000
-          run env (Store.claimExecutionAttempt access (fixtureRevision 4) reference "replacement" 60) >>= (@?= Right Attempt.AttemptNeedsReconciliation)
+          run env (Store.claimExecutionAttempt access (fixtureRevision 4) reference (fixtureOwner "replacement") 60) >>= (@?= Right Attempt.AttemptNeedsReconciliation)
           run env (Store.completeExecutionAttempt access (fixtureRevision 4) claim terminalAttempt) >>= (@?= Left AttemptClaimLost)
           run env (Store.markExecutionAttemptUncertain access (fixtureRevision 4) claim) >>= (@?= Right R.Accepted)
           run env (Store.recordLateExecutionReceipt access (fixtureRevision 5) claim terminalAttempt) >>= (@?= Right R.Accepted)
@@ -542,7 +547,7 @@ tests fixture =
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
           Map.lookup R.Tokens root.usage.held @?= Just (fixtureAmount 10)
           root.active @?= (fixtureCount 1)
-          run env (Store.claimExecutionAttempt access (fixtureRevision 6) reference "another-owner" 60) >>= (@?= Right Attempt.AttemptNeedsReconciliation)
+          run env (Store.claimExecutionAttempt access (fixtureRevision 6) reference (fixtureOwner "another-owner") 60) >>= (@?= Right Attempt.AttemptNeedsReconciliation)
           run env (Store.reconcileExecutionAttempt access (fixtureRevision 6) reference.attemptId) >>= (@?= Right R.Accepted)
           run env (Store.reconcileExecutionAttempt access (fixtureRevision 6) reference.attemptId) >>= (@?= Right R.AlreadyAccepted)
           (_, reconciledState) <- expectRight =<< run env (Store.loadExecution access)
@@ -573,7 +578,7 @@ tests fixture =
           drive >>= (@?= Suspended)
           first <- pendingReference env snapshot
           (_, pending) <- expectRight =<< run env (Store.loadExecution access)
-          claim <- expectClaim =<< run env (Store.claimExecutionAttempt access pending.revision first "disappeared-owner" 1)
+          claim <- expectClaim =<< run env (Store.claimExecutionAttempt access pending.revision first (fixtureOwner "disappeared-owner") 1)
           (_, claimed) <- expectRight =<< run env (Store.loadExecution access)
           run env (Store.startExecutionAttempt access claimed.revision claim) >>= (@?= Right R.Accepted)
           threadDelay 1100000
@@ -640,7 +645,7 @@ tests fixture =
           pending.status @?= Awakeable.Pending
           before <- run env (loadStepIndex name workflow 1)
           assertBool "old timer did not add an orphan wake to the new journal" (Map.notMember ("awk:" <> awakeableIdText oldToken) before)
-          claim <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) reference "rotation-executor" 60)
+          claim <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) reference (fixtureOwner "rotation-executor") 60)
           run env (Store.startExecutionAttempt access (fixtureRevision 3) claim) >>= (@?= Right R.Accepted)
           run env (Store.completeExecutionAttempt access (fixtureRevision 4) claim terminalAttempt) >>= (@?= Right R.Accepted)
           run env (Store.refreshExecutionWake access (fixtureRevision 5) (Attempt.ExecutionWake currentToken 1)) >>= (@?= Right R.Accepted)
@@ -1126,7 +1131,7 @@ modelRecoveryCase fixture afterCompletion = testCase (if afterCompletion then "a
         next = old & #attemptId .~ second.request.attemptId
         actual = terminalAttempt & #accounting .~ Just (terminal & #known .~ Map.fromList [(R.Tokens, (fixtureAmount 3)), (R.CostMicroUsd, (fixtureAmount 0))] & #missing .~ [])
     _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 1) first (\_ -> pure ()))
-    former <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) old "former-owner" 1)
+    former <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) old (fixtureOwner "former-owner") 1)
     run env (Store.startExecutionAttempt access (fixtureRevision 3) former) >>= (@?= Right R.Accepted)
     threadDelay 1100000
     run env (Store.markExecutionAttemptUncertain access (fixtureRevision 4) former) >>= (@?= Right R.Accepted)
@@ -1142,9 +1147,9 @@ modelRecoveryCase fixture afterCompletion = testCase (if afterCompletion then "a
     root <- expectRight =<< run env (Roots.inspectRoot rootId)
     root.active @?= (fixtureCount 2)
     root.unknown @?= (fixtureCount 1)
-    run env (Store.claimExecutionAttempt access (fixtureRevision 6) old "stale-delivery" 60) >>= (@?= Right Attempt.AttemptFinished)
+    run env (Store.claimExecutionAttempt access (fixtureRevision 6) old (fixtureOwner "stale-delivery") 60) >>= (@?= Right Attempt.AttemptFinished)
     run env (Store.publishExecutionWake old) >>= (@?= Right ())
-    replacement <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 6) next "replacement-owner" 60)
+    replacement <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 6) next (fixtureOwner "replacement-owner") 60)
     run env (Store.startExecutionAttempt access (fixtureRevision 7) replacement) >>= (@?= Right R.Accepted)
     run env (Store.completeExecutionAttempt access (fixtureRevision 8) replacement actual) >>= (@?= Right R.Accepted)
     when afterCompletion (run env (Store.finishExecution access (fixtureRevision 9) (object ["reply" .= ("accepted reply" :: Text)])) >>= (@?= Right R.Accepted))
@@ -1175,7 +1180,7 @@ recoveryCapacityCase fixture = testCase "a refused recovery preserves the unknow
         old = Attempt.JobReference 1 snapshot.executionId operation.specification.operationId first.request.attemptId
         second = first & #request . #attemptId .~ AttemptId "refused-recovery-attempt"
     _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 1) first (\_ -> pure ()))
-    former <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) old "former-owner" 1)
+    former <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) old (fixtureOwner "former-owner") 1)
     run env (Store.startExecutionAttempt access (fixtureRevision 3) former) >>= (@?= Right R.Accepted)
     threadDelay 1100000
     run env (Store.markExecutionAttemptUncertain access (fixtureRevision 4) former) >>= (@?= Right R.Accepted)
@@ -1234,7 +1239,7 @@ toolRecoveryCase fixture recovery = testCase (show recovery <> " retains its log
     unknown.phase @?= Unresolved
     unknown.cursor @?= (fixtureRevision 1)
     Just old <- expectRight =<< run env (Store.inspectExecutionAttempt first.attemptId)
-    let former = Attempt.AttemptClaim first (fromMaybe "missing-owner" old.owner) old.generation
+    let former = Attempt.AttemptClaim first (fromMaybe (fixtureOwner "missing-owner") old.owner) old.generation
     proposed <- run env (Store.recoverExecutionAttemptWith access unknown.revision first.attemptId (submission secondRequest) (\_ -> pure ()))
     if recovery == UncertainEffect
       then do
@@ -1425,7 +1430,7 @@ recoveryReceiptCapacityCase fixture = testCase "full pending-receipt capacity re
         old = Attempt.JobReference 1 snapshot.executionId operation.specification.operationId first.request.attemptId
         second = first & #request . #attemptId .~ AttemptId "full-receipt-recovery"
     _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 1) first (\_ -> pure ()))
-    former <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) old "former-owner" 1)
+    former <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) old (fixtureOwner "former-owner") 1)
     run env (Store.startExecutionAttempt access (fixtureRevision 3) former) >>= (@?= Right R.Accepted)
     threadDelay 1100000
     run env (Store.markExecutionAttemptUncertain access (fixtureRevision 4) former) >>= (@?= Right R.Accepted)
@@ -1456,3 +1461,9 @@ fixtureToolPosition value = either (error . show) id (parseToolPosition value)
 
 fixtureAssignment :: AssignmentText.Text -> AssignmentKey
 fixtureAssignment = either (error . show) id . parseAssignmentKey
+
+fixtureGeneration :: Integer -> Generation.StateRevision "execution-attempt"
+fixtureGeneration value = either (error . show) id (Generation.parseRevision value)
+
+fixtureOwner :: ClaimText.Text -> Claim.ClaimOwner
+fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)

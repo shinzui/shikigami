@@ -132,7 +132,7 @@ reserveWorkspaceEffectTx binding owner epoch (OperationId operation) fingerprint
 -- reservation, change identity or release a different operation's uncertainty.
 recordWorkspaceReceiptTx :: WorkspaceBinding -> FileReceipt -> Transaction (Either WorkspaceError ())
 recordWorkspaceReceiptTx binding receipt
-  | receipt.bindingDigest /= workspaceBindingDigest binding || receipt.generation <= 0 = pure (Left WorkspaceBindingConflict)
+  | receipt.bindingDigest /= workspaceBindingDigest binding || receipt.generation <= initialRevision = pure (Left WorkspaceBindingConflict)
   | otherwise = do
       let OperationId operation = receipt.operationId
       changed <- Tx.statement (operation, binding.workspace.resource, receipt.fingerprint, receipt) saveReceipt
@@ -149,7 +149,7 @@ registerFileForOwnerTx binding owner epoch registration = do
   let receipt = registration.receipt
       OperationId key = receipt.operationId
   existing <- Tx.statement key selectEffect
-  if current == Right () && validProcessRouting registration.routing && registration.routing.identity == owner && registration.routing.executionId == registration.operation.executionId && registration.operation.operationId == receipt.operationId && receipt.bindingDigest == workspaceBindingDigest binding && receipt.generation > 0 && receipt.state == EditPrepared && registration.claimOwner /= "" && maybe False (\(resource, fingerprint, _) -> resource == binding.workspace.resource && fingerprint == receipt.fingerprint) existing
+  if current == Right () && validProcessRouting registration.routing && registration.routing.identity == owner && registration.routing.executionId == registration.operation.executionId && registration.operation.operationId == receipt.operationId && receipt.bindingDigest == workspaceBindingDigest binding && receipt.generation > initialRevision && receipt.state == EditPrepared && maybe False (\(resource, fingerprint, _) -> resource == binding.workspace.resource && fingerprint == receipt.fingerprint) existing
     then do
       Tx.statement (key, registration) insertFileRegistration
       retained <- inspectRegisteredFileTx receipt.operationId

@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.WorkspaceRpcSpec (tests, withListener) where
 
 import Control.Concurrent (threadDelay)
@@ -16,6 +18,7 @@ import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Execution.Identity (AttemptId (..), ExecutionRootId (..), OperationId (..))
 import Shikigami.StateRevision (StateRevision, parseRevision)
+import Shikigami.StateRevision qualified as Generation
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
 import Shikigami.WorkerSession.Transfer
 import Shikigami.WorkerSession.Types (ObjectiveRef (..), WorkerSessionId (..))
@@ -105,8 +108,8 @@ tests =
           assertBool "timed-out handlers provide no completion proof" (all isLeft results)
           readIORef counts >>= (@?= (4, 0)),
       testCase "client refuses unrelated operation and invalid settled evidence" $ withListener \path listener uid -> do
-        let wrong = RpcView (ProcessView (OperationId "other") (AttemptId "actual") 1 digest ProcessReserved Nothing)
-            incomplete = RpcView (ProcessView operation (AttemptId "actual") 1 digest ProcessSettled Nothing)
+        let wrong = RpcView (ProcessView (OperationId "other") (AttemptId "actual") (fixtureGeneration 1) digest ProcessReserved Nothing)
+            incomplete = RpcView (ProcessView operation (AttemptId "actual") (fixtureGeneration 1) digest ProcessSettled Nothing)
         mapM_ (\value -> withAsync (serveRpc (RpcPolicy [uid] 1 2) listener (const (pure value))) \_ -> callRpc path uid 3 request >>= (@?= Left RpcMalformed)) [wrong, incomplete],
       testCase "TCP listeners cannot enter peer-credential transport" $
         bracket (Socket.socket Socket.AF_INET Socket.Stream Socket.defaultProtocol) Socket.close \listener -> do
@@ -163,7 +166,7 @@ request :: RpcRequest
 request = RpcObserve operation
 
 reply :: RpcReply
-reply = RpcView (ProcessView operation (AttemptId "actual") 1 digest ProcessReserved Nothing)
+reply = RpcView (ProcessView operation (AttemptId "actual") (fixtureGeneration 1) digest ProcessReserved Nothing)
 
 digest :: Text.Text
 digest = "sha256:" <> Text.replicate 64 "a"
@@ -177,3 +180,6 @@ isLeft _ = False
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureGeneration :: Integer -> Generation.StateRevision "execution-attempt"
+fixtureGeneration value = either (error . show) id (Generation.parseRevision value)

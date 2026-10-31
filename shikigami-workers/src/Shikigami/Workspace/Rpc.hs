@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 
 -- | Bounded, credential-checked Unix transport. The manager owns the listener
@@ -33,7 +34,7 @@ import Network.Socket.ByteString qualified as SocketBytes
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Execution.Identity (AttemptId (..), OperationId (..))
 import Shikigami.Prelude hiding ((.=))
-import Shikigami.StateRevision (StateRevision)
+import Shikigami.StateRevision
 import Shikigami.WorkerSession.Transfer
 import Shikigami.WorkerSession.Types (WorkerSessionId)
 import Shikigami.Workspace.Process
@@ -56,7 +57,7 @@ instance Show RpcRequest where show _ = "RpcRequest <protected>"
 data ProcessView = ProcessView
   { operationId :: !OperationId,
     attemptId :: !AttemptId,
-    generation :: !Integer,
+    generation :: !(StateRevision "execution-attempt"),
     bindingDigest :: !Text,
     phase :: !ProcessPhase,
     receipt :: !(Maybe ProcessReceipt)
@@ -217,7 +218,7 @@ processViewResult value
 
 validView :: ProcessView -> Bool
 validView value =
-  bounded operation && bounded attempt && value.generation > 0 && value.generation < 9223372036854775808 && digestText value.bindingDigest && case value.receipt of
+  bounded operation && bounded attempt && value.generation > initialRevision && revisionNumber value.generation < 9223372036854775808 && digestText value.bindingDigest && case value.receipt of
     Nothing -> value.phase /= ProcessSettled
     Just receipt -> value.phase == ProcessSettled && receipt.operationId == value.operationId && receipt.attemptId == value.attemptId && receipt.generation == value.generation && receipt.bindingDigest == value.bindingDigest && digestText receipt.fingerprint && receipt.unit == processUnit value.operationId receipt.fingerprint && hostIdentity receipt.bootId && hostIdentity receipt.invocationId && receipt.descendantsEmpty && receipt.outputComplete && maybe (receipt.termination /= ProcessExited) (\code -> code >= 0 && code <= 255) receipt.exitCode && all validOutput [receipt.stdout, receipt.stderr] && receipt.stdout.bytes + receipt.stderr.bytes <= 1048576
   where

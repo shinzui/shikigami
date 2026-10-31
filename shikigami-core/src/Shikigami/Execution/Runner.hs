@@ -14,13 +14,14 @@ module Shikigami.Execution.Runner
 where
 
 import Effectful (Eff)
+import Shikigami.Execution.Claim
 import Shikigami.Execution.Identity (AttemptId, OperationId (..))
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Store qualified as Store
 import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude
-import Shikigami.StateRevision (StateRevision)
+import Shikigami.StateRevision
 
 -- A trusted callback receives the logical key outside the model arguments.
 -- Actual transport attempts and owner generations are separate coordinates.
@@ -40,8 +41,8 @@ data OperationContext = OperationContext
 data DispatchContext = DispatchContext
   { operation :: !OperationContext,
     attemptId :: !AttemptId,
-    owner :: !Text,
-    generation :: !Integer
+    owner :: !ClaimOwner,
+    generation :: !(StateRevision "execution-attempt")
   }
   deriving stock (Eq, Show, Generic)
 

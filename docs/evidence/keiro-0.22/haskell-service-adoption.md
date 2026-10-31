@@ -180,8 +180,8 @@ underflow refusal cases. Full affected acceptance is 556 pure, 382 PostgreSQL,
 complete scalar/identity census remain open.
 
 The [compiled declaration worklist](domain-declarations.json) and
-[census acquisition results](domain-census-results.txt) enumerate 312 hand-owned
-modules, 889 declarations and 14 separately listed role entrypoints. The source
+[census acquisition results](domain-census-results.txt) enumerate 313 hand-owned
+modules, 890 declarations and 14 separately listed role entrypoints. The source
 and interface hashes preserve the actual candidate; the worklist does not assign
 automatic domain/boundary exemptions or certify the remaining review.
 
@@ -227,3 +227,9 @@ call receipts, execution bindings, SQL statements and workspace authorization
 under ADR-84. [Assignment-key acceptance](assignment-key-results.txt) records
 exact string bytes and total technical derivation, 77 compiler clients and
 561 pure/383 PostgreSQL/260 worker/95 server cases. The full census remains open.
+
+Attempt fences retain private ClaimOwner and StateRevision "execution-attempt"
+under ADR-85, independently of native workflow generations and application principals.
+[Attempt-fence acceptance](attempt-fence-results.txt) records exact retained bytes,
+85 compiler clients and 562 pure/383 PostgreSQL/260 worker/95 server cases with
+neutral native reports. The complete scalar/identity review remains open.

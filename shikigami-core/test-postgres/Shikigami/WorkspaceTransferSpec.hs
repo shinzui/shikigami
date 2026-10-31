@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.WorkspaceTransferSpec (tests) where
 
 import Control.Concurrent.Async (concurrently)
@@ -18,6 +20,7 @@ import Shikigami.Execution.SelectionRuntime qualified as Selection
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude
 import Shikigami.StateRevision (StateRevision, advanceRevision, parseRevision)
+import Shikigami.StateRevision qualified as Generation
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
 import Shikigami.WorkerSession.Input (InstructionText, parseInstructionText)
 import Shikigami.WorkerSession.Store qualified as Sessions
@@ -67,7 +70,7 @@ tests fixture =
       testCase "prepared file effects preserve uncertainty until factual settlement after freeze" $ withWorkspace fixture \env session access binding original -> do
         let operation = OperationId "pending-file"
             digest = "sha256:" <> Text.replicate 64 "a"
-            prepared = FileReceipt operation (AttemptId "original-actual") 1 digest (workspaceBindingDigest binding) (bundleDigest original.instructions) "dependency.txt" "1:2" Nothing digest EditPrepared
+            prepared = FileReceipt operation (AttemptId "original-actual") (fixtureGeneration 1) digest (workspaceBindingDigest binding) (bundleDigest original.instructions) "dependency.txt" "1:2" Nothing digest EditPrepared
         _ <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceEffectTx binding session.identity (fixtureRevision 0) operation digest))
         run env (runTransaction (Workspaces.recordWorkspaceReceiptTx binding prepared)) >>= (@?= Right ())
         intent <- request env session access binding
@@ -160,3 +163,6 @@ fixtureInstruction value = either (error . show) id (parseInstructionText value)
 
 fixtureAssignment :: AssignmentText.Text -> AssignmentKey
 fixtureAssignment = either (error . show) id . parseAssignmentKey
+
+fixtureGeneration :: Integer -> Generation.StateRevision "execution-attempt"
+fixtureGeneration value = either (error . show) id (Generation.parseRevision value)

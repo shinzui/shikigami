@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.WorkspaceActionProofSpec (tests) where
 
 import Auth.Biscuit (toPublic)
@@ -6,6 +8,7 @@ import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as AssignmentText
+import Data.Text qualified as ClaimText
 import Data.Text qualified as Text
 import Data.Text.Encoding (decodeUtf8)
 import Data.Time (addUTCTime)
@@ -21,12 +24,14 @@ import Kikan.En.Client (newActionProofVerifier, verifyIssuedAction)
 import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
+import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Runner
 import Shikigami.Execution.ToolPosition (ToolPosition, parseToolPosition)
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadRef (..))
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision (StateRevision, parseRevision)
+import Shikigami.StateRevision qualified as Generation
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
 import Shikigami.WorkerSession.Transfer (TransferIntent (..))
 import Shikigami.WorkerSession.Types (AssignmentId (..), ObjectiveRef (..), WorkerSessionId (..))
@@ -54,7 +59,7 @@ tests =
             request = WorkspaceRequest "run" Nothing (ExecutionRootId "root") owner owner (fixtureRevision 0)
             binding = WorkspaceBinding request (WorkspaceRef "shikigami.workspace/1" "resource") "mori://fixture/repo" (Text.replicate 40 "a") "policy-1" "/private/workspaces" "/operator/source"
             logical = OperationContext (ExecutionId "execution") (OperationId "operation") "operation" "fingerprint" "scope"
-            dispatch = DispatchContext logical (AttemptId "attempt") "claim-owner" 1
+            dispatch = DispatchContext logical (AttemptId "attempt") (fixtureOwner "claim-owner") (fixtureGeneration 1)
             now = read "2026-10-29 12:00:00 UTC"
             expiry = addUTCTime 30 now
             verifier = newActionProofVerifier (singleKey keyId (toPublic secret)) (Set.singleton schema) (const (pure False))
@@ -81,8 +86,8 @@ tests =
             [ workspaceFileAction binding (admission & #instructions .~ changedPolicy) dispatch "replace" "src/file" "device:parent" "input-hash",
               workspaceFileAction binding (admission & #assignmentId .~ (fixtureAssignment "other-assignment")) dispatch "replace" "src/file" "device:parent" "input-hash",
               workspaceFileAction binding admission (dispatch & #attemptId .~ AttemptId "other-attempt") "replace" "src/file" "device:parent" "input-hash",
-              workspaceFileAction binding admission (dispatch & #owner .~ "other-claim") "replace" "src/file" "device:parent" "input-hash",
-              workspaceFileAction binding admission (dispatch & #generation .~ 2) "replace" "src/file" "device:parent" "input-hash",
+              workspaceFileAction binding admission (dispatch & #owner .~ (fixtureOwner "other-claim")) "replace" "src/file" "device:parent" "input-hash",
+              workspaceFileAction binding admission (dispatch & #generation .~ (fixtureGeneration 2)) "replace" "src/file" "device:parent" "input-hash",
               workspaceFileAction binding admission (dispatch & #operation . #operationId .~ OperationId "other-operation") "replace" "src/file" "device:parent" "input-hash",
               workspaceFileAction binding admission (dispatch & #operation . #fingerprint .~ "other-fingerprint") "replace" "src/file" "device:parent" "input-hash",
               workspaceFileAction binding admission (dispatch & #operation . #scopeDigest .~ "other-scope") "replace" "src/file" "device:parent" "input-hash",
@@ -129,8 +134,8 @@ tests =
               ]
             alteredDispatches =
               [ dispatch & #attemptId .~ AttemptId "other-attempt",
-                dispatch & #owner .~ "other-claim",
-                dispatch & #generation .~ 2,
+                dispatch & #owner .~ (fixtureOwner "other-claim"),
+                dispatch & #generation .~ (fixtureGeneration 2),
                 dispatch & #operation . #operationId .~ OperationId "other-operation",
                 dispatch & #operation . #fingerprint .~ "other-fingerprint",
                 dispatch & #operation . #scopeDigest .~ "other-scope"
@@ -164,7 +169,7 @@ tests =
         mapM_
           (\invalid -> workspaceProcessAction binding processAdmission dispatch invalid boot "device:parent" @?= Left FileEffectRefused)
           [ record & #attemptId .~ AttemptId "unmatched-attempt",
-            record & #generation .~ 2,
+            record & #generation .~ (fixtureGeneration 2),
             record & #fingerprint .~ "mismatched",
             record & #phase .~ ProcessRunning,
             record & #bootId .~ Just "22222222-2222-4222-8222-222222222222",
@@ -247,8 +252,8 @@ tests =
               gitAction provisionAdmission gitDispatch profile (gitRecord & #routing . #inputDigest .~ ("sha256:" <> Text.replicate 64 "b")),
               gitAction (provisionAdmission & #assignmentId .~ (fixtureAssignment "other-assignment")) gitDispatch profile gitRecord,
               gitAction provisionAdmission (gitDispatch & #attemptId .~ AttemptId "other-attempt") profile (gitRecord & #attemptId .~ AttemptId "other-attempt"),
-              gitAction provisionAdmission (gitDispatch & #owner .~ "other-claim") profile (gitRecord & #claimOwner .~ "other-claim"),
-              gitAction provisionAdmission (gitDispatch & #generation .~ 2) profile (gitRecord & #generation .~ 2),
+              gitAction provisionAdmission (gitDispatch & #owner .~ (fixtureOwner "other-claim")) profile (gitRecord & #claimOwner .~ (fixtureOwner "other-claim")),
+              gitAction provisionAdmission (gitDispatch & #generation .~ (fixtureGeneration 2)) profile (gitRecord & #generation .~ (fixtureGeneration 2)),
               gitAction provisionAdmission gitDispatch changedProfile (gitRecord & #profileDigest .~ Git.gitProfileDigest changedProfile),
               gitAction provisionAdmission gitDispatch profile (gitRecord & #phase .~ Git.GitReserved & #candidate .~ Nothing)
             ]
@@ -272,7 +277,7 @@ tests =
               observation provisionAdmission gitDispatch profile "status" ("sha256:" <> Text.replicate 64 "b") "device:files",
               observation provisionAdmission gitDispatch profile "status" command.profile "device:other-files",
               observation (provisionAdmission & #assignmentId .~ (fixtureAssignment "other-assignment")) gitDispatch profile "status" command.profile "device:files",
-              observation provisionAdmission (gitDispatch & #generation .~ 2) profile "status" command.profile "device:files",
+              observation provisionAdmission (gitDispatch & #generation .~ (fixtureGeneration 2)) profile "status" command.profile "device:files",
               observation provisionAdmission gitDispatch changedProfile "status" command.profile "device:files"
             ]
         mapM_ (\action -> verifyIssuedAction verifier now (statusRequest & #action .~ action) statusIssued >>= \answer -> assertBool "Git observation proof binds kind, input, anchor, assignment, actual claim and profile" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) changedObservations
@@ -372,3 +377,9 @@ fixtureToolPosition value = either (error . show) id (parseToolPosition value)
 
 fixtureAssignment :: AssignmentText.Text -> AssignmentKey
 fixtureAssignment = either (error . show) id . parseAssignmentKey
+
+fixtureGeneration :: Integer -> Generation.StateRevision "execution-attempt"
+fixtureGeneration value = either (error . show) id (Generation.parseRevision value)
+
+fixtureOwner :: ClaimText.Text -> Claim.ClaimOwner
+fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)
