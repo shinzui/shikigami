@@ -177,19 +177,19 @@ superviseProcess runtime request = protect do
 -- reads only provider facts and returns metadata. It cannot issue a launch.
 reconcileProcess :: SupervisorRuntime -> OperationId -> IO (Either SupervisorError ProcessRecord)
 reconcileProcess runtime operation = protect do
-  (binding, _) <- transact runtime (Processes.inspectRegisteredProcessTx operation) >>= maybe (abort SupervisorRefused) pure
+  (binding, _) <- readRegisteredProcess runtime operation >>= maybe (abort SupervisorRefused) pure
   let metadata = workspaceMetadata binding.storageRoot binding
   needFile =<< checkPrivateDirectory binding.storageRoot
   needFile =<< checkPrivateDirectory metadata
   locked <-
     withWorkspaceLock metadata $
       Right <$> do
-        record <- transact runtime (Processes.inspectProcessTx operation) >>= maybe (abort SupervisorUnavailable) pure
+        record <- readProcess runtime operation >>= maybe (abort SupervisorUnavailable) pure
         unless (record.bindingDigest == workspaceBindingDigest binding && record.unit == processUnit operation record.fingerprint) (abort SupervisorUnresolved)
         if record.phase == ProcessReserved
           then do
             transact runtime (Processes.refuseReservedProcessTx record) >>= either (const (abort SupervisorUnresolved)) pure
-            transact runtime (Processes.inspectProcessTx operation) >>= maybe (abort SupervisorUnavailable) pure
+            readProcess runtime operation >>= maybe (abort SupervisorUnavailable) pure
           else observe runtime binding record
   either (const (abort SupervisorUnresolved)) pure locked
 
@@ -210,7 +210,7 @@ loadAccepted runtime request = do
   assistant <- case response of ModelReturned value _ -> pure value; _ -> abort SupervisorRefused
   unless (take 1 (drop (toolPositionNumber tool.position) (toolInvocations assistant)) == [tool.invocation]) (abort SupervisorRefused)
   let next = toolContinuation tool assistant
-      routing = ProcessRouting 1 snapshot.executionId snapshot.identity operation.input.digest next
+      routing = ProcessRouting ProcessRoutingV1 snapshot.executionId snapshot.identity operation.input.digest next
   unless (validProcessRouting routing) (abort SupervisorRefused)
   rule <- either (const (abort SupervisorRefused)) pure (parseEither (Aeson.withObject "validation rule" (\fields -> if length fields /= 1 then fail "invalid rule request" else fields .: "rule")) tool.invocation.arguments)
   unless (bounded rule) (abort SupervisorRefused)
@@ -231,14 +231,14 @@ lockedProcess runtime accepted = do
       command = accepted.command
   -- An existing registration is observed without rechecking the former claim
   -- or reserving a new deadline. It can never produce another launch request.
-  existing <- transact runtime (Processes.inspectProcessTx dispatch.operation.operationId)
+  existing <- readProcess runtime dispatch.operation.operationId
   case existing of
     Just record -> do
       unless (record.bindingDigest == workspaceBindingDigest binding && record.instructionDigest == bundleDigest accepted.admission.instructions && record.command == command && record.routing == Just accepted.routing && record.fingerprint == processFingerprint binding record.instructionDigest dispatch.operation command) (abort SupervisorRefused)
       if record.phase == ProcessReserved
         then do
           transact runtime (Processes.refuseReservedProcessTx record) >>= either (const (abort SupervisorUnresolved)) pure
-          transact runtime (Processes.inspectProcessTx record.operationId) >>= maybe (abort SupervisorUnavailable) pure
+          readProcess runtime record.operationId >>= maybe (abort SupervisorUnavailable) pure
         else observe runtime binding record
     Nothing -> do
       boot <- runtime.backend.bootIdentity >>= either (abort . backendError) pure
@@ -330,7 +330,7 @@ observe runtime binding record = do
             _ <- transact runtime (Processes.markProcessUnresolvedTx record)
             pure ()
         Right (Just _) -> pure ()
-      transact runtime (Processes.inspectProcessTx record.operationId) >>= maybe (abort SupervisorUnavailable) pure
+      readProcess runtime record.operationId >>= maybe (abort SupervisorUnavailable) pure
 
 -- Retained root control and the original cutoff govern already admitted work.
 -- Failure to read current control never invents a stop decision or prevents
@@ -383,7 +383,7 @@ data ProcessPublication = AwaitingProcessReceipt | AwaitingExecutionExpiry | Pro
 -- actual attempt, replay-read grant, command or authority to continue model IO.
 publishProcessReceipt :: SupervisorRuntime -> OperationId -> IO (Either SupervisorError ProcessPublication)
 publishProcessReceipt runtime operationId = protect do
-  (binding, initial) <- transact runtime (Processes.inspectRegisteredProcessTx operationId) >>= maybe (abort SupervisorRefused) pure
+  (binding, initial) <- readRegisteredProcess runtime operationId >>= maybe (abort SupervisorRefused) pure
   record <-
     if initial.phase `elem` [ProcessSettled, ProcessRefused]
       then pure initial
@@ -451,6 +451,13 @@ execute runtime action = do
     Right (Left err) | err `elem` [ExecutionStorageUnavailable, ProjectionUnavailable] -> abort SupervisorUnavailable
     Right (Left _) -> abort SupervisorRefused
     Left _ -> abort SupervisorUnavailable
+
+-- Invalid retained facts cannot authorize a replacement launch or a receipt.
+readProcess :: SupervisorRuntime -> OperationId -> IO (Maybe ProcessRecord)
+readProcess runtime operation = transact runtime (Processes.inspectProcessTx operation) >>= either (const (abort SupervisorUnresolved)) pure
+
+readRegisteredProcess :: SupervisorRuntime -> OperationId -> IO (Maybe (WorkspaceBinding, ProcessRecord))
+readRegisteredProcess runtime operation = transact runtime (Processes.inspectRegisteredProcessTx operation) >>= either (const (abort SupervisorUnresolved)) pure
 
 transact :: SupervisorRuntime -> Transaction a -> IO a
 transact runtime action = runAppIO runtime.appEnv (runTransaction action) >>= either (const (abort SupervisorUnavailable)) pure

@@ -269,6 +269,11 @@
           "rationale": "ADR-100 retains a closed numeric-one GitRecordFormat and typed optional Git/origin reads. Malformed JSON, unexpected SQL NULL, unsupported format and invalid joined origin condemn inside the transaction with WorkspaceBindingConflict. The provider preserves FileEffectUnresolved for data and FileEffectUnavailable for SQL failure; it cannot treat bad intent as missing. Positive-first controls preserve the common barrier, roll back tentative freeze and keep lost-ack HEAD/publication singular. Other workspace stores and the full scalar/identity census remain pending."
         },
         {
+          "id": "owned-process-intent-decoding-and-routing-format",
+          "disposition": "implemented",
+          "rationale": "ADR-101 captures ProcessStore direct/joined FromJSON refusals as typed row data, condemns inside the read and preserves WorkspaceBindingConflict rather than missing intent. Supervisor data remains unresolved while SQL failure is unavailable. Closed numeric-one ProcessRoutingFormat preserves process/file routing bytes and original coordinates. Positive controls preserve the barrier, roll back a freeze and keep accepted-attempt uncertainty/one launch without fabricated receipt. Other workspace stores and the full scalar/identity census remain pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -390,7 +395,11 @@
         "docs/evidence/keiro-0.22/git-row-results.txt",
         "docs/evidence/keiro-0.22/git-row-native-diff.json",
         "docs/evidence/keiro-0.22/git-row-native-replay.json",
-        "docs/evidence/keiro-0.22/git-row-fold-identities.json"
+        "docs/evidence/keiro-0.22/git-row-fold-identities.json",
+        "docs/evidence/keiro-0.22/process-row-results.txt",
+        "docs/evidence/keiro-0.22/process-row-native-diff.json",
+        "docs/evidence/keiro-0.22/process-row-native-replay.json",
+        "docs/evidence/keiro-0.22/process-row-fold-identities.json"
       ]
     },
     {

@@ -1,0 +1,20 @@
+Transactional process intent/origin refusals and closed routing — ExecPlan 107
+Source parent: c8f3c2381372c0d49aa7b1019fdd65dc5973b06b (master).
+Selected GHC 9.12.4/frozen cohort; arm64 macOS and real PostgreSQL fixtures.
+Decision: docs/adr/0101-process-intent-decoding-preserves-launch-and-receipt-uncertainty.md.
+
+Contract
+ProcessStore direct/joined JSON readers retain typed Either results and condemn the transaction on FromJSON failure before returning WorkspaceBindingConflict. Parser/source text is discarded and absence remains Right Nothing. Reservation, launch, invocation observation, receipt/refusal persistence and the Git process-collision check propagate that ownership. The supervisor maps data refusal to SupervisorUnresolved; concrete SQL failures retain SupervisorUnavailable. No unreadable intent can become a replacement launch or receipt acknowledgement.
+ProcessRoutingFormat is closed at ProcessRoutingV1, encoding numeric one exactly. Unsupported/fractional/overflow versions refuse. Process and file producers and proof/systemd fixtures retain valid routing bytes. Existing identity, input digest, next-step, exact action/claim, deadline, physical settlement and output/receipt checks remain. The numeric guard is redundant once the field is closed and is removed.
+
+Acceptance
+Existing focused process-registration cases: ten PASS (6.11s). Complete focused registration/supervisor suites with five new controls: 32 PASS (31.74s).
+Positive registration/inspection precedes malformed record, unsupported routing and invalid joined-origin injection. Direct and joined readers refuse, no launch/factual transition succeeds, and the common barrier remains. A tentative freeze is observed inside the transaction and rolls back on the bad read. Exact numeric-one codecs reject unsupported, fractional and oversized numbers.
+The existing accepted-supervisor fixture captures/starts once and loses acknowledgement. Before corruption the original attempt is uncertain and its retained receipt absent. Corrupt metadata then makes independent recovery and publication return SupervisorUnresolved. Repeated execution does not launch again; the accepted attempt remains uncertain with no late receipt. Renaming/restoring the actual table confirms a real SQL failure remains SupervisorUnavailable. This uses the existing instrumented macOS backend, not a real Linux systemd qualification.
+Full suites PASS: 584 pure (5.87s), 405 serial PostgreSQL (121.08s), 273 worker (182.93s), 95 server (18.90s). Existing RPC peer/claim checks, root cancellation, collector uncertainty, deadline/output evidence, independent recovery after revocation, handoff/fencing, late receipt and exact action-proof controls remain.
+Selected compiler: 178 nominal + 58 opaque = 236 PASS. Positive process-routing format/field clients precede numeric construction and Git-format substitution rejection. Protected Show is unchanged.
+just keiro-gate c8f3c23 PASS: native check, ten-member inspection, idempotent scaffold and 156 conformance rows. Strict diff has zero findings; domain and six diagrams pass. Four transducer fingerprints/source hashes remain unchanged; native diff/replay/fold reports are retained. No workflow label/order/effect or valid codec/identity producer change; no patch is needed.
+All 124 frozen guide hashes verified. Current unique source/tool worklist verified: 320 modules, 909 declarations (695 data, 177 newtypes, 37 aliases), 14 entrypoints. The worklist remains unclassified. Haskell conventions, thirteen checker mutation tests and git diff --check pass. Generated files remain untouched.
+
+Scope
+This covers process JSON/routing decoding, not every process business scalar, other workspace stores or native Linux invocation/containment. The operation-key pagination statement remains unchanged. The complete scalar/identity and remaining decoder-owner review keep plan107 M1 open. Other API/client/agent/CLI/live HTTP results remain preceding evidence. Packaged/Linux/runtime qualification and plan95 have not started.

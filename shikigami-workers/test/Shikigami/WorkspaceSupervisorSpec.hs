@@ -4,7 +4,7 @@ module Shikigami.WorkspaceSupervisorSpec (tests) where
 
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (withAsync)
-import Control.Exception (throwIO)
+import Control.Exception (finally, throwIO)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as Bytes
@@ -18,6 +18,7 @@ import Data.Text qualified as Text
 import Effectful (Eff)
 import Effectful.Dispatch.Static (unsafeEff_)
 import Hasql.Transaction (Transaction)
+import Hasql.Transaction qualified as Tx
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization
 import Shikigami.Agent.Name (AgentName, mkAgentName)
@@ -63,7 +64,27 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace accepted process supervisor"
-    [ testCase "transfer-aware process revision uses the peer service and independent original-attempt publisher" $ withProcessVersion True 1 fixture id True \file runtime _ calls snapshot reference -> withListener \path listener uid -> do
+    [ testCase "malformed pending process intent stays unresolved without another launch" $ withProcess fixture id False \file runtime observed calls snapshot reference -> do
+        let executor = Fixture.executorForAdapter (adapter runtime observed) file
+        Executor.executeAcceptedAttempt executor snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+        Just original <- right =<< transaction file (Processes.inspectProcessTx reference.operationId)
+        original.attemptId @?= reference.attemptId
+        original.receipt @?= Nothing
+        Just attempt <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
+        attempt.phase @?= Attempt.AttemptUncertain
+        readIORef calls >>= (@?= (1, 1))
+        transaction file (Tx.sql "UPDATE shikigami.workspace_processes SET record='{}'::jsonb")
+        reconcileProcess runtime reference.operationId >>= (@?= Left SupervisorUnresolved)
+        publishProcessReceipt runtime reference.operationId >>= (@?= Left SupervisorUnresolved)
+        Executor.executeAcceptedAttempt executor snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+        readIORef calls >>= (@?= (1, 1))
+        Just retained <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
+        retained.phase @?= Attempt.AttemptUncertain
+        retained.lateReceipt @?= Nothing
+        transaction file (Tx.sql "ALTER TABLE shikigami.workspace_processes RENAME TO fixture_unavailable_processes")
+        (reconcileProcess runtime reference.operationId >>= (@?= Left SupervisorUnavailable))
+          `finally` transaction file (Tx.sql "ALTER TABLE shikigami.fixture_unavailable_processes RENAME TO workspace_processes"),
+      testCase "transfer-aware process revision uses the peer service and independent original-attempt publisher" $ withProcessVersion True 1 fixture id True \file runtime _ calls snapshot reference -> withListener \path listener uid -> do
         let client = ProcessClient path uid 3 3
         withAsync (serveRpc (RpcPolicy [uid] 2 3) listener (dispatchSupervisorRpc runtime)) \_ -> do
           Executor.executeAcceptedAttempt (Fixture.executorForAdapter (const (transferredWorkspaceExecAdapter client)) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
@@ -115,7 +136,7 @@ tests fixture =
             Executor.executeAcceptedAttempt (Fixture.executorForAdapter (const (workspaceExecAdapter client)) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
             Just actual <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
             actual.phase @?= Attempt.AttemptUncertain
-            transaction file (Processes.inspectProcessTx reference.operationId) >>= (@?= Nothing)
+            transaction file (Processes.inspectProcessTx reference.operationId) >>= (@?= Right Nothing)
             readIORef calls >>= (@?= (0, 0)),
       testCase "restarted Unix service observes original facts and acknowledges after authority revocation" $ withProcess fixture id False \file runtime _ calls snapshot reference ->
         withListener \path listener uid -> do
@@ -138,7 +159,7 @@ tests fixture =
         readIORef calls >>= (@?= (0, 0))
         Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         request <- readIORef observed >>= maybe (fail "missing actual request") pure
-        Just retained <- transaction file (Processes.inspectProcessTx reference.operationId)
+        Just retained <- right =<< transaction file (Processes.inspectProcessTx reference.operationId)
         retained.attemptId @?= reference.attemptId
         retained.generation @?= request.generation
         retained.phase @?= ProcessSettled
@@ -217,7 +238,7 @@ tests fixture =
       testCase "denied exact authority proves pre-launch refusal and cannot be retried into a launch" $ withProcess fixture (\runtime -> runtime & #authorizer .~ denyAllActionAuthorizer) True \file runtime observed calls snapshot reference -> do
         Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         request <- readIORef observed >>= maybe (fail "missing actual request") pure
-        Just retained <- transaction file (Processes.inspectProcessTx reference.operationId)
+        Just retained <- right =<< transaction file (Processes.inspectProcessTx reference.operationId)
         retained.phase @?= ProcessRefused
         retained.receipt @?= Nothing
         readIORef calls >>= (@?= (0, 0))
@@ -229,7 +250,7 @@ tests fixture =
         let gate _ = atomicModifyIORef' checks (\count -> (count + 1, count)) >>= \count -> pure (if count < 3 then Right () else Left "revoked at launch boundary")
         withProcess fixture (\runtime -> runtime & #lifecycle .~ gate) True \file runtime observed calls snapshot reference -> do
           Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
-          Just retained <- transaction file (Processes.inspectProcessTx reference.operationId)
+          Just retained <- right =<< transaction file (Processes.inspectProcessTx reference.operationId)
           retained.phase @?= ProcessUnresolved
           retained.receipt @?= Nothing
           Just actual <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
@@ -238,7 +259,7 @@ tests fixture =
       testCase "a substituted actual claim generation refuses before reserving or preparing capture" $ withProcess fixture id True \file runtime observed calls snapshot reference -> do
         let changed request = request & #generation .~ (Generation.advanceRevision request.generation)
         Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapterWithRequest changed runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
-        transaction file (Processes.inspectProcessTx reference.operationId) >>= (@?= Nothing)
+        transaction file (Processes.inspectProcessTx reference.operationId) >>= (@?= Right Nothing)
         readIORef calls >>= (@?= (0, 0)),
       testCase "lost or failed capture without completion evidence keeps process and actual attempt unresolved" $ do
         let configure marker runtime =
@@ -258,7 +279,7 @@ tests fixture =
         mapM_
           ( \marker -> withProcess fixture (configure marker) True \file runtime observed calls snapshot reference -> do
               Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
-              Just retained <- transaction file (Processes.inspectProcessTx reference.operationId)
+              Just retained <- right =<< transaction file (Processes.inspectProcessTx reference.operationId)
               retained.phase @?= ProcessUnresolved
               retained.receipt @?= Nothing
               reconcileProcess runtime reference.operationId >>= (@?= Right retained)
@@ -272,7 +293,7 @@ tests fixture =
         Just (binding, _) <- transaction file (Workspaces.inspectWorkspaceTx admission.workspace)
         transaction file (Workspaces.freezeWorkspaceTx binding binding.request.owner binding.request.epoch) >>= (@?= Right ())
         Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
-        transaction file (Processes.inspectProcessTx reference.operationId) >>= (@?= Nothing)
+        transaction file (Processes.inspectProcessTx reference.operationId) >>= (@?= Right Nothing)
         readIORef calls >>= (@?= (0, 0))
     ]
 
@@ -347,7 +368,7 @@ adapterWithVersion transferred alter runtime observed file = DurableAdapter (if 
             case result of
               Right record | Just output <- processToolResult record -> pure output
               Left SupervisorRefused -> do
-                retained <- transaction file (Processes.inspectProcessTx request.operationId)
+                retained <- right =<< transaction file (Processes.inspectProcessTx request.operationId)
                 case retained of
                   Just record | Just output <- processToolResult record -> pure output
                   _ -> throwIO (userError "workspace process refusal requires reconciliation")
@@ -399,7 +420,7 @@ rootCancellationCase fixture stopAcknowledged = do
     page.acknowledged @?= 0
     page.pending @?= 1
     readIORef stops >>= (@?= 1)
-    Just retained <- transaction file (Processes.inspectProcessTx reference.operationId)
+    Just retained <- right =<< transaction file (Processes.inspectProcessTx reference.operationId)
     retained.receipt @?= Nothing
     retained.phase @?= (if stopAcknowledged then ProcessLaunchRequested else ProcessUnresolved)
     readIORef calls >>= (@?= (1, 1))

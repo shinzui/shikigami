@@ -61,8 +61,9 @@ reserveGitFor owner checkOperation binding proposed
             Right Nothing -> do
               process <- inspectProcessTx proposed.operation.operationId
               case process of
-                Just _ -> pure (Left WorkspaceBindingConflict)
-                Nothing -> do
+                Left err -> pure (Left err)
+                Right (Just _) -> pure (Left WorkspaceBindingConflict)
+                Right Nothing -> do
                   Tx.statement (key, binding.workspace.resource, proposed.fingerprint, proposed) insertGit
                   retained <- inspectGitTx proposed.operation.operationId
                   pure (retained >>= maybe (Left WorkspaceBindingConflict) (\actual -> if sameReservation actual proposed then Right actual else Left WorkspaceBindingConflict))

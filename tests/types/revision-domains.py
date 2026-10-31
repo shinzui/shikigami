@@ -47,6 +47,7 @@ import Shikigami.Execution.Identity qualified as Entity
 import Shikigami.Execution.Counter
 import Shikigami.Decision.Contract qualified as Decision
 import Shikigami.Workspace.GitTypes qualified as Git
+import Shikigami.Workspace.Process qualified as Process
 import Shikigami.Execution.Quantity
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Capability (WorkerCommand (CancelWorker))
@@ -62,6 +63,9 @@ import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ('process-routing-format', 'value :: Process.ProcessRoutingFormat\nvalue = Process.ProcessRoutingV1\nreadFormat :: Process.ProcessRouting -> Process.ProcessRoutingFormat\nreadFormat routing = routing.format\n', True),
+    ('process-routing-format-numeric', 'value :: Process.ProcessRoutingFormat\nvalue = 2\n', False),
+    ('git-format-is-not-process-routing-format', 'value :: Git.GitRecordFormat -> Process.ProcessRoutingFormat\nvalue = id\n', False),
     ('git-record-format', 'value :: Git.GitRecordFormat\nvalue = Git.GitRecordV1\nreadFormat :: Git.GitRecord -> Git.GitRecordFormat\nreadFormat record = record.format\n', True),
     ('git-record-format-numeric', 'value :: Git.GitRecordFormat\nvalue = 2\n', False),
     ('program-format-is-not-git-record-format', 'value :: Decision.ProgramParameterFormat -> Git.GitRecordFormat\nvalue = id\n', False),
@@ -443,6 +447,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
             fragments.update({'decision-call-constructor': ['DecisionCallId'], 'decision-call-coercion': ['DecisionCallId'], 'decision-call-literal': ['DecisionCallId', 'IsString'], 'execution-attempt-is-not-decision-call': ["Couldn't match", 'AttemptId', 'DecisionCallId'], 'decision-ordinal-constructor': ['DecisionCallOrdinal'], 'decision-ordinal-coercion': ['DecisionCallOrdinal', 'Int64'], 'decision-ordinal-numeric': ['DecisionCallOrdinal', 'Num'], 'selection-ordinal-is-not-decision-ordinal': ["Couldn't match", 'CallOrdinal', 'DecisionCallOrdinal']})
             fragments.update({'program-identity-constructor': ['ProgramIdentity'], 'program-identity-coercion': ['ProgramIdentity', 'Text'], 'program-identity-scope-coercion': ["Couldn't match", 'program-id', 'program-version'], 'program-identity-scope-substitution': ["Couldn't match", 'input-schema-version', 'result-schema-version'], 'program-identity-literal': ['ProgramIdentity', 'IsString'], 'program-parameter-format-numeric': ['ProgramParameterFormat', 'Num'], 'program-parameter-digest-constructor': ['ProgramParameterDigest'], 'program-parameter-digest-coercion': ['ProgramParameterDigest', 'Text'], 'program-parameter-digest-literal': ['ProgramParameterDigest', 'IsString'], 'payload-digest-is-not-program-parameter-digest': ["Couldn't match", 'PayloadDigest', 'ProgramParameterDigest']})
             fragments.update({'git-record-format-numeric': ['GitRecordFormat', 'Num'], 'program-format-is-not-git-record-format': ["Couldn't match", 'ProgramParameterFormat', 'GitRecordFormat']})
+            fragments.update({'process-routing-format-numeric': ['ProcessRoutingFormat', 'Num'], 'git-format-is-not-process-routing-format': ["Couldn't match", 'GitRecordFormat', 'ProcessRoutingFormat']})
             if name.endswith("-constructor"):
                 assert any(marker in result.stderr.lower() for marker in ["not in scope", "does not export", "illegal term-level"]), (name, result.stderr)
             assert all(fragment in result.stderr for fragment in fragments[name]), (name, result.stderr)

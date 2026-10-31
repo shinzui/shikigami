@@ -20,14 +20,16 @@ import Data.Text qualified as ClaimText
 import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
 import Hasql.Transaction (Transaction)
+import Hasql.Transaction qualified as Tx
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Identity
+import Shikigami.Execution.Payload (parsePayloadDigest)
 import Shikigami.Execution.Runner (OperationContext (..))
-import Shikigami.Execution.Transcript (ExecutionId (..))
+import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (NeedModel))
 import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
@@ -50,7 +52,22 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace process registrations"
-    [ testCase "bounded factual scans advance past unresolved registrations and include unacknowledged settled facts" $ withProcess fixture \env binding proposed -> do
+    [ testGroup
+        "process metadata refusals"
+        [ testCase "malformed process JSON retains its barrier" (malformedProcessMetadata fixture (Tx.sql "UPDATE shikigami.workspace_processes SET record='{}'::jsonb")),
+          testCase "unsupported retained routing format retains its barrier" (malformedProcessMetadata fixture (Tx.sql "UPDATE shikigami.workspace_processes SET record=jsonb_set(record,'{routing,format}','2'::jsonb)")),
+          testCase "malformed registered origin is an owning refusal" $ withProcess fixture \env binding proposed -> do
+            run env (reserveProcessTx binding proposed) >>= (@?= Right proposed)
+            run env (inspectRegisteredProcessTx proposed.operationId) >>= (@?= Right (Just (binding, proposed)))
+            run env (Tx.sql "UPDATE shikigami.workspace_bindings SET binding='{}'::jsonb")
+            run env (inspectProcessTx proposed.operationId) >>= (@?= Right (Just proposed))
+            run env (inspectRegisteredProcessTx proposed.operationId) >>= (@?= Left WorkspaceBindingConflict),
+          testCase "routing format has exact closed numeric-one codecs" do
+            Aeson.encode ProcessRoutingV1 @?= "1"
+            Aeson.eitherDecode (Aeson.encode ProcessRoutingV1) @?= Right ProcessRoutingV1
+            mapM_ (\value -> assertBool "unsupported format refused" (case Aeson.eitherDecode @ProcessRoutingFormat value of Left _ -> True; _ -> False)) ["0", "2", "-1", "1.5", "1e10000"]
+        ],
+      testCase "bounded factual scans advance past unresolved registrations and include unacknowledged settled facts" $ withProcess fixture \env binding proposed -> do
         let identifiers = [fixtureOperationId ("page-" <> Text.justifyRight 3 '0' (Text.pack (show index))) | index <- [1 .. 66 :: Int]]
         forM_ identifiers \operation -> do
           let candidate = proposed & #operationId .~ operation & #unit .~ processUnit operation proposed.fingerprint
@@ -98,7 +115,7 @@ tests fixture =
       testCase "a proven pre-launch refusal races the launch grant without inventing a process receipt" $ withProcess fixture \env binding proposed -> do
         _ <- right =<< run env (reserveProcessTx binding proposed)
         (launch, refused) <- concurrently (run env (requestProcessLaunchTx binding proposed boot)) (run env (refuseReservedProcessTx proposed))
-        Just actual <- run env (inspectProcessTx proposed.operationId)
+        Just actual <- right =<< run env (inspectProcessTx proposed.operationId)
         actual.receipt @?= Nothing
         case actual.phase of
           ProcessRefused -> do
@@ -141,7 +158,7 @@ tests fixture =
         run env (recordProcessReceiptTx receipt) >>= (@?= Right ())
         run env (recordProcessReceiptTx (receipt & #exitCode .~ Just 1)) >>= (@?= Left WorkspaceBindingConflict)
         run env (Store.checkWorkspaceOwnerTx binding binding.request.owner (fixtureRevision 0)) >>= (@?= Left WorkspaceBindingConflict)
-        Just retained <- run env (inspectProcessTx proposed.operationId)
+        Just retained <- right =<< run env (inspectProcessTx proposed.operationId)
         retained.phase @?= ProcessSettled,
       testCase "private collector completion reconciles the original attempt after freeze and acknowledgement loss" $ withProcess fixture \env binding proposed -> do
         record <- launchRecord env binding proposed
@@ -154,7 +171,7 @@ tests fixture =
         receipt.stdout.bytes @?= 7
         receipt.stdout.truncated @?= True
         reconcileCollector env directory record >>= (@?= Right (Just receipt))
-        Just actual <- run env (inspectProcessTx proposed.operationId)
+        Just actual <- right =<< run env (inspectProcessTx proposed.operationId)
         actual.phase @?= ProcessSettled
         actual.receipt @?= Just receipt,
       testCase "collector evidence rejects mismatched identities, incomplete settlement and inconsistent output" $ withProcess fixture \env binding proposed -> do
@@ -164,7 +181,7 @@ tests fixture =
           ( \changed -> do
               writeCollector directory record changed
               readCollectorReceipt directory record >>= (@?= Left CollectorEvidenceConflict)
-              Just actual <- run env (inspectProcessTx proposed.operationId)
+              Just actual <- right =<< run env (inspectProcessTx proposed.operationId)
               actual.phase @?= ProcessLaunchRequested
           )
           [ ["bootId" .= otherBoot],
@@ -292,3 +309,28 @@ fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+malformedProcessMetadata :: DatabaseFixture -> Transaction () -> IO ()
+malformedProcessMetadata fixture corrupt = withProcess fixture \env binding original -> do
+  let inputDigest = either (error . show) id (parsePayloadDigest original.fingerprint)
+      routing = ProcessRouting ProcessRoutingV1 (ExecutionId "process-routing") binding.request.owner inputDigest NeedModel
+      proposed = original & #routing .~ Just routing
+  run env (reserveProcessTx binding proposed) >>= (@?= Right proposed)
+  run env (inspectProcessTx proposed.operationId) >>= (@?= Right (Just proposed))
+  run env (inspectRegisteredProcessTx proposed.operationId) >>= (@?= Right (Just (binding, proposed)))
+  run env corrupt
+  run env (inspectProcessTx proposed.operationId) >>= (@?= Left WorkspaceBindingConflict)
+  run env (inspectRegisteredProcessTx proposed.operationId) >>= (@?= Left WorkspaceBindingConflict)
+  run env (reserveProcessTx binding proposed) >>= (@?= Left WorkspaceBindingConflict)
+  run env (requestProcessLaunchTx binding proposed boot) >>= (@?= Left WorkspaceBindingConflict)
+  run env (observeProcessInvocationTx proposed boot invocation) >>= (@?= Left WorkspaceBindingConflict)
+  run env (recordProcessReceiptTx (receiptFor proposed)) >>= (@?= Left WorkspaceBindingConflict)
+  run env (refuseReservedProcessTx proposed) >>= (@?= Left WorkspaceBindingConflict)
+  during <- run env do
+    frozen <- Store.freezeWorkspaceTx binding binding.request.owner (fixtureRevision 0)
+    control <- Store.inspectWorkspaceControlTx binding
+    inspected <- inspectProcessTx proposed.operationId
+    pure (frozen, (.frozen) <$> control, inspected)
+  during @?= (Right (), Just True, Left WorkspaceBindingConflict)
+  run env (Store.checkWorkspaceOwnerTx binding binding.request.owner (fixtureRevision 0)) >>= (@?= Right ())
+  run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "successor")) >>= (@?= Left WorkspaceBindingConflict)

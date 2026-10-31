@@ -401,3 +401,15 @@ publication and the barrier. This does not qualify native Linux Git containment.
 Native findings against a809c68 are empty and four transducers unchanged. The
 320-module/908-declaration worklist remains unclassified; complete scalar/identity,
 model/other decision and other decoder-owner review remain open.
+
+Process intent/origin reads preserve owning transactional refusals; the supervisor
+keeps data unresolved and SQL failure unavailable. Closed numeric-one routing
+preserves process/file bytes and accepted coordinates.
+[ADR-101](../../adr/0101-process-intent-decoding-preserves-launch-and-receipt-uncertainty.md)
+and [acceptance](process-row-results.txt) record 32 focused and 584 pure/405 PostgreSQL/
+273 worker/95 server cases, 236 compiler clients and native/domain/diagram gates.
+A tentative freeze rolls back and corrupt recovery retains one launch with an
+uncertain actual and no invented receipt. Native Linux systemd behavior is not
+inferred. Native findings against c8f3c23 are empty and four transducers unchanged.
+The 320-module/909-declaration worklist remains unclassified; complete scalar/
+identity, model/other decision and remaining decoder-owner review remain open.

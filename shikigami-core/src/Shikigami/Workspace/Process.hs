@@ -80,8 +80,20 @@ instance Show ProcessReceipt where show _ = "ProcessReceipt <protected>"
 -- Retain only accepted routing coordinates while replay access is live. A
 -- restarted factual owner must not reread model bodies after revocation merely
 -- to acknowledge the original attempt's independently retained receipt.
+data ProcessRoutingFormat = ProcessRoutingV1
+  deriving stock (Eq, Show)
+
+instance ToJSON ProcessRoutingFormat where
+  toJSON ProcessRoutingV1 = toJSON (1 :: Int)
+  toEncoding ProcessRoutingV1 = toEncoding (1 :: Int)
+
+instance FromJSON ProcessRoutingFormat where
+  parseJSON value = do
+    number <- parseJSON @Int value
+    if number == 1 then pure ProcessRoutingV1 else fail "unsupported process routing format"
+
 data ProcessRouting = ProcessRouting
-  { format :: !Int,
+  { format :: !ProcessRoutingFormat,
     executionId :: !ExecutionId,
     identity :: !AgentIdentity,
     inputDigest :: !PayloadDigest,
@@ -93,7 +105,7 @@ data ProcessRouting = ProcessRouting
 instance Show ProcessRouting where show _ = "ProcessRouting <protected>"
 
 validProcessRouting :: ProcessRouting -> Bool
-validProcessRouting routing = routing.format == 1 && bounded routing.executionId.value && either (const False) bounded (identityText routing.identity) && validNext routing.next && Bytes.length (Aeson.encode routing) <= 4096
+validProcessRouting routing = bounded routing.executionId.value && either (const False) bounded (identityText routing.identity) && validNext routing.next && Bytes.length (Aeson.encode routing) <= 4096
   where
     validNext NeedModel = True
     validNext (NeedTool _ position) = position > firstToolPosition

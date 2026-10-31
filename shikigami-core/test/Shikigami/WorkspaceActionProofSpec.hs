@@ -113,7 +113,7 @@ tests =
             boot = "11111111-1111-4111-8111-111111111111"
             recordFor b a d c =
               let fingerprint = processFingerprint b (bundleDigest a.instructions) d.operation c
-               in ProcessRecord d.operation.operationId d.attemptId d.owner d.generation (workspaceBindingDigest b) (bundleDigest a.instructions) fingerprint c expiry (processUnit d.operation.operationId fingerprint) Nothing Nothing ProcessReserved Nothing (Just (ProcessRouting 1 d.operation.executionId b.request.owner (fixturePayloadDigest ("sha256:" <> Text.replicate 64 "a")) NeedModel))
+               in ProcessRecord d.operation.operationId d.attemptId d.owner d.generation (workspaceBindingDigest b) (bundleDigest a.instructions) fingerprint c expiry (processUnit d.operation.operationId fingerprint) Nothing Nothing ProcessReserved Nothing (Just (ProcessRouting ProcessRoutingV1 d.operation.executionId b.request.owner (fixturePayloadDigest ("sha256:" <> Text.replicate 64 "a")) NeedModel))
             record = recordFor binding processAdmission dispatch command
         workspaceProcessAction binding admission dispatch record boot "device:parent" @?= Left FileEffectRefused
         workspaceFileAction binding processAdmission dispatch "replace" "src/file" "device:parent" "input-hash" @?= Left FileEffectRefused
@@ -152,8 +152,8 @@ tests =
                      workspaceProcessAction binding processAdmission dispatch record "22222222-2222-4222-8222-222222222222" "device:parent",
                      workspaceProcessAction binding processAdmission dispatch record boot "device:other-parent",
                      workspaceProcessAction binding (processAdmission & #assignmentId .~ (fixtureAssignment "other-assignment")) dispatch record boot "device:parent",
-                     workspaceProcessAction binding processAdmission dispatch (record & #routing .~ Just (ProcessRouting 1 logical.executionId owner (fixturePayloadDigest ("sha256:" <> Text.replicate 64 "b")) NeedModel)) boot "device:parent",
-                     workspaceProcessAction binding processAdmission dispatch (record & #routing .~ Just (ProcessRouting 1 logical.executionId owner (fixturePayloadDigest ("sha256:" <> Text.replicate 64 "a")) (NeedTool (fixturePayloadRef "response" ("sha256:" <> Text.replicate 64 "a") 1) (fixtureToolPosition 1)))) boot "device:parent"
+                     workspaceProcessAction binding processAdmission dispatch (record & #routing .~ Just (ProcessRouting ProcessRoutingV1 logical.executionId owner (fixturePayloadDigest ("sha256:" <> Text.replicate 64 "b")) NeedModel)) boot "device:parent",
+                     workspaceProcessAction binding processAdmission dispatch (record & #routing .~ Just (ProcessRouting ProcessRoutingV1 logical.executionId owner (fixturePayloadDigest ("sha256:" <> Text.replicate 64 "a")) (NeedTool (fixturePayloadRef "response" ("sha256:" <> Text.replicate 64 "a") 1) (fixtureToolPosition 1)))) boot "device:parent"
                    ]
             )
         processBindingActions <-
@@ -312,7 +312,7 @@ tests =
         workspaceTransferAction provisionBinding intent @?= Left FileEffectRefused
         let successorAdmission = provisionAdmission & #bindingDigest .~ workspaceBindingDigest transferBinding & #runId .~ "successor-run" & #assignmentId .~ (fixtureAssignment "successor-assignment") & #owner .~ intent.newOwner & #epoch .~ (fixtureRevision 1) & #filePolicy .~ Just transferableFilePolicy
             retainedProfile = profile & #bindingDigest .~ workspaceBindingDigest transferBinding
-            successorProcess = recordFor transferBinding successorAdmission dispatch command & #routing .~ Just (ProcessRouting 1 logical.executionId intent.newOwner (fixturePayloadDigest command.profile) NeedModel)
+            successorProcess = recordFor transferBinding successorAdmission dispatch command & #routing .~ Just (ProcessRouting ProcessRoutingV1 logical.executionId intent.newOwner (fixturePayloadDigest command.profile) NeedModel)
             successorGit raw = let changed = raw & #bindingDigest .~ workspaceBindingDigest transferBinding & #profileDigest .~ Git.gitProfileDigest retainedProfile & #routing . #identity .~ intent.newOwner in changed & #fingerprint .~ Git.gitFingerprint transferBinding changed
             proposedGit = successorGit gitRecord
             verifyTargets exact changed = do

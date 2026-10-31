@@ -52,7 +52,7 @@ import Shikigami.StateRevision
 import Shikigami.Workspace.Allocation (workspaceFiles, workspaceMetadata)
 import Shikigami.Workspace.ContainedFile
 import Shikigami.Workspace.Instructions
-import Shikigami.Workspace.Process (ProcessRouting (..), validProcessRouting)
+import Shikigami.Workspace.Process (ProcessRouting (..), ProcessRoutingFormat (..), validProcessRouting)
 import Shikigami.Workspace.ProcessPolicy
 import Shikigami.Workspace.Profile (retainedFileProfile)
 import Shikigami.Workspace.Provider
@@ -228,7 +228,7 @@ withAccess mode runtime snapshot dispatch logical input perform = catch work (\(
       case source of
         Right (ModelReturned assistant _) -> do
           let next = toolContinuation tool assistant
-              routing = ProcessRouting 1 snapshot.executionId snapshot.identity operation.input.digest next
+              routing = ProcessRouting ProcessRoutingV1 snapshot.executionId snapshot.identity operation.input.digest next
               registration = FileRegistration dispatch.operation dispatch.owner routing receipt
           saved <- runTx runtime do
             reserved <- Store.reserveWorkspaceEffectTx bound admission.owner admission.epoch receipt.operationId receipt.fingerprint

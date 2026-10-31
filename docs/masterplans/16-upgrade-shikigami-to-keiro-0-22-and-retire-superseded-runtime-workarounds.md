@@ -87,19 +87,19 @@ native delivery/recovery and actual administrative CLI/HTTP/live inspection are
 accepted. EP-5 has implemented public API/CLI/configuration behavior and explicit
 clause dispositions for 42 of its 46 frozen source rows. Objective identity uses
 a checked allocated TypeID; objective content, worker/workspace ownership,
-execution policies, counters, decisions and assignment locators retain their
+execution policies, counters, root control decisions and assignment locators retain their
 nominal checked meanings.
 
-Latest Git intent/format acceptance passed 584 pure, 405 serial PostgreSQL,
-268 worker and 95 server cases, 233 compiler clients and native/domain/diagram
-gates. ADR-100 preserves unresolved publication/origin on malformed metadata and
-closes format at numeric one. Lost-ack/corrupt recovery retains one local HEAD
-publication and the barrier; native Linux containment is not inferred. Strict
-native findings against a809c68 are empty with unchanged transducers. The
-unclassified census has 320 modules and 908 declarations. Complete scalar/
-identity, model/other decision values and remaining decoder-owner review keep
-EP-5 In Progress. EP-6's frozen closure, packaged Linux/runtime and inventory
-gates have not started.
+Latest process intent/routing acceptance passed 584 pure, 405 serial PostgreSQL,
+273 worker and 95 server cases, 236 compiler clients and native/domain/diagram
+gates. ADR-101 preserves process uncertainty on malformed metadata and closes
+routing format at numeric one. Positive controls retain one launch, roll back a
+freeze and refuse acknowledgement without facts. Native Linux containment is
+not inferred. Strict native findings against c8f3c23 are empty with unchanged
+transducers. The unclassified census has 320 modules and 909 declarations.
+Complete scalar/identity, model/other decision values and remaining decoder-owner
+review keep EP-5 In Progress. EP-6's frozen closure, packaged Linux/runtime and
+inventory gates have not started.
 
 ## Surprises & Discoveries
 

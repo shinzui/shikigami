@@ -259,7 +259,7 @@ tests fixture =
       testCase "a reserved process is refused without launch while unknown launch evidence remains pending" $ withTransfer fixture \env binding intent runtime _ -> do
         record <- reserveProcess env binding
         (workspaceTransferProvider runtime).reconcile intent >>= \outcome -> assertBool "proven unlaunched reservation permits settlement" (case outcome of FencedAndSettled proof -> matchesFence intent proof; _ -> False)
-        Just retained <- run env (runTransaction (Processes.inspectProcessTx record.operationId))
+        Just retained <- right =<< run env (runTransaction (Processes.inspectProcessTx record.operationId))
         retained.phase @?= ProcessRefused,
       testCase "denied fresh authority never freezes or stops an unadmitted workspace" $ withTransferProcess fixture \env binding intent runtime _ stopped -> do
         (workspaceTransferProvider (runtime & #authorizer .~ denyAllActionAuthorizer)).reconcile intent >>= (@?= FenceUnavailable)
@@ -340,7 +340,7 @@ withTransferProcess fixture callback = withTransfer fixture \env binding intent 
   run env (runTransaction (Processes.observeProcessInvocationTx record boot invocation)) >>= (@?= Right ())
   createDirectory (processDirectory binding record)
   ensurePrivateDirectory (processDirectory binding record) >>= (@?= Right ())
-  Just current <- run env (runTransaction (Processes.inspectProcessTx record.operationId))
+  Just current <- right =<< run env (runTransaction (Processes.inspectProcessTx record.operationId))
   callback env binding intent runtime current stopped
 
 assertRefused :: Either Text () -> Assertion
