@@ -27,8 +27,8 @@ Review and fix every applicable Haskell and service-architecture guideline acros
 
 ## Progress
 
-- [ ] M1: Core/package/record/error/resource conventions have an explicit complete applicability review and fixes.
-- [x] M2: Public HTTP, CLI, configuration and telemetry clauses implemented with explicit optional-interface decisions, 28 source rows and real process/live HTTP evidence. Final packaged/Linux qualification remains plan95.
+- [x] M1: Upgrade-scoped core/package/record/error/resource adoption accepted on macOS; the remaining exhaustive domain census is explicitly transferred to standalone plan108 under ADR-106.
+- [x] M2: Public HTTP, CLI, configuration and telemetry clauses implemented with explicit optional-interface decisions, 28 source rows and real process/live HTTP evidence. Final macOS qualification is accepted by plan95; Linux is excluded under ADR-106.
 - [x] M3: Practice-review entity IDs use owner-allocated UUIDv7 values with durable logical-key receipts; authorization, cross-workflow retry and record-then-retire recovery remain qualified.
 
 ## Surprises & Discoveries
@@ -95,6 +95,8 @@ malformed pending workspace row remains unresolved until repaired. Complete
 scalar/identity and remaining decoder-owner classifications remain open.
 
 ## Decision Log
+
+2026-10-31: Close this child at the implemented macOS upgrade boundary. ADR-106 and standalone plan108 retain the remaining exhaustive identity/scalar/decoder work as an explicit deferral, not compliance. Stop new refactoring waves and accept the full current candidate.
 
 2026-10-31: ADR-105 keeps provider/API/endpoint/vendor-model meanings nominal
 through SDK capture, signed permissions and evidence comparisons. Total capture
@@ -195,10 +197,10 @@ checks. The unchanged literal profile byte golden and exact HTTP/CLI/model check
 pass. Native findings against ee79dc3 are empty with unchanged transducers.
 The unclassified census has 322 modules and 913 declarations. Complete scalar/
 identity, profile/signing/other decision values and remaining decoder-owner review
-keep M1 incomplete. Plan95's frozen closure, packaged Linux/runtime and inventory
-gates have not started.
+are transferred to standalone plan108 under ADR-106. Plan95 accepts the final
+macOS closure, outside-checkout roles and inventory gate.
 [Acceptance](../evidence/keiro-0.22/provider-coordinates-results.txt) retains exact
-results and scope. Forty-two of 46 assigned sources have implemented dispositions.
+results and scope. Forty-two of 46 assigned sources were accepted during implementation; three final-profile rows now have macOS evidence and one domain row is explicitly deferred to plan108. This child is Complete within that documented scope.
 
 
 ## Context and Orientation
@@ -273,9 +275,11 @@ selected count. Tasty does not implement regular expressions. The owning
 `mori://UnkindPartition/tasty` documents this in `tasty/README.md`; its source-file
 artifact URI is pending. Zero-selection runs are not acceptance evidence.
 
-Record actual cases and concise output under `docs/evidence/keiro-0.22/`. Database tests that skip are not accepted. Before claiming Linux is unavailable, inspect `container --help`, `container list --all` and `tests/workspace/build-apple.sh`; use native ARM64 Apple containers, retaining the documented remote-builder fallback only when needed. Do not claim runtime containment from compilation alone.
+Record actual cases and concise output under `docs/evidence/keiro-0.22/`. Database tests that skip are not accepted. The user selected macOS-only completion under ADR-106. Do not resume Linux/container qualification for this upgrade; standalone plan108 owns the remaining exhaustive domain review.
 
 ## Validation and Acceptance
+
+Apply ADR-106’s bounded upgrade scope. The exhaustive domain-census clause is explicitly deferred to plan108, not certified compliant by this child’s completion. All other assigned rows have current implementation or final macOS-profile evidence.
 
 Every Haskell/architecture source is reviewed clause-by-clause with a supported final disposition, and changed behavior has focused regression evidence. All seven package boundaries remain intentional; record-field/deriving scans cover touched source and prose. Existing Prelude compliance is verified rather than rewritten. CLI and HTTP scenarios pass against actual fixtures; record exact setup and test names.
 

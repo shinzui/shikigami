@@ -1,0 +1,121 @@
+{
+  "profile": "aarch64-darwin / GHC 9.12.4 / PostgreSQL 18 / PGMQ / local stub providers",
+  "sourceParent": "df499878b9f465a7bd29f83b38e74ff2489b188f",
+  "codeWorklist": "docs/evidence/keiro-0.22/domain-declarations.json",
+  "primaryAcceptance": "docs/evidence/keiro-0.22/provider-coordinates-results.txt",
+  "suites": {
+    "core": 593,
+    "postgres": 405,
+    "workers": 274,
+    "server": 95,
+    "api": 31,
+    "client": 9,
+    "agent": 37,
+    "migrationComposition": 9,
+    "migrationSmoke": 11,
+    "nativeConformance": 156,
+    "diagrams": 6,
+    "compilerClients": 272,
+    "cliRealProcessOutsideCheckout": 84,
+    "hurlFiles": [
+      4,
+      2,
+      1
+    ],
+    "hurlRequests": [
+      13,
+      15,
+      3
+    ]
+  },
+  "outsideCheckout": "CLI cwd is disposable; live HTTP server/worker use copied schema and agents in a disposable runtime root. Real acceptance, duplicate delivery, drain, terminal failure and outage contracts passed.",
+  "closure": {
+    "packages": 383,
+    "repositories": 6,
+    "compiler": "ghc-9.12.4",
+    "cohortSha256": "609e8e50cc96e648f2a994c9abc238846035d72a41a27bcf2f7815aa5d11e1fb",
+    "metadataSha256": "e0a989c2f00cb6432ef159b842776ab1d0d79d5b626ef695fa8d051dbe71e0d1"
+  },
+  "binaries": {
+    "shikigami-agent-launch": {
+      "path": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-agent-0.1.0.0/x/shikigami-agent-launch/build/shikigami-agent-launch/shikigami-agent-launch",
+      "sha256": "c8b53c80d1ce61bb82ae5169ac4839b9fda62ae8253132d63d3d38c74f73476c"
+    },
+    "shikigami-agent-run": {
+      "path": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-agent-0.1.0.0/x/shikigami-agent-run/build/shikigami-agent-run/shikigami-agent-run",
+      "sha256": "15cc18e52ffa387739f94e85b0a2e3cfe9bbd81140023c7b5e28987420542854"
+    },
+    "shikigami-run-behavior": {
+      "path": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-agent-0.1.0.0/x/shikigami-run-behavior/build/shikigami-run-behavior/shikigami-run-behavior",
+      "sha256": "fd7ff97c538afada4a314b58f0058ba33179fe6d52e86d55ed0c5adc61a79699"
+    },
+    "shikigami-openapi": {
+      "path": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-api-0.1.0.0/x/shikigami-openapi/build/shikigami-openapi/shikigami-openapi",
+      "sha256": "45f7f2a09d733e6a675cec1c5e516a5bdf03a35056f4120d92b23d2d631947cb"
+    },
+    "shikigami-client": {
+      "path": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-client-0.1.0.0/x/shikigami-client/build/shikigami-client/shikigami-client",
+      "sha256": "38a69d8aebbc2ccab346e85e9231e57ad1ca0f7e1d86985d9209f461e0b53894"
+    },
+    "shikigami-migrate": {
+      "path": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-migrations-0.1.0.0/x/shikigami-migrate/build/shikigami-migrate/shikigami-migrate",
+      "sha256": "6f38142ef8185dcd457a348f176e0fa9eb5049b82123bc3f07cfa3656fc2fe24"
+    },
+    "shikigami": {
+      "path": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/x/shikigami/build/shikigami/shikigami",
+      "sha256": "ed919a71ae53241ceeb6b80e2f23ae2ad3f8a5ec4b987eb9be9f70df0baa76d4"
+    },
+    "shikigami-server": {
+      "path": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/x/shikigami-server/build/shikigami-server/shikigami-server",
+      "sha256": "873cab5d5fe6a06d01d784adc3e1437f4f9b54c4b6c5f5a362d4ca011295fb76"
+    },
+    "shikigami-consume-events": {
+      "path": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/x/shikigami-consume-events/build/shikigami-consume-events/shikigami-consume-events",
+      "sha256": "1fba376054028dc035617146ba8ec8cadc0345e931826f453a9bbc2831bdc346"
+    },
+    "shikigami-consume-stream": {
+      "path": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/x/shikigami-consume-stream/build/shikigami-consume-stream/shikigami-consume-stream",
+      "sha256": "b6b0b7ff1f6903d7017b536bb6181afb233b0c08a60700d747c9c325095dcbf6"
+    },
+    "shikigami-scheduler": {
+      "path": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/x/shikigami-scheduler/build/shikigami-scheduler/shikigami-scheduler",
+      "sha256": "c2fe142c859fce73bdedd4de379cd7c89e8e086959d0232a56b9ad82ba19c699"
+    },
+    "shikigami-worker": {
+      "path": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/x/shikigami-worker/build/shikigami-worker/shikigami-worker",
+      "sha256": "94043c26fc0b09661cd7124dbff000f800b255b4b68821f92c28249062d9eed2"
+    },
+    "shikigami-workspace-collector": {
+      "path": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/x/shikigami-workspace-collector/build/shikigami-workspace-collector/shikigami-workspace-collector",
+      "sha256": "94452ea535695a1041a5123646f760085c8d792daa1f821775732b339fe4950c"
+    },
+    "shikigami-workspace-supervisor": {
+      "path": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/x/shikigami-workspace-supervisor/build/shikigami-workspace-supervisor/shikigami-workspace-supervisor",
+      "sha256": "b07109b32ef2e4ea13e3f241e881947ffd91b54afeeadc38b3c51f8ce6c21f28"
+    }
+  },
+  "limits": [
+    "Linux/container/remote-builder qualification excluded by user",
+    "No cold Nix rebuild claimed",
+    "No live vendor credential or real Kafka broker qualification claimed"
+  ],
+  "followUp": "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md",
+  "scopeDecision": "docs/adr/0106-the-keiro-upgrade-closes-on-a-bounded-macos-profile.md",
+  "runtimeSourceFingerprint": "d7564572d529c2acf4cac66501f86550a1235ae425a313df0788e3edd3217afd",
+  "qualificationSourceHashes": {
+    "cabal.project": "6edaeaaaa604d1022d73ac5b879b4386735fca43e302089b2c75f15b0676bbbf",
+    "nix/qualification-package.nix": "e5c17369945f91e411ad21c43caa218de39fe492cf9b02456daea5a48d68402e",
+    "tests/hurl/run.sh": "1d415c2d361e222db59c4fee7154560e93fb9f67f6a38d75b78d07988a790252",
+    "tests/cli/contracts.py": "c289c58dc9a470b767b8c7aa7974fbd00f695aa64a2a1c9dc33ebfbae01e66bc",
+    "tools/qualification/keiro_022_audit.py": "041d1f11a7b3b03b8fa8571211206aee1879d062f46d110b4c1a6812971737ff",
+    "tools/qualification/test_keiro_022_audit.py": "aadfecff2c639166b73004858f3574f435880a5d18e652def50fe43e0c267fb8",
+    "tools/qualification/export-cohort.py": "5ee3865ef26a4fc5c3b1db9cc6c32588634d53ea70606419e25542c97dcec779",
+    "tools/qualification/verify-cohort.py": "a8e0a14ac6d8720c1d1458c27bae052c5b56f68047c7df8b9381eca6c5e83b15"
+  },
+  "remainingToolChecks": {
+    "qualificationTests": 21,
+    "styleMutationTests": 13,
+    "migrationSchemaIsolation": "PASS",
+    "inventory": "124 sources / 93 release items; one named deferred domain clause"
+  }
+}

@@ -57,10 +57,16 @@ pg_port="$(free_port)"
 pg_ctl -D "$pg_data" -l "$pg_log" -o "-k $pg_socket -p $pg_port -h ''" start -w >/dev/null
 createdb -h "$pg_socket" -p "$pg_port" shikigami
 
-cd "$repo_root"
-cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} build exe:shikigami-migrate exe:shikigami-server exe:shikigami-client exe:shikigami-worker exe:shikigami
-migrate_bin="$(cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} list-bin exe:shikigami-migrate)"
-server_bin="$(cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} list-bin exe:shikigami-server)"
+# Discovery stays in the project; runtime processes use copied assets elsewhere.
+project_cabal() { (cd "$repo_root"; command cabal "$@"); }
+runtime_root="$work_dir/runtime"
+mkdir -p "$runtime_root/tests/hurl"
+cp -R "$repo_root/schema" "$runtime_root/schema"
+cp -R "$repo_root/tests/hurl/agents" "$runtime_root/tests/hurl/agents"
+cd "$runtime_root"
+project_cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} build exe:shikigami-migrate exe:shikigami-server exe:shikigami-client exe:shikigami-worker exe:shikigami
+migrate_bin="$(project_cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} list-bin exe:shikigami-migrate)"
+server_bin="$(project_cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} list-bin exe:shikigami-server)"
 connection="host=$pg_socket port=$pg_port dbname=shikigami user=$(id -un)"
 DATABASE_URL="$connection" "$migrate_bin" up
 
@@ -93,7 +99,7 @@ bash "$suite_dir/run.sh" "$base_url" "$secrets_file"
 # The disposable fixture explicitly opts into perimeter and write scenarios.
 hurl --test --variable "base_url=$base_url" --secrets-file "$secrets_file" "$suite_dir/auth.hurl" "$suite_dir/agent-runs.hurl"
 
-client_bin="$(cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} list-bin exe:shikigami-client)"
+client_bin="$(project_cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} list-bin exe:shikigami-client)"
 "$client_bin" --token "$token" agents show heartbeat --server "$base_url"
 "$client_bin" agents list --server "$base_url" --first 1
 
@@ -114,7 +120,7 @@ live_request="$("$client_bin" runs request heartbeat --key client-live --server 
 live_run_id="$(printf '%s\n' "$live_request" | awk 'NR == 1 { print $2 }')"
 "$client_bin" runs show heartbeat "$live_run_id" --server "$base_url"
 "$client_bin" runs list heartbeat --first 1 --server "$base_url"
-operator_bin="$(cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} list-bin exe:shikigami)"
+operator_bin="$(project_cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} list-bin exe:shikigami)"
 PG_CONNECTION_STRING="$connection" "$operator_bin" runs show shikigami.agent-run "$live_run_id" --json >"$work_dir/operator-accepted.json"
 python3 - "$work_dir/operator-accepted.json" <<'PY_ACCEPTED'
 import json, sys
@@ -131,12 +137,12 @@ wait_status=0
 [ "$wait_status" -eq 3 ]
 
 # The fixture heartbeat has no external sinks; a real worker can complete it.
-worker_bin="$(cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} list-bin exe:shikigami-worker)"
+worker_bin="$(project_cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} list-bin exe:shikigami-worker)"
 PG_CONNECTION_STRING="$connection" "$worker_bin" --set agents.directory=tests/hurl/agents --set "health.port=$(free_port)" >"$worker_log" 2>&1 &
 worker_pid=$!
 "$client_bin" runs wait heartbeat "$live_run_id" --timeout 60 --interval 1 --server "$base_url"
 "$client_bin" runs show heartbeat "$live_run_id" --server "$base_url"
-operator_bin="$(cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} list-bin exe:shikigami)"
+operator_bin="$(project_cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} list-bin exe:shikigami)"
 PG_CONNECTION_STRING="$connection" "$operator_bin" runs show shikigami.agent-run "$live_run_id" --json >"$work_dir/operator-run.json"
 python3 - "$work_dir/operator-run.json" <<'PY_CHECK'
 import json, sys
@@ -151,7 +157,7 @@ kill "$worker_pid"
 wait "$worker_pid"
 worker_pid=""
 mkdir -p "$work_dir/failing-agents"
-python3 - "$repo_root" "$work_dir/failing-agents/heartbeat.dhall" <<'PY_FAILURE'
+python3 - "$runtime_root" "$work_dir/failing-agents/heartbeat.dhall" <<'PY_FAILURE'
 from pathlib import Path
 import sys
 root = Path(sys.argv[1])

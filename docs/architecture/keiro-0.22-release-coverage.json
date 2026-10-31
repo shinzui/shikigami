@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "scope": "Released 0.19 through 0.22 changelog bullets, including DSL notes; each has a provisional implementation owner who must validate applicability.",
+  "scope": "All 93 frozen released 0.19\u20130.22 items have supported final consumer dispositions for the bounded macOS profile.",
   "features": [
     {
       "id": "REL-1",
@@ -515,9 +515,14 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.22.0.0 \u2014 2026-10-27",
       "feature": "- `just release-gate` runs correctness and all six benchmark guards with retained per-guard statuses. Benchmark setup is selected and isolated, sources are fixed, and durable PostgreSQL settings are explicit; replacement baselines require attributed recording evidence.",
-      "status": "pending",
+      "status": "not-applicable",
       "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/macos-final-qualification.json",
+        "docs/evidence/keiro-0.22/current-domain-results.txt",
+        "docs/adr/0106-the-keiro-upgrade-closes-on-a-bounded-macos-profile.md"
+      ],
+      "rationale": "This is the upstream Keiro publisher release/benchmark gate, not an application consumer runtime API. Shikigami does not publish Keiro, own its six benchmark baselines or replace them. Its actual correctness/guard/native/transport and bounded macOS profile checks are retained instead; no upstream benchmark or load qualification is claimed."
     },
     {
       "id": "REL-32",
@@ -735,9 +740,14 @@
       "sourcePath": "CHANGELOG.md",
       "section": "0.21.0.0 \u2014 2026-10-14",
       "feature": "- The `keiro-upgrade` blueprint adds a 0.20.0.0 \u2192 0.21.0.0 edge for DSL API adaptations, generated-name updates, and witness-backed harness regeneration. No upstream edge is entailed because the dependency cohort is unchanged.",
-      "status": "pending",
+      "status": "existing",
       "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md",
-      "evidence": []
+      "evidence": [
+        "docs/evidence/keiro-0.22/macos-final-qualification.json",
+        "docs/evidence/keiro-0.22/current-domain-contracts.md",
+        "docs/evidence/keiro-0.22/provider-coordinates-native-diff.json"
+      ],
+      "rationale": "The application has adopted the current DSL API and generated names through its pinned native CLI, complete ten-member regeneration, witness-backed conformance and all-enabled compilation. The old-version upgrade blueprint is a producer tooling edge; no deployed 0.20 population or blueprint implementation belongs to this fresh application baseline."
     },
     {
       "id": "REL-46",
@@ -1513,5 +1523,20 @@
       "rationale": "Superseded intermediate cohort is reconciled to released0.22 by completed plan92. Full candidate compilation uses the final solve and exact published descriptors."
     }
   ],
-  "inventorySha256": "2fd4ea012557065297f8a0511663f95d73092e287d8181a71ac72cca3e050957"
+  "inventorySha256": "2fd4ea012557065297f8a0511663f95d73092e287d8181a71ac72cca3e050957",
+  "sourceFiles": [
+    {
+      "project": "mori://shinzui/keiro",
+      "sourceRevision": "b28201f2063fa4f6dcb724cbf474959107e36b74",
+      "sourcePath": "CHANGELOG.md",
+      "sourceSha256": "e9155f998a8d66b938b91be6a2f19f12d6b0f296e3cf6cbf08328d32310ffc34"
+    },
+    {
+      "project": "mori://shinzui/keiro",
+      "sourceRevision": "b28201f2063fa4f6dcb724cbf474959107e36b74",
+      "sourcePath": "keiro-dsl/CHANGELOG.md",
+      "sourceSha256": "65573356f7065a2660f0ba628ec2310aa00a2efff0f6240a6067021f03353235"
+    }
+  ],
+  "closureSha256": "90826b0656f19b54460bdd2c73a34a8bcb848d8e67a14a2f384919bc2abf6c8a"
 }

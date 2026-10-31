@@ -1,6 +1,6 @@
 # Keiro 0.22 adoption audit
 
-Updated 2026-10-30. This ledger records partial implementation acceptance. Plans92,93,94 and106 are complete; the Haskell corpus and final qualification remain pending. [MasterPlan 16](../masterplans/16-upgrade-shikigami-to-keiro-0-22-and-retire-superseded-runtime-workarounds.md) and its six children own implementation.
+Updated 2026-10-31. The Keiro 0.22 upgrade is accepted on the user-selected macOS profile. All six children are complete within ADR-106's bounded scope; the exhaustive domain census is explicitly deferred to standalone plan108 and is not certified compliant. [MasterPlan 16](../masterplans/16-upgrade-shikigami-to-keiro-0-22-and-retire-superseded-runtime-workarounds.md) and its six children own implementation.
 
 ## Scope and source denominator
 
@@ -8,7 +8,7 @@ The user confirmed Shikigami is unused. ADR-27 permits a clean current baseline:
 
 [Source inventory](keiro-0.22-coverage.json) freezes 124 canonical documents: 94 from `mori://shinzui/keiro-runtime-patterns` at 62531b00b415785be61584a3c44b569fdfb35c4e and 30 from `mori://shinzui/haskell-jitsurei` at cce10bd4d22c30b52a5d18b1be8ae16755f5435c. Paths, hashes and owners are explicit; unregistered documents are separately listed for inspection, not silently omitted. Each applicable clause needs implementation and evidence. Accepted rows carry current evidence; shared final-qualification clauses retain explicit pending owners. Native inspection evidence is recorded in `docs/evidence/keiro-0.22/native-inspection-runtime.md`; it does not certify final deployment artifacts.
 
-[Release inventory](keiro-0.22-release-coverage.json) freezes 93 changelog bullets from the released Keiro source and DSL changelog across 0.19–0.22. Source paths are relative to `mori://shinzui/keiro` at b28201f2063fa4f6dcb724cbf474959107e36b74; artifact-level file URIs are pending. Plan 92 reconciles published descriptors and errata, assigns each item to an implementation owner and records any explicit denominator revision. Plan 95 rejects incomplete closure. Registry and remote tag rechecks still show 0.22.0.0 on 2026-10-30.
+[Release inventory](keiro-0.22-release-coverage.json) freezes 93 changelog bullets from the released Keiro source and DSL changelog across 0.19–0.22. Source paths are relative to `mori://shinzui/keiro` at b28201f2063fa4f6dcb724cbf474959107e36b74; artifact-level file URIs are pending. Plan 92 reconciles published descriptors and errata, assigns each item to an implementation owner and records any explicit denominator revision. Plan 95 rejects incomplete upgrade closure and permits only ADR-106's named domain-audit deferral. Registry and remote tag rechecks still show 0.22.0.0 on 2026-10-30.
 
 ## Findings and ownership
 
@@ -36,4 +36,4 @@ HTTP and live inspection are selected, with dedicated bounded resources and admi
 
 ## Closure contract
 
-Each source row records applicable clauses, owner, concrete code, regression evidence, rationale and final status. Release rows receive the same supported disposition. `pending`, plan links alone, nonexistent evidence or blanket exclusions fail final acceptance. Plan 95 adds mutation-tested inventory validation and the first-deployment runbook. Prior review approvals apply only to their historical scope; this expanded plan has not received a separate review.
+Each source row records applicable clauses, owner, concrete code, regression evidence, rationale and final status. Release rows receive the same supported disposition. `pending`, plan links alone, nonexistent evidence, source drift or unsupported exclusions/deferrals fail final acceptance. The validator is `tools/qualification/keiro_022_audit.py`; its sole permitted deferral names plan108 and ADR-106. The macOS runbook is `docs/operations/keiro-0.22-rollout.md`. No Linux, cold Nix build, live vendor or real Kafka qualification is claimed. Prior review approvals remain historical; no new independent review is implied.

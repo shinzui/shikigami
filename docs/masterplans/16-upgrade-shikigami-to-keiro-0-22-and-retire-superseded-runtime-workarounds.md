@@ -43,11 +43,19 @@ provenance:
 
 ## Vision & Scope
 
-Run one released Keiro 0.22 cohort with current generated domain contracts, correct durable delivery/recovery, useful administrative CLI/HTTP/live inspection and complete current-guide evidence. The user confirmed on 2026-10-30 that Shikigami is unused and refactoring is cheap. Apply ADR-27: establish the intended first-release schema, codecs and workflow baseline; remove obsolete readers and patch branches rather than adding historical compatibility. Do not require an old successful build, populated upgrade or cross-build replay. Fresh provisioning and same-build crash/restart, accounting, authorization and protected evidence remain mandatory.
+Run one released Keiro 0.22 cohort with current generated domain contracts, correct durable delivery/recovery, useful administrative CLI/HTTP/live inspection and scope-qualified current-guide evidence. The user confirmed on 2026-10-30 that Shikigami is unused and refactoring is cheap. Apply ADR-27: establish the intended first-release schema, codecs and workflow baseline; remove obsolete readers and patch branches rather than adding historical compatibility. Do not require an old successful build, populated upgrade or cross-build replay. Fresh provisioning and same-build crash/restart, accounting, authorization and protected evidence remain mandatory.
 
 This refresh expands the existing MasterPlan 16 and preserves intention `intention_01m61agcfzek98hqzkb0kxcfmg`; unrelated completed EP-16 is unchanged. All applicable features across the 0.18→0.22 gap must receive evidence-backed adoption. A non-applicable disposition needs a specific absent consumer or genuine upstream capability limitation, never refactoring cost or obsolete bytes. Do not fabricate a process manager from a workflow or a Kafka publisher from an HTTP sink.
 
 Hackage and remote tags were rechecked on 2026-10-30: 0.22.0.0 is the latest listed Keiro release and tag keiro-0.22.0.0 peels to b28201f2063fa4f6dcb724cbf474959107e36b74. Verify companion releases before pinning; latest compatible cohort does not mean latest independent major of every library. Source owner is `mori://shinzui/keiro`. Kotei's analogous initiative is `mori://shinzui/kotei/masterplans/21-migrate-kotei-to-keiro-0-22-and-adopt-current-runtime-practices`; it supplies no Shikigami implementation evidence.
+
+Final completion scope is the bounded macOS profile in
+[ADR-106](../adr/0106-the-keiro-upgrade-closes-on-a-bounded-macos-profile.md),
+following the user's request to finish without Linux qualification after twelve
+hours. Remaining exhaustive domain classification is owned by standalone
+[plan108](../plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md),
+with an explicit deferred guide disposition. It is not certified compliant and
+is not another child of this upgrade.
 
 ## Decomposition Strategy
 
@@ -63,8 +71,8 @@ Consulted decisions: [ADR-27](../adr/0027-the-first-release-establishes-one-clea
 | EP-2 | Guarded commands and complete domain adoption | [93](../plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md) | EP-1 | None | Complete |
 | EP-3 | Native delivery and workflow recovery | [94](../plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md) | EP-1 | EP-2 | Complete |
 | EP-4 | Administrative CLI, HTTP and live inspection | [106](../plans/106-expose-bounded-administrative-inspection-and-live-feeds.md) | EP-1 | EP-3 | Complete |
-| EP-5 | Haskell and service architecture practices | [107](../plans/107-adopt-current-haskell-and-service-architecture-practices.md) | EP-1 | None | In Progress |
-| EP-6 | Integrated first-release qualification | [95](../plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md) | EP-1, EP-2, EP-3, EP-4, EP-5 | None | Not Started |
+| EP-5 | Haskell and service architecture practices | [107](../plans/107-adopt-current-haskell-and-service-architecture-practices.md) | EP-1 | None | Complete |
+| EP-6 | Integrated first-release qualification | [95](../plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md) | EP-1, EP-2, EP-3, EP-4, EP-5 | None | Complete |
 
 ## Dependency Graph
 
@@ -82,24 +90,19 @@ EP-6 owns final source/release inventory validation, exact-candidate evidence, f
 
 ## Progress
 
-2026-10-30: EP-1 through EP-4 are Complete. The released cohort/current domain,
-native delivery/recovery and actual administrative CLI/HTTP/live inspection are
-accepted. EP-5 has implemented public API/CLI/configuration behavior and explicit
-clause dispositions for 42 of its 46 frozen source rows. Objective identity uses
-a checked allocated TypeID; objective content, worker/workspace ownership,
-execution policies, counters, root control decisions and assignment locators retain their
-nominal checked meanings.
+2026-10-31: All six children are Complete for the bounded macOS upgrade scope.
+The all-enabled build, 593 pure, 405 serial PostgreSQL, 274 worker, 95 server,
+31 API, nine client, 37 agent, nine migration composition and eleven live
+migration cases pass. Native/domain/diagram gates, 272 compiler clients, 84
+outside-checkout CLI checks and the live HTTP/auth/worker/outage contract pass.
+The exact selected closure exports 383 packages and six immutable repositories.
 
-Latest provider-tuple acceptance passed the all-enabled build, 593 pure, 405
-serial PostgreSQL, 274 worker and 95 server cases, 272 compiler clients and
-native/domain/diagram gates. ADR-105 retains nominal foreign tuple coordinates
-through SDK capture, dispatch, signed profiles, model descriptors and evidence
-checks. The unchanged literal profile byte golden and exact HTTP/CLI/model checks
-pass. Native findings against ee79dc3 are empty with unchanged transducers.
-The unclassified census has 322 modules and 913 declarations. Complete scalar/
-identity, profile/signing/other decision values and remaining decoder-owner review
-keep EP-5 In Progress. EP-6's frozen closure, packaged Linux/runtime and inventory
-gates have not started.
+The frozen 124-source/93-release-item gate verifies owners, evidence and source
+hashes and rejects unsupported deferrals. One explicitly deferred domain-census
+clause is owned by standalone plan108. Nine final-profile clauses are accepted
+for macOS; no Linux, cold Nix build, live vendor or real Kafka claim is made.
+[Final evidence](../evidence/keiro-0.22/macos-final-qualification.json) and
+[the rollout procedure](../operations/keiro-0.22-rollout.md) define the result.
 
 ## Surprises & Discoveries
 
@@ -120,9 +123,17 @@ The previous plan hardcoded six workspace members/two aggregates; the current wo
 
 ## Outcomes & Retrospective
 
-Four children are accepted; Haskell/service practices and integrated first-release
-qualification remain.
-No final release or deployment is certified.
+The Keiro 0.22 upgrade is complete and verified on the requested macOS profile.
+Released dependency/schema ownership, current generated contracts, native queue/
+workflow recovery, bounded administrative visibility and public API/CLI behavior
+are accepted. No external deployment was performed.
+
+The exhaustive domain audit expanded beyond the release migration and repeated
+full-suite rounds increased elapsed time. ADR-106 records the bounded completion
+and batching decision. Plan108 retains every remaining identity/scalar/decoder
+finding without claiming a complete semantic census. FRIC-34 and FRIC-35 are
+accepted with their scoped TLS/generated-header decisions; no initiative-owned
+logged friction remains. Platform/provider expansion needs its own evidence.
 
 ## Revision Notes
 

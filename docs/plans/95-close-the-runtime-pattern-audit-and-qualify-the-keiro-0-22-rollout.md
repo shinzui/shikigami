@@ -48,9 +48,9 @@ Qualify one first-release candidate with fresh provisioning, real same-build rec
 
 ## Progress
 
-- [ ] M1: New-build histories, queues, workflow recovery and refusal atomicity pass integrated tests.
-- [ ] M2: All deployable roles use the exported final solve and pass outside-checkout startup.
-- [ ] M3: Every source clause and intervening release feature has final evidence, with a tested first-deployment runbook.
+- [x] M1: New-build histories, queues, workflow recovery and refusal atomicity pass integrated tests.
+- [x] M2: The successful macOS solve is exported; built roles, CLI and live server/worker use copied assets outside the checkout. No cold Nix/Linux build is claimed.
+- [x] M3: All 124 source and 93 release rows have supported scoped dispositions; the single domain follow-up is explicit, the mutation-tested validator passes and the first-deployment runbook is published in the repository.
 
 ## Surprises & Discoveries
 
@@ -58,13 +58,28 @@ The October 28 scope assumed a deployed population and an older domain census. T
 
 ## Decision Log
 
-2026-10-31: The user explicitly accepts macOS-only verification and requests completion after twelve hours. Stop Linux/container qualification and new open-ended refactoring; freeze the current candidate and batch final checks. Remaining exhaustive-audit scope is being reconciled separately.
+2026-10-31: The user explicitly accepts macOS-only verification and requests completion after twelve hours. Stop Linux/container qualification and new open-ended refactoring; freeze the current candidate and batch final checks. ADR-106 moves the residual exhaustive domain audit to standalone plan108; only its named clause may be deferred by the final gate.
 
 2026-10-30: Apply the user's first-release policy and exhaustive current-guide adoption. Replace old-history qualification with fresh provisioning and same-build recovery. Preserve real transaction, authority and privacy invariants.
 
 ## Outcomes & Retrospective
 
-Not implemented. Record outcomes, remaining profile limitations and triaged friction at completion.
+Complete for the requested macOS profile. The full all-enabled build and current
+593 pure/405 PostgreSQL/274 worker/95 server checks pass with 31 API, nine client,
+37 agent, nine migration-composition and eleven migration-smoke cases. Native/
+domain/six diagrams and 272 compiler clients pass. Eighty-four CLI checks and
+three live HTTP profiles (31 Hurl requests plus actual client/worker scenarios)
+pass from outside the checkout with copied schema/agent assets. The source closure
+exports 383 packages/six immutable repositories, and packaging exceptions match
+the accepted Cabal project. Final source/evidence validation and its mutation
+checks pass. See [final evidence](../evidence/keiro-0.22/macos-final-qualification.json)
+and [rollout](../operations/keiro-0.22-rollout.md).
+
+Linux containment, cold Nix rebuilding, real Kafka and live vendor qualification
+are outside this profile. The complete declaration worklist is not a semantic
+compliance claim; plan108 owns that explicit follow-up. No external deployment
+was performed. Repeated per-scalar full-suite runs were excessive; future work
+uses focused tests and one full milestone pass, as ADR-106 records.
 
 ## Context and Orientation
 
@@ -98,7 +113,7 @@ nix develop --no-write-lock-file -c cabal test shikigami-migrations-test shikiga
 nix develop --no-write-lock-file -c cabal test keiro-shikigami-conformance
 bash tools/check-migration-schema-isolation.sh
 python3 -m unittest discover -s tools/qualification -p 'test_*.py' -v
-nix build --no-link .#shikigami .#shikigami-server .#shikigami-worker .#shikigami-migrate
+python3 tools/qualification/keiro_022_audit.py
 git diff --check
 ```
 
@@ -106,7 +121,7 @@ Record actual cases and concise output under `docs/evidence/keiro-0.22/`. Databa
 
 ## Validation and Acceptance
 
-All source/release rows have supported final dispositions, new-build recovery is proven, all package tests pass without skipped required database coverage, and packaged roles match the exported solve. The deliberate reset diff is retained; strict evolution gates pass against its accepted baseline afterwards. No external deployment/provider claim exceeds the executed profile. A failed integration reopens its owning child and invalidates only evidence affected by the fix.
+All source/release rows have supported final dispositions within ADR-106's scope, including its one explicitly deferred domain clause; new-build recovery is proven, all package tests pass without skipped required database coverage, and packaged roles match the exported solve. The deliberate reset diff is retained; strict evolution gates pass against its accepted baseline afterwards. No external deployment/provider claim exceeds the executed profile. A failed integration reopens its owning child and invalidates only evidence affected by the fix.
 
 ## Idempotence and Recovery
 

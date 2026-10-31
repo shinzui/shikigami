@@ -17,13 +17,14 @@ def run(binary, args, code=0, data=b"", env=None):
     global checks
     result = subprocess.run([binaries[binary], *args, "+RTS", "-N2", "-RTS"],
                             input=data, capture_output=True, timeout=8,
-                            env=env, cwd=ROOT)
+                            env=env, cwd=execution_cwd)
     assert result.returncode == code, (binary, args, result.returncode,
                                        result.stdout, result.stderr)
     checks += 1
     return result.stdout + result.stderr
 
 with tempfile.TemporaryDirectory(prefix="shikigami-cli-contract-") as directory:
+    execution_cwd = Path(directory)
     poison = Path(directory) / "must-not-open.fifo"
     os.mkfifo(poison)
     clean = {key: value for key, value in os.environ.items()

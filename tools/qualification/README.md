@@ -27,7 +27,9 @@ To export the successful isolated solve for immutable packaging, substitute its
 actual `dist-newstyle/cache/plan.json` path:
 
 ```sh
+cabal path
 python3 tools/qualification/export-cohort.py --plan /absolute/path/to/plan.json \
+  --index /absolute/remote-repo-cache/hackage.haskell.org/01-index.tar \
   --output nix/qualification
 git add nix/qualification/cohort.json nix/qualification/metadata.tar.gz \
   nix/qualification/vendor/kikan-en.tar
@@ -50,3 +52,11 @@ The resulting JSON is a supplied observation, not evidence of agent-owned pollin
 See the [readiness report](../../docs/evidence/local-qualification/readiness.md)
 for tested revisions and the service startup order. Keep credentials in private
 configuration; provide credential-file paths rather than secret values.
+
+
+The current 0.22 export and bounded macOS qualification are recorded in
+`docs/evidence/keiro-0.22/macos-final-qualification.json`. Obtain the index path
+from `cabal path`; Cabal's XDG cache need not be `~/.cabal/packages`. The current
+export is not evidence of a cold Nix or Linux build. Run the scoped inventory
+gate with `python3 tools/qualification/keiro_022_audit.py`; it verifies sources
+through canonical Mori project roots and permits only the named plan108 follow-up.

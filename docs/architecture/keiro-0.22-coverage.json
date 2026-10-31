@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "scope": "Implementation inventory; remaining domain/Haskell findings and final qualification are pending.",
+  "scope": "Accepted macOS Keiro 0.22 upgrade profile; exhaustive domain classification explicitly deferred to plan108, not certified compliant.",
   "sources": [
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-cross-cutting-modules",
@@ -100,8 +100,8 @@
       "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
       "sourcePath": "runtime-patterns/architecture/domain-newtypes-and-typeids.md",
       "sourceSha256": "c9bb6e61d42c1345f23529b211f66d7485200aa2bfda41ef9966e8a13970a844",
-      "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
+      "owner": "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md",
+      "status": "deferred",
       "clauses": [
         {
           "id": "allocated-entity-identity",
@@ -295,8 +295,8 @@
         },
         {
           "id": "complete-domain-scalar-and-identity-census",
-          "disposition": "pending",
-          "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
+          "disposition": "deferred",
+          "rationale": "Explicit follow-up under ADR-106 and plan108 after the user requested bounded macOS upgrade completion. The current 322-module/913-declaration worklist remains unclassified; accepted individual clauses retain their evidence. This is not a compliance or non-applicability claim."
         }
       ],
       "evidence": [
@@ -439,8 +439,13 @@
         "docs/evidence/keiro-0.22/provider-coordinates-results.txt",
         "docs/evidence/keiro-0.22/provider-coordinates-native-diff.json",
         "docs/evidence/keiro-0.22/provider-coordinates-native-replay.json",
-        "docs/evidence/keiro-0.22/provider-coordinates-fold-identities.json"
-      ]
+        "docs/evidence/keiro-0.22/provider-coordinates-fold-identities.json",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md",
+        "docs/adr/0106-the-keiro-upgrade-closes-on-a-bounded-macos-profile.md",
+        "docs/evidence/keiro-0.22/macos-final-qualification.json"
+      ],
+      "followUp": "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md",
+      "scopeDecision": "docs/adr/0106-the-keiro-upgrade-closes-on-a-bounded-macos-profile.md"
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-extended-node-verticals",
@@ -492,7 +497,7 @@
       "sourcePath": "runtime-patterns/architecture/generated-compilation-contract.md",
       "sourceSha256": "aed922d9a97d6ffafb2e58520c3032d693f960fe1a3aa65c1a4f3b64846e12b1",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "complete-build-manifest",
@@ -516,9 +521,9 @@
         },
         {
           "id": "frozen-packaged-ci-qualification",
-          "disposition": "pending",
+          "disposition": "implemented",
           "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md",
-          "rationale": "Plan95 must refresh the exact Nix/Cabal source closure and qualify generated/runtime/role artifacts on the actual Mac/Linux profiles. Current Cabal compilation and generation checks do not certify the still-old Nix qualification archive."
+          "rationale": "The selected macOS PostgreSQL/PGMQ profile passes the full compiled/native/behavioral corpus, actual listener/recovery/refusal tests, fresh migrations, and CLI/live HTTP outside-checkout checks with copied schema/agent assets. The exact successful solve exports 383 packages and six pinned repositories. ADR-106 excludes Linux, real Kafka/live vendors and a cold Nix rebuild from this bounded profile; no unexecuted profile is claimed."
         }
       ],
       "evidence": [
@@ -528,7 +533,10 @@
         "docs/evidence/keiro-0.22/worker-owner-revision-results.txt",
         "docs/evidence/keiro-0.22/resource-root-revision-results.txt",
         "shikigami-core/test/Shikigami/KeiroSpecificationSpec.hs",
-        "shikigami-core/test/Shikigami/PackageArchitectureSpec.hs"
+        "shikigami-core/test/Shikigami/PackageArchitectureSpec.hs",
+        "docs/evidence/keiro-0.22/macos-final-qualification.json",
+        "docs/adr/0106-the-keiro-upgrade-closes-on-a-bounded-macos-profile.md",
+        "docs/operations/keiro-0.22-rollout.md"
       ]
     },
     {
@@ -566,7 +574,7 @@
       "sourcePath": "runtime-patterns/architecture/service-packages.md",
       "sourceSha256": "5ccf5a048546225fd461b13149180b7f02e49bebc9c397c23be6175ff1bc846e",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "six-role-ownership",
@@ -590,9 +598,9 @@
         },
         {
           "id": "frozen-packaged-ci-qualification",
-          "disposition": "pending",
+          "disposition": "implemented",
           "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md",
-          "rationale": "Plan95 must refresh the exact Nix/Cabal source closure and qualify generated/runtime/role artifacts on the actual Mac/Linux profiles. Current Cabal compilation and generation checks do not certify the still-old Nix qualification archive."
+          "rationale": "The selected macOS PostgreSQL/PGMQ profile passes the full compiled/native/behavioral corpus, actual listener/recovery/refusal tests, fresh migrations, and CLI/live HTTP outside-checkout checks with copied schema/agent assets. The exact successful solve exports 383 packages and six pinned repositories. ADR-106 excludes Linux, real Kafka/live vendors and a cold Nix rebuild from this bounded profile; no unexecuted profile is claimed."
         }
       ],
       "evidence": [
@@ -602,7 +610,10 @@
         "docs/evidence/keiro-0.22/worker-owner-revision-results.txt",
         "docs/evidence/keiro-0.22/resource-root-revision-results.txt",
         "shikigami-core/test/Shikigami/KeiroSpecificationSpec.hs",
-        "shikigami-core/test/Shikigami/PackageArchitectureSpec.hs"
+        "shikigami-core/test/Shikigami/PackageArchitectureSpec.hs",
+        "docs/evidence/keiro-0.22/macos-final-qualification.json",
+        "docs/adr/0106-the-keiro-upgrade-closes-on-a-bounded-macos-profile.md",
+        "docs/operations/keiro-0.22-rollout.md"
       ]
     },
     {
@@ -660,7 +671,7 @@
       "sourcePath": "runtime-patterns/architecture/test-layout.md",
       "sourceSha256": "81e5074a4615dc7d53edeb8d0e022171d4f9df1ce879ff028825b6e244134945",
       "owner": "docs/plans/107-adopt-current-haskell-and-service-architecture-practices.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "scenario-first",
@@ -694,16 +705,19 @@
         },
         {
           "id": "final-qualified-profiles",
-          "disposition": "pending",
+          "disposition": "implemented",
           "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md",
-          "rationale": "Plan95 must qualify the final frozen role artifacts and actual selected Linux/transport profiles. Current PostgreSQL/native mock-adapter evidence is not a real Kafka-broker test; any selected Kafka profile needs its own broker-backed evidence."
+          "rationale": "The selected macOS PostgreSQL/PGMQ profile passes the full compiled/native/behavioral corpus, actual listener/recovery/refusal tests, fresh migrations, and CLI/live HTTP outside-checkout checks with copied schema/agent assets. The exact successful solve exports 383 packages and six pinned repositories. ADR-106 excludes Linux, real Kafka/live vendors and a cold Nix rebuild from this bounded profile; no unexecuted profile is claimed."
         }
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/domain-driver-results.txt",
         "shikigami-core/test-domain/Main.hs",
         "shikigami-core/shikigami-core.cabal",
-        "docs/evidence/keiro-0.22/worker-owner-revision-results.txt"
+        "docs/evidence/keiro-0.22/worker-owner-revision-results.txt",
+        "docs/evidence/keiro-0.22/macos-final-qualification.json",
+        "docs/adr/0106-the-keiro-upgrade-closes-on-a-bounded-macos-profile.md",
+        "docs/operations/keiro-0.22-rollout.md"
       ]
     },
     {
@@ -1844,7 +1858,7 @@
       "sourcePath": "runtime-patterns/keiro/evolution-and-rollout.md",
       "sourceSha256": "ed7ffeb46935aedcdf51a50efa164ee953900a139fb2bbf6f8dd38bfba41f333",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "strict-machine-readable-gates",
@@ -1863,14 +1877,17 @@
         },
         {
           "id": "final-artifact-and-load-evidence",
-          "disposition": "pending",
-          "rationale": "Plan95 owns the final frozen role artifacts, Linux runtime and remaining application load observations. Native correctness and upstream practical acceptance do not establish a statistical or exhaustive performance pass.",
+          "disposition": "implemented",
+          "rationale": "The selected macOS PostgreSQL/PGMQ profile passes the full compiled/native/behavioral corpus, actual listener/recovery/refusal tests, fresh migrations, and CLI/live HTTP outside-checkout checks with copied schema/agent assets. The exact successful solve exports 383 packages and six pinned repositories. ADR-106 excludes Linux, real Kafka/live vendors and a cold Nix rebuild from this bounded profile; no unexecuted profile is claimed.",
           "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md"
         }
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/macos-final-qualification.json",
+        "docs/adr/0106-the-keiro-upgrade-closes-on-a-bounded-macos-profile.md",
+        "docs/operations/keiro-0.22-rollout.md"
       ]
     },
     {
@@ -1912,7 +1929,7 @@
       "sourcePath": "runtime-patterns/keiro/gotchas.md",
       "sourceSha256": "9f64b810a81cd39bf4dabfb2afaa824bef5ee2b4a4d6237c594bcaed2855f657",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "runtime-and-resource-boundaries",
@@ -1937,8 +1954,8 @@
         },
         {
           "id": "final-artifact-and-load-evidence",
-          "disposition": "pending",
-          "rationale": "Plan95 owns the final frozen role artifacts, Linux runtime and remaining application load observations. Native correctness and upstream practical acceptance do not establish a statistical or exhaustive performance pass.",
+          "disposition": "implemented",
+          "rationale": "The selected macOS PostgreSQL/PGMQ profile passes the full compiled/native/behavioral corpus, actual listener/recovery/refusal tests, fresh migrations, and CLI/live HTTP outside-checkout checks with copied schema/agent assets. The exact successful solve exports 383 packages and six pinned repositories. ADR-106 excludes Linux, real Kafka/live vendors and a cold Nix rebuild from this bounded profile; no unexecuted profile is claimed.",
           "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md"
         }
       ],
@@ -1948,7 +1965,10 @@
         "docs/evidence/keiro-0.22/native-inspection-cli.md",
         "docs/evidence/keiro-0.22/native-inspection-runtime.md",
         "docs/evidence/keiro-0.22/native-inspection-results.txt",
-        "docs/operations/inspection.md"
+        "docs/operations/inspection.md",
+        "docs/evidence/keiro-0.22/macos-final-qualification.json",
+        "docs/adr/0106-the-keiro-upgrade-closes-on-a-bounded-macos-profile.md",
+        "docs/operations/keiro-0.22-rollout.md"
       ]
     },
     {
@@ -2223,7 +2243,7 @@
       "sourcePath": "runtime-patterns/keiro/read-models-and-projections.md",
       "sourceSha256": "9214ceb29496c2cfe683730ff8a1bb8c7f904bcc1f06c5b442e0490b268f1309",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "single-catalog-registration-and-freshness",
@@ -2253,8 +2273,8 @@
         },
         {
           "id": "final-artifact-and-load-evidence",
-          "disposition": "pending",
-          "rationale": "Plan95 owns the final frozen role artifacts, Linux runtime and remaining application load observations. Native correctness and upstream practical acceptance do not establish a statistical or exhaustive performance pass.",
+          "disposition": "implemented",
+          "rationale": "The selected macOS PostgreSQL/PGMQ profile passes the full compiled/native/behavioral corpus, actual listener/recovery/refusal tests, fresh migrations, and CLI/live HTTP outside-checkout checks with copied schema/agent assets. The exact successful solve exports 383 packages and six pinned repositories. ADR-106 excludes Linux, real Kafka/live vendors and a cold Nix rebuild from this bounded profile; no unexecuted profile is claimed.",
           "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md"
         }
       ],
@@ -2264,7 +2284,10 @@
         "docs/evidence/keiro-0.22/native-inspection-cli.md",
         "docs/evidence/keiro-0.22/native-inspection-runtime.md",
         "docs/evidence/keiro-0.22/native-inspection-results.txt",
-        "docs/operations/inspection.md"
+        "docs/operations/inspection.md",
+        "docs/evidence/keiro-0.22/macos-final-qualification.json",
+        "docs/adr/0106-the-keiro-upgrade-closes-on-a-bounded-macos-profile.md",
+        "docs/operations/keiro-0.22-rollout.md"
       ]
     },
     {
@@ -2881,7 +2904,7 @@
       "sourcePath": "runtime-patterns/messaging/gotchas.md",
       "sourceSha256": "14f3a206af5c8a042eb3664f61c511479c02cf46ded18df723e571844bc63d16",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "transport-finalization-and-ownership",
@@ -2901,8 +2924,8 @@
         },
         {
           "id": "final-artifact-and-load-evidence",
-          "disposition": "pending",
-          "rationale": "Plan95 owns the final frozen role artifacts, Linux runtime and remaining application load observations. Native correctness and upstream practical acceptance do not establish a statistical or exhaustive performance pass.",
+          "disposition": "implemented",
+          "rationale": "The selected macOS PostgreSQL/PGMQ profile passes the full compiled/native/behavioral corpus, actual listener/recovery/refusal tests, fresh migrations, and CLI/live HTTP outside-checkout checks with copied schema/agent assets. The exact successful solve exports 383 packages and six pinned repositories. ADR-106 excludes Linux, real Kafka/live vendors and a cold Nix rebuild from this bounded profile; no unexecuted profile is claimed.",
           "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md"
         }
       ],
@@ -2912,7 +2935,10 @@
         "docs/evidence/keiro-0.22/native-inspection-cli.md",
         "docs/evidence/keiro-0.22/native-inspection-runtime.md",
         "docs/evidence/keiro-0.22/native-inspection-results.txt",
-        "docs/operations/inspection.md"
+        "docs/operations/inspection.md",
+        "docs/evidence/keiro-0.22/macos-final-qualification.json",
+        "docs/adr/0106-the-keiro-upgrade-closes-on-a-bounded-macos-profile.md",
+        "docs/operations/keiro-0.22-rollout.md"
       ]
     },
     {
@@ -3000,7 +3026,8 @@
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
         "docs/evidence/keiro-0.22/native-runtime-results.txt"
-      ]
+      ],
+      "rationale": "There is no application-owned Kiroku subscription, shard group, namespace fan-in or static member assignment. The four catalog owners are synchronous atomic authority with LiveOnly payloads. No unused subscription is introduced. No application raw Kiroku acknowledgement stream or consumer-group processor exists. The service does not duplicate framework acknowledgement/retry ownership."
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/messaging-outbox",
@@ -3066,7 +3093,7 @@
       "sourcePath": "runtime-patterns/messaging/pgmq-connection-faults.md",
       "sourceSha256": "10c30939a69cba30c476dd5ec864d3f9640b89b533a1da278a2948b93d0f4697",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "released-retry-and-supervision",
@@ -3085,14 +3112,17 @@
         },
         {
           "id": "final-artifact-and-load-evidence",
-          "disposition": "pending",
-          "rationale": "Plan95 owns the final frozen role artifacts, Linux runtime and remaining application load observations. Native correctness and upstream practical acceptance do not establish a statistical or exhaustive performance pass.",
+          "disposition": "implemented",
+          "rationale": "The selected macOS PostgreSQL/PGMQ profile passes the full compiled/native/behavioral corpus, actual listener/recovery/refusal tests, fresh migrations, and CLI/live HTTP outside-checkout checks with copied schema/agent assets. The exact successful solve exports 383 packages and six pinned repositories. ADR-106 excludes Linux, real Kafka/live vendors and a cold Nix rebuild from this bounded profile; no unexecuted profile is claimed.",
           "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md"
         }
       ],
       "evidence": [
         "docs/evidence/keiro-0.22/native-runtime-lifecycle.md",
-        "docs/evidence/keiro-0.22/native-runtime-results.txt"
+        "docs/evidence/keiro-0.22/native-runtime-results.txt",
+        "docs/evidence/keiro-0.22/macos-final-qualification.json",
+        "docs/adr/0106-the-keiro-upgrade-closes-on-a-bounded-macos-profile.md",
+        "docs/operations/keiro-0.22-rollout.md"
       ]
     },
     {
@@ -3101,7 +3131,7 @@
       "sourcePath": "runtime-patterns/messaging/pgmq-dead-letter-administration.md",
       "sourceSha256": "3712e3b33d5089dfbce27a2b2c109707cb8380a9c3b5ef01e3f7b7168a5589bf",
       "owner": "docs/plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md",
-      "status": "pending",
+      "status": "implemented",
       "clauses": [
         {
           "id": "actual-adapter-envelope",
@@ -3116,8 +3146,8 @@
         },
         {
           "id": "final-artifact-and-load-evidence",
-          "disposition": "pending",
-          "rationale": "Plan95 owns the final frozen role artifacts, Linux runtime and remaining application load observations. Native correctness and upstream practical acceptance do not establish a statistical or exhaustive performance pass.",
+          "disposition": "implemented",
+          "rationale": "The selected macOS PostgreSQL/PGMQ profile passes the full compiled/native/behavioral corpus, actual listener/recovery/refusal tests, fresh migrations, and CLI/live HTTP outside-checkout checks with copied schema/agent assets. The exact successful solve exports 383 packages and six pinned repositories. ADR-106 excludes Linux, real Kafka/live vendors and a cold Nix rebuild from this bounded profile; no unexecuted profile is claimed.",
           "owner": "docs/plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md"
         }
       ],
@@ -3127,7 +3157,10 @@
         "docs/evidence/keiro-0.22/native-inspection-cli.md",
         "docs/evidence/keiro-0.22/native-inspection-runtime.md",
         "docs/evidence/keiro-0.22/native-inspection-results.txt",
-        "docs/operations/inspection.md"
+        "docs/operations/inspection.md",
+        "docs/evidence/keiro-0.22/macos-final-qualification.json",
+        "docs/adr/0106-the-keiro-upgrade-closes-on-a-bounded-macos-profile.md",
+        "docs/operations/keiro-0.22-rollout.md"
       ]
     },
     {
@@ -3413,7 +3446,8 @@
         "docs/evidence/keiro-0.22/migrations-smoke.txt",
         "shikigami-migrations/src/Shikigami/Migrations.hs",
         "shikigami-migrations/app/Main.hs"
-      ]
+      ],
+      "rationale": "No service Codd ledger, import deployment or legacy reader exists. No import facade or historical checksum equivalence is invented; only fresh provisioning is qualified."
     },
     {
       "source": "mori://shinzui/keiro-runtime-patterns/docs/migrations-operations",
@@ -4716,5 +4750,6 @@
       "reason": "Reserved producer change log; review changes when refreshing the source inventory."
     }
   ],
-  "inventorySha256": "1420d682f59a432aef5def99aa05c831c7c364c5410a98f4317cfc22f391f4d0"
+  "inventorySha256": "1420d682f59a432aef5def99aa05c831c7c364c5410a98f4317cfc22f391f4d0",
+  "closureSha256": "02d68df76ad9e02351fe19a1d25b33baf2076f0ab1f7caf0cd900a2248d36d3a"
 }

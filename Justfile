@@ -281,3 +281,8 @@ domain-value-types:
     cabal build shikigami-core
     python3 tests/types/revision-domains.py
     python3 tests/types/opaque-values.py
+
+# Frozen 0.22 consumer evidence and the explicitly bounded macOS profile.
+keiro-upgrade-audit:
+    python3 tools/qualification/keiro_022_audit.py
+    python3 -m unittest discover -s tools/qualification -p 'test_*.py' -v

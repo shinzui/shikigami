@@ -10,10 +10,10 @@ the cohort moves. Before plan 80, the only exact constraint was `keiro-dsl`, whi
 and so no bound ties to the runtime's Keiro release. A drift between a matrix
 row and the solver's plan is a bug in one of them.
 
-## Keiro 0.22 candidate — checked 2026-10-30
+## Keiro 0.22 accepted macOS cohort — selected 2026-10-30
 
-Plan 92 is implementing this candidate; build, generation and database acceptance
-remain required. The fixed index is `2026-10-30T19:00:00Z`. Authoritative released
+Plans 92–95, 106 and 107 accept this cohort on the bounded macOS profile; build,
+generation, fresh PostgreSQL and same-build recovery checks pass. The fixed index is `2026-10-30T19:00:00Z`. Authoritative released
 descriptor hashes, upstream release commits and actual solve selections are in
 [evidence/keiro-0.22/released-cohort.json](evidence/keiro-0.22/released-cohort.json).
 
@@ -28,13 +28,15 @@ not fit Keiro 0.22's Store 0.12 bound. Kioku 0.12.0.1 requires Baikai Effectful
 0.4.0.5 and Baikai 0.10, beyond the application's frozen Baikai 0.7 cohort;
 0.12.0.0 admits that existing cohort without a bounds override. Published
 pg-migrate-test-support 1.2 admits ephemeral-pg 0.3.1; its obsolete allow-newer
-entry is removed. The unrelated third-party claude exception remains.
+entry is removed. The unrelated scoped TLS exceptions for claude and kiroku-cli remain.
 
 Kikan-En contract/client now use verified published source commit
 `16704290d527d413568bfa40c983f5c3604c35c8` from
 `mori://shinzui/kikan-en/repos/kikan-en`; no sibling source paths participate.
-They have no Hackage releases. The final frozen deployment export still belongs
-to plan 95 and has not yet been refreshed.
+They have no Hackage releases. The final successful macOS solve is exported in nix/qualification: 383 runtime
+packages, six immutable repositories and exact descriptor/source/flag/compiler
+identity. This replaces the historical 0.18 export. A cold Nix rebuild is not
+claimed; actual built roles and copied assets pass outside-checkout checks.
 
 The fresh schema uses the published PGMQ component, including migration 0007,
 instead of the old vendored SQL. No developer database is altered. This deliberately

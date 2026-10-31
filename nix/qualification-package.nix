@@ -38,7 +38,7 @@ let
     with-compiler: ghc-9.12.4
     tests: False
     benchmarks: False
-    allow-newer: claude:http-client-tls, pg-migrate-test-support:ephemeral-pg
+    allow-newer: claude:http-client-tls, kiroku-cli:http-client-tls
   '' + lib.concatMapStrings
     (name:
       let
