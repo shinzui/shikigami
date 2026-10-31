@@ -6,6 +6,7 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Int (Int64)
 import Data.Map.Strict qualified as Map
 import Data.Time (UTCTime (..), fromGregorian)
+import Shikigami.Execution.Counter (AttemptCount, parseAttemptCount)
 import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
 import Shikigami.Execution.Resources
 import Shikigami.StateRevision (initialRevision)
@@ -16,16 +17,21 @@ tests :: TestTree
 tests =
   testGroup
     "ExecutionResources"
-    [ testCase "root revisions preserve numeric JSON and reject negative admission" do
+    [ testCase "root revisions and counts preserve numeric JSON and reject negatives" do
         let now = UTCTime (fromGregorian 2026 10 30) 0
-            root = Root (Envelope Map.empty now) initialRevision False Nothing False 0 0 Map.empty emptyUsage
+            root = Root (Envelope Map.empty now) initialRevision False Nothing False (fixtureCount 0) (fixtureCount 0) Map.empty emptyUsage
             encoded = Aeson.toJSON root
         Aeson.fromJSON encoded @?= Aeson.Success root
         case encoded of
           Aeson.Object fields -> do
             fmap Aeson.encode (KeyMap.lookup "revision" fields) @?= Just (Aeson.encode (0 :: Integer))
-            let negative = Aeson.Object (KeyMap.insert "revision" (Aeson.toJSON (-1 :: Integer)) fields)
-            assertBool "negative root revision refused" (case Aeson.fromJSON negative :: Aeson.Result Root of Aeson.Error _ -> True; _ -> False)
+            mapM_
+              ( \key -> do
+                  fmap Aeson.encode (KeyMap.lookup key fields) @?= Just (Aeson.encode (0 :: Integer))
+                  let negative = Aeson.Object (KeyMap.insert key (Aeson.toJSON (-1 :: Integer)) fields)
+                  assertBool "negative root counter refused" (case Aeson.fromJSON negative :: Aeson.Result Root of Aeson.Error _ -> True; _ -> False)
+              )
+              ["revision", "active", "unknown"]
           _ -> assertFailure "resource root was not an object",
       testCase "negative and overflowing quantities are refused" do
         mapM_
@@ -70,3 +76,6 @@ tests =
 
 fixtureAmount :: Integer -> ResourceAmount
 fixtureAmount amount = either (error . show) id (parseResourceAmount amount)
+
+fixtureCount :: Integer -> AttemptCount scope
+fixtureCount count = either (error . show) id (parseAttemptCount count)

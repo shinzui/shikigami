@@ -144,6 +144,11 @@
           "rationale": "Private ResourceAmount admits nonnegative int64 units at construction/JSON decode. Dimension-keyed vectors and finite/active ceilings retain it. Checked vector arithmetic rejects overflow/underflow before accounting publication and preserves dimension/finite-limit refusal priority. Actual HTTP valid/overflow reports prove exact settlement versus retained unknown billing holds; synthetic full-counter settlement leaves root/attempt unchanged. ADR-76 and 555 pure/378 PostgreSQL/260 worker/95 server evidence cover this change. Distinct counters/policy values and the complete census remain pending."
         },
         {
+          "id": "attempt-counts-and-operational-call-limits",
+          "disposition": "implemented",
+          "rationale": "Private nominal AttemptCount separates root active/unknown and selection call/active/unknown values. AttemptLimit separates finite call/retry/concurrency ceilings, with ResourceAmount token caps and typed profile refinement failure before provider setup. Exact codecs, scope compiler failures and four real coupled root/assignment underflow refusals pass. Full acceptance is 556 pure/382 PostgreSQL/260 workers/95 server plus 23 compiler clients under ADR-77. Other counters/policies and complete identity/scalar census remain pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -162,7 +167,9 @@
         "docs/evidence/keiro-0.22/worker-cursor-results.txt",
         "docs/evidence/keiro-0.22/execution-revision-results.txt",
         "docs/adr/0076-resource-amounts-are-checked-before-accounting-publication.md",
-        "docs/evidence/keiro-0.22/resource-amount-results.txt"
+        "docs/evidence/keiro-0.22/resource-amount-results.txt",
+        "docs/adr/0077-attempt-counters-and-call-ceilings-retain-their-scopes.md",
+        "docs/evidence/keiro-0.22/attempt-count-results.txt"
       ]
     },
     {

@@ -97,6 +97,7 @@ library
     Shikigami.Execution.Admission
     Shikigami.Execution.Attempt
     Shikigami.Execution.Catalog
+    Shikigami.Execution.Counter
     Shikigami.Execution.Driver
     Shikigami.Execution.Ephemeral
     Shikigami.Execution.Executor

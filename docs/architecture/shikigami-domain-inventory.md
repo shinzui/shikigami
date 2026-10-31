@@ -63,6 +63,14 @@ retains its unknown billing hold instead of becoming zero. ADR-76 and
 cover the real HTTP and synthetic counter-boundary cases. This does not complete
 the separate counter/policy/identity census.
 
+Root and assignment attempt counts now retain distinct nominal scopes. Finite
+call/retry/concurrency ceilings match their respective count scopes, while token
+caps retain ResourceAmount. Signed-profile wire values refine once into these
+operational limits with typed refusal before provider setup. Checked zero-count
+decrements refuse before coupled settlement/reconciliation. The positive codec,
+compiler and full recovery evidence is in [attempt-count acceptance](../evidence/keiro-0.22/attempt-count-results.txt)
+and ADR-77. Other execution counters and policy values remain under review.
+
 Objective is an application-owned entity: `ObjectiveId` now uses the generated
 abstract TypeID-v7 domain with prefix `shikigami_objective`. Creation allocates a
 UUIDv7 ID, while creator-scoped operation receipts retain deduplication authority.

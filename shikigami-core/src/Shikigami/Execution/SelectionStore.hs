@@ -1,10 +1,11 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Assignment-local actual call facts. Root reservations and these facts
 -- share one transaction; neither store claims to be the execution transcript.
 module Shikigami.Execution.SelectionStore where
 
 import Contravariant.Extras (contrazip2, contrazip5)
 import Data.Aeson qualified as Aeson
-import Data.Foldable (traverse_)
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.Int (Int64)
@@ -22,6 +23,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Attestation.CallFacts (CallComplianceFacts)
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Execution.Counter
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Quantity
 import Shikigami.Execution.Resources
@@ -30,24 +32,27 @@ import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Prelude
 
 data CallLimits = CallLimits
-  { calls :: !(Maybe Integer),
-    retries :: !(Maybe Integer),
-    concurrency :: !(Maybe Integer),
+  { calls :: !(Maybe (AttemptLimit "selection-calls")),
+    retries :: !(Maybe (AttemptLimit "selection-retries")),
+    concurrency :: !(Maybe (AttemptLimit "selection-active")),
     cutoff :: !(Maybe UTCTime),
-    tokens :: !(Maybe Integer)
+    tokens :: !(Maybe ResourceAmount)
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-callLimitsFor :: ExecutionSelection -> Maybe ResolvedProfile -> CallLimits
-callLimitsFor selection profile =
-  CallLimits
-    { calls = toInteger <$> (profile >>= (\p -> p.profile.limits.maxCalls)),
-      retries = toInteger <$> (profile >>= (\p -> p.profile.limits.maxRetries)),
-      concurrency = toInteger <$> (profile >>= (\p -> p.profile.limits.maxConcurrency)),
-      cutoff = case maybe [] pure ((\seconds -> addUTCTime (fromIntegral seconds) selection.admittedAt) <$> (profile >>= (\p -> p.profile.limits.maxDurationSeconds))) <> maybe [] pure (profile >>= (\p -> p.profile.validUntil)) of [] -> Nothing; deadlines -> Just (minimum deadlines),
-      tokens = toInteger <$> (profile >>= (\p -> p.profile.limits.maxTokens))
-    }
+callLimitsFor :: ExecutionSelection -> Maybe ResolvedProfile -> Either ResourceError CallLimits
+callLimitsFor selection profile = do
+  let wire = (\p -> p.profile.limits) <$> profile
+      refine parser = traverse (either (Left . InvalidResourceRequest) Right . parser . toInteger)
+  calls <- refine parseAttemptLimit (wire >>= (.maxCalls))
+  retries <- refine parseAttemptLimit (wire >>= (.maxRetries))
+  concurrency <- refine parseAttemptLimit (wire >>= (.maxConcurrency))
+  tokens <- refine parseResourceAmount (wire >>= (.maxTokens))
+  let duration = wire >>= (.maxDurationSeconds)
+  when (maybe False (< 0) duration) (Left (InvalidResourceRequest "invalid assignment duration"))
+  let cutoff = case maybe [] pure ((\seconds -> addUTCTime (fromIntegral seconds) selection.admittedAt) <$> duration) <> maybe [] pure (profile >>= (\p -> p.profile.validUntil)) of [] -> Nothing; deadlines -> Just (minimum deadlines)
+  pure (CallLimits calls retries concurrency cutoff tokens)
 
 callLimitsWithin :: CallLimits -> CallLimits -> Bool
 callLimitsWithin proposed admitted = and [within proposed.calls admitted.calls, within proposed.retries admitted.retries, within proposed.concurrency admitted.concurrency, within proposed.tokens admitted.tokens, within proposed.cutoff admitted.cutoff]
@@ -57,10 +62,10 @@ callLimitsWithin proposed admitted = and [within proposed.calls admitted.calls, 
 data Assignment = Assignment
   { selection :: !ExecutionSelection,
     limits :: !CallLimits,
-    attempts :: !Integer,
-    active :: !Integer,
+    attempts :: !(AttemptCount "selection-calls"),
+    active :: !(AttemptCount "selection-active"),
     usage :: !Usage,
-    unknown :: !Integer
+    unknown :: !(AttemptCount "selection-unknown")
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -70,11 +75,17 @@ data CallReceipt = CallReceipt
     rootId :: !(Maybe ExecutionRootId),
     request :: !AttemptRequest,
     fingerprint :: !Text,
-    ordinal :: !Integer,
+    ordinal :: !(AttemptCount "selection-calls"),
     startedAt :: !UTCTime
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving anyclass (ToJSON)
+
+instance FromJSON CallReceipt where
+  parseJSON value = do
+    receipt <- Aeson.genericParseJSON Aeson.defaultOptions value
+    unless (attemptNumber receipt.ordinal > 0 && attemptNumber receipt.ordinal <= toInteger (maxBound :: Int64)) (fail "invalid selection call ordinal")
+    pure receipt
 
 data CallPhase = CallTerminal | CallTransportUnknown | CallRefused
   deriving stock (Eq, Show, Generic)
@@ -130,15 +141,13 @@ reserveSelectionCallTx selection limits request fingerprint now = do
       validateKey assignmentId
       validateKey fingerprint
       validateOperation (OperationRequest request.operationId Nothing ModelOperation Map.empty fingerprint)
-      resourceLimits <- assignmentLimits limits
-      validateAttempt resourceLimits (OperationRequest request.operationId Nothing ModelOperation Map.empty fingerprint) request
-      forM_ [limits.calls, limits.retries, limits.concurrency, limits.tokens] (traverse_ (\n -> unless (validCallCount n) (Left (InvalidResourceRequest "invalid assignment limit"))))
+      validateAttempt (assignmentLimits limits) (OperationRequest request.operationId Nothing ModelOperation Map.empty fingerprint) request
     reserveValidated = do
       root <- traverse Resources.inspectRootTx selection.rootId
       case sequence root of
         Left err -> pure (Left (CallResourcesRefused err))
         Right state -> do
-          Tx.statement (assignmentId, Assignment selection limits 0 0 emptyUsage 0) insertAssignment
+          Tx.statement (assignmentId, Assignment selection limits noAttempts noAttempts emptyUsage noAttempts) insertAssignment
           stored <- Tx.statement assignmentId lockAssignment
           case stored of
             Nothing -> pure (Left AssignmentConflict)
@@ -151,36 +160,37 @@ reserveSelectionCallTx selection limits request fingerprint now = do
                     Just _ -> pure (Left CallIdentityConflict)
                     Nothing
                       | maybe False (now >=) limits.cutoff -> pure (Left AssignmentCutoffReached)
-                      | maybe False (assignment.active >=) limits.concurrency -> pure (Left AssignmentConcurrencyExceeded)
-                      | maybe False (assignment.attempts >=) limits.calls -> pure (Left AssignmentCallLimitExceeded)
-                      | not (validCallCount (assignment.attempts + 1)) -> pure (Left AssignmentCallLimitExceeded)
+                      | maybe False (attemptLimitReached assignment.active) limits.concurrency -> pure (Left AssignmentConcurrencyExceeded)
+                      | maybe False (attemptLimitReached assignment.attempts) limits.calls -> pure (Left AssignmentCallLimitExceeded)
+                      | attemptNumber assignment.attempts >= toInteger (maxBound :: Int64) -> pure (Left AssignmentCallLimitExceeded)
                       | otherwise -> do
-                          previous <- Tx.statement (assignmentId, operationKey request.operationId) countOperationCalls
-                          admitted <- case assignmentLimits limits >>= \resourceLimits -> admit resourceLimits assignment.usage request.quantities of
+                          previousNumber <- Tx.statement (assignmentId, operationKey request.operationId) countOperationCalls
+                          let previous = parseAttemptCount previousNumber
+                          admitted <- case admit (assignmentLimits limits) assignment.usage request.quantities of
                             Left err -> pure (Left (CallResourcesRefused err))
                             Right usage -> do
-                              rootAdmission <-
-                                if maybe False (previous >=) ((+ 1) <$> limits.retries)
-                                  then pure (Left CallRetryLimitExceeded)
-                                  else case (selection.rootId, state) of
-                                    (Just rootId, Just rootState) -> do
-                                      let operation = OperationRequest request.operationId Nothing ModelOperation Map.empty fingerprint
-                                      reserved <- Resources.reserveOperationsTx rootId rootState.revision [operation] now
-                                      case reserved of
-                                        Left err -> pure (Left (CallResourcesRefused err))
-                                        Right _ ->
-                                          Resources.beginAttemptTx rootId rootState.revision request now >>= \case
-                                            Left err -> pure (Left (CallResourcesRefused err))
-                                            Right Accepted -> pure (Right ())
-                                            Right AlreadyAccepted -> pure (Left CallIdentityConflict)
-                                    (Nothing, Nothing) -> pure (Right ())
-                                    _ -> pure (Left AssignmentConflict)
+                              rootAdmission <- case previous of
+                                Left err -> pure (Left (CallResourcesRefused (InvalidResourceRequest err)))
+                                Right count | maybe False (attemptLimitExceeded count) limits.retries -> pure (Left CallRetryLimitExceeded)
+                                Right _ -> case (selection.rootId, state) of
+                                  (Just rootId, Just rootState) -> do
+                                    let operation = OperationRequest request.operationId Nothing ModelOperation Map.empty fingerprint
+                                    reserved <- Resources.reserveOperationsTx rootId rootState.revision [operation] now
+                                    case reserved of
+                                      Left err -> pure (Left (CallResourcesRefused err))
+                                      Right _ ->
+                                        Resources.beginAttemptTx rootId rootState.revision request now >>= \case
+                                          Left err -> pure (Left (CallResourcesRefused err))
+                                          Right Accepted -> pure (Right ())
+                                          Right AlreadyAccepted -> pure (Left CallIdentityConflict)
+                                  (Nothing, Nothing) -> pure (Right ())
+                                  _ -> pure (Left AssignmentConflict)
                               pure (usage <$ rootAdmission)
                           case admitted of
                             Left err -> pure (Left err)
                             Right usage -> do
-                              let receipt = CallReceipt assignmentId selection.rootId request fingerprint (assignment.attempts + 1) now
-                              Tx.statement (assignmentId, assignment & #attempts .~ receipt.ordinal & #active .~ (assignment.active + 1) & #usage .~ usage) updateAssignment
+                              let receipt = CallReceipt assignmentId selection.rootId request fingerprint (nextAttempt assignment.attempts) now
+                              Tx.statement (assignmentId, assignment & #attempts .~ receipt.ordinal & #active .~ (nextAttempt assignment.active) & #usage .~ usage) updateAssignment
                               writeCall (SelectionCall receipt Nothing)
                               pure (Right (NewCall receipt))
 
@@ -208,10 +218,14 @@ finishSelectionCallTx receipt outcome = do
                     CallRefused -> KnownUsage (Map.fromList [(Tokens, zeroAmount), (CostMicroUsd, zeroAmount)])
                     CallTerminal | null outcome.missing -> KnownUsage outcome.known
                     CallTerminal -> PartialUsage outcome.known outcome.missing "terminal billing facts unavailable"
-              let localUsage = maybe (Left (InvalidResourceRequest "assignment missing")) (settleAssignment receipt.request.quantities settlement . (.usage)) assignment
-              case localUsage of
+              let prepare current = do
+                    usage <- settleAssignment receipt.request.quantities settlement current.usage
+                    active <- if outcome.phase == CallTransportUnknown then Right current.active else either (Left . InvalidResourceRequest) Right (previousAttempt current.active)
+                    let unknown = if outcome.phase == CallTransportUnknown || not (null outcome.missing) then nextAttempt current.unknown else current.unknown
+                    pure (usage, active, unknown)
+              case maybe (Left (InvalidResourceRequest "assignment missing")) prepare assignment of
                 Left err -> pure (Left (CallResourcesRefused err))
-                Right usage -> do
+                Right (usage, active, unknown) -> do
                   settled <- case receipt.rootId of
                     Nothing -> pure (Right Accepted)
                     Just rootId -> Resources.settleAttemptTx rootId receipt.request.attemptId settlement
@@ -219,8 +233,7 @@ finishSelectionCallTx receipt outcome = do
                     Left err -> Tx.condemn >> pure (Left (CallResourcesRefused err))
                     Right _ -> do
                       forM_ assignment \current -> do
-                        let active = current.active - (if outcome.phase == CallTransportUnknown then 0 else 1)
-                        Tx.statement (receipt.assignmentId, current & #active .~ active & #usage .~ usage & #unknown .~ (current.unknown + if outcome.phase == CallTransportUnknown || not (null outcome.missing) then 1 else 0)) updateAssignment
+                        Tx.statement (receipt.assignmentId, current & #active .~ active & #usage .~ usage & #unknown .~ unknown) updateAssignment
                       writeCall (SelectionCall receipt (Just outcome))
                       pure (Right Accepted)
 
@@ -262,14 +275,15 @@ reconcileSelectionCallTx receipt outcome = do
           newlyKnown = if fromUnknown then measured else Map.filterWithKey (\dimension _ -> dimension `elem` previous.missing) measured
       unless (fromUnknown || all (`Map.member` measured) previous.missing) (Left CallIdentityConflict)
       usage <- either (Left . CallResourcesRefused) Right (if fromUnknown then settleAssignment reservation settlement assignment.usage else settleUsage reservation newlyKnown assignment.usage)
-      pure (usage, assignment.active - if fromUnknown then 1 else 0, assignment.unknown - if null outcome.missing then 1 else 0, settlement)
+      active <- if fromUnknown then either (Left . CallResourcesRefused . InvalidResourceRequest) Right (previousAttempt assignment.active) else Right assignment.active
+      unknown <- if null outcome.missing then either (Left . CallResourcesRefused . InvalidResourceRequest) Right (previousAttempt assignment.unknown) else Right assignment.unknown
+      pure (usage, active, unknown, settlement)
     preserves old new = maybe True (\value -> new == Just value) old
 
-assignmentLimits :: CallLimits -> Either ResourceError Limits
-assignmentLimits limits = do
+assignmentLimits :: CallLimits -> Limits
+assignmentLimits limits =
   let unbounded = Map.fromList [(d, ExplicitlyUnbounded) | d <- [minBound .. maxBound]]
-  tokens <- traverse (either (Left . InvalidResourceRequest) Right . parseResourceAmount) limits.tokens
-  pure (maybe unbounded (\n -> Map.insert Tokens (Limited n) unbounded) tokens)
+   in maybe unbounded (\n -> Map.insert Tokens (Limited n) unbounded) limits.tokens
 
 settleAssignment :: Quantities -> Settlement -> Usage -> Either ResourceError Usage
 settleAssignment reservation settlement usage = case settlement of
@@ -314,7 +328,7 @@ getCall :: Statement Text (Maybe SelectionCall)
 getCall = preparable "SELECT state FROM shikigami.execution_selection_calls WHERE attempt_id=$1 FOR UPDATE" textParam (D.rowMaybe jsonRow)
 
 writeCall :: SelectionCall -> Transaction ()
-writeCall call = let AttemptId key = call.receipt.request.attemptId in Tx.statement (call.receipt.assignmentId, key, operationKey call.receipt.request.operationId, fromInteger call.receipt.ordinal, call) putCall
+writeCall call = let AttemptId key = call.receipt.request.attemptId in Tx.statement (call.receipt.assignmentId, key, operationKey call.receipt.request.operationId, fromInteger (attemptNumber call.receipt.ordinal), call) putCall
 
 putCall :: Statement (Text, Text, Text, Int64, SelectionCall) ()
 putCall = preparable "INSERT INTO shikigami.execution_selection_calls (assignment_id,attempt_id,operation_id,ordinal,state) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (attempt_id) DO UPDATE SET state=EXCLUDED.state" (contrazip5 textParam textParam textParam (E.param (E.nonNullable E.int8)) jsonParam) D.noResult
@@ -327,6 +341,3 @@ operationKey (OperationId key) = key
 
 countOperationCalls :: Statement (Text, Text) Integer
 countOperationCalls = preparable "SELECT count(*) FROM shikigami.execution_selection_calls WHERE assignment_id=$1 AND operation_id=$2" (contrazip2 textParam textParam) (D.singleRow (toInteger <$> D.column (D.nonNullable D.int8)))
-
-validCallCount :: Integer -> Bool
-validCallCount count = count >= 0 && count <= toInteger (maxBound :: Int64)

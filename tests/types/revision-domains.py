@@ -11,6 +11,7 @@ HEADER = '''{-# LANGUAGE DataKinds #-}
 module RevisionBoundary where
 import Data.Coerce (coerce)
 import Data.Text (Text)
+import Shikigami.Execution.Counter
 import Shikigami.Execution.Quantity
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Capability (WorkerCommand (CancelWorker))
@@ -18,6 +19,7 @@ import Shikigami.WorkerSession.Types (WorkerSessionId)
 import Shikigami.WorkerSession.Types qualified as WorkerSession
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.Transcript qualified as Execution
+import Shikigami.Execution.SelectionStore qualified as Calls
 '''
 CASES = [
     ("valid", '''value :: StateRevision "objective"
@@ -39,6 +41,24 @@ executionRevision root = root.revision
 ''', False),
     ("operation-is-not-execution-revision", '''executionRevision :: Execution.ExecutionState -> StateRevision "execution"
 executionRevision state = state.cursor
+''', False),
+    ("selection-call-limit", '''calls :: Calls.CallLimits -> Maybe (AttemptLimit "selection-calls")
+calls limits = limits.calls
+''', True),
+    ("active-limit-is-not-call-limit", '''calls :: Calls.CallLimits -> Maybe (AttemptLimit "selection-calls")
+calls limits = limits.concurrency
+''', False),
+    ("root-attempt-count", '''active :: Resources.Root -> AttemptCount "root-active"
+active root = root.active
+''', True),
+    ("root-unknown-is-not-active", '''active :: Resources.Root -> AttemptCount "root-active"
+active root = root.unknown
+''', False),
+    ("attempt-count-scope-coercion", '''wrong :: AttemptCount "root-active" -> AttemptCount "root-unknown"
+wrong = coerce
+''', False),
+    ("unchecked-attempt-count", '''negative :: AttemptCount "root-active"
+negative = -1
 ''', False),
     ("resource-amount", '''amount :: Integer -> Either Text ResourceAmount
 amount = parseResourceAmount
@@ -89,6 +109,10 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
                 "event-is-not-message-sequence": ["Couldn't match type", "worker-message", "worker-event"],
                 "execution-root-is-not-execution": ["Couldn't match type", "execution-root", "execution"],
                 "operation-is-not-execution-revision": ["Couldn't match type", "execution-operation", "execution"],
+                "active-limit-is-not-call-limit": ["Couldn't match type", "selection-active", "selection-calls"],
+                "root-unknown-is-not-active": ["Couldn't match type", "root-active", "root-unknown"],
+                "attempt-count-scope-coercion": ["Couldn't match type", "root-active", "root-unknown"],
+                "unchecked-attempt-count": ["AttemptCount", "Num"],
                 "unchecked-resource-arithmetic": ["ResourceAmount", "Num"],
                 "unchecked-resource-coercion": ["ResourceAmount", "Integer"],
                 "wrong-root-revision": ["Couldn't match type", "worker-session", "execution-root"],

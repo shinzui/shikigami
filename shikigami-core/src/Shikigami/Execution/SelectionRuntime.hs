@@ -46,6 +46,7 @@ import Shikigami.Behavior.Run (BehaviorEnv (..))
 import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..), versionedDigest)
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Execution.Attempt (ModelCallPreparation (..))
+import Shikigami.Execution.Counter (attemptNumber)
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Quantity (parseResourceAmount)
 import Shikigami.Execution.Resources qualified as Resources
@@ -109,7 +110,7 @@ preparePinnedExecutionCall env@SelectionRuntime {transact} selection operation a
           root <- traverse (\root -> transact (Resources.inspectRootTx root)) selection.rootId
           pure do
             stored <- traverse (either (const (Left "execution resource storage is unavailable")) (either (const (Left "execution root is unavailable")) Right)) root
-            let limits = Calls.callLimitsFor selection env.profile
+            limits <- first (const "pinned execution profile has invalid limits") (Calls.callLimitsFor selection env.profile)
             (quantities, policy) <- reservation limits stored selected.model options
             pure (Resources.AttemptRequest attempt operation quantities policy, ModelCallPreparation limits (requestFingerprint selection context options))
 
@@ -122,9 +123,9 @@ narrowOutput options (Just wanted) = do
   pure (options & #maxTokens .~ (Just tokens))
 
 buildExecutionEnvWith :: Maybe PreparedSelectionCall -> SelectionRuntime -> ExecutionSelection -> IO (Either ExecutionSelectionFailure BehaviorEnv)
-buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = case resolvePinnedEnv env selection of
+buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = case resolved of
   Left refusal -> pure (Left refusal)
-  Right (binding, selectedEnv) -> do
+  Right (binding, selectedEnv, limits) -> do
     handler <- case selection.source of
       ProcessDefault -> lookupApiProviderWith (fromMaybe globalProviderRegistry env.baseEnv.providerRegistry) (Model.api (bindingModel binding))
       DeclaredAlias -> pure $ case [p | p <- env.providers, p.apiTag == Model.api (bindingModel binding)] of [p] -> Just p; _ -> Nothing
@@ -133,10 +134,13 @@ buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = c
       Just realHandler -> do
         realRegistry <- newProviderRegistryFrom [realHandler]
         consumed <- newIORef False
-        private <- newProviderRegistryFrom [wrap consumed binding realHandler realRegistry]
+        private <- newProviderRegistryFrom [wrap limits consumed binding realHandler realRegistry]
         pure (Right (selectedEnv & #providerRegistry .~ Just private))
   where
-    limits = Calls.callLimitsFor selection env.profile
+    resolved = do
+      (binding, selectedEnv) <- resolvePinnedEnv env selection
+      limits <- either (const (Left ExecutionProfileConflict)) Right (Calls.callLimitsFor selection env.profile)
+      pure (binding, selectedEnv, limits)
     minimumStrength options =
       max
         (maybe Evidence.EvidenceRequestedOnly (\p -> p.profile.minimumEvidenceStrength) env.profile)
@@ -147,7 +151,7 @@ buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = c
             Nothing -> Evidence.EvidenceRequestedOnly
         )
 
-    wrap consumed binding handler registry =
+    wrap limits consumed binding handler registry =
       ( handler
           & #complete
           .~ ( \model context options -> do
@@ -155,7 +159,7 @@ buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = c
                  if not fresh
                    then errorResponseAt model "PreparedAttemptAlreadyConsumed"
                    else mask \restore -> do
-                     prepared <- prepare binding handler model context options
+                     prepared <- prepare limits binding handler model context options
                      case prepared of
                        Left response -> do
                          forM_ preparedCall \prepared -> prepared.commit prepared.receipt (Calls.CallOutcome Calls.CallRefused Map.empty [] Nothing Nothing Nothing) (Just response)
@@ -173,7 +177,7 @@ buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = c
                  if not fresh
                    then pure (liftCompleteToStream (\_ _ _ -> errorResponseAt model "PreparedAttemptAlreadyConsumed") model context options)
                    else do
-                     prepared <- prepare binding handler model context options
+                     prepared <- prepare limits binding handler model context options
                      case prepared of
                        Left response -> do
                          forM_ preparedCall \prepared -> prepared.commit prepared.receipt (Calls.CallOutcome Calls.CallRefused Map.empty [] Nothing Nothing Nothing) (Just response)
@@ -197,7 +201,7 @@ buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = c
       Nothing -> pure True
       Just _ -> atomicModifyIORef' used (\already -> (True, not already))
 
-    prepare binding handler model context options = do
+    prepare limits binding handler model context options = do
       let refuse detail = Left <$> errorResponseAt model detail
           base = effectiveBindingOptions env.profile binding
           semantic value = toJSON (value & #apiKey .~ (Nothing) & #evidence .~ (Nothing) & #maxTokens .~ (Nothing) & #timeoutMs .~ (Nothing) & #responseFormat .~ (Nothing) & #metadata .~ (Map.delete "shikigami_call_id" (Options.metadata value)))
@@ -261,7 +265,7 @@ buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = c
               boundedOptions = (options & #timeoutMs .~ (case timeouts of [] -> Nothing; xs -> Just (minimum xs)))
               AttemptId attempt = receipt.request.attemptId
               strength = max (minimumStrength (bindingOptions binding)) (minimumStrength boundedOptions)
-              correlated = configureEvidenceCall env.runId (callCorrelationId env.runId attempt 0) (fromInteger receipt.ordinal) Nothing strength boundedOptions
+              correlated = configureEvidenceCall env.runId (callCorrelationId env.runId attempt 0) (fromInteger (attemptNumber receipt.ordinal)) Nothing strength boundedOptions
               effective = case Model.api model of
                 AnthropicMessages -> (correlated & #metadata .~ (Options.metadata options))
                 OpenAIChatCompletions -> (correlated & #metadata .~ (Options.metadata options))

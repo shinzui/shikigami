@@ -22,6 +22,7 @@ import Shikigami.Agent.Principal (AgentIdentity (CompatibilityIdentity))
 import Shikigami.App (AppEffects, runAppIO)
 import Shikigami.Capability.Provider (DurableAdapter (..), DurableToolContract (..))
 import Shikigami.Execution.Attempt qualified as Attempt
+import Shikigami.Execution.Counter (AttemptCount, parseAttemptCount)
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Resources (Root (..))
@@ -157,7 +158,7 @@ tests fixture =
         stillUnknown.phase @?= Attempt.AttemptUncertain
         Just admission <- pure snapshot.workspace
         root <- stored file (Roots.inspectRoot admission.rootId)
-        root.unknown @?= 2
+        root.unknown @?= (fixtureCount 2)
         stored file (Roots.setRootControl admission.rootId root.revision True Nothing)
         Just (waiting, _, _) <- stored file (Execution.inspectExecution snapshot.executionId)
         let claim = Attempt.AttemptClaim reference request.owner request.generation
@@ -173,8 +174,8 @@ tests fixture =
         settled <- stored file (Roots.inspectRoot admission.rootId)
         -- The fixture model has separate unreported invoice billing. Factual
         -- tool settlement must preserve that unrelated conservative hold.
-        settled.unknown @?= 1
-        settled.active @?= 0
+        settled.unknown @?= (fixtureCount 1)
+        settled.active @?= (fixtureCount 0)
         settled.cancelled @?= True
         readIORef calls >>= (@?= (1, 1)),
       testCase "independent receipt recovery preserves the next accepted tool after replay authority is revoked" $ withProcessForTools 2 fixture id False \file runtime observed calls snapshot reference -> do
@@ -399,3 +400,6 @@ rootCancellationCase fixture stopAcknowledged = do
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureCount :: Integer -> AttemptCount scope
+fixtureCount number = either (error . show) id (parseAttemptCount number)

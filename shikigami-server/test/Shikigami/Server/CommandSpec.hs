@@ -26,6 +26,7 @@ import Settei.Env (envSnapshot, environmentSource)
 import Shikigami.Agent.Approval (ApprovalDecision (..))
 import Shikigami.App.Config (AppConfig (..), Role (..), environmentBindings, revealSecretText)
 import Shikigami.App.Config.Load (ConfigOptions (..), ConfigRun (..), DiagnosticMode (..), appConfigRun)
+import Shikigami.Execution.Counter (nextAttempt, noAttempts)
 import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Server.Command (adminInfo, adminPrefs, adminSubcommands)
@@ -89,7 +90,7 @@ tests =
         let now = UTCTime (fromGregorian 2026 10 27) 0
             envelope = Resources.Envelope (Map.singleton Resources.Tokens (Resources.Limited (fixtureAmount 100))) now
             usage = Resources.Usage (Map.singleton Resources.Tokens (fixtureAmount 3)) (Map.singleton Resources.Tokens (fixtureAmount 10))
-            root = Resources.Root envelope (fixtureRevision 0) False Nothing False 1 1 (Map.singleton Resources.Tokens (fixtureAmount 3)) usage
+            root = Resources.Root envelope (fixtureRevision 0) False Nothing False (nextAttempt noAttempts) (nextAttempt noAttempts) (Map.singleton Resources.Tokens (fixtureAmount 3)) usage
             result = resourceView now root
         case result of
           Aeson.Object fields -> do

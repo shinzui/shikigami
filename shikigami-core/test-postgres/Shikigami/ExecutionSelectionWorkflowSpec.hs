@@ -25,6 +25,10 @@ import Data.Text.Encoding qualified as TextEncoding
 import Data.Time (UTCTime, addUTCTime, getCurrentTime)
 import Data.UUID qualified as UUID
 import Effectful (Eff)
+import Hasql.Decoders qualified as D
+import Hasql.Encoders qualified as E
+import Hasql.Statement (preparable)
+import Hasql.Transaction qualified as Tx
 import Keiro.Outbox (listOutbox)
 import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
 import Keiro.Workflow.Awakeable (AwakeableId (..))
@@ -52,6 +56,7 @@ import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
 import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..), versionedDigest)
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Execution.Attempt qualified as Attempt
+import Shikigami.Execution.Counter (AttemptCount, AttemptLimit, noAttempts, parseAttemptCount, parseAttemptLimit)
 import Shikigami.Execution.Driver qualified as Driver
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Foreground (driveExecutionForeground)
@@ -103,9 +108,9 @@ tests fixture =
                   response <- completeBehaviorRequest selected selected.model (systemUser "system" "marker") selected.options
                   responseError response @?= Nothing
                   Just (assignment, facts) <- run app (Calls.inspectSelection selection.assignmentId)
-                  assignment.attempts @?= 1
-                  assignment.active @?= 0
-                  assignment.unknown @?= 1
+                  assignment.attempts @?= (fixtureCount 1)
+                  assignment.active @?= (fixtureCount 0)
+                  assignment.unknown @?= (fixtureCount 1)
                   length facts @?= 1
                   (head facts).receipt.rootId @?= Just root
                   assertBool "request digest only" (not ("marker" `Text.isInfixOf` Text.pack (show facts)))
@@ -119,7 +124,7 @@ tests fixture =
           map (\v -> lookupField "model" v) bodies @?= map (Just . Model.modelId . bindingModel) bindings
           map (\v -> lookupReasoning v) bodies @?= map Just ["low", "medium", "high"]
           snapshot <- expectRight =<< run app (Roots.inspectRoot root)
-          snapshot.active @?= 0
+          snapshot.active @?= (fixtureCount 0)
           Map.lookup ModelAttempts snapshot.usage.settled @?= Just (fixtureAmount 3)
           assertBool "different selection identities share one root" (all ((== Just root) . (.rootId)) selections),
       testCase "out-of-range HTTP usage retains its ceiling while valid usage settles exactly" $
@@ -134,8 +139,8 @@ tests fixture =
               responseError response @?= Nothing
               length <$> observed >>= (@?= 1)
               snapshot <- expectRight =<< run app (Roots.inspectRoot root)
-              snapshot.active @?= 0
-              snapshot.unknown @?= 1
+              snapshot.active @?= (fixtureCount 0)
+              snapshot.unknown @?= (fixtureCount 1)
               Map.lookup ModelAttempts snapshot.usage.settled @?= Just (fixtureAmount 1)
               if overflow
                 then do
@@ -190,7 +195,7 @@ tests fixture =
           (_, state) <- expectRight =<< run app (Durable.loadExecution access)
           state.cursor @?= (fixtureRevision 1)
           rootState <- expectRight =<< run app (Roots.inspectRoot root)
-          rootState.active @?= 0
+          rootState.active @?= (fixtureCount 0)
           Map.lookup ModelAttempts rootState.usage.settled @?= Just (fixtureAmount 1),
       testCase "executor restart repairs a lost wake without repeating the HTTP call" $
         withRuntime fixture \app store base -> withHttp \bindings observed -> do
@@ -227,7 +232,7 @@ tests fixture =
           Just wake <- run app (lookupAwakeable UUID.nil)
           wake.status @?= Awakeable.Completed
           rootState <- expectRight =<< run app (Roots.inspectRoot root)
-          rootState.active @?= 0
+          rootState.active @?= (fixtureCount 0)
           Map.lookup ModelAttempts rootState.usage.settled @?= Just (fixtureAmount 1),
       testCase "a terminal HTTP error releases transport capacity while retaining unknown billing" $
         withRuntime fixture \app store base -> withHttpWithFailure True \bindings observed -> do
@@ -240,10 +245,10 @@ tests fixture =
           assertBool "terminal provider error" (responseError response /= Nothing)
           observed >>= (\bodies -> length bodies @?= 1)
           rootState <- expectRight =<< run app (Roots.inspectRoot root)
-          rootState.active @?= 0
-          rootState.unknown @?= 1
+          rootState.active @?= (fixtureCount 0)
+          rootState.unknown @?= (fixtureCount 1)
           Just (assignment, [call]) <- run app (Calls.inspectSelection selection.assignmentId)
-          assignment.active @?= 0
+          assignment.active @?= (fixtureCount 0)
           case call.outcome of Just outcome -> outcome.phase @?= Calls.CallTerminal; _ -> assertFailure "missing terminal call facts",
       testCase "fresh authority refusal after reservation sends no request" $
         withRuntime fixture \app store base -> withHttp \bindings observed -> do
@@ -259,8 +264,8 @@ tests fixture =
           assertBool "typed provider refusal" (responseError response /= Nothing)
           observed >>= (@?= [])
           snapshot <- expectRight =<< run app (Roots.inspectRoot root)
-          snapshot.active @?= 0
-          snapshot.unknown @?= 0,
+          snapshot.active @?= (fixtureCount 0)
+          snapshot.unknown @?= (fixtureCount 0),
       testCase "callers cannot weaken a pinned binding evidence requirement" $
         withRuntime fixture \app store base -> withHttp \bindings observed -> do
           now <- getCurrentTime
@@ -291,7 +296,7 @@ tests fixture =
           let catalog = mustRight (modelCatalog [])
               fallback = mustRight (defaultBinding stubModel Options.emptyOptions)
               selection = mustRight (resolveExecutionSelection "ledger-assignment" catalog (Right fallback) Nothing Nothing Nothing Nothing (Just root) now)
-              limits = Calls.CallLimits (Just 3) (Just 1) (Just 1) Nothing Nothing
+              limits = Calls.CallLimits (Just (fixtureLimit 3)) (Just (fixtureLimit 1)) (Just (fixtureLimit 1)) Nothing Nothing
               request key = AttemptRequest (AttemptId key) (OperationId "logical") (Map.fromList [(ActiveWork, (fixtureAmount 1)), (ModelAttempts, (fixtureAmount 1))]) AdmittedUnknownUsage
               reserve key = run app (Calls.reserveSelectionCall selection limits (request key) "digest" now)
           (a, b) <- concurrently (reserve "one") (reserve "two")
@@ -308,12 +313,16 @@ tests fixture =
           run app (Calls.finishSelectionCall retried terminal) >>= (@?= Right Accepted)
           reserve "exhausted" >>= (@?= Left Calls.CallRetryLimitExceeded)
           Just (assignment, facts) <- run app (Calls.inspectSelection selection.assignmentId)
-          assignment.attempts @?= 2
-          assignment.active @?= 0
+          assignment.attempts @?= (fixtureCount 2)
+          assignment.active @?= (fixtureCount 0)
           length facts @?= 2
           snapshot <- expectRight =<< run app (Roots.inspectRoot root)
           Map.lookup ModelAttempts snapshot.usage.settled @?= Just (fixtureAmount 2)
           Map.lookup Tokens snapshot.known @?= Just (fixtureAmount 6),
+      testCase "assignment active-count underflow refuses before coupled root settlement" $
+        refusedAssignmentSettlement fixture False,
+      testCase "assignment unknown-count underflow refuses before coupled root reconciliation" $
+        refusedAssignmentSettlement fixture True,
       testCase "new Skill parent awaits the driver and completes after its provider binding is retired" $
         withRuntime fixture \app store base -> withHttp \bindings observed -> do
           _ <- expectRight =<< run app Catalog.registerProjectionCatalog
@@ -555,3 +564,47 @@ fixtureRevision value = either (error . show) id (parseRevision value)
 
 fixtureAmount :: Integer -> ResourceAmount
 fixtureAmount amount = either (error . show) id (parseResourceAmount amount)
+
+fixtureCount :: Integer -> AttemptCount scope
+fixtureCount count = either (error . show) id (parseAttemptCount count)
+
+fixtureLimit :: Integer -> AttemptLimit scope
+fixtureLimit number = either (error . show) id (parseAttemptLimit number)
+
+-- Synthetic boundary state in the application-owned selection table. Both the
+-- actual receipt and root are acquired through production admission first.
+refusedAssignmentSettlement :: DatabaseFixture -> Bool -> IO ()
+refusedAssignmentSettlement fixture reconcile = withRuntime fixture \app _ _ -> do
+  now <- getCurrentTime
+  root <- seed app now []
+  let catalog = mustRight (modelCatalog [])
+      fallback = mustRight (defaultBinding stubModel Options.emptyOptions)
+      selection = mustRight (resolveExecutionSelection "counter-refusal" catalog (Right fallback) Nothing Nothing Nothing Nothing (Just root) now)
+      limits = mustRight (Calls.callLimitsFor selection Nothing)
+      request = AttemptRequest (AttemptId "counter-refusal") (OperationId "counter-operation") (Map.fromList [(ActiveWork, fixtureAmount 1), (ModelAttempts, fixtureAmount 1), (Tokens, fixtureAmount 10), (CostMicroUsd, fixtureAmount 0)]) EnforcedCeiling
+      terminal = Calls.CallOutcome Calls.CallTerminal (Map.fromList [(Tokens, fixtureAmount 3), (CostMicroUsd, fixtureAmount 0)]) [] Nothing Nothing Nothing
+  admitted <- expectRight =<< run app (Calls.reserveSelectionCall selection limits request "counter-fingerprint" now)
+  receipt <- case admitted of Calls.NewCall value -> pure value; _ -> assertFailure "new admitted call expected"
+  if reconcile
+    then run app (Calls.finishSelectionCall receipt (Calls.CallOutcome Calls.CallTransportUnknown Map.empty [Tokens, CostMicroUsd] Nothing Nothing Nothing)) >>= (@?= Right Accepted)
+    else pure ()
+  Just (before, facts) <- run app (Calls.inspectSelection selection.assignmentId)
+  beforeRoot <- expectRight =<< run app (Roots.inspectRoot root)
+  let invalid = if reconcile then before & #unknown .~ noAttempts else before & #active .~ noAttempts
+  run
+    app
+    ( runTransaction
+        ( Tx.statement
+            (toJSON invalid)
+            ( preparable
+                "UPDATE shikigami.execution_selections SET state=$1 WHERE assignment_id='counter-refusal'"
+                (E.param (E.nonNullable E.jsonb))
+                D.noResult
+            )
+        )
+    )
+  result <- run app (if reconcile then runTransaction (Calls.reconcileSelectionCallTx receipt terminal) else Calls.finishSelectionCall receipt terminal)
+  assertBool "count underflow refused" (case result of Left (Calls.CallResourcesRefused (InvalidResourceRequest _)) -> True; _ -> False)
+  run app (Calls.inspectSelection selection.assignmentId) >>= (@?= Just (invalid, facts))
+  afterRoot <- expectRight =<< run app (Roots.inspectRoot root)
+  afterRoot @?= beforeRoot

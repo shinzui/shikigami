@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Pure admission rules. Cost is always integer millionths of one USD;
 -- counters and ceilings use integers, never floating point arithmetic.
 module Shikigami.Execution.Resources where
@@ -6,6 +8,7 @@ import Data.Aeson (FromJSONKey, ToJSONKey)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
+import Shikigami.Execution.Counter
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Quantity
 import Shikigami.Prelude
@@ -48,8 +51,8 @@ data Root = Root
     cancelled :: !Bool,
     activeLimit :: !(Maybe ResourceAmount),
     overage :: !Bool,
-    active :: !Integer,
-    unknown :: !Integer,
+    active :: !(AttemptCount "root-active"),
+    unknown :: !(AttemptCount "root-unknown"),
     known :: !Quantities,
     usage :: !Usage
   }

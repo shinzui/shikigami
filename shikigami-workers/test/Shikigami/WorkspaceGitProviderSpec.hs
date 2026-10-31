@@ -22,6 +22,7 @@ import Shikigami.Agent.Name (AgentName (..))
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Capability.Provider (DurableAdapter (..))
 import Shikigami.Execution.Attempt qualified as Attempt
+import Shikigami.Execution.Counter (AttemptCount, parseAttemptCount)
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy.Types
@@ -149,8 +150,8 @@ tests fixture =
         (_, state) <- right =<< run env (Execution.loadExecution access)
         state.cursor @?= (fixtureRevision 2)
         root <- right =<< run env (Roots.inspectRoot binding.request.rootId)
-        root.active @?= 0
-        root.unknown @?= 1,
+        root.active @?= (fixtureCount 0)
+        root.unknown @?= (fixtureCount 1),
       testCase "replacement observation never republishes and independently closes the superseded original" $ withGit fixture "commit" \env binding snapshot access reference runtime profile backend -> do
         profileReady env binding profile
         Bytes.writeFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") "new dependency\n"
@@ -374,3 +375,6 @@ assertRefused _ = assertFailure "expected bounded refusal"
 
 fixtureRevision :: Integer -> StateRevision scope
 fixtureRevision value = either (error . show) id (parseRevision value)
+
+fixtureCount :: Integer -> AttemptCount scope
+fixtureCount number = either (error . show) id (parseAttemptCount number)

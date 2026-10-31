@@ -20,6 +20,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Decl (mkDelegationBudget)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Delegation.BudgetStore
+import Shikigami.Execution.Counter (AttemptCount, noAttempts, parseAttemptCount)
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
 import Shikigami.Execution.Resources
@@ -42,7 +43,7 @@ tests fixture =
           "one winner, one exhausted, so dispatcher can run exactly once"
           ((a == Right Accepted && b == Left (ResourceExhausted ActiveWork)) || (b == Right Accepted && a == Left (ResourceExhausted ActiveWork)))
         snapshot <- root env
-        snapshot.active @?= 1,
+        snapshot.active @?= (fixtureCount 1),
       testCase "all dimensions reserve together or none" $ withFixture fixture \env -> do
         seed env [(Tokens, (fixtureAmount 5))]
         reserveModel env "one"
@@ -89,14 +90,14 @@ tests fixture =
         run env (settleAttempt rid (AttemptId "a") (UnknownUsage "transport outcome unknown")) >>= (@?= Right Accepted)
         snapshot <- root env
         run env (inspectAttempt rid (AttemptId "a")) >>= (@?= Right (Just (Attempt (attempt "a" "one" 10) (Just (UnknownUsage "transport outcome unknown")))))
-        snapshot.unknown @?= 1
-        snapshot.active @?= 1
+        snapshot.unknown @?= (fixtureCount 1)
+        snapshot.active @?= (fixtureCount 1)
         run env (begin "b" "one") >>= (@?= Left (ResourceExhausted ActiveWork))
         run env (settleAttempt rid (AttemptId "a") (KnownUsage (measure 3))) >>= (@?= Left SettlementConflict)
         run env (reconcileAttempt rid (AttemptId "a") (measure 3)) >>= (@?= Right Accepted)
         final <- root env
-        final.unknown @?= 0
-        final.active @?= 0
+        final.unknown @?= (fixtureCount 0)
+        final.active @?= (fixtureCount 0)
         Map.lookup Tokens final.known @?= Just (fixtureAmount 3),
       testCase "racing identical settlements commit only once" $ withFixture fixture \env -> do
         seed env []
@@ -108,31 +109,12 @@ tests fixture =
         run env (settleAttempt rid (AttemptId "a") (KnownUsage (measure 4))) >>= (@?= Left SettlementConflict)
         snapshot <- root env
         Map.lookup Tokens snapshot.known @?= Just (fixtureAmount 3),
-      testCase "known-counter overflow refuses before changing the root or attempt" $ withFixture fixture \env -> do
-        seed env []
-        reserveModel env "one"
-        run env (begin "a" "one") >>= (@?= Right Accepted)
-        before <- root env
-        beforeAttempt <- run env (inspectAttempt rid (AttemptId "a"))
-        let full = before & #known .~ Map.singleton ModelAttempts (fixtureAmount (toInteger (maxBound :: Int64)))
-        -- Boundary-only synthetic state in the application's own table. No
-        -- framework journal, receipt or projection row is edited.
-        run
-          env
-          ( runTransaction
-              ( Tx.statement
-                  (Aeson.toJSON full)
-                  ( preparable
-                      "UPDATE shikigami.execution_roots SET state=$1 WHERE root_id='root'"
-                      (E.param (E.nonNullable E.jsonb))
-                      D.noResult
-                  )
-              )
-          )
-        result <- run env (settleAttempt rid (AttemptId "a") (KnownUsage (measure 3)))
-        assertBool "counter overflow refused" (case result of Left (InvalidResourceRequest _) -> True; _ -> False)
-        root env >>= (@?= full)
-        run env (inspectAttempt rid (AttemptId "a")) >>= (@?= beforeAttempt),
+      testCase "known-counter overflow refuses before changing the root or attempt" $
+        refusedSettlement fixture False (\before -> before & #known .~ Map.singleton ModelAttempts (fixtureAmount (toInteger (maxBound :: Int64)))),
+      testCase "active-count underflow refuses before changing the root or attempt" $
+        refusedSettlement fixture False (\before -> before & #active .~ noAttempts),
+      testCase "unknown-count underflow refuses reconciliation without changing the root or attempt" $
+        refusedSettlement fixture True (\before -> before & #unknown .~ noAttempts),
       testCase "overage is retained and stops future dispatch" $ withFixture fixture \env -> do
         seed env []
         reserveModel env "one"
@@ -160,7 +142,7 @@ tests fixture =
         run env (beginAttempt rid (fixtureRevision 1) (attempt "b" "one" 10) now) >>= (@?= Left (ResourceExhausted ActiveWork))
         settle env "a" 5
         snapshot <- root env
-        snapshot.active @?= 0
+        snapshot.active @?= (fixtureCount 0)
         snapshot.cancelled @?= False,
       testCase "unknown policy cannot claim a finite token cap" $ withFixture fixture \env -> do
         seed env []
@@ -265,16 +247,16 @@ tests fixture =
         run env (settleAttempt rid (AttemptId "a") partial) >>= (@?= Right Accepted)
         run env (settleAttempt rid (AttemptId "a") partial) >>= (@?= Right AlreadyAccepted)
         snapshot <- root env
-        snapshot.active @?= 0
-        snapshot.unknown @?= 1
+        snapshot.active @?= (fixtureCount 0)
+        snapshot.unknown @?= (fixtureCount 1)
         Map.lookup CostMicroUsd snapshot.usage.held @?= Just (fixtureAmount 10)
         Map.lookup Tokens snapshot.known @?= Just (fixtureAmount 3)
         run env (beginAttempt rid (fixtureRevision 0) (AttemptRequest (AttemptId "b") (OperationId "one") (Map.fromList [(ActiveWork, (fixtureAmount 1)), (ModelAttempts, (fixtureAmount 1)), (Tokens, (fixtureAmount 10)), (CostMicroUsd, (fixtureAmount 1))]) EnforcedCeiling) now) >>= (@?= Left (ResourceExhausted CostMicroUsd))
         run env (reconcileAttempt rid (AttemptId "a") (Map.fromList [(Tokens, (fixtureAmount 4)), (CostMicroUsd, (fixtureAmount 3))])) >>= (@?= Left SettlementConflict)
         run env (reconcileAttempt rid (AttemptId "a") (Map.fromList [(Tokens, (fixtureAmount 3)), (CostMicroUsd, (fixtureAmount 3))])) >>= (@?= Right Accepted)
         final <- root env
-        final.active @?= 0
-        final.unknown @?= 0
+        final.active @?= (fixtureCount 0)
+        final.unknown @?= (fixtureCount 0)
         Map.lookup ModelAttempts final.known @?= Just (fixtureAmount 1)
         Map.lookup Tokens final.known @?= Just (fixtureAmount 3)
         Map.lookup CostMicroUsd final.known @?= Just (fixtureAmount 3)
@@ -332,3 +314,37 @@ fixtureRevision value = either (error . show) id (parseRevision value)
 
 fixtureAmount :: Integer -> ResourceAmount
 fixtureAmount amount = either (error . show) id (parseResourceAmount amount)
+
+fixtureCount :: Integer -> AttemptCount scope
+fixtureCount count = either (error . show) id (parseAttemptCount count)
+
+-- Isolated boundary seeds use only the application's own table. No framework
+-- journal, receipt or projection is edited, and successful admission precedes
+-- each refusal so unrelated setup failure cannot satisfy the assertion.
+refusedSettlement :: DatabaseFixture -> Bool -> (Root -> Root) -> IO ()
+refusedSettlement fixture reconcile change = withFixture fixture \env -> do
+  seed env []
+  reserveModel env "one"
+  run env (begin "a" "one") >>= (@?= Right Accepted)
+  if reconcile
+    then run env (settleAttempt rid (AttemptId "a") (UnknownUsage "fixture missing billing")) >>= (@?= Right Accepted)
+    else pure ()
+  before <- root env
+  beforeAttempt <- run env (inspectAttempt rid (AttemptId "a"))
+  let invalid = change before
+  run
+    env
+    ( runTransaction
+        ( Tx.statement
+            (Aeson.toJSON invalid)
+            ( preparable
+                "UPDATE shikigami.execution_roots SET state=$1 WHERE root_id='root'"
+                (E.param (E.nonNullable E.jsonb))
+                D.noResult
+            )
+        )
+    )
+  result <- run env (if reconcile then reconcileAttempt rid (AttemptId "a") (measure 3) else settleAttempt rid (AttemptId "a") (KnownUsage (measure 3)))
+  assertBool "invalid accounting refused" (case result of Left (InvalidResourceRequest _) -> True; _ -> False)
+  root env >>= (@?= invalid)
+  run env (inspectAttempt rid (AttemptId "a")) >>= (@?= beforeAttempt)

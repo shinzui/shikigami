@@ -35,6 +35,7 @@ import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
+import Shikigami.Execution.Counter
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Quantity
 import Shikigami.Execution.Resources
@@ -50,7 +51,7 @@ enrollRootTx :: ExecutionRootId -> Envelope -> Transaction (Either ResourceError
 enrollRootTx (ExecutionRootId key) envelope = case validateKey key of
   Left err -> pure (Left err)
   Right () -> do
-    let initial = Root envelope initialRevision False Nothing False 0 0 Map.empty emptyUsage
+    let initial = Root envelope initialRevision False Nothing False noAttempts noAttempts Map.empty emptyUsage
     inserted <- Tx.statement (key, initial) insertRoot
     stored <- Tx.statement key lockRoot
     pure case stored of
@@ -114,11 +115,11 @@ beginAttemptTx root expected request now = withRoot root \state -> do
                 Left err -> pure (Left err)
                 Right next -> do
                   writeAttempt root (Attempt request Nothing)
-                  saveRoot root (next & #active .~ state.active + 1)
+                  saveRoot root (next & #active .~ nextAttempt state.active)
                   pure (Right Accepted)
   where
     checkActive state = case Map.lookup ActiveWork (effectiveLimits state) of
-      Just (Limited n) | state.active >= amountUnits n -> Left (ResourceExhausted ActiveWork)
+      Just (Limited n) | attemptNumber state.active >= amountUnits n -> Left (ResourceExhausted ActiveWork)
       _ -> Right ()
 
 settleAttempt :: (Store :> es) => ExecutionRootId -> AttemptId -> Settlement -> Eff es (Either ResourceError Admission)
@@ -155,7 +156,7 @@ recordSettlement reconcile root attemptId outcome = withRoot root \state -> do
             | Text.null reason || Text.length reason > 512 -> pure (Left (InvalidResourceRequest "unknown reason must contain 1..512 characters"))
             | otherwise -> do
                 writeAttempt root (Attempt attempt.request (Just outcome))
-                saveRoot root (state & #unknown .~ state.unknown + 1)
+                saveRoot root (state & #unknown .~ nextAttempt state.unknown)
                 pure (Right Accepted)
           KnownUsage measured -> do
             operation <- readOperation root attempt.request.operationId
@@ -176,24 +177,15 @@ recordSettlement reconcile root attemptId outcome = withRoot root \state -> do
                       preservePartial
                       known <- add counters newlyMeasured >>= add state.known
                       settled <- settleUsage reservation newlyMeasured usage
-                      pure (settled, known)
+                      active <- if wasPartial attempt then Right state.active else either (Left . InvalidResourceRequest) Right (previousAttempt state.active)
+                      unknown <- if wasUncertain attempt then either (Left . InvalidResourceRequest) Right (previousAttempt state.unknown) else Right state.unknown
+                      pure (settled, known, active, unknown)
                 case scope >>= prepare of
                   Left err -> pure (Left err)
-                  Right (usage, known) -> do
+                  Right (usage, known, active, unknown) -> do
                     next <- saveScopeUsage root state operationRequest.allocationId usage
                     let exceeded = any (\(d, n) -> Map.member d reservation && n > Map.findWithDefault zeroAmount d reservation) (Map.toList newlyMeasured)
-                        recorded =
-                          next
-                            & #active
-                            .~ state.active
-                            - (if wasPartial attempt then 0 else 1)
-                              & #unknown
-                              .~ state.unknown
-                            - (if wasUncertain attempt then 1 else 0)
-                              & #known
-                              .~ known
-                              & #overage
-                              .~ (state.overage || exceeded)
+                        recorded = next & #active .~ active & #unknown .~ unknown & #known .~ known & #overage .~ (state.overage || exceeded)
                     writeAttempt root (Attempt attempt.request (Just outcome))
                     saveRoot root recorded
                     pure (Right Accepted)
@@ -210,14 +202,16 @@ recordSettlement reconcile root attemptId outcome = withRoot root \state -> do
                         prepare (_, _, usage) = do
                           known <- add counters measured >>= add state.known
                           settled <- settleUsage knownReservation measured usage
-                          pure (settled, known)
+                          active <- either (Left . InvalidResourceRequest) Right (previousAttempt state.active)
+                          let unknown = if wasUncertain attempt then state.unknown else nextAttempt state.unknown
+                          pure (settled, known, active, unknown)
                     case scope >>= prepare of
                       Left err -> pure (Left err)
-                      Right (usage, known) -> do
+                      Right (usage, known, active, unknown) -> do
                         next <- saveScopeUsage root state operationRequest.allocationId usage
                         let exceeded = any (\(d, n) -> Map.member d knownReservation && n > Map.findWithDefault zeroAmount d knownReservation) (Map.toList measured)
                         writeAttempt root (Attempt attempt.request (Just outcome))
-                        saveRoot root (next & #active .~ (state.active - 1) & #unknown .~ (state.unknown + if wasUncertain attempt then 0 else 1) & #known .~ known & #overage .~ (state.overage || exceeded))
+                        saveRoot root (next & #active .~ active & #unknown .~ unknown & #known .~ known & #overage .~ (state.overage || exceeded))
                         pure (Right Accepted)
   where
     wasUncertain attempt = case attempt.outcome of

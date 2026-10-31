@@ -33,6 +33,7 @@ import Shikigami.Capability.Provider
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Decision.ModelCatalog (modelCatalog)
 import Shikigami.Execution.Attempt qualified as Attempt
+import Shikigami.Execution.Counter (AttemptCount, parseAttemptCount)
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy.Types
@@ -102,8 +103,8 @@ tests fixture =
         empty.inspected @?= 0
         empty.cursor @?= Nothing
         root <- right =<< run env (Roots.inspectRoot binding.request.rootId)
-        root.unknown @?= 1
-        root.active @?= 0,
+        root.unknown @?= (fixtureCount 1)
+        root.active @?= (fixtureCount 0),
       testCase "independent file recovery settles a superseded actual without replacement IO" $ withEffect fixture \env binding snapshot access reference runtime _ -> do
         Executor.executeAcceptedAttempt (executorFor runtime (throwIO (userError "lost publication acknowledgement"))) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         (_, uncertain) <- right =<< run env (Execution.loadExecution access)
@@ -230,8 +231,8 @@ tests fixture =
         root <- right =<< run env (Roots.inspectRoot binding.request.rootId)
         -- The fixture model reply has unreported invoice cost. The recovered
         -- file attempt adds no remaining uncertainty or active reservation.
-        root.unknown @?= 1
-        root.active @?= 0,
+        root.unknown @?= (fixtureCount 1)
+        root.active @?= (fixtureCount 0),
       testCase "a crash after prepared intent never attributes a replacement write to the old actual attempt" $ withEffect fixture \env binding snapshot access reference runtime _ -> do
         calls <- newIORef (0 :: Int)
         let interrupted =
@@ -480,3 +481,6 @@ fixtureRevision value = either (error . show) id (parseRevision value)
 
 fixtureAmount :: Integer -> ResourceAmount
 fixtureAmount amount = either (error . show) id (parseResourceAmount amount)
+
+fixtureCount :: Integer -> AttemptCount scope
+fixtureCount count = either (error . show) id (parseAttemptCount count)

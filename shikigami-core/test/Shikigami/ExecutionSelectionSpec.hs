@@ -3,11 +3,13 @@ module Shikigami.ExecutionSelectionSpec (tests) where
 import Baikai.Options (emptyOptions)
 import Baikai.ThinkingLevel (ThinkingLevel (ThinkingHigh))
 import Control.Lens ((&), (.~))
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy.Char8 qualified as Lazy
 import Data.Either (isLeft)
 import Data.Generics.Labels ()
+import Data.Int (Int64)
 import Data.List (isInfixOf)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict qualified as Map
@@ -23,8 +25,10 @@ import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..))
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Execution.Request
+import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.Selection
 import Shikigami.Execution.SelectionRuntime (currentExecutionAuthority)
+import Shikigami.Execution.SelectionStore qualified as Calls
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -32,7 +36,26 @@ tests :: TestTree
 tests =
   testGroup
     "ExecutionSelection"
-    [ testCase "coordinator and worker aliases select distinct exact models" do
+    [ testCase "call-limit codecs retain numbers and factory admission refuses negative protocol ceilings" do
+        let wire = Profile.unlimitedProfileLimits & #maxCalls .~ Just 3 & #maxRetries .~ Just 2 & #maxConcurrency .~ Just 1 & #maxTokens .~ Just 10
+            make limits = Calls.callLimitsFor (select "worker-a") (Just (profileFor "stub-worker-a" limits))
+            limits = mustRight (make wire)
+            expected = Aeson.object ["calls" .= (3 :: Integer), "retries" .= (2 :: Integer), "concurrency" .= (1 :: Integer), "cutoff" .= Aeson.Null, "tokens" .= (10 :: Integer)]
+        Aeson.fromJSON (Aeson.toJSON limits) @?= Aeson.Success limits
+        Aeson.encode limits @?= Aeson.encode expected
+        mapM_
+          (\invalid -> assertBool "invalid protocol limit refused" (case make invalid of Left (Resources.InvalidResourceRequest _) -> True; _ -> False))
+          [wire & #maxCalls .~ Just (-1), wire & #maxRetries .~ Just (-1), wire & #maxConcurrency .~ Just (-1), wire & #maxTokens .~ Just (-1), wire & #maxDurationSeconds .~ Just (-1)]
+        case Aeson.toJSON limits of
+          Aeson.Object fields ->
+            mapM_
+              ( \(key, number) -> case Aeson.fromJSON (Aeson.Object (KeyMap.insert key (Aeson.toJSON (number :: Integer)) fields)) :: Aeson.Result Calls.CallLimits of
+                  Aeson.Error _ -> pure ()
+                  Aeson.Success _ -> assertFailure "invalid call limit decoded"
+              )
+              [(key, number) | key <- ["calls", "retries", "concurrency", "tokens"], number <- [-1, toInteger (maxBound :: Int64) + 1]]
+          _ -> assertFailure "call limits did not encode as an object",
+      testCase "coordinator and worker aliases select distinct exact models" do
         let coordinator = select "coordinator"
             workerA = select "worker-a"
             workerB = select "worker-b"

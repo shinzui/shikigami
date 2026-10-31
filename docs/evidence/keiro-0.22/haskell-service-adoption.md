@@ -171,3 +171,10 @@ for unrepresentable provider measurements. [Resource-amount acceptance](resource
 records 555 pure, 378 PostgreSQL, 260 worker and 95 server cases, including the
 actual HTTP boundary and synthetic full-counter refusal. Counter, policy and
 identity census work remains open.
+
+Attempt counts and finite operational call/retry/concurrency limits retain their
+nominal scopes under ADR-77. [Attempt-count acceptance](attempt-count-results.txt)
+records exact codecs, typed profile failure, 23 compiler clients and four coupled
+underflow refusal cases. Full affected acceptance is 556 pure, 382 PostgreSQL,
+260 worker and 95 server cases. Remaining execution counters/policies and the
+complete scalar/identity census remain open.

@@ -1453,6 +1453,7 @@ checkedSubmission access binding snapshot operation submission =
           (UnreportedInvoiceCost, Just (Resources.Limited _)) -> throwE (ResourceAdmissionRefused "tool invoice ceiling is unsupported")
           _ -> pure ()
     (kind, Just prepared)
-      | kind `elem` [ModelTurn, ModelRepair, ModelSummary] ->
-          unless (Calls.callLimitsWithin prepared.limits (Calls.callLimitsFor snapshot.selection snapshot.sanctionedProfile)) (throwE (ExecutionPolicyRefused "prepared call limits exceed the pinned profile"))
+      | kind `elem` [ModelTurn, ModelRepair, ModelSummary] -> do
+          admitted <- either (throwE . ResourceAdmissionRefused . Text.pack . show) pure (Calls.callLimitsFor snapshot.selection snapshot.sanctionedProfile)
+          unless (Calls.callLimitsWithin prepared.limits admitted) (throwE (ExecutionPolicyRefused "prepared call limits exceed the pinned profile"))
     _ -> throwE AttemptConflict
