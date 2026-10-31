@@ -96,6 +96,13 @@ scalar/identity and remaining decoder-owner classifications remain open.
 
 ## Decision Log
 
+2026-10-31: ADR-100 keeps Git intent/origin corruption as an owning transactional
+refusal and FileEffectUnresolved, with SQL failure still unavailable. Capture
+unexpected SQL NULL as data because Git reservations always write a complete
+record into the shared nullable column. Close record format at numeric one.
+Preserve the actual lost-ack GitPublishRequested intent, original claim and
+publication barrier; no replacement, terminal inference or native activation.
+
 2026-10-31: ADR-99 keeps assignment-call decoding ownership distinct from resource
 failures and outer StoreError. Condemn on complete optional/list decode failure,
 return CallStateCorrupt and make inspection preserve its explicit Either through
@@ -148,15 +155,16 @@ cases. The language checker and thirteen style/ownership mutation tests pass.
 [The adoption record](../evidence/keiro-0.22/haskell-service-adoption.md) links each
 implemented domain-value wave and its exact candidate/evidence.
 
-Latest assignment-call acceptance passed 584 pure, 405 serial PostgreSQL,
-262 worker and 95 server cases plus native/domain/diagram gates.
-[Acceptance](../evidence/keiro-0.22/selection-row-results.txt) records owning
-corruption refusals, complete bounded facts, preserved holds, coupled rollback
-and distinct SQL failures. Strict native findings against 1541cb1 are empty;
-four transducers remain unchanged. The current 320-module/907-declaration worklist,
-source/tool hashes and all 124 frozen guide hashes are verified. Earlier 230
-compiler-client and other role/CLI/live HTTP results remain in their individual
-wave records. Forty-two of 46 assigned sources have implemented dispositions.
+Latest Git intent/format acceptance passed 584 pure, 405 serial PostgreSQL,
+268 worker and 95 server cases, 233 compiler clients and native/domain/diagram
+gates. [Acceptance](../evidence/keiro-0.22/git-row-results.txt) records malformed/
+null/unsupported-format/origin refusals, coupled freeze rollback and one real
+local publication across acknowledgement loss and corrupt recovery. SQL failure
+retains its separate availability path. Strict native findings against a809c68
+are empty; four transducers remain unchanged. The current 320-module/
+908-declaration worklist, source/tool hashes and all 124 frozen guide hashes are
+verified. Other role/CLI/live HTTP results remain in their individual wave
+records. Forty-two of 46 assigned sources have implemented dispositions.
 Complete scalar/identity, model/other decision values and remaining decoder-owner
 review keep M1 incomplete. Three final-profile clauses and plan95's packaged
 Linux/runtime qualification remain open.

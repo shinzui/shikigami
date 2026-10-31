@@ -389,3 +389,15 @@ publication rolls back. Native findings against 1541cb1 are empty and four
 transducers unchanged. The 320-module/907-declaration worklist remains unclassified;
 complete scalar/identity, model/other decision and other decoder-owner review
 remain open.
+
+Git intent/origin reads retain typed refusals for malformed JSON, unexpected SQL
+NULL and unsupported format, condemning before publication. The provider keeps
+data unresolved and SQL failure unavailable; GitRecordFormat is closed numeric
+one. [ADR-100](../../adr/0100-git-intent-decoding-preserves-unresolved-publication-and-origin.md)
+and [acceptance](git-row-results.txt) record 29 focused and 584 pure/405 PostgreSQL/
+268 worker/95 server cases, 233 compiler clients and native/domain/diagram gates.
+A tentative freeze rolls back; lost-ack/corrupt recovery preserves one real local
+publication and the barrier. This does not qualify native Linux Git containment.
+Native findings against a809c68 are empty and four transducers unchanged. The
+320-module/908-declaration worklist remains unclassified; complete scalar/identity,
+model/other decision and other decoder-owner review remain open.

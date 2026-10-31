@@ -90,14 +90,16 @@ a checked allocated TypeID; objective content, worker/workspace ownership,
 execution policies, counters, decisions and assignment locators retain their
 nominal checked meanings.
 
-Latest assignment-call acceptance passed 584 pure, 405 serial PostgreSQL,
-262 worker and 95 server cases plus native/domain/diagram gates. ADR-99 retains
-owning corruption refusals, complete bounded facts, coupled rollback and distinct
-outer SQL failures through inspection. Strict native findings against 1541cb1
-are empty, with unchanged transducers. The unclassified census has 320 modules
-and 907 declarations. Complete scalar/identity, model/other decision values and
-remaining decoder-owner review keep EP-5 In Progress. EP-6's frozen closure,
-packaged Linux/runtime and inventory gates have not started.
+Latest Git intent/format acceptance passed 584 pure, 405 serial PostgreSQL,
+268 worker and 95 server cases, 233 compiler clients and native/domain/diagram
+gates. ADR-100 preserves unresolved publication/origin on malformed metadata and
+closes format at numeric one. Lost-ack/corrupt recovery retains one local HEAD
+publication and the barrier; native Linux containment is not inferred. Strict
+native findings against a809c68 are empty with unchanged transducers. The
+unclassified census has 320 modules and 908 declarations. Complete scalar/
+identity, model/other decision values and remaining decoder-owner review keep
+EP-5 In Progress. EP-6's frozen closure, packaged Linux/runtime and inventory
+gates have not started.
 
 ## Surprises & Discoveries
 

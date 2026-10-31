@@ -49,8 +49,22 @@ data GitRouting = GitRouting {executionId :: !ExecutionId, identity :: !AgentIde
 
 instance Show GitRouting where show _ = "GitRouting <protected>"
 
+-- | The retained intent has one supported first-release wire format. A typed
+-- record cannot carry an unchecked version and still look like current intent.
+data GitRecordFormat = GitRecordV1
+  deriving stock (Eq, Show)
+
+instance ToJSON GitRecordFormat where
+  toJSON GitRecordV1 = toJSON (1 :: Int)
+  toEncoding GitRecordV1 = toEncoding (1 :: Int)
+
+instance FromJSON GitRecordFormat where
+  parseJSON value = do
+    number <- parseJSON @Integer value
+    if number == 1 then pure GitRecordV1 else fail "unsupported Git record format"
+
 data GitRecord = GitRecord
-  { format :: !Int,
+  { format :: !GitRecordFormat,
     operation :: !OperationContext,
     attemptId :: !AttemptId,
     claimOwner :: !ClaimOwner,
@@ -78,7 +92,7 @@ validGitCandidate :: GitCandidate -> Bool
 validGitCandidate value = all validGitObject [value.parent, value.tree, value.result] && value.result /= value.parent && not (null value.paths) && length value.paths <= 256 && sort (nub value.paths) == value.paths && all (\path -> validWorkspacePath path && Text.all (< '\DEL') path) value.paths
 
 validGitRecord :: GitRecord -> Bool
-validGitRecord record = record.format == 1 && bounded operation && bounded execution && bounded attempt && record.operation.idempotencyKey == operation && digestText record.operation.fingerprint && digestText record.operation.scopeDigest && record.generation > initialRevision && all digestText [record.bindingDigest, record.instructionDigest, record.profileDigest, record.fingerprint] && bounded record.target && Text.length record.target <= 128 && validGitObject record.expectedParent && record.routing.executionId == record.operation.executionId && validRouting && validPhase && Bytes.length (Aeson.encode record) <= 65536
+validGitRecord record = bounded operation && bounded execution && bounded attempt && record.operation.idempotencyKey == operation && digestText record.operation.fingerprint && digestText record.operation.scopeDigest && record.generation > initialRevision && all digestText [record.bindingDigest, record.instructionDigest, record.profileDigest, record.fingerprint] && bounded record.target && Text.length record.target <= 128 && validGitObject record.expectedParent && record.routing.executionId == record.operation.executionId && validRouting && validPhase && Bytes.length (Aeson.encode record) <= 65536
   where
     operation = operationIdText record.operation.operationId
     ExecutionId execution = record.operation.executionId

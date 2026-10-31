@@ -4,7 +4,7 @@
 -- is instrumented; native coupled Git qualification remains a separate gate.
 module Shikigami.WorkspaceGitProviderSpec (tests) where
 
-import Control.Exception (throwIO)
+import Control.Exception (finally, throwIO)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString qualified as Bytes
@@ -20,6 +20,7 @@ import Data.Time (addUTCTime, getCurrentTime)
 import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUID
 import Effectful (Eff)
+import Hasql.Transaction qualified as Tx
 import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization
@@ -75,7 +76,28 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace accepted Git provider"
-    [ testCase "accepted integration combines two retained worker artifacts in a third clean workspace" $ withIntegration fixture False \env target admission runtime backend artifacts -> do
+    [ testCase "malformed retained Git intent refuses factual recovery without another publication" $ withGitVersion True fixture "commit" \env binding snapshot _ reference runtime profile backend -> do
+        profileReady env binding profile
+        publications <- newIORef (0 :: Int)
+        Bytes.writeFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") "new dependency\n"
+        let interrupted = backend & #afterPublication .~ (modifyIORef' publications (+ 1) >> throwIO (userError "lost Git acknowledgement"))
+            executor = Fixture.executorForAdapter (transferredWorkspaceGitAdapterWithBackend interrupted) runtime
+        execute executor snapshot reference
+        readIORef publications >>= (@?= 1)
+        Just retained <- right =<< run env (runTransaction (Git.inspectGitTx reference.operationId))
+        retained.phase @?= GitPublishRequested
+        headBefore <- Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= right
+        run env (runTransaction (Tx.sql "UPDATE shikigami.workspace_effects SET receipt='{}'::jsonb WHERE kind='git'"))
+        reconcileGitEffect env reference.operationId >>= (@?= Left FileEffectUnresolved)
+        publishGitReceipt env reference.operationId >>= (@?= Left FileEffectUnresolved)
+        execute executor snapshot reference
+        readIORef publications >>= (@?= 1)
+        Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= (@?= Right headBefore)
+        run env (runTransaction (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "successor"))) >>= (@?= Left WorkspaceBindingConflict)
+        run env (runTransaction (Tx.sql "ALTER TABLE shikigami.workspace_effects RENAME TO fixture_unavailable_git_effects"))
+        (reconcileGitEffect env reference.operationId >>= (@?= Left FileEffectUnavailable))
+          `finally` run env (runTransaction (Tx.sql "ALTER TABLE shikigami.fixture_unavailable_git_effects RENAME TO workspace_effects")),
+      testCase "accepted integration combines two retained worker artifacts in a third clean workspace" $ withIntegration fixture False \env target admission runtime backend artifacts -> do
         let input = Aeson.toJSON (Integration.Request target.base artifacts)
         withIntegrationTool env admission runtime backend input \output -> do
           value <- outputValue output
@@ -109,11 +131,11 @@ tests fixture =
         let interrupted = backend & #afterPublication .~ (modifyIORef' publications (+ 1) >> throwIO (userError "lost transferred Git acknowledgement"))
         execute (Fixture.executorForAdapter (transferredWorkspaceGitAdapterWithBackend interrupted) runtime) snapshot reference
         readIORef publications >>= (@?= 1)
-        Just before <- run env (runTransaction (Git.inspectGitTx reference.operationId))
+        Just before <- right =<< run env (runTransaction (Git.inspectGitTx reference.operationId))
         run env (runTransaction (Store.freezeWorkspaceTx binding binding.request.owner (fixtureRevision 0))) >>= (@?= Right ())
         publishGitReceipt env reference.operationId >>= (@?= Right GitReceiptAcknowledged)
         publishGitReceipt env reference.operationId >>= (@?= Right GitReceiptAcknowledged)
-        Just after <- run env (runTransaction (Git.inspectGitTx reference.operationId))
+        Just after <- right =<< run env (runTransaction (Git.inspectGitTx reference.operationId))
         after.phase @?= GitApplied
         after.candidate @?= before.candidate
         readIORef publications >>= (@?= 1),
@@ -127,7 +149,7 @@ tests fixture =
         Bytes.writeFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") "new dependency\n"
         execute executor snapshot reference
         readIORef writes >>= (@?= 1)
-        Just record <- run env (runTransaction (Git.inspectGitTx reference.operationId))
+        Just record <- right =<< run env (runTransaction (Git.inspectGitTx reference.operationId))
         record.phase @?= GitApplied
         record.attemptId @?= reference.attemptId
         Just candidate <- pure record.candidate
@@ -183,7 +205,7 @@ tests fixture =
         (_, after) <- right =<< run env (Execution.loadExecution access)
         after.cursor @?= before.cursor
         after.pendingReceipts @?= (fixtureProgress 0)
-        Just retained <- run env (runTransaction (Git.inspectGitTx reference.operationId))
+        Just retained <- right =<< run env (runTransaction (Git.inspectGitTx reference.operationId))
         retained.attemptId @?= reference.attemptId,
       testCase "status and diff are bounded admitted observations with no commit registration" $
         mapM_
@@ -192,7 +214,7 @@ tests fixture =
               Bytes.writeFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") "new dependency\n"
               execute (Fixture.executorForAdapter (workspaceGitAdapterWithBackend backend) runtime) snapshot reference
               Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= (@?= Right binding.base)
-              run env (runTransaction (Git.inspectGitTx reference.operationId)) >>= (@?= Nothing)
+              run env (runTransaction (Git.inspectGitTx reference.operationId)) >>= (@?= Right Nothing)
               Just operation <- right =<< run env (Execution.inspectOperation reference.operationId)
               result <- maybe (fail "missing observation result") pure operation.outcome
               output <- right =<< run env (Execution.readReplayPayload @OperationOutcome access "operation-outcome" result)
@@ -207,19 +229,19 @@ tests fixture =
         let denied = runtime & #authorizer .~ denyAllActionAuthorizer
         execute (Fixture.executorForAdapter (workspaceGitAdapterWithBackend backend) denied) snapshot reference
         Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= (@?= Right binding.base)
-        Just record <- run env (runTransaction (Git.inspectGitTx reference.operationId))
+        Just record <- right =<< run env (runTransaction (Git.inspectGitTx reference.operationId))
         record.phase @?= GitRefused,
       testCase "loss after publication admission cannot authorize a replacement HEAD update" $ withGit fixture "commit" \env binding snapshot access reference runtime profile backend -> do
         profileReady env binding profile
         Bytes.writeFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") "new dependency\n"
         let stopAfterGrant _ = do
-              record <- run env (runTransaction (Git.inspectGitTx reference.operationId))
+              record <- right =<< run env (runTransaction (Git.inspectGitTx reference.operationId))
               if maybe False ((== GitPublishRequested) . (.phase)) record then pure (Left "fixture revoked") else pure (Right ())
             interrupted = runtime & #lifecycle .~ stopAfterGrant
         execute (Fixture.executorForAdapter (workspaceGitAdapterWithBackend backend) interrupted) snapshot reference
         Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= (@?= Right binding.base)
         publishGitReceipt env reference.operationId >>= (@?= Right AwaitingGitReceipt)
-        Just record <- run env (runTransaction (Git.inspectGitTx reference.operationId))
+        Just record <- right =<< run env (runTransaction (Git.inspectGitTx reference.operationId))
         record.phase @?= GitUnresolved
         run env (runTransaction (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "successor"))) >>= (@?= Left WorkspaceBindingConflict)
         (_, state) <- right =<< run env (Execution.loadExecution access)
@@ -238,7 +260,7 @@ tests fixture =
               let counting = backend & #capture .~ (\b p target policy -> modifyIORef' captured (+ 1) >> backend.capture b p target policy)
               execute (Fixture.executorForAdapter (workspaceGitAdapterWithBackend counting) runtime) snapshot reference
               readIORef captured >>= (@?= 0)
-              run env (runTransaction (Git.inspectGitTx reference.operationId)) >>= (@?= Nothing)
+              run env (runTransaction (Git.inspectGitTx reference.operationId)) >>= (@?= Right Nothing)
               Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= (@?= Right binding.base)
           )
           ["status", "diff", "commit"],
@@ -247,7 +269,7 @@ tests fixture =
         Bytes.writeFile (workspaceFiles binding.storageRoot binding </> "AGENTS.md") "changed root instructions\n"
         execute (Fixture.executorForAdapter (workspaceGitAdapterWithBackend backend) runtime) snapshot reference
         Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= (@?= Right binding.base)
-        Just record <- run env (runTransaction (Git.inspectGitTx reference.operationId))
+        Just record <- right =<< run env (runTransaction (Git.inspectGitTx reference.operationId))
         record.phase @?= GitRefused
         record.candidate @?= Nothing,
       testCase "reserved profiles refuse before capture or publication" $ withGit fixture "commit" \env binding snapshot _ reference runtime _ backend -> do
@@ -255,7 +277,7 @@ tests fixture =
         let counting = backend & #capture .~ (\b p target policy -> modifyIORef' captured (+ 1) >> backend.capture b p target policy)
         execute (Fixture.executorForAdapter (workspaceGitAdapterWithBackend counting) runtime) snapshot reference
         readIORef captured >>= (@?= 0)
-        run env (runTransaction (Git.inspectGitTx reference.operationId)) >>= (@?= Nothing)
+        run env (runTransaction (Git.inspectGitTx reference.operationId)) >>= (@?= Right Nothing)
         Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= (@?= Right binding.base),
       testCase "stale actual generation refuses before capture or publication" $ withGit fixture "commit" \env binding snapshot _ reference runtime profile backend -> do
         profileReady env binding profile
@@ -264,7 +286,7 @@ tests fixture =
             broken r = let adapter = workspaceGitAdapterWithBackend counting r in DurableAdapter adapter.descriptor adapter.contracts (\s d name -> adapter.prepare s (d & #generation .~ (Generation.advanceRevision d.generation)) name)
         execute (Fixture.executorForAdapter broken runtime) snapshot reference
         readIORef captured >>= (@?= 0)
-        run env (runTransaction (Git.inspectGitTx reference.operationId)) >>= (@?= Nothing)
+        run env (runTransaction (Git.inspectGitTx reference.operationId)) >>= (@?= Right Nothing)
         Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= (@?= Right binding.base)
     ]
 
@@ -332,7 +354,7 @@ withIntegration fixture conflicting use = withGitVersion True fixture "commit" \
     use env target admission runtime backend [firstArtifact, secondArtifact]
   where
     artifact env reference = do
-      Just (binding, record) <- run env (runTransaction (Git.inspectRegisteredGitTx reference.operationId))
+      Just (binding, record) <- right =<< run env (runTransaction (Git.inspectRegisteredGitTx reference.operationId))
       record.phase @?= GitApplied
       candidate <- maybe (fail "missing applied artifact") pure record.candidate
       pure (Integration.Artifact reference.operationId (workspaceBindingDigest binding) binding.base candidate.result)

@@ -13,6 +13,7 @@ import Data.Text qualified as ClaimText
 import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
 import Hasql.Transaction (Transaction)
+import Hasql.Transaction qualified as Tx
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..))
@@ -41,7 +42,23 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace Git registrations"
-    [ testCase "concurrent reservations and duplicate actuals retain the original identity and time" $ withGit fixture \env binding proposed -> do
+    [ testGroup
+        "Git metadata refusals"
+        [ testCase "malformed JSON remains unresolved" (malformedGitMetadata fixture (Tx.sql "UPDATE shikigami.workspace_effects SET receipt='{}'::jsonb WHERE kind='git'")),
+          testCase "unexpected SQL null remains unresolved" (malformedGitMetadata fixture (Tx.sql "UPDATE shikigami.workspace_effects SET receipt=NULL WHERE kind='git'")),
+          testCase "unsupported record format remains unresolved" (malformedGitMetadata fixture (Tx.sql "UPDATE shikigami.workspace_effects SET receipt=jsonb_set(receipt,'{format}','2'::jsonb) WHERE kind='git'")),
+          testCase "malformed registered origin refuses before a provider directory can be restored" $ withGit fixture \env binding proposed -> do
+            run env (reserveGitTx binding proposed) >>= (@?= Right proposed)
+            run env (inspectRegisteredGitTx proposed.operation.operationId) >>= (@?= Right (Just (binding, proposed)))
+            run env (Tx.sql "UPDATE shikigami.workspace_bindings SET binding='{}'::jsonb")
+            run env (inspectGitTx proposed.operation.operationId) >>= (@?= Right (Just proposed))
+            run env (inspectRegisteredGitTx proposed.operation.operationId) >>= (@?= Left WorkspaceBindingConflict),
+          testCase "record format is closed numeric one" do
+            Aeson.encode GitRecordV1 @?= "1"
+            Aeson.eitherDecode (Aeson.encode GitRecordV1) @?= Right GitRecordV1
+            mapM_ (\raw -> assertBool "unsupported numeric format refused" (case Aeson.eitherDecode @GitRecordFormat raw of Left _ -> True; _ -> False)) ["0", "2", "-1", "1.5"]
+        ],
+      testCase "concurrent reservations and duplicate actuals retain the original identity and time" $ withGit fixture \env binding proposed -> do
         (a, b) <- concurrently (run env (reserveGitTx binding proposed)) (run env (reserveGitTx binding proposed))
         a @?= Right proposed
         b @?= a
@@ -49,7 +66,7 @@ tests fixture =
         run env (reserveGitTx binding duplicate) >>= (@?= Right proposed)
         let changed = proposed & #target .~ "other-target"
         run env (reserveGitTx binding (changed & #fingerprint .~ gitFingerprint binding changed)) >>= (@?= Left WorkspaceBindingConflict)
-        run env (inspectRegisteredGitTx proposed.operation.operationId) >>= (@?= Just (binding, proposed)),
+        run env (inspectRegisteredGitTx proposed.operation.operationId) >>= (@?= Right (Just (binding, proposed))),
       testCase "publication consumes one transition and factual recovery survives owner freeze" $ withGit fixture \env binding proposed -> do
         _ <- right =<< run env (reserveGitTx binding proposed)
         prepared <- right =<< run env (prepareGitTx binding proposed candidate)
@@ -57,7 +74,7 @@ tests fixture =
         (a, b) <- concurrently (run env (requestGitPublicationTx binding prepared)) (run env (requestGitPublicationTx binding prepared))
         outcomes <- mapM right [a, b]
         sort outcomes @?= [False, True]
-        Just requested <- run env (inspectGitTx proposed.operation.operationId)
+        Just requested <- right =<< run env (inspectGitTx proposed.operation.operationId)
         unresolved <- right =<< run env (markGitUnresolvedTx requested)
         assertBlocked env binding
         run env (Store.freezeWorkspaceTx binding binding.request.owner (fixtureRevision 0)) >>= (@?= Right ())
@@ -72,7 +89,7 @@ tests fixture =
         prepared <- right =<< run env (prepareGitTx binding proposed candidate)
         (publish, refuse) <- concurrently (run env (requestGitPublicationTx binding prepared)) (run env (refuseGitBeforePublicationTx prepared))
         assertBool "only publication or refusal wins" (case (publish, refuse) of (Right True, Left WorkspaceBindingConflict) -> True; (Left WorkspaceBindingConflict, Right value) -> value.phase == GitRefused; _ -> False)
-        Just retained <- run env (inspectGitTx proposed.operation.operationId)
+        Just retained <- right =<< run env (inspectGitTx proposed.operation.operationId)
         assertBool "no applied receipt was fabricated" (retained.phase `elem` [GitPublishRequested, GitRefused]),
       testCase "a prepared candidate alone cannot become applied or release the common barrier" $ withGit fixture \env binding proposed -> do
         _ <- right =<< run env (reserveGitTx binding proposed)
@@ -91,7 +108,7 @@ tests fixture =
         let receipt = FileReceipt operation (fixtureAttemptId "file-attempt") (fixtureGeneration 1) digest (workspaceBindingDigest binding) digest "dependency.txt" "device:parent" Nothing digest EditRefused
         run env (Store.recordWorkspaceReceiptTx binding receipt) >>= (@?= Right ())
         run env (Store.reserveWorkspaceEffectTx binding binding.request.owner (fixtureRevision 0) operation digest) >>= (@?= Right (Just receipt))
-        run env (inspectGitTx operation) >>= (@?= Nothing)
+        run env (inspectGitTx operation) >>= (@?= Right Nothing)
         run env (reserveGitTx binding proposed) >>= (@?= Left WorkspaceBindingConflict),
       testCase "bounded factual scans include settled records and advance without relaunch authority" $ withGit fixture \env binding proposed -> do
         let keys = [Text.pack ("git-page-" <> show index) | index <- [1 .. 66 :: Int]]
@@ -129,7 +146,7 @@ withGit fixture use = Fixture.withFixture fixture \env _ root repository -> do
   run env (Store.markWorkspaceReadyTx binding) >>= (@?= Right ())
   now <- getCurrentTime
   let logical = OperationContext (ExecutionId "git-execution") (fixtureOperationId "git-operation") "git-operation" digest digest
-      record = GitRecord 1 logical (fixtureAttemptId "original-attempt") (fixtureOwner "original-claim") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest "device:parent" candidate.parent digest now (GitRouting logical.executionId owner (fixturePayloadDigest digest) NeedModel) GitReserved Nothing
+      record = GitRecord GitRecordV1 logical (fixtureAttemptId "original-attempt") (fixtureOwner "original-claim") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest "device:parent" candidate.parent digest now (GitRouting logical.executionId owner (fixturePayloadDigest digest) NeedModel) GitReserved Nothing
   use env binding (record & #fingerprint .~ gitFingerprint binding record)
 
 candidate :: GitCandidate
@@ -161,3 +178,25 @@ fixtureAgentName = either (error . show) id . mkAgentName
 
 fixturePayloadDigest :: Text -> PayloadDigest
 fixturePayloadDigest = either (error . show) id . parsePayloadDigest
+
+malformedGitMetadata :: DatabaseFixture -> Transaction () -> IO ()
+malformedGitMetadata fixture corrupt = withGit fixture \env binding proposed -> do
+  run env (reserveGitTx binding proposed) >>= (@?= Right proposed)
+  run env (inspectGitTx proposed.operation.operationId) >>= (@?= Right (Just proposed))
+  run env (inspectRegisteredGitTx proposed.operation.operationId) >>= (@?= Right (Just (binding, proposed)))
+  run env corrupt
+  run env (inspectGitTx proposed.operation.operationId) >>= (@?= Left WorkspaceBindingConflict)
+  run env (inspectRegisteredGitTx proposed.operation.operationId) >>= (@?= Left WorkspaceBindingConflict)
+  run env (reserveGitTx binding proposed) >>= (@?= Left WorkspaceBindingConflict)
+  run env (prepareGitTx binding proposed candidate) >>= (@?= Left WorkspaceBindingConflict)
+  run env (requestGitPublicationTx binding proposed) >>= (@?= Left WorkspaceBindingConflict)
+  run env (recordGitAppliedTx proposed) >>= (@?= Left WorkspaceBindingConflict)
+  run env (refuseGitBeforePublicationTx proposed) >>= (@?= Left WorkspaceBindingConflict)
+  during <- run env do
+    frozen <- Store.freezeWorkspaceTx binding binding.request.owner (fixtureRevision 0)
+    control <- Store.inspectWorkspaceControlTx binding
+    inspected <- inspectGitTx proposed.operation.operationId
+    pure (frozen, (.frozen) <$> control, inspected)
+  during @?= (Right (), Just True, Left WorkspaceBindingConflict)
+  run env (Store.checkWorkspaceOwnerTx binding binding.request.owner (fixtureRevision 0)) >>= (@?= Right ())
+  assertBlocked env binding

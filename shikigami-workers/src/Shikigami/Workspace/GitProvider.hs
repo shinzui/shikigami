@@ -266,9 +266,9 @@ commit backend runtime accepted profile target request = do
   now <- getCurrentTime
   let binding = accepted.binding
       dispatch = accepted.dispatch
-      raw = GitRecord 1 dispatch.operation dispatch.attemptId dispatch.owner dispatch.generation (workspaceBindingDigest binding) (bundleDigest accepted.admission.instructions) (gitProfileDigest profile) target request.expectedParent "" now accepted.routing GitReserved Nothing
+      raw = GitRecord GitRecordV1 dispatch.operation dispatch.attemptId dispatch.owner dispatch.generation (workspaceBindingDigest binding) (bundleDigest accepted.admission.instructions) (gitProfileDigest profile) target request.expectedParent "" now accepted.routing GitReserved Nothing
       proposed = raw & #fingerprint .~ gitFingerprint binding raw
-  existing <- transact runtime.appEnv (Git.inspectGitTx dispatch.operation.operationId)
+  existing <- readGit runtime.appEnv dispatch.operation.operationId
   case existing of
     Just old -> do
       unless (samePlanInput old proposed) (abort FileEffectUnresolved)
@@ -298,12 +298,12 @@ commit backend runtime accepted profile target request = do
         current runtime accepted
         Objects.publishCommit metadata candidate.parent candidate.result >>= either (const (abort FileEffectUnresolved)) pure
         backend.afterPublication
-        Just requested <- transact runtime.appEnv (Git.inspectGitTx original.operation.operationId)
+        Just requested <- readGit runtime.appEnv original.operation.operationId
         reconcileLocked runtime.appEnv binding requested
       case attempted of
         Right record -> resultValue binding record
         Left err -> do
-          Just retained <- transact runtime.appEnv (Git.inspectGitTx original.operation.operationId)
+          Just retained <- readGit runtime.appEnv original.operation.operationId
           if retained.phase `elem` [GitReserved, GitPrepared]
             then do
               _ <- transact runtime.appEnv (Git.refuseGitBeforePublicationTx retained) >>= either (const (abort FileEffectUnresolved)) pure
@@ -329,7 +329,7 @@ bounded value = if Lazy.length (Aeson.encode value) <= 32768 then pure value els
 
 reconcileGitEffect :: AppEnv -> OperationId -> IO (Either FileEffectError GitRecord)
 reconcileGitEffect env operation = protect do
-  (binding, record) <- transact env (Git.inspectRegisteredGitTx operation) >>= maybe (abort FileEffectUnresolved) pure
+  (binding, record) <- readRegisteredGit env operation >>= maybe (abort FileEffectUnresolved) pure
   if record.phase `elem` [GitApplied, GitRefused]
     then validateRecord binding record >> pure record
     else do
@@ -341,7 +341,7 @@ reconcileGitEffect env operation = protect do
 
 reconcileLocked :: AppEnv -> WorkspaceBinding -> GitRecord -> IO GitRecord
 reconcileLocked env binding original = do
-  record <- transact env (Git.inspectGitTx original.operation.operationId) >>= maybe (abort FileEffectUnresolved) pure
+  record <- readGit env original.operation.operationId >>= maybe (abort FileEffectUnresolved) pure
   validateRecord binding record
   if record.phase `elem` [GitApplied, GitRefused]
     then pure record
@@ -389,7 +389,7 @@ data GitPublication = AwaitingGitReceipt | AwaitingGitExecutionExpiry | GitRecei
 
 publishGitReceipt :: AppEnv -> OperationId -> IO (Either FileEffectError GitPublication)
 publishGitReceipt env operationId = protect do
-  (binding, _) <- transact env (Git.inspectRegisteredGitTx operationId) >>= maybe (abort FileEffectUnresolved) pure
+  (binding, _) <- readRegisteredGit env operationId >>= maybe (abort FileEffectUnresolved) pure
   record <- reconcileGitEffect env operationId >>= either abort pure
   case gitToolResult binding record of
     Nothing -> pure AwaitingGitReceipt
@@ -434,6 +434,14 @@ gitToolResult binding record = case record.phase of
 
 execute :: AppEnv -> Eff AppEffects (Either ExecutionError a) -> IO a
 execute env action = runAppIO env action >>= either (const (abort FileEffectUnavailable)) (either (const (abort FileEffectRefused)) pure)
+
+-- A malformed retained intent cannot authorize a replacement or a receipt.
+-- Storage failures keep transact's availability path; data refuses unresolved.
+readGit :: AppEnv -> OperationId -> IO (Maybe GitRecord)
+readGit env operation = transact env (Git.inspectGitTx operation) >>= either (const (abort FileEffectUnresolved)) pure
+
+readRegisteredGit :: AppEnv -> OperationId -> IO (Maybe (WorkspaceBinding, GitRecord))
+readRegisteredGit env operation = transact env (Git.inspectRegisteredGitTx operation) >>= either (const (abort FileEffectUnresolved)) pure
 
 transact :: AppEnv -> Transaction a -> IO a
 transact env action = runAppIO env (runTransaction action) >>= either (const (abort FileEffectUnavailable)) pure
@@ -484,7 +492,7 @@ integration backend runtime snapshot dispatch name input = do
   accepted <- loadAcceptedTool True workspaceIntegrationDescriptor integrationBinding runtime snapshot dispatch input
   _ <- backend.host >>= either (const (abort FileEffectRefused)) pure
   sources <- forM request.artifacts \artifact -> do
-    (source, record) <- transact runtime.appEnv (Git.inspectRegisteredGitTx artifact.operationId) >>= maybe (abort FileEffectRefused) pure
+    (source, record) <- readRegisteredGit runtime.appEnv artifact.operationId >>= maybe (abort FileEffectRefused) pure
     unless (workspaceBindingDigest source == artifact.bindingDigest && source.base == artifact.base && maybe False ((== artifact.revision) . (.result)) record.candidate) (abort FileEffectRefused)
     pure (source, record)
   let binding = accepted.binding; metadata = workspaceMetadata binding.storageRoot binding
