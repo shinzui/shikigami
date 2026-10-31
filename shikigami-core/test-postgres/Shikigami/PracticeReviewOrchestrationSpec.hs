@@ -43,7 +43,7 @@ import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent), compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..))
-import Shikigami.Agent.Run.Key (RunKey (..))
+import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
@@ -361,7 +361,7 @@ agentRunSpecialistTests databaseFixture =
                   routeKind = AgentWorkflowRoute,
                   occurredAt = UTCTime (fromGregorian 2026 8 26) 0,
                   triggerPayload = Aeson.toJSON trigger,
-                  idempotencyKey = RunKey "agent-run-practice-review-incomplete",
+                  idempotencyKey = fixtureRunKey "agent-run-practice-review-incomplete",
                   parentSessionId = Just parentSession,
                   parentRunWorkflowId = Just (WorkflowId "architecture-practice-router-parent"),
                   delegationDepth = Just (fixtureDelegationDepth 1),
@@ -967,3 +967,6 @@ fixtureAgentName = either (error . show) id . mkAgentName
 
 fixtureDelegationDepth :: Int -> DelegationDepth
 fixtureDelegationDepth = either (error . show) id . parseDelegationDepth . toInteger
+
+fixtureRunKey :: Text -> RunKey
+fixtureRunKey = either (error . show) id . parseRunKey

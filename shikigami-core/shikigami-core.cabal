@@ -216,6 +216,7 @@ library
     Shikigami.Telemetry.Metrics
     Shikigami.Telemetry.TraceContext
     Shikigami.Trigger.Enqueue
+    Shikigami.Trigger.RequestKey
     Shikigami.Trigger.Schedule
     Shikigami.Trigger.Stream
     Shikigami.WorkerSession.Capability

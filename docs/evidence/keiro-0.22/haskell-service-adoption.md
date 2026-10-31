@@ -255,3 +255,14 @@ principal authority. [Agent-value acceptance](agent-values-results.txt) records
 diagram gates. The compatibility namespace change is an intentional first-release
 reset; a neutral helper-reference diff does not assert old-scope compatibility.
 The complete scalar/identity census remains open.
+
+RunKey is now private and remains in acceptance, lifecycle refusals and SQL.
+A distinct addressed caller key prevents raw caller coordinates from masquerading
+as full workflow coordinates. Two real queue/inbox regressions reproduced
+cross-agent and delimiter collisions; structured v2 producer keys separate them
+and retain native redelivery under ADR-88. [Trigger-key acceptance](trigger-key-results.txt)
+records 573 pure/386 PostgreSQL/262 worker/95 server cases, all other package suites,
+118 compiler clients, 82 CLI checks and passing native/domain/diagram/live HTTP
+gates. HTTP v2 and delegated-child bytes remain unchanged; the other fresh producer
+identities deliberately reset under the unused first-release exception. The
+complete scalar/allocated-identity census remains open.

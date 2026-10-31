@@ -33,7 +33,7 @@ import Shikigami.Agent.Decl
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (identityText)
-import Shikigami.Agent.Run.Key (RunKey (..))
+import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
 import Shikigami.Agent.RunJob
 import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
@@ -141,7 +141,7 @@ workflowCase configFile prefix stage = do
     http <- right =<< newSinkHttp (HttpLimits config.httpRequestMaxBytes config.httpResponseMaxBytes) (credentialsFromConfig config) (DanwaConfig "http://localhost:1" "fixture")
     let declaration = original & #name .~ fixtureAgentName "workspace-upgrade" & #behavior .~ Skill (Text.pack skill) & #identity .~ Just (IdentityDecl principal) & #capabilityOverlays .~ map (.capability) [supervisedWorkspaceEditDescriptor, workspaceExecDescriptor, workspaceGitDescriptor] & #sinks .~ []
         rootId = ExecutionRootId "workflow-upgrade-root"
-        job = RunJob (fixtureAgentName "workspace-upgrade") initial.binding.request.owner TriggeredBySchedule now Aeson.Null (RunKey "workspace-durable-upgrade") Nothing Nothing Nothing [] Nothing Nothing (Just rootId) Nothing AgentWorkflowRoute
+        job = RunJob (fixtureAgentName "workspace-upgrade") initial.binding.request.owner TriggeredBySchedule now Aeson.Null (fixtureRunKey "workspace-durable-upgrade") Nothing Nothing Nothing [] Nothing Nothing (Just rootId) Nothing AgentWorkflowRoute
         deps =
           Agent.AgentRunDeps
             { appEnv = env,
@@ -262,3 +262,6 @@ right = either (fail . show) pure
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureRunKey :: Text -> RunKey
+fixtureRunKey = either (error . show) id . parseRunKey

@@ -28,7 +28,7 @@ import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), identityText)
-import Shikigami.Agent.Run.Key (RunKey (..))
+import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
 import Shikigami.Agent.RunJob
 import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
@@ -282,7 +282,7 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
   let declaration = original & #name .~ fixtureAgentName "workspace-worker" & #behavior .~ Skill (Text.pack skill) & #identity .~ Just (IdentityDecl "workspace-principal") & #capabilityOverlays .~ [workspaceEditDescriptor.capability] & #sinks .~ []
       identity = CompatibilityIdentity (fixtureAgentName "workspace-worker")
       rootId = ExecutionRootId "workflow-root"
-      job = RunJob (fixtureAgentName "workspace-worker") identity TriggeredBySchedule now Aeson.Null (RunKey "workspace-workflow-fixture") Nothing Nothing Nothing [] Nothing Nothing (Just rootId) Nothing AgentWorkflowRoute
+      job = RunJob (fixtureAgentName "workspace-worker") identity TriggeredBySchedule now Aeson.Null (fixtureRunKey "workspace-workflow-fixture") Nothing Nothing Nothing [] Nothing Nothing (Just rootId) Nothing AgentWorkflowRoute
       deps =
         Agent.AgentRunDeps
           { appEnv = env,
@@ -367,3 +367,6 @@ fixtureAgentName = either (error . show) id . mkAgentName
 
 fixtureDelegationDepth :: Int -> DelegationDepth
 fixtureDelegationDepth = either (error . show) id . parseDelegationDepth . toInteger
+
+fixtureRunKey :: Text -> RunKey
+fixtureRunKey = either (error . show) id . parseRunKey

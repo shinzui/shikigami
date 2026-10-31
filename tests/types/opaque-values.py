@@ -29,6 +29,8 @@ import Shikigami.App.Config qualified as Config
 import Shikigami.Attestation.Reviewed qualified as Reviewed
 import Shikigami.Capability.Overlay qualified as Overlay
 import Shikigami.AgentRun.RequestKey qualified as Request
+import Shikigami.Agent.Run.Key qualified as FullKey
+import Shikigami.Trigger.RequestKey qualified as Addressed
 import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.AssignmentKey qualified as Assignment
 import Shikigami.Execution.ToolPosition qualified as Position
@@ -42,7 +44,11 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''agentName :: Text -> Either Text Name.AgentName
+POSITIVE = '''fullKey :: Text -> Either Text FullKey.RunKey
+fullKey = FullKey.parseRunKey
+addressedKey :: Text -> Either Text Addressed.RequestKey
+addressedKey = Addressed.parseRequestKey
+agentName :: Text -> Either Text Name.AgentName
 agentName = Name.mkAgentName
 expertise :: Text -> Either Text Expertise.ExpertiseKey
 expertise = Expertise.parseExpertiseKey
@@ -106,6 +112,8 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('FullKey.RunKey', 'parse'),
+    ('Addressed.RequestKey', 'parse'),
     ('Name.AgentName', 'parse'),
     ('Expertise.ExpertiseKey', 'parse'),
     ('Depth.DelegationDepth', 'parse'),

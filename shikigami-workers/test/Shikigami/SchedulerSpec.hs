@@ -23,7 +23,7 @@ import Pgmq (Message (..), MessageBody (..), ReadMessage (..), readMessage)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
-import Shikigami.Agent.Run.Key (RunKey (..))
+import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
@@ -114,7 +114,7 @@ tests databaseFixture =
                 assertEqual "agent name" (fixtureAgentName "heartbeat") agentName
                 assertEqual "trigger kind" TriggeredBySchedule triggerKind
                 assertEqual "occurred at due minute" firstDue occurredAt
-                assertEqual "stable schedule idempotency key" (RunKey "heartbeat:sched:2026-06-20T00:01:00Z") idempotencyKey
+                assertEqual "stable schedule idempotency key" (fixtureRunKey "schedule-run-v2:sha256:fc2f27254279da17338ac783aadd4fde27e2d75c79a9036f16b720a6c60ac4a6") idempotencyKey
                 assertEqual "payload parses as schedule" (Just (fixtureAgentName "heartbeat", firstDue)) (parseSchedulePayload triggerPayload)
               other -> assertFailure ("expected one run job, got " <> show other)
 
@@ -144,7 +144,7 @@ tests databaseFixture =
                 assertEqual "principal" (Just "agent_heartbeat") ((.principalId) runSkip)
                 assertEqual "trigger boundary" DirectoryStore.TriggerStage ((.stage) runSkip)
                 assertEqual "source" "schedule" ((.detail) runSkip)
-                assertEqual "same key the run would use" "heartbeat:sched:2026-06-20T00:01:00Z" ((.idempotencyKey) runSkip)
+                assertEqual "same key the run would use" (fixtureRunKey "schedule-run-v2:sha256:fc2f27254279da17338ac783aadd4fde27e2d75c79a9036f16b720a6c60ac4a6") ((.idempotencyKey) runSkip)
               other -> assertFailure ("expected one schedule skip, got " <> show other),
       -- The catch-up policy is a choice of what instant the next timer is armed
       -- from. Before it, a schedule fire always re-armed from the tick that just
@@ -166,7 +166,7 @@ tests databaseFixture =
             messages <- readRunJobs pool
             assertEqual
               "waking a day late enqueues exactly the one run it was armed for"
-              [RunKey "heartbeat:sched:2026-06-20T00:01:00Z"]
+              [fixtureRunKey "schedule-run-v2:sha256:fc2f27254279da17338ac783aadd4fde27e2d75c79a9036f16b720a6c60ac4a6"]
               [(.idempotencyKey) job | job <- messages]
 
             staleNext <- expectedNext cron staleDue
@@ -444,3 +444,6 @@ atSecond second =
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureRunKey :: Text -> RunKey
+fixtureRunKey = either (error . show) id . parseRunKey

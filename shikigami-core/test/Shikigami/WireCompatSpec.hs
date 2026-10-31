@@ -24,7 +24,7 @@ import Shikigami.Agent.Decl
   )
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity), compatibilityIdentity)
-import Shikigami.Agent.Run.Key (RunKey (..))
+import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByStream), runJobWorkflowId)
 import Shikigami.Agent.Workflow (StepResult (..))
 import Shikigami.Capability.Catalog (CapabilityResolutionError)
@@ -182,7 +182,7 @@ sampleRunJob =
       routeKind = AgentWorkflowRoute,
       occurredAt = sampleTime,
       triggerPayload = triggerPayloadValue,
-      idempotencyKey = RunKey "at-risk-watch:act_1",
+      idempotencyKey = fixtureRunKey "at-risk-watch:act_1",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -382,7 +382,7 @@ identityBoundaryTests =
         let first = runJobWorkflowId sampleRunJob
         runJobWorkflowId sampleRunJob @?= first
         mkWorkflowId first.unWorkflowId @?= Right first
-        case runJobWorkflowId ((sampleRunJob & #idempotencyKey .~ (RunKey "another:event"))) == first of
+        case runJobWorkflowId ((sampleRunJob & #idempotencyKey .~ (fixtureRunKey "another:event"))) == first of
           False -> pure ()
           True -> assertFailure "distinct run keys collided"
     ]
@@ -401,3 +401,6 @@ preSelectionRunJobEnvelope = "{\"data\":{\"agentName\":\"at-risk-watch\",\"deleg
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureRunKey :: Text -> RunKey
+fixtureRunKey = either (error . show) id . parseRunKey

@@ -7,18 +7,23 @@
 -- deterministic id that collided two different names into one.
 module Shikigami.EnqueueHardeningSpec (tests) where
 
-import Data.Aeson (Value, object, (.=))
+import Data.Aeson (Value, eitherDecode, encode, object, (.=))
+import Data.Either (isLeft)
+import Data.Foldable (for_)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), diffUTCTime, fromGregorian, getCurrentTime)
+import Data.UUID qualified as UUID
 import Pgmq (parseQueueName, queueNameToText)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), StreamMatch (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
-import Shikigami.Agent.RunJob (RunJob)
+import Shikigami.Agent.Run.Key (RunKey, newCliRunKey, parseRunKey, runKeyFromUUID, runKeyText)
+import Shikigami.Agent.RunJob (RunJob, RunRouteKind (AgentWorkflowRoute, ConversationWorkflowRoute))
 import Shikigami.Agent.RunJob qualified as RunJob
 import Shikigami.Prelude (nameBytes)
-import Shikigami.Trigger.Enqueue (addressedRunKey, envelopeOccurredAt, runJobFromEnvelope, runQueueName)
+import Shikigami.Trigger.Enqueue (addressedRunKey, addressedRunKeyWithKey, envelopeOccurredAt, runJobFromEnvelope, runQueueName)
+import Shikigami.Trigger.RequestKey qualified as Addressed
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
 
@@ -26,7 +31,34 @@ tests :: TestTree
 tests =
   testGroup
     "EnqueueHardening"
-    [ -- 'runQueueName' resolves a compile-time literal through a partial parse
+    [ testCase "full and caller keys retain exact string codecs and refuse empty input" do
+        for_ ["key", " 名 key \n", " "] \raw -> do
+          let full = either (error . show) id (parseRunKey raw)
+              caller = either (error . show) id (Addressed.parseRequestKey raw)
+          encode full @?= encode raw
+          encode caller @?= encode raw
+          eitherDecode (encode full) @?= Right full
+          eitherDecode (encode caller) @?= Right caller
+        assertBool "empty full key factory" (isLeft (parseRunKey ""))
+        assertBool "empty caller key factory" (isLeft (Addressed.parseRequestKey ""))
+        assertBool "empty full key JSON" (isLeft (eitherDecode @RunKey "\"\""))
+        assertBool "empty caller key JSON" (isLeft (eitherDecode @Addressed.RequestKey "\"\"")),
+      testCase "caller keys retain agent and route coordinates" do
+        let key = either (error . show) id (Addressed.parseRequestKey "shared")
+            agent = fixtureAgentName "first"
+            first = addressedRunKeyWithKey agent AgentWorkflowRoute key
+        first @?= addressedRunKeyWithKey agent AgentWorkflowRoute key
+        assertBool "another agent" (first /= addressedRunKeyWithKey (fixtureAgentName "second") AgentWorkflowRoute key)
+        assertBool "another route" (first /= addressedRunKeyWithKey agent ConversationWorkflowRoute key),
+      testCase "CLI invocation keys are fresh and retain the complete opaque codec" do
+        first <- newCliRunKey (fixtureAgentName "first")
+        second <- newCliRunKey (fixtureAgentName "first")
+        assertBool "independent invocations" (first /= second)
+        eitherDecode (encode first) @?= Right first
+        eitherDecode (encode second) @?= Right second,
+      testCase "native UUID capture retains its exact workflow coordinate" do
+        runKeyText (runKeyFromUUID UUID.nil) @?= UUID.toText UUID.nil,
+      -- 'runQueueName' resolves a compile-time literal through a partial parse
       -- and calls 'error' on failure. Threading an Either through every caller
       -- would be out of proportion to a constant; a test that would catch a
       -- future edit to the literal is not.
@@ -54,17 +86,17 @@ tests =
       -- The key this replaced was built from getCurrentTime, so retrying
       -- `shikigami enqueue-run` after a timeout ran the agent a second time.
       testCase "the same logical event enqueues one stable idempotency key" do
-        let first = addressedRunKey (fixtureAgentName "triage-note") samplePayload
-            again = addressedRunKey (fixtureAgentName "triage-note") samplePayload
+        let first = addressedRunKey (fixtureAgentName "triage-note") AgentWorkflowRoute samplePayload
+            again = addressedRunKey (fixtureAgentName "triage-note") AgentWorkflowRoute samplePayload
         assertEqual "two calls for one event agree" first again
-        assertBool "the key names the agent" ("triage-note:evt:" `Text.isPrefixOf` first),
+        assertBool "the key names its versioned protocol" ("addressed-run-v2:" `Text.isPrefixOf` runKeyText first),
       testCase "different agents and payloads get different keys" do
         assertBool
           "a different agent is a different key"
-          (addressedRunKey (fixtureAgentName "triage-note") samplePayload /= addressedRunKey (fixtureAgentName "other-agent") samplePayload)
+          (addressedRunKey (fixtureAgentName "triage-note") AgentWorkflowRoute samplePayload /= addressedRunKey (fixtureAgentName "other-agent") AgentWorkflowRoute samplePayload)
         assertBool
           "a different payload is a different key"
-          (addressedRunKey (fixtureAgentName "triage-note") samplePayload /= addressedRunKey (fixtureAgentName "triage-note") (object ["ticket" .= ("t-2" :: Text)])),
+          (addressedRunKey (fixtureAgentName "triage-note") AgentWorkflowRoute samplePayload /= addressedRunKey (fixtureAgentName "triage-note") AgentWorkflowRoute (object ["ticket" .= ("t-2" :: Text)])),
       -- Every deterministic id in the runtime hashed names with
       -- @fromIntegral . fromEnum@ over Chars, which truncates to the low byte.
       testCase "UUIDv5 name bytes separate names that differ above U+00FF" do

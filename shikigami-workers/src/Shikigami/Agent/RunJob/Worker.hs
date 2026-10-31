@@ -177,7 +177,7 @@ admitRunJobWith storePool directory declarations job =
                 DirectoryStore.stage = DirectoryStore.DrainStage,
                 DirectoryStore.detail = routeKindText ((.routeKind) job),
                 DirectoryStore.reason = skipReason,
-                DirectoryStore.idempotencyKey = (runKeyText ((.idempotencyKey) job))
+                DirectoryStore.idempotencyKey = ((.idempotencyKey) job)
               }
       DirectoryStore.recordRunSkip storePool runSkip >>= \case
         Left problem -> pure (DrainAuditFailed problem)

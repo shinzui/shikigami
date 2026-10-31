@@ -11,7 +11,7 @@ import Data.Text qualified as Text
 import Data.Text.IO qualified as TIO
 import Data.Time (getCurrentTime)
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..))
-import Kioku.Id (genSessionId, idText)
+import Kioku.Id (idText)
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Activity (ActivityEnvelope)
@@ -23,7 +23,7 @@ import Shikigami.Agent.Loader (AgentLoadEntry (..), AgentLoadReport (..), loadAg
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..), recordActivityAsMemory, renderMemoryRecord)
-import Shikigami.Agent.Run.Key (RunKey (..))
+import Shikigami.Agent.Run.Key (newCliRunKey)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App (AppEnv (..), noopTracer)
@@ -119,7 +119,7 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
       Left err -> dieAgentRun ("invalid sink HTTP configuration: " <> Text.pack (show err))
       Right clients -> pure clients
   occurredAt <- getCurrentTime
-  freshId <- genSessionId
+  freshKey <- newCliRunKey ((.name) decl)
   let job =
         RunJob
           { agentName = ((.name) decl),
@@ -127,7 +127,7 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
             triggerKind = TriggeredByEvent,
             occurredAt,
             triggerPayload = Aeson.Null,
-            idempotencyKey = RunKey (agentNameText ((.name) decl) <> ":cli:" <> idText freshId),
+            idempotencyKey = freshKey,
             parentSessionId = Nothing,
             parentRunWorkflowId = Nothing,
             delegationDepth = Nothing,

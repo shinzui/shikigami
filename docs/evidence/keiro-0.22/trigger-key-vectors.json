@@ -1,0 +1,23 @@
+{
+  "sourceParent": "76f5c8d93b179c0216d008378eca96a0ade8922e",
+  "compiler": "ghc-9.12.4",
+  "probeSource": "{-# LANGUAGE GHC2024 #-}\n{-# LANGUAGE OverloadedStrings #-}\n{-# LANGUAGE OverloadedRecordDot #-}\nimport Data.Aeson (object)\nimport Data.Time (UTCTime)\nimport Shikigami.Activity (ActivityEnvelope(..),Actor(..),Subject(..))\nimport Shikigami.Agent.Decl (AgentDecl(..))\nimport Shikigami.Agent.Loader (loadAgent)\nimport Shikigami.Agent.Name (mkAgentName)\nimport Shikigami.Agent.Run.Key (runKeyText)\nimport Shikigami.Agent.RunJob (RunJob(..),RunRouteKind(..))\nimport Shikigami.Trigger.Enqueue (addressedRunKey,addressedRunKeyWithKey,runJobFromEnvelope,scheduleRunIdempotencyKey)\nimport Shikigami.Trigger.RequestKey qualified as Addressed\nmain :: IO ()\nmain = do\n decl <- loadAgent \"agents/heartbeat.dhall\" >>= either (fail . show) pure\n heartbeat <- either (fail . show) pure (mkAgentName \"heartbeat\")\n risk <- either (fail . show) pure (mkAgentName \"risk-agent\")\n caller <- either (fail . show) pure (Addressed.parseRequestKey \"shared\")\n let due = read \"2026-06-20 00:01:00 UTC\" :: UTCTime\n     envelope = ActivityEnvelope \"act_stream_1\" \"2026-08-19T00:00:00Z\" \"shinzui/test\" (Actor \"service\" \"fixture\" Nothing) (Subject \"ticket\" \"ticket-1\") \"customer.risk_detected\" (object []) [] \"act_stream_1\"\n print (\"schedule\",runKeyText (scheduleRunIdempotencyKey heartbeat due))\n print (\"stream\",runKeyText (runJobFromEnvelope due (decl {name=risk}) envelope).idempotencyKey)\n print (\"addressed-payload\",runKeyText (addressedRunKey heartbeat AgentWorkflowRoute (object [])))\n print (\"addressed-caller\",runKeyText (addressedRunKeyWithKey heartbeat AgentWorkflowRoute caller))\n",
+  "vectors": [
+    {
+      "kind": "schedule",
+      "key": "schedule-run-v2:sha256:fc2f27254279da17338ac783aadd4fde27e2d75c79a9036f16b720a6c60ac4a6"
+    },
+    {
+      "kind": "stream",
+      "key": "stream-run-v2:sha256:d5c5840b1bb985d45b79cb5e3034694f28435fd5ce27e2cc39df39e9db25f667"
+    },
+    {
+      "kind": "addressed-payload",
+      "key": "addressed-run-v2:sha256:79cd1c1cae842e49a6639e5ba88e71bf923773d4096941b44c89c92512ec86ba"
+    },
+    {
+      "kind": "addressed-caller",
+      "key": "addressed-run-v2:sha256:547ca2e14591d5da19ba030373ddb5d964a513f0eadf2d751f030a6b064a09f3"
+    }
+  ]
+}

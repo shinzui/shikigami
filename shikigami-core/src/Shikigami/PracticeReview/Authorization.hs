@@ -38,6 +38,7 @@ import Shikigami.PracticeReview
   )
 import Shikigami.Prelude
 import Shikigami.Trigger.Enqueue (enqueueAddressedRunWithKey)
+import Shikigami.Trigger.RequestKey qualified as Addressed
 
 data ResolutionAuthorityKind = Human | ApprovedArtifact
   deriving stock (Eq, Show, Generic)
@@ -216,10 +217,11 @@ enqueueAuthorizedPracticeReviewResolution pool identity agent ReviewResolutionAu
                           }
                       PracticeReviewResolution {resolutionId = ResolutionId resolutionId} = validatedResolutionValue validated
                       key = agent <> ":resolution:" <> resolutionId
-                  case mkAgentName agent of
-                    Left problem -> pure (Left (ResolutionAuthorizerRefused problem))
-                    Right target ->
-                      enqueueAddressedRunWithKey pool identity target AgentWorkflowRoute (Aeson.toJSON envelope) key
+                  case (mkAgentName agent, Addressed.parseRequestKey key) of
+                    (Left problem, _) -> pure (Left (ResolutionAuthorizerRefused problem))
+                    (_, Left problem) -> pure (Left (ResolutionAuthorizerRefused problem))
+                    (Right target, Right requestKey) ->
+                      enqueueAddressedRunWithKey pool identity target AgentWorkflowRoute (Aeson.toJSON envelope) requestKey
                         <&> first (ResolutionEnqueueFailed . Text.pack . show)
 
 authorizationEnvelopeSchemaVersion :: Int

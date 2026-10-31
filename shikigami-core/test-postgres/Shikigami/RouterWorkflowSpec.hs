@@ -45,7 +45,7 @@ import Shikigami.Agent.ExpertiseKey (ExpertiseKey, parseExpertiseKey)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..))
-import Shikigami.Agent.Run.Key (RunKey (..))
+import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
@@ -378,7 +378,7 @@ routerJob key =
       routeKind = AgentWorkflowRoute,
       occurredAt = fixedTime,
       triggerPayload = secretPayload,
-      idempotencyKey = RunKey key,
+      idempotencyKey = fixtureRunKey key,
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -596,3 +596,6 @@ fixtureExpertiseKey = either (error . show) id . parseExpertiseKey
 
 fixtureSelectionLimit :: Integer -> SelectionLimit
 fixtureSelectionLimit = either (error . show) id . parseSelectionLimit . fromInteger
+
+fixtureRunKey :: Text -> RunKey
+fixtureRunKey = either (error . show) id . parseRunKey

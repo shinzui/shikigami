@@ -36,6 +36,7 @@ import Hasql.Transaction.Sessions qualified as Transaction.Sessions
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
 import Shikigami.Agent.Loader (AgentLoadEntry (..), AgentLoadReport (..), LoadError (..))
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
+import Shikigami.Agent.Run.Key (RunKey, parseRunKey, runKeyText)
 
 -- | Admission boundary that refused a run.
 data SkipStage = TriggerStage | DrainStage
@@ -48,7 +49,7 @@ data RunSkip = RunSkip
     stage :: !SkipStage,
     detail :: !Text,
     reason :: !Text,
-    idempotencyKey :: !Text
+    idempotencyKey :: !RunKey
   }
   deriving stock (Generic, Eq, Show)
 
@@ -195,7 +196,7 @@ recordRunSkipStatement =
         <> (renderSkipStage . view #stage >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> (view #detail >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> (view #reason >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> (view #idempotencyKey >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((runKeyText . view #idempotencyKey) >$< Encoders.param (Encoders.nonNullable Encoders.text))
     )
     Decoders.noResult
 
@@ -218,7 +219,7 @@ runSkipRow =
     <*> Decoders.column (Decoders.nonNullable (Decoders.refine parseSkipStage Decoders.text))
     <*> Decoders.column (Decoders.nonNullable Decoders.text)
     <*> Decoders.column (Decoders.nonNullable Decoders.text)
-    <*> Decoders.column (Decoders.nonNullable Decoders.text)
+    <*> Decoders.column (Decoders.nonNullable (Decoders.refine parseRunKey Decoders.text))
 
 renderLoadStatus :: LoadStatus -> Text
 renderLoadStatus = \case
@@ -240,11 +241,11 @@ renderUsage :: Either Pool.UsageError a -> Either Text a
 renderUsage = first (Text.pack . show)
 
 -- | Indexed lookup of the drain refusal for one accepted run.
-lookupDrainSkip :: Pool -> AgentName -> Text -> IO (Either Text (Maybe RunSkip))
+lookupDrainSkip :: Pool -> AgentName -> RunKey -> IO (Either Text (Maybe RunSkip))
 lookupDrainSkip pool agent key = renderUsage <$> Pool.use pool (Session.statement (agent, key) statement)
   where
     statement =
       preparable
         "SELECT agent_name,principal_id,stage,detail,reason,idempotency_key FROM shikigami.run_skips WHERE agent_name=$1 AND stage='drain' AND idempotency_key=$2"
-        ((agentNameText . fst >$< Encoders.param (Encoders.nonNullable Encoders.text)) <> (snd >$< Encoders.param (Encoders.nonNullable Encoders.text)))
+        ((agentNameText . fst >$< Encoders.param (Encoders.nonNullable Encoders.text)) <> ((runKeyText . snd) >$< Encoders.param (Encoders.nonNullable Encoders.text)))
         (Decoders.rowMaybe runSkipRow)

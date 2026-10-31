@@ -39,7 +39,7 @@ import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..),
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..))
-import Shikigami.Agent.Run.Key (RunKey (..))
+import Shikigami.Agent.Run.Key (runKeyFromUUID)
 import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByDelegation))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
@@ -146,8 +146,8 @@ delegateWith expectedIdentity executionRequest declarations directory decl ctx d
       Just sid -> pure sid
       Nothing -> throwIO DelegationMissingSessionId
   (_, parentWorkflowId) <- currentWorkflow
-  let childWorkflowId = delegatedWorkflowIdV2 parentWorkflowId childAgent delegationKey
-      WorkflowId childWorkflowIdText = childWorkflowId
+  let childUuid = delegatedUuidV2 parentWorkflowId childAgent delegationKey
+      childWorkflowId = WorkflowId (UUID.toText childUuid)
       (budgetId, seed) =
         case existingBudgetId of
           Just existing -> (existing, Nothing)
@@ -173,7 +173,7 @@ delegateWith expectedIdentity executionRequest declarations directory decl ctx d
             routeKind = AgentWorkflowRoute,
             occurredAt = now,
             triggerPayload = payload,
-            idempotencyKey = RunKey childWorkflowIdText,
+            idempotencyKey = runKeyFromUUID childUuid,
             parentSessionId = Just currentSession,
             parentRunWorkflowId = Just parentWorkflowId,
             delegationDepth = Just childDepth,
@@ -387,15 +387,15 @@ awaitDelegatedEither delegated =
         Nothing -> throwIO err
 
 delegatedWorkflowIdV2 :: WorkflowId -> AgentName -> Text -> WorkflowId
-delegatedWorkflowIdV2 (WorkflowId parentWorkflowId) childAgent delegationKey =
-  WorkflowId $
-    Text.pack $
-      UUID.toString $
-        UUID.V5.generateNamed UUID.V5.namespaceURL $
-          nameBytes $
-            versionedDigest
-              "shikigami.delegation-child/2"
-              (Aeson.object ["parent" .= parentWorkflowId, "agent" .= childAgent, "key" .= delegationKey])
+delegatedWorkflowIdV2 parent child key = WorkflowId (UUID.toText (delegatedUuidV2 parent child key))
+
+delegatedUuidV2 :: WorkflowId -> AgentName -> Text -> UUID.UUID
+delegatedUuidV2 (WorkflowId parentWorkflowId) childAgent delegationKey =
+  UUID.V5.generateNamed UUID.V5.namespaceURL $
+    nameBytes $
+      versionedDigest
+        "shikigami.delegation-child/2"
+        (Aeson.object ["parent" .= parentWorkflowId, "agent" .= childAgent, "key" .= delegationKey])
 
 duplicatesInOrder :: (Ord a) => [a] -> [a]
 duplicatesInOrder = go Set.empty Set.empty

@@ -72,6 +72,7 @@ import Shikigami.Server.Command.StubKawa (runStubKawaCmd)
 import Shikigami.Server.Command.Validate (runValidate)
 import Shikigami.Server.Command.Workers (runWorkersControl, runWorkersInspect, runWorkersInterrupt, runWorkersSend)
 import Shikigami.StateRevision (StateRevision, parseRevision)
+import Shikigami.Trigger.RequestKey qualified as Addressed
 import Shikigami.WorkerSession.Capability (WorkerCommand (..))
 import Shikigami.WorkerSession.Position (MessagePosition, beforeMessages, parseMessagePosition)
 import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
@@ -384,7 +385,7 @@ enqueueRunInfo =
         <$> argument agentReader (metavar "AGENT")
         <*> payloadArgument
         <*> switch (long "conversation" <> help "Route the job as a danwa conversation turn instead of an agent run")
-        <*> optional (strOption (long "key" <> metavar "TEXT" <> help "Idempotency key; defaults to one derived from the agent and payload"))
+        <*> optional (option (eitherReader (first Text.unpack . Addressed.parseRequestKey . Text.pack)) (long "key" <> metavar "TEXT" <> help "Idempotency key; defaults to one derived from the agent and payload"))
 
 resolveApprovalInfo :: ParserInfo AdminAction
 resolveApprovalInfo =

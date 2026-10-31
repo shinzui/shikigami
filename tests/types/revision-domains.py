@@ -26,6 +26,9 @@ import Shikigami.Router.SelectionLimit qualified as Limit
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Router.Decision qualified as Route
 import Shikigami.Agent.Run.Key (RunKey)
+import Shikigami.Agent.Run.Key qualified as FullKey
+import Shikigami.Trigger.RequestKey qualified as Addressed
+import Shikigami.Directory.Store qualified as Directory
 import Shikigami.AgentRun.Ledger qualified as Ledger
 import Shikigami.AgentRun.RequestKey
 import Shikigami.Agent.Principal (AgentPrincipal)
@@ -50,6 +53,15 @@ import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ('full-run-key-fields', 'full :: Ledger.RunRequestRow -> RunKey\nfull row = row.runKey\nskip :: Directory.RunSkip -> RunKey\nskip row = row.idempotencyKey\ncaller :: Text -> Either Text Addressed.RequestKey\ncaller = Addressed.parseRequestKey\n', True),
+    ('unchecked-full-run-key-coercion', 'value :: Text -> FullKey.RunKey\nvalue = coerce\n', False),
+    ('unchecked-full-run-key-constructor', 'value :: Text -> FullKey.RunKey\nvalue = FullKey.RunKey\n', False),
+    ('unchecked-full-run-key-literal', 'value :: FullKey.RunKey\nvalue = fromString "key"\n', False),
+    ('unchecked-addressed-request-key-coercion', 'value :: Text -> Addressed.RequestKey\nvalue = coerce\n', False),
+    ('unchecked-addressed-request-key-constructor', 'value :: Text -> Addressed.RequestKey\nvalue = Addressed.RequestKey\n', False),
+    ('unchecked-addressed-request-key-literal', 'value :: Addressed.RequestKey\nvalue = fromString "key"\n', False),
+    ('http-request-key-is-not-addressed', 'value :: RequestKey -> Addressed.RequestKey\nvalue key = key\n', False),
+    ('full-run-key-is-not-addressed', 'value :: RunKey -> Addressed.RequestKey\nvalue key = key\n', False),
     ("retained-agent-values", '''name :: Agent.AgentDecl -> Name.AgentName
 name decl = decl.name
 expertise :: Agent.ExpertiseDecl -> Expertise.ExpertiseKey
@@ -318,6 +330,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
                 fragments["unchecked-" + kind + "-coercion"] = [kind, raw]
                 fragments["unchecked-" + kind + "-constructor"] = [kind]
                 fragments["unchecked-" + kind + ("-literal" if raw == "Text" else "-numeric")] = [kind, "IsString" if raw == "Text" else "Num"]
+            fragments.update({'unchecked-full-run-key-coercion': ['RunKey', 'Text'], 'unchecked-full-run-key-constructor': ['RunKey'], 'unchecked-full-run-key-literal': ['RunKey', 'IsString'], 'unchecked-addressed-request-key-coercion': ['RequestKey', 'Text'], 'unchecked-addressed-request-key-constructor': ['RequestKey'], 'unchecked-addressed-request-key-literal': ['RequestKey', 'IsString'], 'http-request-key-is-not-addressed': ["Couldn't match", 'RequestKey'], 'full-run-key-is-not-addressed': ["Couldn't match", 'RunKey', 'RequestKey']})
             if name.endswith("-constructor"):
                 assert any(marker in result.stderr.lower() for marker in ["not in scope", "does not export", "illegal term-level"]), (name, result.stderr)
             assert all(fragment in result.stderr for fragment in fragments[name]), (name, result.stderr)

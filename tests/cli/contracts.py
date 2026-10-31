@@ -51,6 +51,8 @@ with tempfile.TemporaryDirectory(prefix="shikigami-cli-contract-") as directory:
     for invalid_key in ["", "line\nkey", "x" * 201]:
         output = run(client, ["--config", str(poison), "runs", "request", "heartbeat", "--key", invalid_key, "--stdin"], 2, env=clean)
         assert b"HTTP request key must contain" in output
+    output = run("shikigami", ["--config", str(poison), "enqueue-run", "heartbeat", "--key", "", "--payload", "-"], 2, env=clean)
+    assert b"addressed request key must not be empty" in output
     for args in [["enqueue-run", "", "--payload", "-"],
                  ["grants", "grant", "", "KawaDigest"],
                  ["grants", "revoke", "", "KawaDigest"]]:

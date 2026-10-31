@@ -54,7 +54,7 @@ import Shikigami.Agent.Decl
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..))
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), ResolvedAgentIdentity (VerifiedAgent), compatibilityIdentity, mkAgentPrincipal)
-import Shikigami.Agent.Run.Key (RunKey (..), runKeyText)
+import Shikigami.Agent.Run.Key (RunKey, parseRunKey, runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
@@ -650,7 +650,7 @@ testJob label =
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 8 21) 0,
       triggerPayload = object [],
-      idempotencyKey = RunKey ("heartbeat:sink-delivery:" <> label),
+      idempotencyKey = fixtureRunKey ("heartbeat:sink-delivery:" <> label),
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -825,3 +825,6 @@ receiptCommitGap databaseFixture = do
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureRunKey :: Text -> RunKey
+fixtureRunKey = either (error . show) id . parseRunKey

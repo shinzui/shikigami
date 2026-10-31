@@ -66,7 +66,7 @@ import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), Ap
 import Shikigami.Agent.Approval.Workflow qualified as Approval
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
-import Shikigami.Agent.Run.Key (RunKey (..))
+import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
 import Shikigami.Agent.RunJob (RunRouteKind (..))
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Behavior.Input (triggerOnly)
@@ -413,7 +413,7 @@ tests fixture =
           withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
           now <- getCurrentTime
           let submission = modelSubmission operation
-              enqueue reference = void (enqueueRunJobTx (addressedRunJob now snapshot.identity (fixtureAgentName "worker") ExecutionOperationRoute (toJSON reference) (RunKey "accepted-attempt-job")))
+              enqueue reference = void (enqueueRunJobTx (addressedRunJob now snapshot.identity (fixtureAgentName "worker") ExecutionOperationRoute (toJSON reference) (fixtureRunKey "accepted-attempt-job")))
               failAfterQueue reference = enqueue reference >> Tx.statement () (preparable "SELECT 1/0" E.noParams (D.singleRow (D.column (D.nonNullable D.int4)))) >> pure ()
           refused <- run env (Store.submitExecutionAttemptWith access (fixtureRevision 1) submission failAfterQueue)
           case refused of Left ExecutionStorageUnavailable -> pure (); other -> assertFailure (show other)
@@ -1470,3 +1470,6 @@ fixtureOwner value = either (error . show) id (Claim.parseClaimOwner value)
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureRunKey :: Text -> RunKey
+fixtureRunKey = either (error . show) id . parseRunKey

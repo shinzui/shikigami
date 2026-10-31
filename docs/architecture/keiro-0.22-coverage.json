@@ -204,6 +204,11 @@
           "rationale": "The retained before probe reproduces sanitizer aliasing for valid a:b/a.b names. ADR-87 versions exact-name compatibility attribution/scopes with deterministic UUIDv5 rendering accepted by Kioku. An actual PostgreSQL regression writes and independently restores both session scopes; valid whitespace/Unicode names retain valid principal references. Verified-principal authority and name-keyed compatibility grants remain. The namespace/derived attribution change is an intentional unused first-release reset, not a neutral old-history claim or a TypeID allocation."
         },
         {
+          "id": "full-run-keys-and-distinct-trigger-caller-keys",
+          "disposition": "implemented",
+          "rationale": "Private nonempty RunKey remains in run acceptance, lifecycle refusals, SQL and status joins; a separate addressed caller RequestKey retains its own existing policy, distinct from the bounded HTTP key. Real queue/inbox controls reproduced equal caller keys across agents and agent/message delimiter collisions; v2 structured factories retain agent/route/source coordinates and native redelivery. CLI empty-key admission fails before configuration/stdin, and one-off invocation uses a native UUID nonce rather than allocating an unused Kioku session id. HTTP v2 and delegated child key bytes remain unchanged. ADR-88, 573 pure/386 PostgreSQL/262 worker/95 server cases, 118 compiler clients and 82 CLI checks cover this clause. Fresh producer identities intentionally reset under the unused first-release exception; full scalar/allocated-identity review remains pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -252,7 +257,14 @@
         "docs/evidence/keiro-0.22/agent-values-identity-vectors.json",
         "docs/evidence/keiro-0.22/agent-values-native-diff.json",
         "docs/evidence/keiro-0.22/agent-values-native-replay.json",
-        "shikigami-core/test/Shikigami/AgentValueSpec.hs"
+        "shikigami-core/test/Shikigami/AgentValueSpec.hs",
+        "docs/adr/0088-run-keys-separate-caller-and-trigger-coordinates.md",
+        "docs/evidence/keiro-0.22/trigger-key-results.txt",
+        "docs/evidence/keiro-0.22/trigger-key-before-probe.json",
+        "docs/evidence/keiro-0.22/trigger-key-before-regressions.txt",
+        "docs/evidence/keiro-0.22/trigger-key-vectors.json",
+        "docs/evidence/keiro-0.22/trigger-key-native-diff.json",
+        "docs/evidence/keiro-0.22/trigger-key-native-replay.json"
       ]
     },
     {

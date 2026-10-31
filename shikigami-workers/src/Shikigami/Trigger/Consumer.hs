@@ -81,7 +81,7 @@ import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), StreamMatch, Trigger (..))
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkAgentPrincipal)
-import Shikigami.Agent.Run.Key (RunKey (..), runKeyText)
+
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByEvent))
 import Shikigami.Agent.RunJob qualified as RunJob
 import Shikigami.App (AppEnv (..), runAppIO)
@@ -93,7 +93,7 @@ import Shikigami.Integration.Danwa qualified as Danwa
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Telemetry.Metrics (ShikigamiMetrics, recordConsumerRecord)
-import Shikigami.Trigger.Enqueue (enqueueRunJobTx, envelopeOccurredAt, runJobFromEnvelopeWithIdentity)
+import Shikigami.Trigger.Enqueue (enqueueRunJobTx, envelopeOccurredAt, integrationRunKey, runJobFromEnvelopeWithIdentity)
 import Shikigami.Trigger.Stream (IncludeAgentActors, matchesStreamWith)
 
 -- | Connection and durable poison-record target for one Kafka subscription.
@@ -626,7 +626,7 @@ prepareEventHits directory receivedAt agents payloadValue event =
                 routeKind = eventRouteOf agent,
                 occurredAt = receivedAt,
                 triggerPayload = payloadValue,
-                idempotencyKey = RunKey (agentNameText (agent ^. #name) <> ":" <> event ^. #messageId),
+                idempotencyKey = integrationRunKey (agent ^. #name) (eventRouteOf agent) event,
                 parentSessionId = Nothing,
                 parentRunWorkflowId = Nothing,
                 delegationDepth = Nothing,
@@ -670,7 +670,7 @@ prepareTrigger directory detail agent job hit = do
             stage = TriggerStage,
             detail,
             reason,
-            idempotencyKey = runKeyText (job ^. #idempotencyKey)
+            idempotencyKey = job ^. #idempotencyKey
           }
 
 commitTrigger :: PreparedTrigger hit -> Tx.Transaction (CommittedTrigger hit)

@@ -31,6 +31,12 @@ this exception. Nominal agent values and the explicit unbound seed retain valid
 wire values and existing labels; a neutral native helper-reference diff is not a
 claim that the old compatibility namespace is preserved.
 
+[ADR-88](adr/0088-run-keys-separate-caller-and-trigger-coordinates.md) versions
+fresh trigger and one-off invocation keys after real queue/inbox collision
+controls. HTTP v2 and delegated child coordinates retain their bytes. This is
+also an intentional unused first-release identity reset; unchanged native helper
+references do not imply old producer-key compatibility.
+
 
 ## What a durable workflow is, and why editing one is not like editing ordinary code
 

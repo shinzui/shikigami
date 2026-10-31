@@ -5,6 +5,7 @@ import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as ByteString
 import Data.IORef (modifyIORef', newIORef, readIORef)
 import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
@@ -19,8 +20,9 @@ import Shibuya.Core.Ack (AckDecision (..))
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), StreamMatch (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
-import Shikigami.Agent.Run.Key (RunKey (..))
-import Shikigami.Agent.RunJob (RunJob (..))
+import Shikigami.Agent.Principal (compatibilityIdentity)
+import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
+import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), runJobWorkflowId)
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Directory.Store qualified as DirectoryStore
@@ -37,8 +39,10 @@ import Shikigami.Trigger.Consumer
     processActivityRecord,
     processDecodedActivity,
     processDecodedActivityWithDirectory,
+    processDecodedIntegrationEvent,
   )
-import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
+import Shikigami.Trigger.Enqueue (enqueueAddressedRunWithKey, ensureRunQueue, runQueueName)
+import Shikigami.Trigger.RequestKey qualified as Addressed
 import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertEqual, assertFailure, testCase)
@@ -47,7 +51,31 @@ tests :: DatabaseFixture -> TestTree
 tests databaseFixture =
   testGroup
     "StreamInbox"
-    [ testCase "matched event atomically records inbox row and enqueues run job" do
+    [ testCase "addressed caller keys retain separate agent coordinates" do
+        withFixture databaseFixture \_appEnv pool -> do
+          ensureQueue pool
+          let first = fixtureAgentName "first"
+              second = fixtureAgentName "second"
+          _ <- enqueueAddressedRunWithKey pool (compatibilityIdentity first) first AgentWorkflowRoute (Aeson.object []) (fixtureAddressedKey "shared") >>= either (assertFailure . show) pure
+          _ <- enqueueAddressedRunWithKey pool (compatibilityIdentity second) second AgentWorkflowRoute (Aeson.object []) (fixtureAddressedKey "shared") >>= either (assertFailure . show) pure
+          _ <- enqueueAddressedRunWithKey pool (compatibilityIdentity first) first AgentWorkflowRoute (Aeson.object []) (fixtureAddressedKey "shared") >>= either (assertFailure . show) pure
+          jobs <- readRunJobs pool
+          assertEqual "delivery retry retains another delivery of the same logical request" 3 (length jobs)
+          assertEqual "independent workflows" 2 (Set.size (Set.fromList (map runJobWorkflowId jobs))),
+      testCase "integration keys retain separate agent and opaque message coordinates" do
+        withFixture databaseFixture \appEnv pool -> do
+          ensureQueue pool
+          let first = streamAgent {name = fixtureAgentName "a:b", trigger = Event {eventType = "probe.run"}}
+              second = streamAgent {name = fixtureAgentName "a", trigger = Event {eventType = "probe.run"}}
+              firstEvent = activityEvent {messageId = "c", eventType = "probe.run"}
+              secondEvent = activityEvent {messageId = "b:c", eventType = "probe.run"}
+          processDecodedIntegrationEvent appEnv [first] (const (pure ())) firstEvent Nothing >>= assertEqual "first delivery commits" Enqueued
+          processDecodedIntegrationEvent appEnv [second] (const (pure ())) secondEvent Nothing >>= assertEqual "second delivery commits" Enqueued
+          processDecodedIntegrationEvent appEnv [first] (const (pure ())) firstEvent Nothing >>= assertEqual "native redelivery remains duplicate" Duplicate
+          jobs <- readRunJobs pool
+          assertEqual "both native inbox deliveries enqueue" 2 (length jobs)
+          assertEqual "independent workflows" 2 (Set.size (Set.fromList (map runJobWorkflowId jobs))),
+      testCase "matched event atomically records inbox row and enqueues run job" do
         (withFixture databaseFixture) \appEnv pool -> do
           ensureQueue pool
           hitCount <- newIORef (0 :: Int)
@@ -65,7 +93,7 @@ tests databaseFixture =
           jobs <- readRunJobs pool
           case jobs of
             [RunJob {idempotencyKey}] ->
-              assertEqual "stable stream idempotency key" (RunKey "risk-agent:act_stream_1") idempotencyKey
+              assertEqual "stable stream idempotency key" (fixtureRunKey "stream-run-v2:sha256:d5c5840b1bb985d45b79cb5e3034694f28435fd5ce27e2cc39df39e9db25f667") idempotencyKey
             other -> assertFailure ("expected one RunJob, got " <> show other)
           inbox <- readInbox appEnv
           assertEqual "completed inbox row" (Just InboxCompleted) (inboxStatus <$> inbox),
@@ -112,7 +140,7 @@ tests databaseFixture =
               assertEqual "principal" (Just "agent_risk") ((.principalId) runSkip)
               assertEqual "trigger boundary" DirectoryStore.TriggerStage ((.stage) runSkip)
               assertEqual "source" "stream" ((.detail) runSkip)
-              assertEqual "same key the run would use" "risk-agent:act_stream_1" ((.idempotencyKey) runSkip)
+              assertEqual "same key the run would use" (fixtureRunKey "stream-run-v2:sha256:d5c5840b1bb985d45b79cb5e3034694f28435fd5ce27e2cc39df39e9db25f667") ((.idempotencyKey) runSkip)
             other -> assertFailure ("expected one stream skip, got " <> show other),
       testCase "handler failure rolls back both inbox row and message" do
         (withFixture databaseFixture) \appEnv pool -> do
@@ -379,3 +407,9 @@ deadLetterQueueName =
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureRunKey :: Text -> RunKey
+fixtureRunKey = either (error . show) id . parseRunKey
+
+fixtureAddressedKey :: Text -> Addressed.RequestKey
+fixtureAddressedKey = either (error . show) id . Addressed.parseRequestKey

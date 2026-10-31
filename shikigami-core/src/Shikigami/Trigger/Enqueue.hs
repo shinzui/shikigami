@@ -10,6 +10,9 @@ module Shikigami.Trigger.Enqueue
     ensureRunQueue,
     enqueueRunJob,
     addressedRunKey,
+    addressedRunKeyWithKey,
+    integrationRunKey,
+    enqueueAddressedRun,
     enqueueAddressedRunWithKey,
     addressedRunJob,
     scheduleRunIdempotencyKey,
@@ -19,26 +22,26 @@ where
 
 import Data.Aeson (Value, (.=))
 import Data.Aeson qualified as Aeson
-import Data.ByteString.Lazy qualified as LazyByteString
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Text qualified as Text
-import Data.Text.Encoding qualified as Text.Encoding
-import Data.Time.Format.ISO8601 (iso8601ParseM, iso8601Show)
-import Data.UUID qualified as UUID
-import Data.UUID.V5 qualified as UUID.V5
+import Data.Time.Format.ISO8601 (iso8601ParseM)
 import Hasql.Pool (Pool, UsageError)
 import Hasql.Pool qualified as Pool
 import Hasql.Transaction qualified as Tx
+import Keiro.Integration.Event (IntegrationEvent (..))
 import Keiro.PGMQ qualified as Job
 import Pgmq (MessageBody (..), MessageId, QueueName, SendMessage (..), createQueue, parseQueueName, sendMessage)
 import Pgmq.Hasql.Statements.Message qualified as PgmqStatements
 import Shikigami.Activity (ActivityEnvelope (..))
 import Shikigami.Agent.Decl (AgentDecl (..))
-import Shikigami.Agent.Name (AgentName, agentNameText)
+import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
-import Shikigami.Agent.Run.Key (RunKey (..))
+import Shikigami.Agent.Run.Key (RunKey, runKeyWithPrefix)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
+import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunJobs (encodeRunJob, queuePhysical, runJob)
+import Shikigami.Trigger.RequestKey qualified as Addressed
 
 -- | The IP-7 queue name (shared with the worker).
 runQueueName :: QueueName
@@ -77,7 +80,7 @@ runJobFromEnvelopeWithIdentity resolvedOccurredAt identity decl env =
       routeKind = AgentWorkflowRoute,
       occurredAt = resolvedOccurredAt,
       triggerPayload = toJSON env,
-      idempotencyKey = RunKey (agentNameText ((.name) decl) <> ":" <> envActivityId),
+      idempotencyKey = runKeyWithPrefix ('s' :| "tream-run-v2:") (versionedDigest "shikigami.stream-run/2" (Aeson.object ["agent" .= decl.name, "activity" .= envActivityId])),
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -134,24 +137,30 @@ enqueueRunJob pool job =
 -- replaced was built from 'getCurrentTime', which made the addressed producer
 -- the one producer in the runtime that could not deduplicate anything: retrying
 -- @shikigami enqueue-run@ after a timeout ran the agent twice.
-addressedRunKey :: AgentName -> Value -> Text
-addressedRunKey agent payload =
-  agentNameText agent
-    <> ":evt:"
-    <> UUID.toText
-      ( UUID.V5.generateNamed
-          UUID.V5.namespaceURL
-          (nameBytes (agentNameText agent <> ":" <> Text.Encoding.decodeUtf8Lenient (LazyByteString.toStrict (Aeson.encode payload))))
-      )
+addressedRunKey :: AgentName -> RunRouteKind -> Value -> RunKey
+addressedRunKey agent route payload =
+  runKeyWithPrefix ('a' :| "ddressed-run-v2:") (versionedDigest "shikigami.addressed-run/2" (Aeson.object ["agent" .= agent, "route" .= route, "payload" .= payload]))
 
--- | Enqueue an addressed run with a caller-supplied stable idempotency key.
---
--- The route is a parameter rather than an inference: an event-triggered job can
--- mean either workflow, and only the caller knows which one it meant.
-enqueueAddressedRunWithKey :: Pool -> AgentIdentity -> AgentName -> RunRouteKind -> Value -> Text -> IO (Either UsageError MessageId)
+addressedRunKeyWithKey :: AgentName -> RunRouteKind -> Addressed.RequestKey -> RunKey
+addressedRunKeyWithKey agent route key =
+  runKeyWithPrefix ('a' :| "ddressed-run-v2:") (versionedDigest "shikigami.addressed-run/2" (Aeson.object ["agent" .= agent, "route" .= route, "key" .= key]))
+
+-- | The native envelope owns its opaque message identity. Preserve it exactly
+-- in its own field rather than interpreting it as a UUID or a delimiter word.
+integrationRunKey :: AgentName -> RunRouteKind -> IntegrationEvent -> RunKey
+integrationRunKey agent route event =
+  runKeyWithPrefix ('e' :| "vent-run-v2:") (versionedDigest "shikigami.integration-run/2" (Aeson.object ["agent" .= agent, "route" .= route, "message" .= event.messageId]))
+
+enqueueAddressedRun :: Pool -> AgentIdentity -> AgentName -> RunRouteKind -> Value -> IO (Either UsageError MessageId)
+enqueueAddressedRun pool identity agent route payload = do
+  now <- getCurrentTime
+  enqueueRunJob pool (addressedRunJob now identity agent route payload (addressedRunKey agent route payload))
+
+-- | The caller key stays distinct from the full scoped run coordinate.
+enqueueAddressedRunWithKey :: Pool -> AgentIdentity -> AgentName -> RunRouteKind -> Value -> Addressed.RequestKey -> IO (Either UsageError MessageId)
 enqueueAddressedRunWithKey pool identity agent route payload key = do
   now <- getCurrentTime
-  enqueueRunJob pool (addressedRunJob now identity agent route payload (RunKey key))
+  enqueueRunJob pool (addressedRunJob now identity agent route payload (addressedRunKeyWithKey agent route key))
 
 -- | The CLI and HTTP producers share this exact queue payload constructor.
 addressedRunJob :: UTCTime -> AgentIdentity -> AgentName -> RunRouteKind -> Value -> RunKey -> RunJob
@@ -191,7 +200,7 @@ enqueueScheduledRun pool identity agent dueAt =
               "agent" .= agent,
               "dueAt" .= dueAt
             ],
-        idempotencyKey = RunKey (scheduleRunIdempotencyKey agent dueAt),
+        idempotencyKey = scheduleRunIdempotencyKey agent dueAt,
         parentSessionId = Nothing,
         parentRunWorkflowId = Nothing,
         delegationDepth = Nothing,
@@ -203,6 +212,6 @@ enqueueScheduledRun pool identity agent dueAt =
       }
 
 -- | The producer and lifecycle-audit key for one deterministic cron tick.
-scheduleRunIdempotencyKey :: AgentName -> UTCTime -> Text
+scheduleRunIdempotencyKey :: AgentName -> UTCTime -> RunKey
 scheduleRunIdempotencyKey agent dueAt =
-  agentNameText agent <> ":sched:" <> Text.pack (iso8601Show dueAt)
+  runKeyWithPrefix ('s' :| "chedule-run-v2:") (versionedDigest "shikigami.scheduled-run/2" (Aeson.object ["agent" .= agent, "dueAt" .= dueAt]))

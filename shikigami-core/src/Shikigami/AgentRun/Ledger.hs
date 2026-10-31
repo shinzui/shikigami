@@ -24,6 +24,7 @@ import Data.Foldable (toList)
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.Int (Int64)
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Text qualified as Text
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID
@@ -43,7 +44,7 @@ import Pgmq.Hasql.Statements.Message qualified as PgmqStatements
 import Relay.Pagination (Connection, CursorError, PageRequest)
 import Relay.Pagination.Hasql qualified as Relay
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
-import Shikigami.Agent.Run.Key (RunKey (..), runKeyText)
+import Shikigami.Agent.Run.Key (RunKey, parseRunKey, runKeyText, runKeyWithPrefix)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.AgentRun.RequestKey
 import Shikigami.Behavior.Error (boundedBehaviorDetail)
@@ -53,7 +54,7 @@ import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Trigger.Enqueue (enqueueRunJobTx)
 
 httpRunKey :: AgentName -> RequestKey -> RunKey
-httpRunKey agent key = RunKey ("http-run-v2:" <> versionedDigest "shikigami.http-run/2" (object ["agent" .= agent, "key" .= key]))
+httpRunKey agent key = runKeyWithPrefix ('h' :| "ttp-run-v2:") (versionedDigest "shikigami.http-run/2" (object ["agent" .= agent, "key" .= key]))
 
 -- Aeson's ordered object encoding makes object member order immaterial.
 payloadFingerprint :: Value -> Text
@@ -63,7 +64,7 @@ data RunRequestRow = RunRequestRow
   { agentName :: !AgentName,
     idempotencyKey :: !RequestKey,
     runId :: !Text,
-    runKey :: !Text,
+    runKey :: !RunKey,
     payloadFingerprint :: !Text,
     requestedBy :: !Text,
     queueMessageId :: !Int64,
@@ -98,7 +99,7 @@ acceptRunRequest pool job key caller
     fingerprint = payloadFingerprint job.triggerPayload
     accept = do
       MessageId message <- enqueueRunJobTx job
-      let row = RunRequestRow agent key (runJobWorkflowId job).unWorkflowId (runKeyText job.idempotencyKey) fingerprint caller message job.occurredAt "accepted" Nothing Nothing
+      let row = RunRequestRow agent key (runJobWorkflowId job).unWorkflowId job.idempotencyKey fingerprint caller message job.occurredAt "accepted" Nothing Nothing
       inserted <- Tx.statement row insertStatement
       case inserted of
         Just acceptedAt -> pure (Just (row & #acceptedAt .~ acceptedAt))
@@ -132,7 +133,7 @@ rowDecoder =
     <$> D.column (D.nonNullable (D.refine mkAgentName D.text))
     <*> D.column (D.nonNullable (D.refine parseRequestKey D.text))
     <*> text
-    <*> text
+    <*> D.column (D.nonNullable (D.refine parseRunKey D.text))
     <*> text
     <*> text
     <*> D.column (D.nonNullable D.int8)
@@ -159,21 +160,24 @@ insertStatement =
     ( ((agentNameText . (.agentName)) >$< E.param (E.nonNullable E.text))
         <> ((requestKeyText . (.idempotencyKey)) >$< E.param (E.nonNullable E.text))
         <> ((.runId) >$< E.param (E.nonNullable E.text))
-        <> ((.runKey) >$< E.param (E.nonNullable E.text))
+        <> ((runKeyText . (.runKey)) >$< E.param (E.nonNullable E.text))
         <> ((.payloadFingerprint) >$< E.param (E.nonNullable E.text))
         <> ((.requestedBy) >$< E.param (E.nonNullable E.text))
         <> ((.queueMessageId) >$< E.param (E.nonNullable E.int8))
     )
     (D.rowMaybe (D.column (D.nonNullable D.timestamptz)))
 
+runKeyEncoder :: E.Params (RunKey, Text)
+runKeyEncoder = ((runKeyText . fst) >$< E.param (E.nonNullable E.text)) <> (snd >$< E.param (E.nonNullable E.text))
+
 -- | Idempotent best-effort receipt for a decoded job's terminal queue outcome.
 recordDeadLetter :: Pool -> RunKey -> Text -> IO (Either Text Bool)
 recordDeadLetter pool key detail =
   safeUse pool $
-    Session.statement (runKeyText key, boundedBehaviorDetail detail) $
+    Session.statement (key, boundedBehaviorDetail detail) $
       preparable
         "UPDATE shikigami.agent_run_requests SET disposition='dead_lettered', disposition_detail=$2, disposition_at=COALESCE(disposition_at,now()) WHERE run_key=$1 RETURNING true"
-        keyEncoder
+        runKeyEncoder
         (fmap (fromMaybe False) (D.rowMaybe (D.column (D.nonNullable D.bool))))
 
 -- | Reconcile a pre-workflow request from the released PGMQ read API. The
@@ -214,7 +218,7 @@ refreshRunDisposition pool request
     receiptStatement =
       preparable
         ("UPDATE shikigami.agent_run_requests SET disposition='dead_lettered', disposition_detail=COALESCE(disposition_detail,$2), disposition_at=COALESCE(disposition_at,now()) WHERE run_key=$1 RETURNING " <> columns)
-        keyEncoder
+        runKeyEncoder
         (D.rowMaybe rowDecoder)
 
 data RunListError = InvalidRunCursor !CursorError | RunListUnavailable !Text

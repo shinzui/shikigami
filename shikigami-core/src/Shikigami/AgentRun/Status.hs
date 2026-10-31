@@ -29,7 +29,6 @@ import Kioku.Session qualified as Session
 import Kiroku.Store.Connection (KirokuStore (..))
 import Kiroku.Store.Effect (runStoreIO)
 import Shikigami.Agent.Name (AgentName, agentNameText)
-import Shikigami.Agent.Run.Key (runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.Agent.Workflow (StepResult (..))
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
@@ -104,7 +103,7 @@ gatherRunFacts store agent runId = do
         Right (Left err) -> pure (Left err)
         Right (Right Nothing) -> pure (Right Nothing)
         Right (Right (Just facts)) -> do
-          let key = (.runKey) <$> facts.request <|> (runKeyText . (.idempotencyKey) <$> recordedJob facts.steps)
+          let key = (.runKey) <$> facts.request <|> ((.idempotencyKey) <$> recordedJob facts.steps)
           skipped <- maybe (pure (Right Nothing)) (lookupDrainSkip store.pool agent) key
           -- Only requests with no workflow/refusal need queue reconciliation.
           -- Existing terminal receipts avoid touching the queue on repeated reads.

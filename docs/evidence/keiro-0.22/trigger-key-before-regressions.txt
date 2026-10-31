@@ -1,0 +1,25 @@
+Source parent: 76f5c8d
+Command: cabal test shikigami-workers-test --test-options="-j1 -p /coordinates/" --test-show-details=direct -j1
+Expected failure before production changes. Two existing positive coordinate controls pass; both new actual queue/inbox controls fail.
+
+shikigami-workers
+  workspace accepted Git provider
+    forged artifact coordinates refuse before capture:                      OK (4.32s)
+  workspace Unix RPC
+    client verifies the server UID before disclosing operation coordinates: OK
+  StreamInbox
+    addressed caller keys retain separate agent coordinates:                FAIL (0.18s)
+      test/Shikigami/StreamInboxSpec.hs:62:
+      independent workflows
+      expected: 2
+       but got: 1
+      Use -p '/coordinates/&&/addressed caller keys retain separate agent coordinates/' to rerun this test only.
+    integration keys retain separate agent and opaque message coordinates:  FAIL (0.24s)
+      test/Shikigami/StreamInboxSpec.hs:74:
+      independent workflows
+      expected: 2
+       but got: 1
+      Use -p '/coordinates/&&/integration keys retain separate agent and opaque message coordinates/' to rerun this test only.
+
+2 out of 4 tests failed (4.74s)
+Test suite shikigami-workers-test: FAIL

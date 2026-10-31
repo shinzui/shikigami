@@ -12,6 +12,7 @@ import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
 import Shikigami.Agent.Loader (loadAgentsReport, loadedAgents)
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Payload (readPayloadArgument)
+import Shikigami.Agent.Run.Key (runKeyText)
 import Shikigami.Agent.RunJob (RunRouteKind (..))
 import Shikigami.App.Config (AppConfig (agentsDirectory, directorySettings), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
@@ -19,7 +20,8 @@ import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Directory qualified as Directory
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
-import Shikigami.Trigger.Enqueue (addressedRunKey, enqueueAddressedRunWithKey, ensureRunQueue)
+import Shikigami.Trigger.Enqueue (addressedRunKey, addressedRunKeyWithKey, enqueueAddressedRun, enqueueAddressedRunWithKey, ensureRunQueue)
+import Shikigami.Trigger.RequestKey qualified as Addressed
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
@@ -41,7 +43,7 @@ import System.IO (hPutStrLn, stderr)
 -- @database.connection_string@. It is demanded here rather than by the whole
 -- @shikigami@ command line because sibling subcommands such as @validate@ run
 -- entirely offline.
-runEnqueueRun :: AgentName -> Maybe String -> Bool -> Maybe String -> AppConfig -> IO ()
+runEnqueueRun :: AgentName -> Maybe String -> Bool -> Maybe Addressed.RequestKey -> AppConfig -> IO ()
 runEnqueueRun target mpayload conversation mkey config = do
   let agent = Text.unpack (agentNameText target)
   supplied <- readPayloadArgument mpayload
@@ -79,8 +81,10 @@ runEnqueueRun target mpayload conversation mkey config = do
         exitFailure
       Right () -> pure ()
     let route = if conversation then ConversationWorkflowRoute else AgentWorkflowRoute
-        key = maybe (addressedRunKey target payload) Text.pack mkey
-    res <- enqueueAddressedRunWithKey (pool st) admittedIdentity target route payload key
+        key = maybe (addressedRunKey target route payload) (addressedRunKeyWithKey target route) mkey
+    res <- case mkey of
+      Nothing -> enqueueAddressedRun (pool st) admittedIdentity target route payload
+      Just requestKey -> enqueueAddressedRunWithKey (pool st) admittedIdentity target route payload requestKey
     case res of
       Left e -> do
         hPutStrLn stderr ("enqueue-run: " <> show e)
@@ -92,7 +96,7 @@ runEnqueueRun target mpayload conversation mkey config = do
               <> " for agent "
               <> agent
               <> " with idempotency key "
-              <> Text.unpack key
+              <> Text.unpack (maybe (runKeyText key) Addressed.requestKeyText mkey)
           )
   where
     declaredPrincipalId AgentDecl {identity = Nothing} = Nothing

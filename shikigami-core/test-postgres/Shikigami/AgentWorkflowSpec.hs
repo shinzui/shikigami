@@ -73,7 +73,7 @@ import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), ResolvedAgentIdentity (CompatibilityAgent, VerifiedAgent), compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.Agent.Run (AgentRunResult (..), recallAgentLearnings, recallPriorLearnings)
-import Shikigami.Agent.Run.Key (RunKey (..), runKeyText)
+import Shikigami.Agent.Run.Key (RunKey, parseRunKey, runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunFailure (..), AgentRunHooks (..), SinkIntent (..), agentRunFailureDetail, agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, executionRuntime, publishSinkIntent, runAgentRunWorkflow)
 import Shikigami.AgentRun.Status qualified as RunStatus
@@ -229,7 +229,7 @@ tests databaseFixture =
             registered <- runAppIO appEnv ExecutionCatalog.registerProjectionCatalog
             assertBool (show registered) (case registered of Right (Right _) -> True; _ -> False)
             Enqueue.ensureRunQueue _kirokuStore.pool >>= assertEqual "execution queue ready" (Right ())
-            let newJob = runJob & #idempotencyKey .~ RunKey "overlay-lifecycle:durable"
+            let newJob = runJob & #idempotencyKey .~ fixtureRunKey "overlay-lifecycle:durable"
                 execution = Replay.executionIdFor (assignmentIdFor (runJobWorkflowId newJob).unWorkflowId)
             runAgentRunWorkflow deps newJob >>= assertEqual "new parent releases its advance" (Right Suspended)
             completed <- ExecutionFixture.driveExecutionChild appEnv (executionRuntime deps) execution 20
@@ -351,7 +351,7 @@ tests databaseFixture =
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [decl]
                 refusedJob =
-                  (job & #idempotencyKey .~ (RunKey "heartbeat:test-refused-session") & #delegationDepth .~ (Just (fixtureDelegationDepth 1)))
+                  (job & #idempotencyKey .~ (fixtureRunKey "heartbeat:test-refused-session") & #delegationDepth .~ (Just (fixtureDelegationDepth 1)))
 
             result <- runAgentRunWorkflow deps refusedJob
             case result of
@@ -375,7 +375,7 @@ tests databaseFixture =
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 neverDecl = withRecordPolicy Never decl
                 deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [neverDecl]
-                neverJob = (job & #idempotencyKey .~ (RunKey "heartbeat:test-record-never"))
+                neverJob = (job & #idempotencyKey .~ (fixtureRunKey "heartbeat:test-record-never"))
 
             result <- runAgentRunWorkflow deps neverJob
             sid <- case result of
@@ -1766,7 +1766,7 @@ tests databaseFixture =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                    runJob = (approvalJob & #idempotencyKey .~ (RunKey "heartbeat:test-approval-notify-permanent"))
+                    runJob = (approvalJob & #idempotencyKey .~ (fixtureRunKey "heartbeat:test-approval-notify-permanent"))
                     deps =
                       (testDepsWithApproval appEnv behaviorEnv defaultAgentRunHooks defaultApprovalEnv)
                         { approvalWorkflow =
@@ -1796,7 +1796,7 @@ tests databaseFixture =
                 behaviorEnv <- newBehaviorEnv
                 posts <- newIORef (0 :: Int)
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                    runJob = (approvalJob & #idempotencyKey .~ (RunKey "heartbeat:test-approval-notify-transient"))
+                    runJob = (approvalJob & #idempotencyKey .~ (fixtureRunKey "heartbeat:test-approval-notify-transient"))
                     deps =
                       (testDepsWithApproval appEnv behaviorEnv defaultAgentRunHooks defaultApprovalEnv)
                         { approvalWorkflow =
@@ -1834,7 +1834,7 @@ tests databaseFixture =
                 attemptsRef <- newIORef (0 :: Int)
                 posts <- newIORef []
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                    runJob = (approvalJob & #idempotencyKey .~ (RunKey "heartbeat:test-approval-notify-crash-window"))
+                    runJob = (approvalJob & #idempotencyKey .~ (fixtureRunKey "heartbeat:test-approval-notify-crash-window"))
                     notifier =
                       ApprovalWorkflow.ApprovalNotifier
                         { ApprovalWorkflow.recordPark = \_ _ _ _ -> pure (),
@@ -2573,7 +2573,7 @@ capabilityJob agentName key =
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
-      idempotencyKey = RunKey key,
+      idempotencyKey = fixtureRunKey key,
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -2877,7 +2877,7 @@ job =
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
-      idempotencyKey = RunKey "heartbeat:test-workflow-replay",
+      idempotencyKey = fixtureRunKey "heartbeat:test-workflow-replay",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -2897,7 +2897,7 @@ retryVersioningJob key =
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
-      idempotencyKey = RunKey key,
+      idempotencyKey = fixtureRunKey key,
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -2920,7 +2920,7 @@ permanentFailureJob =
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
-      idempotencyKey = RunKey "missing-task-agent:test-permanent-failure",
+      idempotencyKey = fixtureRunKey "missing-task-agent:test-permanent-failure",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -2940,7 +2940,7 @@ crashJob =
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
-      idempotencyKey = RunKey "heartbeat:test-workflow-crash-resume",
+      idempotencyKey = fixtureRunKey "heartbeat:test-workflow-crash-resume",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -2960,7 +2960,7 @@ profileRefusalJob =
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
-      idempotencyKey = RunKey "heartbeat:test-profile-refusal",
+      idempotencyKey = fixtureRunKey "heartbeat:test-profile-refusal",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -2980,7 +2980,7 @@ profilePinningJob =
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
-      idempotencyKey = RunKey "heartbeat:test-profile-pinning",
+      idempotencyKey = fixtureRunKey "heartbeat:test-profile-pinning",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -3000,7 +3000,7 @@ profileViolationJob =
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
-      idempotencyKey = RunKey "profiled-skill:test-profile-violation",
+      idempotencyKey = fixtureRunKey "profiled-skill:test-profile-violation",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -3016,7 +3016,7 @@ profiledFlowViolationJob =
   profileViolationJob
     & #agentName .~ fixtureAgentName "profiled-flow"
     & #identity .~ compatibilityIdentity (fixtureAgentName "profiled-flow")
-    & #idempotencyKey .~ RunKey "profiled-flow:test-profile-violation"
+    & #idempotencyKey .~ fixtureRunKey "profiled-flow:test-profile-violation"
 
 sampleWorkflowProfileId :: ProfileId
 sampleWorkflowProfileId = ProfileId "sanctioned-review"
@@ -3167,7 +3167,7 @@ recordBeforeCompleteCrashJob =
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
-      idempotencyKey = RunKey "heartbeat:test-record-before-complete-crash",
+      idempotencyKey = fixtureRunKey "heartbeat:test-record-before-complete-crash",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -3187,7 +3187,7 @@ flowJob =
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object ["text" .= ("customer says thanks, all good" :: Text)],
-      idempotencyKey = RunKey "at-risk-customer:test-flow-low",
+      idempotencyKey = fixtureRunKey "at-risk-customer:test-flow-low",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -3209,7 +3209,7 @@ flowMemoryJob =
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object ["text" .= ("customer says thanks, all good" :: Text)],
-      idempotencyKey = RunKey "at-risk-customer:test-flow-memory-high",
+      idempotencyKey = fixtureRunKey "at-risk-customer:test-flow-memory-high",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -3321,7 +3321,7 @@ approvalJob =
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
-      idempotencyKey = RunKey "heartbeat:test-approval-approved",
+      idempotencyKey = fixtureRunKey "heartbeat:test-approval-approved",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -3341,7 +3341,7 @@ rejectedJob =
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
-      idempotencyKey = RunKey "heartbeat:test-approval-rejected",
+      idempotencyKey = fixtureRunKey "heartbeat:test-approval-rejected",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -3361,7 +3361,7 @@ timeoutJob =
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
-      idempotencyKey = RunKey "heartbeat:test-approval-timeout",
+      idempotencyKey = fixtureRunKey "heartbeat:test-approval-timeout",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -3381,7 +3381,7 @@ answeredBeforeDeadlineJob =
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object [],
-      idempotencyKey = RunKey "heartbeat:test-approval-before-deadline",
+      idempotencyKey = fixtureRunKey "heartbeat:test-approval-before-deadline",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -3401,7 +3401,7 @@ researchSupervisorJob =
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object ["topic" .= ("durable workflows" :: Text)],
-      idempotencyKey = RunKey "research-supervisor:test-fanout",
+      idempotencyKey = fixtureRunKey "research-supervisor:test-fanout",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -3421,7 +3421,7 @@ flowDelegationJob =
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0,
       triggerPayload = object ["topic" .= ("durable workflows" :: Text)],
-      idempotencyKey = RunKey "flow-delegation-supervisor:test-allowed",
+      idempotencyKey = fixtureRunKey "flow-delegation-supervisor:test-allowed",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -3434,7 +3434,7 @@ flowDelegationJob =
 
 flowDelegationDeniedJob :: RunJob
 flowDelegationDeniedJob =
-  (flowDelegationJob & #idempotencyKey .~ (RunKey "flow-delegation-supervisor:test-denied"))
+  (flowDelegationJob & #idempotencyKey .~ (fixtureRunKey "flow-delegation-supervisor:test-denied"))
 
 expectedWebFinding :: Value
 expectedWebFinding =
@@ -3463,3 +3463,6 @@ fixtureAgentName = either (error . show) id . mkAgentName
 
 fixtureDelegationDepth :: Int -> DelegationDepth
 fixtureDelegationDepth = either (error . show) id . parseDelegationDepth . toInteger
+
+fixtureRunKey :: Text -> RunKey
+fixtureRunKey = either (error . show) id . parseRunKey

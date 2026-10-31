@@ -1,0 +1,28 @@
+{
+  "sourceParent": "76f5c8d93b179c0216d008378eca96a0ade8922e",
+  "compiler": "ghc-9.12.4",
+  "sources": [
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Agent/Run/Key.hs",
+      "sha256": "ac2bdaf816d407109bafabe66d02de775e70de928cbad11128e2e99663929e85"
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Agent/RunJob.hs",
+      "sha256": "4cd6acda676e9902395105b78e923af9d4b6f49032c50ae33dc5c85954a582d4"
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Trigger/Enqueue.hs",
+      "sha256": "9355eb939e47cfe44d053b1db3b683b65743e87f217fe624c4690717b8b5c9ee"
+    },
+    {
+      "sourcePath": "shikigami-workers/src/Shikigami/Trigger/Consumer.hs",
+      "sha256": "8258d32a3372f9cce9cbd7a21d5f2d735b8b958d10eb5e49cdaacf2a38f2a96d"
+    }
+  ],
+  "probeSource": "{-# LANGUAGE OverloadedStrings #-}\nimport Data.Aeson (object)\nimport Data.Either (isLeft)\nimport Data.Time (getCurrentTime)\nimport Shikigami.Agent.Name (mkAgentName)\nimport Shikigami.Agent.Principal (compatibilityIdentity)\nimport Shikigami.Agent.Run.Key (RunKey(..))\nimport Shikigami.Agent.RunJob (RunRouteKind(..),runJobWorkflowId)\nimport Shikigami.Trigger.Enqueue (addressedRunJob)\nimport Shikigami.RunJobs qualified as Jobs\nmain :: IO ()\nmain = do\n now <- getCurrentTime\n first <- either (fail . show) pure (mkAgentName \"first\")\n second <- either (fail . show) pure (mkAgentName \"second\")\n let job name key = addressedRunJob now (compatibilityIdentity name) name AgentWorkflowRoute (object []) (RunKey key)\n print (\"distinct agents share caller-key workflow\",runJobWorkflowId (job first \"shared\") == runJobWorkflowId (job second \"shared\"))\n print (\"empty fresh key refuses its own queue decoder\",isLeft (Jobs.decodeRunJob (Jobs.encodeRunJob (job first \"\"))))\n",
+  "output": [
+    "(\"distinct agents share caller-key workflow\",True)",
+    "(\"empty fresh key refuses its own queue decoder\",True)"
+  ],
+  "meaning": "The exact addressed RunJob constructor used by the public enqueuer conflates equal caller keys across names, and constructs an empty key rejected by the complete generated queue decoder. The real inbox regression is qualified separately."
+}

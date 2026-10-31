@@ -1,0 +1,32 @@
+Scoped producer run keys — ExecPlan 107
+Source parent: 76f5c8d93b179c0216d008378eca96a0ade8922e (master); changed source/interface hashes are retained in domain-declarations.json.
+Compiler: selected GHC 9.12.4/frozen Cabal cohort, arm64 macOS.
+Decision: docs/adr/0088-run-keys-separate-caller-and-trigger-coordinates.md.
+
+Observed failures
+The retained public producer probe derives one workflow for two agents with the same addressed caller key. It also constructs an empty key refused by the complete generated queue decoder.
+The real PostgreSQL before run selects four coordinate cases: two existing positive controls pass, and both new queue/inbox cases fail expected two distinct workflow ids versus actual one. Integration message ids are native opaque application text, not a locally invented UUID restriction.
+A combined alternative focused filter selected zero tests and is excluded. Separate filters then pass ten EnqueueHardening cases and four coordinate cases, including both regressions, stable caller retries and native inbox redelivery.
+
+Resulting contract
+Private RunKey owns nonempty exact text, with checked restoration, structurally nonempty protocol prefixes and exact canonical native UUID capture. The run ledger, lifecycle refusal rows, SQL encoders/decoders and status joins retain it.
+Private addressed RequestKey owns nonempty exact caller text, including established whitespace/Unicode/control values. It stays distinct from full keys and the separately bounded HTTP RequestKey. Empty CLI keys refuse before configuration FIFO/stdin/database work.
+Fresh stream, integration, addressed and scheduled keys use versioned structured coordinates. Addressed/integration routes participate explicitly. One-off CLI invocation uses a fresh UUIDv4 runtime nonce rather than allocating an unused Kioku session id.
+These are native workflow/deduplication coordinates, not allocated entity ids or TypeID-v7 values. HTTP v2 key bytes, delegated child UUID/key bytes and execution-operation key bytes remain unchanged.
+The fresh producer identities intentionally change under ADR-27's confirmed unused first-release baseline. No old-key factory fallback or populated upgrade/cross-build replay is claimed. A neutral native helper-reference diff does not classify old producer-key meaning as compatible.
+
+Acceptance
+cabal build all --enable-tests -j2: PASS, all enabled components including fixture source (no Linux runtime claim).
+cabal test shikigami-core-test shikigami-core-postgres-test shikigami-workers-test shikigami-server-test shikigami-api-test shikigami-client-test shikigami-agent-test --test-options=-j1 --test-show-details=direct -j1: PASS.
+  pure 573 (5.98s); serial PostgreSQL 386 (107.32s); worker 262 (165.92s); server 95 (17.33s); API 31; client 9; agent 37.
+Selected-compiler positive-first checks: 82 nominal + 36 opaque/generic = 118 PASS. Both request-key domains reject substitution/coercion/constructors/literals after positive typed fields/factories; generic construction is closed.
+python3 tests/cli/contracts.py: PASS, 82 real-process checks without database/vendor.
+just keiro-gate 76f5c8d: PASS, check/inspect/idempotent scaffold, zero diff findings, all 156 native conformance rows. Diff/replay and unchanged four aggregate fingerprints/source hashes are retained separately.
+cabal test shikigami-core-domain-test shikigami-core-diagrams-test --test-show-details=direct -j1: PASS, 143 domain assertions and six diagrams.
+just hurl: PASS, task-owned fresh database/server/worker; 4/2/1 files and 13/15/3 requests across three phases, zero failed files.
+Haskell conventions, 13 style/ownership mutation tests, formatter and whitespace checks: PASS.
+Compiled audit worklist: 317 modules/893 declarations; all source/tool hashes and per-module declaration uniqueness verified. It remains unclassified.
+All 124 frozen guide hashes remain current, denominator unchanged.
+
+Scope
+The complete scalar/allocated-identity census remains open. ExecPlan 107 M1 is incomplete and plan 95's exact packaged closure/Linux/runtime/inventory qualification has not started.

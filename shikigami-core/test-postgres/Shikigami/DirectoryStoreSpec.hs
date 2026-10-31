@@ -16,6 +16,7 @@ import Hasql.Statement (Statement, preparable)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Agent.Loader (AgentLoadReport (..), loadAgentsReport)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
+import Shikigami.Agent.Run.Key (RunKey, parseRunKey, runKeyText)
 import Shikigami.Directory.Store
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Test.Tasty (TestTree, testGroup)
@@ -56,7 +57,7 @@ tests databaseFixture =
                     stage = TriggerStage,
                     detail = "schedule",
                     reason = "principal lifecycle is paused",
-                    idempotencyKey = "schedule:heartbeat:2026-08-23T00:00:00Z"
+                    idempotencyKey = fixtureRunKey "schedule:heartbeat:2026-08-23T00:00:00Z"
                   }
               drainSkip = (triggerSkip & #stage .~ (DrainStage) & #detail .~ ("agent-run"))
           expectRight "first trigger skip" =<< recordRunSkip pool triggerSkip
@@ -140,7 +141,7 @@ manifestPathOf :: LoadStateRow -> Text
 manifestPathOf (manifestPath, _, _, _, _) = manifestPath
 
 idempotencyKeyOf :: RunSkip -> Text
-idempotencyKeyOf RunSkip {idempotencyKey} = idempotencyKey
+idempotencyKeyOf RunSkip {idempotencyKey} = runKeyText idempotencyKey
 
 stageText :: SkipStage -> Text
 stageText = \case
@@ -155,3 +156,6 @@ expectPoolRight label = either (assertFailure . ((label <> ": ") <>) . show) pur
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureRunKey :: Text -> RunKey
+fixtureRunKey = either (error . show) id . parseRunKey

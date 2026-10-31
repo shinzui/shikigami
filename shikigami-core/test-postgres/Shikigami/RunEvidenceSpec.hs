@@ -9,6 +9,7 @@ import Control.Exception qualified as Exception
 import Data.Aeson (Value, eitherDecode, encode)
 import Data.ByteString.Lazy (ByteString)
 import Data.Generics.Labels ()
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Effectful (Eff)
@@ -26,7 +27,7 @@ import Kiroku.Store.Read qualified as StoreRead
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types qualified as StoreTypes
 import Numeric.Natural (Natural)
-import Shikigami.Agent.Run.Key (RunKey (..))
+import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Attestation.Agent
 import Shikigami.Attestation.CallFacts (CallComplianceFacts (..), callComplianceFacts)
@@ -600,7 +601,7 @@ sampleEvidence =
     sampleReviewed
     sampleProfileRef
     (ReviewRequestId "review-request-1")
-    (RunKey "review-request-1:attempt-1")
+    (fixtureRunKey "review-request-1:attempt-1")
 
 sampleAggregateId :: RunEvidenceId
 sampleAggregateId =
@@ -614,7 +615,7 @@ rejectedSampleEvidence =
     & #runId
     .~ rejectedRunId
     & #idempotencyKey
-    .~ RunKey "review-request-2:attempt-1"
+    .~ fixtureRunKey "review-request-2:attempt-1"
 
 rejectedAggregateId :: RunEvidenceId
 rejectedAggregateId =
@@ -1080,3 +1081,6 @@ completeScenarioEvidence connectionString correlation key =
         assertEqual "caller-owned evidence identity survives" sealed.runEvidenceId row.runEvidenceId
         assertEqual "no fabricated model calls" [] row.calls
       Nothing -> liftIO (assertFailure "scenario evidence missing")
+
+fixtureRunKey :: Text -> RunKey
+fixtureRunKey = either (error . show) id . parseRunKey

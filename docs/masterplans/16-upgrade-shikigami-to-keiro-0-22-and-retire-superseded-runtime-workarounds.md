@@ -90,17 +90,17 @@ a checked allocated TypeID; objective content, worker/workspace ownership,
 execution policies, counters, decisions and assignment locators retain their
 nominal checked meanings.
 
-Latest agent-value acceptance rebuilt all enabled components and passed 569 pure,
-386 serial PostgreSQL, 260 worker and 95 server cases, plus 107 compiler clients,
-all API/client/agent suites, 81 CLI checks and live Hurl. Private agent/routing
-values retain their checked meaning. Distinct stored compatibility scopes fix a
-reproduced name collision under ADR-87's intentional first-release namespace
-reset; verified-principal authority remains. The native gate passes against
-b940359 with no findings and unchanged aggregate folds. ADR-86's earlier deliberate
-child-identity body breaks remain retained. The complete scalar/identity census
-keeps EP-5 In Progress. Three source rows retain only final-profile clauses owned
-by EP-6. Its exact frozen artifacts, Linux/runtime integration and final inventory
-gate have not started; all implementation children must complete first.
+Latest trigger-key acceptance rebuilt all enabled components and passed 573 pure,
+386 serial PostgreSQL, 262 worker and 95 server cases, plus 118 compiler clients,
+all API/client/agent suites, 82 CLI checks and live Hurl. Private run/caller keys
+and structured producer coordinates fix two real queue/inbox collisions while
+preserving retries and native redelivery under ADR-88. HTTP v2 and delegated
+child coordinates remain unchanged. The native gate passes against 76f5c8d with
+no findings and unchanged aggregate folds. Earlier intentional baseline resets
+remain retained. Complete scalar/allocated-identity review keeps EP-5 In Progress.
+Three source rows retain only final-profile clauses owned by EP-6. Its exact
+frozen artifacts, Linux/runtime integration and final inventory gate have not
+started; all implementation children must complete first.
 
 ## Surprises & Discoveries
 

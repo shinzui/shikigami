@@ -35,7 +35,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa), ApprovalDecision (..), ApprovalRequest (..))
 import Shikigami.Agent.Approval.Workflow qualified as Approval
 import Shikigami.Agent.Name (agentNameFromNonEmpty)
-import Shikigami.Agent.Run.Key (RunKey (..))
+import Shikigami.Agent.Run.Key (runKeyWithPrefix)
 import Shikigami.Agent.RunJob (RunRouteKind (ExecutionOperationRoute))
 import Shikigami.App (AppEffects)
 import Shikigami.Decision.Contract (versionedDigest)
@@ -296,5 +296,5 @@ decide runtime start wake = do
           now <- liftIO getCurrentTime
           (_, accepted) <- checked (owned ((case retired of Nothing -> Store.submitExecutionAttemptWith; Just old -> \permit revision -> Store.recoverExecutionAttemptWith permit revision old) access state.revision (Attempt.AttemptSubmission request prepared wake) (enqueue now snapshot.identity snapshot.agent)))
           pure (ObserveExecution (Attempt.JobReference 1 start.executionId accepted.operationId accepted.request.attemptId))
-    enqueue now identity agent reference = void (enqueueRunJobTx (addressedRunJob now identity agent ExecutionOperationRoute (toJSON reference) (RunKey ("execution:" <> versionedDigest "shikigami.execution-job/1" (toJSON reference)))))
+    enqueue now identity agent reference = void (enqueueRunJobTx (addressedRunJob now identity agent ExecutionOperationRoute (toJSON reference) (runKeyWithPrefix ('e' :| "xecution:") (versionedDigest "shikigami.execution-job/1" (toJSON reference)))))
     policyDigest snapshot = versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)

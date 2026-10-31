@@ -51,7 +51,7 @@ import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, meiboPrincipal, principalText)
-import Shikigami.Agent.Run.Key (RunKey (..))
+import Shikigami.Agent.Run.Key (RunKey, parseRunKey, runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..))
 import Shikigami.Agent.RunJob.Worker (DrainAdmission (..), RunRoute (..), admitRunJobWith, agentJobOutcome, conversationJobOutcome, drainAdmissionOutcome, routeErrorJobOutcome, routeRunJob, runJob, transientBehaviorJobOutcome, withVisibilityHeartbeatEvery)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
@@ -148,7 +148,7 @@ tests databaseFixture =
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \store -> do
             let pool = StoreConnection.pool store
-                jobWith suffix = (sampleJob & #identity .~ (UnresolvedLegacyIdentity) & #idempotencyKey .~ (RunKey ("codec-agent:event:" <> suffix)))
+                jobWith suffix = (sampleJob & #identity .~ (UnresolvedLegacyIdentity) & #idempotencyKey .~ (fixtureRunKey ("codec-agent:event:" <> suffix)))
             activeDirectory <- directoryWith [principalRecord Active]
             active <- admitRunJobWith pool activeDirectory [drainAgent] (jobWith "active")
             assertAllowedAs "active principal continues" "agent_codec" active
@@ -179,7 +179,7 @@ tests databaseFixture =
                 "codec-agent:event:unknown",
                 "codec-agent:event:unavailable"
               ]
-              ((.idempotencyKey) <$> skips),
+              ((runKeyText . (.idempotencyKey)) <$> skips),
       testCase "worker-path heartbeat keeps one slow delivery leased" do
         (withShikigamiFreshDatabase databaseFixture) \connStr -> do
           callCount <- newIORef (0 :: Int)
@@ -376,7 +376,7 @@ sampleJob =
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 8 19) 0,
       triggerPayload = Aeson.object ["kind" .= ("test" :: Text)],
-      idempotencyKey = RunKey "codec-agent:event:1",
+      idempotencyKey = fixtureRunKey "codec-agent:event:1",
       parentSessionId = Nothing,
       parentRunWorkflowId = Nothing,
       delegationDepth = Nothing,
@@ -450,3 +450,6 @@ waitUntil predicate =
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureRunKey :: Text -> RunKey
+fixtureRunKey = either (error . show) id . parseRunKey
