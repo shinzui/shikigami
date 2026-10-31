@@ -18,7 +18,7 @@ import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Identity (OperationId (..))
-import Shikigami.Execution.Resources (Admission (..), Root (..))
+import Shikigami.Execution.Resources (Admission (..), Cancellation (..), Root (..))
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Transcript (ExecutionId (..))
 import Shikigami.Flow.Routing qualified as Routing
@@ -163,7 +163,7 @@ tests fixture =
           run env (Handoff.resumeHandoff owner.services (sessionIdFor admission)) >>= (@?= Right Handoff.HandoffPending)
           rootId <- maybe (assertFailure "missing root" >> fail "missing root") pure admission.context.executionRootId
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
-          run env (Roots.setRootControl rootId root.revision True Nothing) >>= (@?= Right ())
+          run env (Roots.setRootControl rootId root.revision StopWork Nothing) >>= (@?= Right ())
           run env (Handoff.resumeHandoff owner.services (sessionIdFor admission)) >>= (@?= Right (Handoff.HandoffEstablished successor (fixtureRevision 1)))
           state <- current env admission
           run env (Store.acceptMessage access state.revision (fixtureRevision 1) (OperationId "cancelled-root-work") (instruction 2)) >>= (@?= Left SessionOwnerRefused),

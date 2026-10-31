@@ -51,7 +51,7 @@ enrollRootTx :: ExecutionRootId -> Envelope -> Transaction (Either ResourceError
 enrollRootTx (ExecutionRootId key) envelope = case validateKey key of
   Left err -> pure (Left err)
   Right () -> do
-    let initial = Root envelope initialRevision False Nothing False noAttempts noAttempts Map.empty emptyUsage
+    let initial = Root envelope initialRevision ContinueWork Nothing NoOverage noAttempts noAttempts Map.empty emptyUsage
     inserted <- Tx.statement (key, initial) insertRoot
     stored <- Tx.statement key lockRoot
     pure case stored of
@@ -185,7 +185,7 @@ recordSettlement reconcile root attemptId outcome = withRoot root \state -> do
                   Right (usage, known, active, unknown) -> do
                     next <- saveScopeUsage root state operationRequest.allocationId usage
                     let exceeded = any (\(d, n) -> Map.member d reservation && n > Map.findWithDefault zeroAmount d reservation) (Map.toList newlyMeasured)
-                        recorded = next & #active .~ active & #unknown .~ unknown & #known .~ known & #overage .~ (state.overage || exceeded)
+                        recorded = next & #active .~ active & #unknown .~ unknown & #known .~ known & #overage .~ (if exceeded then OverageDetected else state.overage)
                     writeAttempt root (Attempt attempt.request (Just outcome))
                     saveRoot root recorded
                     pure (Right Accepted)
@@ -211,7 +211,7 @@ recordSettlement reconcile root attemptId outcome = withRoot root \state -> do
                         next <- saveScopeUsage root state operationRequest.allocationId usage
                         let exceeded = any (\(d, n) -> Map.member d knownReservation && n > Map.findWithDefault zeroAmount d knownReservation) (Map.toList measured)
                         writeAttempt root (Attempt attempt.request (Just outcome))
-                        saveRoot root (next & #active .~ active & #unknown .~ unknown & #known .~ known & #overage .~ (state.overage || exceeded))
+                        saveRoot root (next & #active .~ active & #unknown .~ unknown & #known .~ known & #overage .~ (if exceeded then OverageDetected else state.overage))
                         pure (Right Accepted)
   where
     wasUncertain attempt = case attempt.outcome of
@@ -276,12 +276,12 @@ finiteLimits Envelope {limits} = traverse finite limits
 
 -- | Policy revisions change only here. Usage recording remains permitted
 -- after cancellation/cutoff/revision changes; accepted work must drain truthfully.
-setRootControl :: (Store :> es) => ExecutionRootId -> StateRevision "execution-root" -> Bool -> Maybe ResourceAmount -> Eff es (Either ResourceError ())
+setRootControl :: (Store :> es) => ExecutionRootId -> StateRevision "execution-root" -> Cancellation -> Maybe ResourceAmount -> Eff es (Either ResourceError ())
 setRootControl root expected cancelled activeLimit = runTransaction $ withRoot root \state ->
   if expected /= state.revision
     then pure (Left RevisionConflict)
     else
-      if state.cancelled && not cancelled
+      if state.cancelled == StopWork && cancelled == ContinueWork
         then pure (Left (InvalidResourceRequest "cancellation is irreversible"))
         else
           if maybe False (\n -> case Map.lookup ActiveWork state.envelope.limits of Just (Limited maximumAmount) -> n > maximumAmount; Nothing -> n > zeroAmount; _ -> False) activeLimit

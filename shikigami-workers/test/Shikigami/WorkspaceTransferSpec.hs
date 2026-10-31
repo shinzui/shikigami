@@ -95,7 +95,7 @@ tests fixture =
           execution <- FileFixture.withAcceptedWorkspaceTool 1 transferredWorkspaceEditAdapter (AgentName "worker") "overlay__workspace-edit__read" token env original runtime input \snapshot access reference -> do
             Executor.executeAcceptedAttempt (FileFixture.executorForAdapter transferredWorkspaceEditAdapter runtime) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
             (_, state) <- right =<< run env (Execution.loadExecution access)
-            _ <- right =<< run env (Execution.stopExecution snapshot.identity snapshot.executionId state.revision False (ExecutionPolicyRefused "fixture terminal"))
+            _ <- right =<< run env (Execution.stopExecution snapshot.identity snapshot.executionId state.revision StopAsFailure (ExecutionPolicyRefused "fixture terminal"))
             pure snapshot.executionId
           parent <- right =<< run env (Sessions.authorizeSession context.sessionId context.actor (pure (Right ())))
           Just (_, first) <- pure binding.request.assignment
@@ -144,7 +144,7 @@ tests fixture =
             let next = assignment & #runId .~ thirdRun & #selection .~ selection
             host.load next >>= \case Left _ -> pure (); Right _ -> assertFailure "a session result hid an active prior execution"
             (_, state) <- right =<< run env (Execution.loadExecution access)
-            _ <- right =<< run env (Execution.stopExecution snapshot.identity snapshot.executionId state.revision False (ExecutionPolicyRefused "fixture terminal"))
+            _ <- right =<< run env (Execution.stopExecution snapshot.identity snapshot.executionId state.revision StopAsFailure (ExecutionPolicyRefused "fixture terminal"))
             resumed <- right =<< host.load next
             resumed.workspace @?= binding.workspace
             pure thirdRun
@@ -206,13 +206,13 @@ tests fixture =
             let nextAssignment = assignmentFor nextRun nextSelection
                 assignmentFor run selected = SkillAssignment run intent.newWorker intent.newOwner session selected Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host cannot call models")
             host.load nextAssignment >>= \case Left _ -> pure (); Right _ -> assertFailure "live prior successor execution admitted followup"
-            _ <- right =<< run env (Execution.stopExecution snapshot.identity snapshot.executionId state.revision False (ExecutionPolicyRefused "fixture terminal"))
+            _ <- right =<< run env (Execution.stopExecution snapshot.identity snapshot.executionId state.revision StopAsFailure (ExecutionPolicyRefused "fixture terminal"))
             nextAdmission <- right =<< host.load nextAssignment
             nextToken <- UUID4.nextRandom
             FileFixture.withAcceptedWorkspaceTool 1 transferredWorkspaceEditAdapter intent.newWorker "overlay__workspace-edit__read" nextToken env nextAdmission fileRuntime (Aeson.object ["path" .= ("dependency.txt" :: Text)]) \nextSnapshot nextAccess nextReference -> do
               Executor.executeAcceptedAttempt (FileFixture.executorForAdapter transferredWorkspaceEditAdapter fileRuntime) nextSnapshot.identity nextReference >>= (@?= Right Executor.ExecutorDone)
               (_, nextState) <- right =<< run env (Execution.loadExecution nextAccess)
-              _ <- right =<< run env (Execution.stopExecution nextSnapshot.identity nextSnapshot.executionId nextState.revision False (ExecutionPolicyRefused "fixture terminal"))
+              _ <- right =<< run env (Execution.stopExecution nextSnapshot.identity nextSnapshot.executionId nextState.revision StopAsFailure (ExecutionPolicyRefused "fixture terminal"))
               Just (running, _) <- right =<< run env (Sessions.inspectSession intent.sessionId)
               _ <- right =<< run env (Sessions.recordResult parent running.revision (fixtureRevision 1) (OperationId "finish-successor-followup") (AssignmentResult 1 nextMessage.assignmentId AssignmentFailed (Just nextSnapshot.executionId) Aeson.Null []))
               pure ()

@@ -152,7 +152,7 @@ main = catch dispatch \(failure :: SomeException) -> do
         ["inspect", config, prefix, name] -> withCase config prefix name \env _ _ _ item -> inspectCase env prefix name item
         ["cancel", config, prefix, name] -> withCase config prefix name \env _ _ _ item -> do
           root <- stored env (Roots.inspectRoot item.binding.request.rootId)
-          stored env (Roots.setRootControl item.binding.request.rootId root.revision True Nothing)
+          stored env (Roots.setRootControl item.binding.request.rootId root.revision Resources.StopWork Nothing)
         ["verify", config, prefix, name, expected] -> withCase config prefix name \env _ _ _ item -> verifyCase env prefix name expected item
         ["verify-git", config, prefix, name, expected] -> withCase config prefix name \env _ _ _ item -> verifyGitCase env expected item
         ["--help"] -> putStrLn "Disposable workspace Linux fixture: authority DIRECTORY PORT | native-provision CONFIG SPEC"

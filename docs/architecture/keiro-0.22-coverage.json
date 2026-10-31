@@ -169,6 +169,11 @@
           "rationale": "Validated router declarations and pinned diffs use private non-Generic seals with Generic read views. Constructors, representation coercion, generic conversion and unchecked JSON admission are rejected after positive public controls. DecisionFailure, instruction bundles and run/call correlations lose residual Generic construction. The explicit bundle codec preserves valid bytes and validator ownership. Workflow reads project the same policy without step/journal changes. ADR-81, 63 compiler clients and full 559 pure/383 PostgreSQL/260 worker/95 server/30 API/9 client/37 agent plus native/domain/diagram acceptance cover this clause. The complete scalar/identity census remains pending."
         },
         {
+          "id": "resource-root-and-termination-decisions",
+          "disposition": "implemented",
+          "rationale": "Cancellation, Overage and Termination are distinct closed types. Root JSON remains boolean; command termination has no wire codec. Irreversible cancellation, sticky overage, drain/settlement rules and native terminal selection are unchanged. Complete false/true root codecs and 67 compiler clients pass with 559 pure/383 PostgreSQL/260 workers/95 server cases under ADR-82; native generation/replay is neutral. The full scalar/identity census remains pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -198,7 +203,9 @@
         "docs/evidence/keiro-0.22/opaque-values-results.txt",
         "tests/types/opaque-values.py",
         "docs/adr/0081-validated-results-use-private-seals-and-public-read-views.md",
-        "docs/evidence/keiro-0.22/validated-results-results.txt"
+        "docs/evidence/keiro-0.22/validated-results-results.txt",
+        "docs/adr/0082-root-control-decisions-and-execution-termination-have-distinct-types.md",
+        "docs/evidence/keiro-0.22/root-decisions-results.txt"
       ]
     },
     {

@@ -4,7 +4,7 @@
 -- counters and ceilings use integers, never floating point arithmetic.
 module Shikigami.Execution.Resources where
 
-import Data.Aeson (FromJSONKey, ToJSONKey)
+import Data.Aeson (FromJSON (..), FromJSONKey, ToJSON (..), ToJSONKey)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
@@ -45,12 +45,37 @@ data Usage = Usage
 emptyUsage :: Usage
 emptyUsage = Usage Map.empty Map.empty
 
+-- These persisted decisions share Bool on the wire, not a domain type.
+data Cancellation = ContinueWork | StopWork
+  deriving stock (Eq, Show)
+
+instance ToJSON Cancellation where
+  toJSON value = toJSON (value == StopWork)
+  toEncoding value = toEncoding (value == StopWork)
+
+instance FromJSON Cancellation where
+  parseJSON value = do
+    stopped <- parseJSON value
+    pure (if stopped then StopWork else ContinueWork)
+
+data Overage = NoOverage | OverageDetected
+  deriving stock (Eq, Show)
+
+instance ToJSON Overage where
+  toJSON value = toJSON (value == OverageDetected)
+  toEncoding value = toEncoding (value == OverageDetected)
+
+instance FromJSON Overage where
+  parseJSON value = do
+    exceeded <- parseJSON value
+    pure (if exceeded then OverageDetected else NoOverage)
+
 data Root = Root
   { envelope :: !Envelope,
     revision :: !(StateRevision "execution-root"),
-    cancelled :: !Bool,
+    cancelled :: !Cancellation,
     activeLimit :: !(Maybe ResourceAmount),
-    overage :: !Bool,
+    overage :: !Overage,
     active :: !(AttemptCount "root-active"),
     unknown :: !(AttemptCount "root-unknown"),
     known :: !Quantities,
@@ -168,8 +193,8 @@ admit limits usage amounts = do
 checkRoot :: UTCTime -> StateRevision "execution-root" -> Root -> Either ResourceError ()
 checkRoot now expected root = do
   when (expected /= root.revision) (Left RevisionConflict)
-  when root.cancelled (Left RootCancelled)
-  when root.overage (Left OverageRecorded)
+  when (root.cancelled == StopWork) (Left RootCancelled)
+  when (root.overage == OverageDetected) (Left OverageRecorded)
   when (now >= root.envelope.cutoff) (Left CutoffReached)
 
 effectiveLimits :: Root -> Limits

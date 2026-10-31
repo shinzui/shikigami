@@ -32,6 +32,18 @@ import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ("root-cancellation", '''cancel :: Resources.Root -> Resources.Cancellation
+cancel root = root.cancelled
+''', True),
+    ("overage-is-not-cancellation", '''cancel :: Resources.Root -> Resources.Cancellation
+cancel root = root.overage
+''', False),
+    ("execution-termination", '''mode :: Execution.Termination
+mode = Execution.StopAsCancelled
+''', True),
+    ("cancellation-is-not-termination", '''mode :: Resources.Cancellation -> Execution.Termination
+mode cancel = cancel
+''', False),
     ("worker-assignment-limit", '''limit :: WorkerSession.SessionAdmission -> MaximumAssignments
 limit admission = admission.maximumAssignments
 capacity :: MaximumSessions
@@ -163,6 +175,8 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
                 "event-is-not-message-sequence": ["Couldn't match type", "worker-message", "worker-event"],
                 "execution-root-is-not-execution": ["Couldn't match type", "execution-root", "execution"],
                 "operation-is-not-execution-revision": ["Couldn't match type", "execution-operation", "execution"],
+                "overage-is-not-cancellation": ["Couldn't match", "Cancellation", "Overage"],
+                "cancellation-is-not-termination": ["Couldn't match", "Cancellation", "Termination"],
                 "mailbox-is-not-assignment-limit": ["Couldn't match", "MaximumAssignments", "MailboxLimit"],
                 "unchecked-session-limit-arithmetic": ["MaximumAssignments", "Num"],
                 "unchecked-session-limit-coercion": ["MaximumSessions", "Int"],

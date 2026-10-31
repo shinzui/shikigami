@@ -25,7 +25,7 @@ import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Counter (AttemptCount, parseAttemptCount)
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Policy.Types
-import Shikigami.Execution.Resources (Root (..))
+import Shikigami.Execution.Resources (Cancellation (..), Root (..))
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Execution.Store qualified as Execution
@@ -159,7 +159,7 @@ tests fixture =
         Just admission <- pure snapshot.workspace
         root <- stored file (Roots.inspectRoot admission.rootId)
         root.unknown @?= (fixtureCount 2)
-        stored file (Roots.setRootControl admission.rootId root.revision True Nothing)
+        stored file (Roots.setRootControl admission.rootId root.revision StopWork Nothing)
         Just (waiting, _, _) <- stored file (Execution.inspectExecution snapshot.executionId)
         let claim = Attempt.AttemptClaim reference request.owner request.generation
             invalid = Attempt.AttemptResult (OperationDenied "not a retained tool result") NeedModel Nothing
@@ -176,7 +176,7 @@ tests fixture =
         -- tool settlement must preserve that unrelated conservative hold.
         settled.unknown @?= (fixtureCount 1)
         settled.active @?= (fixtureCount 0)
-        settled.cancelled @?= True
+        settled.cancelled @?= StopWork
         readIORef calls >>= (@?= (1, 1)),
       testCase "independent receipt recovery preserves the next accepted tool after replay authority is revoked" $ withProcessForTools 2 fixture id False \file runtime observed calls snapshot reference -> do
         Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
@@ -387,7 +387,7 @@ rootCancellationCase fixture stopAcknowledged = do
     readIORef stops >>= (@?= 0)
     Just admission <- pure snapshot.workspace
     root <- stored file (Roots.inspectRoot admission.rootId)
-    stored file (Roots.setRootControl admission.rootId root.revision True Nothing)
+    stored file (Roots.setRootControl admission.rootId root.revision StopWork Nothing)
     let revoked = runtime & #authorizer .~ denyAllActionAuthorizer & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked")) & #selectRule .~ (\_ _ _ -> pure (Left "revoked"))
     page <- right =<< scanProcessReceipts revoked Nothing
     page.acknowledged @?= 0

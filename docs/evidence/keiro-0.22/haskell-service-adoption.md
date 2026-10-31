@@ -181,7 +181,7 @@ complete scalar/identity census remain open.
 
 The [compiled declaration worklist](domain-declarations.json) and
 [census acquisition results](domain-census-results.txt) enumerate 310 hand-owned
-modules, 884 declarations and 14 separately listed role entrypoints. The source
+modules, 887 declarations and 14 separately listed role entrypoints. The source
 and interface hashes preserve the actual candidate; the worklist does not assign
 automatic domain/boundary exemptions or certify the remaining review.
 
@@ -211,3 +211,8 @@ residual generic construction is closed. [Validated-result acceptance](validated
 records 63 compiler clients, exact bundle bytes, neutral native reports and the
 full affected package suites, including 383 PostgreSQL and 260 worker cases.
 No workflow step shape changes. Complete scalar/identity review remains open.
+
+Root cancellation, overage and execution termination now retain separate closed
+types under ADR-82. [Root-decision acceptance](root-decisions-results.txt) records
+unchanged boolean wire bytes, 67 compiler clients, neutral native reports and
+559 pure/383 PostgreSQL/260 worker/95 server tests. The wider census remains open.

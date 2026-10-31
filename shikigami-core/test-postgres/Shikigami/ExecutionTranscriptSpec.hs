@@ -347,7 +347,7 @@ tests fixture =
           drive >>= (@?= ContinuedAsNew)
           drive >>= (@?= Suspended)
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
-          run env (Roots.setRootControl rootId root.revision True Nothing) >>= (@?= Right ())
+          run env (Roots.setRootControl rootId root.revision R.StopWork Nothing) >>= (@?= Right ())
           result <- pumpDriver env executor snapshot 12
           result.phase @?= Replay.Cancelled
           calls >>= (@?= [])
@@ -878,7 +878,7 @@ tests fixture =
         withFixture fixture \env snapshot access -> do
           (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
           receipt <- reserveCall env snapshot operation
-          run env (Roots.setRootControl rootId (fixtureRevision 0) True Nothing) >>= (@?= Right ())
+          run env (Roots.setRootControl rootId (fixtureRevision 0) R.StopWork Nothing) >>= (@?= Right ())
           run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId modelOutcome NeedModel (Just (receipt, terminal))) >>= (@?= Right R.Accepted)
           result <- run env (Store.acceptOperation access (fixtureRevision 2) (spec snapshot 1) secretInput)
           result @?= Left (ResourceAdmissionRefused "RootCancelled")

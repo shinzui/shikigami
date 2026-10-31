@@ -91,7 +91,8 @@ nominal checked values. Worker-input acceptance is 559 pure, 383 serial PostgreS
 server cases. The subsequent opaque-instance fix rebuilt all components and passed
 51 compiler clients, 559 pure and 95 server cases. Validated-result/bundle-codec
 acceptance then reran all package suites with 63 compiler clients and unchanged
-559 pure/383 PostgreSQL/260 worker/95 server counts. The remaining scalar/identity census keeps EP-5 In Progress;
+559 pure/383 PostgreSQL/260 worker/95 server counts. Root-decision acceptance
+then retained those runtime counts with 67 compiler clients. The remaining scalar/identity census keeps EP-5 In Progress;
 three further source rows retain only final-profile clauses owned by EP-6. EP-6's exact frozen artifacts, Linux/runtime integration and final
 inventory gate have not started; all five implementation children must complete
 before that qualification.

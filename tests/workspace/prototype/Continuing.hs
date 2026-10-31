@@ -167,7 +167,7 @@ terminal q prepared = do
   Just (state, _, _) <- right =<< run q.env (Execution.inspectExecution prepared.snapshot.executionId)
   -- This fixture drives accepted tool contracts, not a normal final model turn.
   -- Its explicit failed terminal is honest and leaves the shared root active.
-  void (right =<< run q.env (Execution.stopExecution prepared.snapshot.identity prepared.snapshot.executionId state.revision False (ExecutionPolicyRefused "fixture tools completed")))
+  void (right =<< run q.env (Execution.stopExecution prepared.snapshot.identity prepared.snapshot.executionId state.revision StopAsFailure (ExecutionPolicyRefused "fixture tools completed")))
 
 openNativeSession :: Qualification -> Text.Text -> IO (WorkerSessionId, AgentIdentity, Text.Text, ExecutionRootId)
 openNativeSession q name = do

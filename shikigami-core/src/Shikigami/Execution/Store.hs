@@ -607,8 +607,9 @@ refreshExecutionControlWake identity execution expected wake = catchExecutionWit
   now <- liftIO getCurrentTime
   refreshExecutionWake (ReplayAccess execution identity (addUTCTime 60 now)) expected wake
 
-stopExecution :: (ExecutionEffects es) => AgentIdentity -> ExecutionId -> StateRevision "execution" -> Bool -> ExecutionError -> Eff es (Either ExecutionError Admission)
-stopExecution identity execution expected cancelled reason = catchExecutionWith id do
+stopExecution :: (ExecutionEffects es) => AgentIdentity -> ExecutionId -> StateRevision "execution" -> Termination -> ExecutionError -> Eff es (Either ExecutionError Admission)
+stopExecution identity execution expected termination reason = catchExecutionWith id do
+  let cancelled = termination == StopAsCancelled
   (stored, binding) <- readMetadata (getExecution execution)
   unless (identity == binding.identity) (throwIO (ExecutionAbort ExecutionIdentityConflict))
   if stored.phase `elem` [Failed, Cancelled] && stored.failure == Just reason
@@ -634,7 +635,7 @@ stopExecution identity execution expected cancelled reason = catchExecutionWith 
               root <- maybe (throwE OperationConflict) pure actualBinding.rootId
               result <- lift (Roots.inspectRootTx root)
               status <- either (throwE . ResourceAdmissionRefused . Text.pack . show) pure result
-              unless status.cancelled (throwE OperationConflict)
+              unless (status.cancelled == Resources.StopWork) (throwE OperationConflict)
             unless (Lazy.length (Aeson.encode reason) <= 1024) (throwE UnsupportedReplay)
             pure (state, pendingOperation)
         )

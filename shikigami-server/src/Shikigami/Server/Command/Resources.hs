@@ -43,8 +43,8 @@ resourceView now root =
       "activeLimit" .= root.activeLimit,
       "units" .= object ["CostMicroUsd" .= ("millionths of one USD" :: Text), "Tokens" .= ("tokens" :: Text)],
       "refusalCategories"
-        .= ( [RootCancelled | root.cancelled]
-               <> [OverageRecorded | root.overage]
+        .= ( [RootCancelled | root.cancelled == StopWork]
+               <> [OverageRecorded | root.overage == OverageDetected]
                <> [CutoffReached | now >= root.envelope.cutoff]
                <> either (\err -> [err]) (\usage -> [ResourceExhausted d | (d, Limited n) <- Map.toList (effectiveLimits root), Map.findWithDefault zeroAmount d usage >= n]) (occupied root.usage)
                <> [DimensionNotAdmitted d | d <- [minBound .. maxBound], Map.notMember d root.envelope.limits]

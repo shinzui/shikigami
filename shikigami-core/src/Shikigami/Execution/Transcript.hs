@@ -271,6 +271,10 @@ validateSnapshot snapshot = case Aeson.fromJSON (toJSON snapshot) of
   Aeson.Success decoded | decoded == snapshot -> Right ()
   _ -> Left UnsupportedReplay
 
+-- A command's terminal choice is distinct from resource-root cancellation.
+data Termination = StopAsFailure | StopAsCancelled
+  deriving stock (Eq, Show)
+
 data ExecutionPhase = Active | Parked | Unresolved | Succeeded | Failed | Cancelled
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)

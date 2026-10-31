@@ -121,7 +121,7 @@ tests fixture =
         run env (begin "a" "one") >>= (@?= Right Accepted)
         settle env "a" 11
         snapshot <- root env
-        snapshot.overage @?= True
+        snapshot.overage @?= OverageDetected
         Map.lookup Tokens snapshot.known @?= Just (fixtureAmount 11)
         run env (begin "b" "one") >>= (@?= Left OverageRecorded),
       testCase "cancellation and cutoff deny admission but preserve recording" $ withFixture fixture \env -> do
@@ -129,21 +129,21 @@ tests fixture =
         reserveModel env "one"
         run env (begin "a" "one") >>= (@?= Right Accepted)
         run env (beginAttempt rid (fixtureRevision 0) (attempt "b" "one" 10) (addUTCTime 3600 now)) >>= (@?= Left CutoffReached)
-        run env (setRootControl rid (fixtureRevision 0) True Nothing) >>= (@?= Right ())
+        run env (setRootControl rid (fixtureRevision 0) StopWork Nothing) >>= (@?= Right ())
         run env (beginAttempt rid (fixtureRevision 1) (attempt "b" "one" 10) now) >>= (@?= Left RootCancelled)
         settle env "a" 5
         run env (begin "a" "one") >>= (@?= Right AlreadyAccepted)
-        run env (setRootControl rid (fixtureRevision 1) False Nothing) >>= (@?= Left (InvalidResourceRequest "cancellation is irreversible")),
+        run env (setRootControl rid (fixtureRevision 1) ContinueWork Nothing) >>= (@?= Left (InvalidResourceRequest "cancellation is irreversible")),
       testCase "reduced active cap drains accepted work without fabricating cancellation" $ withFixture fixture \env -> do
         seed env []
         reserveModel env "one"
         run env (begin "a" "one") >>= (@?= Right Accepted)
-        run env (setRootControl rid (fixtureRevision 0) False (Just (fixtureAmount 0))) >>= (@?= Right ())
+        run env (setRootControl rid (fixtureRevision 0) ContinueWork (Just (fixtureAmount 0))) >>= (@?= Right ())
         run env (beginAttempt rid (fixtureRevision 1) (attempt "b" "one" 10) now) >>= (@?= Left (ResourceExhausted ActiveWork))
         settle env "a" 5
         snapshot <- root env
         snapshot.active @?= (fixtureCount 0)
-        snapshot.cancelled @?= False,
+        snapshot.cancelled @?= ContinueWork,
       testCase "unknown policy cannot claim a finite token cap" $ withFixture fixture \env -> do
         seed env []
         reserveModel env "one"

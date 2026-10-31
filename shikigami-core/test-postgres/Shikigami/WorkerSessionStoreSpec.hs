@@ -172,7 +172,7 @@ tests fixture =
           _ <- expectRight =<< run env (Store.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (OperationId "start") first.assignmentId)
           rootId <- maybe (assertFailure "fixture root missing" >> fail "fixture root missing") pure admission.context.executionRootId
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
-          run env (Roots.setRootControl rootId root.revision True Nothing) >>= (@?= Right ())
+          run env (Roots.setRootControl rootId root.revision R.StopWork Nothing) >>= (@?= Right ())
           run env (Store.acceptMessage access (fixtureRevision 2) (fixtureRevision 0) (OperationId "late-work") (instruction "no")) >>= (@?= Left SessionOwnerRefused)
           _ <- expectRight =<< run env (Store.recordResult access (fixtureRevision 2) (fixtureRevision 0) (OperationId "finish") (resultFor first "accepted finding"))
           available <- expectRight =<< run env (Store.readResult access first.assignmentId)

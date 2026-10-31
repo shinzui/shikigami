@@ -44,7 +44,7 @@ import Shikigami.Execution.Identity (AttemptId (..))
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Policy.Limits (policyNumber)
 import Shikigami.Execution.Progress (repairLimitReached)
-import Shikigami.Execution.Resources (AttemptRequest (..), Envelope (..), Root (..))
+import Shikigami.Execution.Resources (AttemptRequest (..), Cancellation (StopWork), Envelope (..), Root (..))
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.SelectionRuntime (preparePinnedExecutionCall)
 import Shikigami.Execution.Store qualified as Store
@@ -144,7 +144,7 @@ advanceExecution runtime start wake = do
       metadata <- runExecutionStore runtime (Store.inspectExecution start.executionId)
       case metadata of
         Right (Just (state, binding, _)) | state.phase `elem` [Active, Parked] -> do
-          stopped <- runExecutionStore runtime (Store.stopExecution binding.identity start.executionId state.revision False err)
+          stopped <- runExecutionStore runtime (Store.stopExecution binding.identity start.executionId state.revision StopAsFailure err)
           case stopped of
             Right _ -> pure (Right RotateExecution)
             Left UnresolvedOperation -> pure decision
@@ -160,12 +160,12 @@ decide runtime start wake = do
     else do
       now <- liftIO getCurrentTime
       root <- traverse (\rootId -> checked (owned (Roots.inspectRoot rootId <&> either (const (Left (ResourceAdmissionRefused "execution root unavailable"))) Right))) binding.rootId
-      let stopped = maybe False (.cancelled) root
+      let stopped = maybe False (\state -> state.cancelled == StopWork) root
           cutoff = maybe False (\value -> now >= value.envelope.cutoff) root
       stoppedResult <-
         if stopped || cutoff
           then do
-            result <- liftIO (owned (Store.stopExecution binding.identity start.executionId state.revision stopped (ExecutionPolicyRefused (if stopped then "execution root cancelled" else "execution cutoff reached"))))
+            result <- liftIO (owned (Store.stopExecution binding.identity start.executionId state.revision (if stopped then StopAsCancelled else StopAsFailure) (ExecutionPolicyRefused (if stopped then "execution root cancelled" else "execution cutoff reached"))))
             case result of
               Right _ -> pure True
               Left UnresolvedOperation -> case state.activeOperation of

@@ -19,11 +19,20 @@ tests =
     "ExecutionResources"
     [ testCase "root revisions and counts preserve numeric JSON and reject negatives" do
         let now = UTCTime (fromGregorian 2026 10 30) 0
-            root = Root (Envelope Map.empty now) initialRevision False Nothing False (fixtureCount 0) (fixtureCount 0) Map.empty emptyUsage
+            root = Root (Envelope Map.empty now) initialRevision ContinueWork Nothing NoOverage (fixtureCount 0) (fixtureCount 0) Map.empty emptyUsage
             encoded = Aeson.toJSON root
         Aeson.fromJSON encoded @?= Aeson.Success root
         case encoded of
           Aeson.Object fields -> do
+            fmap Aeson.encode (KeyMap.lookup "cancelled" fields) @?= Just "false"
+            fmap Aeson.encode (KeyMap.lookup "overage" fields) @?= Just "false"
+            let stoppedWire = Aeson.Object (KeyMap.insert "cancelled" (Aeson.Bool True) (KeyMap.insert "overage" (Aeson.Bool True) fields))
+            case Aeson.fromJSON stoppedWire :: Aeson.Result Root of
+              Aeson.Error failure -> assertFailure failure
+              Aeson.Success stopped -> do
+                stopped.cancelled @?= StopWork
+                stopped.overage @?= OverageDetected
+                Aeson.encode stopped @?= Aeson.encode stoppedWire
             fmap Aeson.encode (KeyMap.lookup "revision" fields) @?= Just (Aeson.encode (0 :: Integer))
             mapM_
               ( \key -> do
