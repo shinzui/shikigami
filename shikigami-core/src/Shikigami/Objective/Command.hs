@@ -11,12 +11,12 @@ import Shikigami.WorkerSession.Checkpoint (CheckpointIntent)
 -- | This is the entire public vocabulary. Internal commands have no public
 -- JSON tags and cannot be selected by a public command envelope.
 data Command
-  = ReviseInstructions !Text
+  = ReviseInstructions !Instructions
   | ReviseCriteria ![Criterion]
   | SetAssignments ![AssignmentDraft]
-  | RecordProgress !ObjectiveAssignmentId !AssignmentState ![Text] ![Text]
+  | RecordProgress !ObjectiveAssignmentId !AssignmentState ![DecisionNote] ![AssumptionNote]
   | RecordEvidence !ObjectiveAssignmentId !EvidenceInput
-  | SetNextAction ![Text]
+  | SetNextAction ![NextAction]
   | SetBlocked !Bool
   | ProposeCompletion !CompletionProposal
   | AcceptCompletion

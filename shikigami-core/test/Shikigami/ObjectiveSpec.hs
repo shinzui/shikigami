@@ -48,6 +48,17 @@ tests =
         Aeson.encode value @?= Aeson.encode (7 :: Integer)
         Aeson.fromJSON (Aeson.toJSON value) @?= Aeson.Success value
         assertBool "negative revision refused" (case Aeson.fromJSON (Aeson.toJSON (-1 :: Integer)) :: Aeson.Result (StateRevision "objective") of Aeson.Error _ -> True; _ -> False),
+      testCase "protected objective prose keeps its string codec and construction bounds" do
+        Aeson.encode (title "title") @?= Aeson.encode ("title" :: Text)
+        Aeson.encode (instructions "") @?= Aeson.encode ("" :: Text)
+        forM_
+          [ either (const True) (const False) (parseTitle ""),
+            either (const True) (const False) (parseGoal ""),
+            either (const True) (const False) (parseInstructions (Data.Text.replicate 32769 "x")),
+            either (const True) (const False) (parseAttestationStatement "")
+          ]
+          (assertBool "invalid content refused before domain construction")
+        assertBool "protected text is not a Show diagnostic" (not ("PRIVATE_INSTRUCTIONS_SENTINEL" `Data.Text.isInfixOf` Data.Text.pack (show (instructions "PRIVATE_INSTRUCTIONS_SENTINEL")))),
       testCase "bounded graphs reject cycles, duplicates and dangling dependencies" do
         validateGraph [draft "a" [], draft "b" [objectiveAssignment "a"]] @?= Right ()
         mapM_
@@ -59,7 +70,7 @@ tests =
         forM_ ["IngestCheckpoint", "TransferOwnership"] \tag ->
           assertBool "private command refused" (case Aeson.fromJSON (Aeson.object ["tag" .= (tag :: Text)]) :: Aeson.Result Command of Aeson.Error _ -> True; _ -> False),
       testCase "criteria require unique, nonempty structured keys" do
-        validateCriteria [Criterion (criterionKey "build") "build passes" Automatic False] @?= Right ()
+        validateCriteria [Criterion (criterionKey "build") (description "build passes") Automatic False] @?= Right ()
         assertBool "empty criteria refused" (validateCriteria [] /= Right ())
         assertBool "duplicate criteria refused" (validateCriteria [criterion, criterion] /= Right ()),
       testCase "acceptance rejects stale instructions, missing journey and child success alone" do
@@ -71,15 +82,15 @@ tests =
         validateAcceptance (objective & #criteria .~ [criterion & #journeyRequired .~ True]) proposal @?= Left ObjectiveInvalidEvidence
     ]
   where
-    criterion = Criterion (criterionKey "human") "integrated user journey" HumanVerifiable False
+    criterion = Criterion (criterionKey "human") (description "integrated user journey") HumanVerifiable False
     actor = VerifiedCaller "fixture"
     proposal = CompletionProposal (revision 0) (revision 0) (revision 0) [artifact "artifact"] [evidenceKey "check"] []
     assignment = Assignment (draft "a" [] & #state .~ Done) initialRevision initialRevision initialRevision []
-    evidence = Evidence (Attestation (evidenceKey "check") (criterionKey "human") (artifact "artifact") "reviewed" False) (EvidenceVerification CheckPassed (Just (criterionKey "human")) False) (objectiveAssignment "a") (assignmentMeaning assignment) actor initialRevision initialRevision initialRevision
-    objective = Objective (either (error . show) id (parseObjectiveId "shikigami_objective_01h455vb4pex5vsknk084sn02q")) actor [Member actor [Owner]] "title" "goal" "instructions" (revision 1) initialRevision initialRevision [criterion] Open [assignment] [evidence] [] [] [] [] [] (Just (proposal, actor)) Nothing
+    evidence = Evidence (Attestation (evidenceKey "check") (criterionKey "human") (artifact "artifact") (statement "reviewed") False) (EvidenceVerification CheckPassed (Just (criterionKey "human")) False) (objectiveAssignment "a") (assignmentMeaning assignment) actor initialRevision initialRevision initialRevision
+    objective = Objective (either (error . show) id (parseObjectiveId "shikigami_objective_01h455vb4pex5vsknk084sn02q")) actor [Member actor [Owner]] (title "title") (goal "goal") (instructions "instructions") (revision 1) initialRevision initialRevision [criterion] Open [assignment] [evidence] [] [] [] [] [] (Just (proposal, actor)) Nothing
 
 draft :: Text -> [ObjectiveAssignmentId] -> AssignmentDraft
-draft key dependencies = AssignmentDraft (objectiveAssignment key) "work" dependencies (compatibilityIdentity "worker") Pending Nothing (Just (ExecutionRootId "root")) (Just (UTCTime (fromGregorian 2027 1 1) 0))
+draft key dependencies = AssignmentDraft (objectiveAssignment key) (instructions "work") dependencies (compatibilityIdentity "worker") Pending Nothing (Just (ExecutionRootId "root")) (Just (UTCTime (fromGregorian 2027 1 1) 0))
 
 showText :: Int -> Text
 showText = Data.Text.pack . show
@@ -98,3 +109,24 @@ objectiveAssignment = either (error . show) id . parseObjectiveAssignmentId
 
 artifact :: Text -> ArtifactRef
 artifact = either (error . show) id . parseArtifactRef
+
+title :: Text -> Title
+title = either (error . show) id . parseTitle
+
+goal :: Text -> Goal
+goal = either (error . show) id . parseGoal
+
+instructions :: Text -> Instructions
+instructions = either (error . show) id . parseInstructions
+
+description :: Text -> CriterionDescription
+description = either (error . show) id . parseCriterionDescription
+
+statement :: Text -> AttestationStatement
+statement = either (error . show) id . parseAttestationStatement
+
+nextAction :: Text -> NextAction
+nextAction = either (error . show) id . parseNextAction
+
+limitation :: Text -> CompletionLimitation
+limitation = either (error . show) id . parseCompletionLimitation

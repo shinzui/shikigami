@@ -3,7 +3,6 @@
 module Shikigami.Objective.Acceptance (validateAcceptance, validateGraph, validateCriteria, evidenceArtifact, assignmentMeaning) where
 
 import Data.List (find, nub)
-import Data.Text qualified as Text
 import Shikigami.Agent.Principal (identityText)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Objective.Types
@@ -12,7 +11,6 @@ import Shikigami.Prelude
 validateCriteria :: [Criterion] -> Either ObjectiveError ()
 validateCriteria criteria = do
   unless (not (null criteria) && length criteria <= 64 && length (nub (map (.key) criteria)) == length criteria) (Left (ObjectiveInvalid "criteria must have distinct keys and contain 1..64 items"))
-  forM_ criteria \item -> unless (not (Text.null item.description) && Text.length item.description <= 4096) (Left (ObjectiveInvalid "invalid criterion"))
 
 validateGraph :: [AssignmentDraft] -> Either ObjectiveError ()
 validateGraph graph = do
@@ -20,7 +18,7 @@ validateGraph graph = do
       invalid = Left (ObjectiveInvalid "invalid assignment graph")
   unless (length graph <= 128 && length (nub keys) == length keys) invalid
   forM_ graph \node -> do
-    unless (Text.length node.instructions <= 32768 && length node.dependencies <= 128 && length (nub node.dependencies) == length node.dependencies && all (`elem` keys) node.dependencies) invalid
+    unless (length node.dependencies <= 128 && length (nub node.dependencies) == length node.dependencies && all (`elem` keys) node.dependencies) invalid
     unless (either (const False) validKey (identityText node.owner)) invalid
     unless (isJust node.rootId == isJust node.cutoff && (isNothing node.sessionId || isJust node.rootId)) invalid
   unless (acyclic [] graph) invalid
@@ -42,7 +40,7 @@ validateAcceptance :: Objective -> CompletionProposal -> Either ObjectiveError (
 validateAcceptance objective proposal = do
   unless (objective.status == Open && objective.revision == advanceRevision proposal.objectiveRevision && objective.instructionsRevision == proposal.instructionsRevision && objective.criteriaRevision == proposal.criteriaRevision) (Left ObjectiveConflict)
   unless (null objective.unresolved) (Left ObjectiveUnresolved)
-  unless (not (null proposal.artifacts) && length proposal.artifacts <= 128 && length (nub proposal.artifacts) == length proposal.artifacts && length proposal.checks <= 256 && length (nub proposal.checks) == length proposal.checks && length proposal.limitations <= 64 && all ((<= 4096) . Text.length) proposal.limitations) invalid
+  unless (not (null proposal.artifacts) && length proposal.artifacts <= 128 && length (nub proposal.artifacts) == length proposal.artifacts && length proposal.checks <= 256 && length (nub proposal.checks) == length proposal.checks && length proposal.limitations <= 64) invalid
   forM_ objective.assignments \assignment -> do
     unless (assignment.definition.state `elem` [Done, Withdrawn]) invalid
     when (assignment.definition.state == Done) $

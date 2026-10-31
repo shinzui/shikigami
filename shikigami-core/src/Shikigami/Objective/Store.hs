@@ -30,7 +30,6 @@ import Data.Generics.Labels ()
 import Data.Int (Int64)
 import Data.KindID qualified as KindID
 import Data.List (find, nub)
-import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error, tryError)
 import Effectful.Exception (catchSync, throwIO)
@@ -258,7 +257,7 @@ validateSnapshot :: Objective -> Either ObjectiveError ()
 validateSnapshot objective = do
   validateCriteria objective.criteria
   validateGraph (map (.definition) objective.assignments)
-  unless (not (Text.null objective.title) && Text.length objective.title <= 512 && not (Text.null objective.goal) && Text.length objective.goal <= 32768 && Text.length objective.instructions <= 32768 && length objective.external <= 64 && length objective.members <= 256 && length objective.decisions <= 64 && length objective.assumptions <= 64 && length objective.nextActions <= 64 && length objective.evidence <= 256 && length objective.unresolved <= 128 && all ((<= 4096) . Text.length) (objective.decisions <> objective.assumptions <> objective.nextActions) && Lazy.length (Aeson.encode objective) <= 1048576) (Left (ObjectiveInvalid "objective exceeds its bounds"))
+  unless (length objective.external <= 64 && length objective.members <= 256 && length objective.decisions <= 64 && length objective.assumptions <= 64 && length objective.nextActions <= 64 && length objective.evidence <= 256 && length objective.unresolved <= 128 && Lazy.length (Aeson.encode objective) <= 1048576) (Left (ObjectiveInvalid "objective exceeds its bounds"))
 
 versionFor :: Objective -> ObjectiveAssignmentId -> Either ObjectiveError CP.ObjectiveVersion
 versionFor objective key = do
@@ -295,7 +294,7 @@ validateTransition _now access expected mutation current = do
         unless (all ((/= input.key) . (.input.key)) objective.evidence && any ((== input.criterion) . (.key)) objective.criteria) (Left ObjectiveInvalidEvidence)
         disposition <- maybe (Left ObjectiveInvalidEvidence) Right (lookup input access.checks)
         case input of
-          Attestation {statement} -> unless (not (Text.null statement) && Text.length statement <= 4096 && any (\criterion -> criterion.key == input.criterion && criterion.kind == HumanVerifiable) objective.criteria) (Left ObjectiveInvalidEvidence)
+          Attestation {} -> unless (any (\criterion -> criterion.key == input.criterion && criterion.kind == HumanVerifiable) objective.criteria) (Left ObjectiveInvalidEvidence)
           _ -> pure ()
         pure (Evidence input disposition key (assignmentMeaning assignment) access.actor (advanceRevision current.revision) current.instructionsRevision current.criteriaRevision)
       unless (length (nub (map (.input.key) records)) == length records) (Left ObjectiveInvalidEvidence)

@@ -1,0 +1,6 @@
+ExecPlan 107 checked objective prose; source parent 3bbfc99; 2026-10-31 UTC.
+Nine nominal protected text types have private constructors without Generic, Num or IsString. Existing individual length rules apply at parsing and JSON admission; valid strings retain exact JSON bytes.
+Core pure: all 545 passed (5.55s), including empty/oversized text refusal, exact encoding and protected Show.
+Core PostgreSQL: all 375 passed serially (103.22s), including concurrent objective commands, checkpoint/owner fencing, completion authority and receipt recovery.
+Language checker and git diff --check passed after formatting.
+Final same-candidate packaged/Linux qualification remains plan95.

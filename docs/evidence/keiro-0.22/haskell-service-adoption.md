@@ -91,3 +91,11 @@ The assignment locator retains its established `{"value":"a"}` object codec;
 artifact, criterion and evidence references retain JSON strings. Database/provider
 adapters refine inputs and unwrap explicitly. Existing concurrent creation,
 checkpoint, verifier-backed completion and lost-receipt cases pass unchanged.
+
+Objective prose now has nine private checked types: Title, Goal, Instructions,
+CriterionDescription, AttestationStatement, DecisionNote, AssumptionNote,
+NextAction and CompletionLimitation. Each retains the existing individual length
+policy and JSON string bytes. Show renders a fixed protected marker. Joint list,
+graph, encoded-size, revision and authority checks remain at their owning command
+boundaries. The pure suite covers empty/oversized admission, exact string encoding
+and protected Show; all 545 pure and 375 PostgreSQL tests pass after conversion.

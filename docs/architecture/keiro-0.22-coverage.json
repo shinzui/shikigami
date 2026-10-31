@@ -46,6 +46,11 @@
           "rationale": "Abstract nominal StateRevision scopes cover objective, assignment, instructions, criteria and worker-owner counters, including domain command arguments. Checked nonnegative JSON retains exact numeric bytes. Real positive/negative compiler clients and full core/PostgreSQL acceptance pass; adapters render numbers explicitly under ADR-74."
         },
         {
+          "id": "objective-prose",
+          "disposition": "implemented",
+          "rationale": "Nine private checked prose types retain established individual length rules and exact JSON strings, with protected Show. Joint command/graph/size/authority checks remain. All 545 pure and 375 serial PostgreSQL cases pass after conversion."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -57,7 +62,8 @@
         "docs/evidence/keiro-0.22/haskell-service-adoption.md",
         "docs/adr/0074-domain-state-revisions-keep-their-scope-at-application-boundaries.md",
         "docs/evidence/keiro-0.22/state-revision-results.txt",
-        "tests/types/revision-domains.py"
+        "tests/types/revision-domains.py",
+        "docs/evidence/keiro-0.22/objective-content-results.txt"
       ]
     },
     {

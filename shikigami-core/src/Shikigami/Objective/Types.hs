@@ -2,7 +2,7 @@
 
 -- | Durable values are identities and evidence references, never authority.
 -- Authentication and fresh action decisions belong to Objective.Capability.
-module Shikigami.Objective.Types (module Shikigami.Objective.Types, module Shikigami.Objective.Keys, module Shikigami.StateRevision, ObjectiveId, parseObjectiveId, objectiveIdText) where
+module Shikigami.Objective.Types (module Shikigami.Objective.Types, module Shikigami.Objective.Keys, module Shikigami.Objective.Content, module Shikigami.StateRevision, ObjectiveId, parseObjectiveId, objectiveIdText) where
 
 import Data.Aeson ((.!=), (.:?))
 import Data.Aeson qualified as Aeson
@@ -12,6 +12,7 @@ import Data.Text qualified as Text
 import Shikigami.Agent.Principal (AgentIdentity, identityText, mkAgentPrincipal)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Generated.Nominals (ObjectiveId, objectiveIdText, parseObjectiveId)
+import Shikigami.Objective.Content
 import Shikigami.Objective.Keys
 import Shikigami.Prelude
 import Shikigami.StateRevision
@@ -41,7 +42,7 @@ data CriterionKind = Automatic | HumanVerifiable
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data Criterion = Criterion {key :: !CriterionKey, description :: !Text, kind :: !CriterionKind, journeyRequired :: !Bool}
+data Criterion = Criterion {key :: !CriterionKey, description :: !CriterionDescription, kind :: !CriterionKind, journeyRequired :: !Bool}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -60,7 +61,7 @@ data CreationOrigin
 
 data AssignmentDraft = AssignmentDraft
   { assignmentId :: !ObjectiveAssignmentId,
-    instructions :: !Text,
+    instructions :: !Instructions,
     dependencies :: ![ObjectiveAssignmentId],
     owner :: !AgentIdentity,
     state :: !AssignmentState,
@@ -91,7 +92,7 @@ data ResultReference
 
 data EvidenceInput
   = ResultEvidence {key :: !EvidenceKey, criterion :: !CriterionKey, result :: !ResultReference, journey :: !Bool}
-  | Attestation {key :: !EvidenceKey, criterion :: !CriterionKey, artifact :: !ArtifactRef, statement :: !Text, journey :: !Bool}
+  | Attestation {key :: !EvidenceKey, criterion :: !CriterionKey, artifact :: !ArtifactRef, statement :: !AttestationStatement, journey :: !Bool}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -128,7 +129,7 @@ data CompletionProposal = CompletionProposal
     criteriaRevision :: !(StateRevision "objective-criteria"),
     artifacts :: ![ArtifactRef],
     checks :: ![EvidenceKey],
-    limitations :: ![Text]
+    limitations :: ![CompletionLimitation]
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -150,9 +151,9 @@ data Objective = Objective
   { objectiveId :: !ObjectiveId,
     owner :: !AccessPrincipal,
     members :: ![Member],
-    title :: !Text,
-    goal :: !Text,
-    instructions :: !Text,
+    title :: !Title,
+    goal :: !Goal,
+    instructions :: !Instructions,
     revision :: !(StateRevision "objective"),
     instructionsRevision :: !(StateRevision "objective-instructions"),
     criteriaRevision :: !(StateRevision "objective-criteria"),
@@ -160,9 +161,9 @@ data Objective = Objective
     status :: !Status,
     assignments :: ![Assignment],
     evidence :: ![Evidence],
-    decisions :: ![Text],
-    assumptions :: ![Text],
-    nextActions :: ![Text],
+    decisions :: ![DecisionNote],
+    assumptions :: ![AssumptionNote],
+    nextActions :: ![NextAction],
     external :: ![ExternalReference],
     unresolved :: ![UnresolvedOperation],
     proposed :: !(Maybe (CompletionProposal, AccessPrincipal)),
@@ -173,7 +174,7 @@ data Objective = Objective
 
 instance Show Objective where show _ = "Objective <protected>"
 
-data CreateRequest = CreateRequest {title :: !Text, goal :: !Text, instructions :: !Text, criteria :: ![Criterion], external :: ![ExternalReference]}
+data CreateRequest = CreateRequest {title :: !Title, goal :: !Goal, instructions :: !Instructions, criteria :: ![Criterion], external :: ![ExternalReference]}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
