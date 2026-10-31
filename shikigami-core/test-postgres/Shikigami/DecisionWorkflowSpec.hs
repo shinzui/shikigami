@@ -18,6 +18,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
+import Data.Text qualified as AliasText
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Data.Text.IO qualified as TextIO
@@ -45,6 +46,7 @@ import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv)
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.Evidence
+import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Decision.StubProvider (decisionStubProvider)
 import Shikigami.Flow qualified as Flow
@@ -67,7 +69,7 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 binding :: Text -> Text -> Text -> ModelBinding
-binding alias version exact = mustRight (modelBinding (ModelAlias alias) version alias "1" ((stubModel & #modelId .~ (exact))) Options.emptyOptions Nothing)
+binding alias version exact = mustRight (modelBinding (fixtureModelAlias alias) version alias "1" ((stubModel & #modelId .~ (exact))) Options.emptyOptions Nothing)
 
 a, b, changedB :: ModelBinding
 a = binding "triage" "1" "stub-triage"
@@ -78,7 +80,7 @@ catalog :: ModelCatalog
 catalog = mustRight (modelCatalog [a, b])
 
 declaration :: AgentDecl
-declaration = (Fixture.routerDecl & #behavior .~ (Flow {name = "shikumi-decision-example"}) & #decisionModels .~ (["triage", "investigate"]))
+declaration = (Fixture.routerDecl & #behavior .~ (Flow {name = "shikumi-decision-example"}) & #decisionModels .~ (map fixtureModelAlias ["triage", "investigate"]))
 
 job :: Text -> RunJob
 job key = (Fixture.routerJob key) {triggerPayload = object ["request" .= ("Investigate the architecture practice" :: Text)]}
@@ -444,3 +446,6 @@ fixtureAgentName = either (error . show) id . mkAgentName
 
 fixtureExpertiseKey :: Text -> ExpertiseKey
 fixtureExpertiseKey = either (error . show) id . parseExpertiseKey
+
+fixtureModelAlias :: AliasText.Text -> Alias.ModelAlias
+fixtureModelAlias = either (error . show) id . Alias.parseModelAlias

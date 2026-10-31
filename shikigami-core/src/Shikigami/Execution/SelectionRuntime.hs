@@ -42,7 +42,7 @@ import Shikigami.Behavior.Compatibility (validateResponseRequest)
 import Shikigami.Behavior.Provider (withModelBinding)
 import Shikigami.Behavior.Provider.Call (providerCallFor, validateProfileCall)
 import Shikigami.Behavior.Run (BehaviorEnv (..))
-import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..), versionedDigest)
+import Shikigami.Decision.Contract (ModelDescriptor (..), modelAliasText, versionedDigest)
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Execution.AssignmentKey (assignmentIdFor, conversationAssignmentIdFor)
 import Shikigami.Execution.Attempt (ModelCallPreparation (..))
@@ -279,7 +279,7 @@ buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = c
     transaction action = transact action >>= either (const (ioError (userError "execution call store unavailable"))) pure
     finishTerminal receipt failed evidence response =
       let attempt = attemptIdText receipt.request.attemptId
-          ModelAlias alias = selection.descriptor.alias
+          alias = modelAliasText selection.descriptor.alias
           normalized = (\ev -> factsFromTerminal (callCorrelationId env.runId attempt 0) RootCall (fromMaybe selection.descriptor.modelId (Evidence.observedValue ev.observedModel)) (Just alias) ev & #relationshipKnown .~ False) <$> evidence
           outcome = outcomeFor failed evidence & #compliance .~ normalized
        in case preparedCall of

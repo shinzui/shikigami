@@ -193,7 +193,7 @@ import Shikigami.Agent.Decl
     mkDelegationBudget,
   )
 import Shikigami.Behavior.StubProvider (stubModel)
-import Shikigami.Decision.Contract (DecisionFailure, ModelAlias (..))
+import Shikigami.Decision.Contract (DecisionFailure, ModelAlias, modelAliasText)
 import Shikigami.Decision.ModelCatalog qualified as Decision
 import Shikigami.Directory (DirectorySettings (..))
 import Shikigami.Execution.Policy.Types qualified as Harness
@@ -603,7 +603,7 @@ behaviorProviderConfig =
 -- | Finite metadata, decoded with the same generated per-API catalogs as the
 -- response selection. Credentials remain separate secret Settei settings.
 data DecisionModelSpec = DecisionModelSpec
-  { alias :: !Text,
+  { alias :: !ModelAlias,
     version :: !Text,
     bindingId :: !Text,
     bindingVersion :: !Text,
@@ -641,7 +641,7 @@ instance Aeson.FromJSON DecisionModelSpec where
     timeoutMs <- o .:? "timeout_ms"
     let options = (Options.emptyOptions & #thinking .~ (thinking) & #maxTokens .~ (maxTokens) & #timeoutMs .~ (timeoutMs))
         validWord text = not (Text.null text) && Text.length text <= 128 && Text.all (\c -> isAlphaNum c || c `elem` ("-_." :: String)) text
-    if all validWord [alias, version, bindingId, bindingVersion]
+    if all validWord [modelAliasText alias, version, bindingId, bindingVersion]
       then pure DecisionModelSpec {alias, version, bindingId, bindingVersion, model, options}
       else fail "invalid decision model identity"
 
@@ -678,7 +678,7 @@ decisionModelsConfig =
             OpenAIResponses -> responses
             _ -> Nothing
        in Decision.modelBinding
-            (ModelAlias spec.alias)
+            spec.alias
             spec.version
             spec.bindingId
             spec.bindingVersion

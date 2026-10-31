@@ -2,6 +2,7 @@ module Shikigami.Flow.ShikumiDecisionExample (shikumiDecisionExample, exampleSlo
 
 import Data.Aeson (Result (..), Value, eitherDecodeStrict, encode, fromJSON, object, (.=))
 import Data.ByteString.Lazy qualified as LBS
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
 import Data.Text.Encoding qualified as TE
 import Effectful (Eff, (:>))
@@ -22,14 +23,14 @@ investigationStep :: DecisionStep InvestigationInput InvestigationResult
 investigationStep = decisionStep Investigation (programRef investigationProgram)
 
 exampleSlots :: [DecisionSlot]
-exampleSlots = [decisionSlot triageStep [ModelAlias "triage"], decisionSlot investigationStep [ModelAlias "investigate"]]
+exampleSlots = [decisionSlot triageStep [modelAliasFromNonEmpty ('t' :| "riage")], decisionSlot investigationStep [modelAliasFromNonEmpty ('i' :| "nvestigate")]]
 
 shikumiDecisionExample :: (Decision :> es, Delegate :> es) => Value -> Eff es Value
 shikumiDecisionExample payload = do
   input <- case fromJSON payload of
     Error _ -> refuseDecision (decisionFailure InvalidInput "decision example expects a request object")
     Success value -> pure value
-  triage <- decide triageStep (ModelAlias "triage") input
+  triage <- decide triageStep (modelAliasFromNonEmpty ('t' :| "riage")) input
   case triage.action of
     ReturnNow -> pure (object ["triage" .= triage, "results" .= ([] :: [Value])])
     Investigate -> do
@@ -37,7 +38,7 @@ shikumiDecisionExample payload = do
       investigation <-
         decide
           investigationStep
-          (ModelAlias "investigate")
+          (modelAliasFromNonEmpty ('i' :| "nvestigate"))
           InvestigationInput {request = input.request, triageSummary = triage.summary, candidateCatalog = TE.decodeUtf8 (LBS.toStrict (encode catalog))}
       case investigation.action of
         ReturnResult -> pure (object ["triage" .= triage, "investigation" .= investigation, "results" .= ([] :: [Value])])

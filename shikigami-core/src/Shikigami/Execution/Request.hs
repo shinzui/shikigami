@@ -5,12 +5,13 @@ import Baikai.ThinkingLevel (ThinkingLevel)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Dhall (FromDhall)
+import Shikigami.Decision.ModelAlias (ModelAlias)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Prelude
 
 data ExecutionPolicy = ExecutionPolicy
-  { defaultAlias :: !Text,
-    permittedAliases :: ![Text]
+  { defaultAlias :: !ModelAlias,
+    permittedAliases :: ![ModelAlias]
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON, FromDhall)
@@ -19,8 +20,8 @@ data ExecutionPolicy = ExecutionPolicy
 -- available to this assignment. Endpoints, credentials and vendor flags have
 -- no representation here.
 data ExecutionRequest = ExecutionRequest
-  { alias :: !(Maybe Text),
-    permittedAliases :: !(Maybe [Text]),
+  { alias :: !(Maybe ModelAlias),
+    permittedAliases :: !(Maybe [ModelAlias]),
     thinking :: !(Maybe ThinkingLevel)
   }
   deriving stock (Eq, Show, Generic)
@@ -36,7 +37,7 @@ instance FromJSON ExecutionRequest where
 data ExecutionContext = ExecutionContext
   { rootId :: !(Maybe ExecutionRootId),
     request :: !(Maybe ExecutionRequest),
-    permittedAliases :: !(Maybe [Text])
+    permittedAliases :: !(Maybe [ModelAlias])
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)

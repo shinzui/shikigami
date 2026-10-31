@@ -14,6 +14,7 @@ import Data.List (isInfixOf)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
+import Data.Text qualified as AliasText
 import Data.Text qualified as AssignmentText
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
@@ -23,7 +24,8 @@ import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile), ResolvedProfile (..))
 import Shikigami.Behavior.StubProvider (stubModel)
-import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..), versionedDigest)
+import Shikigami.Decision.Contract (ModelAlias, ModelDescriptor (..), versionedDigest)
+import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Execution.AssignmentKey (AssignmentKey, assignmentIdFor, assignmentKeyText, conversationAssignmentIdFor, parseAssignmentKey)
 import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
@@ -41,7 +43,30 @@ tests :: TestTree
 tests =
   testGroup
     "ExecutionSelection"
-    [ testCase "assignment keys preserve selection bytes and technical derivation" do
+    [ testCase "permission and selection codecs reject empty retained aliases" do
+        let positive = select "worker-a"
+        Aeson.eitherDecode (Aeson.encode positive) @?= Right positive
+        Aeson.eitherDecode "{\"alias\":\"worker-a\"}" @?= Right (ExecutionRequest (Just (fixtureModelAlias "worker-a")) Nothing Nothing)
+        Aeson.eitherDecode "{\"defaultAlias\":\"worker-a\",\"permittedAliases\":[\"worker-a\"]}" @?= Right (ExecutionPolicy (fixtureModelAlias "worker-a") [fixtureModelAlias "worker-a"])
+        Aeson.eitherDecode "{\"rootId\":null,\"request\":null,\"permittedAliases\":[\"worker-a\"]}" @?= Right (ExecutionContext Nothing Nothing (Just [fixtureModelAlias "worker-a"]))
+        mapM_
+          (\wire -> assertBool "request key refused" (isLeft (Aeson.eitherDecode @ExecutionRequest wire)))
+          ["{\"alias\":\"\"}", "{\"permittedAliases\":[\"\"]}"]
+        assertBool "declaration key refused" (isLeft (Aeson.eitherDecode @ExecutionPolicy "{\"defaultAlias\":\"\",\"permittedAliases\":[\"worker-a\"]}"))
+        assertBool "inherited key refused" (isLeft (Aeson.eitherDecode @ExecutionContext "{\"rootId\":null,\"request\":null,\"permittedAliases\":[\"\"]}"))
+        case Aeson.toJSON positive of
+          Aeson.Object fields -> assertBool "retained selection key refused" (case Aeson.fromJSON @ExecutionSelection (Aeson.Object (KeyMap.insert "permittedAliases" (Aeson.toJSON ([""] :: [Text])) fields)) of Aeson.Error _ -> True; _ -> False)
+          _ -> assertFailure "selection control was not an object",
+      testCase "selection retains its permission list and key bounds" do
+        let resolve inherited request = resolveExecutionSelection (fixtureAssignment "alias-bounds") catalog (Right fallback) (Just permission) request inherited Nothing Nothing fixedTime
+            oversized = fixtureModelAlias (Text.replicate 257 "x")
+            excessive = map (fixtureModelAlias . Text.pack . show) [1 .. 65 :: Int]
+        assertBool "positive inherited restriction admitted" (not (isLeft (resolve (Just [fixtureModelAlias "coordinator"]) Nothing)))
+        resolve (Just [oversized]) Nothing @?= Left InvalidExecutionPermission
+        resolve (Just excessive) Nothing @?= Left InvalidExecutionPermission
+        resolve (Just [fixtureModelAlias "worker-a", fixtureModelAlias "worker-a"]) Nothing @?= Left InvalidExecutionPermission
+        resolve Nothing (Just (ExecutionRequest Nothing (Just [oversized]) Nothing)) @?= Left InvalidExecutionPermission,
+      testCase "assignment keys preserve selection bytes and technical derivation" do
         let selection = select "worker-a"
             raw = "assignment-test" :: Text
             expected = Aeson.object ["assignmentId" .= raw, "descriptor" .= selection.descriptor, "effectiveOptions" .= selection.effectiveOptions, "permittedAliases" .= selection.permittedAliases, "profile" .= selection.profile, "rootId" .= selection.rootId, "source" .= selection.source, "admittedAt" .= selection.admittedAt]
@@ -94,20 +119,20 @@ tests =
         map (\s -> s.descriptor.modelId) [coordinator, workerA, workerB] @?= ["stub-coordinator", "stub-worker-a", "stub-worker-b"]
         mapM_ (\selection -> Aeson.eitherDecode (Aeson.encode selection) @?= Right selection) [coordinator, workerA, workerB],
       testCase "user and parent restrictions cannot widen declaration authority" do
-        let req alias = Just (ExecutionRequest (Just alias) Nothing Nothing)
+        let req alias = Just (ExecutionRequest (Just (fixtureModelAlias alias)) Nothing Nothing)
             resolve request inherited = resolveExecutionSelection (fixtureAssignment "assignment-test") catalog (Right fallback) (Just permission) request inherited Nothing Nothing fixedTime
         resolve (req "unknown") Nothing @?= Left ExecutionAliasForbidden
-        resolve (req "worker-a") (Just ["worker-b"]) @?= Left ExecutionAliasForbidden
-        resolve (Just (ExecutionRequest (Just "worker-a") (Just ["worker-b"]) Nothing)) Nothing @?= Left ExecutionRequirementConflict
-        resolve (Just (ExecutionRequest (Just "worker-a") Nothing (Just ThinkingHigh))) Nothing @?= Left ExecutionThinkingConflict,
+        resolve (req "worker-a") (Just [fixtureModelAlias "worker-b"]) @?= Left ExecutionAliasForbidden
+        resolve (Just (ExecutionRequest (Just (fixtureModelAlias "worker-a")) (Just (map fixtureModelAlias ["worker-b"])) Nothing)) Nothing @?= Left ExecutionRequirementConflict
+        resolve (Just (ExecutionRequest (Just (fixtureModelAlias "worker-a")) Nothing (Just ThinkingHigh))) Nothing @?= Left ExecutionThinkingConflict,
       testCase "an absent declaration keeps the fully pinned process default" do
         let result = mustRight (resolveExecutionSelection (fixtureAssignment "assignment-test") catalog (Right fallback) Nothing Nothing Nothing Nothing Nothing fixedTime)
         result.source @?= ProcessDefault
         result.descriptor @?= modelDescriptor fallback
-        resolveExecutionSelection (fixtureAssignment "assignment-test") catalog (Right fallback) Nothing (Just (ExecutionRequest (Just "worker-a") Nothing Nothing)) Nothing Nothing Nothing fixedTime @?= Left ExecutionRequirementConflict,
+        resolveExecutionSelection (fixtureAssignment "assignment-test") catalog (Right fallback) Nothing (Just (ExecutionRequest (Just (fixtureModelAlias "worker-a")) Nothing Nothing)) Nothing Nothing Nothing fixedTime @?= Left ExecutionRequirementConflict,
       testCase "mutable aliases never replace an immutable pinned binding" do
         let original = select "worker-a"
-            changed = mustRight (modelCatalog [mustRight (modelBinding (ModelAlias "worker-a") "2" "worker-a" "2" (stubModel & #modelId .~ "different-model") emptyOptions Nothing)])
+            changed = mustRight (modelCatalog [mustRight (modelBinding (fixtureModelAlias "worker-a") "2" "worker-a" "2" (stubModel & #modelId .~ "different-model") emptyOptions Nothing)])
             retained = mustRight (retainModelBindings changed [binding "worker-a" "stub-worker-a" Nothing])
         assertBool "new alias value refused" (isLeft (selectionBinding changed fallback Nothing original))
         assertBool "retained exact binding usable" (not (isLeft (selectionBinding retained fallback Nothing original)))
@@ -115,10 +140,10 @@ tests =
       testCase "whole-run permissions and decision permissions stay separate" do
         declaration <- mustRight <$> loadAgent "../agents/heartbeat.dhall"
         let runOnly = declaration & #execution .~ Just permission
-            decisionOnly = declaration & #decisionModels .~ ["worker-a"]
-        assertBool "run permission grants no decision model" (isLeft (resolveModel catalog runOnly Nothing (ModelAlias "worker-a")))
-        assertBool "decision alias does not grant whole-run selection" (isLeft (resolveExecutionSelection (fixtureAssignment "assignment-test") catalog (Right fallback) decisionOnly.execution (Just (ExecutionRequest (Just "worker-a") Nothing Nothing)) Nothing Nothing Nothing fixedTime))
-        assertBool "invalid unused whole-run default does not deny a decision alias" (not (isLeft (resolveModel catalog (decisionOnly & #execution .~ Just (ExecutionPolicy "unknown" [])) Nothing (ModelAlias "worker-a")))),
+            decisionOnly = declaration & #decisionModels .~ (map fixtureModelAlias ["worker-a"])
+        assertBool "run permission grants no decision model" (isLeft (resolveModel catalog runOnly Nothing (fixtureModelAlias "worker-a")))
+        assertBool "decision alias does not grant whole-run selection" (isLeft (resolveExecutionSelection (fixtureAssignment "assignment-test") catalog (Right fallback) decisionOnly.execution (Just (ExecutionRequest (Just (fixtureModelAlias "worker-a")) Nothing Nothing)) Nothing Nothing Nothing fixedTime))
+        assertBool "invalid unused whole-run default does not deny a decision alias" (not (isLeft (resolveModel catalog (decisionOnly & #execution .~ Just (ExecutionPolicy (fixtureModelAlias "unknown") [])) Nothing (fixtureModelAlias "worker-a")))),
       testCase "Dhall agent harness narrows the shared policy and survives JSON replay" do
         declaration <- mustRight <$> loadAgent "test/fixtures/harness-agent.dhall"
         policy <- pure (mustRight (Harness.narrowHarnessPolicy Harness.defaultHarnessPolicy declaration.harness))
@@ -140,7 +165,7 @@ tests =
         let secret = "PLANTED_EXECUTION_SECRET"
             selected = binding "worker-a" "stub-worker-a" (Just (opaqueCredential secret))
             local = mustRight (modelCatalog [selected])
-            result = mustRight (resolveExecutionSelection (fixtureAssignment "assignment-test") local (Right fallback) (Just (ExecutionPolicy "worker-a" ["worker-a"])) Nothing Nothing Nothing Nothing fixedTime)
+            result = mustRight (resolveExecutionSelection (fixtureAssignment "assignment-test") local (Right fallback) (Just (ExecutionPolicy (fixtureModelAlias "worker-a") (map fixtureModelAlias ["worker-a"]))) Nothing Nothing Nothing Nothing fixedTime)
         assertBool "no credential in JSON" (not ("PLANTED_EXECUTION_SECRET" `isInfixOf` Lazy.unpack (Aeson.encode result))),
       testCase "secret header and metadata options never enter durable selection bytes" do
         mapM_
@@ -168,7 +193,7 @@ tests =
     ]
 
 binding :: Text -> Text -> Maybe OpaqueCredential -> ModelBinding
-binding alias model credential = mustRight (modelBinding (ModelAlias alias) "1" alias "1" (stubModel & #modelId .~ model) emptyOptions credential)
+binding alias model credential = mustRight (modelBinding (fixtureModelAlias alias) "1" alias "1" (stubModel & #modelId .~ model) emptyOptions credential)
 
 fallback :: ModelBinding
 fallback = mustRight (defaultBinding stubModel emptyOptions)
@@ -177,10 +202,10 @@ catalog :: ModelCatalog
 catalog = mustRight (modelCatalog [binding alias ("stub-" <> alias) Nothing | alias <- ["coordinator", "worker-a", "worker-b"]])
 
 permission :: ExecutionPolicy
-permission = ExecutionPolicy "coordinator" ["coordinator", "worker-a", "worker-b"]
+permission = ExecutionPolicy (fixtureModelAlias "coordinator") (map fixtureModelAlias ["coordinator", "worker-a", "worker-b"])
 
 select :: Text -> ExecutionSelection
-select alias = mustRight (resolveExecutionSelection (fixtureAssignment "assignment-test") catalog (Right fallback) (Just permission) (Just (ExecutionRequest (Just alias) Nothing Nothing)) Nothing Nothing Nothing fixedTime)
+select alias = mustRight (resolveExecutionSelection (fixtureAssignment "assignment-test") catalog (Right fallback) (Just permission) (Just (ExecutionRequest (Just (fixtureModelAlias alias)) Nothing Nothing)) Nothing Nothing Nothing fixedTime)
 
 mustRight :: (Show e) => Either e a -> a
 mustRight = either (error . show) id
@@ -212,3 +237,6 @@ fixturePolicy number = either (error . show) id (parsePolicyNumber number)
 
 fixtureAssignment :: AssignmentText.Text -> AssignmentKey
 fixtureAssignment = either (error . show) id . parseAssignmentKey
+
+fixtureModelAlias :: AliasText.Text -> Alias.ModelAlias
+fixtureModelAlias = either (error . show) id . Alias.parseModelAlias

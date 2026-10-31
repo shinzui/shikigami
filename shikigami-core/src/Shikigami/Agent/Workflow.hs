@@ -455,7 +455,7 @@ usesDefaultModel decl = case decl.behavior of
   Flow {name} -> maybe True (.requiresDefaultModel) (Flow.lookupFlow name)
   _ -> isJust decl.routing
 
-inheritedPermissions :: AgentDecl -> RunJob -> Maybe [Text]
+inheritedPermissions :: AgentDecl -> RunJob -> Maybe [DecisionContract.ModelAlias]
 inheritedPermissions decl job =
   foldr
     intersect
@@ -480,7 +480,7 @@ selectionRefusalDetail deps job decl profile selected refusal =
         Nothing -> behaviorModelId deps.behaviorEnv
         Just permission ->
           let alias = fromMaybe permission.defaultAlias (job.executionRequest >>= (.alias))
-           in maybe alias (.modelId) (find (\d -> d.alias == DecisionContract.ModelAlias alias) (ModelCatalog.catalogDescriptors deps.decisions.catalog))
+           in maybe (DecisionContract.modelAliasText alias) (.modelId) (find (\d -> d.alias == alias) (ModelCatalog.catalogDescriptors deps.decisions.catalog))
 
 -- The queue executor and the future driver share these process-owned
 -- dependencies. No live function or credential enters an execution snapshot.

@@ -80,6 +80,7 @@ import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.App (CommandEffects, commandOptions)
 import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Decision.ModelAlias (ModelAlias, modelAliasText)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId, operationIdText)
 import Shikigami.Execution.Payload
 import Shikigami.Execution.Resources (Admission (..))
@@ -270,10 +271,10 @@ nextAssignment access@(SessionAccess session _ _) = protected do
 acceptMessage :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> Instruction -> Eff es (Either SessionError (Admission, MessageReceipt))
 acceptMessage access expected epoch operation instruction = acceptScopedMessage access expected epoch operation Nothing instruction
 
-acceptScopedMessage :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> Maybe [Text] -> Instruction -> Eff es (Either SessionError (Admission, MessageReceipt))
+acceptScopedMessage :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> Maybe [ModelAlias] -> Instruction -> Eff es (Either SessionError (Admission, MessageReceipt))
 acceptScopedMessage access expected epoch operation permissions instruction = guarded do
   either (throwIO . SessionAbort) pure (validateInstruction instruction)
-  unless (maybe True (\aliases -> not (null aliases) && length aliases <= 128 && all (\alias -> not (Text.null alias) && Text.length alias <= 256) aliases) permissions) (throwIO (SessionAbort SessionOwnerRefused))
+  unless (maybe True (\aliases -> not (null aliases) && length aliases <= 128 && all ((<= 256) . Text.length . modelAliasText) aliases) permissions) (throwIO (SessionAbort SessionOwnerRefused))
   ref <- either (throwIO . SessionAbort) pure (payloadReference encoded)
   let commandInput = maybe (toJSON (epoch, ref)) (\aliases -> toJSON (epoch, ref, aliases)) permissions
   mutate

@@ -13,6 +13,7 @@ import Data.ByteString.Lazy qualified as LazyByteString
 import Data.Foldable (for_)
 import Data.Generics.Labels ()
 import Data.Text (Text)
+import Data.Text qualified as AliasText
 import Data.Time (UTCTime (..), fromGregorian)
 import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
 import Shibuya.Core.Types (Attempt (..), Envelope (..), mkEnvelope)
@@ -37,6 +38,7 @@ import Shikigami.Capability.Overlay
     mkCapabilityRevision,
     mkResolvedCapabilitySet,
   )
+import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Execution.Request (ExecutionRequest (..))
 import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
@@ -147,8 +149,15 @@ queueTests =
             job = sampleRunJob & #triggerPayload .~ input
         RunJobs.decodeRunJob (RunJobs.encodeRunJob job) @?= Right job,
       testCase "current jobs retain root and typed selection constraints" do
-        let enrolled = sampleRunJob & #executionRootId .~ Just (fixtureRootId "root-1") & #executionRequest .~ Just (ExecutionRequest (Just "worker") Nothing Nothing) & #executionPermissions .~ Just ["worker"]
+        let enrolled = sampleRunJob & #executionRootId .~ Just (fixtureRootId "root-1") & #executionRequest .~ Just (ExecutionRequest (Just (fixtureModelAlias "worker")) Nothing Nothing) & #executionPermissions .~ Just (map fixtureModelAlias ["worker"])
         RunJobs.decodeRunJob (RunJobs.encodeRunJob enrolled) @?= Right enrolled,
+      testCase "current jobs reject empty inherited alias metadata" do
+        RunJobs.decodeRunJob (RunJobs.encodeRunJob sampleRunJob) @?= Right sampleRunJob
+        case toJSON sampleRunJob of
+          Object fields -> case Aeson.fromJSON @RunJob (Object (KeyMap.insert "executionPermissions" (toJSON ([""] :: [Text])) fields)) of
+            Aeson.Error _ -> pure ()
+            Aeson.Success _ -> assertFailure "invalid inherited alias reached the journal"
+          _ -> assertFailure "job control was not an object",
       testCase "lineage list order survives the real queue boundary" do
         let job = sampleRunJob & #lineage .~ [fixtureAgentName "first", fixtureAgentName "second"]
         RunJobs.decodeRunJob (RunJobs.encodeRunJob job) @?= Right job,
@@ -405,3 +414,6 @@ fixtureAgentName = either (error . show) id . mkAgentName
 
 fixtureRunKey :: Text -> RunKey
 fixtureRunKey = either (error . show) id . parseRunKey
+
+fixtureModelAlias :: AliasText.Text -> Alias.ModelAlias
+fixtureModelAlias = either (error . show) id . Alias.parseModelAlias

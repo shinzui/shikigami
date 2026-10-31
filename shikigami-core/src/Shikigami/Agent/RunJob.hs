@@ -21,6 +21,7 @@ import Shikigami.Agent.Delegate.Depth (DelegationDepth)
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.Agent.Run.Key (RunKey, runKeyText)
+import Shikigami.Decision.ModelAlias (ModelAlias)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Execution.Request (ExecutionRequest)
 import Shikigami.Prelude hiding ((.=))
@@ -59,7 +60,7 @@ data RunJob = RunJob
     delegationDepth :: !(Maybe DelegationDepth),
     lineage :: ![AgentName],
     executionRequest :: !(Maybe ExecutionRequest),
-    executionPermissions :: !(Maybe [Text]),
+    executionPermissions :: !(Maybe [ModelAlias]),
     executionRootId :: !(Maybe ExecutionRootId),
     delegationBudgetId :: !(Maybe DelegationBudgetId),
     routeKind :: !RunRouteKind

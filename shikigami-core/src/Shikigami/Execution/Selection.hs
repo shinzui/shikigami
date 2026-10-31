@@ -17,6 +17,7 @@ import Baikai.Options qualified as Options
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Data.List (find, nub)
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict qualified as Map
 import Data.Maybe (catMaybes)
 import Data.Text qualified as Text
@@ -24,7 +25,7 @@ import Shikigami.Attestation.Profile (SanctionedExecutionProfileRef)
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Provider.Call (providerCallFor, validateProfileCall)
-import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..))
+import Shikigami.Decision.Contract (ModelAlias, ModelDescriptor (..), modelAliasFromNonEmpty, modelAliasText)
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Execution.AssignmentKey (AssignmentKey)
 import Shikigami.Execution.Identity (ExecutionRootId)
@@ -39,7 +40,7 @@ data ExecutionSelection = ExecutionSelection
   { assignmentId :: !AssignmentKey,
     descriptor :: !ModelDescriptor,
     effectiveOptions :: !Aeson.Value,
-    permittedAliases :: ![Text],
+    permittedAliases :: ![ModelAlias],
     profile :: !(Maybe SanctionedExecutionProfileRef),
     rootId :: !(Maybe ExecutionRootId),
     source :: !SelectionSource,
@@ -74,7 +75,7 @@ defaultBinding model options = do
   either
     (const (Left ExecutionOptionsIncompatible))
     Right
-    (modelBinding (ModelAlias "__process_default__") "1" "behavior.default" "1" model ((options & #apiKey .~ (Nothing))) credential)
+    (modelBinding (modelAliasFromNonEmpty ('_' :| "_process_default__")) "1" "behavior.default" "1" model ((options & #apiKey .~ (Nothing))) credential)
 
 resolveExecutionSelection ::
   AssignmentKey ->
@@ -82,7 +83,7 @@ resolveExecutionSelection ::
   Either ExecutionSelectionFailure ModelBinding ->
   Maybe ExecutionPolicy ->
   Maybe ExecutionRequest ->
-  Maybe [Text] ->
+  Maybe [ModelAlias] ->
   Maybe ResolvedProfile ->
   Maybe ExecutionRootId ->
   UTCTime ->
@@ -95,7 +96,7 @@ resolveExecutionSelection assignmentId catalog fallback declaration requested in
   (binding, allowed, source) <- case policy of
     Nothing -> do
       binding <- fallback
-      let ModelAlias alias = (modelDescriptor binding).alias
+      let alias = (modelDescriptor binding).alias
           allowed = restrict [alias]
       when (maybe False (/= alias) request.alias || alias `notElem` allowed) (Left ExecutionRequirementConflict)
       pure (binding, allowed, ProcessDefault)
@@ -105,12 +106,12 @@ resolveExecutionSelection assignmentId catalog fallback declaration requested in
           allowed = restrict permitted
       unless (validPermission permission) (Left InvalidExecutionPermission)
       unless (wanted `elem` allowed) (Left ExecutionAliasForbidden)
-      descriptor <- maybe (Left ExecutionAliasUnavailable) Right (find (\d -> d.alias == ModelAlias wanted) (catalogDescriptors catalog))
+      descriptor <- maybe (Left ExecutionAliasUnavailable) Right (find (\d -> d.alias == wanted) (catalogDescriptors catalog))
       binding <- either (const (Left PinnedBindingUnavailable)) Right (pinnedBinding catalog descriptor)
       pure (binding, allowed, DeclaredAlias)
   let narrowed = maybe allowed (filter (`elem` allowed)) request.permittedAliases
       descriptor = modelDescriptor binding
-      ModelAlias selectedAlias = descriptor.alias
+      selectedAlias = descriptor.alias
   unless (selectedAlias `elem` narrowed) (Left ExecutionRequirementConflict)
   when (maybe False (\wanted -> descriptor.thinking /= Just wanted) request.thinking) (Left ExecutionThinkingConflict)
   forM_ profile \resolved -> case validateProfileCall resolved (providerCallFor (bindingModel binding) (bindingOptions binding)) of
@@ -144,8 +145,8 @@ selectionBinding catalog fallback profile selection = do
     Right () -> Right ()
   pure binding
 
-validAliases :: [Text] -> Bool
-validAliases aliases = length aliases <= 64 && length (nub aliases) == length aliases && all (\alias -> not (Text.null alias) && Text.length alias <= 256) aliases
+validAliases :: [ModelAlias] -> Bool
+validAliases aliases = length aliases <= 64 && length (nub aliases) == length aliases && all ((<= 256) . Text.length . modelAliasText) aliases
 
 validPermission :: ExecutionPolicy -> Bool
 validPermission permission = permission.defaultAlias `elem` permission.permittedAliases && validAliases permission.permittedAliases

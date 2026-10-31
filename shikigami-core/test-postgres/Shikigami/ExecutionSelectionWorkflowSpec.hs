@@ -22,6 +22,7 @@ import Data.Int (Int64)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
+import Data.Text qualified as AliasText
 import Data.Text qualified as AssignmentText
 import Data.Text qualified as ClaimText
 import Data.Text qualified as Text
@@ -57,7 +58,8 @@ import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest, newBehaviorEnv)
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
-import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..), versionedDigest)
+import Shikigami.Decision.Contract (ModelAlias, ModelDescriptor (..), versionedDigest)
+import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
@@ -281,7 +283,7 @@ tests fixture =
           root <- seed app now []
           original <- case bindings of first : _ -> pure first; _ -> assertFailure "binding missing"
           let options = bindingOptions original & #evidence .~ Just (Evidence.evidenceRequest "pinned" & #strictness .~ Evidence.EvidenceRequired Evidence.EvidenceFullyObserved)
-              strict = mustRight (modelBinding (ModelAlias "coordinator") "strict" "coordinator" "strict" (bindingModel original) options (bindingCredential original))
+              strict = mustRight (modelBinding (fixtureModelAlias "coordinator") "strict" "coordinator" "strict" (bindingModel original) options (bindingCredential original))
               catalog = mustRight (modelCatalog [strict])
           selected <- expectRight =<< buildExecutionEnv (runtime app store base catalog) (select now root catalog "coordinator")
           response <- completeBehaviorRequest selected selected.model (systemUser "system" "marker") (selected.options & #evidence .~ Nothing)
@@ -383,7 +385,7 @@ tests fixture =
             other -> assertFailure (show other),
       testCase "forbidden user alias leaves provider request count unchanged" $
         withRuntime fixture \app store base -> withHttp \bindings observed -> do
-          let request = Fixture.routerJob "selection-forbidden" & #executionRequest .~ Just (ExecutionRequest (Just "forbidden") Nothing Nothing)
+          let request = Fixture.routerJob "selection-forbidden" & #executionRequest .~ Just (ExecutionRequest (Just (fixtureModelAlias "forbidden")) Nothing Nothing)
           result <- Agent.runAgentRunWorkflow (workflowDeps app store base (mustRight (modelCatalog bindings)) workerDecl) request
           assertBool "named refusal" ("ExecutionAliasForbidden" `Text.isInfixOf` Text.pack (show result))
           observed >>= (@?= []),
@@ -408,7 +410,7 @@ tests fixture =
                     grants = StaticGrants (Map.singleton "router" (Set.singleton SDanwaConversation)),
                     directory = dependencies.directory
                   }
-              context = ExecutionContext (Just root) (Just (ExecutionRequest (Just "worker-a") Nothing Nothing)) (Just ["worker-a"])
+              context = ExecutionContext (Just root) (Just (ExecutionRequest (Just (fixtureModelAlias "worker-a")) Nothing Nothing)) (Just (map fixtureModelAlias ["worker-a"]))
               message n = AddressedMessage "conv_selection" ("message" <> Text.pack (show n)) Nothing "human" ("request-" <> Text.pack (show n)) "participant" ("emb" <> Text.pack (show n)) "human" now
           _ <- expectRight =<< run app Catalog.registerProjectionCatalog
           ensureRunQueue store.pool >>= expectRight
@@ -444,7 +446,7 @@ tests fixture =
           case bodies of
             [_, secondBody] -> assertBool "prior accepted turns are frozen in the next assignment" ("request-1" `Text.isInfixOf` TextEncoding.decodeUtf8 (Lazy.toStrict (encode secondBody)))
             _ -> assertFailure "conversation repeated provider work"
-          refused <- Conversation.runConversationTurnWithExecution env declaration (compatibilityIdentity (fixtureAgentName "router")) (Just (context & #request .~ Just (ExecutionRequest (Just "worker-b") Nothing Nothing))) (message (3 :: Int))
+          refused <- Conversation.runConversationTurnWithExecution env declaration (compatibilityIdentity (fixtureAgentName "router")) (Just (context & #request .~ Just (ExecutionRequest (Just (fixtureModelAlias "worker-b")) Nothing Nothing))) (message (3 :: Int))
           assertBool "context cannot change within epoch" (either (const True) (const False) refused)
           observed >>= (\after -> length after @?= 2)
           snapshot <- expectRight =<< run app (Roots.inspectRoot root)
@@ -455,7 +457,7 @@ aliases :: [Text]
 aliases = ["coordinator", "worker-a", "worker-b"]
 
 workerDecl :: AgentDecl
-workerDecl = Fixture.routerDecl & #behavior .~ Skill "../agents/skills/triage-note" & #routing .~ Nothing & #delegates .~ map fixtureAgentName [] & #execution .~ Just (ExecutionPolicy "coordinator" aliases)
+workerDecl = Fixture.routerDecl & #behavior .~ Skill "../agents/skills/triage-note" & #routing .~ Nothing & #delegates .~ map fixtureAgentName [] & #execution .~ Just (ExecutionPolicy (fixtureModelAlias "coordinator") (map fixtureModelAlias aliases))
 
 workflowDeps :: AppEnv -> KirokuStore -> BehaviorEnv -> ModelCatalog -> AgentDecl -> Agent.AgentRunDeps
 workflowDeps app store base catalog declaration =
@@ -468,7 +470,7 @@ runtime :: AppEnv -> KirokuStore -> BehaviorEnv -> ModelCatalog -> SelectionRunt
 runtime app store base catalog = SelectionRuntime catalog Nothing (Decision.defaultDecisionServices catalog).providers base (runCorrelationId "selection-fixture") (pure (Right ())) (selectionTransaction app (Just store.pool))
 
 select :: UTCTime -> ExecutionRootId -> ModelCatalog -> Text -> ExecutionSelection
-select now root catalog alias = mustRight (resolveExecutionSelection (fixtureAssignment ("assignment:" <> alias)) catalog (Left PinnedBindingUnavailable) (Just (ExecutionPolicy alias aliases)) Nothing Nothing Nothing (Just root) now)
+select now root catalog alias = mustRight (resolveExecutionSelection (fixtureAssignment ("assignment:" <> alias)) catalog (Left PinnedBindingUnavailable) (Just (ExecutionPolicy (fixtureModelAlias alias) (map fixtureModelAlias aliases))) Nothing Nothing Nothing (Just root) now)
 
 seed :: AppEnv -> UTCTime -> [(Dimension, Limit)] -> IO ExecutionRootId
 seed app now overrides = do
@@ -502,7 +504,7 @@ withHttpUsage failResponse reportedTokens use = do
         respond (if failResponse then Wai.responseLBS status500 [("Content-Type", "application/json")] "{\"error\":{\"message\":\"fixture failure\"}}" else Wai.responseLBS status200 [("Content-Type", "text/event-stream")] frames)
   testWithApplication (pure application) \port -> do
     let models = take 3 [m | m <- allModels, Model.api m == OpenAIResponses, Model.provider m == "openai", Model.reasoning m]
-        bindings = zipWith3 (\alias model thinking -> mustRight (modelBinding (ModelAlias alias) "1" alias "1" (model & #baseUrl .~ ("http://127.0.0.1:" <> Text.pack (show port) <> "/v1")) (Options.emptyOptions & #thinking .~ Just thinking & #maxTokens .~ (1024 <$ reportedTokens)) (Just (opaqueCredential "fixture-secret")))) aliases models [ThinkingLow, ThinkingMedium, ThinkingHigh]
+        bindings = zipWith3 (\alias model thinking -> mustRight (modelBinding (fixtureModelAlias alias) "1" alias "1" (model & #baseUrl .~ ("http://127.0.0.1:" <> Text.pack (show port) <> "/v1")) (Options.emptyOptions & #thinking .~ Just thinking & #maxTokens .~ (1024 <$ reportedTokens)) (Just (opaqueCredential "fixture-secret")))) aliases models [ThinkingLow, ThinkingMedium, ThinkingHigh]
     length bindings @?= 3
     use bindings (readIORef requests)
   where
@@ -702,3 +704,6 @@ malformedSelectionRow fixture row = withRuntime fixture \app _ _ -> do
     )
   unavailable <- runAppIO app (Calls.inspectSelection selection.assignmentId)
   assertBool "SQL failure remains an outer store error" (case unavailable of Left _ -> True; _ -> False)
+
+fixtureModelAlias :: AliasText.Text -> Alias.ModelAlias
+fixtureModelAlias = either (error . show) id . Alias.parseModelAlias

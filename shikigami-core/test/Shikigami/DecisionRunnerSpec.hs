@@ -26,6 +26,7 @@ import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
+import Data.Text qualified as AliasText
 import Data.Text.Encoding qualified as TE
 import Data.Time (UTCTime (..), fromGregorian, getCurrentTime)
 import Data.Vector qualified as V
@@ -36,6 +37,7 @@ import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Error (TransientBehaviorFailure)
 import Shikigami.Decision.Contract
+import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Prelude ((&), (.~))
@@ -67,7 +69,7 @@ bindingA, bindingB :: ModelBinding
 bindingA = binding "triage" anthropic_claude_haiku_4_5 "credential-a"
 bindingB = binding "investigate" anthropic_claude_sonnet_4_6 "credential-b"
 
-binding alias model secret = mustRight (modelBinding (ModelAlias alias) "1" alias "1" model Options.emptyOptions (Just (opaqueCredential secret)))
+binding alias model secret = mustRight (modelBinding (fixtureModelAlias alias) "1" alias "1" model Options.emptyOptions (Just (opaqueCredential secret)))
 
 input :: Answer
 input = Answer "investigate" 0.81
@@ -329,3 +331,6 @@ forbiddenProfile = ResolvedProfile content (Profile.SanctionedExecutionProfileRe
           requiredCorrelationFields = [],
           signerRequirements = Profile.noSignerRequirements
         }
+
+fixtureModelAlias :: AliasText.Text -> Alias.ModelAlias
+fixtureModelAlias = either (error . show) id . Alias.parseModelAlias

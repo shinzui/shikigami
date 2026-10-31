@@ -90,6 +90,7 @@ library
     Shikigami.Capability.Tools
     Shikigami.Decision.Contract
     Shikigami.Decision.Evidence
+    Shikigami.Decision.ModelAlias
     Shikigami.Decision.ModelCatalog
     Shikigami.Decision.StubProvider
     Shikigami.Delegation.BudgetStore

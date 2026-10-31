@@ -7,6 +7,7 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
+import Data.Text qualified as AliasText
 import Data.Text qualified as Text
 import Data.Time (addUTCTime)
 import Effectful (Eff)
@@ -27,6 +28,7 @@ import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
+import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Execution.Resources (Admission (..))
 import Shikigami.Execution.Resources qualified as R
@@ -333,7 +335,7 @@ withConfiguredFixture fixture configure callback = withShikigamiFreshDatabase fi
             (SessionScope "fixture-coordinator" "logical-worker")
             (ObjectiveRef "fixture-checkpoint-provider" "objective-1")
             (parent & #name .~ fixtureAgentName "coordinator" & #delegates .~ map fixtureAgentName ["worker"])
-            (DelegateCtx (fixtureDelegationDepth 0) (compatibilityIdentity (fixtureAgentName "coordinator")) (Just parentSession) Nothing (Just (WorkflowId "original-parent")) [fixtureAgentName "coordinator"] (Just ["worker-model"]) (Just root) Nothing defaultDelegationBudget)
+            (DelegateCtx (fixtureDelegationDepth 0) (compatibilityIdentity (fixtureAgentName "coordinator")) (Just parentSession) Nothing (Just (WorkflowId "original-parent")) [fixtureAgentName "coordinator"] (Just [fixtureModelAlias "worker-model"]) (Just root) Nothing defaultDelegationBudget)
             (fixtureAgentName "worker")
             (compatibilityIdentity (fixtureAgentName "worker"))
             (fixtureLimit 10)
@@ -368,3 +370,6 @@ fixtureAgentName = either (error . show) id . mkAgentName
 
 fixtureDelegationDepth :: Int -> DelegationDepth
 fixtureDelegationDepth = either (error . show) id . parseDelegationDepth . toInteger
+
+fixtureModelAlias :: AliasText.Text -> Alias.ModelAlias
+fixtureModelAlias = either (error . show) id . Alias.parseModelAlias

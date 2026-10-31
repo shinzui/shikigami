@@ -3,6 +3,7 @@
 module Shikigami.DecisionContractSpec (tests) where
 
 import Baikai.Evidence qualified as Evidence
+import Control.Exception (SomeException, try)
 import Control.Lens ((&), (.~))
 import Control.Monad (forM_)
 import Data.Aeson (FromJSON, ToJSON, Value (..), eitherDecode, encode, object, toJSON, (.=))
@@ -12,10 +13,13 @@ import Data.Generics.Labels ()
 import Data.Int (Int64)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
+import Data.Text qualified as AliasText
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
+import Dhall qualified
 import GHC.Generics (Generic)
 import Shikigami.Decision.Contract
+import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Program.Decision
 import Shikumi.Adapter (ToPrompt)
@@ -43,7 +47,7 @@ original :: RegisteredProgram Request Answer
 original = registration "1" emptyParams
 
 model :: ModelDescriptor
-model = ModelDescriptor (ModelAlias "triage") "1" "sha256:model" "stub" "stub" "in-process" "stub-a" Nothing "stub-binding" "1"
+model = ModelDescriptor (fixtureModelAlias "triage") "1" "sha256:model" "stub" "stub" "in-process" "stub-a" Nothing "stub-binding" "1"
 
 prepared :: PreparedDecision
 prepared = PreparedDecision "prepare-1" (runCorrelationId "run-1") "workflow-1" 0 "triage" (descriptor (programRef original)) (object ["request" .= ("hello" :: Text)]) model Nothing
@@ -52,7 +56,19 @@ tests :: TestTree
 tests =
   testGroup
     "typed decision contracts"
-    [ testCase "program identity scopes and computed parameter contracts retain checked wire values" do
+    [ testCase "model alias codecs keep exact names and reject empty lookup keys" do
+        forM_ ["triage", "日本", " ", "alias\0suffix", Text.replicate 1000 "x"] \text -> do
+          let alias = fixtureModelAlias text
+          modelAliasText alias @?= text
+          toJSON alias @?= toJSON text
+          eitherDecode (encode alias) @?= Right alias
+        assertBool "empty factory refused" (isLeft (parseModelAlias ""))
+        assertBool "empty JSON refused" (isLeft (eitherDecode @ModelAlias "\"\"")),
+      testCase "Dhall alias admission uses the checked lookup domain" do
+        Dhall.input Dhall.auto "\"triage\"" >>= (@?= fixtureModelAlias "triage")
+        refused <- try @SomeException (Dhall.input Dhall.auto "\"\"" :: IO ModelAlias)
+        assertBool "empty Dhall lookup name refused" (isLeft refused),
+      testCase "program identity scopes and computed parameter contracts retain checked wire values" do
         let raw = " \nλ:opaque-version "
             identity = mustRight (parseProgramIdentity raw :: Either Text (ProgramIdentity "implementation-digest"))
             digest = programParameterDigest (object ["state" .= ("fixture" :: Text)])
@@ -122,7 +138,7 @@ tests =
         assertBool "executable absent" (isLeft (lookupProgram (mustRight (programRegistry [])) (programRef original)))
         decodeResult codec (encodeResult codec output) @?= Right output,
       testCase "policy, preparation, outcome and failure round-trip" do
-        let policy = DecisionPolicySnapshot [DecisionSlot "triage" [descriptor (programRef original)] [ModelAlias "triage"]] [model] Nothing
+        let policy = DecisionPolicySnapshot [DecisionSlot "triage" [descriptor (programRef original)] [fixtureModelAlias "triage"]] [model] Nothing
             outcome = DecisionOutcome prepared.identity prepared.program (Right (object ["answer" .= ("return" :: Text), "confidence" .= (0.9 :: Double)])) []
             failure = decisionFailure InvalidInput (Text.replicate 800 "x")
         eitherDecode (encode policy) @?= Right policy
@@ -179,3 +195,6 @@ tests =
 
 mustRight :: (Show e) => Either e a -> a
 mustRight = either (error . show) id
+
+fixtureModelAlias :: AliasText.Text -> Alias.ModelAlias
+fixtureModelAlias = either (error . show) id . Alias.parseModelAlias

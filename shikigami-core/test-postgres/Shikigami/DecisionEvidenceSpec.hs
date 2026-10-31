@@ -9,6 +9,7 @@ import Data.Either (isLeft)
 import Data.Generics.Labels ()
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
+import Data.Text qualified as AliasText
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Hasql.Pool (Pool)
@@ -22,6 +23,7 @@ import Shikigami.Attestation.Profile qualified as P
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Decision.Contract
 import Shikigami.Decision.Evidence
+import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Log.Correlation (callCorrelationId, runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Test.Tasty (TestTree, testGroup)
@@ -33,7 +35,7 @@ program = ProgramDescriptor (identity "fixture") (identity "1") (identity "sha25
     identity = mustRight . parseProgramIdentity
 
 model :: ModelDescriptor
-model = ModelDescriptor (ModelAlias "triage") "1" "sha256:model" "stub" "stub" "in-process" "model-a" Nothing "binding" "1"
+model = ModelDescriptor (fixtureModelAlias "triage") "1" "sha256:model" "stub" "stub" "in-process" "model-a" Nothing "binding" "1"
 
 prepared :: PreparedDecision
 prepared =
@@ -115,7 +117,7 @@ tests fixture =
         withShikigamiFreshDatabase fixture \connection -> withPool connection \pool -> do
           let store = postgresDecisionEvidenceStore pool
               hooks = decisionCallHooks store Nothing
-              secondModel = (model & #modelId .~ ("model-b") & #alias .~ (ModelAlias "investigate")) :: ModelDescriptor
+              secondModel = (model & #modelId .~ ("model-b") & #alias .~ (fixtureModelAlias "investigate")) :: ModelDescriptor
               secondPrepared = (prepared & #identity .~ ("invocation-b") & #label .~ ("investigate") & #model .~ (secondModel)) :: PreparedDecision
               secondEvidence = (terminal "provider-b") {B.requestedModel = "model-b"}
           first <- expectRight =<< hooks.beginCall context
@@ -243,3 +245,6 @@ mustRight = either (error . show) id
 
 containsPrompt :: Value -> Bool
 containsPrompt = ("PROMPT_MARKER" `Text.isInfixOf`) . Text.pack . show
+
+fixtureModelAlias :: AliasText.Text -> Alias.ModelAlias
+fixtureModelAlias = either (error . show) id . Alias.parseModelAlias

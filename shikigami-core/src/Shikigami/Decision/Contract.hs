@@ -5,7 +5,10 @@
 -- | Shikigami-owned wire contracts. Executables, prompts and credentials never
 -- belong in these descriptors; preparation alone contains the validated input.
 module Shikigami.Decision.Contract
-  ( ModelAlias (..),
+  ( ModelAlias,
+    parseModelAlias,
+    modelAliasFromNonEmpty,
+    modelAliasText,
     ProgramDescriptor (..),
     ProgramIdentity,
     parseProgramIdentity,
@@ -64,11 +67,8 @@ import GHC.Generics (Generic)
 import GHC.TypeLits (Symbol)
 import Numeric.Natural (Natural)
 import Shikigami.Attestation.Profile (SanctionedExecutionProfileRef)
+import Shikigami.Decision.ModelAlias
 import Shikigami.Log.Correlation (RunCorrelationId)
-
-newtype ModelAlias = ModelAlias Text
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
 
 -- | Immutable operator/program registration coordinates. Each field has a
 -- nominal scope; opaque versions and implementation labels are not assumed to

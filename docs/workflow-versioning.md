@@ -80,6 +80,16 @@ marker compatibility. Fresh provisioning and same-build reservation/recovery are
 required; no old-identity inference is introduced.
 
 
+[ADR-103](adr/0103-model-aliases-remain-checked-through-permission-and-selection.md)
+retains checked model aliases through declarations, queued jobs, delegation,
+selection and session receipts. Valid strings, permission arrays, producer keys
+and workflow steps retain their bytes and meaning. Empty aliases now refuse
+at decoding under the unused first-release policy; no fallback reader is added.
+Native helper references do not establish compatibility for formerly invalid
+opaque metadata. Valid same-build selection and permission recovery remain
+separate behavioral gates.
+
+
 ## What a durable workflow is, and why editing one is not like editing ordinary code
 
 Shikigami runs each agent run and each Danwa conversation as a **durable

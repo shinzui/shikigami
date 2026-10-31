@@ -10,6 +10,7 @@ import Data.Either (isLeft)
 import Data.Generics.Labels ()
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
+import Data.Text qualified as AliasText
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Data.Time (UTCTime (..), fromGregorian)
@@ -25,6 +26,7 @@ import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Decision.Contract
+import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Flow (FlowDef (..), flowRegistry)
 import Shikigami.Program.Decision
@@ -39,13 +41,13 @@ registry :: ProgramRegistry
 registry = mustRight (programRegistry [SomeProgram registered])
 
 binding :: Text -> Text -> ModelBinding
-binding alias exact = mustRight (modelBinding (ModelAlias alias) "1" "binding" "1" ((stubModel & #modelId .~ (exact))) emptyOptions Nothing)
+binding alias exact = mustRight (modelBinding (fixtureModelAlias alias) "1" "binding" "1" ((stubModel & #modelId .~ (exact))) emptyOptions Nothing)
 
 catalog :: ModelCatalog
 catalog = mustRight (modelCatalog [binding "triage" "stub-triage", binding "investigate" "stub-investigate"])
 
 slot :: DecisionSlot
-slot = DecisionSlot "triage" [descriptor (programRef registered)] [ModelAlias "triage", ModelAlias "investigate"]
+slot = DecisionSlot "triage" [descriptor (programRef registered)] [fixtureModelAlias "triage", fixtureModelAlias "investigate"]
 
 tests :: TestTree
 tests =
@@ -53,18 +55,18 @@ tests =
     "decision model admission"
     [ testCase "operator aliases and declaration intersect without a provider" do
         declaration <- allowedDeclaration
-        let triage = mustRight (resolveModel catalog declaration Nothing (ModelAlias "triage"))
-            investigate = mustRight (resolveModel catalog declaration Nothing (ModelAlias "investigate"))
+        let triage = mustRight (resolveModel catalog declaration Nothing (fixtureModelAlias "triage"))
+            investigate = mustRight (resolveModel catalog declaration Nothing (fixtureModelAlias "investigate"))
         assertBool "exact models differ" (triage.modelId /= investigate.modelId)
-        assertBool "unknown aliases denied" (isLeft (resolveModel catalog declaration Nothing (ModelAlias "payload-model")))
-        assertBool "agent permission required" (isLeft (resolveModel catalog ((declaration & #decisionModels .~ ([]))) Nothing (ModelAlias "triage")))
+        assertBool "unknown aliases denied" (isLeft (resolveModel catalog declaration Nothing (fixtureModelAlias "payload-model")))
+        assertBool "agent permission required" (isLeft (resolveModel catalog ((declaration & #decisionModels .~ ([]))) Nothing (fixtureModelAlias "triage")))
         assertBool "duplicate operator aliases refused" (isLeft (modelCatalog [binding "triage" "stub-triage", binding "triage" "stub-investigate"])),
       testCase "whole-slot policy narrows to the pinned profile" do
         declaration <- allowedDeclaration
         let snapshot = mustRight (resolvePolicy registry [slot] catalog declaration (Just (profile "stub-triage")))
         map (\model -> model.modelId) snapshot.models @?= ["stub-triage"]
-        snapshot.slots @?= [((slot & #models .~ ([ModelAlias "triage"])) :: DecisionSlot)]
-        assertBool "forbidden selected tuple" (isLeft (resolveModel catalog declaration (Just (profile "stub-triage")) (ModelAlias "investigate"))),
+        snapshot.slots @?= [((slot & #models .~ ([fixtureModelAlias "triage"])) :: DecisionSlot)]
+        assertBool "forbidden selected tuple" (isLeft (resolveModel catalog declaration (Just (profile "stub-triage")) (fixtureModelAlias "investigate"))),
       testCase "slot contracts and aliases validate before a runtime exists" do
         declaration <- allowedDeclaration
         slotErrors registry declaration [slot] @?= []
@@ -101,7 +103,7 @@ tests =
 allowedDeclaration :: IO AgentDecl
 allowedDeclaration = do
   declaration <- mustRight <$> loadAgent "../agents/heartbeat.dhall"
-  pure ((declaration & #decisionModels .~ (["triage", "investigate"])))
+  pure ((declaration & #decisionModels .~ (map fixtureModelAlias ["triage", "investigate"])))
 
 profile :: Text -> ResolvedProfile
 profile exact = ResolvedProfile content (Profile.SanctionedExecutionProfileRef (Profile.ProfileId "test") (Profile.ProfileVersion "1") (profileDigest content))
@@ -147,3 +149,6 @@ configRun values diagnosticMode =
 
 mustRight :: (Show e) => Either e a -> a
 mustRight = either (error . show) id
+
+fixtureModelAlias :: AliasText.Text -> Alias.ModelAlias
+fixtureModelAlias = either (error . show) id . Alias.parseModelAlias

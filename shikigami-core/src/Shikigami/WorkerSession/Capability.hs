@@ -39,6 +39,7 @@ import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.App (AppEffects)
 import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Decision.ModelAlias (ModelAlias)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Execution.Payload (payloadDigestText)
@@ -63,7 +64,7 @@ data CoordinatorRun = CoordinatorRun
     identity :: !AgentIdentity,
     sessionId :: !SessionId,
     rootId :: !(Maybe ExecutionRootId),
-    permittedAliases :: !(Maybe [Text])
+    permittedAliases :: !(Maybe [ModelAlias])
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)

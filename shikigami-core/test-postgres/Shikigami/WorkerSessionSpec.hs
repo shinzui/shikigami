@@ -6,6 +6,7 @@ import Data.Generics.Labels ()
 import Data.IORef
 import Data.List (isInfixOf)
 import Data.Map.Strict qualified as Map
+import Data.Text qualified as AliasText
 import Data.Time (addUTCTime)
 import Effectful (Eff)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowOutcome (Completed, ContinuedAsNew, Suspended), currentGeneration, loadStepIndex, runWorkflowWith)
@@ -23,6 +24,7 @@ import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Behavior.Run (newBehaviorEnv)
+import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Delegation.BudgetStore (delegationBudgetIdFor, reserveEnrolledDelegationSlots)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Identity (OperationId)
@@ -62,7 +64,7 @@ tests fixture =
               options = shikigamiWorkflowRunOptions env
               drive initial = run env (runWorkflowWith options sessionWorkflowName (sessionWorkflowId session) (Session.sessionWorkflow runtime initial))
               inspect = do Just (state, _) <- expectRight =<< run env (Store.inspectSession session); pure state
-              input text = Instruction 1 FollowUp (fixtureInstruction text) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (Just (ExecutionRequest (Just "worker-model") (Just ["worker-model"]) Nothing))
+              input text = Instruction 1 FollowUp (fixtureInstruction text) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (Just (ExecutionRequest (Just (fixtureModelAlias "worker-model")) (Just (map fixtureModelAlias ["worker-model"])) Nothing))
           (_, first) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "first") (input "first"))
           drive (Just (Session.WorkerSessionStart session)) >>= (@?= Suspended)
           started <- expectRight =<< run env (Store.readAssignment access first.assignmentId)
@@ -231,3 +233,6 @@ fixtureInstruction value = either (error . show) id (parseInstructionText value)
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureModelAlias :: AliasText.Text -> Alias.ModelAlias
+fixtureModelAlias = either (error . show) id . Alias.parseModelAlias

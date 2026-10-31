@@ -46,6 +46,11 @@ import Shikigami.Objective.Keys qualified as Objective
 import Shikigami.Execution.Identity qualified as Entity
 import Shikigami.Execution.Counter
 import Shikigami.Decision.Contract qualified as Decision
+import Shikigami.Decision.ModelAlias qualified as Alias
+import Shikigami.Execution.Request qualified as AliasRequest
+import Shikigami.Agent.RunJob qualified as AliasJob
+import Shikigami.Agent.Delegate.Context qualified as AliasDelegate
+import Shikigami.WorkerSession.Capability qualified as AliasCoordinator
 import Shikigami.Workspace.GitTypes qualified as Git
 import Shikigami.Workspace.Process qualified as Process
 import Shikigami.Workspace.Types qualified as Workspace
@@ -64,6 +69,12 @@ import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ('retained-model-aliases', 'parse :: Text -> Either Text Alias.ModelAlias\nparse = Alias.parseModelAlias\npolicy :: AliasRequest.ExecutionPolicy -> [Alias.ModelAlias]\npolicy value = value.permittedAliases\nrequest :: AliasRequest.ExecutionRequest -> Maybe Alias.ModelAlias\nrequest value = value.alias\ncontext :: AliasRequest.ExecutionContext -> Maybe [Alias.ModelAlias]\ncontext value = value.permittedAliases\njob :: AliasJob.RunJob -> Maybe [Alias.ModelAlias]\njob value = value.executionPermissions\ndelegate :: AliasDelegate.DelegateCtx -> Maybe [Alias.ModelAlias]\ndelegate value = value.executionPermissions\nmessage :: WorkerSession.MessageReceipt -> Maybe [Alias.ModelAlias]\nmessage value = value.permittedAliases\ncoordinator :: AliasCoordinator.CoordinatorRun -> Maybe [Alias.ModelAlias]\ncoordinator value = value.permittedAliases\ndeclaration :: Agent.AgentDecl -> [Alias.ModelAlias]\ndeclaration value = value.decisionModels\nselection :: Selection.ExecutionSelection -> [Alias.ModelAlias]\nselection value = value.permittedAliases\n', True),
+    ('model-alias-constructor', 'value = Alias.ModelAlias\n', False),
+    ('model-alias-coercion', 'value :: Text -> Alias.ModelAlias\nvalue = coerce\n', False),
+    ('model-alias-literal', 'value :: Alias.ModelAlias\nvalue = fromString "bad"\n', False),
+    ('agent-name-is-not-model-alias', 'value :: Name.AgentName -> Alias.ModelAlias\nvalue = id\n', False),
+
     ('workspace-values', 'parse :: Text -> Either Text Workspace.WorkspaceId\nparse = Workspace.parseWorkspaceId\nidentity :: Workspace.WorkspaceBinding -> Workspace.WorkspaceId\nidentity binding = binding.id\n', True),
     ('workspace-id-constructor', 'value = Workspace.WorkspaceId\n', False),
     ('workspace-id-kindid-coercion', 'value :: KindID.KindID "shikigami_workspace" -> Workspace.WorkspaceId\nvalue = coerce\n', False),
@@ -457,6 +468,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
             fragments.update({'git-record-format-numeric': ['GitRecordFormat', 'Num'], 'program-format-is-not-git-record-format': ["Couldn't match", 'ProgramParameterFormat', 'GitRecordFormat']})
             fragments.update({'process-routing-format-numeric': ['ProcessRoutingFormat', 'Num'], 'git-format-is-not-process-routing-format': ["Couldn't match", 'GitRecordFormat', 'ProcessRoutingFormat']})
             fragments.update({'workspace-id-constructor': ['WorkspaceId'], 'workspace-id-kindid-coercion': ['WorkspaceId'], 'workspace-id-text-coercion': ['WorkspaceId', 'Text'], 'workspace-id-literal': ['WorkspaceId', 'IsString'], 'root-is-not-workspace': ["Couldn't match", 'ExecutionRootId', 'WorkspaceId']})
+            fragments.update({'model-alias-constructor': ['ModelAlias'], 'model-alias-coercion': ['ModelAlias', 'Text'], 'model-alias-literal': ['ModelAlias', 'IsString'], 'agent-name-is-not-model-alias': ["Couldn't match", 'AgentName', 'ModelAlias']})
             if name.endswith("-constructor"):
                 assert any(marker in result.stderr.lower() for marker in ["not in scope", "does not export", "illegal term-level"]), (name, result.stderr)
             assert all(fragment in result.stderr for fragment in fragments[name]), (name, result.stderr)

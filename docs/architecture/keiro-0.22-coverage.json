@@ -279,6 +279,11 @@
           "rationale": "ADR-102 retains a private checked UUIDv7 WorkspaceId beside the unchanged technical origin/provider locator. PostgreSQL 18 allocates inside the existing immutable origin reservation; concurrent/lost-response requests return its committed winner and refusal condemns the transaction. Fresh DDL uniquely binds the identity to protected JSON. Real concurrent, rollback, immutable-conflict, follow-up/transfer and action-proof controls pass. Binding digests intentionally reset under ADR-27; the full scalar/identity and other decoder-owner review remains pending."
         },
         {
+          "id": "model-alias-domain-through-permissions",
+          "disposition": "implemented",
+          "rationale": "ADR-103 seals the exact nonempty model lookup name and retains it through catalog/configuration, declarations, policies, requests, selections, queued jobs, delegation and worker receipts. Checked JSON/Dhall codecs preserve valid strings; consumer-specific syntax/cardinality/key bounds remain with their owners. Positive retained-field compiler clients and actual model/profile/inherited permission controls pass. Other model metadata/decision scalars and the complete census remain pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -409,7 +414,12 @@
         "docs/evidence/keiro-0.22/workspace-identity-results.txt",
         "docs/evidence/keiro-0.22/workspace-identity-native-diff.json",
         "docs/evidence/keiro-0.22/workspace-identity-native-replay.json",
-        "docs/evidence/keiro-0.22/workspace-identity-fold-identities.json"
+        "docs/evidence/keiro-0.22/workspace-identity-fold-identities.json",
+        "docs/adr/0103-model-aliases-remain-checked-through-permission-and-selection.md",
+        "docs/evidence/keiro-0.22/model-alias-results.txt",
+        "docs/evidence/keiro-0.22/model-alias-native-diff.json",
+        "docs/evidence/keiro-0.22/model-alias-native-replay.json",
+        "docs/evidence/keiro-0.22/model-alias-fold-identities.json"
       ]
     },
     {

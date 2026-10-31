@@ -426,3 +426,15 @@ findings against ee8f85c are empty; four transducers remain unchanged. Binding
 JSON/digests intentionally change under the unused first-release policy. No old
 metadata compatibility or Linux runtime qualification is inferred. The 320-module/
 910-declaration worklist remains unclassified; complete M1 review stays open.
+
+
+Model lookup names now remain checked nominal values throughout permissions,
+selection, queued jobs, delegation and retained worker receipts.
+[ADR-103](../../adr/0103-model-aliases-remain-checked-through-permission-and-selection.md)
+and [acceptance](model-alias-results.txt) record checked JSON/Dhall admission,
+unchanged valid strings, concrete owner bounds and separate model authority.
+The all-enabled build, 590 pure/405 PostgreSQL/274 worker/95 server, 249 compiler
+clients and native/domain/diagram gates pass. Native findings against d907aee
+are empty and four transducers unchanged. Other model metadata and decision
+scalars remain open. The 321-module/910-declaration worklist remains unclassified;
+complete M1 review and plan95 remain open.

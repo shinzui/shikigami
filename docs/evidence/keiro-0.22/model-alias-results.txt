@@ -1,0 +1,21 @@
+Checked model aliases through selection and inherited permissions — ExecPlan 107
+Source parent: d907aee (master); selected GHC 9.12.4/frozen cohort.
+arm64 macOS and real PostgreSQL fixtures.
+Decision: docs/adr/0103-model-aliases-remain-checked-through-permission-and-selection.md.
+
+Contract
+Decision.ModelAlias owns the private nominal exact nonempty lookup name. JSON/Dhall capture is checked; a NonEmpty factory is total. No Generic, constructor, text coercion or IsString escape. Contract re-exports the API while declarations avoid the larger contract dependency graph.
+The nominal value remains in operator configuration, declaration decision permissions, model descriptors/slots, whole-run policy/request/context/selection, RunJob, delegation, coordinator permissions and retained MessageReceipt. Lookup, narrowing, intersection and equality use the nominal value. Evidence/diagnostics and concrete owner boundary length checks project text explicitly.
+The alias is a configured lookup name, not an allocated entity or vendor model ID. Preserve exact case/Unicode/whitespace and wire bytes. Configuration retains its 128-character word syntax; selection retains 64 distinct names and 256-character keys; scoped session admission retains nonempty lists up to 128 with 256-character keys. Separate decision/whole-run authority, immutable pinned bindings, exact provider tuples, profiles, options and credentials remain.
+
+Acceptance
+Focused pure checks: 70 PASS (0.23s) for initial alias/codec/Dhall/job changes. Focused real PostgreSQL decision/selection/worker-capability checks: 57 PASS (17.94s). A later owner-bound positive test initially excluded the configured default; correcting that fixture leaves production logic unchanged. Final focused pure selection/decision/job checks: 65 PASS (0.12s), including the corrected owner-bound controls. Earlier selected wire checks remain valid; the final full suite includes every case.
+Exact alias strings round-trip, including Unicode, whitespace and opaque names beyond a consumer-specific limit. Empty JSON/Dhall names refuse. Positive complete policy/request/context/selection/job values precede empty inherited/member rejection. Selection retains its 256-character, distinct-name and 64-entry limits. Real profile/permission/HTTP checks preserve exact model/thinking dispatch, retained bindings, retries/accounting and narrowed worker authority. Static process-default and example aliases retain their exact names.
+All-enabled build PASS, including Linux qualification fixture compilation. Compilation does not qualify Linux runtime behavior.
+Full suites PASS: 590 pure (5.91s), 405 serial PostgreSQL (115.14s), 274 worker (175.01s), 95 server (19.09s). Domain behavior and six diagrams PASS.
+Selected compiler: 189 nominal + 60 opaque = 249 PASS. Positive clients verify all retained alias field types, followed by constructor/text-coercion/literal/agent-name substitution/Generic rejection. An initial positive probe named Instruction rather than the owning MessageReceipt; the corrected client passes before negative probes.
+just keiro-gate d907aee PASS: native check, ten-member inspection, idempotent scaffold and 156 conformance rows. Findings empty; four transducer fingerprints/source hashes unchanged. Native diff/replay/fold reports retained. Valid step/identity/codec meaning is unchanged; no patch is needed. First-release decoding rejects formerly invalid empty opaque aliases without a fallback reader, as workflow-versioning records.
+All 124 frozen guide hashes verified. Current compiled source/tool worklist verified: 321 modules, 910 declarations (695 data, 178 newtypes, 37 aliases), 14 entrypoints. Haskell conventions, thirteen mutation tests and git diff --check PASS. Generated files unchanged.
+
+Scope
+This closes configured model lookup names through domain permissions, not every model descriptor version/digest, other decision scalar, decoder or entity authority. The complete declaration worklist remains unclassified and M1 remains open. Packaged/Linux/runtime profiles and plan95 have not started.

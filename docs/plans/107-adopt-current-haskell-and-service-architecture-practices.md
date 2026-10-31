@@ -96,6 +96,13 @@ scalar/identity and remaining decoder-owner classifications remain open.
 
 ## Decision Log
 
+2026-10-31: ADR-103 keeps checked model lookup names through configuration,
+declaration/whole-run permissions, selection, queued jobs, delegation and session
+receipts. Preserve valid strings and consumer-specific bounds rather than minting
+an entity ID or flattening the meaning for every lookup. Exact provider/profile
+and immutable-binding authority remains; other descriptor/decision values stay
+open.
+
 2026-10-31: ADR-63 establishes allocation lifetime through follow-up and transfer.
 ADR-102 gives that workspace a private UUIDv7 entity identity beside its existing
 technical origin/provider address. PostgreSQL 18 allocates inside the reservation
@@ -168,19 +175,18 @@ cases. The language checker and thirteen style/ownership mutation tests pass.
 [The adoption record](../evidence/keiro-0.22/haskell-service-adoption.md) links each
 implemented domain-value wave and its exact candidate/evidence.
 
-Latest workspace identity acceptance passed the all-enabled build, 585 pure,
-405 serial PostgreSQL, 274 worker and 95 server cases, 243 compiler clients and
-native/domain/diagram gates. ADR-102 allocates one retained workspace identity
-beside its stable origin/provider locator. Concurrent/lost-response, rollback,
-immutable-conflict and follow-up/transfer controls pass; fresh composition and
-all eleven live migration checks pass. Binding JSON/digests intentionally change
-under ADR-27. Native findings against ee8f85c are empty with unchanged transducers.
-The unclassified census has 320 modules and 910 declarations. Complete scalar/
-identity, model/other decision values and remaining decoder-owner review keep
-M1 incomplete. Plan95's frozen closure, packaged Linux/runtime and inventory
-gates have not started.
-[Acceptance](../evidence/keiro-0.22/workspace-identity-results.txt) retains exact
-results and scope. Forty-two of 46 assigned sources have implemented dispositions.
+Latest model-alias acceptance passed the all-enabled build, 590 pure, 405 serial
+PostgreSQL, 274 worker and 95 server cases, 249 compiler clients and native/domain/
+diagram gates. ADR-103 keeps checked lookup names throughout permissions,
+selection, queued jobs, delegation and worker receipts. JSON/Dhall admission,
+concrete owner bounds and exact model/profile authority checks pass. Valid strings
+retain their bytes; empty names refuse without fallback. Native findings against
+d907aee are empty with unchanged transducers. The unclassified census has 321
+modules and 910 declarations. Complete scalar/identity, other model/decision
+values and remaining decoder-owner review keep M1 incomplete. Plan95's frozen
+closure, packaged Linux/runtime and inventory gates have not started.
+[Acceptance](../evidence/keiro-0.22/model-alias-results.txt) retains exact results
+and scope. Forty-two of 46 assigned sources have implemented dispositions.
 
 
 ## Context and Orientation

@@ -43,6 +43,7 @@ import Numeric.Natural (Natural)
 import Shikigami.Agent.ExpertiseKey (ExpertiseKey)
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Capability.Overlay (CapabilityId)
+import Shikigami.Decision.ModelAlias (ModelAlias)
 import Shikigami.Execution.Policy.Types (HarnessOverrides)
 import Shikigami.Execution.Request (ExecutionPolicy)
 import Shikigami.Prelude
@@ -285,7 +286,7 @@ data AgentDecl = AgentDecl
     delegates :: ![AgentName],
     execution :: !(Maybe ExecutionPolicy),
     harness :: !(Maybe HarnessOverrides),
-    decisionModels :: ![Text],
+    decisionModels :: ![ModelAlias],
     delegationBudget :: !(Maybe DelegationBudget),
     sanctionedProfile :: !(Maybe ProfileRequirement),
     capabilityOverlays :: ![CapabilityId],
@@ -310,7 +311,7 @@ instance ToJSON AgentDecl where
 
 instance FromJSON AgentDecl where
   parseJSON = Aeson.withObject "AgentDecl" \fields ->
-    let decisions = if KeyMap.member "decisionModels" fields then fields else KeyMap.insert "decisionModels" (Aeson.toJSON ([] :: [Text])) fields
+    let decisions = if KeyMap.member "decisionModels" fields then fields else KeyMap.insert "decisionModels" (Aeson.toJSON ([] :: [ModelAlias])) fields
         execution = if KeyMap.member "execution" decisions then decisions else KeyMap.insert "execution" Aeson.Null decisions
         harness = if KeyMap.member "harness" execution then execution else KeyMap.insert "harness" Aeson.Null execution
      in Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object harness)

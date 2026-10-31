@@ -20,6 +20,7 @@ import Shikigami.Agent.Delegate.Depth (depthInt)
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity (..), identityText)
 import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Decision.ModelAlias (ModelAlias)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Execution.Request (ExecutionRequest)
 import Shikigami.Execution.Transcript (ExecutionId, PayloadRef)
@@ -184,7 +185,7 @@ data MessageReceipt = MessageReceipt
     childWorkflowId :: !(Maybe Text),
     executionId :: !(Maybe ExecutionId),
     context :: !(Maybe PayloadRef),
-    permittedAliases :: !(Maybe [Text])
+    permittedAliases :: !(Maybe [ModelAlias])
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON)
@@ -193,7 +194,7 @@ instance FromJSON MessageReceipt where
   parseJSON = Aeson.withObject "MessageReceipt" \fields -> do
     context <- fields .:? "context"
     aliases <- fields .:? "permittedAliases"
-    message <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (KeyMap.insert "permittedAliases" (toJSON (aliases :: Maybe [Text])) (KeyMap.insert "context" (toJSON (context :: Maybe PayloadRef)) fields)))
+    message <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (KeyMap.insert "permittedAliases" (toJSON (aliases :: Maybe [ModelAlias])) (KeyMap.insert "context" (toJSON (context :: Maybe PayloadRef)) fields)))
     unless (message.format == 1 && revisionNumber message.sequence < 10000 && message.assignmentId == assignmentIdFor message.sessionId message.sequence message.operationId) (fail "unsupported assignment receipt identity")
     _ <- traverse (either (fail . show) pure . mkWorkflowId) message.childWorkflowId
     unless (if message.phase == Queued then isNothing message.childWorkflowId else isJust message.childWorkflowId) (fail "assignment child mapping is missing or premature")

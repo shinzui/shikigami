@@ -19,6 +19,7 @@ import Shikigami.Agent.Decl (AgentDecl (..), DelegationBudget)
 import Shikigami.Agent.Delegate.Depth (DelegationDepth, depthInt, parseDelegationDepth)
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
+import Shikigami.Decision.ModelAlias (ModelAlias)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Prelude hiding ((.=))
 
@@ -37,7 +38,7 @@ data DelegateCtx = DelegateCtx
     parentSessionId :: !(Maybe SessionId),
     parentRunWorkflowId :: !(Maybe WorkflowId),
     lineage :: ![AgentName],
-    executionPermissions :: !(Maybe [Text]),
+    executionPermissions :: !(Maybe [ModelAlias]),
     executionRootId :: !(Maybe ExecutionRootId),
     delegationBudgetId :: !(Maybe DelegationBudgetId),
     budgetLimit :: !DelegationBudget

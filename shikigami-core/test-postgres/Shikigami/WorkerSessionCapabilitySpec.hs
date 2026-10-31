@@ -8,6 +8,7 @@ import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
+import Data.Text qualified as AliasText
 import Data.Text qualified as AssignmentText
 import Data.Text qualified as Text
 import Data.Time (addUTCTime)
@@ -29,7 +30,8 @@ import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
-import Shikigami.Decision.Contract (ModelAlias (..), ModelDescriptor (..))
+import Shikigami.Decision.Contract (ModelAlias, ModelDescriptor (..))
+import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Executor (BoundTool (..))
@@ -231,7 +233,7 @@ tests fixture =
           run env (Execution.inspectExecution (execution refused)) >>= (@?= Right Nothing),
       testCase "new parent permissions cannot widen the frozen worker delegation" $
         withCapabilityFixture fixture \env admission host scope authorizer _ _ -> do
-          let narrowed = scope & #run . #permittedAliases .~ Just ["other-model"] & #context . #executionPermissions .~ Just ["other-model"]
+          let narrowed = scope & #run . #permittedAliases .~ Just (map fixtureModelAlias ["other-model"]) & #context . #executionPermissions .~ Just (map fixtureModelAlias ["other-model"])
               authority = CoordinationAuthority (\_ -> pure (Right (Just narrowed))) (\_ _ -> pure (Right narrowed))
               selected = host & #authority .~ authority
           grant <- permit env selected narrowed authorizer
@@ -296,8 +298,8 @@ listenerToken env scope = do
 snapshotFor :: CoordinationScope -> IO Replay.ExecutionSnapshot
 snapshotFor scope = do
   now <- getCurrentTime
-  let descriptor = ModelDescriptor (ModelAlias "worker-model") "1" "fixture-model" "fixture" "fixture" "fixture" "fixture" Nothing "fixture" "1"
-      selection = ExecutionSelection (fixtureAssignment "coordination-assignment") descriptor (Aeson.object []) ["worker-model"] Nothing scope.run.rootId ProcessDefault now
+  let descriptor = ModelDescriptor (fixtureModelAlias "worker-model") "1" "fixture-model" "fixture" "fixture" "fixture" "fixture" Nothing "fixture" "1"
+      selection = ExecutionSelection (fixtureAssignment "coordination-assignment") descriptor (Aeson.object []) [fixtureModelAlias "worker-model"] Nothing scope.run.rootId ProcessDefault now
   pure (Replay.ExecutionSnapshot 1 (Replay.executionIdFor selection.assignmentId) scope.run.runId (fixtureAgentName "coordinator") scope.run.identity scope.run.sessionId selection Nothing (Replay.SkillInstructions "fixture" "fixture" "fixture") (Replay.ReplayContext 2 Nothing [Replay.RequestTurn [Replay.TextBlock "coordinate"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] Nothing)
 
 executeTool :: BoundTool -> Aeson.Value -> IO ToolOutput
@@ -331,3 +333,6 @@ fixtureAssignment = either (error . show) id . parseAssignmentKey
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureModelAlias :: AliasText.Text -> Alias.ModelAlias
+fixtureModelAlias = either (error . show) id . Alias.parseModelAlias

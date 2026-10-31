@@ -60,8 +60,8 @@ data ModelBinding = ModelBinding
 -- Options are immutable and credential-free; the runner injects the secret only
 -- at the actual transport boundary. All option metadata joins the digest.
 modelBinding :: ModelAlias -> Text -> Text -> Text -> Model -> Options -> Maybe OpaqueCredential -> Either DecisionFailure ModelBinding
-modelBinding alias@(ModelAlias aliasText) version bindingId bindingVersion model options credential
-  | any Text.null [aliasText, version, bindingId, bindingVersion] = refuse "model descriptor identities must be nonempty"
+modelBinding alias version bindingId bindingVersion model options credential
+  | any Text.null [version, bindingId, bindingVersion] = refuse "model descriptor identities must be nonempty"
   | Options.apiKey options /= Nothing = refuse "model options must not carry a credential"
   | Model.api model `notElem` [AnthropicMessages, OpenAIChatCompletions, OpenAIResponses, Custom "stub"] = refuse "decision model requires an admitted HTTP or stub API"
   | Model.api model /= Custom "stub", maybe True (Text.null . revealCredential) credential = refuse "decision credential binding is unavailable"
@@ -129,8 +129,8 @@ catalogDescriptors :: ModelCatalog -> [ModelDescriptor]
 catalogDescriptors (ModelCatalog entries _) = map modelDescriptor entries
 
 resolveModel :: ModelCatalog -> AgentDecl -> Maybe ResolvedProfile -> ModelAlias -> Either DecisionFailure ModelDescriptor
-resolveModel (ModelCatalog entries _) declaration profile alias@(ModelAlias value)
-  | value `notElem` declaration.decisionModels = Left (decisionFailure ForbiddenModel "agent does not authorize decision model alias")
+resolveModel (ModelCatalog entries _) declaration profile alias
+  | alias `notElem` declaration.decisionModels = Left (decisionFailure ForbiddenModel "agent does not authorize decision model alias")
   | otherwise = case find (\binding -> binding.descriptor.alias == alias) entries of
       Nothing -> Left (decisionFailure UnknownModel "operator model alias is unavailable")
       Just binding -> do
@@ -180,7 +180,7 @@ slotErrors registry declaration slots =
       ["invalid decision slot label" | Text.null slot.label || not (asciiAlphaNum (Text.head slot.label)) || Text.any (\c -> not (asciiWord c)) slot.label]
         <> ["decision slot has no program or model" | null slot.programs || null slot.models]
         <> ["decision slot program contract is not registered" | any (`notElem` programDescriptors registry) slot.programs]
-        <> ["decision slot model alias is not declared by agent" | any (\(ModelAlias alias) -> alias `notElem` declaration.decisionModels) slot.models]
+        <> ["decision slot model alias is not declared by agent" | any (`notElem` declaration.decisionModels) slot.models]
     asciiAlphaNum c = c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
     asciiWord c = asciiAlphaNum c || c == '-' || c == '_'
 
