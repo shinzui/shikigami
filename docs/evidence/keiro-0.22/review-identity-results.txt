@@ -24,4 +24,5 @@ Haskell conventions, thirteen style/ownership mutation checks, formatter and whi
 Compiled worklist: 320 modules, 902 declarations (692 data, 173 newtype, 37 aliases), fourteen entrypoints; current source/tool hashes and uniqueness verified. All 124 frozen guide source hashes remain unchanged. The worklist remains unclassified, not a compliance certificate.
 
 Remaining work
-Establish and check the ordinary strict gate against the committed new baseline. Complete the residual identity/scalar and other owner decoder audit before completing plan107. Plan95's exact packaged closure, Linux/runtime and inventory gates remain unstarted. No populated historical upgrade, live Mori content-plane or Linux runtime qualification is claimed.
+The ordinary just keiro-gate 4f031e7 passes against the committed identity baseline: zero findings, idempotent regeneration and 156 native rows. Current diff/replay reports are retained separately from the intentional reset.
+Complete the residual identity/scalar and other owner decoder audit before completing plan107. Plan95's exact packaged closure, Linux/runtime and inventory gates remain unstarted. No populated historical upgrade, live Mori content-plane or Linux runtime qualification is claimed.

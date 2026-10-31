@@ -117,6 +117,8 @@ HTTP. All 38 affected practice cases pass after adding permanent decorated-v5
 refusals. [Acceptance](../evidence/keiro-0.22/review-identity-results.txt) records
 phase boundaries, controls and the intentional single native workflow break.
 The reviewed application schema gains exactly sixteen receipt-table objects.
+The ordinary strict gate against committed baseline 4f031e7 passes with zero
+findings and 156 native rows; reset and current reports remain separate.
 The 320-module/902-declaration worklist, source/tool hashes and all 124 frozen
 guide hashes are verified. Forty-two of 46 assigned sources have implemented
 dispositions. Complete scalar/allocated-identity, other owners' decoder review

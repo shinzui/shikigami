@@ -320,7 +320,9 @@
         "docs/evidence/keiro-0.22/review-identity-reset-native-diff.json",
         "docs/evidence/keiro-0.22/review-identity-reset-native-replay.json",
         "docs/evidence/keiro-0.22/review-identity-fold-identities.json",
-        "shikigami-core/src/Shikigami/PracticeReview/IdentityStore.hs"
+        "shikigami-core/src/Shikigami/PracticeReview/IdentityStore.hs",
+        "docs/evidence/keiro-0.22/review-identity-current-native-diff.json",
+        "docs/evidence/keiro-0.22/review-identity-current-native-replay.json"
       ]
     },
     {
