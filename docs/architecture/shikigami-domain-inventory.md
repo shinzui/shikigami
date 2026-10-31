@@ -44,6 +44,16 @@ nominal Text bindings to
 `ExecutionId` and `WorkerSessionId`. They preserve their runtime-owned UUIDv5
 technical coordinates and empty initial sentinel. They are not TypeID-v7 domains.
 
+Execution transcript revisions and expected command revisions retain the separate
+`execution` StateRevision scope, including PreparedTool. The transcript cursor,
+retained operation positions and operation-id derivation retain
+`execution-operation`; they cannot substitute for resource-root policy revisions.
+Native generated command and SQL codecs render numbers explicitly. Exact positive
+state/operation codecs, invalid-position rejection and unchanged deterministic ID
+input bytes are covered by ExecutionPositionSpec. This scalar refactor changes no
+workflow step or declared DSL body; counters and other scalar findings retain
+their separate open census in plan 107.
+
 Objective is an application-owned entity: `ObjectiveId` now uses the generated
 abstract TypeID-v7 domain with prefix `shikigami_objective`. Creation allocates a
 UUIDv7 ID, while creator-scoped operation receipts retain deduplication authority.

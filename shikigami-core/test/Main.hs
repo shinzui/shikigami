@@ -37,6 +37,7 @@ import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.DirectorySpec qualified as DirectorySpec
 import Shikigami.EnqueueHardeningSpec qualified as EnqueueHardeningSpec
 import Shikigami.ExecutionPolicySpec qualified as ExecutionPolicySpec
+import Shikigami.ExecutionPositionSpec qualified as ExecutionPositionSpec
 import Shikigami.ExecutionResourcesSpec qualified as ExecutionResourcesSpec
 import Shikigami.ExecutionSelectionSpec qualified as ExecutionSelectionSpec
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
@@ -112,6 +113,7 @@ main =
           DecisionRunnerSpec.tests,
           DelegateContextSpec.tests,
           DelegationBatchSpec.tests,
+          ExecutionPositionSpec.tests,
           ExecutionPolicySpec.tests,
           ExecutionResourcesSpec.tests,
           WorkerSessionPositionSpec.tests,

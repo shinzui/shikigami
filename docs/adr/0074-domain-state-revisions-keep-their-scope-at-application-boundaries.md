@@ -43,6 +43,15 @@ field name must differ. Refuse a new event append at the existing stored cursor
 limit inside the same transaction, preserving payload/receipt/event rollback and
 readability of the retained state. This does not authorize truncation or rotation.
 
+Execution transcript revisions use execution, while operation sequence positions
+use execution-operation. Expected-revision commands and PreparedTool retain the
+execution scope. State cursors, retained operation positions and deterministic
+operation identity derivation retain the operation scope. The native aggregate
+command adapter alone renders its Int revision, preserving its finite bound;
+SQL pagination/position adapters render numbers explicitly. Ephemeral call indexes
+are incidental local counters converted once into operation positions. These are
+not resource-root policy revisions or worker-session event cursors.
+
 JSON encoding remains an integer with identical bytes for valid values. No scope
 tag is added to a journal or request. Malformed negative counters fail decoding
 rather than entering domain state. Existing finite database bounds remain checked

@@ -61,6 +61,7 @@ import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config
 import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
+import Shikigami.StateRevision (initialRevision, revisionNumber)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Workspace.Admission (WorkspaceHost (..))
 import Shikigami.Workspace.Allocation
@@ -183,13 +184,13 @@ workflowCase configFile prefix stage = do
         parent >>= suspended
         parent >>= suspended
         Just (state, _, _) <- metadata
-        unless (state.cursor == 0) (fail "admission performed an effect")
+        unless (state.cursor == initialRevision) (fail "admission performed an effect")
       "edit" -> do
         parent >>= suspended
         let advance remaining = do
               Just (state, _, _) <- metadata
-              if state.cursor >= 2
-                then unless (state.cursor == 2) (fail "edit checkpoint overran")
+              if revisionNumber state.cursor >= 2
+                then unless (revisionNumber state.cursor == 2) (fail "edit checkpoint overran")
                 else do
                   unless (remaining > (0 :: Int)) (fail "edit checkpoint did not advance")
                   void (right =<< driveExecutionForeground runtime (ExecutionStart execution) 1)

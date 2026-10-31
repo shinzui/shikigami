@@ -157,3 +157,10 @@ earlier domain-member directory move, moving binding symbols changes two fold
 fingerprints: the strict report retains 44 warnings and affected replay. Complete
 rebuild, 156 native conformance rows, 143 domain assertions and the full
 549/376/260/95 application suites pass, as do ten compiler and 70 CLI clients.
+
+Execution transcript and prepared-tool revisions now retain their own execution
+scope, separate from operation sequence positions and resource-root policy revisions.
+[Execution revision acceptance](execution-revision-results.txt) records complete
+codec/identity controls, fourteen compiler clients and the passing 552 pure,
+376 PostgreSQL and 260 worker cases. Other resource quantities/counters and the
+complete scalar census remain open.

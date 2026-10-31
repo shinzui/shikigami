@@ -440,6 +440,7 @@ test-suite shikigami-core-test
     Shikigami.DirectorySpec
     Shikigami.EnqueueHardeningSpec
     Shikigami.ExecutionPolicySpec
+    Shikigami.ExecutionPositionSpec
     Shikigami.ExecutionResourcesSpec
     Shikigami.ExecutionSelectionSpec
     Shikigami.Fixture.KawaStub

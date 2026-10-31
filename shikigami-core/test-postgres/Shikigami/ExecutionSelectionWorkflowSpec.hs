@@ -78,6 +78,7 @@ import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Sink.Config (DanwaConfig (..))
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (SinkKind (SDanwaConversation))
+import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Test.Tasty (TestTree, testGroup)
@@ -129,29 +130,29 @@ tests fixture =
               selectedRuntime = runtime app store base catalog
               execution = Replay.executionIdFor selection.assignmentId
               snapshot = Replay.ExecutionSnapshot 1 execution "prepared-http" (AgentName "worker") (compatibilityIdentity "worker") session selection Nothing (Replay.SkillInstructions "fixture" "system" "body") (Replay.ReplayContext 1 (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
-              operationId = Replay.operationIdFor execution 0
+              operationId = Replay.operationIdFor execution (fixtureRevision 0)
               specification = Replay.OperationSpec operationId Replay.ModelTurn RepeatableObservation "model" (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) "scope" Nothing
               context = systemUser "system" "marker"
           _ <- expectRight =<< run app Catalog.registerProjectionCatalog
           run app (Durable.admitExecution snapshot) >>= (@?= Right Accepted)
           access <- expectRight =<< run app (Durable.authorizeReplay execution snapshot.identity (pure (Right ())))
-          _ <- expectRight =<< run app (Durable.acceptOperation access 0 specification (toJSON context))
+          _ <- expectRight =<< run app (Durable.acceptOperation access (fixtureRevision 0) specification (toJSON context))
           (request, preparedCall) <- expectRight =<< preparePinnedExecutionCall selectedRuntime selection operationId (AttemptId "prepared-http-attempt") context Nothing
           let submission = Attempt.AttemptSubmission request (Just preparedCall) (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)
               reference = Attempt.JobReference 1 execution operationId request.attemptId
-          (_, attempt) <- expectRight =<< run app (Durable.submitExecutionAttemptWith access 1 submission (\_ -> pure ()))
+          (_, attempt) <- expectRight =<< run app (Durable.submitExecutionAttemptWith access (fixtureRevision 1) submission (\_ -> pure ()))
           claim <-
-            run app (Durable.claimExecutionAttempt access 2 reference "prepared-http-owner" 60) >>= \case
+            run app (Durable.claimExecutionAttempt access (fixtureRevision 2) reference "prepared-http-owner" 60) >>= \case
               Right (Attempt.ClaimGranted granted) -> pure granted
               other -> assertFailure (show other) >> fail "claim"
-          run app (Durable.startExecutionAttempt access 3 claim) >>= (@?= Right Accepted)
+          run app (Durable.startExecutionAttempt access (fixtureRevision 3) claim) >>= (@?= Right Accepted)
           receipt <- maybe (assertFailure "missing reserved call" >> fail "receipt") pure attempt.call
           let commit _ accounting response = case response of
                 Nothing -> assertFailure "expected terminal response"
                 Just actual -> do
                   let outcome = Replay.ModelReturned (Replay.captureAssistant actual) (toJSON <$> actual.evidence)
                   ref <- expectRight (Durable.outcomeReference outcome)
-                  run app (Durable.completeExecutionAttempt access 4 claim (Attempt.AttemptResult outcome (Replay.NeedValidation ref) (Just accounting))) >>= (@?= Right Accepted)
+                  run app (Durable.completeExecutionAttempt access (fixtureRevision 4) claim (Attempt.AttemptResult outcome (Replay.NeedValidation ref) (Just accounting))) >>= (@?= Right Accepted)
           selected <- expectRight =<< buildPreparedExecutionEnv selectedRuntime selection (PreparedSelectionCall receipt commit)
           response <- completeBehaviorRequest selected selected.model context selected.options
           responseError response @?= Nothing
@@ -161,7 +162,7 @@ tests fixture =
           length bodies @?= 1
           lookupField "model" (head bodies) @?= Just selection.descriptor.modelId
           (_, state) <- expectRight =<< run app (Durable.loadExecution access)
-          state.cursor @?= 1
+          state.cursor @?= (fixtureRevision 1)
           rootState <- expectRight =<< run app (Roots.inspectRoot root)
           rootState.active @?= 0
           Map.lookup ModelAttempts rootState.usage.settled @?= Just 1,
@@ -175,7 +176,7 @@ tests fixture =
               selectedRuntime = runtime app store base catalog
               execution = Replay.executionIdFor selection.assignmentId
               snapshot = Replay.ExecutionSnapshot 1 execution "executor-http" (AgentName "worker") (compatibilityIdentity "worker") session selection Nothing (Replay.SkillInstructions "fixture" "system" "body") (Replay.ReplayContext 1 (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
-              operationId = Replay.operationIdFor execution 0
+              operationId = Replay.operationIdFor execution (fixtureRevision 0)
               specification = Replay.OperationSpec operationId Replay.ModelTurn RepeatableObservation "model" (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) "scope" Nothing
               executor authority = Executor.ExecutionRuntime app (const authority) (const authority) (const selectedRuntime) (\_ _ _ use -> Right <$> use []) 5
           _ <- expectRight =<< run app Catalog.registerProjectionCatalog
@@ -183,14 +184,14 @@ tests fixture =
           access <- expectRight =<< run app (Durable.authorizeReplay execution snapshot.identity (pure (Right ())))
           view <- expectRight (selectContextView snapshot.policy snapshot.initialContext)
           let input = ModelOperationInput 1 view Nothing Nothing
-          (_, operation) <- expectRight =<< run app (Durable.acceptOperation access 0 specification (toJSON input))
+          (_, operation) <- expectRight =<< run app (Durable.acceptOperation access (fixtureRevision 0) specification (toJSON input))
           context <- expectRight (Executor.modelContext snapshot operation input)
           (request, preparedCall) <- expectRight =<< preparePinnedExecutionCall selectedRuntime selection operationId (AttemptId "executor-http-attempt") context Nothing
           let reference = Attempt.JobReference 1 execution operationId request.attemptId
-          _ <- expectRight =<< run app (Durable.submitExecutionAttemptWith access 1 (Attempt.AttemptSubmission request (Just preparedCall) (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)) (\_ -> pure ()))
+          _ <- expectRight =<< run app (Durable.submitExecutionAttemptWith access (fixtureRevision 1) (Attempt.AttemptSubmission request (Just preparedCall) (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)) (\_ -> pure ()))
           Executor.executeAcceptedAttempt (executor (pure (Right ()))) snapshot.identity reference >>= (@?= Left (Replay.ExecutionPolicyRefused "execution wake is unavailable"))
           (_, committed) <- expectRight =<< run app (Durable.loadExecution access)
-          committed.cursor @?= 1
+          committed.cursor @?= (fixtureRevision 1)
           observed >>= (\bodies -> length bodies @?= 1)
           run app (runTransaction (registerAwakeableTx UUID.nil "shikigami.execution" (Replay.executionWorkflowId execution).unWorkflowId))
           -- A committed outcome needs no current provider/credential or new
@@ -498,3 +499,6 @@ expectRight = either (assertFailure . show) pure
 
 mustRight :: (Show e) => Either e a -> a
 mustRight = either (error . show) id
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

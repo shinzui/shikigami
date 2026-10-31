@@ -91,7 +91,7 @@ tests fixture =
         Just original <- right =<< run env (Execution.inspectExecutionAttempt reference.attemptId)
         original.phase @?= Attempt.AttemptCommitted
         Just (state, _, _) <- right =<< run env (Execution.inspectExecution snapshot.executionId)
-        state.cursor @?= 2
+        state.cursor @?= (fixtureRevision 2)
         state.pendingReceipts @?= 0
         scan <- right =<< scanFileReceipts env Nothing
         scan.inspected @?= 1
@@ -117,7 +117,7 @@ tests fixture =
         assertBool "original late receipt retained" (maybe False (const True) original.lateReceipt)
         Just (state, _, _) <- right =<< run env (Execution.inspectExecution snapshot.executionId)
         state.pendingReceipts @?= 0
-        state.cursor @?= 1,
+        state.cursor @?= (fixtureRevision 1),
       testCase "independent recovery preserves uncertainty when prepared bytes were never published" $ withEffect fixture \env binding snapshot _ reference runtime _ -> do
         calls <- newIORef (0 :: Int)
         let interrupted =
@@ -190,7 +190,7 @@ tests fixture =
         readIORef authorizations >>= (@?= count)
         getModificationTime (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") >>= (@?= before)
         (_, state) <- right =<< run env (Execution.loadExecution access)
-        state.cursor @?= 2
+        state.cursor @?= (fixtureRevision 2)
         Just operation <- right =<< run env (Execution.inspectOperation reference.operationId)
         assertBool "one chosen result" (maybe False (const True) operation.outcome)
         -- Accepted arguments are protected; replacing content in a callback must
@@ -208,7 +208,7 @@ tests fixture =
         Executor.executeAcceptedAttempt executor snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         (_, uncertain) <- right =<< run env (Execution.loadExecution access)
         uncertain.phase @?= Unresolved
-        uncertain.cursor @?= 1
+        uncertain.cursor @?= (fixtureRevision 1)
         path <- pure (workspaceFiles binding.storageRoot binding </> "src/dependency.txt")
         readFile path >>= (@?= "PRIVATE_REPLACEMENT\n")
         published <- getModificationTime path
@@ -222,7 +222,7 @@ tests fixture =
         Executor.executeAcceptedAttempt executor snapshot.identity next >>= (@?= Right Executor.ExecutorDone)
         getModificationTime path >>= (@?= published)
         (_, resumed) <- right =<< run env (Execution.loadExecution access)
-        resumed.cursor @?= 2
+        resumed.cursor @?= (fixtureRevision 2)
         resumed.pendingReceipts @?= 0
         Just original <- right =<< run env (Execution.inspectExecutionAttempt reference.attemptId)
         assertBool "independent receipt settles original claim" (maybe False (const True) original.lateReceipt)
@@ -251,7 +251,7 @@ tests fixture =
         Executor.executeAcceptedAttempt executor snapshot.identity next >>= (@?= Right Executor.ExecutorDone)
         (_, retained) <- right =<< run env (Execution.loadExecution access)
         retained.phase @?= Unresolved
-        retained.cursor @?= 1
+        retained.cursor @?= (fixtureRevision 1)
         retained.pendingReceipts @?= 1
         readFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") >>= (@?= "old dependency\n")
         Just original <- right =<< run env (Execution.inspectExecutionAttempt reference.attemptId)
@@ -312,7 +312,7 @@ tests fixture =
           >>= (@?= Right ())
         (_, state) <- right =<< run env (Execution.loadExecution access)
         state.phase @?= Unresolved
-        state.cursor @?= 1
+        state.cursor @?= (fixtureRevision 1)
         readFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") >>= (@?= "old dependency\n"),
       testCase "historical workspace admission without file qualification refuses before IO" $ withEffectQualified (#filePolicy .~ Nothing) "replace" Nothing fixture \env binding snapshot _ reference runtime _ -> do
         Executor.executeAcceptedAttempt (executorFor runtime (pure ())) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
@@ -412,11 +412,11 @@ withAcceptedWorkspaceTool toolCount install agent wire token env admission runti
   let chosen = filter (\tool -> tool.name == wire) menu.toolBindings
       tool = case chosen of [value] -> value; _ -> error "missing fixture file binding"
       snapshot = initial & #offeredTools .~ Aeson.toJSON (filterTools menu.offeredTools) & #toolBindings .~ [tool]
-      model = OperationSpec (operationIdFor snapshot.executionId 0) ModelTurn RepeatableObservation "model" (versionedDigest "shikigami.harness-policy/1" (Aeson.toJSON snapshot.policy)) "scope" Nothing
+      model = OperationSpec (operationIdFor snapshot.executionId (fixtureRevision 0)) ModelTurn RepeatableObservation "model" (versionedDigest "shikigami.harness-policy/1" (Aeson.toJSON snapshot.policy)) "scope" Nothing
   _ <- right =<< run env Catalog.registerProjectionCatalog
   run env (Execution.admitExecution snapshot) >>= (@?= Right Resources.Accepted)
   access <- right =<< run env (Execution.authorizeReplay snapshot.executionId identity (pure (Right ())))
-  (_, operation) <- right =<< run env (Execution.acceptOperation access 0 model (Aeson.object []))
+  (_, operation) <- right =<< run env (Execution.acceptOperation access (fixtureRevision 0) model (Aeson.object []))
   let OperationId operationKey = operation.specification.operationId
       modelRequest = Resources.AttemptRequest (AttemptId ("model:" <> operationKey)) operation.specification.operationId (Map.fromList [(Resources.ActiveWork, 1), (Resources.ModelAttempts, 1), (Resources.Tokens, 10), (Resources.CostMicroUsd, 0)]) Resources.EnforcedCeiling
   reservation <- right =<< run env (Calls.reserveSelectionCall selection (Calls.CallLimits Nothing Nothing Nothing Nothing Nothing) modelRequest "fixture-model" now)
@@ -424,14 +424,14 @@ withAcceptedWorkspaceTool toolCount install agent wire token env admission runti
   let assistant = ReplayAssistant 1 ([ToolBlock (ToolInvocation "replace-call" tool.name input)] <> [ToolBlock (ToolInvocation ("additional-call-" <> Text.pack (show index)) tool.name input) | index <- [1 .. toolCount - 1]]) ToolUse Nothing Nothing (Aeson.object []) Nothing
       outcome = ModelReturned assistant Nothing
   response <- right (Execution.outcomeReference outcome)
-  run env (Execution.recordOutcomeAndAdvance access 1 operation.specification.operationId outcome (NeedTool response 0) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.singleton Resources.Tokens 1) [Resources.CostMicroUsd] Nothing Nothing Nothing))) >>= (@?= Right Resources.Accepted)
+  run env (Execution.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId outcome (NeedTool response 0) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.singleton Resources.Tokens 1) [Resources.CostMicroUsd] Nothing Nothing Nothing))) >>= (@?= Right Resources.Accepted)
   let toolInput = ToolOperationInput response 0 (ToolInvocation "replace-call" tool.name input) tool
-      specification = OperationSpec (operationIdFor snapshot.executionId 1) ToolOperation tool.recovery tool.name (versionedDigest "shikigami.harness-policy/1" (Aeson.toJSON snapshot.policy)) (toolScopeDigest tool) (Just 0)
+      specification = OperationSpec (operationIdFor snapshot.executionId (fixtureRevision 1)) ToolOperation tool.recovery tool.name (versionedDigest "shikigami.harness-policy/1" (Aeson.toJSON snapshot.policy)) (toolScopeDigest tool) (Just 0)
       reference = Attempt.JobReference 1 snapshot.executionId specification.operationId (AttemptId ("file-tool:" <> case specification.operationId of OperationId key -> key))
       submission = Attempt.AttemptSubmission (Execution.toolAttemptRequest reference.attemptId reference.operationId tool) Nothing (Attempt.ExecutionWake (AwakeableId token) 0)
-  _ <- right =<< run env (Execution.acceptOperation access 2 specification (Aeson.toJSON toolInput))
+  _ <- right =<< run env (Execution.acceptOperation access (fixtureRevision 2) specification (Aeson.toJSON toolInput))
   run env (runTransaction (registerAwakeableTx token "shikigami.execution" (executionWorkflowId snapshot.executionId).unWorkflowId))
-  _ <- right =<< run env (Execution.submitExecutionAttemptWith access 3 submission (\_ -> pure ()))
+  _ <- right =<< run env (Execution.submitExecutionAttemptWith access (fixtureRevision 3) submission (\_ -> pure ()))
   use snapshot access reference
   where
     filterTools (Aeson.Array values) = Aeson.Array (filterVector values)

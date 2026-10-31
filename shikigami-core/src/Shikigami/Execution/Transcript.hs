@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Application replay records. No decoder for Baikai Response, Context,
 -- Options or ModelCallEvidence is implied by these codecs.
 module Shikigami.Execution.Transcript where
@@ -37,6 +39,7 @@ import Shikigami.Execution.Identity (OperationId (..))
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Prelude hiding (Options)
+import Shikigami.StateRevision
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), instructionPrompt)
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikumi.Tool.Output qualified as Tool
@@ -53,7 +56,7 @@ executionIdFor assignment = ExecutionId ("execution:" <> versionedDigest "shikig
 executionWorkflowId :: ExecutionId -> WorkflowId
 executionWorkflowId execution = WorkflowId (UUID.toText (UUID.generateNamed UUID.namespaceURL (nameBytes ("shikigami.execution:" <> execution.value))))
 
-operationIdFor :: ExecutionId -> Integer -> OperationId
+operationIdFor :: ExecutionId -> StateRevision "execution-operation" -> OperationId
 operationIdFor execution cursor = OperationId ("operation:" <> versionedDigest "shikigami.execution-operation/1" (toJSON (execution, cursor)))
 
 data PayloadRef = PayloadRef
@@ -278,9 +281,9 @@ data NextWork = NeedModel | NeedTool !PayloadRef !Int | NeedValidation !PayloadR
 data ExecutionState = ExecutionState
   { format :: !Int,
     executionId :: !ExecutionId,
-    revision :: !Integer,
+    revision :: !(StateRevision "execution"),
     phase :: !ExecutionPhase,
-    cursor :: !Integer,
+    cursor :: !(StateRevision "execution-operation"),
     next :: !NextWork,
     snapshot :: !PayloadRef,
     activeOperation :: !(Maybe OperationId),
@@ -301,7 +304,7 @@ instance ToJSON ExecutionState where
 instance FromJSON ExecutionState where
   parseJSON = Aeson.withObject "ExecutionState" \fields -> do
     state <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (foldr (\key current -> if KeyMap.member key current then current else KeyMap.insert key Aeson.Null current) (if KeyMap.member "pendingReceipts" fields then fields else KeyMap.insert "pendingReceipts" (toJSON (0 :: Int)) fields) ["wake", "failure"]))
-    unless (state.format == 1 && state.revision >= 0 && state.cursor >= 0 && state.cursor <= 10000 && state.pendingReceipts >= 0 && state.pendingReceipts <= 1000000) (fail "unsupported execution state version or cursor")
+    unless (state.format == 1 && revisionNumber state.cursor <= 10000 && state.pendingReceipts >= 0 && state.pendingReceipts <= 1000000) (fail "unsupported execution state version or cursor")
     pure state
 
 data OperationKind = ModelTurn | ToolOperation | ModelSummary | ModelRepair
@@ -323,7 +326,7 @@ data OperationSpec = OperationSpec
 data Operation = Operation
   { format :: !Int,
     executionId :: !ExecutionId,
-    position :: !Integer,
+    position :: !(StateRevision "execution-operation"),
     specification :: !OperationSpec,
     fingerprint :: !Text,
     input :: !PayloadRef,
@@ -342,7 +345,7 @@ instance ToJSON Operation where
 instance FromJSON Operation where
   parseJSON = Aeson.withObject "Operation" \fields -> do
     operation <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (if KeyMap.member "permission" fields then fields else KeyMap.insert "permission" Aeson.Null fields))
-    unless (operation.format == 1 && operation.position >= 0 && operation.specification.operationId == operationIdFor operation.executionId operation.position) (fail "unsupported operation version or identity")
+    unless (operation.format == 1 && operation.specification.operationId == operationIdFor operation.executionId operation.position) (fail "unsupported operation version or identity")
     pure operation
 
 data ReplayToolResult = ReplayToolResult

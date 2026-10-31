@@ -184,7 +184,7 @@ tests fixture =
           FileFixture.withAcceptedWorkspaceTool 1 transferredWorkspaceEditAdapter intent.newWorker "overlay__workspace-edit__read" token env admission fileRuntime (Aeson.object ["path" .= ("dependency.txt" :: Text)]) \snapshot access reference -> do
             Executor.executeAcceptedAttempt (FileFixture.executorForAdapter transferredWorkspaceEditAdapter fileRuntime) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
             (_, state) <- right =<< run env (Execution.loadExecution access)
-            state.cursor @?= 2
+            state.cursor @?= (fixtureRevision 2)
             Just operation <- right =<< run env (Execution.inspectOperation reference.operationId)
             result <- maybe (fail "missing successor result") pure operation.outcome
             output <- right =<< run env (Execution.readReplayPayload @OperationOutcome access "operation-outcome" result)

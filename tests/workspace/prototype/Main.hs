@@ -353,9 +353,9 @@ verifyCase env _prefix _name expected item = do
       unless (process.phase == ProcessUnresolved && process.receipt == Nothing && actual.phase `elem` [Attempt.DispatchStarted, Attempt.AttemptUncertain] && root.active + root.unknown >= 1) (fail "missing evidence released capacity")
       blocked <- transact env (Workspaces.checkWorkspaceOperationTx item.binding item.binding.request.owner item.binding.request.epoch (OperationId "fixture-successor"))
       unless (case blocked of Left _ -> True; _ -> False) (fail "unresolved process opened the file barrier")
-    "refused" -> unless (process.phase == ProcessRefused && process.receipt == Nothing && actual.phase == Attempt.AttemptCommitted && state.cursor == 3 && root.active == 0 && root.unknown == 0) (fail "pre-launch refusal did not settle its actual")
+    "refused" -> unless (process.phase == ProcessRefused && process.receipt == Nothing && actual.phase == Attempt.AttemptCommitted && state.cursor == (fixtureRevision 3) && root.active == 0 && root.unknown == 0) (fail "pre-launch refusal did not settle its actual")
     _ -> case process.receipt of
-      Just receipt -> unless (process.phase == ProcessSettled && validProcessReceipt process receipt && actual.phase == Attempt.AttemptCommitted && state.cursor == 3 && root.active == 0 && root.unknown == 0 && if expected == "cancelled" then receipt.termination == ProcessCancelled && not (processSucceeded receipt) else expected == "success" && processSucceeded receipt) (fail "original receipt did not settle")
+      Just receipt -> unless (process.phase == ProcessSettled && validProcessReceipt process receipt && actual.phase == Attempt.AttemptCommitted && state.cursor == (fixtureRevision 3) && root.active == 0 && root.unknown == 0 && if expected == "cancelled" then receipt.termination == ProcessCancelled && not (processSucceeded receipt) else expected == "success" && processSucceeded receipt) (fail "original receipt did not settle")
       Nothing -> fail "completion receipt missing"
   source <- requireRight =<< runWorkspaceGit item.binding.storageRoot 1024 ["-C", item.binding.source, "status", "--porcelain"]
   unless (Bytes.null source) (fail "source repository changed")
@@ -367,9 +367,9 @@ verifyGitCase env expected item = do
   Just actual <- stored env (Execution.inspectExecutionAttempt item.prepared.reference.attemptId)
   Just (state, _, _) <- stored env (Execution.inspectExecution item.prepared.snapshot.executionId)
   root <- stored env (Roots.inspectRoot item.binding.request.rootId)
-  Just validation <- transact env (Processes.inspectProcessTx (operationIdFor item.prepared.snapshot.executionId 2))
+  Just validation <- transact env (Processes.inspectProcessTx (operationIdFor item.prepared.snapshot.executionId (fixtureRevision 2)))
   unless (maybe False processSucceeded validation.receipt && validation.instructionDigest == record.instructionDigest) (fail "upgrade validation evidence missing")
-  unless (record.attemptId == actual.request.attemptId && record.generation == actual.generation && actual.phase == Attempt.AttemptCommitted && state.cursor == 4 && root.active == 0 && root.unknown == 0) (fail "original Git actual did not settle")
+  unless (record.attemptId == actual.request.attemptId && record.generation == actual.generation && actual.phase == Attempt.AttemptCommitted && state.cursor == (fixtureRevision 4) && root.active == 0 && root.unknown == 0) (fail "original Git actual did not settle")
   let metadata = workspaceMetadata item.binding.storageRoot item.binding
   headId <- requireRight =<< GitObjects.readHead metadata
   case expected of

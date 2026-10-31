@@ -31,6 +31,7 @@ import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
+import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Workspace.FileProvider (FileRuntime (..))
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Process
@@ -181,7 +182,7 @@ tests fixture =
         let revoked = runtime & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked")) & #authorizer .~ denyAllActionAuthorizer & #selectRule .~ (\_ _ _ -> pure (Left "revoked"))
         publishProcessReceipt revoked reference.operationId >>= (@?= Right ProcessReceiptAcknowledged)
         Just (state, _, _) <- stored file (Execution.inspectExecution snapshot.executionId)
-        state.cursor @?= 2
+        state.cursor @?= (fixtureRevision 2)
         case state.next of
           NeedTool _ position -> position @?= 1
           _ -> assertFailure "accepted second tool routing was lost"
@@ -395,3 +396,6 @@ rootCancellationCase fixture stopAcknowledged = do
     retained.receipt @?= Nothing
     retained.phase @?= (if stopAcknowledged then ProcessLaunchRequested else ProcessUnresolved)
     readIORef calls >>= (@?= (1, 1))
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

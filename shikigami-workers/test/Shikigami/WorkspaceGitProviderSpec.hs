@@ -125,7 +125,7 @@ tests fixture =
         execute executor snapshot reference
         readIORef writes >>= (@?= 1)
         (_, state) <- right =<< run env (Execution.loadExecution access)
-        state.cursor @?= 2
+        state.cursor @?= (fixtureRevision 2)
         source <- right =<< runWorkspaceGit binding.storageRoot 4096 ["-C", binding.source, "status", "--porcelain"]
         source @?= ""
         metadata <- right =<< run env (Execution.inspectExecution snapshot.executionId)
@@ -147,7 +147,7 @@ tests fixture =
         original.phase @?= Attempt.AttemptCommitted
         assertBool "original independent receipt retained" (original.lateReceipt /= Nothing)
         (_, state) <- right =<< run env (Execution.loadExecution access)
-        state.cursor @?= 2
+        state.cursor @?= (fixtureRevision 2)
         root <- right =<< run env (Roots.inspectRoot binding.request.rootId)
         root.active @?= 0
         root.unknown @?= 1,
@@ -166,7 +166,7 @@ tests fixture =
         execute executor snapshot replacement
         readIORef writes >>= (@?= 1)
         (_, before) <- right =<< run env (Execution.loadExecution access)
-        before.cursor @?= 2
+        before.cursor @?= (fixtureRevision 2)
         before.pendingReceipts @?= 1
         publishGitReceipt env reference.operationId >>= (@?= Right GitReceiptAcknowledged)
         (_, after) <- right =<< run env (Execution.loadExecution access)

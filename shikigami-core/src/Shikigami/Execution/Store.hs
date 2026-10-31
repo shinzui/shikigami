@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
 
 -- | Checked lifecycle events and protected replay data commit together. The
 -- generated stream is the lifecycle authority; these rows retain its rich data.
@@ -102,6 +103,7 @@ import Shikigami.ExecutionLifecycle.Generated.Domain qualified as Generated
 import Shikigami.ExecutionLifecycle.Generated.EventStream (executionLifecycleCategory, executionLifecycleEventStream)
 import Shikigami.ExecutionLookup.Generated.ReadModel (executionLookupReadModel)
 import Shikigami.Prelude hiding ((.=))
+import Shikigami.StateRevision
 
 type ExecutionReadEffects es = (IOE :> es, Store :> es, Error StoreError :> es)
 
@@ -172,7 +174,7 @@ admitExecution snapshot
       Right ref -> do
         let execution = snapshot.executionId
             binding = ExecutionBinding snapshot.identity snapshot.selection.rootId snapshot.selection.assignmentId snapshot.selection.descriptor ref.digest (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy))
-            state = ExecutionState 1 execution 0 Active 0 NeedModel ref Nothing Nothing 0 0 Nothing Nothing 0
+            state = ExecutionState 1 execution initialRevision Active initialRevision NeedModel ref Nothing Nothing 0 0 Nothing Nothing 0
         result <- persistChecked
           execution
           (Generated.AdmitExecution (Generated.AdmitExecutionData execution ref.digest))
@@ -298,7 +300,7 @@ readPayload access binding kind ref = do
       decode content
     _ -> abort CorruptReplay
 
-acceptOperation :: (ExecutionEffects es) => ReplayAccess -> Integer -> OperationSpec -> Aeson.Value -> Eff es (Either ExecutionError (Admission, Operation))
+acceptOperation :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> OperationSpec -> Aeson.Value -> Eff es (Either ExecutionError (Admission, Operation))
 acceptOperation access@(ReplayAccess execution _ _) expected specification input = catchExecutionWith id do
   stored <- readMetadata (Tx.statement execution.value selectExecution)
   case stored of
@@ -320,7 +322,7 @@ acceptOperation access@(ReplayAccess execution _ _) expected specification input
                   (current, actualBinding) <- checkedExecution execution
                   _ <- checkedAccess access actualBinding
                   checkedRevision expected current
-                  unless (current.phase == Active && isNothing current.activeOperation && current.cursor < 10000) (throwE ExecutionNotActive)
+                  unless (current.phase == Active && isNothing current.activeOperation && revisionNumber current.cursor < 10000) (throwE ExecutionNotActive)
                   unless (specification.operationId == operationIdFor execution current.cursor) (throwE OperationConflict)
                   except (validateOperation specification)
                   unless (specification.policyDigest == actualBinding.policyDigest) (throwE OperationConflict)
@@ -336,8 +338,8 @@ acceptOperation access@(ReplayAccess execution _ _) expected specification input
               \(current, modelOperation) -> do
                 actual <- writePayload execution body
                 unless (actual == ref) (abort CorruptReplay)
-                Tx.statement (operationKey specification.operationId, execution.value, fromInteger current.cursor, operation) insertOperation
-                saveExecution (current & #revision .~ (expected + 1) & #activeOperation .~ Just specification.operationId & #modelTurns .~ (current.modelTurns + if modelOperation then 1 else 0) & #repairs .~ (current.repairs + if specification.kind == ModelRepair then 1 else 0))
+                Tx.statement (operationKey specification.operationId, execution.value, fromInteger (revisionNumber current.cursor), operation) insertOperation
+                saveExecution (current & #revision .~ (advanceRevision expected) & #activeOperation .~ Just specification.operationId & #modelTurns .~ (current.modelTurns + if modelOperation then 1 else 0) & #repairs .~ (current.repairs + if specification.kind == ModelRepair then 1 else 0))
             case result of
               Right () -> pure (Right (Accepted, operation))
               Left EventRejected -> do
@@ -352,7 +354,7 @@ acceptOperation access@(ReplayAccess execution _ _) expected specification input
 
 -- Park the accepted tool itself. No new logical/model turn is allocated.
 -- The review identity is independent of driver generation and wake tokens.
-parkOperationPermission :: (ExecutionEffects es) => ReplayAccess -> Integer -> OperationId -> Eff es (Either ExecutionError PermissionBinding)
+parkOperationPermission :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> OperationId -> Eff es (Either ExecutionError PermissionBinding)
 parkOperationPermission access@(ReplayAccess execution _ _) expected operationId = catchExecutionWith id do
   operation <- findOperation operationId >>= maybe (throwIO (ExecutionAbort OperationMissing)) pure
   if operation.executionId /= execution
@@ -363,7 +365,7 @@ parkOperationPermission access@(ReplayAccess execution _ _) expected operationId
         (_, binding) <- readMetadata (getExecution execution)
         result <- persistChecked
           execution
-          (Generated.ParkExecution (Generated.ParkExecutionData execution (fromInteger expected) (fromInteger (expected + 1))))
+          (Generated.ParkExecution (Generated.ParkExecutionData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected)))))
           ( do
               checkedLockRoot binding.rootId
               checkedAdmissionRoot binding.rootId
@@ -382,7 +384,7 @@ parkOperationPermission access@(ReplayAccess execution _ _) expected operationId
           )
           \(state, current, permission) -> do
             Tx.statement (operationKey operationId, current & #permission .~ Just permission) updateOperation
-            saveExecution (state & #revision .~ (expected + 1) & #phase .~ Parked)
+            saveExecution (state & #revision .~ (advanceRevision expected) & #phase .~ Parked)
         case result of
           Left (CheckFailed err) -> pure (Left err)
           _ -> do
@@ -391,7 +393,7 @@ parkOperationPermission access@(ReplayAccess execution _ _) expected operationId
 
 -- Only the approval child result enters here; the opaque token is resolved by
 -- the existing approval library. A review id alone never supplies a decision.
-resolveOperationPermission :: (ExecutionEffects es) => ReplayAccess -> Integer -> OperationId -> ReviewRequestId -> ApprovalDecision -> Eff es (Either ExecutionError Admission)
+resolveOperationPermission :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> OperationId -> ReviewRequestId -> ApprovalDecision -> Eff es (Either ExecutionError Admission)
 resolveOperationPermission access@(ReplayAccess execution _ _) expected operationId review decision = catchExecutionWith id do
   operation <- findOperation operationId >>= maybe (throwIO (ExecutionAbort OperationMissing)) pure
   permission <- maybe (throwIO (ExecutionAbort OperationConflict)) pure operation.permission
@@ -403,7 +405,7 @@ resolveOperationPermission access@(ReplayAccess execution _ _) expected operatio
       (_, binding) <- readMetadata (getExecution execution)
       result <- persistChecked
         execution
-        (Generated.ResumeExecution (Generated.ResumeExecutionData execution (fromInteger expected) (fromInteger (expected + 1))))
+        (Generated.ResumeExecution (Generated.ResumeExecutionData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected)))))
         ( do
             checkedLockRoot binding.rootId
             (state, actualBinding) <- checkedExecution execution
@@ -419,7 +421,7 @@ resolveOperationPermission access@(ReplayAccess execution _ _) expected operatio
         )
         \(state, current) -> do
           Tx.statement (operationKey operationId, current & #permission .~ Just (permission & #resolution .~ Just resolution)) updateOperation
-          saveExecution (state & #revision .~ (expected + 1) & #phase .~ Active)
+          saveExecution (state & #revision .~ (advanceRevision expected) & #phase .~ Active)
       case result of
         Right () -> pure (Right Accepted)
         Left (CheckFailed err) -> pure (Left err)
@@ -429,7 +431,7 @@ resolveOperationPermission access@(ReplayAccess execution _ _) expected operatio
 
 -- A child decision records facts after waiting without reusing an expired read
 -- permit. It grants neither replay reads nor a new effect authorization.
-resolveOperationControlPermission :: (ExecutionEffects es) => AgentIdentity -> ExecutionId -> Integer -> OperationId -> ReviewRequestId -> ApprovalDecision -> Eff es (Either ExecutionError Admission)
+resolveOperationControlPermission :: (ExecutionEffects es) => AgentIdentity -> ExecutionId -> StateRevision "execution" -> OperationId -> ReviewRequestId -> ApprovalDecision -> Eff es (Either ExecutionError Admission)
 resolveOperationControlPermission identity execution expected operation review decision = catchExecutionWith id do
   (_, binding) <- readMetadata (getExecution execution)
   unless (identity == binding.identity) (throwIO (ExecutionAbort ExecutionIdentityConflict))
@@ -460,16 +462,16 @@ checkedOperationInput access binding state snapshot specification input = case s
 
 -- Reservation, prepared attempt and queue acceptance share this transaction.
 -- The callback is the existing queue owner's transaction, not external IO.
-submitExecutionAttemptWith :: (ExecutionEffects es) => ReplayAccess -> Integer -> Attempt.AttemptSubmission -> (Attempt.JobReference -> Transaction ()) -> Eff es (Either ExecutionError (Admission, Attempt.ExecutionAttempt))
+submitExecutionAttemptWith :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> Attempt.AttemptSubmission -> (Attempt.JobReference -> Transaction ()) -> Eff es (Either ExecutionError (Admission, Attempt.ExecutionAttempt))
 submitExecutionAttemptWith = submitAttempt Nothing
 
 -- Retirement of the unknown actual attempt, reservation of its replacement,
 -- queue acceptance and reopening logical progress commit together. A refusal
 -- leaves the original unresolved work and accounting untouched.
-recoverExecutionAttemptWith :: (ExecutionEffects es) => ReplayAccess -> Integer -> AttemptId -> Attempt.AttemptSubmission -> (Attempt.JobReference -> Transaction ()) -> Eff es (Either ExecutionError (Admission, Attempt.ExecutionAttempt))
+recoverExecutionAttemptWith :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> AttemptId -> Attempt.AttemptSubmission -> (Attempt.JobReference -> Transaction ()) -> Eff es (Either ExecutionError (Admission, Attempt.ExecutionAttempt))
 recoverExecutionAttemptWith access expected previous = submitAttempt (Just previous) access expected
 
-submitAttempt :: (ExecutionEffects es) => Maybe AttemptId -> ReplayAccess -> Integer -> Attempt.AttemptSubmission -> (Attempt.JobReference -> Transaction ()) -> Eff es (Either ExecutionError (Admission, Attempt.ExecutionAttempt))
+submitAttempt :: (ExecutionEffects es) => Maybe AttemptId -> ReplayAccess -> StateRevision "execution" -> Attempt.AttemptSubmission -> (Attempt.JobReference -> Transaction ()) -> Eff es (Either ExecutionError (Admission, Attempt.ExecutionAttempt))
 submitAttempt retired access@(ReplayAccess execution _ _) expected submission enqueue = catchExecutionWith id do
   when (retired == Just submission.request.attemptId) (throwIO (ExecutionAbort AttemptConflict))
   (_, binding) <- readMetadata (getExecution execution)
@@ -484,7 +486,7 @@ submitAttempt retired access@(ReplayAccess execution _ _) expected submission en
     Nothing -> do
       result <- persistChecked
         execution
-        (if isJust retired then Generated.RetryExecution (Generated.RetryExecutionData execution (fromInteger expected) (fromInteger (expected + 1))) else advance execution expected)
+        (if isJust retired then Generated.RetryExecution (Generated.RetryExecutionData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected)))) else advance execution expected)
         ( do
             checkedLockRoot binding.rootId
             checkedAdmissionRoot binding.rootId
@@ -549,7 +551,7 @@ submitAttempt retired access@(ReplayAccess execution _ _) expected submission en
           let attempt = Attempt.ExecutionAttempt 1 execution operation.specification.operationId submission.request fingerprint receipt wakeRef Attempt.AwaitingDispatch Nothing 0 Nothing Nothing Nothing Nothing
           Tx.statement (attemptKey submission.request.attemptId, execution.value, operationKey operation.specification.operationId, attempt) insertExecutionAttempt
           enqueue reference
-          saveExecution (current & #revision .~ (expected + 1) & #phase .~ Active & #next .~ resumeNext & #pendingReceipts .~ (current.pendingReceipts + if isJust retired then 1 else 0))
+          saveExecution (current & #revision .~ (advanceRevision expected) & #phase .~ Active & #next .~ resumeNext & #pendingReceipts .~ (current.pendingReceipts + if isJust retired then 1 else 0))
       case result of
         Left (CheckFailed err) -> pure (Left err)
         _ -> do
@@ -563,14 +565,14 @@ inspectExecutionAttempt attempt = protected (Tx.statement (attemptKey attempt) s
 
 -- Rotation publishes a new generation's wake without changing the accepted
 -- request/attempt fingerprint. Completion always signals the latest publication.
-refreshExecutionWake :: (ExecutionEffects es) => ReplayAccess -> Integer -> Attempt.ExecutionWake -> Eff es (Either ExecutionError Admission)
+refreshExecutionWake :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> Attempt.ExecutionWake -> Eff es (Either ExecutionError Admission)
 refreshExecutionWake access@(ReplayAccess execution _ _) expected wake = catchExecutionWith id do
   (state, binding) <- readMetadata (getExecution execution)
   ref <- either (throwIO . ExecutionAbort) pure (payloadReference body)
   if state.wake == Just ref
     then pure (Right AlreadyAccepted)
     else do
-      let command = if state.phase == Unresolved then Generated.MarkExecutionUnresolved (Generated.MarkExecutionUnresolvedData execution (fromInteger expected) (fromInteger (expected + 1))) else advance execution expected
+      let command = if state.phase == Unresolved then Generated.MarkExecutionUnresolved (Generated.MarkExecutionUnresolvedData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected)))) else advance execution expected
       result <- persistChecked
         execution
         command
@@ -585,28 +587,28 @@ refreshExecutionWake access@(ReplayAccess execution _ _) expected wake = catchEx
         \current -> do
           actual <- writePayload execution body
           unless (actual == ref) (abort CorruptReplay)
-          saveExecution (current & #revision .~ (expected + 1) & #wake .~ Just ref)
+          saveExecution (current & #revision .~ (advanceRevision expected) & #wake .~ Just ref)
       pure (case result of Right () -> Right Accepted; Left (CheckFailed err) -> Left err; Left EventRejected -> Left ExecutionRevisionConflict)
   where
     body = envelope "execution-wake" (toJSON wake)
 
 -- Updating a wake hint grants no replay read or dispatch authority. This
 -- restricted writer keeps accepted work observable after principal revocation.
-refreshExecutionControlWake :: (ExecutionEffects es) => AgentIdentity -> ExecutionId -> Integer -> Attempt.ExecutionWake -> Eff es (Either ExecutionError Admission)
+refreshExecutionControlWake :: (ExecutionEffects es) => AgentIdentity -> ExecutionId -> StateRevision "execution" -> Attempt.ExecutionWake -> Eff es (Either ExecutionError Admission)
 refreshExecutionControlWake identity execution expected wake = catchExecutionWith id do
   (_, binding) <- readMetadata (getExecution execution)
   unless (identity == binding.identity) (throwIO (ExecutionAbort ExecutionIdentityConflict))
   now <- liftIO getCurrentTime
   refreshExecutionWake (ReplayAccess execution identity (addUTCTime 60 now)) expected wake
 
-stopExecution :: (ExecutionEffects es) => AgentIdentity -> ExecutionId -> Integer -> Bool -> ExecutionError -> Eff es (Either ExecutionError Admission)
+stopExecution :: (ExecutionEffects es) => AgentIdentity -> ExecutionId -> StateRevision "execution" -> Bool -> ExecutionError -> Eff es (Either ExecutionError Admission)
 stopExecution identity execution expected cancelled reason = catchExecutionWith id do
   (stored, binding) <- readMetadata (getExecution execution)
   unless (identity == binding.identity) (throwIO (ExecutionAbort ExecutionIdentityConflict))
   if stored.phase `elem` [Failed, Cancelled] && stored.failure == Just reason
     then pure (Right AlreadyAccepted)
     else do
-      let command = if stored.pendingReceipts > 0 then (if cancelled then Generated.CancelExecutionPendingReceipts (Generated.CancelExecutionPendingReceiptsData execution (fromInteger expected) (fromInteger (expected + 1))) else Generated.FailExecutionPendingReceipts (Generated.FailExecutionPendingReceiptsData execution (fromInteger expected) (fromInteger (expected + 1)))) else if cancelled then Generated.CancelExecution (Generated.CancelExecutionData execution (fromInteger expected) (fromInteger (expected + 1))) else Generated.FailExecution (Generated.FailExecutionData execution (fromInteger expected) (fromInteger (expected + 1)))
+      let command = if stored.pendingReceipts > 0 then (if cancelled then Generated.CancelExecutionPendingReceipts (Generated.CancelExecutionPendingReceiptsData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected)))) else Generated.FailExecutionPendingReceipts (Generated.FailExecutionPendingReceiptsData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected))))) else if cancelled then Generated.CancelExecution (Generated.CancelExecutionData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected)))) else Generated.FailExecution (Generated.FailExecutionData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected))))
       result <- persistChecked
         execution
         command
@@ -635,7 +637,7 @@ stopExecution identity execution expected cancelled reason = catchExecutionWith 
             denied <- writePayload execution (envelope "operation-outcome" (toJSON (OperationDenied "execution stopped before dispatch")))
             Tx.statement (operationKey operationId, operation & #outcome .~ Just denied & #continuation .~ Just WorkFinished) updateOperation
           ref <- writePayload execution (envelope "execution-failure" (toJSON reason))
-          saveExecution (state & #revision .~ (expected + 1) & #phase .~ (if cancelled then Cancelled else Failed) & #next .~ WorkFinished & #result .~ Just ref & #failure .~ Just reason & #activeOperation .~ Nothing)
+          saveExecution (state & #revision .~ (advanceRevision expected) & #phase .~ (if cancelled then Cancelled else Failed) & #next .~ WorkFinished & #result .~ Just ref & #failure .~ Just reason & #activeOperation .~ Nothing)
       pure (case result of Right () -> Right Accepted; Left (CheckFailed err) -> Left err; Left EventRejected -> Left ExecutionRevisionConflict)
 
 inspectOperationAttempts :: (ExecutionReadEffects es) => OperationId -> Eff es (Either ExecutionError [Attempt.ExecutionAttempt])
@@ -657,7 +659,7 @@ loadModelReplayWindow access@(ReplayAccess execution _ _) = protected do
       ref <- maybe (abort CorruptReplay) pure operation.outcome
       outcome <- readPayload @OperationOutcome access binding "operation-outcome" ref
       case outcome of
-        ModelReturned assistant _ -> pure (input.view.context & #messages %~ (<> [AssistantTurn assistant]), operation.position, Just operation.input)
+        ModelReturned assistant _ -> pure (input.view.context & #messages %~ (<> [AssistantTurn assistant]), revisionNumber operation.position, Just operation.input)
         _ -> abort CorruptReplay
   tail <- Tx.statement (execution.value, fromInteger after) acceptedOperationsAfter
   (context, summary, _) <- foldM (append binding snapshot.policy.contextBytes) (base, Nothing, []) tail
@@ -720,14 +722,14 @@ publishExecutionWake reference = catchExecutionWith id do
 
 -- The queue's admitted identity can record a conditional pre-dispatch refusal
 -- even after revocation. No protected replay body is read or returned here.
-refuseUndispatchedExecutionAttempt :: (ExecutionEffects es) => AgentIdentity -> Integer -> Attempt.JobReference -> Eff es (Either ExecutionError Admission)
+refuseUndispatchedExecutionAttempt :: (ExecutionEffects es) => AgentIdentity -> StateRevision "execution" -> Attempt.JobReference -> Eff es (Either ExecutionError Admission)
 refuseUndispatchedExecutionAttempt identity expected reference = catchExecutionWith id do
   (_, binding) <- readMetadata (getExecution reference.executionId)
   unless (identity == binding.identity) (throwIO (ExecutionAbort ExecutionIdentityConflict))
   now <- liftIO getCurrentTime
   abandonExecutionAttempt (ReplayAccess reference.executionId identity now) expected reference
 
-claimExecutionAttempt :: (ExecutionEffects es) => ReplayAccess -> Integer -> Attempt.JobReference -> Text -> Int -> Eff es (Either ExecutionError Attempt.ClaimResult)
+claimExecutionAttempt :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> Attempt.JobReference -> Text -> Int -> Eff es (Either ExecutionError Attempt.ClaimResult)
 claimExecutionAttempt access@(ReplayAccess execution _ _) expected reference owner seconds = catchExecutionWith id do
   unless (reference.format == 1 && reference.executionId == execution && not (Text.null owner) && Text.length owner <= 256 && seconds >= 1 && seconds <= 3600) (throwIO (ExecutionAbort AttemptConflict))
   (_, binding) <- readMetadata (getExecution execution)
@@ -760,7 +762,7 @@ claimExecutionAttempt access@(ReplayAccess execution _ _) expected reference own
         \(state, current, instant) -> do
           let claimed = current & #phase .~ Attempt.Claimed & #owner .~ Just owner & #generation .~ (current.generation + 1) & #expiresAt .~ Just (addUTCTime (fromIntegral seconds) instant)
           saveAttempt claimed
-          saveExecution (state & #revision .~ (expected + 1))
+          saveExecution (state & #revision .~ (advanceRevision expected))
       pure case result of
         Right () -> Right (Attempt.ClaimGranted (Attempt.AttemptClaim reference owner (previous.generation + 1)))
         Left (CheckFailed err) -> Left err
@@ -768,7 +770,7 @@ claimExecutionAttempt access@(ReplayAccess execution _ _) expected reference own
 
 -- Only a successful transition from Claimed may run IO. Repeated start calls
 -- return AlreadyAccepted, which is observation and never dispatch permission.
-startExecutionAttempt :: (ExecutionEffects es) => ReplayAccess -> Integer -> Attempt.AttemptClaim -> Eff es (Either ExecutionError Admission)
+startExecutionAttempt :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> Attempt.AttemptClaim -> Eff es (Either ExecutionError Admission)
 startExecutionAttempt access@(ReplayAccess execution _ _) expected claim = catchExecutionWith id do
   (_, binding) <- readMetadata (getExecution execution)
   previous <- readMetadata (Tx.statement (attemptKey claim.reference.attemptId) selectExecutionAttempt) >>= maybe (throwIO (ExecutionAbort AttemptMissing)) pure
@@ -795,7 +797,7 @@ startExecutionAttempt access@(ReplayAccess execution _ _) expected claim = catch
         )
         \(state, current) -> do
           saveAttempt (current & #phase .~ Attempt.DispatchStarted)
-          saveExecution (state & #revision .~ (expected + 1))
+          saveExecution (state & #revision .~ (advanceRevision expected))
       pure (case result of Right () -> Right Accepted; Left (CheckFailed err) -> Left err; Left EventRejected -> Left ExecutionRevisionConflict)
 
 checkStartedExecutionAttempt :: (ExecutionReadEffects es) => ReplayAccess -> Attempt.AttemptClaim -> Eff es (Either ExecutionError ())
@@ -815,7 +817,7 @@ checkStartedExecutionAttempt access@(ReplayAccess execution _ _) claim = protect
 -- A conditional refusal before dispatch is known to have made no external
 -- call. It releases active capacity, retains the accounted attempt and permits
 -- a safe new transport attempt under the same logical operation key.
-abandonExecutionAttempt :: (ExecutionEffects es) => ReplayAccess -> Integer -> Attempt.JobReference -> Eff es (Either ExecutionError Admission)
+abandonExecutionAttempt :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> Attempt.JobReference -> Eff es (Either ExecutionError Admission)
 abandonExecutionAttempt access@(ReplayAccess execution _ _) expected reference = catchExecutionWith id do
   unless (reference.executionId == execution) (throwIO (ExecutionAbort AttemptConflict))
   previous <- readMetadata (Tx.statement (attemptKey reference.attemptId) selectExecutionAttempt) >>= maybe (throwIO (ExecutionAbort AttemptMissing)) pure
@@ -845,10 +847,10 @@ abandonExecutionAttempt access@(ReplayAccess execution _ _) expected reference =
             Nothing -> forM_ actualBinding.rootId \root -> Roots.settleAttemptTx root current.request.attemptId (Resources.KnownUsage zeroModelBilling) >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
           ref <- writePayload execution (envelope "attempt-result" (toJSON receipt))
           saveAttempt (current & #phase .~ Attempt.AttemptAbandoned & #outcome .~ Just ref)
-          saveExecution (state & #revision .~ (expected + 1))
+          saveExecution (state & #revision .~ (advanceRevision expected))
       pure (case result of Right () -> Right Accepted; Left (CheckFailed err) -> Left err; Left EventRejected -> Left ExecutionRevisionConflict)
 
-completeExecutionAttempt :: (ExecutionEffects es) => ReplayAccess -> Integer -> Attempt.AttemptClaim -> Attempt.AttemptResult -> Eff es (Either ExecutionError Admission)
+completeExecutionAttempt :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> Attempt.AttemptClaim -> Attempt.AttemptResult -> Eff es (Either ExecutionError Admission)
 completeExecutionAttempt access@(ReplayAccess execution _ _) expected claim result = catchExecutionWith id do
   previous <- readMetadata (Tx.statement (attemptKey claim.reference.attemptId) selectExecutionAttempt) >>= maybe (throwIO (ExecutionAbort AttemptMissing)) pure
   unless (claim.reference.executionId == execution && claimMatches claim previous) (throwIO (ExecutionAbort AttemptClaimLost))
@@ -873,7 +875,7 @@ completeExecutionAttempt access@(ReplayAccess execution _ _) expected claim resu
   where
     body = envelope "attempt-result" (toJSON result)
 
-markExpiredExecutionAttemptUncertain :: (ExecutionEffects es) => AgentIdentity -> Integer -> Attempt.JobReference -> Eff es (Either ExecutionError Admission)
+markExpiredExecutionAttemptUncertain :: (ExecutionEffects es) => AgentIdentity -> StateRevision "execution" -> Attempt.JobReference -> Eff es (Either ExecutionError Admission)
 markExpiredExecutionAttemptUncertain identity expected reference = catchExecutionWith id do
   (_, binding) <- readMetadata (getExecution reference.executionId)
   unless (identity == binding.identity) (throwIO (ExecutionAbort ExecutionIdentityConflict))
@@ -883,7 +885,7 @@ markExpiredExecutionAttemptUncertain identity expected reference = catchExecutio
   let claim = Attempt.AttemptClaim reference (fromMaybe "" attempt.owner) attempt.generation
   markExecutionAttemptUncertain (ReplayAccess reference.executionId identity now) expected claim
 
-markExecutionAttemptUncertain :: (ExecutionEffects es) => ReplayAccess -> Integer -> Attempt.AttemptClaim -> Eff es (Either ExecutionError Admission)
+markExecutionAttemptUncertain :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> Attempt.AttemptClaim -> Eff es (Either ExecutionError Admission)
 markExecutionAttemptUncertain access@(ReplayAccess execution _ _) expected claim = catchExecutionWith id do
   previous <- readMetadata (Tx.statement (attemptKey claim.reference.attemptId) selectExecutionAttempt) >>= maybe (throwIO (ExecutionAbort AttemptMissing)) pure
   unless (claim.reference.executionId == execution && claimMatches claim previous) (throwIO (ExecutionAbort AttemptClaimLost))
@@ -903,7 +905,7 @@ markExecutionAttemptUncertain access@(ReplayAccess execution _ _) expected claim
 
 -- A former owner retains its actual receipt without changing the chosen
 -- logical result. Superseded receipts settle only their own actual accounting.
-recordLateExecutionReceipt :: (ExecutionEffects es) => ReplayAccess -> Integer -> Attempt.AttemptClaim -> Attempt.AttemptResult -> Eff es (Either ExecutionError Admission)
+recordLateExecutionReceipt :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> Attempt.AttemptClaim -> Attempt.AttemptResult -> Eff es (Either ExecutionError Admission)
 recordLateExecutionReceipt access@(ReplayAccess execution _ _) expected claim receipt = catchExecutionWith id do
   previous <- readMetadata (Tx.statement (attemptKey claim.reference.attemptId) selectExecutionAttempt) >>= maybe (throwIO (ExecutionAbort AttemptMissing)) pure
   if previous.phase == Attempt.AttemptSuperseded
@@ -917,7 +919,7 @@ recordLateExecutionReceipt access@(ReplayAccess execution _ _) expected claim re
           (_, binding) <- readMetadata (getExecution execution)
           result <- persistChecked
             execution
-            (Generated.MarkExecutionUnresolved (Generated.MarkExecutionUnresolvedData execution (fromInteger expected) (fromInteger (expected + 1))))
+            (Generated.MarkExecutionUnresolved (Generated.MarkExecutionUnresolvedData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected)))))
             ( do
                 checkedLockRoot binding.rootId
                 (state, actualBinding) <- checkedExecution execution
@@ -932,7 +934,7 @@ recordLateExecutionReceipt access@(ReplayAccess execution _ _) expected claim re
               actual <- writePayload execution body
               unless (actual == ref) (abort CorruptReplay)
               saveAttempt (current & #lateReceipt .~ Just ref)
-              saveExecution (state & #revision .~ (expected + 1))
+              saveExecution (state & #revision .~ (advanceRevision expected))
           pure (case result of Right () -> Right Accepted; Left (CheckFailed err) -> Left err; Left EventRejected -> Left ExecutionRevisionConflict)
   where
     body = envelope "late-attempt-receipt" (toJSON receipt)
@@ -941,7 +943,7 @@ recordLateExecutionReceipt access@(ReplayAccess execution _ _) expected claim re
 -- factual receipt. Socket/model callers must never supply the result body.
 -- Like factual control reconciliation, this returns metadata and no replay
 -- permit. It confers neither fresh dispatch nor protected replay-read authority.
-recordIndependentToolReceipt :: (ExecutionEffects es) => AgentIdentity -> Integer -> Attempt.AttemptClaim -> Attempt.AttemptResult -> Eff es (Either ExecutionError Admission)
+recordIndependentToolReceipt :: (ExecutionEffects es) => AgentIdentity -> StateRevision "execution" -> Attempt.AttemptClaim -> Attempt.AttemptResult -> Eff es (Either ExecutionError Admission)
 recordIndependentToolReceipt identity expected claim receipt = catchExecutionWith id do
   let execution = claim.reference.executionId
   (_, binding) <- readMetadata (getExecution execution)
@@ -969,7 +971,7 @@ recordIndependentToolReceipt identity expected claim receipt = catchExecutionWit
 -- A superseded owner's receipt settles that actual attempt only. The logical
 -- operation, chosen result and cursor remain exactly as the replacement left
 -- them, including after the execution child has completed.
-recordSupersededReceipt :: (ExecutionEffects es) => ReplayAccess -> Integer -> Attempt.AttemptClaim -> Attempt.AttemptResult -> Eff es (Either ExecutionError Admission)
+recordSupersededReceipt :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> Attempt.AttemptClaim -> Attempt.AttemptResult -> Eff es (Either ExecutionError Admission)
 recordSupersededReceipt access@(ReplayAccess execution _ _) expected claim receipt = do
   (stored, binding) <- readMetadata (getExecution execution)
   previous <- readMetadata (Tx.statement (attemptKey claim.reference.attemptId) selectExecutionAttempt) >>= maybe (throwIO (ExecutionAbort AttemptMissing)) pure
@@ -980,7 +982,7 @@ recordSupersededReceipt access@(ReplayAccess execution _ _) expected claim recei
     Nothing -> do
       result <- persistChecked
         execution
-        (Generated.SettleExecutionReceipt (Generated.SettleExecutionReceiptData execution (fromInteger expected) (fromInteger (expected + 1)) (stored.pendingReceipts - 1)))
+        (Generated.SettleExecutionReceipt (Generated.SettleExecutionReceiptData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected))) (stored.pendingReceipts - 1)))
         ( do
             checkedLockRoot binding.rootId
             (state, actualBinding) <- checkedExecution execution
@@ -999,7 +1001,7 @@ recordSupersededReceipt access@(ReplayAccess execution _ _) expected claim recei
           unless (actual == ref) (abort CorruptReplay)
           resultRef <- writePayload execution (envelope "attempt-result" (toJSON receipt))
           saveAttempt (current & #lateReceipt .~ Just ref & #outcome .~ Just resultRef)
-          saveExecution (state & #revision .~ (expected + 1) & #pendingReceipts .~ (state.pendingReceipts - 1))
+          saveExecution (state & #revision .~ (advanceRevision expected) & #pendingReceipts .~ (state.pendingReceipts - 1))
       pure (case result of Right () -> Right Accepted; Left (CheckFailed err) -> Left err; Left EventRejected -> Left ExecutionRevisionConflict)
   where
     body = envelope "late-attempt-receipt" (toJSON receipt)
@@ -1022,7 +1024,7 @@ settleRetainedReceipt binding attempt receipt = case (attempt.call, receipt.acco
 
 -- Reconciliation consumes the retained former owner's actual receipt. It
 -- never samples another result, dispatches IO or invents zero measurements.
-reconcileExecutionAttempt :: (ExecutionEffects es) => ReplayAccess -> Integer -> AttemptId -> Eff es (Either ExecutionError Admission)
+reconcileExecutionAttempt :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> AttemptId -> Eff es (Either ExecutionError Admission)
 reconcileExecutionAttempt access@(ReplayAccess execution _ _) expected attemptId = catchExecutionWith id do
   previous <- readMetadata (Tx.statement (attemptKey attemptId) selectExecutionAttempt) >>= maybe (throwIO (ExecutionAbort AttemptMissing)) pure
   unless (previous.executionId == execution) (throwIO (ExecutionAbort AttemptConflict))
@@ -1032,7 +1034,7 @@ reconcileExecutionAttempt access@(ReplayAccess execution _ _) expected attemptId
       (_, binding) <- readMetadata (getExecution execution)
       result <- persistChecked
         execution
-        (Generated.ReconcileExecution (Generated.ReconcileExecutionData execution (fromInteger expected) (fromInteger (expected + 1))))
+        (Generated.ReconcileExecution (Generated.ReconcileExecutionData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected)))))
         ( do
             checkedLockRoot binding.rootId
             (state, actualBinding) <- checkedExecution execution
@@ -1055,12 +1057,12 @@ reconcileExecutionAttempt access@(ReplayAccess execution _ _) expected attemptId
           resultRef <- writePayload execution (envelope "attempt-result" (toJSON receipt))
           Tx.statement (operationKey current.operationId, operation & #outcome .~ Just outcomeRef & #continuation .~ Just receipt.next & #uncertain .~ False) updateOperation
           saveAttempt (current & #phase .~ Attempt.AttemptCommitted & #outcome .~ Just resultRef)
-          saveExecution (state & #revision .~ (expected + 1) & #phase .~ Active & #activeOperation .~ Nothing & #cursor .~ (state.cursor + 1) & #next .~ receipt.next)
+          saveExecution (state & #revision .~ (advanceRevision expected) & #phase .~ Active & #activeOperation .~ Nothing & #cursor .~ (advanceRevision state.cursor) & #next .~ receipt.next)
       pure (case result of Right () -> Right Accepted; Left (CheckFailed err) -> Left err; Left EventRejected -> Left ExecutionRevisionConflict)
 
 -- Applying a retained receipt records accepted facts and returns admission
 -- metadata only, including when its principal can no longer read replay bodies.
-reconcileExecutionControlAttempt :: (ExecutionEffects es) => AgentIdentity -> ExecutionId -> Integer -> AttemptId -> Eff es (Either ExecutionError Admission)
+reconcileExecutionControlAttempt :: (ExecutionEffects es) => AgentIdentity -> ExecutionId -> StateRevision "execution" -> AttemptId -> Eff es (Either ExecutionError Admission)
 reconcileExecutionControlAttempt identity execution expected attempt = catchExecutionWith id do
   (_, binding) <- readMetadata (getExecution execution)
   unless (identity == binding.identity) (throwIO (ExecutionAbort ExecutionIdentityConflict))
@@ -1085,12 +1087,12 @@ saveAttempt attempt = Tx.statement (attemptKey attempt.request.attemptId, operat
 attemptKey :: AttemptId -> Text
 attemptKey (AttemptId key) = key
 
-recordOutcomeAndAdvance :: (ExecutionEffects es) => ReplayAccess -> Integer -> OperationId -> OperationOutcome -> NextWork -> Maybe (Calls.CallReceipt, Calls.CallOutcome) -> Eff es (Either ExecutionError Admission)
+recordOutcomeAndAdvance :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> OperationId -> OperationOutcome -> NextWork -> Maybe (Calls.CallReceipt, Calls.CallOutcome) -> Eff es (Either ExecutionError Admission)
 recordOutcomeAndAdvance access revision operation outcome next accounting = recordOutcomeAndAdvanceWith access revision operation outcome next accounting (pure (Right ()))
 
 -- The final transaction hook admits claim/fence checks and deliberate fault
 -- injection. A refusal rolls back lifecycle, payload, cursor and accounting.
-recordOutcomeAndAdvanceWith :: (ExecutionEffects es) => ReplayAccess -> Integer -> OperationId -> OperationOutcome -> NextWork -> Maybe (Calls.CallReceipt, Calls.CallOutcome) -> Transaction (Either ExecutionError ()) -> Eff es (Either ExecutionError Admission)
+recordOutcomeAndAdvanceWith :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> OperationId -> OperationOutcome -> NextWork -> Maybe (Calls.CallReceipt, Calls.CallOutcome) -> Transaction (Either ExecutionError ()) -> Eff es (Either ExecutionError Admission)
 recordOutcomeAndAdvanceWith access@(ReplayAccess execution _ _) expected operationId outcome next accounting finalCheck = catchExecutionWith id do
   previous <- findOperation operationId
   case (previous, payloadReference body) of
@@ -1107,7 +1109,7 @@ recordOutcomeAndAdvanceWith access@(ReplayAccess execution _ _) expected operati
             Nothing -> pure (Left ExecutionMissing)
             Just (_, binding) -> do
               let unresolved = case outcome of OperationUnresolved {} -> True; _ -> False
-                  command = if unresolved then Generated.MarkExecutionUnresolved (Generated.MarkExecutionUnresolvedData execution (fromInteger expected) (fromInteger (expected + 1))) else advance execution expected
+                  command = if unresolved then Generated.MarkExecutionUnresolved (Generated.MarkExecutionUnresolvedData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected)))) else advance execution expected
               let precondition = outcomePrecondition access expected operation outcome accounting binding
               result <- persistGuarded execution command precondition do
                 -- The precondition retains root/execution/operation row locks.
@@ -1118,7 +1120,7 @@ recordOutcomeAndAdvanceWith access@(ReplayAccess execution _ _) expected operati
                 actual <- writePayload execution body
                 unless (actual == ref) (abort CorruptReplay)
                 Tx.statement (operationKey operationId, operation & #outcome .~ Just ref & #continuation .~ Just next & #uncertain .~ unresolved) updateOperation
-                saveExecution (state & #revision .~ (expected + 1) & #cursor .~ (state.cursor + if unresolved then 0 else 1) & #phase .~ (if unresolved then Unresolved else Active) & #activeOperation .~ (if unresolved then Just operationId else Nothing) & #next .~ next)
+                saveExecution (state & #revision .~ (advanceRevision expected) & #cursor .~ (if unresolved then state.cursor else advanceRevision state.cursor) & #phase .~ (if unresolved then Unresolved else Active) & #activeOperation .~ (if unresolved then Just operationId else Nothing) & #next .~ next)
                 finalCheck >>= require
               case result of
                 Right () -> pure (Right Accepted)
@@ -1132,7 +1134,7 @@ recordOutcomeAndAdvanceWith access@(ReplayAccess execution _ _) expected operati
 -- Bounded command authority under the same root -> execution -> operation lock
 -- order as the inline writer. Accounting settlement and final hooks stay late:
 -- their failures must escape the transaction through ExecutionAbort.
-outcomePrecondition :: ReplayAccess -> Integer -> Operation -> OperationOutcome -> Maybe (Calls.CallReceipt, Calls.CallOutcome) -> ExecutionBinding -> Transaction (Either ExecutionError ())
+outcomePrecondition :: ReplayAccess -> StateRevision "execution" -> Operation -> OperationOutcome -> Maybe (Calls.CallReceipt, Calls.CallOutcome) -> ExecutionBinding -> Transaction (Either ExecutionError ())
 outcomePrecondition (ReplayAccess execution identity _) expected operation outcome accounting binding = do
   root <- traverse Roots.inspectRootTx binding.rootId
   case sequence root of
@@ -1143,7 +1145,7 @@ outcomePrecondition (ReplayAccess execution identity _) expected operation outco
       pure do
         (state, actualBinding) <- maybe (Left ExecutionMissing) Right stored
         unless (identity == actualBinding.identity) (Left ReplayReadRefused)
-        unless (expected >= 0 && expected < toInteger (maxBound :: Int) && state.revision == expected) (Left ExecutionRevisionConflict)
+        unless (revisionNumber expected < toInteger (maxBound :: Int) && state.revision == expected) (Left ExecutionRevisionConflict)
         unless (state.activeOperation == Just operation.specification.operationId && state.phase == Active) (Left OperationConflict)
         actualOperation <- maybe (Left OperationMissing) Right actual
         unless (actualOperation == operation) (Left OperationConflict)
@@ -1161,7 +1163,7 @@ outcomePrecondition (ReplayAccess execution identity _) expected operation outco
       forM_ actualOperation.permission \permission ->
         unless (permission.resolution == Just PermissionApproved) (Left (ExecutionPolicyRefused "tool permission was not approved"))
 
-finishExecution :: (ExecutionEffects es) => ReplayAccess -> Integer -> Aeson.Value -> Eff es (Either ExecutionError Admission)
+finishExecution :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> Aeson.Value -> Eff es (Either ExecutionError Admission)
 finishExecution access@(ReplayAccess execution _ _) expected result = catchExecutionWith id $ case payloadReference body of
   Left err -> pure (Left err)
   Right ref -> do
@@ -1170,7 +1172,7 @@ finishExecution access@(ReplayAccess execution _ _) expected result = catchExecu
       Just (state, _) | state.phase == Succeeded && state.result == Just ref -> pure (Right AlreadyAccepted)
       Nothing -> pure (Left ExecutionMissing)
       Just (stored, binding) -> do
-        let command = if stored.pendingReceipts > 0 then Generated.FinishExecutionPendingReceipts (Generated.FinishExecutionPendingReceiptsData execution (fromInteger expected) (fromInteger (expected + 1))) else Generated.FinishExecution (Generated.FinishExecutionData execution (fromInteger expected) (fromInteger (expected + 1)))
+        let command = if stored.pendingReceipts > 0 then Generated.FinishExecutionPendingReceipts (Generated.FinishExecutionPendingReceiptsData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected)))) else Generated.FinishExecution (Generated.FinishExecutionData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected))))
         committed <- persistChecked
           execution
           command
@@ -1196,7 +1198,7 @@ finishExecution access@(ReplayAccess execution _ _) expected result = catchExecu
           \state -> do
             actual <- writePayload execution body
             unless (actual == ref) (abort CorruptReplay)
-            saveExecution (state & #revision .~ (expected + 1) & #phase .~ Succeeded & #result .~ Just ref & #next .~ WorkFinished)
+            saveExecution (state & #revision .~ (advanceRevision expected) & #phase .~ Succeeded & #result .~ Just ref & #next .~ WorkFinished)
         case committed of
           Right () -> pure (Right Accepted)
           Left (CheckFailed err) -> pure (Left err)
@@ -1213,8 +1215,8 @@ validateOperation specification = do
   unless (all (\text -> not (Text.null text) && Text.length text <= 256) [specification.name, specification.policyDigest, specification.scopeDigest]) (Left OperationConflict)
   unless (maybe True (\n -> n >= 0 && n < 256) specification.responsePosition) (Left OperationConflict)
 
-advance :: ExecutionId -> Integer -> Generated.ExecutionLifecycleCommand
-advance execution expected = Generated.AdvanceExecution (Generated.AdvanceExecutionData execution (fromInteger expected) (fromInteger (expected + 1)))
+advance :: ExecutionId -> StateRevision "execution" -> Generated.ExecutionLifecycleCommand
+advance execution expected = Generated.AdvanceExecution (Generated.AdvanceExecutionData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected))))
 
 getExecution :: ExecutionId -> Transaction (ExecutionState, ExecutionBinding)
 getExecution execution = Tx.statement execution.value lockExecution >>= maybe (abort ExecutionMissing) pure
@@ -1409,9 +1411,9 @@ checkedAccess (ReplayAccess execution identity expires) binding = do
   unless (identity == binding.identity && now < expires) (throwE ReplayReadRefused)
   pure execution
 
-checkedRevision :: Integer -> ExecutionState -> ExecutionCheck ()
+checkedRevision :: StateRevision "execution" -> ExecutionState -> ExecutionCheck ()
 checkedRevision expected state = except do
-  unless (expected >= 0 && expected < toInteger (maxBound :: Int) && state.revision == expected) (Left ExecutionRevisionConflict)
+  unless (revisionNumber expected < toInteger (maxBound :: Int) && state.revision == expected) (Left ExecutionRevisionConflict)
 
 checkedOutcomeIdentity :: ReplayAccess -> ExecutionBinding -> ExecutionCheck ()
 checkedOutcomeIdentity (ReplayAccess _ identity _) binding = unless (identity == binding.identity) (throwE ReplayReadRefused)

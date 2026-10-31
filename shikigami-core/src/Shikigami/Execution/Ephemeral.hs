@@ -27,6 +27,7 @@ import Shikigami.Execution.Policy
 import Shikigami.Execution.SelectionRuntime (narrowOutput)
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude
+import Shikigami.StateRevision (advanceRevisions, initialRevision)
 import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (runLLMWith)
 import Shikumi.Tool (registryBaikai, registryTools, renderToolError, runErasedOutput, someToolName, someToolSchema)
@@ -92,9 +93,10 @@ runEphemeralBehavior duration base env decl input = case narrowHarnessPolicy bas
                                 Left _ -> pure (refused "summary output is invalid")
                                 Right _ -> do
                                   let execution = ExecutionId "ephemeral"
-                                      specification = OperationSpec (operationIdFor execution (toInteger calls)) ModelSummary RepeatableObservation "summary" "ephemeral" "ephemeral" Nothing
+                                      position = advanceRevisions (fromIntegral calls) initialRevision
+                                      specification = OperationSpec (operationIdFor execution position) ModelSummary RepeatableObservation "summary" "ephemeral" "ephemeral" Nothing
                                       reference value = PayloadRef "ephemeral" (versionedDigest "shikigami.ephemeral-payload/1" value) (fromIntegral (Lazy.length (Aeson.encode value)))
-                                      operation = Operation 1 execution (toInteger calls) specification "ephemeral" (reference (toJSON accepted)) (Just (reference (toJSON assistant))) (Just NeedModel) False Nothing
+                                      operation = Operation 1 execution position specification "ephemeral" (reference (toJSON accepted)) (Just (reference (toJSON assistant))) (Just NeedModel) False Nothing
                                   loop retained policy calls' toolCount repairs kind source (Just (operation, accepted, assistant))
                               else
                                 if assistant.stopReason == ToolUse

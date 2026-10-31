@@ -15,6 +15,7 @@ import Shikigami.WorkerSession.Capability (WorkerCommand (CancelWorker))
 import Shikigami.WorkerSession.Types (WorkerSessionId)
 import Shikigami.WorkerSession.Types qualified as WorkerSession
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.Transcript qualified as Execution
 '''
 CASES = [
     ("valid", '''value :: StateRevision "objective"
@@ -25,6 +26,18 @@ number = revisionNumber value
     ("resource-root", '''rootRevision :: Resources.Root -> StateRevision "execution-root"
 rootRevision root = root.revision
 ''', True),
+    ("execution-revision", '''executionRevision :: Execution.ExecutionState -> StateRevision "execution"
+executionRevision state = state.revision
+''', True),
+    ("execution-operation-position", '''operationPosition :: Execution.Operation -> StateRevision "execution-operation"
+operationPosition operation = operation.position
+''', True),
+    ("execution-root-is-not-execution", '''executionRevision :: Resources.Root -> StateRevision "execution"
+executionRevision root = root.revision
+''', False),
+    ("operation-is-not-execution-revision", '''executionRevision :: Execution.ExecutionState -> StateRevision "execution"
+executionRevision state = state.cursor
+''', False),
     ("wrong-root-revision", '''rootRevision :: Resources.Root -> StateRevision "worker-session"
 rootRevision root = root.revision
 ''', False),
@@ -61,6 +74,8 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
         if not expected:
             fragments = {
                 "event-is-not-message-sequence": ["Couldn't match type", "worker-message", "worker-event"],
+                "execution-root-is-not-execution": ["Couldn't match type", "execution-root", "execution"],
+                "operation-is-not-execution-revision": ["Couldn't match type", "execution-operation", "execution"],
                 "wrong-root-revision": ["Couldn't match type", "worker-session", "execution-root"],
                 "wrong-worker-revision": ["Couldn't match type", "worker-session", "objective"],
                 "scope-coercion": ["Couldn't match type", "objective", "objective-criteria"],

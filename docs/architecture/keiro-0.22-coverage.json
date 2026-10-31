@@ -134,6 +134,11 @@
           "rationale": "Distinct worker-message/worker-event scopes persist across receipts, checkpoint providers, Flow waits and workspace succession. MessagePosition alone admits the -1 assignment-page sentinel. Exact public after field/numeric byte controls pass. Event capacity refuses atomically without retained payload/command/native-event writes. The 549 pure, 376 PostgreSQL, 260 worker, 95 server, ten compiler and 70 offline CLI cases pass; native generation/replay is neutral."
         },
         {
+          "id": "execution-revision-and-operation-positions",
+          "disposition": "implemented",
+          "rationale": "Execution transcript/expected-command revisions and PreparedTool retain execution; state cursors, retained operation positions and operation-id derivation retain execution-operation. Generated Int and SQL adapters render explicitly with existing writer/position bounds. Three full positive codec/byte/identity controls precede invalid-input cases; 14 real compiler clients reject scope substitution. All 552 pure, 376 serial PostgreSQL and 260 serial worker tests pass. Other resource amounts/counters and the full census remain pending."
+        },
+        {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "pending",
           "rationale": "The remaining hand-owned domain values and identity authorities still require an explicit complete audit and applicable fixes. Existing boundary records may retain primitives only with concrete wire/database/library-adapter ownership; persistence alone is not an exemption."
@@ -149,7 +154,8 @@
         "docs/evidence/keiro-0.22/objective-content-results.txt",
         "docs/evidence/keiro-0.22/worker-owner-revision-results.txt",
         "docs/evidence/keiro-0.22/resource-root-revision-results.txt",
-        "docs/evidence/keiro-0.22/worker-cursor-results.txt"
+        "docs/evidence/keiro-0.22/worker-cursor-results.txt",
+        "docs/evidence/keiro-0.22/execution-revision-results.txt"
       ]
     },
     {

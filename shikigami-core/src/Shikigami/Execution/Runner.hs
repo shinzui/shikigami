@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Preparation is separate from dispatch. An executor must also acquire and
 -- start a fenced attempt before using this prepared request. Preparation alone
 -- never authorizes external IO or claims that an uncertain effect is absent.
@@ -17,6 +19,7 @@ import Shikigami.Execution.Policy
 import Shikigami.Execution.Store qualified as Store
 import Shikigami.Execution.Transcript
 import Shikigami.Prelude
+import Shikigami.StateRevision (StateRevision)
 
 -- A trusted callback receives the logical key outside the model arguments.
 -- Actual transport attempts and owner generations are separate coordinates.
@@ -43,7 +46,7 @@ data DispatchContext = DispatchContext
 
 data PreparedTool = PreparedTool
   { context :: !OperationContext,
-    expectedRevision :: !Integer,
+    expectedRevision :: !(StateRevision "execution"),
     input :: !ToolOperationInput
   }
   deriving stock (Eq, Generic)

@@ -12,6 +12,7 @@ import Data.Text qualified as Text
 import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Transcript
+import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Workspace.Instructions (instructionPrompt, mkInstructionBundle)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
@@ -62,9 +63,9 @@ tests =
             request = RequestTurn [TextBlock "current request"] Nothing
             source = ReplayContext 2 (Just (instructionPrompt bundle)) [UserTurn [TextBlock (Text.replicate 1000 "x")] Nothing, AssistantTurn (answer (Text.replicate 1000 "y")), request, AssistantTurn (answer (Text.replicate 1000 "z"))]
             execution = ExecutionId "summary-fixture"
-            specification = OperationSpec (operationIdFor execution 0) ModelSummary RepeatableObservation "summary" "policy" "scope" Nothing
+            specification = OperationSpec (operationIdFor execution (fixtureRevision 0)) ModelSummary RepeatableObservation "summary" "policy" "scope" Nothing
             ref = PayloadRef "payload" "digest" 1
-            operation = Operation 1 execution 0 specification "fingerprint" ref (Just ref) (Just NeedModel) False Nothing
+            operation = Operation 1 execution (fixtureRevision 0) specification "fingerprint" ref (Just ref) (Just NeedModel) False Nothing
         (kind, input) <- expectRight (prepareModelOperationInput policy ModelTurn source Nothing Nothing)
         kind @?= ModelSummary
         input.view.context.systemPrompt @?= source.systemPrompt
@@ -80,9 +81,9 @@ tests =
         let policy = defaultHarnessPolicy & #contextBytes .~ 1024 & #keepRecentMessages .~ 1 & #summaryTokens .~ Just 64
             source = ReplayContext 1 Nothing [UserTurn [TextBlock "request"] Nothing, UserTurn [TextBlock (Text.replicate 3000 "x")] Nothing, AssistantTurn (answer "latest")]
             execution = ExecutionId "summary-fixture"
-            specification = OperationSpec (operationIdFor execution 0) ModelSummary RepeatableObservation "summary" "policy" "scope" Nothing
+            specification = OperationSpec (operationIdFor execution (fixtureRevision 0)) ModelSummary RepeatableObservation "summary" "policy" "scope" Nothing
             ref = PayloadRef "payload" "digest" 1
-            operation = Operation 1 execution 0 specification "fingerprint" ref (Just ref) (Just NeedModel) False Nothing
+            operation = Operation 1 execution (fixtureRevision 0) specification "fingerprint" ref (Just ref) (Just NeedModel) False Nothing
         selected <- expectRight (selectContextView policy source)
         let old = ModelOperationInput 1 selected (Just 64) Nothing
         prepareModelOperationInput policy ModelTurn source Nothing (Just (operation, old, answer "accepted")) @?= Left UnsupportedReplay,
@@ -169,3 +170,6 @@ toolReply calls = ReplayAssistant 1 [ToolBlock (ToolInvocation callId name args)
 
 expectRight :: (Show e) => Either e a -> IO a
 expectRight = either (\err -> assertFailure (show err) >> fail "expected Right") pure
+
+fixtureRevision :: Integer -> StateRevision scope
+fixtureRevision value = either (error . show) id (parseRevision value)

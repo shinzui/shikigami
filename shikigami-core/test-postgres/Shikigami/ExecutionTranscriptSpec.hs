@@ -131,7 +131,7 @@ tests fixture =
           readIORef described >>= (@?= 1)
           access <- expectRight =<< run env (Store.authorizeReplay snapshot.executionId snapshot.identity (pure (Right ())))
           (frozen, state) <- expectRight =<< run env (Store.loadExecution access)
-          state.cursor @?= 0
+          state.cursor @?= (fixtureRevision 0)
           frozen.instructions.name @?= "durable-fixture"
           frozen.policy.maxModelTurns @?= 3
           frozen.toolBindings @?= [observationBinding]
@@ -263,7 +263,7 @@ tests fixture =
           let unavailable = executor {Executor.replayAuthority = const (pure (Left "revoked")), Executor.authorize = const (pure (Left "retired"))}
           run env (runWorkflow DriverGenerated.workflowName workflow (Driver.executionWorkflow unavailable Nothing)) >>= (@?= Completed completed)
           (_, state) <- expectRight =<< run env (Store.loadExecution access)
-          state.cursor @?= 1,
+          state.cursor @?= (fixtureRevision 1),
       testCase "automatic driver accepts each tool position and reconstructs exact bounded model history" $
         withConfiguredResourceFixture fixture toolConfiguration (Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot access -> do
           (executor, calls, toolCalls) <- driverRuntime env True
@@ -353,7 +353,7 @@ tests fixture =
           permission <- reachPermission env executor snapshot 12
           Just (parked, _, _) <- inspect env snapshot.executionId
           parked.phase @?= Parked
-          parked.cursor @?= 1
+          parked.cursor @?= (fixtureRevision 1)
           parked.modelTurns @?= 1
           tokenRef <- newIORef Nothing
           let childEnv = Approval.ApprovalWorkflowEnv (Approval.ApprovalNotifier (\_ _ token _ -> writeIORef tokenRef (Just token)) (\_ _ _ _ -> pure (Right ())))
@@ -393,33 +393,33 @@ tests fixture =
         assertBool "future assistant version rejected" (case Aeson.fromJSON @ReplayAssistant future of Aeson.Error _ -> True; _ -> False),
       testCase "attempt reservation and real queue acceptance roll back and deduplicate together" $
         withFixture fixture \env snapshot access -> do
-          (_, operation) <- expectRight =<< run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput)
+          (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
           withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
           now <- getCurrentTime
           let submission = modelSubmission operation
               enqueue reference = void (enqueueRunJobTx (addressedRunJob now snapshot.identity "worker" ExecutionOperationRoute (toJSON reference) (RunKey "accepted-attempt-job")))
               failAfterQueue reference = enqueue reference >> Tx.statement () (preparable "SELECT 1/0" E.noParams (D.singleRow (D.column (D.nonNullable D.int4)))) >> pure ()
-          refused <- run env (Store.submitExecutionAttemptWith access 1 submission failAfterQueue)
+          refused <- run env (Store.submitExecutionAttemptWith access (fixtureRevision 1) submission failAfterQueue)
           case refused of Left ExecutionStorageUnavailable -> pure (); other -> assertFailure (show other)
           queueCount env >>= (@?= 0)
           run env (Store.inspectExecutionAttempt submission.request.attemptId) >>= (@?= Right Nothing)
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
           root.usage @?= R.emptyUsage
-          (_, attempt) <- expectRight =<< run env (Store.submitExecutionAttemptWith access 1 submission enqueue)
-          run env (Store.submitExecutionAttemptWith access 1 submission enqueue) >>= (@?= Right (R.AlreadyAccepted, attempt))
+          (_, attempt) <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 1) submission enqueue)
+          run env (Store.submitExecutionAttemptWith access (fixtureRevision 1) submission enqueue) >>= (@?= Right (R.AlreadyAccepted, attempt))
           queueCount env >>= (@?= 1)
           assertBool "opaque wake token absent from metadata" (not ("00000000-0000-0000-0000-000000000000" `Text.isInfixOf` Text.pack (show (Aeson.encode attempt)))),
       testCase "operator pages retain active work beyond the first hundred operations without exposing replay" $
         withConfiguredFixture fixture (\snapshot -> snapshot & #policy . #maxModelTurns .~ 200) \env snapshot access -> do
           mapM_
             ( \cursor -> do
-                (_, operation) <- expectRight =<< run env (Store.acceptOperation access (2 * cursor) (spec snapshot cursor) secretInput)
-                run env (Store.recordOutcomeAndAdvance access (2 * cursor + 1) operation.specification.operationId (OperationDenied "bounded fixture refusal") NeedModel Nothing) >>= (@?= Right R.Accepted)
+                (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision (2 * cursor)) (spec snapshot cursor) secretInput)
+                run env (Store.recordOutcomeAndAdvance access (fixtureRevision (2 * cursor + 1)) operation.specification.operationId (OperationDenied "bounded fixture refusal") NeedModel Nothing) >>= (@?= Right R.Accepted)
             )
             [0 .. 119]
-          (_, active) <- expectRight =<< run env (Store.acceptOperation access 240 (spec snapshot 120) secretInput)
+          (_, active) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 240) (spec snapshot 120) secretInput)
           let submitted = modelSubmission active
-          _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access 241 submitted (\_ -> pure ()))
+          _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 241) submitted (\_ -> pure ()))
           Just first <- expectRight =<< run env (Store.inspectExecutionPage snapshot.executionId (-1) 2)
           Just latest <- expectRight =<< run env (Store.inspectExecutionPage snapshot.executionId 117 2)
           case (first, latest) of
@@ -449,11 +449,11 @@ tests fixture =
                 (response, assistant) <- commitToolRequest env snapshot access
                 let input = ToolOperationInput response 0 (head (toolInvocations assistant)) observationBinding
                     specification = toolSpec snapshot 1 input
-                _ <- expectRight =<< run env (Store.acceptOperation access 2 specification (toJSON input))
+                _ <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
                 pure (Attempt.AttemptSubmission (Store.toolAttemptRequest (AttemptId "shared-tool-attempt") specification.operationId observationBinding) Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0))
           a <- prepare first firstAccess
           b <- prepare second secondAccess
-          (left, right) <- concurrently (run env (Store.submitExecutionAttemptWith firstAccess 3 a (\_ -> pure ()))) (run env (Store.submitExecutionAttemptWith secondAccess 3 b (\_ -> pure ())))
+          (left, right) <- concurrently (run env (Store.submitExecutionAttemptWith firstAccess (fixtureRevision 3) a (\_ -> pure ()))) (run env (Store.submitExecutionAttemptWith secondAccess (fixtureRevision 3) b (\_ -> pure ())))
           length [() | Right (R.Accepted, _) <- [left, right]] @?= 1
           length [() | Left AttemptConflict <- [left, right]] @?= 1
           firstRoot <- expectRight =<< run env (Roots.inspectRoot rootId)
@@ -463,17 +463,17 @@ tests fixture =
           pure (),
       testCase "two executors obtain one claim and only one dispatch-start transition" $
         withPreparedModel fixture \env snapshot access operation reference -> do
-          (left, right) <- concurrently (run env (Store.claimExecutionAttempt access 2 reference "owner-a" 60)) (run env (Store.claimExecutionAttempt access 2 reference "owner-b" 60))
+          (left, right) <- concurrently (run env (Store.claimExecutionAttempt access (fixtureRevision 2) reference "owner-a" 60)) (run env (Store.claimExecutionAttempt access (fixtureRevision 2) reference "owner-b" 60))
           claim <- case [value | Right (Attempt.ClaimGranted value) <- [left, right]] of [value] -> pure value; other -> assertFailure (show other) >> fail "claim"
-          run env (Store.claimExecutionAttempt access 3 reference "third-owner" 60) >>= (@?= Right Attempt.AttemptBusy)
-          run env (Store.startExecutionAttempt access 3 claim) >>= (@?= Right R.Accepted)
-          run env (Store.startExecutionAttempt access 3 claim) >>= (@?= Right R.AlreadyAccepted)
+          run env (Store.claimExecutionAttempt access (fixtureRevision 3) reference "third-owner" 60) >>= (@?= Right Attempt.AttemptBusy)
+          run env (Store.startExecutionAttempt access (fixtureRevision 3) claim) >>= (@?= Right R.Accepted)
+          run env (Store.startExecutionAttempt access (fixtureRevision 3) claim) >>= (@?= Right R.AlreadyAccepted)
           let result = terminalAttempt
-          run env (Store.completeExecutionAttempt access 4 claim result) >>= (@?= Right R.Accepted)
-          run env (Store.completeExecutionAttempt access 4 claim result) >>= (@?= Right R.AlreadyAccepted)
-          run env (Store.claimExecutionAttempt access 5 reference "redelivery" 60) >>= (@?= Right Attempt.AttemptFinished)
+          run env (Store.completeExecutionAttempt access (fixtureRevision 4) claim result) >>= (@?= Right R.Accepted)
+          run env (Store.completeExecutionAttempt access (fixtureRevision 4) claim result) >>= (@?= Right R.AlreadyAccepted)
+          run env (Store.claimExecutionAttempt access (fixtureRevision 5) reference "redelivery" 60) >>= (@?= Right Attempt.AttemptFinished)
           (_, state) <- expectRight =<< run env (Store.loadExecution access)
-          state.cursor @?= 1
+          state.cursor @?= (fixtureRevision 1)
           state.activeOperation @?= Nothing
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
           Map.lookup R.ModelAttempts root.usage.settled @?= Just 1
@@ -482,46 +482,46 @@ tests fixture =
           state.executionId @?= snapshot.executionId,
       testCase "a refused undispatched attempt retries under the same logical key with a new reservation" $
         withPreparedModel fixture \env _snapshot access operation reference -> do
-          run env (Store.abandonExecutionAttempt access 2 reference) >>= (@?= Right R.Accepted)
-          run env (Store.abandonExecutionAttempt access 2 reference) >>= (@?= Right R.AlreadyAccepted)
+          run env (Store.abandonExecutionAttempt access (fixtureRevision 2) reference) >>= (@?= Right R.Accepted)
+          run env (Store.abandonExecutionAttempt access (fixtureRevision 2) reference) >>= (@?= Right R.AlreadyAccepted)
           (_, pending) <- expectRight =<< run env (Store.loadExecution access)
-          pending.cursor @?= 0
+          pending.cursor @?= (fixtureRevision 0)
           pending.activeOperation @?= Just reference.operationId
           let submission = modelSubmission operation & #request . #attemptId .~ AttemptId "second-actual-attempt"
               retry = reference & #attemptId .~ submission.request.attemptId
-          _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access 3 submission (\_ -> pure ()))
-          run env (Store.claimExecutionAttempt access 4 reference "old-delivery" 60) >>= (@?= Right Attempt.AttemptFinished)
-          claim <- expectClaim =<< run env (Store.claimExecutionAttempt access 4 retry "retry-owner" 60)
-          run env (Store.startExecutionAttempt access 5 claim) >>= (@?= Right R.Accepted)
-          run env (Store.completeExecutionAttempt access 6 claim terminalAttempt) >>= (@?= Right R.Accepted)
+          _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 3) submission (\_ -> pure ()))
+          run env (Store.claimExecutionAttempt access (fixtureRevision 4) reference "old-delivery" 60) >>= (@?= Right Attempt.AttemptFinished)
+          claim <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 4) retry "retry-owner" 60)
+          run env (Store.startExecutionAttempt access (fixtureRevision 5) claim) >>= (@?= Right R.Accepted)
+          run env (Store.completeExecutionAttempt access (fixtureRevision 6) claim terminalAttempt) >>= (@?= Right R.Accepted)
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
           Map.lookup R.ModelAttempts root.usage.settled @?= Just 2
           Map.lookup R.Tokens root.usage.settled @?= Just 3
           root.active @?= 0,
       testCase "claim expiry before dispatch permits replacement without another actual attempt" $
         withPreparedModel fixture \env _snapshot access _operation reference -> do
-          first <- expectClaim =<< run env (Store.claimExecutionAttempt access 2 reference "first-owner" 1)
+          first <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) reference "first-owner" 1)
           threadDelay 1100000
-          replacement <- expectClaim =<< run env (Store.claimExecutionAttempt access 3 reference "replacement" 60)
+          replacement <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 3) reference "replacement" 60)
           replacement.generation @?= 2
-          run env (Store.startExecutionAttempt access 4 first) >>= (@?= Left AttemptClaimLost)
-          run env (Store.startExecutionAttempt access 4 replacement) >>= (@?= Right R.Accepted)
-          run env (Store.completeExecutionAttempt access 5 replacement terminalAttempt) >>= (@?= Right R.Accepted)
+          run env (Store.startExecutionAttempt access (fixtureRevision 4) first) >>= (@?= Left AttemptClaimLost)
+          run env (Store.startExecutionAttempt access (fixtureRevision 4) replacement) >>= (@?= Right R.Accepted)
+          run env (Store.completeExecutionAttempt access (fixtureRevision 5) replacement terminalAttempt) >>= (@?= Right R.Accepted)
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
           Map.lookup R.ModelAttempts root.usage.settled @?= Just 1,
       testCase "expiry after dispatch holds accounting and retains a fenced late receipt" $
         withPreparedModel fixture \env _snapshot access _operation reference -> do
-          claim <- expectClaim =<< run env (Store.claimExecutionAttempt access 2 reference "former-owner" 1)
-          run env (Store.startExecutionAttempt access 3 claim) >>= (@?= Right R.Accepted)
+          claim <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) reference "former-owner" 1)
+          run env (Store.startExecutionAttempt access (fixtureRevision 3) claim) >>= (@?= Right R.Accepted)
           threadDelay 1100000
-          run env (Store.claimExecutionAttempt access 4 reference "replacement" 60) >>= (@?= Right Attempt.AttemptNeedsReconciliation)
-          run env (Store.completeExecutionAttempt access 4 claim terminalAttempt) >>= (@?= Left AttemptClaimLost)
-          run env (Store.markExecutionAttemptUncertain access 4 claim) >>= (@?= Right R.Accepted)
-          run env (Store.recordLateExecutionReceipt access 5 claim terminalAttempt) >>= (@?= Right R.Accepted)
-          run env (Store.recordLateExecutionReceipt access 5 claim terminalAttempt) >>= (@?= Right R.AlreadyAccepted)
+          run env (Store.claimExecutionAttempt access (fixtureRevision 4) reference "replacement" 60) >>= (@?= Right Attempt.AttemptNeedsReconciliation)
+          run env (Store.completeExecutionAttempt access (fixtureRevision 4) claim terminalAttempt) >>= (@?= Left AttemptClaimLost)
+          run env (Store.markExecutionAttemptUncertain access (fixtureRevision 4) claim) >>= (@?= Right R.Accepted)
+          run env (Store.recordLateExecutionReceipt access (fixtureRevision 5) claim terminalAttempt) >>= (@?= Right R.Accepted)
+          run env (Store.recordLateExecutionReceipt access (fixtureRevision 5) claim terminalAttempt) >>= (@?= Right R.AlreadyAccepted)
           (_, state) <- expectRight =<< run env (Store.loadExecution access)
           state.phase @?= Unresolved
-          state.cursor @?= 0
+          state.cursor @?= (fixtureRevision 0)
           state.activeOperation @?= Just reference.operationId
           Just attempt <- expectRight =<< run env (Store.inspectExecutionAttempt reference.attemptId)
           attempt.phase @?= Attempt.AttemptUncertain
@@ -531,12 +531,12 @@ tests fixture =
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
           Map.lookup R.Tokens root.usage.held @?= Just 10
           root.active @?= 1
-          run env (Store.claimExecutionAttempt access 6 reference "another-owner" 60) >>= (@?= Right Attempt.AttemptNeedsReconciliation)
-          run env (Store.reconcileExecutionAttempt access 6 reference.attemptId) >>= (@?= Right R.Accepted)
-          run env (Store.reconcileExecutionAttempt access 6 reference.attemptId) >>= (@?= Right R.AlreadyAccepted)
+          run env (Store.claimExecutionAttempt access (fixtureRevision 6) reference "another-owner" 60) >>= (@?= Right Attempt.AttemptNeedsReconciliation)
+          run env (Store.reconcileExecutionAttempt access (fixtureRevision 6) reference.attemptId) >>= (@?= Right R.Accepted)
+          run env (Store.reconcileExecutionAttempt access (fixtureRevision 6) reference.attemptId) >>= (@?= Right R.AlreadyAccepted)
           (_, reconciledState) <- expectRight =<< run env (Store.loadExecution access)
           reconciledState.phase @?= Active
-          reconciledState.cursor @?= 1
+          reconciledState.cursor @?= (fixtureRevision 1)
           afterTransport <- expectRight =<< run env (Roots.inspectRoot rootId)
           afterTransport.active @?= 0
           afterTransport.unknown @?= 1
@@ -597,10 +597,10 @@ tests fixture =
           let binding = head snapshot.toolBindings
               input = ToolOperationInput response 0 (head (toolInvocations assistant)) binding
               specification = toolSpec snapshot 1 input
-          _ <- expectRight =<< run env (Store.acceptOperation access 2 specification (toJSON input))
+          _ <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
           let request = Store.toolAttemptRequest (AttemptId "unreported-tool-invoice") specification.operationId binding
               enqueue _ = void (Tx.statement () (preparable "SELECT 1/0" E.noParams (D.singleRow (D.column (D.nonNullable D.int4)))))
-          refused <- run env (Store.submitExecutionAttemptWith access 3 (Attempt.AttemptSubmission request Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)) enqueue)
+          refused <- run env (Store.submitExecutionAttemptWith access (fixtureRevision 3) (Attempt.AttemptSubmission request Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)) enqueue)
           case refused of Left (ResourceAdmissionRefused "tool invoice ceiling is unsupported") -> pure (); other -> assertFailure (show other)
           run env (Store.inspectExecutionAttempt request.attemptId) >>= (@?= Right Nothing)
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
@@ -629,10 +629,10 @@ tests fixture =
           pending.status @?= Awakeable.Pending
           before <- run env (loadStepIndex name workflow 1)
           assertBool "old timer did not add an orphan wake to the new journal" (Map.notMember ("awk:" <> awakeableIdText oldToken) before)
-          claim <- expectClaim =<< run env (Store.claimExecutionAttempt access 2 reference "rotation-executor" 60)
-          run env (Store.startExecutionAttempt access 3 claim) >>= (@?= Right R.Accepted)
-          run env (Store.completeExecutionAttempt access 4 claim terminalAttempt) >>= (@?= Right R.Accepted)
-          run env (Store.refreshExecutionWake access 5 (Attempt.ExecutionWake currentToken 1)) >>= (@?= Right R.Accepted)
+          claim <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) reference "rotation-executor" 60)
+          run env (Store.startExecutionAttempt access (fixtureRevision 3) claim) >>= (@?= Right R.Accepted)
+          run env (Store.completeExecutionAttempt access (fixtureRevision 4) claim terminalAttempt) >>= (@?= Right R.Accepted)
+          run env (Store.refreshExecutionWake access (fixtureRevision 5) (Attempt.ExecutionWake currentToken 1)) >>= (@?= Right R.Accepted)
           run env (Store.publishExecutionWake reference) >>= (@?= Right ())
           run env (runWorkflow name workflow body) >>= (@?= Completed ()),
       testCase "each tool has a separate immutable operation and accepted outcome" $
@@ -640,32 +640,32 @@ tests fixture =
           (response, assistant) <- commitToolRequest env snapshot access
           let firstInput = ToolOperationInput response 0 (head (toolInvocations assistant)) observationBinding
               firstSpec = toolSpec snapshot 1 firstInput
-          (_, first) <- expectRight =<< run env (Store.acceptOperation access 2 firstSpec (toJSON firstInput))
-          run env (Store.acceptOperation access 2 firstSpec (toJSON firstInput)) >>= (@?= Right (R.AlreadyAccepted, first))
+          (_, first) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) firstSpec (toJSON firstInput))
+          run env (Store.acceptOperation access (fixtureRevision 2) firstSpec (toJSON firstInput)) >>= (@?= Right (R.AlreadyAccepted, first))
           let altered = firstInput & #invocation . #arguments .~ object ["injected" .= True]
-          run env (Store.acceptOperation access 2 firstSpec (toJSON altered)) >>= (@?= Left OperationConflict)
-          run env (Store.recordOutcomeAndAdvance access 3 firstSpec.operationId (ToolReturned [TextBlock "opaque accepted-message reference"] False) (NeedTool response 1) Nothing) >>= (@?= Right R.Accepted)
+          run env (Store.acceptOperation access (fixtureRevision 2) firstSpec (toJSON altered)) >>= (@?= Left OperationConflict)
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 3) firstSpec.operationId (ToolReturned [TextBlock "opaque accepted-message reference"] False) (NeedTool response 1) Nothing) >>= (@?= Right R.Accepted)
           let secondInput = ToolOperationInput response 1 (toolInvocations assistant !! 1) observationBinding
-          (_, second) <- expectRight =<< run env (Store.acceptOperation access 4 (toolSpec snapshot 2 secondInput) (toJSON secondInput))
+          (_, second) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 4) (toolSpec snapshot 2 secondInput) (toJSON secondInput))
           assertBool "tool identity uses committed cursor" (first.specification.operationId /= second.specification.operationId)
-          run env (Store.recordOutcomeAndAdvance access 5 second.specification.operationId (ToolReturned [TextBlock "second result"] False) NeedModel Nothing) >>= (@?= Right R.Accepted)
-          run env (Store.recordOutcomeAndAdvance access 3 firstSpec.operationId (ToolReturned [TextBlock "opaque accepted-message reference"] False) (NeedTool response 1) Nothing) >>= (@?= Right R.AlreadyAccepted)
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 5) second.specification.operationId (ToolReturned [TextBlock "second result"] False) NeedModel Nothing) >>= (@?= Right R.Accepted)
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 3) firstSpec.operationId (ToolReturned [TextBlock "opaque accepted-message reference"] False) (NeedTool response 1) Nothing) >>= (@?= Right R.AlreadyAccepted)
           (_, state) <- expectRight =<< run env (Store.loadExecution access)
-          state.cursor @?= 3
+          state.cursor @?= (fixtureRevision 3)
           state.modelTurns @?= 1,
       testCase "bound approval uses the real opaque token path and resumes the same tool" $
         withConfiguredFixture fixture (\snapshot -> toolConfiguration snapshot & #policy . #humanTools .~ ["observe"]) \env snapshot access -> do
           (response, assistant) <- commitToolRequest env snapshot access
           let input = ToolOperationInput response 0 (head (toolInvocations assistant)) observationBinding
               specification = toolSpec snapshot 1 input
-          _ <- expectRight =<< run env (Store.acceptOperation access 2 specification (toJSON input))
+          _ <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
           now <- getCurrentTime
           run env (Runner.prepareAcceptedTool now False Nothing access specification.operationId [observationBinding] (\_ -> assertFailure "authorization before human decision" >> pure (Right ()))) >>= (@?= Right Runner.ToolPermissionNeeded)
-          permission <- expectRight =<< run env (Store.parkOperationPermission access 3 specification.operationId)
-          run env (Store.parkOperationPermission access 3 specification.operationId) >>= (@?= Right permission)
+          permission <- expectRight =<< run env (Store.parkOperationPermission access (fixtureRevision 3) specification.operationId)
+          run env (Store.parkOperationPermission access (fixtureRevision 3) specification.operationId) >>= (@?= Right permission)
           (_, parked) <- expectRight =<< run env (Store.loadExecution access)
           parked.phase @?= Parked
-          parked.cursor @?= 1
+          parked.cursor @?= (fixtureRevision 1)
           parked.modelTurns @?= 1
           tokenRef <- newIORef Nothing
           let childEnv = Approval.ApprovalWorkflowEnv (Approval.ApprovalNotifier (\_ _ token _ -> writeIORef tokenRef (Just token)) (\_ _ _ _ -> pure (Right ())))
@@ -682,9 +682,9 @@ tests fixture =
           result <- run env parent
           case result of
             Completed (Approval.ApprovalResolved decision) -> do
-              run env (Store.resolveOperationPermission access 4 specification.operationId permission.reviewRequestId decision) >>= (@?= Right R.Accepted)
-              run env (Store.resolveOperationPermission access 4 specification.operationId permission.reviewRequestId decision) >>= (@?= Right R.AlreadyAccepted)
-              run env (Store.resolveOperationPermission access 4 specification.operationId permission.reviewRequestId (Rejected "conflict")) >>= (@?= Left OperationConflict)
+              run env (Store.resolveOperationPermission access (fixtureRevision 4) specification.operationId permission.reviewRequestId decision) >>= (@?= Right R.Accepted)
+              run env (Store.resolveOperationPermission access (fixtureRevision 4) specification.operationId permission.reviewRequestId decision) >>= (@?= Right R.AlreadyAccepted)
+              run env (Store.resolveOperationPermission access (fixtureRevision 4) specification.operationId permission.reviewRequestId (Rejected "conflict")) >>= (@?= Left OperationConflict)
             other -> assertFailure (show other)
           (_, resumed) <- expectRight =<< run env (Store.loadExecution access)
           resumed.phase @?= Active
@@ -718,17 +718,17 @@ tests fixture =
           (response, assistant) <- commitToolRequest env snapshot access
           let input = ToolOperationInput response 0 (head (toolInvocations assistant)) observationBinding
               specification = toolSpec snapshot 1 input
-          _ <- expectRight =<< run env (Store.acceptOperation access 2 specification (toJSON input))
-          permission <- expectRight =<< run env (Store.parkOperationPermission access 3 specification.operationId)
-          run env (Store.resolveOperationPermission access 4 specification.operationId permission.reviewRequestId TimedOut) >>= (@?= Left (ExecutionPolicyRefused "tool permission deadline has not elapsed"))
+          _ <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
+          permission <- expectRight =<< run env (Store.parkOperationPermission access (fixtureRevision 3) specification.operationId)
+          run env (Store.resolveOperationPermission access (fixtureRevision 4) specification.operationId permission.reviewRequestId TimedOut) >>= (@?= Left (ExecutionPolicyRefused "tool permission deadline has not elapsed"))
           threadDelay 1100000
-          run env (Store.resolveOperationPermission access 4 specification.operationId permission.reviewRequestId (Approved (object []))) >>= (@?= Left (ExecutionPolicyRefused "tool permission expired"))
-          run env (Store.resolveOperationPermission access 4 specification.operationId permission.reviewRequestId TimedOut) >>= (@?= Right R.Accepted)
-          run env (Store.resolveOperationPermission access 4 specification.operationId permission.reviewRequestId TimedOut) >>= (@?= Right R.AlreadyAccepted)
-          run env (Store.recordOutcomeAndAdvance access 5 specification.operationId (ToolReturned [TextBlock "forbidden callback"] False) NeedModel Nothing) >>= (@?= Left (ExecutionPolicyRefused "tool permission was not approved"))
+          run env (Store.resolveOperationPermission access (fixtureRevision 4) specification.operationId permission.reviewRequestId (Approved (object []))) >>= (@?= Left (ExecutionPolicyRefused "tool permission expired"))
+          run env (Store.resolveOperationPermission access (fixtureRevision 4) specification.operationId permission.reviewRequestId TimedOut) >>= (@?= Right R.Accepted)
+          run env (Store.resolveOperationPermission access (fixtureRevision 4) specification.operationId permission.reviewRequestId TimedOut) >>= (@?= Right R.AlreadyAccepted)
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 5) specification.operationId (ToolReturned [TextBlock "forbidden callback"] False) NeedModel Nothing) >>= (@?= Left (ExecutionPolicyRefused "tool permission was not approved"))
           (_, state) <- expectRight =<< run env (Store.loadExecution access)
           state.modelTurns @?= 1
-          state.cursor @?= 1,
+          state.cursor @?= (fixtureRevision 1),
       testCase "admission and fresh-connection reconstruction preserve the immutable snapshot" $
         withFixture fixture \env snapshot access -> do
           run env (Store.admitExecution snapshot) >>= (@?= Right R.AlreadyAccepted)
@@ -739,7 +739,7 @@ tests fixture =
           fresh <- expectRight =<< run restarted (Store.authorizeReplay snapshot.executionId snapshot.identity (pure (Right ())))
           (restored, state) <- expectRight =<< run restarted (Store.loadExecution fresh)
           restored @?= snapshot
-          state.cursor @?= 0
+          state.cursor @?= (fixtureRevision 0)
           state.phase @?= Active
           run env (Store.loadExecution access) >>= (@?= Right (snapshot, state)),
       testCase "wrong identity and revoked runtime cannot obtain replay access" $
@@ -750,7 +750,7 @@ tests fixture =
           assertBool "revoked identity refused" (case revoked of Left ReplayReadRefused -> True; _ -> False),
       testCase "inspection contains references and metadata without replay bodies" $
         withFixture fixture \env snapshot access -> do
-          (_, operation) <- expectRight =<< run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput)
+          (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
           readInput <- expectRight =<< run env (Store.readReplayPayload @Value access "operation-input" operation.input)
           readInput @?= secretInput
           metadata <- inspect env snapshot.executionId
@@ -772,22 +772,22 @@ tests fixture =
           inspect env huge.executionId >>= (@?= Nothing),
       testCase "identical accepted operations converge and changed requests conflict" $
         withFixture fixture \env snapshot access -> do
-          (admission, first) <- expectRight =<< run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput)
+          (admission, first) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
           admission @?= R.Accepted
-          run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput) >>= (@?= Right (R.AlreadyAccepted, first))
-          run env (Store.acceptOperation access 0 (spec snapshot 0) (object [])) >>= (@?= Left OperationConflict)
+          run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput) >>= (@?= Right (R.AlreadyAccepted, first))
+          run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) (object [])) >>= (@?= Left OperationConflict)
           snapshotRoot <- expectRight =<< run env (Roots.inspectRoot rootId)
           snapshotRoot.usage @?= R.emptyUsage,
       testCase "racing distinct proposals at one cursor admit exactly one immutable operation" $
         withFixture fixture \env snapshot access -> do
           (a, b) <-
             concurrently
-              (run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput))
-              (run env (Store.acceptOperation access 0 (spec snapshot 0) (object [])))
+              (run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput))
+              (run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) (object [])))
           assertBool "one accepted proposal" (isAccepted a /= isAccepted b)
           Just (state, _, operations) <- inspect env snapshot.executionId
-          state.revision @?= 1
-          state.cursor @?= 0
+          state.revision @?= (fixtureRevision 1)
+          state.cursor @?= (fixtureRevision 0)
           length operations @?= 1,
       testCase "bound execution identity preserves its private event JSON" do
         let event = Lifecycle.ExecutionAdvanced (Lifecycle.ExecutionAdvancedData (ExecutionId "fixture-execution") 1 2)
@@ -804,7 +804,7 @@ tests fixture =
         assertBool "silent lifecycle edge would need an explicit domain policy" (all emits edges),
       testCase "typed precondition and rebuild refusals roll back tentative lifecycle append" $
         withFixture fixture \env snapshot access -> do
-          (_, operation) <- expectRight =<< run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput)
+          (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
           before <- lifecycleCount env snapshot.executionId
           payloads <- payloadCount env snapshot.executionId
           let (catalog, projections) = ExecutionCatalog.withLiveExecution (\_ _ -> error "refused command reached inline writes")
@@ -819,7 +819,7 @@ tests fixture =
           payloadCount env snapshot.executionId >>= (@?= payloads)
           -- Exercise the production relational precondition: a model operation
           -- cannot accept a tool outcome, and the late hook must not run.
-          run env (Store.recordOutcomeAndAdvanceWith access 1 operation.specification.operationId (ToolReturned [] False) NeedModel Nothing (error "typed refusal reached late hook")) >>= (@?= Left OperationConflict)
+          run env (Store.recordOutcomeAndAdvanceWith access (fixtureRevision 1) operation.specification.operationId (ToolReturned [] False) NeedModel Nothing (error "typed refusal reached late hook")) >>= (@?= Left OperationConflict)
           lifecycleCount env snapshot.executionId >>= (@?= before)
           let request =
                 Rebuild.RebuildRequest
@@ -837,7 +837,7 @@ tests fixture =
           payloadCount env snapshot.executionId >>= (@?= payloads),
       testCase "fault after outcome writes rolls back payload cursor call facts and root settlement" $
         withFixture fixture \env snapshot access -> do
-          (_, operation) <- expectRight =<< run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput)
+          (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
           receipt <- reserveCall env snapshot operation
           before <- payloadCount env snapshot.executionId
           eventsBefore <- lifecycleCount env snapshot.executionId
@@ -847,20 +847,20 @@ tests fixture =
                 pure case root of
                   Right value | tentative && value.active == 0 && Map.lookup R.Tokens value.known == Just 3 -> Left ExecutionCommandRefused
                   _ -> Left CorruptReplay
-          run env (Store.recordOutcomeAndAdvanceWith access 1 operation.specification.operationId modelOutcome NeedModel (Just (receipt, terminal)) finalCheck) >>= (@?= Left ExecutionCommandRefused)
+          run env (Store.recordOutcomeAndAdvanceWith access (fixtureRevision 1) operation.specification.operationId modelOutcome NeedModel (Just (receipt, terminal)) finalCheck) >>= (@?= Left ExecutionCommandRefused)
           payloadCount env snapshot.executionId >>= (@?= before)
           lifecycleCount env snapshot.executionId >>= (@?= eventsBefore)
           Just pending <- inspectOperation env operation.specification.operationId
           pending.outcome @?= Nothing
           Just (state, _, _) <- inspect env snapshot.executionId
-          state.revision @?= 1
-          state.cursor @?= 0
+          state.revision @?= (fixtureRevision 1)
+          state.cursor @?= (fixtureRevision 0)
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
           root.active @?= 1
           root.known @?= Map.empty
-          run env (Store.recordOutcomeAndAdvance access 1 operation.specification.operationId modelOutcome NeedModel (Just (receipt, terminal))) >>= (@?= Right R.Accepted)
-          run env (Store.recordOutcomeAndAdvance access 1 operation.specification.operationId modelOutcome NeedModel (Just (receipt, terminal))) >>= (@?= Right R.AlreadyAccepted)
-          run env (Store.recordOutcomeAndAdvance access 1 operation.specification.operationId modelOutcome WorkFinished (Just (receipt, terminal))) >>= (@?= Left OperationConflict)
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId modelOutcome NeedModel (Just (receipt, terminal))) >>= (@?= Right R.Accepted)
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId modelOutcome NeedModel (Just (receipt, terminal))) >>= (@?= Right R.AlreadyAccepted)
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId modelOutcome WorkFinished (Just (receipt, terminal))) >>= (@?= Left OperationConflict)
           settled <- expectRight =<< run env (Roots.inspectRoot rootId)
           settled.active @?= 0
           settled.unknown @?= 1
@@ -868,37 +868,37 @@ tests fixture =
           Map.lookup R.Tokens settled.known @?= Just 3,
       testCase "root cancellation preserves accepted outcomes and prevents new logical work" $
         withFixture fixture \env snapshot access -> do
-          (_, operation) <- expectRight =<< run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput)
+          (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
           receipt <- reserveCall env snapshot operation
           run env (Roots.setRootControl rootId (fixtureRevision 0) True Nothing) >>= (@?= Right ())
-          run env (Store.recordOutcomeAndAdvance access 1 operation.specification.operationId modelOutcome NeedModel (Just (receipt, terminal))) >>= (@?= Right R.Accepted)
-          result <- run env (Store.acceptOperation access 2 (spec snapshot 1) secretInput)
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId modelOutcome NeedModel (Just (receipt, terminal))) >>= (@?= Right R.Accepted)
+          result <- run env (Store.acceptOperation access (fixtureRevision 2) (spec snapshot 1) secretInput)
           result @?= Left (ResourceAdmissionRefused "RootCancelled")
           Just (state, _, _) <- inspect env snapshot.executionId
-          state.revision @?= 2
-          state.cursor @?= 1,
+          state.revision @?= (fixtureRevision 2)
+          state.cursor @?= (fixtureRevision 1),
       testCase "unknown effects preserve reservations and cannot advance as known outcomes" $
         withFixture fixture \env snapshot access -> do
-          (_, operation) <- expectRight =<< run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput)
+          (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
           receipt <- reserveCall env snapshot operation
           let unknown = Calls.CallOutcome Calls.CallTransportUnknown Map.empty [R.Tokens, R.CostMicroUsd] Nothing Nothing Nothing
-          run env (Store.recordOutcomeAndAdvance access 1 operation.specification.operationId (OperationUnresolved "dispatch outcome unknown") NeedModel (Just (receipt, unknown))) >>= (@?= Right R.Accepted)
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId (OperationUnresolved "dispatch outcome unknown") NeedModel (Just (receipt, unknown))) >>= (@?= Right R.Accepted)
           Just (state, _, _) <- inspect env snapshot.executionId
           state.phase @?= Unresolved
-          state.cursor @?= 0
-          run env (Store.recordOutcomeAndAdvance access 2 operation.specification.operationId modelOutcome NeedModel (Just (receipt, terminal))) >>= (@?= Left OperationConflict)
+          state.cursor @?= (fixtureRevision 0)
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 2) operation.specification.operationId modelOutcome NeedModel (Just (receipt, terminal))) >>= (@?= Left OperationConflict)
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
           root.active @?= 1
           root.unknown @?= 1,
       testCase "a terminal result retains its protected outcome and converges after restart" $
         withFixture fixture \env snapshot access -> do
-          (_, operation) <- expectRight =<< run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput)
+          (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
           receipt <- reserveCall env snapshot operation
           outcomeRef <- expectRight (Store.outcomeReference modelOutcome)
-          run env (Store.recordOutcomeAndAdvance access 1 operation.specification.operationId modelOutcome (NeedValidation outcomeRef) (Just (receipt, terminal))) >>= (@?= Right R.Accepted)
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId modelOutcome (NeedValidation outcomeRef) (Just (receipt, terminal))) >>= (@?= Right R.Accepted)
           let output = object ["reply" .= ("accepted reply" :: Text)]
-          run env (Store.finishExecution access 2 output) >>= (@?= Right R.Accepted)
-          run env (Store.finishExecution access 2 output) >>= (@?= Right R.AlreadyAccepted)
+          run env (Store.finishExecution access (fixtureRevision 2) output) >>= (@?= Right R.Accepted)
+          run env (Store.finishExecution access (fixtureRevision 2) output) >>= (@?= Right R.AlreadyAccepted)
           fresh <- expectRight =<< run env (Store.authorizeReplay snapshot.executionId snapshot.identity (pure (Right ())))
           (_, state) <- expectRight =<< run env (Store.loadExecution fresh)
           state.phase @?= Succeeded
@@ -909,30 +909,30 @@ tests fixture =
           let snapshot = anotherSnapshot original "validated-output" & #policy . #output .~ NonemptyReply
           run env (Store.admitExecution snapshot) >>= (@?= Right R.Accepted)
           access <- expectRight =<< run env (Store.authorizeReplay snapshot.executionId snapshot.identity (pure (Right ())))
-          (_, operation) <- expectRight =<< run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput)
+          (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
           receipt <- reserveCall env snapshot operation
           let empty = ModelReturned (ReplayAssistant 1 [] Stop Nothing Nothing (object []) Nothing) Nothing
           ref <- expectRight (Store.outcomeReference empty)
-          run env (Store.recordOutcomeAndAdvance access 1 operation.specification.operationId empty (NeedValidation ref) (Just (receipt, terminal))) >>= (@?= Right R.Accepted)
-          run env (Store.finishExecution access 2 (object ["reply" .= ("invented replacement" :: Text)])) >>= (@?= Left ExecutionOutputInvalid)
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId empty (NeedValidation ref) (Just (receipt, terminal))) >>= (@?= Right R.Accepted)
+          run env (Store.finishExecution access (fixtureRevision 2) (object ["reply" .= ("invented replacement" :: Text)])) >>= (@?= Left ExecutionOutputInvalid)
           Just (state, _, _) <- inspect env snapshot.executionId
           state.phase @?= Active
           state.result @?= Nothing,
       testCase "output repair consumes a normal model turn and has an immutable ceiling" $
         withConfiguredFixture fixture (\snapshot -> snapshot & #policy . #output .~ NonemptyReply & #policy . #outputRepairs .~ 1) \env snapshot access -> do
-          (_, operation) <- expectRight =<< run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput)
+          (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
           receipt <- reserveCall env snapshot operation
           let invalid = ModelReturned (ReplayAssistant 1 [TextBlock ""] Stop Nothing Nothing (object []) Nothing) Nothing
           response <- expectRight (Store.outcomeReference invalid)
-          run env (Store.recordOutcomeAndAdvance access 1 operation.specification.operationId invalid (NeedValidation response) (Just (receipt, terminal))) >>= (@?= Right R.Accepted)
-          (_, repair) <- expectRight =<< run env (Store.acceptOperation access 2 (spec snapshot 1 & #kind .~ ModelRepair) secretInput)
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId invalid (NeedValidation response) (Just (receipt, terminal))) >>= (@?= Right R.Accepted)
+          (_, repair) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) (spec snapshot 1 & #kind .~ ModelRepair) secretInput)
           (_, state) <- expectRight =<< run env (Store.loadExecution access)
           state.repairs @?= 1
           state.modelTurns @?= 2
           retryReceipt <- reserveCall env snapshot repair
-          run env (Store.recordOutcomeAndAdvance access 3 repair.specification.operationId invalid (NeedValidation response) (Just (retryReceipt, terminal))) >>= (@?= Right R.Accepted)
-          run env (Store.acceptOperation access 4 (spec snapshot 2 & #kind .~ ModelRepair) secretInput) >>= (@?= Left ExecutionOutputInvalid)
-          run env (Store.acceptOperation access 4 (spec snapshot 2 & #kind .~ ModelSummary) secretInput) >>= (@?= Left (ExecutionPolicyRefused "model summaries are disabled"))
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 3) repair.specification.operationId invalid (NeedValidation response) (Just (retryReceipt, terminal))) >>= (@?= Right R.Accepted)
+          run env (Store.acceptOperation access (fixtureRevision 4) (spec snapshot 2 & #kind .~ ModelRepair) secretInput) >>= (@?= Left ExecutionOutputInvalid)
+          run env (Store.acceptOperation access (fixtureRevision 4) (spec snapshot 2 & #kind .~ ModelSummary) secretInput) >>= (@?= Left (ExecutionPolicyRefused "model summaries are disabled"))
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
           Map.lookup R.ModelAttempts root.usage.settled @?= Just 2
           Map.lookup R.Tokens root.usage.settled @?= Just 6,
@@ -941,12 +941,12 @@ tests fixture =
           let snapshot = anotherSnapshot original "one-turn" & #policy . #maxModelTurns .~ 1
           run env (Store.admitExecution snapshot) >>= (@?= Right R.Accepted)
           access <- expectRight =<< run env (Store.authorizeReplay snapshot.executionId snapshot.identity (pure (Right ())))
-          (_, operation) <- expectRight =<< run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput)
-          run env (Store.recordOutcomeAndAdvance access 1 operation.specification.operationId (OperationDenied "hard policy refused") NeedModel Nothing) >>= (@?= Right R.Accepted)
-          run env (Store.acceptOperation access 2 (spec snapshot 1) secretInput) >>= (@?= Left (ResourceAdmissionRefused "model-turn limit exhausted"))
+          (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId (OperationDenied "hard policy refused") NeedModel Nothing) >>= (@?= Right R.Accepted)
+          run env (Store.acceptOperation access (fixtureRevision 2) (spec snapshot 1) secretInput) >>= (@?= Left (ResourceAdmissionRefused "model-turn limit exhausted"))
           Just (state, _, operations) <- inspect env snapshot.executionId
           state.modelTurns @?= 1
-          state.cursor @?= 1
+          state.cursor @?= (fixtureRevision 1)
           length operations @?= 1,
       testCase "catalog fencing refuses replay inspection and operation admission" $
         withFixture fixture \env snapshot access -> do
@@ -960,7 +960,7 @@ tests fixture =
           _ <- expectRight =<< run env (Rebuild.beginGroupRebuild Catalog.validatedProjectionCatalog ExecutionCatalog.executionStoreRebuildGroupId request)
           run env (Store.loadExecution access) >>= (@?= Left ProjectionUnavailable)
           run env (Store.inspectExecution snapshot.executionId) >>= (@?= Left ProjectionUnavailable)
-          run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput) >>= (@?= Left ProjectionUnavailable)
+          run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput) >>= (@?= Left ProjectionUnavailable)
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
           root.usage @?= R.emptyUsage,
       testCase "corrupt protected replay fails before the runtime can obtain a context" $
@@ -1052,7 +1052,7 @@ nativeExecutorCase fixture billing = testCase (show billing <> " preserves rich 
     let binding = head snapshot.toolBindings
         input = ToolOperationInput response 0 (head (toolInvocations assistant)) binding
         specification = toolSpec snapshot 1 input
-    (_, operation) <- expectRight =<< run env (Store.acceptOperation access 2 specification (toJSON input))
+    (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
     invocations <- newIORef (0 :: Int)
     base <- newBehaviorEnv
     let tool = mkDynTool "observe" "Observe fixture." (object []) \_ -> do
@@ -1085,7 +1085,7 @@ nativeExecutorCase fixture billing = testCase (show billing <> " preserves rich 
         request = Store.toolAttemptRequest (AttemptId "native-tool-attempt") specification.operationId binding
         reference = Attempt.JobReference 1 snapshot.executionId specification.operationId request.attemptId
     run env (runTransaction (registerAwakeableTx UUID.nil "shikigami.execution" (executionWorkflowId snapshot.executionId).unWorkflowId))
-    _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access 3 (Attempt.AttemptSubmission request Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)) (\_ -> pure ()))
+    _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 3) (Attempt.AttemptSubmission request Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)) (\_ -> pure ()))
     Executor.executeAcceptedAttempt executor snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
     Executor.executeAcceptedAttempt executor snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
     readIORef invocations >>= (@?= 1)
@@ -1108,35 +1108,35 @@ nativeExecutorCase fixture billing = testCase (show billing <> " preserves rich 
 modelRecoveryCase :: DatabaseFixture -> Bool -> TestTree
 modelRecoveryCase fixture afterCompletion = testCase (if afterCompletion then "a late superseded model receipt settles after success without replacing output" else "a late superseded model receipt settles during active progress") $
   withConfiguredResourceFixture fixture id (Map.insert R.ActiveWork (R.Limited 2)) \env snapshot access -> do
-    (_, operation) <- expectRight =<< run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput)
+    (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
     let first = concurrentModelSubmission operation
         old = Attempt.JobReference 1 snapshot.executionId operation.specification.operationId first.request.attemptId
         second = first & #request . #attemptId .~ AttemptId "recovery-model-attempt"
         next = old & #attemptId .~ second.request.attemptId
         actual = terminalAttempt & #accounting .~ Just (terminal & #known .~ Map.fromList [(R.Tokens, 3), (R.CostMicroUsd, 0)] & #missing .~ [])
-    _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access 1 first (\_ -> pure ()))
-    former <- expectClaim =<< run env (Store.claimExecutionAttempt access 2 old "former-owner" 1)
-    run env (Store.startExecutionAttempt access 3 former) >>= (@?= Right R.Accepted)
+    _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 1) first (\_ -> pure ()))
+    former <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) old "former-owner" 1)
+    run env (Store.startExecutionAttempt access (fixtureRevision 3) former) >>= (@?= Right R.Accepted)
     threadDelay 1100000
-    run env (Store.markExecutionAttemptUncertain access 4 former) >>= (@?= Right R.Accepted)
-    _ <- expectRight =<< run env (Store.recoverExecutionAttemptWith access 5 old.attemptId second (\_ -> pure ()))
+    run env (Store.markExecutionAttemptUncertain access (fixtureRevision 4) former) >>= (@?= Right R.Accepted)
+    _ <- expectRight =<< run env (Store.recoverExecutionAttemptWith access (fixtureRevision 5) old.attemptId second (\_ -> pure ()))
     -- Identical admission observes the same accepted replacement, even with a
     -- stale revision. It cannot enqueue or reserve another actual attempt.
-    duplicate <- run env (Store.recoverExecutionAttemptWith access 5 old.attemptId second (\_ -> error "duplicate recovery enqueued"))
+    duplicate <- run env (Store.recoverExecutionAttemptWith access (fixtureRevision 5) old.attemptId second (\_ -> error "duplicate recovery enqueued"))
     case duplicate of Right (R.AlreadyAccepted, _) -> pure (); other -> assertFailure (show other)
     (_, reopened) <- expectRight =<< run env (Store.loadExecution access)
     reopened.phase @?= Active
     reopened.pendingReceipts @?= 1
-    reopened.cursor @?= 0
+    reopened.cursor @?= (fixtureRevision 0)
     root <- expectRight =<< run env (Roots.inspectRoot rootId)
     root.active @?= 2
     root.unknown @?= 1
-    run env (Store.claimExecutionAttempt access 6 old "stale-delivery" 60) >>= (@?= Right Attempt.AttemptFinished)
+    run env (Store.claimExecutionAttempt access (fixtureRevision 6) old "stale-delivery" 60) >>= (@?= Right Attempt.AttemptFinished)
     run env (Store.publishExecutionWake old) >>= (@?= Right ())
-    replacement <- expectClaim =<< run env (Store.claimExecutionAttempt access 6 next "replacement-owner" 60)
-    run env (Store.startExecutionAttempt access 7 replacement) >>= (@?= Right R.Accepted)
-    run env (Store.completeExecutionAttempt access 8 replacement actual) >>= (@?= Right R.Accepted)
-    when afterCompletion (run env (Store.finishExecution access 9 (object ["reply" .= ("accepted reply" :: Text)])) >>= (@?= Right R.Accepted))
+    replacement <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 6) next "replacement-owner" 60)
+    run env (Store.startExecutionAttempt access (fixtureRevision 7) replacement) >>= (@?= Right R.Accepted)
+    run env (Store.completeExecutionAttempt access (fixtureRevision 8) replacement actual) >>= (@?= Right R.Accepted)
+    when afterCompletion (run env (Store.finishExecution access (fixtureRevision 9) (object ["reply" .= ("accepted reply" :: Text)])) >>= (@?= Right R.Accepted))
     (_, before) <- expectRight =<< run env (Store.loadExecution access)
     let different = actual & #outcome .~ ModelReturned (ReplayAssistant 1 [TextBlock "late former reply"] Stop Nothing Nothing (object []) Nothing) Nothing
     run env (Store.completeExecutionAttempt access before.revision former different) >>= (@?= Left AttemptClaimLost)
@@ -1159,17 +1159,17 @@ modelRecoveryCase fixture afterCompletion = testCase (if afterCompletion then "a
 recoveryCapacityCase :: DatabaseFixture -> TestTree
 recoveryCapacityCase fixture = testCase "a refused recovery preserves the unknown attempt and its held capacity" $
   withConfiguredResourceFixture fixture id (Map.insert R.ActiveWork (R.Limited 1)) \env snapshot access -> do
-    (_, operation) <- expectRight =<< run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput)
+    (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
     let first = concurrentModelSubmission operation
         old = Attempt.JobReference 1 snapshot.executionId operation.specification.operationId first.request.attemptId
         second = first & #request . #attemptId .~ AttemptId "refused-recovery-attempt"
-    _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access 1 first (\_ -> pure ()))
-    former <- expectClaim =<< run env (Store.claimExecutionAttempt access 2 old "former-owner" 1)
-    run env (Store.startExecutionAttempt access 3 former) >>= (@?= Right R.Accepted)
+    _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 1) first (\_ -> pure ()))
+    former <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) old "former-owner" 1)
+    run env (Store.startExecutionAttempt access (fixtureRevision 3) former) >>= (@?= Right R.Accepted)
     threadDelay 1100000
-    run env (Store.markExecutionAttemptUncertain access 4 former) >>= (@?= Right R.Accepted)
+    run env (Store.markExecutionAttemptUncertain access (fixtureRevision 4) former) >>= (@?= Right R.Accepted)
     (_, before) <- expectRight =<< run env (Store.loadExecution access)
-    refused <- run env (Store.recoverExecutionAttemptWith access 5 old.attemptId second (\_ -> error "refused recovery enqueued"))
+    refused <- run env (Store.recoverExecutionAttemptWith access (fixtureRevision 5) old.attemptId second (\_ -> error "refused recovery enqueued"))
     case refused of Left ResourceAdmissionRefused {} -> pure (); other -> assertFailure (show other)
     (_, after) <- expectRight =<< run env (Store.loadExecution access)
     after @?= before
@@ -1192,7 +1192,7 @@ toolRecoveryCase fixture recovery = testCase (show recovery <> " retains its log
         first = Attempt.JobReference 1 snapshot.executionId specification.operationId firstRequest.attemptId
         second = first & #attemptId .~ secondRequest.attemptId
         submission request = Attempt.AttemptSubmission request Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)
-    _ <- expectRight =<< run env (Store.acceptOperation access 2 specification (toJSON input))
+    _ <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
     acceptedMessages <- newIORef (Map.empty :: Map.Map Text Text)
     keys <- newIORef ([] :: [Text])
     base <- newBehaviorEnv
@@ -1217,11 +1217,11 @@ toolRecoveryCase fixture recovery = testCase (show recovery <> " retains its log
             )
             5
     run env (runTransaction (registerAwakeableTx UUID.nil "shikigami.execution" (executionWorkflowId snapshot.executionId).unWorkflowId))
-    _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access 3 (submission firstRequest) (\_ -> pure ()))
+    _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 3) (submission firstRequest) (\_ -> pure ()))
     Executor.executeAcceptedAttempt executor snapshot.identity first >>= (@?= Right Executor.ExecutorDone)
     (_, unknown) <- expectRight =<< run env (Store.loadExecution access)
     unknown.phase @?= Unresolved
-    unknown.cursor @?= 1
+    unknown.cursor @?= (fixtureRevision 1)
     Just old <- expectRight =<< run env (Store.inspectExecutionAttempt first.attemptId)
     let former = Attempt.AttemptClaim first (fromMaybe "missing-owner" old.owner) old.generation
     proposed <- run env (Store.recoverExecutionAttemptWith access unknown.revision first.attemptId (submission secondRequest) (\_ -> pure ()))
@@ -1242,7 +1242,7 @@ toolRecoveryCase fixture recovery = testCase (show recovery <> " retains its log
         messages <- readIORef acceptedMessages
         Map.size messages @?= 1
         (_, chosen) <- expectRight =<< run env (Store.loadExecution access)
-        chosen.cursor @?= 2
+        chosen.cursor @?= (fixtureRevision 2)
         chosen.pendingReceipts @?= 1
         let late = Attempt.AttemptResult (ToolReturned [TextBlock "opaque-accepted-message"] False) (NeedTool response 1) Nothing
         run env (Store.recordLateExecutionReceipt access chosen.revision former late) >>= (@?= Right R.Accepted)
@@ -1269,9 +1269,9 @@ terminalAttempt = Attempt.AttemptResult modelOutcome (NeedValidation (mustRight 
 
 withPreparedModel :: DatabaseFixture -> (AppEnv -> ExecutionSnapshot -> Store.ReplayAccess -> Operation -> Attempt.JobReference -> IO a) -> IO a
 withPreparedModel fixture use = withFixture fixture \env snapshot access -> do
-  (_, operation) <- expectRight =<< run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput)
+  (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
   let submission = modelSubmission operation
-  _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access 1 submission (\_ -> pure ()))
+  _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 1) submission (\_ -> pure ()))
   use env snapshot access operation (Attempt.JobReference 1 snapshot.executionId operation.specification.operationId submission.request.attemptId)
 
 expectClaim :: Either ExecutionError Attempt.ClaimResult -> IO Attempt.AttemptClaim
@@ -1287,19 +1287,19 @@ toolConfiguration :: ExecutionSnapshot -> ExecutionSnapshot
 toolConfiguration snapshot = snapshot & #toolBindings .~ [observationBinding] & #offeredTools .~ toJSON [BaikaiTool.mkTool "observe" "Observe fixture." (object [])]
 
 toolSpec :: ExecutionSnapshot -> Integer -> ToolOperationInput -> OperationSpec
-toolSpec snapshot cursor input = OperationSpec (operationIdFor snapshot.executionId cursor) ToolOperation input.binding.recovery input.binding.name (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) (toolScopeDigest input.binding) (Just input.position)
+toolSpec snapshot cursor input = OperationSpec (operationIdFor snapshot.executionId (fixtureRevision cursor)) ToolOperation input.binding.recovery input.binding.name (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) (toolScopeDigest input.binding) (Just input.position)
 
 commitToolRequest :: AppEnv -> ExecutionSnapshot -> Store.ReplayAccess -> IO (PayloadRef, ReplayAssistant)
 commitToolRequest = commitToolRequestWith terminal
 
 commitToolRequestWith :: Calls.CallOutcome -> AppEnv -> ExecutionSnapshot -> Store.ReplayAccess -> IO (PayloadRef, ReplayAssistant)
 commitToolRequestWith callOutcome env snapshot access = do
-  (_, operation) <- expectRight =<< run env (Store.acceptOperation access 0 (spec snapshot 0) secretInput)
+  (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
   receipt <- reserveCall env snapshot operation
   let assistant = ReplayAssistant 1 [ToolBlock (ToolInvocation "first" "observe" (object [])), ToolBlock (ToolInvocation "second" "observe" (object []))] ToolUse Nothing Nothing (object []) Nothing
       outcome = ModelReturned assistant Nothing
   ref <- expectRight (Store.outcomeReference outcome)
-  run env (Store.recordOutcomeAndAdvance access 1 operation.specification.operationId outcome (NeedTool ref 0) (Just (receipt, callOutcome))) >>= (@?= Right R.Accepted)
+  run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId outcome (NeedTool ref 0) (Just (receipt, callOutcome))) >>= (@?= Right R.Accepted)
   pure (ref, assistant)
 
 rootId :: ExecutionRootId
@@ -1315,7 +1315,7 @@ terminal :: Calls.CallOutcome
 terminal = Calls.CallOutcome Calls.CallTerminal (Map.singleton R.Tokens 3) [R.CostMicroUsd] (Just "served-model") (Just "provider-call") Nothing
 
 spec :: ExecutionSnapshot -> Integer -> OperationSpec
-spec snapshot cursor = OperationSpec (operationIdFor snapshot.executionId cursor) ModelTurn RepeatableObservation "model" (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) "scope-digest" Nothing
+spec snapshot cursor = OperationSpec (operationIdFor snapshot.executionId (fixtureRevision cursor)) ModelTurn RepeatableObservation "model" (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) "scope-digest" Nothing
 
 reserveCall :: AppEnv -> ExecutionSnapshot -> Operation -> IO Calls.CallReceipt
 reserveCall env snapshot operation = do
