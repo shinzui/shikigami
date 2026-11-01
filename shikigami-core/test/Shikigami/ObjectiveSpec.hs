@@ -4,11 +4,13 @@ module Shikigami.ObjectiveSpec (tests) where
 
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
+import Data.Either (isLeft)
 import Data.Generics.Labels ()
 import Data.Text qualified
 import Data.Time (UTCTime (..), fromGregorian)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
+import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
 import Shikigami.Objective.Acceptance
@@ -22,7 +24,31 @@ tests :: TestTree
 tests =
   testGroup
     "Objectives"
-    [ testCase "objective identity admits only its canonical TypeID-v7 domain" do
+    [ testCase "objective boolean roles retain their original wire bytes" do
+        forM_ [(Aeson.encode JourneyOptional, "false"), (Aeson.encode JourneyRequired, "true"), (Aeson.encode NoJourney, "false"), (Aeson.encode JourneyObserved, "true"), (Aeson.encode ObjectivesDisabled, "false"), (Aeson.encode ObjectivesEnabled, "true"), (Aeson.encode Unblocked, "false"), (Aeson.encode IsBlocked, "true")] (uncurry (@?=))
+        Aeson.fromJSON (Aeson.Bool True) @?= Aeson.Success JourneyObserved
+        assertBool "text is not a journey flag" (case Aeson.fromJSON (Aeson.String "true") :: Aeson.Result JourneyEvidence of Aeson.Error _ -> True; _ -> False),
+      testCase "objective origins retain exact historical encoder bytes and native execution identity" do
+        forM_
+          [ "{\"executionId\":\"recorded-execution\",\"operationId\":\"accepted-operation\",\"runId\":\"recorded-run\",\"tag\":\"ExecutionOrigin\"}",
+            "{\"conversationId\":\"conversation\",\"operationId\":\"accepted-operation\",\"runId\":\"recorded-run\",\"tag\":\"ConversationOrigin\",\"turnId\":\"turn\"}",
+            "{\"generation\":0,\"label\":\"step\",\"operationId\":\"accepted-operation\",\"tag\":\"FlowOrigin\",\"workflowId\":\"legacy:owner\"}"
+          ]
+          \bytes -> do
+            origin <- either assertFailure pure (Aeson.eitherDecode bytes :: Either String CreationOrigin)
+            Aeson.encode origin @?= bytes,
+      testCase "objective commitments keep their exact producer recipes and reject malformed text" do
+        let value = Aeson.String "payload"
+        mutationFingerprintText (creationFingerprint value) @?= versionedDigest "shikigami.objective-create/1" value
+        mutationFingerprintText (commandFingerprint value) @?= versionedDigest "shikigami.objective-command/1" value
+        objectivePayloadDigestText (objectivePayloadDigest value) @?= versionedDigest "shikigami.objective-payload/1" value
+        assignmentDigestText (assignmentDigestFor value) @?= versionedDigest "shikigami.objective-assignment-meaning/1" value
+        forM_ ["", "sha256:label", "sha256:" <> Data.Text.replicate 64 "A"] \raw -> do
+          assertBool "fingerprint refused" (isLeft (parseMutationFingerprint raw))
+          assertBool "payload digest refused" (isLeft (parseObjectivePayloadDigest raw))
+          assertBool "assignment digest refused" (isLeft (parseAssignmentDigest raw))
+        Aeson.fromJSON (Aeson.toJSON (creationFingerprint value)) @?= Aeson.Success (creationFingerprint value),
+      testCase "objective identity admits only its canonical TypeID-v7 domain" do
         let canonical = "shikigami_objective_01h455vb4pex5vsknk084sn02q"
         identifier <- either (assertFailure . show) pure (parseObjectiveId canonical)
         objectiveIdText identifier @?= canonical
@@ -74,7 +100,7 @@ tests =
         forM_ ["IngestCheckpoint", "TransferOwnership"] \tag ->
           assertBool "private command refused" (case Aeson.fromJSON (Aeson.object ["tag" .= (tag :: Text)]) :: Aeson.Result Command of Aeson.Error _ -> True; _ -> False),
       testCase "criteria require unique, nonempty structured keys" do
-        validateCriteria [Criterion (criterionKey "build") (description "build passes") Automatic False] @?= Right ()
+        validateCriteria [Criterion (criterionKey "build") (description "build passes") Automatic JourneyOptional] @?= Right ()
         assertBool "empty criteria refused" (validateCriteria [] /= Right ())
         assertBool "duplicate criteria refused" (validateCriteria [criterion, criterion] /= Right ()),
       testCase "acceptance rejects stale instructions, missing journey and child success alone" do
@@ -82,15 +108,15 @@ tests =
         validateAcceptance (objective & #instructionsRevision .~ revision 1) proposal @?= Left ObjectiveConflict
         validateAcceptance (objective & #evidence .~ []) proposal @?= Left ObjectiveInvalidEvidence
         validateAcceptance (objective & #assignments .~ [assignment & #instructionsRevision .~ revision 2]) proposal @?= Left ObjectiveInvalidEvidence
-        validateAcceptance (objective & #evidence .~ [evidence & #verification .~ EvidenceVerification CheckFailed (Just (criterionKey "human")) False]) proposal @?= Left ObjectiveInvalidEvidence
-        validateAcceptance (objective & #criteria .~ [criterion & #journeyRequired .~ True]) proposal @?= Left ObjectiveInvalidEvidence
+        validateAcceptance (objective & #evidence .~ [evidence & #verification .~ EvidenceVerification CheckFailed (Just (criterionKey "human")) NoJourney]) proposal @?= Left ObjectiveInvalidEvidence
+        validateAcceptance (objective & #criteria .~ [criterion & #journeyRequired .~ JourneyRequired]) proposal @?= Left ObjectiveInvalidEvidence
     ]
   where
-    criterion = Criterion (criterionKey "human") (description "integrated user journey") HumanVerifiable False
-    actor = VerifiedCaller "fixture"
+    criterion = Criterion (criterionKey "human") (description "integrated user journey") HumanVerifiable JourneyOptional
+    actor = VerifiedCaller (caller "fixture")
     proposal = CompletionProposal (revision 0) (revision 0) (revision 0) [artifact "artifact"] [evidenceKey "check"] []
     assignment = Assignment (draft "a" [] & #state .~ Done) initialRevision initialRevision initialRevision []
-    evidence = Evidence (Attestation (evidenceKey "check") (criterionKey "human") (artifact "artifact") (statement "reviewed") False) (EvidenceVerification CheckPassed (Just (criterionKey "human")) False) (objectiveAssignment "a") (assignmentMeaning assignment) actor initialRevision initialRevision initialRevision
+    evidence = Evidence (Attestation (evidenceKey "check") (criterionKey "human") (artifact "artifact") (statement "reviewed") NoJourney) (EvidenceVerification CheckPassed (Just (criterionKey "human")) NoJourney) (objectiveAssignment "a") (assignmentMeaning assignment) actor initialRevision initialRevision initialRevision
     objective = Objective (either (error . show) id (parseObjectiveId "shikigami_objective_01h455vb4pex5vsknk084sn02q")) actor [Member actor [Owner]] (title "title") (goal "goal") (instructions "instructions") (revision 1) initialRevision initialRevision [criterion] Open [assignment] [evidence] [] [] [] [] [] (Just (proposal, actor)) Nothing
 
 draft :: Text -> [ObjectiveAssignmentId] -> AssignmentDraft
@@ -137,3 +163,6 @@ limitation = either (error . show) id . parseCompletionLimitation
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+caller :: Text -> CallerId
+caller = either (error . show) id . parseCallerId

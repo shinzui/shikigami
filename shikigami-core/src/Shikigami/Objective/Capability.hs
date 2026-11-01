@@ -48,7 +48,7 @@ admit host label semantic = do
     authenticated <- host.authenticate
     case authenticated of
       Left err -> pure (Left err)
-      Right actor | host.settings.enabled && validPrincipal actor -> do
+      Right actor | host.settings.enabled == ObjectivesEnabled && validPrincipal actor -> do
         exact <- case actor of
           RecordedAgent identity -> case (identityText identity, mkCapabilityToolTarget "shikigami.objectives" "1" (label <> "-" <> Text.replace ":" "-" (versionedDigest "shikigami.objective-action/1" semantic))) of
             (Right principal, Right target) -> host.actions.authorize principal (InvokeCapabilityTool target) <&> either (const (Left ObjectiveDenied)) (const (Right ()))
@@ -104,7 +104,7 @@ execute host objective expected operation command = do
             internal <- case command of Public _ -> pure (Right ()); Internal value -> host.verifyInternal access.actor value
             evidence <- forM (evidenceInputs command) \input -> case input of
               Attestation {} -> pure (Right (input, EvidenceVerification CheckPassed (Just input.criterion) input.journey))
-              ResultEvidence {result = WorkerResult receipt _} -> pure (Right (input, EvidenceVerification (if receipt.disposition == WS.AssignmentSucceeded then ResultObserved else CheckFailed) Nothing False))
+              ResultEvidence {result = WorkerResult receipt _} -> pure (Right (input, EvidenceVerification (if receipt.disposition == WS.AssignmentSucceeded then ResultObserved else CheckFailed) Nothing NoJourney))
               ResultEvidence {result} -> fmap (input,) <$> host.verifyResult result
             pure (internal >> sequence evidence)
           case checked of

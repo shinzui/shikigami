@@ -17,13 +17,13 @@ data Command
   | RecordProgress !ObjectiveAssignmentId !AssignmentState ![DecisionNote] ![AssumptionNote]
   | RecordEvidence !ObjectiveAssignmentId !EvidenceInput
   | SetNextAction ![NextAction]
-  | SetBlocked !Bool
+  | SetBlocked !BlockState
   | ProposeCompletion !CompletionProposal
   | AcceptCompletion
   | CancelObjective
   | GrantMember !AccessPrincipal ![Role]
   | RevokeMember !AccessPrincipal
-  | BindConversation !Text
+  | BindConversation !ConversationRef
   | LinkExternal !ExternalReference
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON)

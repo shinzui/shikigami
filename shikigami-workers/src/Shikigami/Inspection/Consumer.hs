@@ -17,7 +17,7 @@ import Shibuya.Metrics.Config qualified as Metrics
 import Shibuya.Metrics.Server (combinedApp)
 import Shibuya.Metrics.WebSocket (newWebSocketState, shutdownWebSockets)
 import Shikigami.Inspection.Runtime (withInspectionRuntime)
-import Shikigami.Inspection.Settings (InspectionSettings (..))
+import Shikigami.Inspection.Settings (InspectionSettings (..), MutationAccess (..), inspectionHostText, inspectionLimitInt, inspectionOriginText, inspectionPortInt)
 import Shikigami.Log qualified as Log
 
 newtype ConsumerInspection = ConsumerInspection
@@ -29,18 +29,18 @@ consumerInspection _ Nothing _ _ _ _ = ConsumerInspection (\_ action -> action)
 consumerInspection staleAfter settings@(Just selected) logger connection store metrics = ConsumerInspection \master action -> do
   let config =
         Metrics.defaultConfig
-          { Metrics.wsMaxConnections = selected.maxConnections,
-            Metrics.wsMaxSubscriptions = selected.maxViews,
-            Metrics.wsMaxQueuedFrames = selected.maxQueuedFrames,
-            Metrics.wsMaxQueuedBytes = selected.maxQueuedBytes,
-            Metrics.wsSendTimeoutUs = selected.deliveryDeadlineSeconds * 1000000,
-            Metrics.wsPushIntervalUs = selected.refreshMillis * 1000,
-            Metrics.corsAllowedOrigins = selected.allowedOrigins,
+          { Metrics.wsMaxConnections = (inspectionLimitInt selected.maxConnections),
+            Metrics.wsMaxSubscriptions = (inspectionLimitInt selected.maxViews),
+            Metrics.wsMaxQueuedFrames = (inspectionLimitInt selected.maxQueuedFrames),
+            Metrics.wsMaxQueuedBytes = (inspectionLimitInt selected.maxQueuedBytes),
+            Metrics.wsSendTimeoutUs = (inspectionLimitInt selected.deliveryDeadlineSeconds) * 1000000,
+            Metrics.wsPushIntervalUs = (inspectionLimitInt selected.refreshMillis) * 1000,
+            Metrics.corsAllowedOrigins = (map inspectionOriginText selected.allowedOrigins),
             Metrics.stuckThreshold = staleAfter
           }
   -- Control remains disabled; enabling Keiro mutations grants no processor
   -- pause authority. No second Shibuya app, adapter or consumer is allocated.
-  bracket (newWebSocketState selected.maxConnections) shutdownWebSockets \state ->
+  bracket (newWebSocketState (inspectionLimitInt selected.maxConnections)) shutdownWebSockets \state ->
     withInspectionRuntime settings logger connection store metrics [MountedSurface shibuyaPrefix (combinedApp config master state [])] (const action)
 
 withConsumerInspection :: (IOE :> es) => ConsumerInspection -> Master -> Eff es a -> Eff es a

@@ -233,8 +233,18 @@ Git fixture deadline contention (FRIC-38); the acceptance command below reflects
 that constraint without changing runtime timeouts. No runtime source is changed.
 The full build and refreshed 325-module/940-declaration census pass; all 4,060 keys have fresh source/build/tool hashes.
 Resolved-only acceptance still correctly refuses 493 violations.
-M2/M3 remain open with unchanged acceptance criteria; see the latest acceptance
-note. The remaining findings are neither resolved nor reclassified.
+M2/M3 retain their zero-violation acceptance criteria. The user clarified that
+avoiding over-engineering means batching straightforward nominal wrappers and
+reusing native types, without accepting the remaining findings as debt.
+
+The next source candidate addresses all 28 Objective and 19 inspection-setting
+findings in one batch. It retains native ExecutionId/WorkflowId, distinct caller,
+operator and foreign reference types, typed computed commitments, closed boolean
+roles, scoped inspection quantities and separate credential roles. It passes
+621 core unit, 95 server and 27 Objective PostgreSQL cases plus 177 public
+compiler controls. The old origin encoder supplied exact byte goldens. Complete
+build/census reconciliation follows; the recorded 493-key baseline inventory
+has not yet been refreshed to this candidate.
 
 ## Surprises & Discoveries
 

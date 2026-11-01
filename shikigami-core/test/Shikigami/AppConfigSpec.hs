@@ -55,11 +55,13 @@ import Settei.Optparse (CliOverride, cliOverride, cliSources)
 import Settei.Yaml (decodeYamlSource, yamlSourceOptions)
 import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa, ViaKizashi))
 import Shikigami.Agent.Decl (delegationBudgetNatural)
+import Shikigami.Agent.Principal (principalText)
 import Shikigami.App.Config
 import Shikigami.App.Config.Load
 import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
 import Shikigami.Execution.Policy.Types qualified as Harness
-import Shikigami.Objective.Types (ObjectiveSettings (..), defaultObjectiveSettings)
+import Shikigami.Inspection.Settings qualified as Inspection
+import Shikigami.Objective.Types (ObjectiveService (..), ObjectiveSettings (..), defaultObjectiveSettings, parseOperatorId)
 import Shikigami.PracticeReview.Capability (renderAttentionRecipientMap)
 import Shikigami.Sink.Auth (TokenSource (..), credentialToken, matchesBearerHeader, staticTokenSource)
 import Shikigami.Sink.Permission (SinkKind (..))
@@ -316,10 +318,10 @@ precedenceTests =
         config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_INSPECTION", supplied)]
         case config.inspection of
           Just selected -> do
-            selected.host @?= "127.0.0.1"
-            selected.port @?= 9092
-            selected.mutationsEnabled @?= False
-            selected.maxConcurrentReads @?= 4
+            Inspection.inspectionHostText selected.host @?= "127.0.0.1"
+            Inspection.inspectionPortInt selected.port @?= 9092
+            selected.mutationsEnabled @?= Inspection.InspectionReadOnly
+            Inspection.inspectionLimitInt selected.maxConcurrentReads @?= 4
           Nothing -> assertFailure "inspection profile absent"
         let report = runWith (diagnosticOptions ExplainJson) [] [("SHIKIGAMI_INSPECTION", supplied)]
         report.exitCode @?= 0
@@ -977,12 +979,12 @@ objectiveConfigurationTests =
         defaultAppConfig.objectiveSettings @?= defaultObjectiveSettings,
       testCase "explicit recorded creation grants resolve without providers" do
         config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_OBJECTIVES", "{\"enabled\":true,\"operator\":\"local-admin\",\"agentCreation\":[\"agent_worker\"]}")]
-        config.objectiveSettings.enabled @?= True
-        config.objectiveSettings.operator @?= Just "local-admin"
-        config.objectiveSettings.agentCreation @?= ["agent_worker"],
+        config.objectiveSettings.enabled @?= ObjectivesEnabled
+        fmap (\v -> either (error . show) id (parseOperatorId v)) (Just "local-admin") @?= config.objectiveSettings.operator
+        map principalText config.objectiveSettings.agentCreation @?= ["agent_worker"],
       testCase "disabled tracking remains disabled with grants" do
         config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_OBJECTIVES", "{\"enabled\":false,\"agentCreation\":[\"agent_worker\"]}")]
-        config.objectiveSettings.enabled @?= False,
+        config.objectiveSettings.enabled @?= ObjectivesDisabled,
       testCase "invalid operator and unrecorded creation identities fail loader" do
         forM_ ["{\"enabled\":true,\"operator\":\"\"}", "{\"agentCreation\":[\"worker\"]}", "{\"administration\":\"AdministerAll\"}"] \value ->
           (runWith (diagnosticOptions CheckConfig) [] [("SHIKIGAMI_OBJECTIVES", value)]).exitCode @?= resolutionExitCode

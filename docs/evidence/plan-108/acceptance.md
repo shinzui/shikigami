@@ -1406,3 +1406,40 @@ All source path/hash pairs are unchanged from the previous census; only compiled
 artifact bindings are refreshed. Normal classification acceptance passes all
 4,060 keys with fresh source/build/tool hashes. Resolved-only acceptance exits 1
 with `unresolved violations: 493`, as required. No disposition is relaxed.
+
+
+## Batched Objective and inspection values (2026-11-01)
+
+The source candidate addresses all 28 Objective and 19 inspection-setting
+findings together. Objective retains native ExecutionId and WorkflowId; private
+nominal wrappers separate caller/operator identities, foreign references and
+computed commitment roles. Explicit boolean domains preserve the old JSON bools.
+Inspection uses scoped nominal quantities and credentials, typed host/port/origin
+values and explicit mutation policy. Renderers lower only at existing library,
+SQL and codec adapters. No Num/IsString/Generic escape hatch or dependency is added.
+
+The old compiled CreationOrigin encoder supplied three exact goldens, including
+`legacy:owner`; all retain identical bytes. The four computed Objective digest
+recipes keep their original domains and inputs. Malformed retained receipt JSON
+commitments and relational fingerprints refuse owning reads and retries without
+advancing events or creating replacement objectives, and recover the original
+receipts after exact repair. Invalid historical values are not rewritten.
+
+On arm64 macOS/GHC 9.12.4 the candidate passes 621 core unit cases, 95 server
+cases (including real inspection HTTP/socket admission and bounds), 27 Objective
+PostgreSQL cases and 177 public compiler controls. The compiler suite includes
+raw/coercion/Generic refusal, separate inspection token/quantity scopes, distinct
+Objective caller/operator and commitment roles, and distinct boolean domains.
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-test shikigami-core-postgres-test -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/Objectives/||/ObjectiveStore/||/AppConfig/'
+nix develop --no-write-lock-file -c cabal test shikigami-core-test shikigami-server-test -j1 --test-show-details=direct --test-option=--num-threads=1
+nix develop --no-write-lock-file -c python3 tests/types/opaque-values.py
+```
+
+The first filter selected 12 Objective unit and 27 PostgreSQL cases; AppConfig
+is covered by the complete 621-case core run. The library/inspection/worker build
+passes. A coherent full build and source/interface census reconciliation remains
+necessary before renewing inventory freshness; this is a tested source candidate,
+not final exhaustive acceptance. No workflow body, identity recipe, schema, HTTP
+wire representation or Linux qualification is changed by this batch.

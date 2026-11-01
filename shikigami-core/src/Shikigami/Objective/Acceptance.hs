@@ -4,7 +4,6 @@ module Shikigami.Objective.Acceptance (validateAcceptance, validateGraph, valida
 
 import Data.List (find, nub)
 import Shikigami.Agent.Principal (identityText)
-import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Objective.Types
 import Shikigami.Prelude
 
@@ -33,8 +32,8 @@ evidenceArtifact = \case
   ResultEvidence {result} -> case result of WorkerResult {artifact} -> artifact; RetainedResult {artifact} -> artifact
   Attestation {artifact} -> artifact
 
-assignmentMeaning :: Assignment -> Text
-assignmentMeaning assignment = versionedDigest "shikigami.objective-assignment-meaning/1" (toJSON (assignment.instructionsRevision, assignment.definition.instructions, assignment.definition.dependencies, assignment.definition.owner, assignment.ownerEpoch, assignment.definition.rootId, assignment.definition.cutoff))
+assignmentMeaning :: Assignment -> AssignmentDigest
+assignmentMeaning assignment = assignmentDigestFor (toJSON (assignment.instructionsRevision, assignment.definition.instructions, assignment.definition.dependencies, assignment.definition.owner, assignment.ownerEpoch, assignment.definition.rootId, assignment.definition.cutoff))
 
 validateAcceptance :: Objective -> CompletionProposal -> Either ObjectiveError ()
 validateAcceptance objective proposal = do
@@ -58,6 +57,6 @@ validateAcceptance objective proposal = do
           (Automatic, ResultEvidence {}) -> True
           (HumanVerifiable, Attestation {}) -> True
           _ -> False
-    unless (any correctKind checks && (not criterion.journeyRequired || any (\e -> correctKind e && e.input.journey && e.verification.journey) checks)) invalid
+    unless (any correctKind checks && (criterion.journeyRequired == JourneyOptional || any (\e -> correctKind e && e.input.journey == JourneyObserved && e.verification.journey == JourneyObserved) checks)) invalid
   where
     invalid = Left ObjectiveInvalidEvidence

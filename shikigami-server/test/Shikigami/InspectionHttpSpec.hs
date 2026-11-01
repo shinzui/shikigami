@@ -1,4 +1,4 @@
-module Shikigami.InspectionHttpSpec (tests, withFixture, profile, readCredential, request, Result (..), field) where
+module Shikigami.InspectionHttpSpec (tests, withFixture, profile, inspectionLimit, readCredential, request, Result (..), field) where
 
 import Control.Concurrent.Async qualified as Async
 import Control.Concurrent.MVar
@@ -49,7 +49,7 @@ import Shikigami.Execution.Transcript (ExecutionId (..))
 import Shikigami.ExecutionLifecycle.Generated.Domain qualified as Execution
 import Shikigami.ExecutionLifecycle.Generated.EventStream (executionLifecycleCategory, executionLifecycleEventStream)
 import Shikigami.Inspection.Runtime (InspectionRuntime (..), withInspectionRuntime)
-import Shikigami.Inspection.Settings (InspectionSettings (..))
+import Shikigami.Inspection.Settings (InspectionLimit, InspectionSettings (..), parseInspectionLimit)
 import Shikigami.Inspection.Store (withObservedStore)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
@@ -174,7 +174,7 @@ tests fixture =
               ["health"] -> (putMVar entered () >> takeMVar release >> respond (Wai.responseLBS status200 [(hContentType, "application/json")] "{}")) `finally` putMVar stopped ()
               ["metrics"] -> respond (Wai.responseLBS status200 [(hContentType, "application/json")] (Aeson.encode (Text.replicate 2048 "x")))
               _ -> respond (Wai.responseLBS status200 [(hContentType, "application/json")] "{}")
-            selected = (profile False) {maxConcurrentReads = 1, readDeadlineSeconds = 1, statementTimeoutMillis = 500, maxResponseBytes = 1024, maxFrameBytes = 256, maxQueuedBytes = 512}
+            selected = (profile False) {maxConcurrentReads = inspectionLimit 1, readDeadlineSeconds = inspectionLimit 1, statementTimeoutMillis = inspectionLimit 500, maxResponseBytes = inspectionLimit 1024, maxFrameBytes = inspectionLimit 256, maxQueuedBytes = inspectionLimit 512}
         withFixtureSurfaces [MountedSurface shibuyaPrefix controlled] fixture selected \runtime _ _ _ manager -> do
           Async.withAsync (request manager runtime.port methodGet "/shibuya/health" [(hAuthorization, readCredential)] "") \pending -> do
             takeMVar entered
@@ -259,3 +259,6 @@ request manager port method path headers body = do
 field :: Aeson.Key -> Value -> Maybe Value
 field key (Object fields) = KeyMap.lookup key fields
 field _ _ = Nothing
+
+inspectionLimit :: Int -> InspectionLimit scope
+inspectionLimit = either (error . show) id . parseInspectionLimit

@@ -43,7 +43,7 @@ import Pgmq.Inspect.Env qualified as Pgmq
 import Pgmq.Inspect.Server qualified as Pgmq
 import PostgresqlConnectionString qualified as ConnectionString
 import Shikigami.Inspection.Catalog (inspectionHooks)
-import Shikigami.Inspection.Settings (InspectionSettings (..), revealInspectionCredential)
+import Shikigami.Inspection.Settings (InspectionSettings (..), MutationAccess (..), inspectionHostText, inspectionLimitInt, inspectionOriginText, inspectionPortInt, revealInspectionCredential)
 import Shikigami.Log qualified as Log
 
 -- Exposed observations are useful for qualification; callers do not own cleanup.
@@ -56,22 +56,22 @@ data InspectionRuntime = InspectionRuntime
 inspectionHttpConfig :: InspectionSettings -> Ops.OpsHttpConfig
 inspectionHttpConfig settings =
   Ops.defaultOpsHttpConfig
-    { Ops.mutations = if settings.mutationsEnabled then Ops.MutationsEnabled else Ops.MutationsDisabled,
-      Ops.allowedOrigins = settings.allowedOrigins,
-      Ops.inspectionLimits = Ops.InspectionLimits settings.maxConcurrentReads settings.readDeadlineSeconds settings.mutationDeadlineSeconds settings.deliveryDeadlineSeconds settings.statementTimeoutMillis settings.maxResponseBytes settings.maxRequestBytes
+    { Ops.mutations = if settings.mutationsEnabled == InspectionMutable then Ops.MutationsEnabled else Ops.MutationsDisabled,
+      Ops.allowedOrigins = (map inspectionOriginText settings.allowedOrigins),
+      Ops.inspectionLimits = Ops.InspectionLimits (inspectionLimitInt settings.maxConcurrentReads) (inspectionLimitInt settings.readDeadlineSeconds) (inspectionLimitInt settings.mutationDeadlineSeconds) (inspectionLimitInt settings.deliveryDeadlineSeconds) (inspectionLimitInt settings.statementTimeoutMillis) (inspectionLimitInt settings.maxResponseBytes) (inspectionLimitInt settings.maxRequestBytes)
     }
 
 inspectionFeedConfig :: InspectionSettings -> Ops.FeedConfig
 inspectionFeedConfig settings =
   Ops.defaultFeedConfig
-    { Ops.fallbackInterval = fromIntegral settings.refreshMillis / 1000,
-      Ops.minRefreshInterval = fromIntegral settings.refreshMillis / 1000,
-      Ops.maxViews = settings.maxViews,
-      Ops.maxConnections = settings.maxConnections,
-      Ops.maxFrameBytes = settings.maxFrameBytes,
-      Ops.maxQueuedBytes = settings.maxQueuedBytes,
-      Ops.queueCapacity = settings.maxQueuedFrames,
-      Ops.readTimeout = fromIntegral (min settings.readDeadlineSeconds settings.deliveryDeadlineSeconds),
+    { Ops.fallbackInterval = fromIntegral (inspectionLimitInt settings.refreshMillis) / 1000,
+      Ops.minRefreshInterval = fromIntegral (inspectionLimitInt settings.refreshMillis) / 1000,
+      Ops.maxViews = (inspectionLimitInt settings.maxViews),
+      Ops.maxConnections = (inspectionLimitInt settings.maxConnections),
+      Ops.maxFrameBytes = (inspectionLimitInt settings.maxFrameBytes),
+      Ops.maxQueuedBytes = (inspectionLimitInt settings.maxQueuedBytes),
+      Ops.queueCapacity = (inspectionLimitInt settings.maxQueuedFrames),
+      Ops.readTimeout = fromIntegral (min (inspectionLimitInt settings.readDeadlineSeconds) (inspectionLimitInt settings.deliveryDeadlineSeconds)),
       Ops.maxItems = 100
     }
 
@@ -92,15 +92,15 @@ withInspectionRuntime :: Maybe InspectionSettings -> Log.Logger -> ConnectionSet
 withInspectionRuntime Nothing _ _ _ _ _ action = action Nothing
 withInspectionRuntime (Just settings) logger connection store metrics extras action = do
   bounded <- either (fail . Text.unpack) pure (inspectionConnectionSettings connection)
-  origins <- either (const (fail "invalid inspection Origin policy")) pure (traverse Metrics.allowedOrigin settings.allowedOrigins)
+  origins <- either (const (fail "invalid inspection Origin policy")) pure (traverse Metrics.allowedOrigin (map inspectionOriginText settings.allowedOrigins))
   let http = inspectionHttpConfig settings
       feeds = inspectionFeedConfig settings
-      server = Ops.defaultOpsHttpServerConfig {Ops.bindHost = settings.host, Ops.port = settings.port, Ops.requestTimeoutSeconds = settings.deliveryDeadlineSeconds + settings.readDeadlineSeconds + 1}
-      metricsConfig = Metrics.defaultConfig {Metrics.cors = Metrics.corsAllowOrigins origins, Metrics.wsMaxConnections = settings.maxConnections, Metrics.wsEventQueueCap = fromIntegral settings.maxQueuedFrames, Metrics.wsPushIntervalUs = settings.refreshMillis * 1000}
-      pgmqConfig = Pgmq.defaultInspectConfig {Pgmq.corsPolicy = maybe Pgmq.CorsDisabled (Pgmq.CorsAllowOrigins . fmap Text.encodeUtf8) (NonEmpty.nonEmpty settings.allowedOrigins), Pgmq.wsMaxConnections = settings.maxConnections, Pgmq.wsMaxSubscriptions = settings.maxViews, Pgmq.wsQueueCapacity = fromIntegral settings.maxQueuedFrames, Pgmq.wsMaxQueues = settings.maxViews, Pgmq.wsMaxFrameBytes = settings.maxFrameBytes, Pgmq.maxConcurrentReads = settings.maxConcurrentReads, Pgmq.pollIntervalUs = settings.refreshMillis * 1000, Pgmq.metricsMinRefreshUs = settings.refreshMillis * 1000}
+      server = Ops.defaultOpsHttpServerConfig {Ops.bindHost = (inspectionHostText settings.host), Ops.port = (inspectionPortInt settings.port), Ops.requestTimeoutSeconds = (inspectionLimitInt settings.deliveryDeadlineSeconds) + (inspectionLimitInt settings.readDeadlineSeconds) + 1}
+      metricsConfig = Metrics.defaultConfig {Metrics.cors = Metrics.corsAllowOrigins origins, Metrics.wsMaxConnections = (inspectionLimitInt settings.maxConnections), Metrics.wsEventQueueCap = fromIntegral (inspectionLimitInt settings.maxQueuedFrames), Metrics.wsPushIntervalUs = (inspectionLimitInt settings.refreshMillis) * 1000}
+      pgmqConfig = Pgmq.defaultInspectConfig {Pgmq.corsPolicy = maybe Pgmq.CorsDisabled (Pgmq.CorsAllowOrigins . fmap Text.encodeUtf8) (NonEmpty.nonEmpty (map inspectionOriginText settings.allowedOrigins)), Pgmq.wsMaxConnections = (inspectionLimitInt settings.maxConnections), Pgmq.wsMaxSubscriptions = (inspectionLimitInt settings.maxViews), Pgmq.wsQueueCapacity = fromIntegral (inspectionLimitInt settings.maxQueuedFrames), Pgmq.wsMaxQueues = (inspectionLimitInt settings.maxViews), Pgmq.wsMaxFrameBytes = (inspectionLimitInt settings.maxFrameBytes), Pgmq.maxConcurrentReads = (inspectionLimitInt settings.maxConcurrentReads), Pgmq.pollIntervalUs = (inspectionLimitInt settings.refreshMillis) * 1000, Pgmq.metricsMinRefreshUs = (inspectionLimitInt settings.refreshMillis) * 1000}
   Ops.withOpsInspectionPool http.inspectionLimits bounded \pool -> do
     let inspectionStore = store {pool}
-    metricsState <- Metrics.newWebSocketState settings.maxConnections
+    metricsState <- Metrics.newWebSocketState (inspectionLimitInt settings.maxConnections)
     -- Select actual providers explicitly. Protected history is outside browser
     -- display authority; no owner JSON or native event-tail protocol is rewritten.
     let providers =
@@ -127,10 +127,10 @@ withInspectionRuntime (Just settings) logger connection store metrics extras act
         keiro <- Ops.opsApplicationWithFeeds http handle inspectionHooks inspectionStore
         let companions = [Ops.MountedSurface Ops.kirokuPrefix (boundedMetricsSocket settings serializedProviders.webSocketServer (Metrics.combinedAppWithProviders metricsConfig metrics [postgres] serializedProviders)), Ops.MountedSurface Ops.pgmqPrefix pgmq.runtimeApplication] <> extras
             boundedCompanions = map (\surface -> surface {Ops.application = boundedCompanion settings companionBudget surface.application}) companions
-        router <- either (fail . Text.unpack . Ops.renderComposeError) pure (Ops.composeSurfaces (Ops.ComposeConfig settings.allowedOrigins) (Ops.MountedSurface Ops.keiroPrefix keiro : boundedCompanions))
+        router <- either (fail . Text.unpack . Ops.renderComposeError) pure (Ops.composeSurfaces (Ops.ComposeConfig (map inspectionOriginText settings.allowedOrigins)) (Ops.MountedSurface Ops.keiroPrefix keiro : boundedCompanions))
         let application = authorizeInspection settings logger router
         Ops.withOpsHttpServer server application \listener -> do
-          Log.logInfo logger "inspection.listening" ["host" .= settings.host, "port" .= listener.serverPort, "scope" .= ("this-process" :: Text)]
+          Log.logInfo logger "inspection.listening" ["host" .= (inspectionHostText settings.host), "port" .= listener.serverPort, "scope" .= ("this-process" :: Text)]
           result <- race (wait listener.serverThread >> fail "inspection listener stopped unexpectedly") (action (Just (InspectionRuntime listener.serverPort handle (readTVar metricsState.connectionCount))))
           either pure pure result
 
@@ -148,7 +148,7 @@ authorizeInspection settings logger application request respond
                 if requiresErasureAuthority (pathInfo request)
                   then respond (failure status403 "erasure_authority_required")
                   else
-                    if settings.mutationsEnabled && maybe False (`credential` value) settings.writeToken
+                    if settings.mutationsEnabled == InspectionMutable && maybe False (`credential` value) settings.writeToken
                       then do
                         invocation <- UUID.toText <$> UUID.nextRandom
                         Log.logInfo logger "operator.inspection.invoked" ["invocation" .= invocation, "method" .= Text.decodeUtf8 (requestMethod request), "path" .= Text.decodeUtf8With (\_ _ -> Just '?') (Bytes.take 512 (rawPathInfo request))]
@@ -204,8 +204,8 @@ boundedMetricsSocket settings serverApp fallback request respond
   where
     options =
       WebSocket.defaultConnectionOptions
-        { WebSocket.connectionFramePayloadSizeLimit = WebSocket.SizeLimit (fromIntegral settings.maxRequestBytes),
-          WebSocket.connectionMessageDataSizeLimit = WebSocket.SizeLimit (fromIntegral settings.maxRequestBytes)
+        { WebSocket.connectionFramePayloadSizeLimit = WebSocket.SizeLimit (fromIntegral (inspectionLimitInt settings.maxRequestBytes)),
+          WebSocket.connectionMessageDataSizeLimit = WebSocket.SizeLimit (fromIntegral (inspectionLimitInt settings.maxRequestBytes))
         }
     run source sink =
       bracket
@@ -214,9 +214,9 @@ boundedMetricsSocket settings serverApp fallback request respond
             ( \case
                 Nothing -> pure ()
                 Just chunk -> do
-                  bytes <- evaluate (Lazy.length (Lazy.take (fromIntegral settings.maxFrameBytes + 1) chunk))
-                  unless (bytes <= fromIntegral settings.maxFrameBytes) (throwIO ResultTooLarge)
-                  Budget.withInspectionDelivery settings.deliveryDeadlineSeconds (mapM_ sink (Lazy.toChunks chunk))
+                  bytes <- evaluate (Lazy.length (Lazy.take (fromIntegral (inspectionLimitInt settings.maxFrameBytes) + 1) chunk))
+                  unless (bytes <= fromIntegral (inspectionLimitInt settings.maxFrameBytes)) (throwIO ResultTooLarge)
+                  Budget.withInspectionDelivery (inspectionLimitInt settings.deliveryDeadlineSeconds) (mapM_ sink (Lazy.toChunks chunk))
             )
         )
         WebSocketStream.close
@@ -234,21 +234,21 @@ boundedMetricsSocket settings serverApp fallback request respond
 -- encoding and delivery around their applications; their socket runtimes own WS.
 boundedCompanion :: InspectionSettings -> Budget.InspectionBudget -> Middleware
 boundedCompanion settings budget application request respond
-  | Bytes.length (rawPathInfo request) + Bytes.length (rawQueryString request) > settings.maxRequestBytes = respond (failure status413 "inspection_request_too_large")
+  | Bytes.length (rawPathInfo request) + Bytes.length (rawQueryString request) > (inspectionLimitInt settings.maxRequestBytes) = respond (failure status413 "inspection_request_too_large")
   | isWebSocketsReq request && pathInfo request `elem` [["ws"], ["ws", "metrics"], ["ws", "events"]] = application request respond
   | otherwise = do
       admitted <- Budget.withInspectionAdmission budget do
         ready <- newEmptyMVar
         delivered <- newEmptyMVar
         withAsync (application request (\response -> capture response >>= putMVar ready >> takeMVar delivered)) \worker -> do
-          computed <- Budget.withInspectionDeadline settings.readDeadlineSeconds (trySynchronous (race (takeMVar ready) (wait worker >> fail "inspection application returned without response")))
+          computed <- Budget.withInspectionDeadline (inspectionLimitInt settings.readDeadlineSeconds) (trySynchronous (race (takeMVar ready) (wait worker >> fail "inspection application returned without response")))
           case computed of
             Left _ -> respond (failure status504 "inspection_timeout")
             Right (Left problem) -> respond $ case fromException problem of
               Just ResultTooLarge -> failure status413 "inspection_result_too_large"
               Nothing -> failure status503 "inspection_failed"
             Right (Right (Right _)) -> respond (failure status503 "inspection_failed")
-            Right (Right (Left response)) -> Budget.withInspectionDelivery settings.deliveryDeadlineSeconds do
+            Right (Right (Left response)) -> Budget.withInspectionDelivery (inspectionLimitInt settings.deliveryDeadlineSeconds) do
               result <- respond response
               putMVar delivered result
               wait worker
@@ -263,9 +263,9 @@ boundedCompanion settings budget application request respond
         body
           ( \builder -> do
               (size, previous) <- readIORef chunks
-              let output = Lazy.take (fromIntegral (settings.maxResponseBytes - size + 1)) (Builder.toLazyByteString builder)
+              let output = Lazy.take (fromIntegral ((inspectionLimitInt settings.maxResponseBytes) - size + 1)) (Builder.toLazyByteString builder)
               count <- evaluate (fromIntegral (Lazy.length output))
-              unless (size + count <= settings.maxResponseBytes) (throwIO ResultTooLarge)
+              unless (size + count <= (inspectionLimitInt settings.maxResponseBytes)) (throwIO ResultTooLarge)
               writeIORef chunks (size + count, output : previous)
           )
           (pure ())

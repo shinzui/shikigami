@@ -3,6 +3,7 @@ module Shikigami.ObjectiveStoreSpec (tests, crashWriter) where
 import Contravariant.Extras (contrazip2, contrazip3)
 import Control.Concurrent.Async (concurrently)
 import Control.Exception (SomeException, try)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy.Char8 qualified as Lazy
@@ -28,7 +29,7 @@ import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkA
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId, operationIdText)
 import Shikigami.Execution.Payload (payloadIdText)
-import Shikigami.Execution.Transcript (PayloadRef (..))
+import Shikigami.Execution.Transcript (ExecutionId (..), PayloadRef (..))
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId, fixtureRootId)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
@@ -36,7 +37,7 @@ import Shikigami.Objective.Capability qualified as O
 import Shikigami.Objective.Command
 import Shikigami.Objective.Store qualified as S
 import Shikigami.Objective.Types
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.WorkerSession.Checkpoint qualified as CP
 import Shikigami.WorkerSession.Input (InstructionText, parseInstructionText)
@@ -86,6 +87,45 @@ tests fixture =
           count env "shikigami.objective_receipts" >>= (@?= 2)
           replaceJson env "UPDATE shikigami.objective_receipts SET outcome=$1 WHERE operation_key LIKE '%edit%'" (toJSON (Right receipt :: Either ObjectiveError Receipt))
           run env retry >>= (@?= Right receipt),
+      testCase "malformed receipt commitments refuse recovery and preserve the original transition" $
+        withObjective fixture \env _ objective -> do
+          let operation = fixtureOperationId "edit"
+              retry = O.executeCommand ownerHost objective (revision 0) operation (ReviseInstructions (instructions "new"))
+          receipt <- right =<< run env retry
+          run env (O.readCommandReceipt ownerHost objective operation) >>= (@?= Right (Just (Right receipt)))
+          before <- get env objective
+          beforeEvents <- objectiveEventCount env
+          forM_ ["fingerprint", "payloadDigest"] \field -> do
+            case toJSON receipt of
+              Aeson.Object fields -> replaceJson env "UPDATE shikigami.objective_receipts SET outcome=$1 WHERE operation_key LIKE '%edit%'" (Aeson.object ["Right" .= Aeson.Object (KeyMap.insert field (Aeson.String "sha256:malformed") fields)])
+              _ -> assertFailure "complete receipt must be an object"
+            run env (O.readCommandReceipt ownerHost objective operation) >>= (@?= Left ObjectiveConflict)
+            _ <- run env retry
+            get env objective >>= (@?= before)
+            objectiveEventCount env >>= (@?= beforeEvents)
+            count env "shikigami.objective_receipts" >>= (@?= 2)
+            replaceJson env "UPDATE shikigami.objective_receipts SET outcome=$1 WHERE operation_key LIKE '%edit%'" (toJSON (Right receipt :: Either ObjectiveError Receipt))
+            run env retry >>= (@?= Right receipt)
+          sql env "UPDATE shikigami.objective_receipts SET fingerprint='sha256:malformed' WHERE operation_key LIKE '%edit%'"
+          run env (O.readCommandReceipt ownerHost objective operation) >>= (@?= Left ObjectiveConflict)
+          run env retry >>= (@?= Left ObjectiveConflict)
+          get env objective >>= (@?= before)
+          objectiveEventCount env >>= (@?= beforeEvents)
+          sql env ("UPDATE shikigami.objective_receipts SET fingerprint='" <> mutationFingerprintText receipt.fingerprint <> "' WHERE operation_key LIKE '%edit%'")
+          run env retry >>= (@?= Right receipt),
+      testCase "malformed creation fingerprint cannot allocate a replacement objective" $
+        withObjective fixture \env _ objective -> do
+          let recover = O.createObjective ownerHost (fixtureOperationId "create") (Just origin) request
+          original <- right =<< run env recover
+          original.objectiveId @?= objective
+          beforeEvents <- objectiveEventCount env
+          sql env "UPDATE shikigami.objective_origins SET fingerprint='sha256:malformed'"
+          run env recover >>= (@?= Left ObjectiveConflict)
+          count env "shikigami.objectives" >>= (@?= 1)
+          count env "shikigami.objective_origins" >>= (@?= 1)
+          objectiveEventCount env >>= (@?= beforeEvents)
+          sql env ("UPDATE shikigami.objective_origins SET fingerprint='" <> mutationFingerprintText original.fingerprint <> "'")
+          run env recover >>= (@?= Right original),
       testCase "corrupt creation receipt prevents replacement allocation and recovers the original winner" $
         withObjective fixture \env _ objective -> do
           let recover = O.createObjective ownerHost (fixtureOperationId "create") (Just origin) request
@@ -185,9 +225,9 @@ tests fixture =
           objectiveEventCount env >>= (@?= 1)
           current <- get env first.objectiveId
           current.members @?= [Member owner [Owner, Coordinator, Completer]]
-          other <- right =<< run env (O.createObjective (host (VerifiedCaller "other")) (fixtureOperationId "create") Nothing request)
+          other <- right =<< run env (O.createObjective (host (VerifiedCaller (caller "other"))) (fixtureOperationId "create") Nothing request)
           assertBool "creator scopes differ" (first.objectiveId /= other.objectiveId)
-          run env (O.readObjective (host (VerifiedCaller "other")) first.objectiveId) >>= (@?= Left ObjectiveDenied),
+          run env (O.readObjective (host (VerifiedCaller (caller "other"))) first.objectiveId) >>= (@?= Left ObjectiveDenied),
       testCase "creation rollback leaves no objective, origin, receipt or lifecycle event" $
         withDatabase fixture \env -> do
           sql env "CREATE FUNCTION shikigami.reject_objective_origin() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RAISE EXCEPTION ''injected origin failure''; END'"
@@ -202,7 +242,7 @@ tests fixture =
         withObjective fixture \env _ objective -> do
           now <- getCurrentTime
           _ <- right =<< run env (O.executeCommand ownerHost objective (revision 0) (fixtureOperationId "graph") (SetAssignments [draft now "a"]))
-          let input = Attestation (evidenceKey "check") (criterionKey "human") (artifact "artifact") (statement "reviewed integration") False
+          let input = Attestation (evidenceKey "check") (criterionKey "human") (artifact "artifact") (statement "reviewed integration") NoJourney
           sql env "CREATE FUNCTION shikigami.reject_objective_receipt() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RAISE EXCEPTION ''injected receipt failure''; END'"
           sql env "CREATE TRIGGER reject_receipt BEFORE INSERT ON shikigami.objective_receipts FOR EACH ROW EXECUTE FUNCTION shikigami.reject_objective_receipt()"
           _ <- try @SomeException (run env (O.executeCommand ownerHost objective (revision 1) (fixtureOperationId "evidence") (RecordEvidence (objectiveAssignment "a") input)))
@@ -216,7 +256,7 @@ tests fixture =
           length current'.evidence @?= 1,
       testCase "revoked membership denies both stale writes and retained receipt disclosure" $
         withObjective fixture \env _ objective -> do
-          let collaborator = VerifiedCaller "coordinator"
+          let collaborator = VerifiedCaller (caller "coordinator")
               collaboratorHost = host collaborator
           _ <- right =<< run env (O.executeCommand ownerHost objective (revision 0) (fixtureOperationId "grant") (GrantMember collaborator [Coordinator]))
           _ <- right =<< run env (O.executeCommand collaboratorHost objective (revision 1) (fixtureOperationId "edit") (SetNextAction [nextAction "next"]))
@@ -226,7 +266,7 @@ tests fixture =
           run env (O.executeCommand collaboratorHost objective (revision 3) (fixtureOperationId "new") (SetNextAction [])) >>= (@?= Left ObjectiveDenied),
       testCase "revocation race cannot commit a later unauthorized edit" $
         withObjective fixture \env _ objective -> do
-          let collaborator = VerifiedCaller "coordinator"
+          let collaborator = VerifiedCaller (caller "coordinator")
           _ <- right =<< run env (O.executeCommand ownerHost objective (revision 0) (fixtureOperationId "grant") (GrantMember collaborator [Coordinator]))
           (revocation, edit) <-
             concurrently
@@ -242,16 +282,16 @@ tests fixture =
           run env (O.executeCommand (host collaborator) objective (revision 1) (fixtureOperationId "edit") (SetNextAction [nextAction "next"])) >>= (@?= Left ObjectiveDenied),
       testCase "readers and workers cannot accept completion or grant access" $
         withObjective fixture \env _ objective -> do
-          let reader = VerifiedCaller "reader"
+          let reader = VerifiedCaller (caller "reader")
           _ <- right =<< run env (O.executeCommand ownerHost objective (revision 0) (fixtureOperationId "grant") (GrantMember reader [Reader]))
           _ <- right =<< run env (O.readObjective (host reader) objective)
-          forM_ [AcceptCompletion, GrantMember (VerifiedCaller "intruder") [Coordinator], ReviseInstructions (instructions "inject")] \command ->
+          forM_ [AcceptCompletion, GrantMember (VerifiedCaller (caller "intruder")) [Coordinator], ReviseInstructions (instructions "inject")] \command ->
             run env (O.executeCommand (host reader) objective (revision 1) (fixtureOperationId "denied") command) >>= (@?= Left ObjectiveDenied),
       testCase "disabled tracking, default-deny agents and fresh action denial fail closed" $
         withDatabase fixture \env -> do
           let agent = RecordedAgent (VerifiedIdentity (either (error . show) id (mkAgentPrincipal "agent_creator")))
               agentHost = host agent
-              granted = (agentHost & #settings .~ ((defaultObjectiveSettings & #enabled .~ (True) & #agentCreation .~ (["agent_creator"]))))
+              granted = (agentHost & #settings .~ ((defaultObjectiveSettings & #enabled .~ ObjectivesEnabled & #agentCreation .~ [either (error . show) id (mkAgentPrincipal "agent_creator")])))
           run env (O.createObjective agentHost (fixtureOperationId "create") Nothing request) >>= (@?= Left ObjectiveDenied)
           run env (O.createObjective ((ownerHost & #settings .~ (defaultObjectiveSettings))) (fixtureOperationId "create") Nothing request) >>= (@?= Left ObjectiveDenied)
           run env (O.createObjective ((granted & #actions .~ (denyAllActionAuthorizer))) (fixtureOperationId "create") Nothing request) >>= (@?= Left ObjectiveDenied)
@@ -272,7 +312,7 @@ tests fixture =
           current.revision @?= revision 1
           _ <- right =<< run env (O.executeCommand ownerHost objective (revision 1) (fixtureOperationId "cancel") CancelObjective)
           run env (O.executeCommand ownerHost objective (revision 2) (fixtureOperationId "progress") (RecordProgress a.assignmentId Done [] [])) >>= assertLeft
-          _ <- right =<< run env (O.executeCommand ownerHost objective (revision 2) (fixtureOperationId "grant-after-cancel") (GrantMember (VerifiedCaller "auditor") [Reader]))
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision 2) (fixtureOperationId "grant-after-cancel") (GrantMember (VerifiedCaller (caller "auditor")) [Reader]))
           current' <- get env objective
           current'.status @?= Cancelled,
       testCase "integrated acceptance requires current checks and authorized attestation" $
@@ -285,11 +325,11 @@ tests fixture =
           let missing = CompletionProposal (revision 2) (revision 0) (revision 0) [artifact "artifact"] [] []
           _ <- right =<< send 2 "propose-missing" (ProposeCompletion missing)
           send 3 "accept-missing" AcceptCompletion >>= (@?= Left ObjectiveInvalidEvidence)
-          _ <- right =<< send 3 "attest" (RecordEvidence a.assignmentId (Attestation (evidenceKey "check") (criterionKey "human") (artifact "artifact") (statement "reviewed integrated journey") False))
+          _ <- right =<< send 3 "attest" (RecordEvidence a.assignmentId (Attestation (evidenceKey "check") (criterionKey "human") (artifact "artifact") (statement "reviewed integrated journey") NoJourney))
           _ <- right =<< send 4 "propose" (ProposeCompletion (CompletionProposal (revision 4) (revision 0) (revision 0) [artifact "artifact"] [evidenceKey "check"] [limitation "known limitation"]))
           _ <- right =<< send 5 "revise" (ReviseInstructions (instructions "new instructions"))
           send 6 "stale-accept" AcceptCompletion >>= (@?= Left ObjectiveConflict)
-          _ <- right =<< send 6 "new-attest" (RecordEvidence a.assignmentId (Attestation (evidenceKey "new-check") (criterionKey "human") (artifact "artifact") (statement "reviewed again") False))
+          _ <- right =<< send 6 "new-attest" (RecordEvidence a.assignmentId (Attestation (evidenceKey "new-check") (criterionKey "human") (artifact "artifact") (statement "reviewed again") NoJourney))
           _ <- right =<< send 7 "new-proposal" (ProposeCompletion (CompletionProposal (revision 7) (revision 1) (revision 0) [artifact "artifact"] [evidenceKey "new-check"] []))
           _ <- right =<< send 8 "accept" AcceptCompletion
           current <- get env objective
@@ -323,8 +363,8 @@ tests fixture =
           _ <- right =<< run env (O.executeCommand ownerHost objective (revision (base + 1)) (fixtureOperationId "restore") (ReviseInstructions (instructions "instructions")))
           run env (O.executeInternal ownerHost objective (revision base) (fixtureOperationId "stale") (IngestCheckpoint a.assignmentId intent [input] [])) >>= (@?= Left ObjectiveConflict)
           count env "shikigami.objective_cursors" >>= (@?= 0)
-          _ <- right =<< run env (O.executeCommand ownerHost objective (revision (base + 2)) (fixtureOperationId "block") (SetBlocked True))
-          _ <- right =<< run env (O.executeCommand ownerHost objective (revision (base + 3)) (fixtureOperationId "unblock") (SetBlocked False))
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision (base + 2)) (fixtureOperationId "block") (SetBlocked IsBlocked))
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision (base + 3)) (fixtureOperationId "unblock") (SetBlocked Unblocked))
           run env (O.executeInternal ownerHost objective (revision base) (fixtureOperationId "stale-after-unblock") (IngestCheckpoint a.assignmentId intent [input] [])) >>= (@?= Left ObjectiveConflict)
           count env "shikigami.objective_cursors" >>= (@?= 0),
       testCase "workers update only their own assignments and cannot attest or grant" $
@@ -338,22 +378,22 @@ tests fixture =
           _ <- right =<< run env (O.executeCommand ownerHost objective (revision 0) (fixtureOperationId "graph") (SetAssignments [own, other]))
           _ <- right =<< run env (O.executeCommand ownerHost objective (revision 1) (fixtureOperationId "grant") (GrantMember (RecordedAgent identity) [Worker]))
           _ <- right =<< run env (O.executeCommand workerHost objective (revision 2) (fixtureOperationId "own") (RecordProgress own.assignmentId Working [] []))
-          forM_ [RecordProgress other.assignmentId Done [] [], RecordEvidence own.assignmentId (Attestation (evidenceKey "forged") (criterionKey "human") (artifact "artifact") (statement "trust me") False), GrantMember (VerifiedCaller "friend") [Coordinator]] \command ->
+          forM_ [RecordProgress other.assignmentId Done [] [], RecordEvidence own.assignmentId (Attestation (evidenceKey "forged") (criterionKey "human") (artifact "artifact") (statement "trust me") NoJourney), GrantMember (VerifiedCaller (caller "friend")) [Coordinator]] \command ->
             run env (O.executeCommand workerHost objective (revision 3) (fixtureOperationId "denied") command) >>= (@?= Left ObjectiveDenied),
       testCase "automatic completion requires verifier-backed criterion and journey evidence" $
         withObjective fixture \env _ objective -> do
           now <- getCurrentTime
           let assignment = draft now "a"
-              reference = RetainedResult "verifier-run" "verifier-execution" "sha256:retained-result" (artifact "artifact")
-              verifiedHost = (ownerHost & #verifyResult .~ (\source -> pure (if source == reference then Right (EvidenceVerification CheckPassed (Just (criterionKey "auto")) True) else Left ObjectiveInvalidEvidence)))
+              reference = RetainedResult (runReference "verifier-run") (ExecutionId "verifier-execution") (resultCommitment "sha256:retained-result") (artifact "artifact")
+              verifiedHost = (ownerHost & #verifyResult .~ (\source -> pure (if source == reference then Right (EvidenceVerification CheckPassed (Just (criterionKey "auto")) JourneyObserved) else Left ObjectiveInvalidEvidence)))
               send expected key command = run env (O.executeCommand verifiedHost objective (revision expected) (fixtureOperationId key) command)
-          _ <- right =<< send 0 "criteria" (ReviseCriteria [Criterion (criterionKey "auto") (description "verified journey") Automatic True])
+          _ <- right =<< send 0 "criteria" (ReviseCriteria [Criterion (criterionKey "auto") (description "verified journey") Automatic JourneyRequired])
           _ <- right =<< send 1 "graph" (SetAssignments [assignment & #state .~ Done])
           -- A fabricated result cannot acquire a verifier disposition.
-          send 2 "fake" (RecordEvidence assignment.assignmentId (ResultEvidence (evidenceKey "fake") (criterionKey "auto") (RetainedResult "fake-run" "fake" "fake" (artifact "artifact")) True)) >>= (@?= Left ObjectiveInvalidEvidence)
-          evidenceReceipt <- right =<< send 2 "verified" (RecordEvidence assignment.assignmentId (ResultEvidence (evidenceKey "verified") (criterionKey "auto") reference True))
+          send 2 "fake" (RecordEvidence assignment.assignmentId (ResultEvidence (evidenceKey "fake") (criterionKey "auto") (RetainedResult (runReference "fake-run") (ExecutionId "fake") (resultCommitment "fake") (artifact "artifact")) JourneyObserved)) >>= (@?= Left ObjectiveInvalidEvidence)
+          evidenceReceipt <- right =<< send 2 "verified" (RecordEvidence assignment.assignmentId (ResultEvidence (evidenceKey "verified") (criterionKey "auto") reference JourneyObserved))
           -- Recovery does not contact an unavailable evidence owner again.
-          run env (O.executeCommand ownerHost objective (revision 2) (fixtureOperationId "verified") (RecordEvidence assignment.assignmentId (ResultEvidence (evidenceKey "verified") (criterionKey "auto") reference True))) >>= (@?= Right evidenceReceipt)
+          run env (O.executeCommand ownerHost objective (revision 2) (fixtureOperationId "verified") (RecordEvidence assignment.assignmentId (ResultEvidence (evidenceKey "verified") (criterionKey "auto") reference JourneyObserved))) >>= (@?= Right evidenceReceipt)
           _ <- right =<< send 3 "propose" (ProposeCompletion (CompletionProposal (revision 3) (revision 0) (revision 1) [artifact "artifact"] [evidenceKey "verified"] []))
           _ <- right =<< send 4 "accept" AcceptCompletion
           current <- get env objective
@@ -381,7 +421,7 @@ tests fixture =
           _ <- right =<< run env (O.executeInternal ownerHost objective (revision base) (fixtureOperationId "checkpoint") (IngestCheckpoint a.assignmentId intent [input] [unresolved]))
           _ <- right =<< send (base + 1) "done-a" (RecordProgress a.assignmentId Done [] [])
           _ <- right =<< send (base + 2) "done-b" (RecordProgress b.assignmentId Done [] [])
-          _ <- right =<< send (base + 3) "attest" (RecordEvidence a.assignmentId (Attestation (evidenceKey "human-check") (criterionKey "human") (artifact "artifact") (statement "reviewed") False))
+          _ <- right =<< send (base + 3) "attest" (RecordEvidence a.assignmentId (Attestation (evidenceKey "human-check") (criterionKey "human") (artifact "artifact") (statement "reviewed") NoJourney))
           _ <- right =<< send (base + 4) "propose" (ProposeCompletion (CompletionProposal (revision (base + 4)) (revision 0) (revision 0) [artifact "artifact"] [evidenceKey "human-check"] []))
           send (base + 5) "accept" AcceptCompletion >>= (@?= Left ObjectiveUnresolved),
       testCase "terminal objectives reconcile authentic accepted results while refusing fresh public progress" $
@@ -405,7 +445,7 @@ tests fixture =
           version <- right (S.versionFor cancelled key)
           version.active @?= False
           (_, intent) <- right =<< run env (Sessions.prepareCheckpoint access (fixtureRevision 3) (fixtureRevision 0) (fixtureOperationId "prepare") version (fixtureRevision 0) (fixtureRevision 3))
-          let evidence = ResultEvidence (evidenceKey "late") (criterionKey "human") (WorkerResult result (artifact "artifact")) False
+          let evidence = ResultEvidence (evidenceKey "late") (criterionKey "human") (WorkerResult result (artifact "artifact")) NoJourney
           _ <- right =<< run env (O.executeInternal ownerHost objective (revision 3) (fixtureOperationId "reconcile") (IngestCheckpoint key intent [evidence] []))
           run env (O.executeCommand ownerHost objective (revision 4) (fixtureOperationId "fresh-progress") (RecordProgress key Working [] [])) >>= assertLeft
           current <- get env objective
@@ -432,19 +472,19 @@ tests fixture =
     ]
 
 owner :: AccessPrincipal
-owner = VerifiedCaller "owner"
+owner = VerifiedCaller (caller "owner")
 
 ownerHost :: O.ObjectiveHost
 ownerHost = host owner
 
 host :: AccessPrincipal -> O.ObjectiveHost
-host actor = O.ObjectiveHost ((defaultObjectiveSettings & #enabled .~ (True))) (pure (Right actor)) allowAllActionAuthorizerForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Right ())) (\_ -> pure (Left ObjectiveInvalidEvidence))
+host actor = O.ObjectiveHost ((defaultObjectiveSettings & #enabled .~ ObjectivesEnabled)) (pure (Right actor)) allowAllActionAuthorizerForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Right ())) (\_ -> pure (Left ObjectiveInvalidEvidence))
 
 request :: CreateRequest
-request = CreateRequest (title "deliver") (goal "integrated goal") (instructions "instructions") [Criterion (criterionKey "human") (description "review integration") HumanVerifiable False] []
+request = CreateRequest (title "deliver") (goal "integrated goal") (instructions "instructions") [Criterion (criterionKey "human") (description "review integration") HumanVerifiable JourneyOptional] []
 
 origin :: CreationOrigin
-origin = ExecutionOrigin "recorded-run" "recorded-execution" (fixtureOperationId "accepted-operation")
+origin = ExecutionOrigin (runReference "recorded-run") (ExecutionId "recorded-execution") (fixtureOperationId "accepted-operation")
 
 draft :: UTCTime -> Text -> AssignmentDraft
 draft now key = AssignmentDraft (objectiveAssignment key) (instructions "work") [] (compatibilityIdentity (fixtureAgentName "worker")) Pending Nothing (Just (fixtureRootId "session-root")) (Just (addUTCTime 3600 now))
@@ -494,7 +534,7 @@ checkpoint env actor _ current assignment key = do
   let result = WS.AssignmentResult V1 message.assignmentId WS.AssignmentSucceeded Nothing (Aeson.object []) ["artifact"]
   (_, receipt) <- right =<< run env (Sessions.recordResult access (fixtureRevision 2) (fixtureRevision 0) (fixtureOperationId "result") result)
   (_, intent) <- right =<< run env (Sessions.prepareCheckpoint access (fixtureRevision 3) (fixtureRevision 0) (fixtureOperationId "prepare") version (fixtureRevision 0) (fixtureRevision 3))
-  pure (intent, ResultEvidence (evidenceKey key) (criterionKey "human") (WorkerResult receipt (artifact "artifact")) False)
+  pure (intent, ResultEvidence (evidenceKey key) (criterionKey "human") (WorkerResult receipt (artifact "artifact")) NoJourney)
 
 run :: AppEnv -> Eff AppEffects a -> IO a
 run env action = runAppIO env action >>= right
@@ -577,3 +617,6 @@ fixtureInstruction value = either (error . show) id (parseInstructionText value)
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+caller :: Text -> CallerId
+caller = either (error . show) id . parseCallerId

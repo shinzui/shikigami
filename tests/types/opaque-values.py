@@ -31,6 +31,7 @@ import Shikigami.Agent.Delegate.Depth qualified as Depth
 import Shikigami.Agent.ExpertiseKey qualified as Expertise
 import Shikigami.Agent.Name qualified as Name
 import Shikigami.Router.SelectionLimit qualified as Limit
+import Shikigami.Objective.Types qualified as Objective
 import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Agent.Principal qualified as Principal
 import Shikigami.App.Config qualified as Config
@@ -76,7 +77,15 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''listenerWorkflow :: WorkerSession.SessionListener -> WorkflowId
+POSITIVE = '''objectiveCaller :: Text -> Either Text Objective.CallerId
+objectiveCaller = Objective.parseCallerId
+objectiveConversation :: Text -> Either Text Objective.ConversationRef
+objectiveConversation = Objective.parseConversationRef
+objectiveFingerprint :: Objective.Receipt -> Objective.MutationFingerprint
+objectiveFingerprint value = value.fingerprint
+objectiveJourney :: Objective.EvidenceVerification -> Objective.JourneyEvidence
+objectiveJourney value = value.journey
+listenerWorkflow :: WorkerSession.SessionListener -> WorkflowId
 listenerWorkflow value = value.ownerId
 listenerDefinition :: WorkerSession.SessionListener -> WorkflowName
 listenerDefinition value = value.ownerName
@@ -216,7 +225,7 @@ capabilityRevision :: Text -> Either Overlay.CapabilityRevisionError Overlay.Cap
 capabilityRevision = Overlay.mkCapabilityRevision
 emptyCapabilities :: Overlay.ResolvedCapabilitySet
 emptyCapabilities = Overlay.emptyResolvedCapabilitySet
-inspection :: Inspection.InspectionCredential -> Text
+inspection :: Inspection.InspectionCredential "read" -> Text
 inspection = Inspection.revealInspectionCredential
 revision :: Text -> Either Text Repository.Revision
 revision = Repository.mkRevision
@@ -256,6 +265,24 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('Inspection.InspectionLimit "maxViews"', 'generic'),
+    ('Inspection.InspectionPort', 'generic'),
+    ('Inspection.InspectionHost', 'generic'),
+    ('Inspection.InspectionOrigin', 'generic'),
+    ('Objective.CallerId', 'generic'),
+    ('Objective.OperatorId', 'generic'),
+    ('Objective.ConversationRef', 'generic'),
+    ('Objective.IntentionRef', 'generic'),
+    ('Objective.ExecPlanRef', 'generic'),
+    ('Objective.ProtocolTaskRef', 'generic'),
+    ('Objective.ResultCommitment', 'generic'),
+    ('Objective.RunReference', 'generic'),
+    ('Objective.TurnReference', 'generic'),
+    ('Objective.OriginLabel', 'generic'),
+    ('Objective.AssignmentDigest', 'generic'),
+    ('Objective.MutationFingerprint', 'generic'),
+    ('Objective.ObjectivePayloadDigest', 'generic'),
+
     ('Format.FormatVersion "execution-state"', 'generic'),
     ('Format.FormatVersion "execution-state"', 'parse'),
     ('SinkCoordinate.SinkOrdinal', 'generic'),
@@ -317,7 +344,7 @@ CASES = [
     ('Overlay.CapabilityId', 'parse'),
     ('Overlay.CapabilityRevision', 'parse'),
     ('Overlay.ResolvedCapabilitySet', 'parse'),
-    ('Inspection.InspectionCredential', 'render'),
+    ('Inspection.InspectionCredential "read"', 'render'),
     ('Repository.Revision', 'parse'),
     ('Repository.RelativePath', 'parse'),
     ('Router.ValidatedRouteDecision', 'parse'),
@@ -359,6 +386,29 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         ('format scope substitution', 'Format.FormatVersion \"execution-state\" -> Format.FormatVersion \"execution-job\"', 'id'),
         ('format scope coercion', 'Format.FormatVersion \"execution-state\" -> Format.FormatVersion \"execution-job\"', 'coerce'),
         ('sink ordinal raw coercion', 'Int -> SinkCoordinate.SinkOrdinal', 'coerce'),
+        ('objective CallerId raw coercion', 'Text -> Objective.CallerId', 'coerce'),
+        ('objective OperatorId raw coercion', 'Text -> Objective.OperatorId', 'coerce'),
+        ('objective ConversationRef raw coercion', 'Text -> Objective.ConversationRef', 'coerce'),
+        ('objective IntentionRef raw coercion', 'Text -> Objective.IntentionRef', 'coerce'),
+        ('objective ExecPlanRef raw coercion', 'Text -> Objective.ExecPlanRef', 'coerce'),
+        ('objective ProtocolTaskRef raw coercion', 'Text -> Objective.ProtocolTaskRef', 'coerce'),
+        ('objective ResultCommitment raw coercion', 'Text -> Objective.ResultCommitment', 'coerce'),
+        ('objective RunReference raw coercion', 'Text -> Objective.RunReference', 'coerce'),
+        ('objective TurnReference raw coercion', 'Text -> Objective.TurnReference', 'coerce'),
+        ('objective OriginLabel raw coercion', 'Text -> Objective.OriginLabel', 'coerce'),
+        ('objective AssignmentDigest raw coercion', 'Text -> Objective.AssignmentDigest', 'coerce'),
+        ('objective MutationFingerprint raw coercion', 'Text -> Objective.MutationFingerprint', 'coerce'),
+        ('objective ObjectivePayloadDigest raw coercion', 'Text -> Objective.ObjectivePayloadDigest', 'coerce'),
+        ('objective caller/operator substitution', 'Objective.CallerId -> Objective.OperatorId', 'coerce'),
+        ('objective commitment substitution', 'Objective.AssignmentDigest -> Objective.MutationFingerprint', 'coerce'),
+        ('objective journey/requirement substitution', 'Objective.JourneyEvidence -> Objective.JourneyRequirement', 'id'),
+        ('objective service/block substitution', 'Objective.ObjectiveService -> Objective.BlockState', 'id'),
+        ('inspection token role substitution', 'Inspection.InspectionCredential "read" -> Inspection.InspectionCredential "write"', 'coerce'),
+        ('inspection limit scope substitution', 'Inspection.InspectionLimit "maxViews" -> Inspection.InspectionLimit "maxConnections"', 'coerce'),
+        ('inspection limit raw coercion', 'Int -> Inspection.InspectionLimit "maxViews"', 'coerce'),
+        ('inspection port raw coercion', 'Int -> Inspection.InspectionPort', 'coerce'),
+        ('inspection origin raw coercion', 'Text -> Inspection.InspectionOrigin', 'coerce'),
+        ('inspection host raw coercion', 'Text -> Inspection.InspectionHost', 'coerce'),
         ('sink ordinal raw substitution', 'Int -> SinkCoordinate.SinkOrdinal', 'id'),
         ('sink session/workflow substitution', 'SessionId -> WorkflowId', 'id'),
         ('freeze boolean substitution', 'Bool -> WorkspaceStore.FreezeState', 'id'),

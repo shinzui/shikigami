@@ -45,7 +45,7 @@ import Keiro.Stream qualified as Stream
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
-import Shikigami.Agent.Principal (identityText)
+import Shikigami.Agent.Principal (identityText, principalText)
 import Shikigami.App (CommandEffects, commandOptions)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId, operationIdText)
@@ -79,10 +79,10 @@ require = either abort pure
 
 creationAllowed :: ObjectiveSettings -> AccessPrincipal -> Bool
 creationAllowed settings actor =
-  settings.enabled && validPrincipal actor && case actor of
+  settings.enabled == ObjectivesEnabled && validPrincipal actor && case actor of
     VerifiedCaller _ -> True
     LocalOperator identity -> settings.operator == Just identity
-    RecordedAgent identity -> either (const False) (`elem` settings.agentCreation) (identityText identity)
+    RecordedAgent identity -> either (const False) (`elem` map principalText settings.agentCreation) (identityText identity)
 
 rolesFor :: Objective -> AccessPrincipal -> [Role]
 rolesFor objective actor = concatMap (.roles) (filter ((== actor) . (.principal)) objective.members)
@@ -93,7 +93,7 @@ administrates access = case access.actor of
   _ -> False
 
 canRead :: Access -> Objective -> Bool
-canRead access objective = access.settings.enabled && validPrincipal access.actor && (administrates access || not (null (rolesFor objective access.actor)))
+canRead access objective = access.settings.enabled == ObjectivesEnabled && validPrincipal access.actor && (administrates access || not (null (rolesFor objective access.actor)))
 
 -- This check runs under the same row lock as revocations and receipt lookup.
 authorized :: Access -> Objective -> Mutation -> Bool
@@ -157,10 +157,10 @@ create access operation origin request verifyOrigin = guarded do
   allocated <- KindID.toText <$> KindID.genKindID @"shikigami_objective"
   identifier <- either (const (throwIO (Abort ObjectiveUnavailable))) pure (parseObjectiveId allocated)
   let creator = versionedDigest "shikigami.objective-creator/1" (toJSON access.actor)
-      fingerprint = versionedDigest "shikigami.objective-create/1" (toJSON (access.actor, operation, origin, request))
+      fingerprint = creationFingerprint (toJSON (access.actor, operation, origin, request))
       initial = Objective identifier access.actor [Member access.actor [Owner, Coordinator, Completer]] request.title request.goal request.instructions initialRevision initialRevision initialRevision request.criteria Open [] [] [] [] [] request.external [] Nothing Nothing
       payload = toJSON (request, origin, initial)
-      digest = versionedDigest "shikigami.objective-payload/1" payload
+      digest = objectivePayloadDigest payload
       receipt = Receipt identifier operation fingerprint initialRevision digest
       lookupOriginal = protected do
         now <- Tx.statement () currentTime
@@ -188,9 +188,9 @@ create access operation origin request verifyOrigin = guarded do
         now <- Tx.statement () currentTime
         unless (now < access.expiresAt && creationAllowed access.settings access.actor) (abort ObjectiveDenied)
         Tx.statement ((objectiveIdText identifier), initial) insertObjective
-        writePayload identifier digest payload
+        writePayload identifier (objectivePayloadDigestText digest) payload
         writeReceipt receipt (Right receipt)
-        Tx.statement (creator, (operationKey operation), (objectiveIdText identifier), fingerprint, toJSON origin, receipt) insertOrigin
+        Tx.statement (creator, (operationKey operation), (objectiveIdText identifier), mutationFingerprintText fingerprint, toJSON origin, receipt) insertOrigin
       recovered <- lookupOriginal
       pure case recovered of Right (Just old) -> Right old; Left err -> Left err; _ -> result >> Left ObjectiveUnresolved
 
@@ -202,7 +202,7 @@ execute access identifier expected operation mutation = guarded do
   unless (validKey (operationKey operation)) (throwIO (Abort (ObjectiveInvalid "invalid operation key")))
   loop (32 :: Int)
   where
-    fingerprint = versionedDigest "shikigami.objective-command/1" (toJSON (access.actor, identifier, expected, operation, commandTag mutation, mutation))
+    fingerprint = commandFingerprint (toJSON (access.actor, identifier, expected, operation, commandTag mutation, mutation))
     inspect = do
       current <- locked identifier
       checkAccess access current
@@ -217,7 +217,7 @@ execute access identifier expected operation mutation = guarded do
           case next of
             Left err | err == ObjectiveUnavailable -> pure (Left (Left err))
             Left err -> do
-              Tx.statement ((objectiveIdText identifier), (operationKey operation), fingerprint, Left err :: Either ObjectiveError Receipt) insertReceipt
+              Tx.statement ((objectiveIdText identifier), (operationKey operation), mutationFingerprintText fingerprint, Left err :: Either ObjectiveError Receipt) insertReceipt
               pure (Left (Left err))
             Right _ -> pure (Right current)
     loop remaining
@@ -229,7 +229,7 @@ execute access identifier expected operation mutation = guarded do
             Right (Left outcome) -> pure outcome
             Right (Right before) -> do
               let nextRevision = advanceRevision before.revision
-                  command = G.ApplyObjectiveTransition (G.ApplyObjectiveTransitionData identifier (fromInteger (revisionNumber before.revision)) (fromInteger (revisionNumber nextRevision)) fingerprint)
+                  command = G.ApplyObjectiveTransition (G.ApplyObjectiveTransitionData identifier (fromInteger (revisionNumber before.revision)) (fromInteger (revisionNumber nextRevision)) (mutationFingerprintText fingerprint))
               applied <- persist identifier command do
                 current <- locked identifier
                 checkAccess access current
@@ -241,13 +241,13 @@ execute access identifier expected operation mutation = guarded do
                 validateSources current mutation >>= require
                 next <- require (validateTransition now access expected mutation current)
                 let payload = toJSON (access.actor, mutation, next)
-                    digest = versionedDigest "shikigami.objective-payload/1" payload
+                    digest = objectivePayloadDigest payload
                     receipt = Receipt identifier operation fingerprint next.revision digest
                 saveSnapshot next
-                writePayload identifier digest payload
+                writePayload identifier (objectivePayloadDigestText digest) payload
                 case mutation of
                   Internal (IngestCheckpoint assignment intent _ _) -> Tx.statement ((objectiveIdText identifier), (objectiveAssignmentIdText assignment), intent.sessionId.value, fromInteger (revisionNumber intent.throughCursor)) saveCursor
-                  Public (BindConversation conversation) -> Tx.statement (conversation, (objectiveIdText identifier), toJSON receipt) bindConversation
+                  Public (BindConversation conversation) -> Tx.statement (conversationRefText conversation, (objectiveIdText identifier), toJSON receipt) bindConversation
                   _ -> pure ()
                 writeReceipt receipt (Right receipt)
               case applied of
@@ -330,7 +330,7 @@ validateTransition _now access expected mutation current = do
         SetNextAction actions -> editable >> pure (current & #nextActions .~ actions)
         SetBlocked blocked -> do
           editable
-          let status = if blocked then Blocked else Open
+          let status = if blocked == IsBlocked then Blocked else Open
           pure (if status == current.status then current else invalidate (current & #status .~ status))
         ProposeCompletion proposal -> do
           active
@@ -347,7 +347,7 @@ validateTransition _now access expected mutation current = do
         RevokeMember principal -> do
           unless (principal /= current.owner) (Left (ObjectiveInvalid "cannot revoke access owner"))
           pure (current & #members %~ filter ((/= principal) . (.principal)))
-        BindConversation conversation -> editable >> (if validKey conversation then Right current else Left (ObjectiveInvalid "invalid conversation"))
+        BindConversation conversation -> editable >> (if validKey (conversationRefText conversation) then Right current else Left (ObjectiveInvalid "invalid conversation"))
         LinkExternal reference -> editable >> pure (current & #external %~ (\refs -> nub (refs <> [reference])))
       Internal (TransferOwnership key epoch owner) -> do
         unless (either (const False) validKey (identityText owner)) (Left ObjectiveDenied)
@@ -426,7 +426,7 @@ writePayload :: ObjectiveId -> Text -> Aeson.Value -> Transaction ()
 writePayload objective digest payload = Tx.statement ((objectiveIdText objective), digest, payload) insertPayload
 
 writeReceipt :: Receipt -> Either ObjectiveError Receipt -> Transaction ()
-writeReceipt receipt outcome = Tx.statement ((objectiveIdText receipt.objectiveId), operationKey receipt.operationId, receipt.fingerprint, outcome) insertReceipt
+writeReceipt receipt outcome = Tx.statement ((objectiveIdText receipt.objectiveId), operationKey receipt.operationId, mutationFingerprintText receipt.fingerprint, outcome) insertReceipt
 
 -- A rejected Keiro command or concurrent duplicate is retried through the locked
 -- inspector. Transport failure remains unavailable/uncertain, never a rejection.
@@ -500,14 +500,14 @@ saveAssignment = preparable "INSERT INTO shikigami.objective_assignments(objecti
 insertPayload :: Statement (Text, Text, Aeson.Value) ()
 insertPayload = preparable "INSERT INTO shikigami.objective_payloads(objective_id,digest,payload) VALUES ($1,$2,$3)" (contrazip3 textParam textParam jsonParam) D.noResult
 
-selectReceipt :: Statement (Text, Text) (Maybe (Either () (Text, Either ObjectiveError Receipt)))
-selectReceipt = preparable "SELECT fingerprint,outcome FROM shikigami.objective_receipts WHERE objective_id=$1 AND operation_key=$2" (contrazip2 textParam textParam) (D.rowMaybe ((\fingerprint value -> (fingerprint,) <$> value) <$> D.column (D.nonNullable D.text) <*> jsonRow))
+selectReceipt :: Statement (Text, Text) (Maybe (Either () (MutationFingerprint, Either ObjectiveError Receipt)))
+selectReceipt = preparable "SELECT fingerprint,outcome FROM shikigami.objective_receipts WHERE objective_id=$1 AND operation_key=$2" (contrazip2 textParam textParam) (D.rowMaybe ((\raw value -> do fingerprint <- either (const (Left ())) Right (parseMutationFingerprint raw); (fingerprint,) <$> value) <$> D.column (D.nonNullable D.text) <*> jsonRow))
 
 insertReceipt :: Statement (Text, Text, Text, Either ObjectiveError Receipt) ()
 insertReceipt = preparable "INSERT INTO shikigami.objective_receipts(objective_id,operation_key,fingerprint,outcome) VALUES ($1,$2,$3,$4)" (contrazip4 textParam textParam textParam jsonParam) D.noResult
 
-selectOrigin :: Statement (Text, Text) (Maybe (Either () (Text, Receipt)))
-selectOrigin = preparable "SELECT fingerprint,receipt FROM shikigami.objective_origins WHERE creator_key=$1 AND operation_key=$2" (contrazip2 textParam textParam) (D.rowMaybe ((\fingerprint value -> (fingerprint,) <$> value) <$> D.column (D.nonNullable D.text) <*> jsonRow))
+selectOrigin :: Statement (Text, Text) (Maybe (Either () (MutationFingerprint, Receipt)))
+selectOrigin = preparable "SELECT fingerprint,receipt FROM shikigami.objective_origins WHERE creator_key=$1 AND operation_key=$2" (contrazip2 textParam textParam) (D.rowMaybe ((\raw value -> do fingerprint <- either (const (Left ())) Right (parseMutationFingerprint raw); (fingerprint,) <$> value) <$> D.column (D.nonNullable D.text) <*> jsonRow))
 
 insertOrigin :: Statement (Text, Text, Text, Text, Aeson.Value, Receipt) ()
 insertOrigin = preparable "INSERT INTO shikigami.objective_origins(creator_key,operation_key,objective_id,fingerprint,origin,receipt) VALUES ($1,$2,$3,$4,$5,$6)" (contrazip6 textParam textParam textParam textParam jsonParam jsonParam) D.noResult
