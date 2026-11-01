@@ -52,6 +52,7 @@ import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Workspace.Allocation (workspaceFiles, workspaceMetadata)
 import Shikigami.Workspace.ContainedFile
@@ -220,7 +221,7 @@ current :: FileRuntime -> AcceptedGit -> IO ()
 current runtime accepted = do
   runtime.lifecycle accepted.snapshot >>= either (const (abort FileEffectRefused)) pure
   let dispatch = accepted.dispatch
-      claim = Attempt.AttemptClaim (Attempt.JobReference 1 accepted.snapshot.executionId dispatch.operation.operationId dispatch.attemptId) dispatch.owner dispatch.generation
+      claim = Attempt.AttemptClaim (Attempt.JobReference V1 accepted.snapshot.executionId dispatch.operation.operationId dispatch.attemptId) dispatch.owner dispatch.generation
   execute runtime.appEnv (Execution.checkStartedExecutionAttempt accepted.access claim)
   transact runtime.appEnv (if accepted.admission.filePolicy == Just transferableFilePolicy then Transfers.checkWorkspaceAdmissionTx accepted.binding accepted.admission dispatch.operation.operationId else Workspaces.checkWorkspaceOperationTx accepted.binding accepted.admission.owner accepted.admission.epoch dispatch.operation.operationId) >>= either (const (abort FileEffectRefused)) pure
 
@@ -404,7 +405,7 @@ publishGitReceipt env operationId = protect do
       unless (routing.identity == retained.identity && retained.rootId == Just binding.request.rootId && record.operation == OperationContext routing.executionId operationId key operation.fingerprint operation.specification.scopeDigest && operation.executionId == routing.executionId && operation.specification.kind == ToolOperation && operation.specification.name == expected.name && operation.specification.recovery == expected.recovery && operation.specification.scopeDigest == toolScopeDigest expected && operation.input.digest == routing.inputDigest) (abort FileEffectUnresolved)
       actual <- execute env (Execution.inspectExecutionAttempt record.attemptId) >>= maybe (abort FileEffectUnresolved) pure
       unless (actual.executionId == routing.executionId && actual.operationId == operationId && actual.owner == Just record.claimOwner && actual.generation == record.generation && isNothing actual.call) (abort FileEffectUnresolved)
-      let reference = Attempt.JobReference 1 routing.executionId operationId record.attemptId
+      let reference = Attempt.JobReference V1 routing.executionId operationId record.attemptId
           claim = Attempt.AttemptClaim reference record.claimOwner record.generation
           outcome = either (\err -> ToolReturned [TextBlock (renderToolError err)] True) (RichToolReturned . captureToolOutput) result
           receipt = Attempt.AttemptResult outcome routing.next Nothing

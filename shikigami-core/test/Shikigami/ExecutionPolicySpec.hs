@@ -16,6 +16,7 @@ import Shikigami.Execution.Policy
 import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
 import Shikigami.Execution.ToolPosition (ToolPosition, parseToolPosition)
 import Shikigami.Execution.Transcript
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Workspace.Instructions (instructionPrompt, mkInstructionBundle)
 import Test.Tasty (TestTree, testGroup)
@@ -82,7 +83,7 @@ tests =
       testCase "historical model input bytes omit the new provenance extension" do
         context <- expectRight (selectContextView defaultHarnessPolicy (ReplayContext 1 Nothing [UserTurn [TextBlock "request"] Nothing]))
         let legacy = Aeson.object ["format" .= (1 :: Int), "view" .= context, "maxOutputTokens" .= (Nothing :: Maybe Int)]
-            input = ModelOperationInput 1 context Nothing Nothing
+            input = ModelOperationInput V1 context Nothing Nothing
         Aeson.fromJSON legacy @?= Aeson.Success input
         Aeson.toJSON input @?= legacy,
       testCase "an enabled summary refuses a source it cannot faithfully include" do
@@ -97,7 +98,7 @@ tests =
             execution = ExecutionId "summary-fixture"
             specification = OperationSpec (operationIdFor execution (fixtureRevision 0)) ModelSummary RepeatableObservation "summary" "policy" "scope" Nothing
             ref = fixturePayloadRef "payload" ("sha256:" <> Text.replicate 64 "a") 1
-            operation = Operation 1 execution (fixtureRevision 0) specification "fingerprint" ref (Just ref) (Just NeedModel) NotMarkedUncertain Nothing
+            operation = Operation V1 execution (fixtureRevision 0) specification "fingerprint" ref (Just ref) (Just NeedModel) NotMarkedUncertain Nothing
         (kind, input) <- expectRight (prepareModelOperationInput policy ModelTurn source Nothing Nothing)
         kind @?= ModelSummary
         input.view.context.systemPrompt @?= source.systemPrompt
@@ -115,9 +116,9 @@ tests =
             execution = ExecutionId "summary-fixture"
             specification = OperationSpec (operationIdFor execution (fixtureRevision 0)) ModelSummary RepeatableObservation "summary" "policy" "scope" Nothing
             ref = fixturePayloadRef "payload" ("sha256:" <> Text.replicate 64 "a") 1
-            operation = Operation 1 execution (fixtureRevision 0) specification "fingerprint" ref (Just ref) (Just NeedModel) NotMarkedUncertain Nothing
+            operation = Operation V1 execution (fixtureRevision 0) specification "fingerprint" ref (Just ref) (Just NeedModel) NotMarkedUncertain Nothing
         selected <- expectRight (selectContextView policy source)
-        let old = ModelOperationInput 1 selected (Just 64) Nothing
+        let old = ModelOperationInput V1 selected (Just 64) Nothing
         prepareModelOperationInput policy ModelTurn source Nothing (Just (operation, old, answer "accepted")) @?= Left UnsupportedReplay,
       testCase "declaration can only narrow operator ceilings and cannot enable summaries" do
         let base = defaultHarnessPolicy & #outputRepairs .~ (fixturePolicy 2) & #output .~ JsonFields ["accepted"] & #deniedTools .~ ["delete"]
@@ -199,10 +200,10 @@ binding :: ToolBinding
 binding = ToolBinding "observe" "1" "schema-digest" RepeatableObservation UnreportedInvoiceCost
 
 answer :: Text.Text -> ReplayAssistant
-answer text = ReplayAssistant 1 [TextBlock text] Stop Nothing Nothing (Aeson.object []) Nothing
+answer text = ReplayAssistant V1 [TextBlock text] Stop Nothing Nothing (Aeson.object []) Nothing
 
 toolReply :: [(Text.Text, Text.Text, Aeson.Value)] -> ReplayAssistant
-toolReply calls = ReplayAssistant 1 [ToolBlock (ToolInvocation callId name args) | (callId, name, args) <- calls] ToolUse Nothing Nothing (Aeson.object []) Nothing
+toolReply calls = ReplayAssistant V1 [ToolBlock (ToolInvocation callId name args) | (callId, name, args) <- calls] ToolUse Nothing Nothing (Aeson.object []) Nothing
 
 expectRight :: (Show e) => Either e a -> IO a
 expectRight = either (\err -> assertFailure (show err) >> fail "expected Right") pure

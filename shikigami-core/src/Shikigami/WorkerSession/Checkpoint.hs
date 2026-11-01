@@ -9,6 +9,7 @@ module Shikigami.WorkerSession.Checkpoint where
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Types (EventReceipt, ObjectiveRef, WorkerSessionId)
@@ -27,7 +28,7 @@ data ObjectiveVersion = ObjectiveVersion
   deriving anyclass (ToJSON, FromJSON)
 
 data CheckpointIntent = CheckpointIntent
-  { format :: !Int,
+  { format :: !(FormatVersion "checkpoint-intent"),
     sessionId :: !WorkerSessionId,
     objective :: !ObjectiveRef,
     operationId :: !OperationId,
@@ -42,7 +43,7 @@ data CheckpointIntent = CheckpointIntent
   deriving anyclass (ToJSON, FromJSON)
 
 data CheckpointReceipt = CheckpointReceipt
-  { format :: !Int,
+  { format :: !(FormatVersion "checkpoint-receipt"),
     objective :: !ObjectiveRef,
     operationId :: !OperationId,
     fingerprint :: !Text,
@@ -65,7 +66,7 @@ intentFingerprint intent = versionedDigest "shikigami.worker-session-checkpoint/
 
 matchesReceipt :: CheckpointIntent -> CheckpointReceipt -> Bool
 matchesReceipt intent receipt =
-  receipt.format == 1
+  receipt.format == V1
     && receipt.objective == intent.objective
     && receipt.operationId == intent.operationId
     && receipt.fingerprint == intentFingerprint intent

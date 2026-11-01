@@ -58,6 +58,24 @@ versions and unchanged session message/command/payload counts. Same-build recove
 late-write rollback and transport-outage tests remain required. No historical
 reader or populated cross-build replay promise is introduced.
 
+## Closed format selectors
+
+ExecPlan 108 retains execution, attempt, harness, replay-result, compliance-fact
+and worker-session format selectors as `FormatVersion scope`. The closed `V1`
+value has a nominal protocol scope, no arithmetic or Generic instance, and the
+same JSON number `1` as the former integer field. This prevents an unsupported
+version from being constructed inside a successful typed record. A future
+protocol version requires an explicit owning-format change; another protocol's
+selector cannot be substituted or coerced into this one.
+
+Unsupported versions are injected into complete encoded fixtures rather than
+constructed as typed records. The execution metadata reader and worker-session
+terminal scan must still return their owning corruption refusal and condemn the
+transaction, including when the caller ignores that refusal and writes both
+before and after it. Restoring the exact original JSON must recover the original
+state without a replacement operation or assignment. The existing replay-context
+protocol that accepts versions 1 and 2 keeps its separate admission contract.
+
 ## References
 
 [ADR-53](0053-execution-lifecycle-and-protected-replay-share-an-atomic-boundary.md),

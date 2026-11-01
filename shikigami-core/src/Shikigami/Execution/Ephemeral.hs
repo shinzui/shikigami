@@ -29,6 +29,7 @@ import Shikigami.Execution.Policy.Limits (policyNumber)
 import Shikigami.Execution.SelectionRuntime (narrowOutput)
 import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude
 import Shikigami.StateRevision (advanceRevisions, initialRevision)
 import Shikumi.Error (ShikumiError)
@@ -105,7 +106,7 @@ runEphemeralBehavior duration base env decl input = case narrowHarnessPolicy bas
                                         pure (PayloadRef payloadId digest bytes)
                                   case (reference (toJSON accepted), reference (toJSON assistant)) of
                                     (Right input, Right output) -> do
-                                      let operation = Operation 1 execution position specification "ephemeral" input (Just output) (Just NeedModel) NotMarkedUncertain Nothing
+                                      let operation = Operation V1 execution position specification "ephemeral" input (Just output) (Just NeedModel) NotMarkedUncertain Nothing
                                       loop retained policy calls' toolCount repairs kind source (Just (operation, accepted, assistant))
                                     _ -> pure (refused "ephemeral payload reference is invalid")
                               else

@@ -30,6 +30,7 @@ import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Store qualified as Store
 import Shikigami.Execution.Tools (ExecutionToolMenu (..))
 import Shikigami.Execution.Transcript
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), instructionPrompt)
 import System.Timeout (timeout)
@@ -94,7 +95,7 @@ admitSkillExecutionWithWorkspace loadWorkspace runtime describe assignment = do
                   Right workspace -> do
                     let initial =
                           ExecutionSnapshot
-                            { format = 1,
+                            { format = V1,
                               executionId = execution,
                               runId = assignment.runId,
                               agent = assignment.agent,

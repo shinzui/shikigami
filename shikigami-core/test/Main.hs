@@ -47,6 +47,7 @@ import Shikigami.ExecutionResourcesSpec qualified as ExecutionResourcesSpec
 import Shikigami.ExecutionSelectionSpec qualified as ExecutionSelectionSpec
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Fixture.SinkHttp (testSinkHttp, testSinkHttpFor)
+import Shikigami.FormatVersionSpec qualified as FormatVersionSpec
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.KanmonClientSpec qualified as KanmonClientSpec
 import Shikigami.KeiroSpecificationSpec qualified as KeiroSpecificationSpec
@@ -124,6 +125,7 @@ main =
           DelegateContextSpec.tests,
           DelegationBatchSpec.tests,
           ExecutionPositionSpec.tests,
+          FormatVersionSpec.tests,
           ExecutionPolicySpec.tests,
           ExecutionResourcesSpec.tests,
           WorkerSessionPositionSpec.tests,

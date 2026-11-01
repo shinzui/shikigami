@@ -48,6 +48,7 @@ import Shikigami.Execution.Start (SkillAssignment (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
 import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
@@ -112,9 +113,9 @@ tests fixture =
           parent <- right =<< run env (Sessions.authorizeSession context.sessionId context.actor (pure (Right ())))
           Just (_, first) <- pure binding.request.assignment
           Just (active, _) <- right =<< run env (Sessions.inspectSession context.sessionId)
-          _ <- right =<< run env (Sessions.recordResult parent active.revision (fixtureRevision 0) (fixtureOperationId "finish-first") (AssignmentResult 1 first AssignmentFailed (Just execution) Aeson.Null []))
+          _ <- right =<< run env (Sessions.recordResult parent active.revision (fixtureRevision 0) (fixtureOperationId "finish-first") (AssignmentResult V1 first AssignmentFailed (Just execution) Aeson.Null []))
           Just (idle, _) <- right =<< run env (Sessions.inspectSession context.sessionId)
-          (_, message) <- right =<< run env (Sessions.acceptMessage parent idle.revision (fixtureRevision 0) (fixtureOperationId "follow-up") (Instruction 1 FollowUp (fixtureInstruction "continue accepted work") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+          (_, message) <- right =<< run env (Sessions.acceptMessage parent idle.revision (fixtureRevision 0) (fixtureOperationId "follow-up") (Instruction V1 FollowUp (fixtureInstruction "continue accepted work") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
           (_, started) <- right =<< run env (Sessions.startAssignment parent (advanceRevision idle.revision) (fixtureRevision 0) (fixtureOperationId "start-follow-up") message.assignmentId)
           child <- maybe (fail "missing follow-up child") pure started.childWorkflowId
           now <- getCurrentTime
@@ -164,9 +165,9 @@ tests fixture =
             output <- right =<< run env (Execution.readReplayPayload @OperationOutcome access "operation-outcome" result)
             assertBool "follow-up sees accepted work" ("ACCEPTED_PRIOR_CHANGE" `Text.isInfixOf` Text.pack (show (Aeson.encode output)))
             Just (active, _) <- right =<< run env (Sessions.inspectSession context.sessionId)
-            _ <- right =<< run env (Sessions.recordResult parent active.revision (fixtureRevision 0) (fixtureOperationId "premature-second-result") (AssignmentResult 1 message.assignmentId AssignmentFailed (Just snapshot.executionId) Aeson.Null []))
+            _ <- right =<< run env (Sessions.recordResult parent active.revision (fixtureRevision 0) (fixtureOperationId "premature-second-result") (AssignmentResult V1 message.assignmentId AssignmentFailed (Just snapshot.executionId) Aeson.Null []))
             Just (idle, _) <- right =<< run env (Sessions.inspectSession context.sessionId)
-            (_, third) <- right =<< run env (Sessions.acceptMessage parent idle.revision (fixtureRevision 0) (fixtureOperationId "third-message") (Instruction 1 FollowUp (fixtureInstruction "continue again") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+            (_, third) <- right =<< run env (Sessions.acceptMessage parent idle.revision (fixtureRevision 0) (fixtureOperationId "third-message") (Instruction V1 FollowUp (fixtureInstruction "continue again") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
             (_, started) <- right =<< run env (Sessions.startAssignment parent (advanceRevision idle.revision) (fixtureRevision 0) (fixtureOperationId "third-start") third.assignmentId)
             thirdRun <- maybe (fail "missing third child") pure started.childWorkflowId
             selection <- right (resolveExecutionSelection (Selection.assignmentIdFor thirdRun) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just context.rootId) now)
@@ -222,13 +223,13 @@ tests fixture =
             parent <- right =<< run env (Sessions.authorizeSession intent.sessionId intent.actor (pure (Right ())))
             Just (active, _) <- right =<< run env (Sessions.inspectSession intent.sessionId)
             assignment <- maybe (fail "missing successor assignment") pure active.activeAssignment
-            _ <- right =<< run env (Sessions.recordResult parent active.revision (fixtureRevision 1) (fixtureOperationId "finish-successor") (AssignmentResult 1 assignment AssignmentFailed (Just snapshot.executionId) Aeson.Null []))
+            _ <- right =<< run env (Sessions.recordResult parent active.revision (fixtureRevision 1) (fixtureOperationId "finish-successor") (AssignmentResult V1 assignment AssignmentFailed (Just snapshot.executionId) Aeson.Null []))
             -- Idleness never retires the continuing session's workspace. Once
             -- closed, eligibility follows the successor execution, despite no
             -- terminal original-allocation execution being present.
             run env (runTransaction (cleanupEligibleTx binding)) >>= (@?= Right False)
             Just (idle, _) <- right =<< run env (Sessions.inspectSession intent.sessionId)
-            (_, nextMessage) <- right =<< run env (Sessions.acceptMessage parent idle.revision (fixtureRevision 1) (fixtureOperationId "successor-followup-message") (Instruction 1 FollowUp (fixtureInstruction "continue successor") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+            (_, nextMessage) <- right =<< run env (Sessions.acceptMessage parent idle.revision (fixtureRevision 1) (fixtureOperationId "successor-followup-message") (Instruction V1 FollowUp (fixtureInstruction "continue successor") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
             (_, nextStarted) <- right =<< run env (Sessions.startAssignment parent (advanceRevision idle.revision) (fixtureRevision 1) (fixtureOperationId "successor-followup-start") nextMessage.assignmentId)
             nextRun <- maybe (fail "missing successor followup child") pure nextStarted.childWorkflowId
             nextSelection <- right (resolveExecutionSelection (Selection.assignmentIdFor nextRun) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just intent.rootId) now)
@@ -243,7 +244,7 @@ tests fixture =
               (_, nextState) <- right =<< run env (Execution.loadExecution nextAccess)
               _ <- right =<< run env (Execution.stopExecution nextSnapshot.identity nextSnapshot.executionId nextState.revision StopAsFailure (ExecutionPolicyRefused "fixture terminal"))
               Just (running, _) <- right =<< run env (Sessions.inspectSession intent.sessionId)
-              _ <- right =<< run env (Sessions.recordResult parent running.revision (fixtureRevision 1) (fixtureOperationId "finish-successor-followup") (AssignmentResult 1 nextMessage.assignmentId AssignmentFailed (Just nextSnapshot.executionId) Aeson.Null []))
+              _ <- right =<< run env (Sessions.recordResult parent running.revision (fixtureRevision 1) (fixtureOperationId "finish-successor-followup") (AssignmentResult V1 nextMessage.assignmentId AssignmentFailed (Just nextSnapshot.executionId) Aeson.Null []))
               pure ()
             Just (finished, _) <- right =<< run env (Sessions.inspectSession intent.sessionId)
             _ <- right =<< run env (Sessions.closeSession parent finished.revision (fixtureRevision 1) (fixtureOperationId "close-successor") AssignmentFailed)
@@ -326,12 +327,12 @@ withWorkspacePolicy transferring policy fixture callback = Fixture.withFixture f
       old = compatibilityIdentity (fixtureAgentName "worker")
       successor = compatibilityIdentity (fixtureAgentName "successor")
       actor = compatibilityIdentity (fixtureAgentName "coordinator")
-      session = SessionAdmission 1 (SessionScope "fixture-parent" "worker") (ObjectiveRef "fixture-checkpoints" "objective") (parent & #name .~ fixtureAgentName "coordinator" & #delegates .~ map fixtureAgentName ["worker", "successor"]) (DelegateCtx (fixtureDelegationDepth 0) actor (Just parentSession) Nothing (Just (WorkflowId "parent")) [fixtureAgentName "coordinator"] Nothing (Just root) Nothing defaultDelegationBudget) (fixtureAgentName "worker") old (fixtureLimit 10) (fixtureLimit 4)
+      session = SessionAdmission V1 (SessionScope "fixture-parent" "worker") (ObjectiveRef "fixture-checkpoints" "objective") (parent & #name .~ fixtureAgentName "coordinator" & #delegates .~ map fixtureAgentName ["worker", "successor"]) (DelegateCtx (fixtureDelegationDepth 0) actor (Just parentSession) Nothing (Just (WorkflowId "parent")) [fixtureAgentName "coordinator"] Nothing (Just root) Nothing defaultDelegationBudget) (fixtureAgentName "worker") old (fixtureLimit 10) (fixtureLimit 4)
   _ <- right =<< run env Catalog.registerProjectionCatalog
   run env (Roots.enrollRoot root (Resources.Envelope (Map.fromList [(dimension, Resources.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now))) >>= (@?= Right Resources.Accepted)
   _ <- right =<< run env (Sessions.openSession session)
   access <- right =<< run env (Sessions.authorizeSession (sessionIdFor session) actor (pure (Right ())))
-  (_, message) <- right =<< run env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send") (Instruction 1 FollowUp (fixtureInstruction "fixture") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+  (_, message) <- right =<< run env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send") (Instruction V1 FollowUp (fixtureInstruction "fixture") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
   (_, started) <- right =<< run env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId "start") message.assignmentId)
   child <- maybe (fail "missing child") pure started.childWorkflowId
   (binding, _) <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx storage (WorkspaceRequest child (Just (sessionIdFor session, message.assignmentId)) root old old (fixtureRevision 0)) repository))
@@ -341,7 +342,7 @@ withWorkspacePolicy transferring policy fixture callback = Fixture.withFixture f
   intent <-
     if transferring
       then snd <$> (right =<< run env (Sessions.requestTransfer access (fixtureRevision 2) (fixtureRevision 0) (fixtureOperationId "transfer") version binding.workspace (fixtureAgentName "successor") successor))
-      else pure (TransferIntent 1 (sessionIdFor session) session.objective actor (fixtureOperationId "not-requested") version old successor (fixtureAgentName "successor") (fixtureRevision 0) (fixtureRevision 1) root binding.workspace)
+      else pure (TransferIntent V1 (sessionIdFor session) session.objective actor (fixtureOperationId "not-requested") version old successor (fixtureAgentName "successor") (fixtureRevision 0) (fixtureRevision 1) root binding.workspace)
   stopped <- newIORef 0
   let backend = SupervisorBackend (pure (Right boot)) (\_ _ _ -> fail "transfer cannot capture") (\_ _ _ _ _ -> fail "transfer cannot launch") (const (pure (Right True))) (\_ -> modifyIORef' stopped (+ 1) >> pure (Right ()))
       runtime = SupervisorRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ -> fail "transfer cannot select new commands") backend
@@ -381,12 +382,12 @@ establishSuccessor env binding intent proof = do
   _ <- right =<< run env (Sessions.retainTransferFence access state.revision (fixtureRevision 0) (fixtureOperationId "retain-fence") intent.operationId (FencedAndSettled proof))
   Just (_, original) <- pure binding.request.assignment
   pending <- current
-  _ <- right =<< run env (Sessions.recordResult access pending.revision (fixtureRevision 0) (fixtureOperationId "finish-original") (AssignmentResult 1 original AssignmentFailed Nothing Aeson.Null []))
+  _ <- right =<< run env (Sessions.recordResult access pending.revision (fixtureRevision 0) (fixtureOperationId "finish-original") (AssignmentResult V1 original AssignmentFailed Nothing Aeson.Null []))
   ready <- current
-  let receipt = OwnershipReceipt 1 intent.objective intent.operationId (ownershipFingerprint intent proof) (advanceRevision intent.expected.revision)
+  let receipt = OwnershipReceipt V1 intent.objective intent.operationId (ownershipFingerprint intent proof) (advanceRevision intent.expected.revision)
   _ <- right =<< run env (Sessions.establishOwner access ready.revision (fixtureRevision 0) (fixtureOperationId "establish") intent.operationId proof receipt)
   established <- current
-  (_, message) <- right =<< run env (Sessions.acceptMessage access established.revision (fixtureRevision 1) (fixtureOperationId "successor-message") (Instruction 1 FollowUp (fixtureInstruction "continue fixture") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+  (_, message) <- right =<< run env (Sessions.acceptMessage access established.revision (fixtureRevision 1) (fixtureOperationId "successor-message") (Instruction V1 FollowUp (fixtureInstruction "continue fixture") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
   (_, started) <- right =<< run env (Sessions.startAssignment access (advanceRevision established.revision) (fixtureRevision 1) (fixtureOperationId "successor-start") message.assignmentId)
   maybe (fail "missing actual successor child") pure started.childWorkflowId
 

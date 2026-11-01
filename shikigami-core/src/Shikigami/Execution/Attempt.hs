@@ -11,11 +11,12 @@ import Shikigami.Execution.Identity
 import Shikigami.Execution.Resources (AttemptRequest (..))
 import Shikigami.Execution.SelectionStore (CallLimits, CallOutcome, CallReceipt (..))
 import Shikigami.Execution.Transcript
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude
 import Shikigami.StateRevision
 
 data JobReference = JobReference
-  { format :: !Int,
+  { format :: !(FormatVersion "execution-job"),
     executionId :: !ExecutionId,
     operationId :: !OperationId,
     attemptId :: !AttemptId
@@ -26,7 +27,7 @@ data JobReference = JobReference
 instance FromJSON JobReference where
   parseJSON value = do
     reference <- genericParseJSON defaultOptions value
-    unless (reference.format == 1) (fail "unsupported execution job version")
+    unless (reference.format == V1) (fail "unsupported execution job version")
     pure reference
 
 data ExecutionWake = ExecutionWake {token :: !AwakeableId, generation :: !Int}
@@ -57,7 +58,7 @@ data AttemptPhase = AwaitingDispatch | Claimed | DispatchStarted | AttemptCommit
   deriving anyclass (ToJSON, FromJSON)
 
 data ExecutionAttempt = ExecutionAttempt
-  { format :: !Int,
+  { format :: !(FormatVersion "execution-attempt"),
     executionId :: !ExecutionId,
     operationId :: !OperationId,
     request :: !AttemptRequest,
@@ -78,7 +79,7 @@ data ExecutionAttempt = ExecutionAttempt
 instance FromJSON ExecutionAttempt where
   parseJSON value = do
     attempt <- genericParseJSON defaultOptions value
-    unless (attempt.format == 1 && attempt.request.operationId == attempt.operationId && not (Text.null attempt.fingerprint) && Text.length attempt.fingerprint <= 256) (fail "unsupported execution attempt identity")
+    unless (attempt.format == V1 && attempt.request.operationId == attempt.operationId && not (Text.null attempt.fingerprint) && Text.length attempt.fingerprint <= 256) (fail "unsupported execution attempt identity")
     unless (maybe True (\receipt -> receipt.request == attempt.request) attempt.call) (fail "execution call receipt differs from its attempt")
     when (attempt.phase `elem` [Claimed, DispatchStarted, AttemptUncertain, AttemptSuperseded]) do
       unless (attempt.generation > initialRevision && isJust attempt.owner && isJust attempt.expiresAt) (fail "execution claim has no owner")

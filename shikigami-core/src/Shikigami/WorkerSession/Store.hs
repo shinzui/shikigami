@@ -88,6 +88,7 @@ import Shikigami.Execution.Resources (Admission (..))
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Transcript (ExecutionId, PayloadRef (..))
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Catalog (withLiveSession)
@@ -166,7 +167,7 @@ openSessionWithLimit maximumSessions admission = guarded do
   let session = sessionIdFor admission
       root = fromMaybe (error "validated session root missing") admission.context.executionRootId
       binding = SessionBinding session (scopeDigestFor admission) admission.scope admission.objective admission.context.identity admission.identity root ref
-      initial = SessionState 1 session initialRevision Idle admission.identity initialRevision Nothing initialRevision initialRevision initialRevision Nothing Nothing Nothing Nothing []
+      initial = SessionState V1 session initialRevision Idle admission.identity initialRevision Nothing initialRevision initialRevision initialRevision Nothing Nothing Nothing Nothing []
       matching = \case
         Just (state, existing) | existing == binding -> Right (AlreadyAccepted, state)
         Just _ -> Left SessionBindingConflict
@@ -318,7 +319,7 @@ acceptScopedMessage access expected epoch operation permissions instruction = gu
       actual <- writePayload state.sessionId encoded
       unless (actual == ref) (abort SessionBindingConflict)
       let fingerprint = commandFingerprint "accept" commandInput
-          message = MessageReceipt 1 state.sessionId state.nextSequence (assignmentIdFor state.sessionId state.nextSequence operation) operation fingerprint instruction.kind ref instruction.assignmentRevision state.epoch Queued Nothing Nothing Nothing permissions
+          message = MessageReceipt V1 state.sessionId state.nextSequence (assignmentIdFor state.sessionId state.nextSequence operation) operation fingerprint instruction.kind ref instruction.assignmentRevision state.epoch Queued Nothing Nothing Nothing permissions
       Tx.statement (state.sessionId.value, fromInteger (revisionNumber state.nextSequence), message.assignmentId.value, operationKey operation, message) insertMessage
       appendEvent state (MessageAccepted message)
       pure (message, state & #nextSequence .~ (advanceRevision state.nextSequence) & #eventCursor .~ (advanceRevision state.eventCursor))
@@ -434,7 +435,7 @@ closeSession access expected epoch operation disposition =
 
 recordResult :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> AssignmentResult -> Eff es (Either SessionError (Admission, ResultReceipt))
 recordResult access expected epoch operation result = guarded do
-  unless (result.format == 1 && length result.artifacts <= 128 && all (\ref -> not (Text.null ref) && Text.length ref <= 256) result.artifacts) (throwIO (SessionAbort (SessionInputRefused "invalid assignment result")))
+  unless (result.format == V1 && length result.artifacts <= 128 && all (\ref -> not (Text.null ref) && Text.length ref <= 256) result.artifacts) (throwIO (SessionAbort (SessionInputRefused "invalid assignment result")))
   ref <- either (throwIO . SessionAbort) pure (payloadReference encoded)
   mutate
     access
@@ -453,7 +454,7 @@ recordResult access expected epoch operation result = guarded do
       when (isJust existing) (abort MessageConflict)
       actual <- writePayload state.sessionId encoded
       unless (actual == ref) (abort SessionBindingConflict)
-      let receipt = ResultReceipt 1 state.sessionId result.assignmentId operation (commandFingerprint "result" (toJSON (epoch, ref))) result.disposition ref (advanceRevision state.eventCursor)
+      let receipt = ResultReceipt V1 state.sessionId result.assignmentId operation (commandFingerprint "result" (toJSON (epoch, ref))) result.disposition ref (advanceRevision state.eventCursor)
       Tx.statement (state.sessionId.value, result.assignmentId.value, receipt) insertResult
       saveMessage (message & #phase .~ AssignmentFinished & #executionId .~ result.executionId)
       appendEvent state (ResultAvailable receipt)
@@ -513,7 +514,7 @@ prepareCheckpoint access expected epoch operation version previous through = gua
       unless (version.rootId == binding.rootId && version.ownerEpoch == epoch && version.owner == state.owner) (abort SessionBindingConflict)
       events <- readRows (state.sessionId.value, fromInteger (revisionNumber previous), fromInteger (revisionNumber through - revisionNumber previous)) listEvents
       unless (map (revisionNumber . (.cursor)) events == [revisionNumber previous + 1 .. revisionNumber through]) (abort SessionBindingConflict)
-      let intent = CheckpointIntent 1 state.sessionId binding.objective operation binding.parentIdentity epoch version previous through events
+      let intent = CheckpointIntent V1 state.sessionId binding.objective operation binding.parentIdentity epoch version previous through events
       pure (intent, state & #checkpointIntent .~ Just operation)
 
 readCheckpointIntent :: (SessionReadEffects es) => SessionAccess -> OperationId -> Eff es (Either SessionError CheckpointIntent)
@@ -527,7 +528,7 @@ getCheckpointIntent session operation = do
   stored <- Tx.statement (session.value, operationKey operation) selectCommand
   case stored of
     Just (_, value) -> case Aeson.fromJSON value of
-      Aeson.Success intent | intent.format == 1 && intent.sessionId == session && intent.operationId == operation -> pure intent
+      Aeson.Success intent | intent.format == V1 && intent.sessionId == session && intent.operationId == operation -> pure intent
       _ -> abort SessionBindingConflict
     _ -> abort AssignmentMissing
 
@@ -642,7 +643,7 @@ requestTransfer access expected epoch operation version workspace target success
       require (either (const (Left SessionOwnerRefused)) Right (assertMayDelegate admission.delegator target))
       require (either (const (Left SessionOwnerRefused)) Right (checkCycle admission.context target))
       void (require (either (const (Left SessionOwnerRefused)) Right (checkDepth admission.context)))
-      let intent = TransferIntent 1 state.sessionId binding.objective binding.parentIdentity operation version state.owner successor target epoch (advanceRevision epoch) binding.rootId workspace
+      let intent = TransferIntent V1 state.sessionId binding.objective binding.parentIdentity operation version state.owner successor target epoch (advanceRevision epoch) binding.rootId workspace
       ref <- writePayload state.sessionId (body "transfer-intent" intent)
       appendEvent state (TransferStatusChanged operation TransferRequested)
       pure (intent, state & #phase .~ Transferring & #handoff .~ Just (HandoffProgress operation ref TransferRequested Nothing Nothing) & #eventCursor .~ (advanceRevision state.eventCursor))
@@ -661,7 +662,7 @@ readTransferOperation access@(SessionAccess session _ _) operation = protected d
   stored <- Tx.statement (session.value, operationKey operation) selectCommand
   case stored of
     Just (_, value) -> case Aeson.fromJSON value of
-      Aeson.Success intent | intent.format == 1 && intent.sessionId == session && intent.operationId == operation -> pure intent
+      Aeson.Success intent | intent.format == V1 && intent.sessionId == session && intent.operationId == operation -> pure intent
       _ -> abort MessageConflict
     Nothing -> abort AssignmentMissing
 

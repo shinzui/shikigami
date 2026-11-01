@@ -47,6 +47,7 @@ import Shikigami.Execution.Request (ExecutionRequest)
 import Shikigami.Execution.Resources (Admission (..), Root (..), checkRoot)
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Transcript (PayloadRef (..))
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Checkpoint (CheckpointProvider (..), ObjectiveVersion (..))
@@ -80,7 +81,7 @@ data WorkerSlot = WorkerSlot
   deriving anyclass (ToJSON, FromJSON)
 
 data CoordinationScope = CoordinationScope
-  { format :: !Int,
+  { format :: !(FormatVersion "coordination-scope"),
     run :: !CoordinatorRun,
     parentScope :: !Text,
     agent :: !AgentDecl,
@@ -190,7 +191,7 @@ resolveGrant host authorizer run pinned = do
   case supplied of
     Right (Right Nothing) -> pure (Right Nothing)
     Right (Right (Just scope)) -> do
-      let valid = scope.format == 1 && scope.run == run && scope.context.identity == run.identity && scope.context.sessionId == Just run.sessionId && scope.context.executionRootId == run.rootId && scope.context.executionPermissions == run.permittedAliases && isJust run.rootId && not (Text.null scope.parentScope) && Text.length scope.parentScope <= 256 && not (null scope.workers) && length scope.workers <= sessionLimit scope.maximumSessions && length (nub (map (.workerKey) scope.workers)) == length scope.workers && maybe True (== scopeFingerprint scope) pinned
+      let valid = scope.format == V1 && scope.run == run && scope.context.identity == run.identity && scope.context.sessionId == Just run.sessionId && scope.context.executionRootId == run.rootId && scope.context.executionPermissions == run.permittedAliases && isJust run.rootId && not (Text.null scope.parentScope) && Text.length scope.parentScope <= 256 && not (null scope.workers) && length scope.workers <= sessionLimit scope.maximumSessions && length (nub (map (.workerKey) scope.workers)) == length scope.workers && maybe True (== scopeFingerprint scope) pinned
           admissions = [sessionAdmission scope worker | worker <- scope.workers]
       if not valid || any (either (const True) (const False) . validateAdmission) admissions
         then pure (Left SessionOwnerRefused)
@@ -306,10 +307,10 @@ executeAdmittedCommand host authorizer (CoordinationGrant scope) operation comma
           (Right identity, Right (Right current)) | identity == slot.identity && current.active && current.owner == identity && current.ownerEpoch == initialRevision && Just current.rootId == scope.run.rootId && now < current.cutoff -> Right ()
           _ -> Left SessionOwnerRefused
       _ -> pure (Left SessionOwnerRefused)
-    message kind draft = Instruction 1 kind draft.text draft.objectiveRevision draft.assignmentRevision draft.criteriaRevision draft.selection
+    message kind draft = Instruction V1 kind draft.text draft.objectiveRevision draft.assignmentRevision draft.criteriaRevision draft.selection
 
 sessionAdmission :: CoordinationScope -> WorkerSlot -> SessionAdmission
-sessionAdmission scope slot = SessionAdmission 1 (SessionScope scope.parentScope slot.workerKey) slot.objective scope.agent scope.context slot.target slot.identity scope.maximumAssignments scope.mailboxLimit
+sessionAdmission scope slot = SessionAdmission V1 (SessionScope scope.parentScope slot.workerKey) slot.objective scope.agent scope.context slot.target slot.identity scope.maximumAssignments scope.mailboxLimit
 
 matchesScope :: CoordinationScope -> WorkerSlot -> SessionBinding -> Bool
 matchesScope scope slot binding = binding.parentIdentity == scope.run.identity && Just binding.rootId == scope.run.rootId && binding.scope == SessionScope scope.parentScope slot.workerKey && binding.objective == slot.objective

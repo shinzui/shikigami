@@ -40,6 +40,7 @@ import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript (executionIdFor)
 import Shikigami.Execution.Transcript qualified as Transcript
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Transfer
@@ -118,7 +119,7 @@ retainedTransferTx intent = do
     _ -> False
 
 validIntent :: WorkspaceBinding -> TransferIntent -> Bool
-validIntent binding intent = intent.format == 1 && intent.workspace == binding.workspace && intent.rootId == binding.request.rootId && intent.oldEpoch >= binding.request.epoch && intent.newEpoch == advanceRevision intent.oldEpoch && revisionNumber intent.newEpoch < 9223372036854775808 && intent.oldOwner /= intent.newOwner && intent.actor /= intent.newOwner
+validIntent binding intent = intent.format == V1 && intent.workspace == binding.workspace && intent.rootId == binding.request.rootId && intent.oldEpoch >= binding.request.epoch && intent.newEpoch == advanceRevision intent.oldEpoch && revisionNumber intent.newEpoch < 9223372036854775808 && intent.oldOwner /= intent.newOwner && intent.actor /= intent.newOwner
 
 -- Only retained settlement of every file/Git/process effect permits a fence.
 -- A free OS lock, missing unit or expired claim alone cannot satisfy this query.
@@ -133,7 +134,7 @@ retainFenceTx binding intent = do
       settled <- workspaceSettledTx binding
       if control == Right (Just (Store.WorkspaceControl intent.oldOwner intent.oldEpoch Store.AdmissionFrozen)) && session && settled == Right True
         then do
-          let proof = FenceProof 1 binding.workspace intent.operationId (transferFingerprint intent) intent.oldEpoch intent.newEpoch (versionedDigest "shikigami.workspace-fence/1" (toJSON (workspaceBindingDigest binding, intent)))
+          let proof = FenceProof V1 binding.workspace intent.operationId (transferFingerprint intent) intent.oldEpoch intent.newEpoch (versionedDigest "shikigami.workspace-fence/1" (toJSON (workspaceBindingDigest binding, intent)))
           Tx.statement (binding.workspace.resource, intent.oldEpoch, proof) saveFence
           pure (Right proof)
         else pure (Left WorkspaceBindingConflict)
@@ -405,7 +406,7 @@ assignmentTerminalTx session assignment requireResult execution owner root = do
     case (found, actual) of
       (Just (receipt, result), Just (state, binding)) -> do
         unless (receipt.sessionId == session && receipt.assignmentId == assignment && maybe True (== execution) receipt.executionId && binding.identity == owner && binding.rootId == Just root) (Left "inconsistent prior assignment association")
-        forM_ result \value -> unless (value.format == 1 && value.sessionId == session && value.assignmentId == assignment) (Left "inconsistent prior result association")
+        forM_ result \value -> unless (value.format == V1 && value.sessionId == session && value.assignmentId == assignment) (Left "inconsistent prior result association")
         pure (receipt.phase == AssignmentFinished && (not requireResult || isJust result) && state.phase `elem` [Transcript.Succeeded, Transcript.Failed, Transcript.Cancelled] && state.pendingReceipts == noPendingReceipts && isNothing state.activeOperation)
       _ -> Right False
 

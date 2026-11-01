@@ -24,6 +24,7 @@ import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Identity (AttemptId, OperationId, operationIdText)
 import Shikigami.Execution.SelectionRuntime qualified as Selection
 import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId)
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude
 import Shikigami.StateRevision (StateRevision, advanceRevision, parseRevision)
@@ -114,7 +115,7 @@ tests fixture =
         run env (runTransaction (retainFenceTx binding intent)) >>= (@?= Right proof),
       testCase "an invented unretained transfer cannot freeze the allocation" $ withWorkspace fixture \env session _ binding _ -> do
         version <- Fixture.checkpointVersion session
-        let intent = TransferIntent 1 (sessionIdFor session) session.objective session.context.identity (fixtureOperationId "invented") version session.identity successor (fixtureAgentName "successor") (fixtureRevision 0) (fixtureRevision 1) binding.request.rootId binding.workspace
+        let intent = TransferIntent V1 (sessionIdFor session) session.objective session.context.identity (fixtureOperationId "invented") version session.identity successor (fixtureAgentName "successor") (fixtureRevision 0) (fixtureRevision 1) binding.request.rootId binding.workspace
         run env (runTransaction (beginTransferTx binding intent)) >>= (@?= Left WorkspaceBindingConflict)
         run env (runTransaction (Workspaces.checkWorkspaceOwnerTx binding session.identity (fixtureRevision 0))) >>= (@?= Right ()),
       testCase "prepared file effects preserve uncertainty until factual settlement after freeze" $ withWorkspace fixture \env session access binding original -> do
@@ -146,9 +147,9 @@ tests fixture =
         _ <- right =<< run env (Sessions.retainTransferFence access current.revision (fixtureRevision 0) (fixtureOperationId "retain-fence") intent.operationId (FencedAndSettled proof))
         Just (_, first) <- pure binding.request.assignment
         pending <- sessionState env session
-        _ <- right =<< run env (Sessions.recordResult access pending.revision (fixtureRevision 0) (fixtureOperationId "finish-original") (AssignmentResult 1 first AssignmentSucceeded Nothing Aeson.Null []))
+        _ <- right =<< run env (Sessions.recordResult access pending.revision (fixtureRevision 0) (fixtureOperationId "finish-original") (AssignmentResult V1 first AssignmentSucceeded Nothing Aeson.Null []))
         ready <- sessionState env session
-        let checkpoint = OwnershipReceipt 1 intent.objective intent.operationId (ownershipFingerprint intent proof) (advanceRevision intent.expected.revision)
+        let checkpoint = OwnershipReceipt V1 intent.objective intent.operationId (ownershipFingerprint intent proof) (advanceRevision intent.expected.revision)
         _ <- right =<< run env (Sessions.establishOwner access ready.revision (fixtureRevision 0) (fixtureOperationId "establish") intent.operationId proof checkpoint)
         established <- sessionState env session
         (_, message) <- right =<< run env (Sessions.acceptMessage access established.revision (fixtureRevision 1) (fixtureOperationId "successor-message") instruction)
@@ -198,7 +199,7 @@ successor :: AgentIdentity
 successor = compatibilityIdentity (fixtureAgentName "successor")
 
 instruction :: Instruction
-instruction = Instruction 1 FollowUp (fixtureInstruction "bounded fixture assignment") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing
+instruction = Instruction V1 FollowUp (fixtureInstruction "bounded fixture assignment") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing
 
 withWorkspace :: DatabaseFixture -> (AppEnv -> SessionAdmission -> Sessions.SessionAccess -> WorkspaceBinding -> WorkspaceAdmission -> IO a) -> IO a
 withWorkspace fixture callback = Fixture.withConfiguredFixture fixture (\admission -> admission & #delegator . #delegates .~ map fixtureAgentName ["worker", "successor"]) \env session access -> do

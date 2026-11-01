@@ -12,6 +12,7 @@ import Shikigami.Execution.Resources (AttemptRequest (..))
 import Shikigami.Execution.Store qualified as Store
 import Shikigami.Execution.Transcript
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as Generated
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 
@@ -39,7 +40,7 @@ driveExecutionForeground runtime start allowance = drive (max 0 (min 10000 allow
                   Left err -> pure (Left err)
                   Right values -> case filter Attempt.logicalAttempt values of
                     [attempt] | attempt.phase /= Attempt.AttemptUncertain -> do
-                      result <- executeAcceptedAttempt runtime binding.identity (Attempt.JobReference 1 start.executionId operation attempt.request.attemptId)
+                      result <- executeAcceptedAttempt runtime binding.identity (Attempt.JobReference V1 start.executionId operation attempt.request.attemptId)
                       case result of
                         Right ExecutorDone -> drive (remaining - 1)
                         Right ExecutorRetry -> pure (Right Nothing)

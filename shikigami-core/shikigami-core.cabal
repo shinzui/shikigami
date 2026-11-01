@@ -146,6 +146,7 @@ library
     Shikigami.Flow.Routing
     Shikigami.Flow.ShikumiDecisionExample
     Shikigami.Flow.Workers
+    Shikigami.FormatVersion
     Shikigami.Generated.Conformance
     Shikigami.Health.Ping
     Shikigami.Inspection.Aggregates
@@ -468,6 +469,7 @@ test-suite shikigami-core-test
     Shikigami.Fixture.ExecutionIdentity
     Shikigami.Fixture.KawaStub
     Shikigami.Fixture.SinkHttp
+    Shikigami.FormatVersionSpec
     Shikigami.KanmonClientSpec
     Shikigami.KeiroSpecificationSpec
     Shikigami.LogSpec

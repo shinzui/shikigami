@@ -42,6 +42,7 @@ import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Progress
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.ToolPosition
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude hiding (Options)
 import Shikigami.StateRevision
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), instructionPrompt)
@@ -102,7 +103,7 @@ data ReplayBlock
 instance Show ReplayBlock where show _ = "ReplayBlock <protected>"
 
 data ReplayAssistant = ReplayAssistant
-  { format :: !Int,
+  { format :: !(FormatVersion "replay-assistant"),
     blocks :: ![ReplayBlock],
     stopReason :: !StopReason,
     responseId :: !(Maybe Text),
@@ -118,7 +119,7 @@ instance Show ReplayAssistant where show assistant = "ReplayAssistant " <> show 
 instance FromJSON ReplayAssistant where
   parseJSON value = do
     assistant <- Aeson.genericParseJSON Aeson.defaultOptions value
-    unless (assistant.format == 1) (fail "unsupported assistant replay version")
+    unless (assistant.format == V1) (fail "unsupported assistant replay version")
     unless (length assistant.blocks <= 256 && all assistantBlock assistant.blocks) (fail "unsupported assistant replay blocks")
     pure assistant
     where
@@ -229,7 +230,7 @@ data PermissionBinding = PermissionBinding
   deriving anyclass (ToJSON, FromJSON)
 
 data ExecutionSnapshot = ExecutionSnapshot
-  { format :: !Int,
+  { format :: !(FormatVersion "execution-snapshot"),
     executionId :: !ExecutionId,
     runId :: !Text,
     agent :: !AgentName,
@@ -258,7 +259,7 @@ instance FromJSON ExecutionSnapshot where
   parseJSON = Aeson.withObject "ExecutionSnapshot" \fields -> do
     let defaults = (if KeyMap.member "workspace" fields then id else KeyMap.insert "workspace" Aeson.Null) (if KeyMap.member "toolBindings" fields then fields else KeyMap.insert "toolBindings" (toJSON ([] :: [ToolBinding])) fields)
     snapshot <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object defaults)
-    unless (snapshot.format == 1 && snapshot.executionId == executionIdFor snapshot.selection.assignmentId && snapshot.selection.profile == (((.ref) . resolvedProfileView) <$> snapshot.sanctionedProfile)) (fail "unsupported execution snapshot version or identity")
+    unless (snapshot.format == V1 && snapshot.executionId == executionIdFor snapshot.selection.assignmentId && snapshot.selection.profile == (((.ref) . resolvedProfileView) <$> snapshot.sanctionedProfile)) (fail "unsupported execution snapshot version or identity")
     case snapshot.selection.effectiveOptions of
       Aeson.Object options -> unless (all (\key -> case KeyMap.lookup key options of Nothing -> True; Just Aeson.Null -> True; Just (Aeson.Object fields) -> KeyMap.null fields; _ -> False) ["headers", "metadata", "apiKey"]) (fail "execution snapshot contains unsupported private model options")
       _ -> fail "execution snapshot options are unsupported"
@@ -292,7 +293,7 @@ data NextWork = NeedModel | NeedTool !PayloadRef !ToolPosition | NeedValidation 
   deriving anyclass (ToJSON, FromJSON)
 
 data ExecutionState = ExecutionState
-  { format :: !Int,
+  { format :: !(FormatVersion "execution-state"),
     executionId :: !ExecutionId,
     revision :: !(StateRevision "execution"),
     phase :: !ExecutionPhase,
@@ -317,7 +318,7 @@ instance ToJSON ExecutionState where
 instance FromJSON ExecutionState where
   parseJSON = Aeson.withObject "ExecutionState" \fields -> do
     state <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (foldr (\key current -> if KeyMap.member key current then current else KeyMap.insert key Aeson.Null current) (if KeyMap.member "pendingReceipts" fields then fields else KeyMap.insert "pendingReceipts" (toJSON (0 :: Int)) fields) ["wake", "failure"]))
-    unless (state.format == 1 && revisionNumber state.cursor <= 10000) (fail "unsupported execution state version or cursor")
+    unless (state.format == V1 && revisionNumber state.cursor <= 10000) (fail "unsupported execution state version or cursor")
     pure state
 
 data OperationKind = ModelTurn | ToolOperation | ModelSummary | ModelRepair
@@ -351,7 +352,7 @@ instance FromJSON OperationUncertainty where
     pure (if marked then MarkedUncertain else NotMarkedUncertain)
 
 data Operation = Operation
-  { format :: !Int,
+  { format :: !(FormatVersion "execution-operation"),
     executionId :: !ExecutionId,
     position :: !(StateRevision "execution-operation"),
     specification :: !OperationSpec,
@@ -372,11 +373,11 @@ instance ToJSON Operation where
 instance FromJSON Operation where
   parseJSON = Aeson.withObject "Operation" \fields -> do
     operation <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (if KeyMap.member "permission" fields then fields else KeyMap.insert "permission" Aeson.Null fields))
-    unless (operation.format == 1 && operation.specification.operationId == operationIdFor operation.executionId operation.position) (fail "unsupported operation version or identity")
+    unless (operation.format == V1 && operation.specification.operationId == operationIdFor operation.executionId operation.position) (fail "unsupported operation version or identity")
     pure operation
 
 data ReplayToolResult = ReplayToolResult
-  { format :: !Int,
+  { format :: !(FormatVersion "replay-tool-result"),
     blocks :: ![ReplayBlock],
     failed :: !Bool,
     structuredContent :: !(Maybe Aeson.Value),
@@ -390,13 +391,13 @@ instance Show ReplayToolResult where show _ = "ReplayToolResult <protected>"
 instance FromJSON ReplayToolResult where
   parseJSON value = do
     result <- Aeson.genericParseJSON Aeson.defaultOptions value
-    unless (result.format == 1 && length result.blocks <= 256 && length result.extensionBlocks <= 128 && all valid result.blocks) (fail "unsupported tool observation")
+    unless (result.format == V1 && length result.blocks <= 256 && length result.extensionBlocks <= 128 && all valid result.blocks) (fail "unsupported tool observation")
     pure result
     where
       valid (TextBlock _) = True; valid ImageBlock {} = True; valid _ = False
 
 captureToolOutput :: Tool.ToolOutput -> ReplayToolResult
-captureToolOutput output = ReplayToolResult 1 (map capture (Vector.toList output.result.content)) output.result.isError output.structuredContent output.extensionBlocks
+captureToolOutput output = ReplayToolResult V1 (map capture (Vector.toList output.result.content)) output.result.isError output.structuredContent output.extensionBlocks
   where
     capture (Content.ToolResultText text) = TextBlock text.text
     capture (Content.ToolResultImage image) = ImageBlock image
@@ -445,7 +446,7 @@ data ExecutionError
 captureAssistant :: Response.Response -> ReplayAssistant
 captureAssistant response =
   ReplayAssistant
-    { format = 1,
+    { format = V1,
       blocks = map assistantBlock (Vector.toList response.message.content),
       stopReason = response.message.stopReason,
       responseId = response.responseId,
@@ -462,7 +463,7 @@ captureAssistant response =
 
 restoreAssistant :: ReplayAssistant -> Either ExecutionError Message.AssistantPayload
 restoreAssistant assistant = do
-  unless (assistant.format == 1) (Left UnsupportedReplay)
+  unless (assistant.format == V1) (Left UnsupportedReplay)
   blocks <- traverse restore assistant.blocks
   pure
     Message.AssistantPayload

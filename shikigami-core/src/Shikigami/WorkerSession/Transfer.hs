@@ -22,6 +22,7 @@ import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
@@ -29,7 +30,7 @@ import Shikigami.WorkerSession.Types (ObjectiveRef, WorkerSessionId)
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 
 data TransferIntent = TransferIntent
-  { format :: !Int,
+  { format :: !(FormatVersion "transfer-intent"),
     sessionId :: !WorkerSessionId,
     objective :: !ObjectiveRef,
     actor :: !AgentIdentity,
@@ -47,7 +48,7 @@ data TransferIntent = TransferIntent
   deriving anyclass (ToJSON, FromJSON)
 
 data FenceProof = FenceProof
-  { format :: !Int,
+  { format :: !(FormatVersion "workspace-fence"),
     workspace :: !WorkspaceRef,
     operationId :: !OperationId,
     fingerprint :: !Text,
@@ -63,7 +64,7 @@ data FenceOutcome = FencedAndSettled !FenceProof | FenceUnresolved | FenceConfli
   deriving anyclass (ToJSON, FromJSON)
 
 data OwnershipReceipt = OwnershipReceipt
-  { format :: !Int,
+  { format :: !(FormatVersion "ownership-receipt"),
     objective :: !ObjectiveRef,
     operationId :: !OperationId,
     fingerprint :: !Text,
@@ -102,7 +103,7 @@ ownershipFingerprint intent proof = versionedDigest "shikigami.worker-session-ow
 
 matchesFence :: TransferIntent -> FenceProof -> Bool
 matchesFence intent proof =
-  proof.format == 1
+  proof.format == V1
     && proof.workspace == intent.workspace
     && proof.operationId == intent.operationId
     && proof.fingerprint == transferFingerprint intent
@@ -113,7 +114,7 @@ matchesFence intent proof =
 matchesOwnership :: TransferIntent -> FenceProof -> OwnershipReceipt -> Bool
 matchesOwnership intent proof receipt =
   matchesFence intent proof
-    && receipt.format == 1
+    && receipt.format == V1
     && receipt.objective == intent.objective
     && receipt.operationId == intent.operationId
     && receipt.fingerprint == ownershipFingerprint intent proof

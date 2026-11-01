@@ -115,6 +115,7 @@ import Shikigami.Execution.Start qualified as ExecutionStart
 import Shikigami.Execution.Tools qualified as ExecutionTools
 import Shikigami.Execution.Transcript qualified as Execution
 import Shikigami.Flow.Decision qualified as FlowDecision
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Log qualified as Log
 import Shikigami.Log.Correlation (runCorrelationId)
@@ -966,7 +967,7 @@ runConversationSkillStep env recordedIdentity decl msg sid userTurn profile sele
 historicalTurn :: TurnRow -> Either Execution.ExecutionError Execution.ReplayMessage
 historicalTurn row = case row.role of
   "user" -> Right (Execution.UserTurn [Execution.TextBlock row.content] Nothing)
-  "assistant" -> Right (Execution.AssistantTurn (Execution.ReplayAssistant 1 [Execution.TextBlock row.content] Stop Nothing Nothing (Aeson.object []) Nothing))
+  "assistant" -> Right (Execution.AssistantTurn (Execution.ReplayAssistant V1 [Execution.TextBlock row.content] Stop Nothing Nothing (Aeson.object []) Nothing))
   _ -> Left Execution.UnsupportedReplay
 
 -- Supported conversation tools are exactly the existing base registry; this

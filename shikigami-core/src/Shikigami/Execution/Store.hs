@@ -111,6 +111,7 @@ import Shikigami.Execution.Transcript
 import Shikigami.ExecutionLifecycle.Generated.Domain qualified as Generated
 import Shikigami.ExecutionLifecycle.Generated.EventStream (executionLifecycleCategory, executionLifecycleEventStream)
 import Shikigami.ExecutionLookup.Generated.ReadModel (executionLookupReadModel)
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.StateRevision
 
@@ -186,7 +187,7 @@ admitExecution snapshot
       Right ref -> do
         let execution = snapshot.executionId
             binding = ExecutionBinding snapshot.identity snapshot.selection.rootId snapshot.selection.assignmentId snapshot.selection.descriptor ref.digest (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy))
-            state = ExecutionState 1 execution initialRevision Active initialRevision NeedModel ref Nothing Nothing noRepairs noModelTurns Nothing Nothing noPendingReceipts
+            state = ExecutionState V1 execution initialRevision Active initialRevision NeedModel ref Nothing Nothing noRepairs noModelTurns Nothing Nothing noPendingReceipts
         result <- persistChecked
           execution
           (Generated.AdmitExecution (Generated.AdmitExecutionData execution (payloadDigestText ref.digest)))
@@ -333,7 +334,7 @@ acceptOperation access@(ReplayAccess execution _ _) expected specification input
       Left err -> pure (Left err)
       Right ref -> do
         let fingerprint = versionedDigest "shikigami.execution-operation-request/1" (toJSON (specification, ref, binding.snapshotDigest))
-            operation = Operation 1 execution state.cursor specification fingerprint ref Nothing Nothing NotMarkedUncertain Nothing
+            operation = Operation V1 execution state.cursor specification fingerprint ref Nothing Nothing NotMarkedUncertain Nothing
         old <- findOperation specification.operationId
         case old of
           Just previous -> pure (duplicate fingerprint previous)
@@ -504,7 +505,7 @@ submitAttempt retired access@(ReplayAccess execution _ _) expected submission en
   operation <- findOperation submission.request.operationId >>= maybe (throwIO (ExecutionAbort OperationMissing)) pure
   wakeRef <- either (throwIO . ExecutionAbort) pure (payloadReference wakeBody)
   let fingerprint = versionedDigest "shikigami.execution-attempt/1" (toJSON (operation.fingerprint, submission.request, submission.modelCall, wakeRef))
-      reference = Attempt.JobReference 1 execution submission.request.operationId submission.request.attemptId
+      reference = Attempt.JobReference V1 execution submission.request.operationId submission.request.attemptId
       duplicate existing = if existing.executionId == execution && existing.operationId == submission.request.operationId && existing.request == submission.request && existing.fingerprint == fingerprint then Right (AlreadyAccepted, existing) else Left AttemptConflict
   old <- readMetadata (readRows (attemptKey submission.request.attemptId) selectExecutionAttempt)
   case old of
@@ -527,7 +528,7 @@ submitAttempt retired access@(ReplayAccess execution _ _) expected submission en
                 pure Nothing
               Just previousId -> do
                 unless (current.phase == Unresolved && operation.uncertain == MarkedUncertain && operation.specification.recovery `elem` [RepeatableObservation, IdempotentEffect]) (throwE UnresolvedOperation)
-                previous <- checkedAttempt (Attempt.JobReference 1 execution operation.specification.operationId previousId)
+                previous <- checkedAttempt (Attempt.JobReference V1 execution operation.specification.operationId previousId)
                 unless (previous.phase == Attempt.AttemptUncertain && isNothing previous.lateReceipt && isJust previous.uncertainty && operation.outcome == previous.uncertainty) (throwE AttemptConflict)
                 attempts <- checkedRows (operationKey operation.specification.operationId) listOperationAttempts
                 unless (length (filter (\attempt -> attempt.phase == Attempt.AttemptSuperseded) attempts) < policyNumber snapshot.policy.recoveryAttempts) (throwE (ExecutionPolicyRefused "recovery attempt ceiling exhausted"))
@@ -575,7 +576,7 @@ submitAttempt retired access@(ReplayAccess execution _ _) expected submission en
             _ -> abort AttemptConflict
           actualWake <- writePayload execution wakeBody
           unless (actualWake == wakeRef) (abort CorruptReplay)
-          let attempt = Attempt.ExecutionAttempt 1 execution operation.specification.operationId submission.request fingerprint receipt wakeRef Attempt.AwaitingDispatch Nothing initialRevision Nothing Nothing Nothing Nothing
+          let attempt = Attempt.ExecutionAttempt V1 execution operation.specification.operationId submission.request fingerprint receipt wakeRef Attempt.AwaitingDispatch Nothing initialRevision Nothing Nothing Nothing Nothing
           Tx.statement (attemptKey submission.request.attemptId, execution.value, operationKey operation.specification.operationId, attempt) insertExecutionAttempt
           enqueue reference
           saveExecution (current & #revision .~ (advanceRevision expected) & #phase .~ Active & #next .~ resumeNext & #pendingReceipts .~ pendingReceipts)
@@ -759,7 +760,7 @@ refuseUndispatchedExecutionAttempt identity expected reference = catchExecutionW
 
 claimExecutionAttempt :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> Attempt.JobReference -> ClaimOwner -> Int -> Eff es (Either ExecutionError Attempt.ClaimResult)
 claimExecutionAttempt access@(ReplayAccess execution _ _) expected reference owner seconds = catchExecutionWith id do
-  unless (reference.format == 1 && reference.executionId == execution && seconds >= 1 && seconds <= 3600) (throwIO (ExecutionAbort AttemptConflict))
+  unless (reference.format == V1 && reference.executionId == execution && seconds >= 1 && seconds <= 3600) (throwIO (ExecutionAbort AttemptConflict))
   (_, binding) <- readMetadata (getExecution execution)
   previous <- readMetadata (readRows (attemptKey reference.attemptId) selectExecutionAttempt) >>= maybe (throwIO (ExecutionAbort AttemptMissing)) pure
   unless (matchesReference reference previous) (throwIO (ExecutionAbort AttemptConflict))
@@ -1100,7 +1101,7 @@ reconcileExecutionControlAttempt identity execution expected attempt = catchExec
   reconcileExecutionAttempt (ReplayAccess execution identity now) expected attempt
 
 matchesReference :: Attempt.JobReference -> Attempt.ExecutionAttempt -> Bool
-matchesReference reference attempt = reference.format == 1 && reference.executionId == attempt.executionId && reference.operationId == attempt.operationId && reference.attemptId == attempt.request.attemptId
+matchesReference reference attempt = reference.format == V1 && reference.executionId == attempt.executionId && reference.operationId == attempt.operationId && reference.attemptId == attempt.request.attemptId
 
 claimMatches :: Attempt.AttemptClaim -> Attempt.ExecutionAttempt -> Bool
 claimMatches claim attempt = matchesReference claim.reference attempt && attempt.owner == Just claim.owner && attempt.generation == claim.generation

@@ -86,6 +86,7 @@ import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as DriverGe
 import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
@@ -172,7 +173,7 @@ tests fixture =
               selection = select now root catalog "coordinator"
               selectedRuntime = runtime app store base catalog
               execution = Replay.executionIdFor selection.assignmentId
-              snapshot = Replay.ExecutionSnapshot 1 execution "prepared-http" (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (Replay.SkillInstructions "fixture" "system" "body") (Replay.ReplayContext 1 (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
+              snapshot = Replay.ExecutionSnapshot V1 execution "prepared-http" (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (Replay.SkillInstructions "fixture" "system" "body") (Replay.ReplayContext 1 (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
               operationId = Replay.operationIdFor execution (fixtureRevision 0)
               specification = Replay.OperationSpec operationId Replay.ModelTurn RepeatableObservation "model" (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) "scope" Nothing
               context = systemUser "system" "marker"
@@ -182,7 +183,7 @@ tests fixture =
           _ <- expectRight =<< run app (Durable.acceptOperation access (fixtureRevision 0) specification (toJSON context))
           (request, preparedCall) <- expectRight =<< preparePinnedExecutionCall selectedRuntime selection operationId (fixtureAttemptId "prepared-http-attempt") context Nothing
           let submission = Attempt.AttemptSubmission request (Just preparedCall) (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)
-              reference = Attempt.JobReference 1 execution operationId request.attemptId
+              reference = Attempt.JobReference V1 execution operationId request.attemptId
           (_, attempt) <- expectRight =<< run app (Durable.submitExecutionAttemptWith access (fixtureRevision 1) submission (\_ -> pure ()))
           claim <-
             run app (Durable.claimExecutionAttempt access (fixtureRevision 2) reference (fixtureOwner "prepared-http-owner") 60) >>= \case
@@ -218,7 +219,7 @@ tests fixture =
               selection = select now root catalog "coordinator"
               selectedRuntime = runtime app store base catalog
               execution = Replay.executionIdFor selection.assignmentId
-              snapshot = Replay.ExecutionSnapshot 1 execution "executor-http" (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (Replay.SkillInstructions "fixture" "system" "body") (Replay.ReplayContext 1 (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
+              snapshot = Replay.ExecutionSnapshot V1 execution "executor-http" (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (Replay.SkillInstructions "fixture" "system" "body") (Replay.ReplayContext 1 (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
               operationId = Replay.operationIdFor execution (fixtureRevision 0)
               specification = Replay.OperationSpec operationId Replay.ModelTurn RepeatableObservation "model" (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) "scope" Nothing
               executor authority = Executor.ExecutionRuntime app (const authority) (const authority) (const selectedRuntime) (\_ _ _ use -> Right <$> use []) 5
@@ -226,11 +227,11 @@ tests fixture =
           run app (Durable.admitExecution snapshot) >>= (@?= Right Accepted)
           access <- expectRight =<< run app (Durable.authorizeReplay execution snapshot.identity (pure (Right ())))
           view <- expectRight (selectContextView snapshot.policy snapshot.initialContext)
-          let input = ModelOperationInput 1 view Nothing Nothing
+          let input = ModelOperationInput V1 view Nothing Nothing
           (_, operation) <- expectRight =<< run app (Durable.acceptOperation access (fixtureRevision 0) specification (toJSON input))
           context <- expectRight (Executor.modelContext snapshot operation input)
           (request, preparedCall) <- expectRight =<< preparePinnedExecutionCall selectedRuntime selection operationId (fixtureAttemptId "executor-http-attempt") context Nothing
-          let reference = Attempt.JobReference 1 execution operationId request.attemptId
+          let reference = Attempt.JobReference V1 execution operationId request.attemptId
           _ <- expectRight =<< run app (Durable.submitExecutionAttemptWith access (fixtureRevision 1) (Attempt.AttemptSubmission request (Just preparedCall) (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)) (\_ -> pure ()))
           Executor.executeAcceptedAttempt (executor (pure (Right ()))) snapshot.identity reference >>= (@?= Left (Replay.ExecutionPolicyRefused "execution wake is unavailable"))
           (_, committed) <- expectRight =<< run app (Durable.loadExecution access)
@@ -565,7 +566,7 @@ driveExecutionChild app executor execution remaining
           operation <- maybe (assertFailure "driver suspended without active work" >> fail "operation") pure state.activeOperation
           attempts <- expectRight =<< run app (Durable.inspectOperationAttempts operation)
           case filter (\attempt -> attempt.phase /= Attempt.AttemptAbandoned) attempts of
-            [attempt] -> Executor.executeAcceptedAttempt executor binding.identity (Attempt.JobReference 1 execution operation attempt.request.attemptId) >>= (@?= Right Executor.ExecutorDone)
+            [attempt] -> Executor.executeAcceptedAttempt executor binding.identity (Attempt.JobReference V1 execution operation attempt.request.attemptId) >>= (@?= Right Executor.ExecutorDone)
             _ -> assertFailure "driver child has no accepted attempt"
           driveExecutionChild app executor execution (remaining - 1)
         _ -> assertFailure (show outcome) >> fail "driver child outcome"

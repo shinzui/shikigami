@@ -35,6 +35,7 @@ import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId, fixtureRootId)
 import Shikigami.Flow.Routing qualified as Routing
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RouterWorkflowSpec qualified as Fixture
@@ -64,7 +65,7 @@ tests fixture =
               options = shikigamiWorkflowRunOptions env
               drive initial = run env (runWorkflowWith options sessionWorkflowName (sessionWorkflowId session) (Session.sessionWorkflow runtime initial))
               inspect = do Just (state, _) <- expectRight =<< run env (Store.inspectSession session); pure state
-              input text = Instruction 1 FollowUp (fixtureInstruction text) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (Just (ExecutionRequest (Just (fixtureModelAlias "worker-model")) (Just (map fixtureModelAlias ["worker-model"])) Nothing))
+              input text = Instruction V1 FollowUp (fixtureInstruction text) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (Just (ExecutionRequest (Just (fixtureModelAlias "worker-model")) (Just (map fixtureModelAlias ["worker-model"])) Nothing))
           (_, first) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "first") (input "first"))
           drive (Just (Session.WorkerSessionStart session)) >>= (@?= Suspended)
           started <- expectRight =<< run env (Store.readAssignment access first.assignmentId)
@@ -115,7 +116,7 @@ tests fixture =
               parentId = sessionWorkflowId session
               options = shikigamiWorkflowRunOptions env
               dependencies = Fixture.routerDeps env behavior (Routing.RoutingRuntime (\_ -> fail "unexpected routing") (\_ _ _ -> fail "unexpected routing")) [worker]
-          (_, message) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send") (Instruction 1 FollowUp (fixtureInstruction "recover input") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+          (_, message) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send") (Instruction V1 FollowUp (fixtureInstruction "recover input") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
           (_, started) <- expectRight =<< run env (Store.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId "start") message.assignmentId)
           child <- maybe (assertFailure "missing mapping" >> fail "missing mapping") (pure . WorkflowId) started.childWorkflowId
           root <- maybe (assertFailure "missing root" >> fail "missing root") pure admission.context.executionRootId
@@ -147,7 +148,7 @@ tests fixture =
           _ <- expectRight =<< run env (Roots.enrollRoot root (Resources.Envelope (Map.singleton Resources.LifetimeDescendants (Resources.Limited (fixtureAmount 0))) (addUTCTime 3600 now)))
           _ <- expectRight =<< run env (Store.openSession limited)
           access <- expectRight =<< run env (Store.authorizeSession (sessionIdFor limited) limited.context.identity (pure (Right ())))
-          (_, message) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send") (Instruction 1 FollowUp (fixtureInstruction "no capacity") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+          (_, message) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send") (Instruction V1 FollowUp (fixtureInstruction "no capacity") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
           version <- checkpointVersion limited
           (provider, _) <- fixtureCheckpoints version False
           let runtime = Session.SessionRuntime env [Fixture.successSpecialist "worker"] disabledDirectoryHandle (const (pure (Right ()))) (Just provider)
@@ -173,7 +174,7 @@ tests fixture =
           run env (Store.consumeEventsWith access (fixtureRevision 2) (fixtureRevision 0) (fixtureOperationId "final-ack") (fixtureRevision 0) (fixtureRevision 1) (pure (Right ()))) >>= (@?= Right (Resources.Accepted, fixtureRevision 1)),
       testCase "checkpoint runtime retries an accepted unknown request before preparing another batch" $
         withFixture fixture \env admission access -> do
-          _ <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "first") (Instruction 1 FollowUp (fixtureInstruction "first") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+          _ <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "first") (Instruction V1 FollowUp (fixtureInstruction "first") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
           version <- checkpointVersion admission
           (provider, count) <- fixtureCheckpoints version True
           let runtime = Session.SessionRuntime env [] disabledDirectoryHandle (const (pure (Right ()))) (Just provider)
@@ -186,7 +187,7 @@ tests fixture =
           run env (Integration.integrateEvents runtime (sessionIdFor admission) (fixtureOperationId "next-batch")) >>= (@?= Right (Integration.EventsCaughtUp (fixtureRevision 1))),
       testCase "missing or stale objective authority admits no child or descendant reservation" $
         withFixture fixture \env admission access -> do
-          (_, message) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "first") (Instruction 1 FollowUp (fixtureInstruction "first") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+          (_, message) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "first") (Instruction V1 FollowUp (fixtureInstruction "first") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
           version <- checkpointVersion admission
           let provider = Checkpoint.CheckpointProvider (\_ -> pure (Right (version & #ownerEpoch .~ (fixtureRevision 99)))) (\_ -> fail "denied checkpoint callback")
               unavailable = Session.SessionRuntime env [] disabledDirectoryHandle (const (pure (Right ()))) Nothing

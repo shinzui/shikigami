@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Consumer-owned restartable facts. Baikai's full ModelCallEvidence remains
 -- encode-only; no decoder for that producer-owned record is invented here.
 module Shikigami.Attestation.CallFacts (CallComplianceFacts (..), callComplianceFacts, factsFromTerminal) where
@@ -12,11 +14,12 @@ import Data.Text (Text)
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
 import Shikigami.Attestation.Evidence (CallRelationship (..), RecordedCallEvidence (..))
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log.Correlation (CallCorrelationId)
 
 -- Keep exact requested/observed identities and translation quality distinct.
 data CallComplianceFacts = CallComplianceFacts
-  { format :: !Natural,
+  { format :: !(FormatVersion "call-compliance"),
     callId :: !CallCorrelationId,
     relationship :: !CallRelationship,
     relationshipKnown :: !Bool,
@@ -42,7 +45,7 @@ data CallComplianceFacts = CallComplianceFacts
 instance FromJSON CallComplianceFacts where
   parseJSON value = do
     facts <- genericParseJSON defaultOptions value
-    if facts.format == 1 then pure facts else fail "unsupported call compliance facts version"
+    if facts.format == V1 then pure facts else fail "unsupported call compliance facts version"
 
 callComplianceFacts :: RecordedCallEvidence -> CallComplianceFacts
 callComplianceFacts recorded = factsFromTerminal recorded.callId recorded.relationship recorded.resolvedModelId recorded.requestedAlias recorded.evidence
@@ -50,7 +53,7 @@ callComplianceFacts recorded = factsFromTerminal recorded.callId recorded.relati
 factsFromTerminal :: CallCorrelationId -> CallRelationship -> Text -> Maybe Text -> Baikai.ModelCallEvidence -> CallComplianceFacts
 factsFromTerminal callId relationship resolvedModelId requestedAlias terminal =
   CallComplianceFacts
-    { format = 1,
+    { format = V1,
       callId,
       relationship,
       relationshipKnown = True,

@@ -59,6 +59,7 @@ import Shikigami.Execution.ToolPosition (ToolPosition, parseToolPosition)
 import Shikigami.Execution.Tools qualified as Tools
 import Shikigami.Execution.Transcript
 import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
@@ -423,7 +424,7 @@ withAcceptedWorkspaceTool toolCount install agent wire token env admission runti
   registry <- right (installDurableAdapters [adapter] emptyCapabilityProviderRegistry)
   catalog <- right (mkCapabilityCatalog [adapter.descriptor])
   capabilities <- right (resolveGovernedCapabilityOverlays (durableAdapterInstalled registry) catalog (\_ _ -> Right ()) (ResolutionSubject (Just (agentNameText agent)) Durable (Skill "fixture") Nothing) [adapter.descriptor.capability])
-  let initial = ExecutionSnapshot 1 (executionIdFor assignment) admission.runId agent identity session selection Nothing (SkillInstructions "fixture" "system" "body") (ReplayContext 2 (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "edit fixture"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
+  let initial = ExecutionSnapshot V1 (executionIdFor assignment) admission.runId agent identity session selection Nothing (SkillInstructions "fixture" "system" "body") (ReplayContext 2 (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "edit fixture"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
       native = Tools.NativeToolFactory (\_ -> pure (Right [])) (\_ _ _ -> pure (Right []))
   menu <- right =<< Tools.describeExecutionTools Log.silentLogger allowAllActionAuthorizerForTests registry native initial
   let chosen = filter (\tool -> tool.name == wire) menu.toolBindings
@@ -438,13 +439,13 @@ withAcceptedWorkspaceTool toolCount install agent wire token env admission runti
       modelRequest = Resources.AttemptRequest (fixtureAttemptId ("model:" <> operationKey)) operation.specification.operationId (Map.fromList [(Resources.ActiveWork, (fixtureAmount 1)), (Resources.ModelAttempts, (fixtureAmount 1)), (Resources.Tokens, (fixtureAmount 10)), (Resources.CostMicroUsd, (fixtureAmount 0))]) Resources.EnforcedCeiling
   reservation <- right =<< run env (Calls.reserveSelectionCall selection (Calls.CallLimits Nothing Nothing Nothing Nothing Nothing) modelRequest "fixture-model" now)
   call <- case reservation of Calls.NewCall value -> pure value; _ -> fail "new fixture call required"
-  let assistant = ReplayAssistant 1 ([ToolBlock (ToolInvocation "replace-call" tool.name input)] <> [ToolBlock (ToolInvocation ("additional-call-" <> Text.pack (show index)) tool.name input) | index <- [1 .. toolCount - 1]]) ToolUse Nothing Nothing (Aeson.object []) Nothing
+  let assistant = ReplayAssistant V1 ([ToolBlock (ToolInvocation "replace-call" tool.name input)] <> [ToolBlock (ToolInvocation ("additional-call-" <> Text.pack (show index)) tool.name input) | index <- [1 .. toolCount - 1]]) ToolUse Nothing Nothing (Aeson.object []) Nothing
       outcome = ModelReturned assistant Nothing
   response <- right (Execution.outcomeReference outcome)
   run env (Execution.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId outcome (NeedTool response (fixtureToolPosition 0)) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.singleton Resources.Tokens (fixtureAmount 1)) [Resources.CostMicroUsd] Nothing Nothing Nothing))) >>= (@?= Right Resources.Accepted)
   let toolInput = ToolOperationInput response (fixtureToolPosition 0) (ToolInvocation "replace-call" tool.name input) tool
       specification = OperationSpec (operationIdFor snapshot.executionId (fixtureRevision 1)) ToolOperation tool.recovery tool.name (versionedDigest "shikigami.harness-policy/1" (Aeson.toJSON snapshot.policy)) (toolScopeDigest tool) (Just (fixtureToolPosition 0))
-      reference = Attempt.JobReference 1 snapshot.executionId specification.operationId (fixtureAttemptId ("file-tool:" <> operationIdText (specification.operationId)))
+      reference = Attempt.JobReference V1 snapshot.executionId specification.operationId (fixtureAttemptId ("file-tool:" <> operationIdText (specification.operationId)))
       submission = Attempt.AttemptSubmission (Execution.toolAttemptRequest reference.attemptId reference.operationId tool) Nothing (Attempt.ExecutionWake (AwakeableId token) 0)
   _ <- right =<< run env (Execution.acceptOperation access (fixtureRevision 2) specification (Aeson.toJSON toolInput))
   run env (runTransaction (registerAwakeableTx token "shikigami.execution" (executionWorkflowId snapshot.executionId).unWorkflowId))

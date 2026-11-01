@@ -65,6 +65,13 @@ module to the list. A real new concept belongs in the domain-root list with its
 implementation; neither list is a technology catch-all or a reason to create a
 placeholder module.
 
+ExecPlan 108 adds the implemented `FormatVersion` value owner alongside the
+existing shared `StateRevision` value owner. It owns only the closed, nominally
+scoped numeric protocol selector and its exact JSON codec. Execution, worker
+session and compliance contracts select their own scopes; this module performs
+no protocol dispatch, migration, storage or runtime composition. The domain-root
+entry is for that concrete value contract, not a general serialization bucket.
+
 ## Durable identity consequences
 
 Moving the nominal binding/fixture/initial symbols changes generated source and

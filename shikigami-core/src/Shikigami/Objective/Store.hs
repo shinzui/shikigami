@@ -51,6 +51,7 @@ import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId, operationIdText)
 import Shikigami.Execution.Payload (parsePayloadDigest)
 import Shikigami.Execution.Transcript (PayloadRef (..))
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Objective.Acceptance
 import Shikigami.Objective.Authority (Access (..))
 import Shikigami.Objective.Catalog (withLiveObjective)
@@ -275,7 +276,7 @@ validateTransition _now access expected mutation current = do
     Internal (IngestCheckpoint key intent _ _) -> do
       actual <- versionFor current key
       let wanted = intent.expected
-      unless (intent.format == 1 && expected == wanted.revision && expected <= actual.revision && actual.assignmentRevision == wanted.assignmentRevision && actual.criteriaRevision == wanted.criteriaRevision && actual.owner == wanted.owner && actual.ownerEpoch == wanted.ownerEpoch && actual.rootId == wanted.rootId && actual.active == wanted.active && intent.epoch == actual.ownerEpoch && wanted.cutoff == actual.cutoff) (Left ObjectiveConflict)
+      unless (intent.format == V1 && expected == wanted.revision && expected <= actual.revision && actual.assignmentRevision == wanted.assignmentRevision && actual.criteriaRevision == wanted.criteriaRevision && actual.owner == wanted.owner && actual.ownerEpoch == wanted.ownerEpoch && actual.rootId == wanted.rootId && actual.active == wanted.active && intent.epoch == actual.ownerEpoch && wanted.cutoff == actual.cutoff) (Left ObjectiveConflict)
     _ -> unless (expected == current.revision) (Left ObjectiveConflict)
   next <- transition
   let advanced = next & #revision .~ (advanceRevision current.revision)

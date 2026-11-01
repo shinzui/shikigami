@@ -46,6 +46,7 @@ import Shikigami.Execution.SelectionStore qualified as Calls
 import Shikigami.Execution.Store qualified as Store
 import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude
 import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (runLLMWith)
@@ -80,7 +81,7 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
   case (metadata, attempt) of
     (Right (Just (state, binding, _)), Right (Just current))
       | binding.identity /= identity -> pure (Right ExecutorInvalidReference)
-      | current.executionId /= reference.executionId || current.operationId /= reference.operationId || reference.format /= 1 -> pure (Right ExecutorInvalidReference)
+      | current.executionId /= reference.executionId || current.operationId /= reference.operationId || reference.format /= V1 -> pure (Right ExecutorInvalidReference)
       | current.phase `elem` [Attempt.AttemptCommitted, Attempt.AttemptAbandoned, Attempt.AttemptUncertain, Attempt.AttemptSuperseded] -> publish
       | current.phase == Attempt.DispatchStarted ->
           if maybe False (now >=) current.expiresAt
@@ -250,7 +251,7 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
 
 modelContext :: ExecutionSnapshot -> Operation -> ModelOperationInput -> Either ExecutionError Context.Context
 modelContext snapshot operation input = do
-  unless (input.format == 1 && input.view.context.systemPrompt == snapshot.initialContext.systemPrompt) (Left CorruptReplay)
+  unless (input.format == V1 && input.view.context.systemPrompt == snapshot.initialContext.systemPrompt) (Left CorruptReplay)
   unless (Lazy.length (Aeson.encode input.view.context) <= fromIntegral (policyNumber snapshot.policy.contextBytes)) (Left (ExecutionPolicyRefused "model context exceeds the pinned byte ceiling"))
   unless (contextRequest input.view.context.messages == contextRequest snapshot.initialContext.messages) (Left CorruptReplay)
   context <- restoreContext input.view.context

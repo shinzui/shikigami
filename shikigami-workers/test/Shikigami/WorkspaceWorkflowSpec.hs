@@ -56,6 +56,7 @@ import Shikigami.Execution.Transcript (ExecutionSnapshot (..), executionIdFor)
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId, fixtureRootId)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.PracticeReview.Capability qualified as Practice
@@ -175,7 +176,7 @@ tests fixture =
           access <- right =<< run env (Execution.authorizeReplay (executionIdFor (assignmentIdFor (runJobWorkflowId job).unWorkflowId)) job.identity (pure (Right ())))
           (snapshot, _) <- right =<< run env (Execution.loadExecution access)
           let coordinator = CompatibilityIdentity (fixtureAgentName "cleanup-coordinator")
-              admission = Sessions.SessionAdmission 1 (Sessions.SessionScope parentSession "worker") (Sessions.ObjectiveRef "fixture" "objective") (parent & #name .~ fixtureAgentName "cleanup-coordinator" & #delegates .~ map fixtureAgentName ["workspace-worker"]) (DelegateCtx (fixtureDelegationDepth 0) coordinator (Just snapshot.sessionId) Nothing (Just (WorkflowId "cleanup-parent")) [fixtureAgentName "cleanup-coordinator"] Nothing (Just binding.request.rootId) Nothing defaultDelegationBudget) (fixtureAgentName "workspace-worker") job.identity (fixtureLimit 10) (fixtureLimit 4)
+              admission = Sessions.SessionAdmission V1 (Sessions.SessionScope parentSession "worker") (Sessions.ObjectiveRef "fixture" "objective") (parent & #name .~ fixtureAgentName "cleanup-coordinator" & #delegates .~ map fixtureAgentName ["workspace-worker"]) (DelegateCtx (fixtureDelegationDepth 0) coordinator (Just snapshot.sessionId) Nothing (Just (WorkflowId "cleanup-parent")) [fixtureAgentName "cleanup-coordinator"] Nothing (Just binding.request.rootId) Nothing defaultDelegationBudget) (fixtureAgentName "workspace-worker") job.identity (fixtureLimit 10) (fixtureLimit 4)
           _ <- right =<< run env (Sessions.openSession admission)
           cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
           run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Right Nothing)

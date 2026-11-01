@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.Execution.Policy.Types where
 
 import Data.Aeson qualified as Aeson
@@ -8,6 +10,7 @@ import Data.Text qualified as Text
 import Dhall (FromDhall)
 import Numeric.Natural (Natural)
 import Shikigami.Execution.Policy.Limits
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude
 
 data RecoveryClass = RepeatableObservation | IdempotentEffect | UncertainEffect
@@ -50,7 +53,7 @@ emptyHarnessOverrides :: HarnessOverrides
 emptyHarnessOverrides = HarnessOverrides Nothing Nothing Nothing Nothing [] [] Nothing Nothing Nothing Nothing
 
 data HarnessPolicy = HarnessPolicy
-  { format :: !Int,
+  { format :: !(FormatVersion "harness-policy"),
     maxModelTurns :: !ModelTurnLimit,
     outputRepairs :: !RepairLimit,
     contextBytes :: !ContextByteLimit,
@@ -75,11 +78,11 @@ instance FromJSON HarnessPolicy where
     either (fail . Text.unpack) (const (pure policy)) (validateHarnessPolicy policy)
 
 defaultHarnessPolicy :: HarnessPolicy
-defaultHarnessPolicy = HarnessPolicy 1 defaultModelTurns defaultRepairs defaultContextBytes defaultRecentMessages [] [] defaultPermissionLifetime AnyReply defaultRecoveryAttempts Nothing
+defaultHarnessPolicy = HarnessPolicy V1 defaultModelTurns defaultRepairs defaultContextBytes defaultRecentMessages [] [] defaultPermissionLifetime AnyReply defaultRecoveryAttempts Nothing
 
 validateHarnessPolicy :: HarnessPolicy -> Either Text ()
 validateHarnessPolicy policy = do
-  unless (policy.format == 1) (Left "unsupported harness policy version")
+  unless (policy.format == V1) (Left "unsupported harness policy version")
   unless (all validNames [policy.deniedTools, policy.humanTools]) (Left "invalid tool permission list")
   case policy.output of
     JsonFields names -> unless (validNames names) (Left "invalid output field list")

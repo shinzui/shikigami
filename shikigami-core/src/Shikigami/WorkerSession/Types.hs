@@ -24,6 +24,7 @@ import Shikigami.Decision.ModelAlias (ModelAlias)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Execution.Request (ExecutionRequest)
 import Shikigami.Execution.Transcript (ExecutionId, PayloadRef)
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Input
@@ -48,7 +49,7 @@ data SessionScope = SessionScope {parent :: !Text, workerKey :: !Text}
 -- Frozen delegation authority is protected input, not an executable grant.
 -- The runtime still checks current lifecycle, root and exact external actions.
 data SessionAdmission = SessionAdmission
-  { format :: !Int,
+  { format :: !(FormatVersion "session-admission"),
     scope :: !SessionScope,
     objective :: !ObjectiveRef,
     delegator :: !AgentDecl,
@@ -86,7 +87,7 @@ data SessionPhase = Idle | Active | Parked | Unresolved | Transferring | Failed 
   deriving anyclass (ToJSON, FromJSON)
 
 data SessionState = SessionState
-  { format :: !Int,
+  { format :: !(FormatVersion "session-state"),
     sessionId :: !WorkerSessionId,
     revision :: !(StateRevision "worker-session"),
     phase :: !SessionPhase,
@@ -108,7 +109,7 @@ data SessionState = SessionState
 instance FromJSON SessionState where
   parseJSON = Aeson.withObject "SessionState" \fields -> do
     state <- SessionState <$> fields .: "format" <*> fields .: "sessionId" <*> fields .: "revision" <*> fields .: "phase" <*> fields .: "owner" <*> fields .: "epoch" <*> fields .: "activeAssignment" <*> fields .: "nextSequence" <*> fields .: "eventCursor" <*> fields .: "consumedCursor" <*> fields .:? "checkpointIntent" <*> fields .:? "wake" <*> fields .:? "worker" <*> fields .:? "handoff" <*> (fields .:? "listeners" .!= [])
-    unless (state.format == 1 && state.consumedCursor <= state.eventCursor && revisionNumber state.eventCursor <= 100000 && revisionNumber state.nextSequence <= 10000 && length state.listeners <= 32) (fail "unsupported worker session state")
+    unless (state.format == V1 && state.consumedCursor <= state.eventCursor && revisionNumber state.eventCursor <= 100000 && revisionNumber state.nextSequence <= 10000 && length state.listeners <= 32) (fail "unsupported worker session state")
     pure state
 
 data SessionListener = SessionListener
@@ -148,7 +149,7 @@ data MessageKind = FollowUp | Interrupt !AssignmentId
   deriving anyclass (ToJSON, FromJSON)
 
 data Instruction = Instruction
-  { format :: !Int,
+  { format :: !(FormatVersion "worker-instruction"),
     kind :: !MessageKind,
     text :: !InstructionText,
     objectiveRevision :: !(StateRevision "objective"),
@@ -171,7 +172,7 @@ data AssignmentPhase = Queued | Running | AssignmentParked | AssignmentUnresolve
   deriving anyclass (ToJSON, FromJSON)
 
 data MessageReceipt = MessageReceipt
-  { format :: !Int,
+  { format :: !(FormatVersion "worker-message"),
     sessionId :: !WorkerSessionId,
     sequence :: !(StateRevision "worker-message"),
     assignmentId :: !AssignmentId,
@@ -195,7 +196,7 @@ instance FromJSON MessageReceipt where
     context <- fields .:? "context"
     aliases <- fields .:? "permittedAliases"
     message <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (KeyMap.insert "permittedAliases" (toJSON (aliases :: Maybe [ModelAlias])) (KeyMap.insert "context" (toJSON (context :: Maybe PayloadRef)) fields)))
-    unless (message.format == 1 && revisionNumber message.sequence < 10000 && message.assignmentId == assignmentIdFor message.sessionId message.sequence message.operationId) (fail "unsupported assignment receipt identity")
+    unless (message.format == V1 && revisionNumber message.sequence < 10000 && message.assignmentId == assignmentIdFor message.sessionId message.sequence message.operationId) (fail "unsupported assignment receipt identity")
     _ <- traverse (either (fail . show) pure . mkWorkflowId) message.childWorkflowId
     unless (if message.phase == Queued then isNothing message.childWorkflowId else isJust message.childWorkflowId) (fail "assignment child mapping is missing or premature")
     pure message
@@ -223,7 +224,7 @@ data ResultDisposition = AssignmentSucceeded | AssignmentFailed | AssignmentCanc
   deriving anyclass (ToJSON, FromJSON)
 
 data AssignmentResult = AssignmentResult
-  { format :: !Int,
+  { format :: !(FormatVersion "assignment-result"),
     assignmentId :: !AssignmentId,
     disposition :: !ResultDisposition,
     executionId :: !(Maybe ExecutionId),
@@ -236,7 +237,7 @@ data AssignmentResult = AssignmentResult
 instance Show AssignmentResult where show _ = "AssignmentResult <protected>"
 
 data ResultReceipt = ResultReceipt
-  { format :: !Int,
+  { format :: !(FormatVersion "worker-result"),
     sessionId :: !WorkerSessionId,
     assignmentId :: !AssignmentId,
     operationId :: !OperationId,
@@ -291,7 +292,7 @@ assignmentIdFor session sequence operation = AssignmentId (UUID.toText (UUID.gen
 validateAdmission :: SessionAdmission -> Either SessionError ()
 validateAdmission admission = do
   unless (admission.identity /= admission.context.identity) (Left SessionOwnerRefused)
-  unless (admission.format == 1) (Left (SessionInputRefused "invalid session bounds"))
+  unless (admission.format == V1) (Left (SessionInputRefused "invalid session bounds"))
   unless (all validKey [admission.scope.parent, admission.scope.workerKey, admission.objective.provider, admission.objective.key, agentNameText admission.worker, agentNameText admission.delegator.name]) (Left (SessionInputRefused "invalid session scope or objective reference"))
   unless (isJust admission.context.executionRootId && isJust admission.context.sessionId) (Left (SessionInputRefused "continuing work requires an admitted root and parent memory session"))
   unless (length admission.context.lineage == depthInt admission.context.depth + 1 && length (nub admission.context.lineage) == length admission.context.lineage && take 1 (reverse admission.context.lineage) == [admission.delegator.name]) (Left (SessionInputRefused "delegation lineage does not match its parent and depth"))
@@ -305,7 +306,7 @@ validateAdmission admission = do
 
 validateInstruction :: Instruction -> Either SessionError ()
 validateInstruction instruction =
-  unless (instruction.format == 1) (Left (SessionInputRefused "invalid instruction or objective/assignment revision"))
+  unless (instruction.format == V1) (Left (SessionInputRefused "invalid instruction or objective/assignment revision"))
 
 instance CanonicalTypeName WorkerSessionId where
   canonicalTypeName _ = "shikigami.WorkerSessionId.v1"

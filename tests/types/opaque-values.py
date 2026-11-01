@@ -48,6 +48,9 @@ import Shikigami.Sink.Coordinate qualified as SinkCoordinate
 import Shikigami.AgentRun.RequestKey qualified as Request
 import Shikigami.Agent.Run.Key qualified as FullKey
 import Shikigami.Trigger.RequestKey qualified as Addressed
+import Shikigami.FormatVersion qualified as Format
+import Shikigami.Execution.Transcript qualified as Transcript
+import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Identity qualified as Entity
 import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Counter qualified as Counter
@@ -72,7 +75,13 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''sinkPosition :: Integer -> Either Text SinkCoordinate.SinkOrdinal
+POSITIVE = '''currentFormat :: Format.FormatVersion "execution-state"
+currentFormat = Format.V1
+executionFormat :: Transcript.ExecutionState -> Format.FormatVersion "execution-state"
+executionFormat value = value.format
+jobFormat :: Attempt.JobReference -> Format.FormatVersion "execution-job"
+jobFormat value = value.format
+sinkPosition :: Integer -> Either Text SinkCoordinate.SinkOrdinal
 sinkPosition = SinkCoordinate.parseSinkOrdinal
 sinkSession :: SinkIntent.SinkIntent -> SessionId
 sinkSession value = value.runId
@@ -242,6 +251,8 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('Format.FormatVersion "execution-state"', 'generic'),
+    ('Format.FormatVersion "execution-state"', 'parse'),
     ('SinkCoordinate.SinkOrdinal', 'generic'),
     ('Delivery.SinkMessageId', 'generic'),
     ('Delivery.ReceiptKey', 'generic'),
@@ -326,6 +337,9 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
     result = compile(POSITIVE)
     assert result.returncode == 0, (result.stdout, result.stderr)
     print('opaque boundary: public factories/adapters: passed', flush=True)
+    result = compile('bypass :: Format.FormatVersion "execution-state"\nbypass = 1\n')
+    assert result.returncode != 0 and 'Num' in result.stderr and 'FormatVersion' in result.stderr, result.stderr
+    print('opaque boundary: format integer literal refused: passed', flush=True)
     result = compile('bypass :: Int -> Policy.Ceiling "calls" Int\nbypass = Policy.Ceiling\n')
     assert result.returncode != 0 and 'Ceiling' in result.stderr and any(fragment in result.stderr.lower() for fragment in ['not in scope', 'does not export', 'illegal term-level use']), result.stderr
     print('opaque boundary: policy ceiling constructor refused: passed', flush=True)
@@ -337,6 +351,8 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         assert result.returncode != 0 and 'RunDisposition' in result.stderr, (source_kind, result.stderr)
         print('opaque boundary: run disposition ' + source_kind + ' substitution refused: passed', flush=True)
     for label, signature, expression in [
+        ('format scope substitution', 'Format.FormatVersion \"execution-state\" -> Format.FormatVersion \"execution-job\"', 'id'),
+        ('format scope coercion', 'Format.FormatVersion \"execution-state\" -> Format.FormatVersion \"execution-job\"', 'coerce'),
         ('sink ordinal raw coercion', 'Int -> SinkCoordinate.SinkOrdinal', 'coerce'),
         ('sink ordinal raw substitution', 'Int -> SinkCoordinate.SinkOrdinal', 'id'),
         ('sink session/workflow substitution', 'SessionId -> WorkflowId', 'id'),
@@ -396,7 +412,7 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         print('opaque boundary: accepted ' + field + ' retains native identity: passed', flush=True)
     for kind, operation in CASES:
         if operation == 'parse':
-            body = 'bypass :: Aeson.Value -> Parser ' + kind + '\nbypass = Aeson.genericParseJSON Aeson.defaultOptions\n'
+            body = 'bypass :: Aeson.Value -> Parser (' + kind + ')\nbypass = Aeson.genericParseJSON Aeson.defaultOptions\n'
         elif operation == 'render':
             body = 'bypass :: ' + kind + ' -> Aeson.Value\nbypass = Aeson.genericToJSON Aeson.defaultOptions\n'
         else:

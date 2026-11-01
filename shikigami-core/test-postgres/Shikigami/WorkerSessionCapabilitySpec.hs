@@ -51,6 +51,7 @@ import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Flow.Workers qualified as Flow
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RouterWorkflowSpec qualified as Fixture
@@ -100,7 +101,7 @@ tests fixture =
         withCapabilityFixture fixture \env admission host scope authorizer _ _ -> do
           let session = Session.sessionIdFor admission
           access <- expectRight =<< run env (Store.authorizeSession session admission.context.identity (pure (Right ())))
-          _ <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send-before-registration") (Session.Instruction 1 Session.FollowUp (fixtureInstruction "retained") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+          _ <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send-before-registration") (Session.Instruction V1 Session.FollowUp (fixtureInstruction "retained") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
           run env (lookupInstance sessionWorkflowName (sessionWorkflowId session)) >>= (@?= Nothing)
           grant <- permit env host scope authorizer
           reply <- expectRight =<< run env (executeCommand host authorizer grant (fixtureOperationId "send-before-registration") (SendWorker session (fixtureRevision 0) (fixtureRevision 0) (draft "retained")))
@@ -184,7 +185,7 @@ tests fixture =
           _ <- run env (gcWorkflowsOnce (addUTCTime 1 now) (WorkflowGcPolicy 0 10))
           run env (Awakeable.lookupAwakeable (awakeableIdToUuid token)) >>= (@?= Nothing)
           access <- expectRight =<< run env (Store.authorizeSession session admission.context.identity (pure (Right ())))
-          _ <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId "after-gc") (Session.Instruction 1 Session.FollowUp (fixtureInstruction "retained") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+          _ <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId "after-gc") (Session.Instruction V1 Session.FollowUp (fixtureInstruction "retained") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
           Just (state, _) <- expectRight =<< run env (Store.inspectSession session)
           state.eventCursor @?= (fixtureRevision 1),
       testCase "coordinating Skills require admitted scope and retain a worker tool instead of running a fixed supervisor" $
@@ -284,7 +285,7 @@ withCapabilityFixture fixture callback = withFixture fixture \env admission _ ->
   version <- checkpointVersion admission
   (checkpoints, _) <- fixtureCheckpoints version False
   let run = CoordinatorRun "capability-parent" admission.context.identity memory admission.context.executionRootId admission.context.executionPermissions
-      scope = CoordinationScope 1 run admission.scope.parent (admission.delegator & #behavior .~ CoordinatingSkill "fixture-coordinator") admission.context [WorkerSlot admission.scope.workerKey admission.worker admission.identity admission.objective (Just (Session.sessionIdFor admission))] (fixtureLimit 8) admission.maximumAssignments admission.mailboxLimit
+      scope = CoordinationScope V1 run admission.scope.parent (admission.delegator & #behavior .~ CoordinatingSkill "fixture-coordinator") admission.context [WorkerSlot admission.scope.workerKey admission.worker admission.identity admission.objective (Just (Session.sessionIdFor admission))] (fixtureLimit 8) admission.maximumAssignments admission.mailboxLimit
       sessions = SessionRuntime env [admission.delegator & #name .~ fixtureAgentName "worker" & #delegates .~ map fixtureAgentName []] disabledDirectoryHandle (const (pure (Right ()))) (Just checkpoints)
   current <- newIORef (Just scope)
   revoked <- newIORef False
@@ -304,7 +305,7 @@ snapshotFor scope = do
   now <- getCurrentTime
   let descriptor = ModelDescriptor (fixtureModelAlias "worker-model") (fixtureModelRegistration "1") (Model.modelDescriptorDigest (toJSON ("fixture-model" :: Text))) (Coordinate.providerCoordinate "fixture") (Coordinate.providerCoordinate "fixture") (Coordinate.providerCoordinate "fixture") (Coordinate.providerCoordinate "fixture") Nothing (fixtureModelRegistration "fixture") (fixtureModelRegistration "1")
       selection = ExecutionSelection (fixtureAssignment "coordination-assignment") descriptor (Aeson.object []) [fixtureModelAlias "worker-model"] Nothing scope.run.rootId ProcessDefault now
-  pure (Replay.ExecutionSnapshot 1 (Replay.executionIdFor selection.assignmentId) scope.run.runId (fixtureAgentName "coordinator") scope.run.identity scope.run.sessionId selection Nothing (Replay.SkillInstructions "fixture" "fixture" "fixture") (Replay.ReplayContext 2 Nothing [Replay.RequestTurn [Replay.TextBlock "coordinate"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] Nothing)
+  pure (Replay.ExecutionSnapshot V1 (Replay.executionIdFor selection.assignmentId) scope.run.runId (fixtureAgentName "coordinator") scope.run.identity scope.run.sessionId selection Nothing (Replay.SkillInstructions "fixture" "fixture" "fixture") (Replay.ReplayContext 2 Nothing [Replay.RequestTurn [Replay.TextBlock "coordinate"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] Nothing)
 
 executeTool :: BoundTool -> Aeson.Value -> IO ToolOutput
 executeTool tool arguments = expectRight =<< (expectRight =<< runEff (runErrorNoCallStack @ShikumiError (runLLM (runErasedOutput tool.tool arguments))))

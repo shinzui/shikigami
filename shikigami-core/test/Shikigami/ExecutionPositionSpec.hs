@@ -22,6 +22,7 @@ import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
 import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId)
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.StateRevision
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -51,11 +52,11 @@ tests =
       testCase "attempt claim owners and generations preserve complete retained bytes" do
         let owner = either (error . show) id (parseClaimOwner "fixture")
             generation = revision 3
-            reference = Attempt.JobReference 1 execution (fixtureOperationId "operation") (fixtureAttemptId "attempt")
+            reference = Attempt.JobReference V1 execution (fixtureOperationId "operation") (fixtureAttemptId "attempt")
             request = Resources.AttemptRequest reference.attemptId reference.operationId Map.empty Resources.AdmittedUnknownUsage
             now = UTCTime (fromGregorian 2026 10 30) 0
             claim = Attempt.AttemptClaim reference owner generation
-            attempt = Attempt.ExecutionAttempt 1 execution reference.operationId request "fingerprint" Nothing payload Attempt.Claimed (Just owner) generation (Just now) Nothing Nothing Nothing
+            attempt = Attempt.ExecutionAttempt V1 execution reference.operationId request "fingerprint" Nothing payload Attempt.Claimed (Just owner) generation (Just now) Nothing Nothing Nothing
             claimWire = Aeson.object ["reference" .= reference, "owner" .= Aeson.String "fixture", "generation" .= (3 :: Integer)]
             attemptWire = Aeson.object ["format" .= (1 :: Int), "executionId" .= execution, "operationId" .= reference.operationId, "request" .= request, "fingerprint" .= Aeson.String "fingerprint", "call" .= Aeson.Null, "wake" .= payload, "phase" .= Attempt.Claimed, "owner" .= Aeson.String "fixture", "generation" .= (3 :: Integer), "expiresAt" .= now, "outcome" .= Aeson.Null, "lateReceipt" .= Aeson.Null, "uncertainty" .= Aeson.Null]
         assertWire claim claimWire
@@ -96,7 +97,7 @@ tests =
           )
           [-1, 256],
       testCase "state revisions and positions keep exact numeric bytes and bounds" do
-        let state = ExecutionState 1 execution (revision 5) Active (revision 7) NeedModel payload Nothing Nothing (progress 2) (progress 3) Nothing Nothing (progress 4)
+        let state = ExecutionState V1 execution (revision 5) Active (revision 7) NeedModel payload Nothing Nothing (progress 2) (progress 3) Nothing Nothing (progress 4)
             encoded = Aeson.toJSON state
         Aeson.fromJSON encoded @?= Aeson.Success state
         case encoded of
@@ -113,7 +114,7 @@ tests =
         Aeson.toJSON (operationIdFor execution (revision 7)) @?= Aeson.toJSON expected,
       testCase "operation codec retains numeric position and rejects another identity" do
         let specification = OperationSpec (operationIdFor execution (revision 7)) ModelTurn RepeatableObservation "model" "policy" "scope" Nothing
-            operation = Operation 1 execution (revision 7) specification "fingerprint" payload Nothing Nothing NotMarkedUncertain Nothing
+            operation = Operation V1 execution (revision 7) specification "fingerprint" payload Nothing Nothing NotMarkedUncertain Nothing
             encoded = Aeson.toJSON operation
         Aeson.fromJSON encoded @?= Aeson.Success operation
         case encoded of

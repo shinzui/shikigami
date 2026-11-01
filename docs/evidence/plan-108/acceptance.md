@@ -1161,3 +1161,48 @@ with exactly `unresolved violations: 575`, as required while M2 remains open.
 Whitespace check passes. This documentation-only milestone needs no source
 rebuild and claims no new runtime or Linux qualification. M2 remediation and M3
 final acceptance/guide disposition remain unfinished.
+
+
+## M2 closed numeric format source candidate
+
+The source candidate replaces 23 execution/attempt/harness/replay-result,
+compliance-fact and worker-session numeric format fields with nominally scoped
+`FormatVersion` values. The only constructor is `V1`; arithmetic and Generic
+bypasses are absent, and JSON remains exactly number `1`. ReplayContext retains
+its separate supported 1/2 protocol. Existing complete wire fixtures and current
+identity/commitment recipes remain unchanged. ADR-90 records the owner boundary;
+ADR-75 and the module policy name the concrete shared format-value owner.
+
+The focused unit selection passes 28 cases, including three new format controls.
+Complete job/policy objects are first successfully decoded, then only their
+format field is replaced by unsupported, fractional, huge or nonnumeric values.
+The public compiler suite passes all 135 controls, including a positive typed
+owner-field API, integer rejection, cross-scope identity/coercion rejection and
+Generic admission rejection.
+
+Two new disposable PostgreSQL cases first read a complete valid execution/session
+state, inject four malformed format values, assert CorruptReplay or
+SessionBindingConflict, ignore an owning transactional refusal between earlier
+and later tentative writes, and prove both writes roll back. Actual operation/
+message admission refuses without a lifecycle transition. Exact original JSON
+repair recovers the original state without replacement work. Both initial cases
+pass; the subsequent 150-case owner selection includes them and passes in 70.59s.
+That selection covers execution/transcript/selection workflows, worker session
+store/capability/handoff, Objective, workspace transfer and run evidence.
+
+Commands use the existing suite-owned ephemeral PostgreSQL fixture, arm64 macOS
+and GHC 9.12.4:
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-test -j1 --test-show-details=direct --test-option=-p --test-option='/closed format versions/||/execution revision and operation positions/||/ExecutionPolicy/'
+nix develop --no-write-lock-file -c python3 tests/types/opaque-values.py
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/ExecutionTranscript/||/ExecutionSelectionWorkflow/||/WorkerSession/||/WorkerSessionStore/||/WorkerSessionCapability/||/WorkerSessionHandoff/||/ObjectiveStore/||/workspace transfer store/||/RunEvidence/'
+python3 tools/style/check_haskell.py
+python3 -m unittest discover -s tools/style
+git diff --check
+```
+
+The source bytes are retained in `closed-formats-source.json`. Native workflow
+compatibility and the final coherent build/census reconciliation remain pending
+for this candidate; no M2/M3 completion or reduced fresh violation count is claimed
+before those gates. The snapshot adds no Linux qualification.

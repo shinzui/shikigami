@@ -649,3 +649,11 @@ contracts. A final primitive-member review corrects five missed scalar findings
 and distinguishes unused metadata, native replay content and diagnostics. All
 4,053 keys are now covered without exemptions based solely on persistence or
 primitive type; 575 concrete findings remain explicit.
+
+
+M2 continuation (2026-11-01): the closed numeric format source candidate targets
+23 scalar findings while preserving JSON number 1. It passes 28 unit, 150 core
+PostgreSQL and 135 public compiler controls, including actual owning ignored-read
+rollback and exact repair for execution/session state. Native compatibility and
+coherent build/census reconciliation remain pending before those findings are
+marked resolved. See `docs/evidence/plan-108/closed-formats-source.json`.

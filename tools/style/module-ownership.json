@@ -21,6 +21,7 @@
     "ExecutionLifecycle",
     "ExecutionLookup",
     "Flow",
+    "FormatVersion",
     "Health",
     "Inspection",
     "Integration",

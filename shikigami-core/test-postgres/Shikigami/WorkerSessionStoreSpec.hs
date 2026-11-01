@@ -4,8 +4,10 @@ import Control.Concurrent.Async (concurrently)
 import Data.Aeson (object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.IORef
+import Data.Int (Int64)
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as AliasText
 import Data.Text qualified as Text
@@ -34,6 +36,7 @@ import Shikigami.Execution.Resources (Admission (..))
 import Shikigami.Execution.Resources qualified as R
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId, fixtureRootId)
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
@@ -59,6 +62,39 @@ tests fixture =
           let count = run env (runTransaction (Tx.statement () (preparable "SELECT (SELECT count(*) FROM shikigami.worker_session_messages),(SELECT count(*) FROM shikigami.worker_session_commands),(SELECT count(*) FROM shikigami.worker_session_payloads)" E.noParams (D.singleRow ((,,) <$> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8))))))
           count >>= (@?= (0, 0, 1))
           run env (length <$> StoreRead.readCategory (StoreTypes.CategoryName "workerSessionLifecycle") (StoreTypes.GlobalPosition 0) 100) >>= (@?= 1),
+      testCase "unsupported retained session formats refuse with ignored-scan rollback and exact repair" $
+        withFixture fixture \env admission access -> do
+          let session = sessionIdFor admission
+              root = maybe (error "fixture root missing") id admission.context.executionRootId
+              readState = preparable "SELECT state FROM shikigami.worker_sessions WHERE session_id=$1" (E.param (E.nonNullable E.text)) (D.singleRow (D.column (D.nonNullable D.jsonb)))
+              replaceState = preparable "UPDATE shikigami.worker_sessions SET state=$2 WHERE session_id=$1" ((fst >$< E.param (E.nonNullable E.text)) <> (snd >$< E.param (E.nonNullable E.jsonb))) D.noResult
+              countProbe = preparable "SELECT count(*) FROM shikigami.format_rollback_probe" E.noParams (D.singleRow (D.column (D.nonNullable D.int8)))
+          valid <- run env (Store.loadAdmission access)
+          valid @?= Right admission
+          run env (runTransaction (Store.rootSessionsTerminalTx root)) >>= (@?= Right False)
+          original <- run env (runTransaction (Tx.statement session.value readState))
+          run env (runTransaction (Tx.sql "CREATE TABLE shikigami.format_rollback_probe (value integer NOT NULL)"))
+          mapM_
+            ( \bad -> do
+                let corrupt = case original of Aeson.Object fields -> Aeson.Object (KeyMap.insert "format" bad fields); value -> value
+                run env (runTransaction (Tx.statement (session.value, corrupt) replaceState))
+                run env (Store.loadAdmission access) >>= (@?= Left SessionBindingConflict)
+                run env (runTransaction (Store.rootSessionsTerminalTx root)) >>= (@?= Left SessionBindingConflict)
+                run
+                  env
+                  ( runTransaction do
+                      Tx.sql "INSERT INTO shikigami.format_rollback_probe VALUES (1)"
+                      _ <- Store.rootSessionsTerminalTx root
+                      Tx.sql "INSERT INTO shikigami.format_rollback_probe VALUES (2)"
+                  )
+                run env (runTransaction (Tx.statement () countProbe)) >>= (@?= (0 :: Int64))
+                run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "unsupported-format-command") (instruction "must not be retained")) >>= (@?= Left SessionBindingConflict)
+                run env (runTransaction (Tx.statement (session.value, original) replaceState))
+                run env (Store.loadAdmission access) >>= (@?= valid)
+                run env (runTransaction (Store.rootSessionsTerminalTx root)) >>= (@?= Right False)
+                run env (runTransaction (Tx.statement session.value readState)) >>= (@?= original)
+            )
+            [Aeson.Number 0, Aeson.Number 2, Aeson.Number 1.5, Aeson.String "1"],
       testCase "malformed protected session metadata remains a binding refusal" do
         mapM_
           ( \assignment -> withFixture fixture \env admission access -> do
@@ -282,7 +318,7 @@ tests fixture =
     ]
 
 instruction :: Text -> Instruction
-instruction text = Instruction 1 FollowUp (fixtureInstruction text) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing
+instruction text = Instruction V1 FollowUp (fixtureInstruction text) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing
 
 checkpointVersion :: SessionAdmission -> IO Checkpoint.ObjectiveVersion
 checkpointVersion admission = do
@@ -301,13 +337,13 @@ fixtureCheckpoints initial loseFirst = do
           Just _ -> (stored, Checkpoint.CheckpointConflict)
           Nothing | intent.expected /= version -> (stored, Checkpoint.CheckpointConflict)
           Nothing ->
-            let receipt = Checkpoint.CheckpointReceipt 1 intent.objective intent.operationId (Checkpoint.intentFingerprint intent) (advanceRevision version.revision)
+            let receipt = Checkpoint.CheckpointReceipt V1 intent.objective intent.operationId (Checkpoint.intentFingerprint intent) (advanceRevision version.revision)
                 updated = (Map.insert intent.operationId (intent, receipt) receipts, version & #revision .~ (advanceRevision version.revision), count + 1)
              in (updated, if loseFirst && count == 0 then Checkpoint.CheckpointUnresolved else Checkpoint.CheckpointAccepted receipt)
   pure (Checkpoint.CheckpointProvider (\_ -> (\(_, version, _) -> Right version) <$> readIORef storage) commit, (\(_, _, count) -> count) <$> readIORef storage)
 
 resultFor :: MessageReceipt -> Text -> AssignmentResult
-resultFor message finding = AssignmentResult 1 message.assignmentId AssignmentSucceeded Nothing (object ["finding" .= finding]) ["opaque-artifact-reference"]
+resultFor message finding = AssignmentResult V1 message.assignmentId AssignmentSucceeded Nothing (object ["finding" .= finding]) ["opaque-artifact-reference"]
 
 accept :: AppEnv -> Store.SessionAccess -> Integer -> Text -> Instruction -> IO (Admission, MessageReceipt)
 accept env access expected key value = expectRight =<< run env (Store.acceptMessage access (fixtureRevision expected) (fixtureRevision 0) (fixtureOperationId key) value)
@@ -331,7 +367,7 @@ withConfiguredFixture fixture configure callback = withShikigamiFreshDatabase fi
       admission =
         configure $
           SessionAdmission
-            1
+            V1
             (SessionScope "fixture-coordinator" "logical-worker")
             (ObjectiveRef "fixture-checkpoint-provider" "objective-1")
             (parent & #name .~ fixtureAgentName "coordinator" & #delegates .~ map fixtureAgentName ["worker"])

@@ -47,6 +47,7 @@ import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.StateRevision
 import Shikigami.Workspace.Allocation (workspaceFiles, workspaceMetadata)
@@ -169,7 +170,7 @@ withAccess mode runtime snapshot dispatch logical input perform = catch work (\(
   where
     owned :: Eff AppEffects (Either ExecutionError a) -> IO (Either FileEffectError a)
     owned action = runAppIO runtime.appEnv action <&> either (const (Left FileEffectUnavailable)) (either (const (Left FileEffectRefused)) Right)
-    claim = Attempt.AttemptClaim (Attempt.JobReference 1 snapshot.executionId dispatch.operation.operationId dispatch.attemptId) dispatch.owner dispatch.generation
+    claim = Attempt.AttemptClaim (Attempt.JobReference V1 snapshot.executionId dispatch.operation.operationId dispatch.attemptId) dispatch.owner dispatch.generation
     work = do
       access <- owned (Execution.authorizeReplay snapshot.executionId snapshot.identity (runtime.replayAuthority snapshot))
       case access of
@@ -254,7 +255,7 @@ withAccess mode runtime snapshot dispatch logical input perform = catch work (\(
                         if receipt.state == EditRefused
                           then ToolReturned [TextBlock (renderToolError (ToolRunFailed "replace" "workspace operation refused"))] True
                           else RichToolReturned (captureToolOutput (textToolOutput (Encoding.decodeUtf8 (Lazy.toStrict (Aeson.encode receipt)))))
-                      original = Attempt.AttemptClaim (Attempt.JobReference 1 snapshot.executionId receipt.operationId receipt.attemptId) owner receipt.generation
+                      original = Attempt.AttemptClaim (Attempt.JobReference V1 snapshot.executionId receipt.operationId receipt.attemptId) owner receipt.generation
                   accepted <- owned (Execution.recordLateExecutionReceipt permit state.revision original (Attempt.AttemptResult output next Nothing))
                   pure (either (const (Left FileEffectUnresolved)) (const (Right ())) accepted)
             _ -> pure (Left FileEffectUnresolved)
@@ -536,7 +537,7 @@ publishFileReceipt env operationId = protectRecovery do
       unless (validProcessRouting routing && routing.identity == retained.identity && retained.rootId == Just binding.request.rootId && registration.operation == OperationContext routing.executionId operationId key operation.fingerprint operation.specification.scopeDigest && operation.executionId == routing.executionId && operation.specification.kind == ToolOperation && operation.specification.name == "overlay__workspace-edit__replace" && operation.specification.recovery == IdempotentEffect && operation.input.digest == routing.inputDigest) (recoveryAbort FileEffectUnresolved)
       actual <- recoveryExecution env (Execution.inspectExecutionAttempt original.attemptId) >>= maybe (recoveryAbort FileEffectUnresolved) pure
       unless (actual.executionId == routing.executionId && actual.operationId == operationId && actual.owner == Just registration.claimOwner && actual.generation == original.generation && isNothing actual.call) (recoveryAbort FileEffectUnresolved)
-      let reference = Attempt.JobReference 1 routing.executionId operationId original.attemptId
+      let reference = Attempt.JobReference V1 routing.executionId operationId original.attemptId
           claim = Attempt.AttemptClaim reference registration.claimOwner original.generation
           outcome = if completed.state == EditRefused then ToolReturned [TextBlock (renderToolError (ToolRunFailed "replace" "workspace operation refused"))] True else RichToolReturned (captureToolOutput (textToolOutput (Encoding.decodeUtf8 (Lazy.toStrict (Aeson.encode completed)))))
           receipt = Attempt.AttemptResult outcome routing.next Nothing

@@ -30,6 +30,7 @@ import Shikigami.Execution.Identity (ExecutionRootId, OperationId, operationIdTe
 import Shikigami.Execution.Payload (payloadIdText)
 import Shikigami.Execution.Transcript (PayloadRef (..))
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId, fixtureRootId)
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Objective.Capability qualified as O
 import Shikigami.Objective.Command
@@ -395,10 +396,10 @@ tests fixture =
           access <- right =<< run env (Sessions.authorizeSession session.sessionId admission.context.identity (pure (Right ())))
           before <- get env objective
           initialVersion <- right (S.versionFor before key)
-          let instruction = WS.Instruction 1 WS.FollowUp (fixtureInstruction "accepted before cancellation") initialVersion.revision initialVersion.assignmentRevision initialVersion.criteriaRevision Nothing
+          let instruction = WS.Instruction V1 WS.FollowUp (fixtureInstruction "accepted before cancellation") initialVersion.revision initialVersion.assignmentRevision initialVersion.criteriaRevision Nothing
           (_, message) <- right =<< run env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send") instruction)
           _ <- right =<< run env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId "start") message.assignmentId)
-          (_, result) <- right =<< run env (Sessions.recordResult access (fixtureRevision 2) (fixtureRevision 0) (fixtureOperationId "result") (WS.AssignmentResult 1 message.assignmentId WS.AssignmentSucceeded Nothing (Aeson.object []) ["artifact"]))
+          (_, result) <- right =<< run env (Sessions.recordResult access (fixtureRevision 2) (fixtureRevision 0) (fixtureOperationId "result") (WS.AssignmentResult V1 message.assignmentId WS.AssignmentSucceeded Nothing (Aeson.object []) ["artifact"]))
           _ <- right =<< run env (O.executeCommand ownerHost objective (revision 2) (fixtureOperationId "cancel") CancelObjective)
           cancelled <- get env objective
           version <- right (S.versionFor cancelled key)
@@ -487,10 +488,10 @@ checkpoint env actor _ current assignment key = do
   session <- maybe (assertFailure "missing fixture session" >> fail "unreachable") pure assignment.sessionId
   access <- right =<< run env (Sessions.authorizeSession session actor (pure (Right ())))
   version <- right (S.versionFor current assignment.assignmentId)
-  let instruction = WS.Instruction 1 WS.FollowUp (fixtureInstruction "perform") version.revision version.assignmentRevision version.criteriaRevision Nothing
+  let instruction = WS.Instruction V1 WS.FollowUp (fixtureInstruction "perform") version.revision version.assignmentRevision version.criteriaRevision Nothing
   (_, message) <- right =<< run env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send") instruction)
   _ <- right =<< run env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId "start") message.assignmentId)
-  let result = WS.AssignmentResult 1 message.assignmentId WS.AssignmentSucceeded Nothing (Aeson.object []) ["artifact"]
+  let result = WS.AssignmentResult V1 message.assignmentId WS.AssignmentSucceeded Nothing (Aeson.object []) ["artifact"]
   (_, receipt) <- right =<< run env (Sessions.recordResult access (fixtureRevision 2) (fixtureRevision 0) (fixtureOperationId "result") result)
   (_, intent) <- right =<< run env (Sessions.prepareCheckpoint access (fixtureRevision 3) (fixtureRevision 0) (fixtureOperationId "prepare") version (fixtureRevision 0) (fixtureRevision 3))
   pure (intent, ResultEvidence (evidenceKey key) (criterionKey "human") (WorkerResult receipt (artifact "artifact")) False)

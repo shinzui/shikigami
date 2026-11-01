@@ -54,6 +54,7 @@ import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.StateRevision
 import Shikigami.Workspace.Allocation (workspaceFiles, workspaceMetadata, workspaceScratch)
@@ -297,7 +298,7 @@ current :: SupervisorRuntime -> AcceptedProcess -> Maybe ProcessRecord -> IO ()
 current runtime accepted record = do
   runtime.lifecycle accepted.snapshot >>= either (const (abort SupervisorRefused)) pure
   let dispatch = accepted.dispatch
-      claim = Attempt.AttemptClaim (Attempt.JobReference 1 accepted.snapshot.executionId dispatch.operation.operationId dispatch.attemptId) dispatch.owner dispatch.generation
+      claim = Attempt.AttemptClaim (Attempt.JobReference V1 accepted.snapshot.executionId dispatch.operation.operationId dispatch.attemptId) dispatch.owner dispatch.generation
   execute runtime (Execution.checkStartedExecutionAttempt accepted.access claim)
   transact runtime (if accepted.admission.filePolicy == Just transferableFilePolicy then Transfers.checkWorkspaceAdmissionOwnerTx accepted.binding accepted.admission else Workspaces.checkWorkspaceOwnerTx accepted.binding accepted.admission.owner accepted.admission.epoch) >>= either (const (abort SupervisorRefused)) pure
   forM_ record \retained -> getCurrentTime >>= \now -> when (now >= retained.deadline) (abort SupervisorRefused)
@@ -401,7 +402,7 @@ publishProcessReceipt runtime operationId = protect do
       unless (routing.identity == retained.identity && retained.rootId == Just binding.request.rootId && operation.executionId == routing.executionId && operation.specification.kind == ToolOperation && operation.specification.name == workspaceExecBinding.name && operation.specification.scopeDigest `elem` map toolScopeDigest [workspaceExecBinding, transferredWorkspaceExecBinding] && operation.specification.recovery == UncertainEffect && operation.input.digest == routing.inputDigest && record.fingerprint == processFingerprint binding record.instructionDigest context record.command) (abort SupervisorUnresolved)
       actual <- execute runtime (Execution.inspectExecutionAttempt record.attemptId) >>= maybe (abort SupervisorUnresolved) pure
       unless (actual.executionId == routing.executionId && actual.operationId == operationId && actual.owner == Just record.claimOwner && actual.generation == record.generation && isNothing actual.call) (abort SupervisorUnresolved)
-      let reference = Attempt.JobReference 1 routing.executionId operationId record.attemptId
+      let reference = Attempt.JobReference V1 routing.executionId operationId record.attemptId
           claim = Attempt.AttemptClaim reference record.claimOwner record.generation
           outcome = either (\err -> ToolReturned [TextBlock (renderToolError err)] True) (RichToolReturned . captureToolOutput) result
           receipt = Attempt.AttemptResult outcome routing.next Nothing

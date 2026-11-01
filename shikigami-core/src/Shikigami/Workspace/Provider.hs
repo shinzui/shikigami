@@ -15,6 +15,7 @@ import Shikigami.Execution.Claim
 import Shikigami.Execution.Identity (AttemptId, OperationId)
 import Shikigami.Execution.Payload (PayloadDigest)
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Transfer (TransferIntent (..), WorkspaceRef (..))
@@ -78,7 +79,7 @@ contentDigest = versionedDigest "shikigami.workspace-content/1" . toJSON
 
 workspaceTransferAction :: WorkspaceBinding -> TransferIntent -> Either FileEffectError AgentAction
 workspaceTransferAction binding intent = do
-  unless (intent.format == 1 && intent.workspace == binding.workspace && intent.rootId == binding.request.rootId && intent.oldEpoch >= binding.request.epoch && intent.newEpoch == advanceRevision intent.oldEpoch && revisionNumber intent.newEpoch < 9223372036854775808 && intent.oldOwner /= intent.newOwner && maybe False ((== intent.sessionId) . fst) binding.request.assignment) (Left FileEffectRefused)
+  unless (intent.format == V1 && intent.workspace == binding.workspace && intent.rootId == binding.request.rootId && intent.oldEpoch >= binding.request.epoch && intent.newEpoch == advanceRevision intent.oldEpoch && revisionNumber intent.newEpoch < 9223372036854775808 && intent.oldOwner /= intent.newOwner && maybe False ((== intent.sessionId) . fst) binding.request.assignment) (Left FileEffectRefused)
   workspaceControlAction binding "fence" (toJSON intent)
 
 workspaceWriteAdmissionAction :: WorkspaceBinding -> WorkspaceRef -> WorkerSessionId -> AgentIdentity -> StateRevision "worker-owner" -> OperationId -> Either FileEffectError AgentAction

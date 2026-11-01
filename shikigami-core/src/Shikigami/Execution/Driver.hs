@@ -51,6 +51,7 @@ import Shikigami.Execution.Timer (armObservation)
 import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as Generated
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Trigger.Enqueue (addressedRunJob, enqueueRunJobTx)
 
@@ -175,7 +176,7 @@ decide runtime start wake = do
                   case find (\attempt -> attempt.phase `elem` [Attempt.AwaitingDispatch, Attempt.Claimed]) attempts of
                     Nothing -> pure False
                     Just attempt -> do
-                      _ <- checked (owned (Store.refuseUndispatchedExecutionAttempt binding.identity state.revision (Attempt.JobReference 1 start.executionId operationId attempt.request.attemptId)))
+                      _ <- checked (owned (Store.refuseUndispatchedExecutionAttempt binding.identity state.revision (Attempt.JobReference V1 start.executionId operationId attempt.request.attemptId)))
                       pure True
               Left err -> throwError err
           else pure False
@@ -231,7 +232,7 @@ decide runtime start wake = do
       (snapshot, state) <- checked (owned (Store.loadExecution access))
       pure (access, snapshot, state)
     observe identity state attempt = do
-      let reference = Attempt.JobReference 1 start.executionId attempt.operationId attempt.request.attemptId
+      let reference = Attempt.JobReference V1 start.executionId attempt.operationId attempt.request.attemptId
       now <- liftIO getCurrentTime
       case attempt.phase of
         Attempt.AttemptUncertain ->
@@ -293,6 +294,6 @@ decide runtime start wake = do
                 pure (request, Just prepared)
           now <- liftIO getCurrentTime
           (_, accepted) <- checked (owned ((case retired of Nothing -> Store.submitExecutionAttemptWith; Just old -> \permit revision -> Store.recoverExecutionAttemptWith permit revision old) access state.revision (Attempt.AttemptSubmission request prepared wake) (enqueue now snapshot.identity snapshot.agent)))
-          pure (ObserveExecution (Attempt.JobReference 1 start.executionId accepted.operationId accepted.request.attemptId))
+          pure (ObserveExecution (Attempt.JobReference V1 start.executionId accepted.operationId accepted.request.attemptId))
     enqueue now identity agent reference = void (enqueueRunJobTx (addressedRunJob now identity agent ExecutionOperationRoute (toJSON reference) (runKeyWithPrefix ('e' :| "xecution:") (versionedDigest "shikigami.execution-job/1" (toJSON reference)))))
     policyDigest snapshot = versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)

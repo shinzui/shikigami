@@ -110,6 +110,7 @@ import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as DriverGe
 import Shikigami.ExecutionLifecycle.Generated.Domain qualified as Lifecycle
 import Shikigami.ExecutionLifecycle.Generated.EventStream (executionLifecycleCategory, executionLifecycleEventStream, executionLifecycleEventStreamDef)
 import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
@@ -395,7 +396,7 @@ tests fixture =
       testCase "assistant replay retains opaque thinking and exact cut-off tool arguments" do
         let assistant =
               ReplayAssistant
-                1
+                V1
                 [ThinkingBlock "opaque-redacted" (Just "signature") True (Just (ProviderReplay OpenAIResponses "exact-model" [object ["opaque" .= ("continuation" :: Text)]])), ToolBlock (ToolInvocation "call" "tool" (Aeson.String "{cut-off"))]
                 Stop
                 (Just "response")
@@ -782,9 +783,13 @@ tests fixture =
           result @?= Left CorruptReplay,
       testCase "oversized and unsupported snapshots refuse before admission" $
         withFixture fixture \env snapshot _ -> do
-          let future = anotherSnapshot snapshot "future" & #format .~ 2
+          let future = anotherSnapshot snapshot "future"
               huge = anotherSnapshot snapshot "huge" & #instructions . #body .~ Text.replicate 1048577 "x"
-          run env (Store.admitExecution future) >>= (@?= Left UnsupportedReplay)
+          case Aeson.toJSON future of
+            Aeson.Object fields ->
+              assertBool "unsupported complete snapshot refused at decoding" (case Aeson.fromJSON (Aeson.Object (KeyMap.insert "format" (Aeson.Number 2) fields)) :: Aeson.Result ExecutionSnapshot of Aeson.Error _ -> True; _ -> False)
+            _ -> assertFailure "valid snapshot was not an object"
+          inspect env future.executionId >>= (@?= Nothing)
           run env (Store.admitExecution huge) >>= (@?= Left PayloadTooLarge)
           inspect env huge.executionId >>= (@?= Nothing),
       testCase "identical accepted operations converge and changed requests conflict" $
@@ -928,7 +933,7 @@ tests fixture =
           access <- expectRight =<< run env (Store.authorizeReplay snapshot.executionId snapshot.identity (pure (Right ())))
           (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
           receipt <- reserveCall env snapshot operation
-          let empty = ModelReturned (ReplayAssistant 1 [] Stop Nothing Nothing (object []) Nothing) Nothing
+          let empty = ModelReturned (ReplayAssistant V1 [] Stop Nothing Nothing (object []) Nothing) Nothing
           ref <- expectRight (Store.outcomeReference empty)
           run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId empty (NeedValidation ref) (Just (receipt, terminal))) >>= (@?= Right R.Accepted)
           run env (Store.finishExecution access (fixtureRevision 2) (object ["reply" .= ("invented replacement" :: Text)])) >>= (@?= Left ExecutionOutputInvalid)
@@ -939,7 +944,7 @@ tests fixture =
         withConfiguredFixture fixture (\snapshot -> snapshot & #policy . #output .~ NonemptyReply & #policy . #outputRepairs .~ (fixturePolicy 1)) \env snapshot access -> do
           (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
           receipt <- reserveCall env snapshot operation
-          let invalid = ModelReturned (ReplayAssistant 1 [TextBlock ""] Stop Nothing Nothing (object []) Nothing) Nothing
+          let invalid = ModelReturned (ReplayAssistant V1 [TextBlock ""] Stop Nothing Nothing (object []) Nothing) Nothing
           response <- expectRight (Store.outcomeReference invalid)
           run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId invalid (NeedValidation response) (Just (receipt, terminal))) >>= (@?= Right R.Accepted)
           (_, repair) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) (spec snapshot 1 & #kind .~ ModelRepair) secretInput)
@@ -980,6 +985,36 @@ tests fixture =
           run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput) >>= (@?= Left ProjectionUnavailable)
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
           root.usage @?= R.emptyUsage,
+      testCase "unsupported retained state formats refuse with ignored-read rollback and exact repair" $
+        withFixture fixture \env snapshot access -> do
+          valid@(_, originalState) <- expectRight =<< run env (Store.loadExecution access)
+          let readState = preparable "SELECT state FROM shikigami.executions WHERE execution_id=$1" (E.param (E.nonNullable E.text)) (D.singleRow (D.column (D.nonNullable D.jsonb)))
+              replaceState = preparable "UPDATE shikigami.executions SET state=$2 WHERE execution_id=$1" ((fst >$< E.param (E.nonNullable E.text)) <> (snd >$< E.param (E.nonNullable E.jsonb))) D.noResult
+              countProbe = preparable "SELECT count(*) FROM shikigami.format_rollback_probe" E.noParams (D.singleRow (D.column (D.nonNullable D.int8)))
+          original <- run env (runTransaction (Tx.statement snapshot.executionId.value readState))
+          run env (runTransaction (Tx.sql "CREATE TABLE shikigami.format_rollback_probe (value integer NOT NULL)"))
+          before <- lifecycleVersion env snapshot.executionId
+          mapM_
+            ( \bad -> do
+                let corrupt = case original of Aeson.Object fields -> Aeson.Object (KeyMap.insert "format" bad fields); value -> value
+                run env (runTransaction (Tx.statement (snapshot.executionId.value, corrupt) replaceState))
+                run env (Store.loadExecution access) >>= (@?= Left CorruptReplay)
+                run env (runTransaction (Store.inspectExecutionTx snapshot.executionId)) >>= (@?= Left CorruptReplay)
+                run
+                  env
+                  ( runTransaction do
+                      Tx.sql "INSERT INTO shikigami.format_rollback_probe VALUES (1)"
+                      _ <- Store.inspectExecutionTx snapshot.executionId
+                      Tx.sql "INSERT INTO shikigami.format_rollback_probe VALUES (2)"
+                  )
+                run env (runTransaction (Tx.statement () countProbe)) >>= (@?= (0 :: Int64))
+                run env (Store.acceptOperation access originalState.revision (spec snapshot 0) secretInput) >>= (@?= Left CorruptReplay)
+                lifecycleVersion env snapshot.executionId >>= (@?= before)
+                run env (runTransaction (Tx.statement (snapshot.executionId.value, original) replaceState))
+                run env (Store.loadExecution access) >>= (@?= Right valid)
+                run env (runTransaction (Tx.statement snapshot.executionId.value readState)) >>= (@?= original)
+            )
+            [Aeson.Number 0, Aeson.Number 2, Aeson.Number 1.5, Aeson.String "1"],
       testCase "malformed reference JSON remains a domain corruption refusal" $
         withFixture fixture \env snapshot access -> do
           before <- lifecycleVersion env snapshot.executionId
@@ -1059,7 +1094,7 @@ pendingReference env snapshot = do
   operation <- maybe (assertFailure "no active operation" >> fail "active") pure state.activeOperation
   attempts <- expectRight =<< run env (Store.inspectOperationAttempts operation)
   case filter Attempt.logicalAttempt attempts of
-    [attempt] -> pure (Attempt.JobReference 1 snapshot.executionId operation attempt.request.attemptId)
+    [attempt] -> pure (Attempt.JobReference V1 snapshot.executionId operation attempt.request.attemptId)
     _ -> assertFailure "expected one prepared attempt" >> fail "attempt"
 
 pumpDriver :: AppEnv -> Executor.ExecutionRuntime -> ExecutionSnapshot -> Int -> IO Driver.ExecutionDriverResult
@@ -1114,7 +1149,7 @@ nativeExecutorCase fixture billing = testCase (show billing <> " preserves rich 
             )
             5
         request = Store.toolAttemptRequest (fixtureAttemptId "native-tool-attempt") specification.operationId binding
-        reference = Attempt.JobReference 1 snapshot.executionId specification.operationId request.attemptId
+        reference = Attempt.JobReference V1 snapshot.executionId specification.operationId request.attemptId
     run env (runTransaction (registerAwakeableTx UUID.nil "shikigami.execution" (executionWorkflowId snapshot.executionId).unWorkflowId))
     _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 3) (Attempt.AttemptSubmission request Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)) (\_ -> pure ()))
     Executor.executeAcceptedAttempt executor snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
@@ -1141,7 +1176,7 @@ modelRecoveryCase fixture afterCompletion = testCase (if afterCompletion then "a
   withConfiguredResourceFixture fixture id (Map.insert R.ActiveWork (R.Limited (fixtureAmount 2))) \env snapshot access -> do
     (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
     let first = concurrentModelSubmission operation
-        old = Attempt.JobReference 1 snapshot.executionId operation.specification.operationId first.request.attemptId
+        old = Attempt.JobReference V1 snapshot.executionId operation.specification.operationId first.request.attemptId
         second = first & #request . #attemptId .~ fixtureAttemptId "recovery-model-attempt"
         next = old & #attemptId .~ second.request.attemptId
         actual = terminalAttempt & #accounting .~ Just (terminal & #known .~ Map.fromList [(R.Tokens, (fixtureAmount 3)), (R.CostMicroUsd, (fixtureAmount 0))] & #missing .~ [])
@@ -1169,7 +1204,7 @@ modelRecoveryCase fixture afterCompletion = testCase (if afterCompletion then "a
     run env (Store.completeExecutionAttempt access (fixtureRevision 8) replacement actual) >>= (@?= Right R.Accepted)
     when afterCompletion (run env (Store.finishExecution access (fixtureRevision 9) (object ["reply" .= ("accepted reply" :: Text)])) >>= (@?= Right R.Accepted))
     (_, before) <- expectRight =<< run env (Store.loadExecution access)
-    let different = actual & #outcome .~ ModelReturned (ReplayAssistant 1 [TextBlock "late former reply"] Stop Nothing Nothing (object []) Nothing) Nothing
+    let different = actual & #outcome .~ ModelReturned (ReplayAssistant V1 [TextBlock "late former reply"] Stop Nothing Nothing (object []) Nothing) Nothing
     run env (Store.completeExecutionAttempt access before.revision former different) >>= (@?= Left AttemptClaimLost)
     run env (Store.recordLateExecutionReceipt access before.revision former different) >>= (@?= Right R.Accepted)
     run env (Store.recordLateExecutionReceipt access before.revision former different) >>= (@?= Right R.AlreadyAccepted)
@@ -1192,7 +1227,7 @@ recoveryCapacityCase fixture = testCase "a refused recovery preserves the unknow
   withConfiguredResourceFixture fixture id (Map.insert R.ActiveWork (R.Limited (fixtureAmount 1))) \env snapshot access -> do
     (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
     let first = concurrentModelSubmission operation
-        old = Attempt.JobReference 1 snapshot.executionId operation.specification.operationId first.request.attemptId
+        old = Attempt.JobReference V1 snapshot.executionId operation.specification.operationId first.request.attemptId
         second = first & #request . #attemptId .~ fixtureAttemptId "refused-recovery-attempt"
     _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 1) first (\_ -> pure ()))
     former <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) old (fixtureOwner "former-owner") 1)
@@ -1220,7 +1255,7 @@ toolRecoveryCase fixture recovery = testCase (show recovery <> " retains its log
         specification = toolSpec snapshot 1 input
         firstRequest = Store.toolAttemptRequest (fixtureAttemptId "lost-native-attempt") specification.operationId binding
         secondRequest = Store.toolAttemptRequest (fixtureAttemptId "recovery-native-attempt") specification.operationId binding
-        first = Attempt.JobReference 1 snapshot.executionId specification.operationId firstRequest.attemptId
+        first = Attempt.JobReference V1 snapshot.executionId specification.operationId firstRequest.attemptId
         second = first & #attemptId .~ secondRequest.attemptId
         submission request = Attempt.AttemptSubmission request Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)
     _ <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
@@ -1303,7 +1338,7 @@ withPreparedModel fixture use = withFixture fixture \env snapshot access -> do
   (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
   let submission = modelSubmission operation
   _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 1) submission (\_ -> pure ()))
-  use env snapshot access operation (Attempt.JobReference 1 snapshot.executionId operation.specification.operationId submission.request.attemptId)
+  use env snapshot access operation (Attempt.JobReference V1 snapshot.executionId operation.specification.operationId submission.request.attemptId)
 
 expectClaim :: Either ExecutionError Attempt.ClaimResult -> IO Attempt.AttemptClaim
 expectClaim value = case value of Right (Attempt.ClaimGranted claim) -> pure claim; _ -> assertFailure (show value) >> fail "claim expected"
@@ -1327,7 +1362,7 @@ commitToolRequestWith :: Calls.CallOutcome -> AppEnv -> ExecutionSnapshot -> Sto
 commitToolRequestWith callOutcome env snapshot access = do
   (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
   receipt <- reserveCall env snapshot operation
-  let assistant = ReplayAssistant 1 [ToolBlock (ToolInvocation "first" "observe" (object [])), ToolBlock (ToolInvocation "second" "observe" (object []))] ToolUse Nothing Nothing (object []) Nothing
+  let assistant = ReplayAssistant V1 [ToolBlock (ToolInvocation "first" "observe" (object [])), ToolBlock (ToolInvocation "second" "observe" (object []))] ToolUse Nothing Nothing (object []) Nothing
       outcome = ModelReturned assistant Nothing
   ref <- expectRight (Store.outcomeReference outcome)
   run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId outcome (NeedTool ref (fixtureToolPosition 0)) (Just (receipt, callOutcome))) >>= (@?= Right R.Accepted)
@@ -1340,7 +1375,7 @@ secretInput :: Value
 secretInput = object ["request" .= ("PRIVATE_REPLAY_MARKER" :: Text)]
 
 modelOutcome :: OperationOutcome
-modelOutcome = ModelReturned (ReplayAssistant 1 [TextBlock "accepted reply"] Stop (Just "response") Nothing (object []) Nothing) (Just (object ["raw" .= ("provider evidence" :: Text)]))
+modelOutcome = ModelReturned (ReplayAssistant V1 [TextBlock "accepted reply"] Stop (Just "response") Nothing (object []) Nothing) (Just (object ["raw" .= ("provider evidence" :: Text)]))
 
 terminal :: Calls.CallOutcome
 terminal = Calls.CallOutcome Calls.CallTerminal (Map.singleton R.Tokens (fixtureAmount 3)) [R.CostMicroUsd] (Just "served-model") (Just "provider-call") Nothing
@@ -1374,7 +1409,7 @@ withConfiguredResourceFixture fixture configure editLimits use = withShikigamiFr
   let env = AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing
       limits = editLimits (Map.insert R.Tokens (R.Limited (fixtureAmount 1000)) (Map.fromList [(dimension, R.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]))
       selection = mustRight (resolveExecutionSelection (fixtureAssignment "transcript-assignment") (mustRight (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just rootId) now)
-      snapshot = configure (ExecutionSnapshot 1 (executionIdFor selection.assignmentId) "transcript-run" (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (SkillInstructions "fixture" "system" "PRIVATE_REPLAY_MARKER") (ReplayContext 1 (Just "system") [UserTurn [TextBlock "PRIVATE_REPLAY_MARKER"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing)
+      snapshot = configure (ExecutionSnapshot V1 (executionIdFor selection.assignmentId) "transcript-run" (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (SkillInstructions "fixture" "system" "PRIVATE_REPLAY_MARKER") (ReplayContext 1 (Just "system") [UserTurn [TextBlock "PRIVATE_REPLAY_MARKER"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing)
   _ <- expectRight =<< run env Catalog.registerProjectionCatalog
   run env (Roots.enrollRoot rootId (R.Envelope limits (addUTCTime 3600 now))) >>= (@?= Right R.Accepted)
   run env (Store.admitExecution snapshot) >>= (@?= Right R.Accepted)
@@ -1442,7 +1477,7 @@ recoveryReceiptCapacityCase fixture = testCase "full pending-receipt capacity re
     withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
     (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
     let first = concurrentModelSubmission operation
-        old = Attempt.JobReference 1 snapshot.executionId operation.specification.operationId first.request.attemptId
+        old = Attempt.JobReference V1 snapshot.executionId operation.specification.operationId first.request.attemptId
         second = first & #request . #attemptId .~ fixtureAttemptId "full-receipt-recovery"
     _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 1) first (\_ -> pure ()))
     former <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) old (fixtureOwner "former-owner") 1)

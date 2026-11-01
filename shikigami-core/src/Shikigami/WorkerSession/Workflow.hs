@@ -45,6 +45,7 @@ import Shikigami.Execution.Identity (OperationId, operationIdWithPrefix)
 import Shikigami.Execution.SelectionRuntime qualified as Selection
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript (executionIdFor)
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.WorkerSession.Checkpoint (CheckpointProvider (..), ObjectiveVersion (..))
 import Shikigami.WorkerSession.Identity
@@ -187,7 +188,7 @@ sessionWorkflow runtime initial = do
               Right (Just (_, binding, _)) | binding.identity == state.owner -> pure (Just executionId)
               Right Nothing -> pure Nothing
               _ -> throwIO (userError "assignment execution reference is unavailable")
-            snd <$> (Store.recordResult access state.revision message.epoch (operationIdWithPrefix ('r' :| "esult:") message.assignmentId.value) (AssignmentResult 1 message.assignmentId disposition reference output []) >>= require)
+            snd <$> (Store.recordResult access state.revision message.epoch (operationIdWithPrefix ('r' :| "esult:") message.assignmentId.value) (AssignmentResult V1 message.assignmentId disposition reference output []) >>= require)
       continueAsNew (WorkerSessionSeed (Just accepted))
 
 selectAssignment :: SessionRuntime -> WorkerSessionId -> Eff AppEffects (Either SessionError SessionAction)
