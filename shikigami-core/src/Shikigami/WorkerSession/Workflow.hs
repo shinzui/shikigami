@@ -49,6 +49,7 @@ import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.WorkerSession.Checkpoint (CheckpointProvider (..), ObjectiveVersion (..))
 import Shikigami.WorkerSession.Identity
+import Shikigami.WorkerSession.Input
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Types
 
@@ -105,13 +106,14 @@ sessionWorkflow runtime initial = do
   actual <- currentWorkflow
   unless (actual == (Generated.workflowName, sessionWorkflowId accepted.sessionId)) (throwIO (userError "session workflow identity mismatch"))
   (token, awaitHint) <- Generated.allocateDeclaredAwait Generated.sessionChangedAwait
-  generation <- currentRunGeneration
+  generationNumber <- currentRunGeneration
+  generation <- either (throwIO . userError . Text.unpack) pure (parseWorkflowGeneration generationNumber)
   _ <- step (StepName "observe-session") do
     access <- raise (sessionAccess runtime accepted.sessionId) >>= require
     state <- currentState accepted.sessionId
     if state.phase `elem` [Failed, Cancelled]
       then pure state
-      else snd <$> (Store.observeSession access state.revision state.epoch (operationIdWithPrefix ('o' :| "bserve:") (Text.pack (show generation))) (SessionWake token generation) >>= require)
+      else snd <$> (Store.observeSession access state.revision state.epoch (operationIdWithPrefix ('o' :| "bserve:") (Text.pack (show generationNumber))) (SessionWake token generation) >>= require)
   action <- step (StepName "select-assignment") (raise (selectAssignment runtime accepted.sessionId) >>= require)
   case action of
     SessionDone phase -> void (cancelAwakeable token) >> pure (WorkerSessionClosed accepted.sessionId phase)
@@ -123,7 +125,7 @@ sessionWorkflow runtime initial = do
       admission <- Store.loadAdmission access >>= require
       instruction <- Store.readInstruction access message.assignmentId >>= require
       findings <- Store.readAssignmentContext access message.assignmentId >>= require
-      childId <- maybe (throwIO (userError "started assignment has no child mapping")) (pure . WorkflowId) message.childWorkflowId
+      childId <- maybe (throwIO (userError "started assignment has no child mapping")) pure message.childWorkflowId
       let WorkflowName childName = agentRunWorkflowName
       registered <- lookupChild childId.unWorkflowId childName
       case registered of
@@ -233,4 +235,4 @@ currentAssignmentAuthority runtime admission state instruction = case runtime.ch
     pure do
       authority
       version <- snapshot
-      unless (version.active && version.owner == state.owner && version.ownerEpoch == state.epoch && Just version.rootId == admission.context.executionRootId && now < version.cutoff && version.revision == instruction.objectiveRevision && version.assignmentRevision == instruction.assignmentRevision && version.criteriaRevision == instruction.criteriaRevision) (Left "current objective assignment changed or expired")
+      unless (objectiveIsActive version.active && version.owner == state.owner && version.ownerEpoch == state.epoch && Just version.rootId == admission.context.executionRootId && now < version.cutoff && version.revision == instruction.objectiveRevision && version.assignmentRevision == instruction.assignmentRevision && version.criteriaRevision == instruction.criteriaRevision) (Left "current objective assignment changed or expired")

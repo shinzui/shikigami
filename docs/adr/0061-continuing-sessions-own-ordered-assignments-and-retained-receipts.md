@@ -51,6 +51,22 @@ API. Runtime orchestration must establish the real child result and fresh
 authority. Objective references in this layer identify the separately owned
 provider; they do not implement objective revisions or workspace fences.
 
+Continuing-session coordinates and commitments retain separate nominal scopes.
+Provider/objective locators, parent scope and worker slot stay distinct through
+admission. Assignment identities decode as canonical RFC 4122 UUIDv5 values;
+artifact references preserve the provider's exact spelling. Paging limits,
+workflow generations, provider receipts and objective activity retain their own
+types and original numeric/string/boolean codecs. Child and coordinator workflow
+references stay native until SQL or JSON adapters.
+
+The mapped WorkerSessionId is deliberately a total Text carrier, as required by
+Keiro's nominal binding contract, including its empty initial state. Its private
+representation has no Generic construction. The admitted binding decoder checks
+that the session identity equals the original UUIDv5 derivation from its retained
+scope commitment. The generated carrier codec is not admission authority. Retained
+scope corruption or a different valid digest is an owning binding refusal with
+transaction rollback; restoring the original bytes restores the original session.
+
 ## Alternatives rejected
 
 Using memory search as a mailbox would lose ordering and deduplication truth.

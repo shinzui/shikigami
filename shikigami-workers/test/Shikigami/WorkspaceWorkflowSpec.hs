@@ -68,6 +68,7 @@ import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.WorkerSession.Input (SessionLimit (..))
+import Shikigami.WorkerSession.Input qualified as WorkerInput
 import Shikigami.WorkerSession.Store qualified as Sessions
 import Shikigami.WorkerSession.Types qualified as Sessions
 import Shikigami.Workspace.Admission (WorkspaceHost (..))
@@ -176,7 +177,7 @@ tests fixture =
           access <- right =<< run env (Execution.authorizeReplay (executionIdFor (assignmentIdFor (runJobWorkflowId job).unWorkflowId)) job.identity (pure (Right ())))
           (snapshot, _) <- right =<< run env (Execution.loadExecution access)
           let coordinator = CompatibilityIdentity (fixtureAgentName "cleanup-coordinator")
-              admission = Sessions.SessionAdmission V1 (Sessions.SessionScope parentSession "worker") (Sessions.ObjectiveRef "fixture" "objective") (parent & #name .~ fixtureAgentName "cleanup-coordinator" & #delegates .~ map fixtureAgentName ["workspace-worker"]) (DelegateCtx (fixtureDelegationDepth 0) coordinator (Just snapshot.sessionId) Nothing (Just (WorkflowId "cleanup-parent")) [fixtureAgentName "cleanup-coordinator"] Nothing (Just binding.request.rootId) Nothing defaultDelegationBudget) (fixtureAgentName "workspace-worker") job.identity (fixtureLimit 10) (fixtureLimit 4)
+              admission = Sessions.SessionAdmission V1 (Sessions.SessionScope (WorkerInput.workerCoordinate parentSession) (WorkerInput.workerCoordinate "worker")) (Sessions.ObjectiveRef (WorkerInput.workerCoordinate "fixture") (WorkerInput.workerCoordinate "objective")) (parent & #name .~ fixtureAgentName "cleanup-coordinator" & #delegates .~ map fixtureAgentName ["workspace-worker"]) (DelegateCtx (fixtureDelegationDepth 0) coordinator (Just snapshot.sessionId) Nothing (Just (WorkflowId "cleanup-parent")) [fixtureAgentName "cleanup-coordinator"] Nothing (Just binding.request.rootId) Nothing defaultDelegationBudget) (fixtureAgentName "workspace-worker") job.identity (fixtureLimit 10) (fixtureLimit 4)
           _ <- right =<< run env (Sessions.openSession admission)
           cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
           run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Right Nothing)

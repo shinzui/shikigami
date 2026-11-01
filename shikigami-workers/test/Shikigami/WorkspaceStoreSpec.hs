@@ -4,6 +4,7 @@ import Control.Concurrent.Async (async, cancel, concurrently, mapConcurrently)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (bracket)
 import Data.Aeson (toJSON)
+import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as Bytes
 import Data.Generics.Labels ()
 import Data.List (sort)
@@ -28,7 +29,7 @@ import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshData
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
-import Shikigami.WorkerSession.Types (AssignmentId (..), WorkerSessionId (..))
+import Shikigami.WorkerSession.Types (AssignmentId (value), WorkerSessionId (value), assignmentIdForDigest, workerSessionId)
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.InstructionLoader
@@ -93,7 +94,7 @@ tests fixture =
         run env (reserveWorkspaceTx root request repo) >>= (@?= Right (retained, Reserved)),
       testCase "distinct assignments have private files, objects and indexes" $ withFixture fixture \env source root repo -> do
         (one, _) <- right =<< run env (reserveWorkspaceTx root request repo)
-        (two, _) <- right =<< run env (reserveWorkspaceTx root ((request & #assignment .~ (Just (WorkerSessionId "session", AssignmentId "two")))) repo)
+        (two, _) <- right =<< run env (reserveWorkspaceTx root ((request & #assignment .~ (Just (workerSessionId "session", fixtureAssignmentId "two")))) repo)
         assertBool "distinct allocated entity identities" (one.id /= two.id)
         assertBool "different resources" (one.workspace /= two.workspace)
         before <- sourceSnapshot source
@@ -130,7 +131,7 @@ tests fixture =
         -- next policy identity. The old private repository retains its bundle.
         writeFile (source </> "AGENTS.md") "PRIVATE_NEW_ROOT_POLICY"
         nextRepository <- commitRepository source
-        (nextBinding, _) <- right =<< run env (reserveWorkspaceTx root ((request & #assignment .~ (Just (WorkerSessionId "session", AssignmentId "next")))) nextRepository)
+        (nextBinding, _) <- right =<< run env (reserveWorkspaceTx root ((request & #assignment .~ (Just (workerSessionId "session", fixtureAssignmentId "next")))) nextRepository)
         allocateWorkspace root nextBinding Reserved >>= (@?= Right ())
         nextBundle <- right =<< loadRepositoryInstructions nextBinding 65536
         assertBool "new assignment admits next instruction identity" (bundleDigest nextBundle /= bundleDigest bundle)
@@ -202,7 +203,7 @@ tests fixture =
     takeDirectoryOfFiles root binding = takeDirectory (workspaceFiles root binding)
 
 request :: WorkspaceRequest
-request = WorkspaceRequest "run" (Just (WorkerSessionId "session", AssignmentId "one")) (fixtureRootId "root") (CompatibilityIdentity (fixtureAgentName "parent")) (CompatibilityIdentity (fixtureAgentName "worker")) (fixtureRevision 0)
+request = WorkspaceRequest "run" (Just (workerSessionId "session", fixtureAssignmentId "one")) (fixtureRootId "root") (CompatibilityIdentity (fixtureAgentName "parent")) (CompatibilityIdentity (fixtureAgentName "worker")) (fixtureRevision 0)
 
 resolved :: FilePath -> Text.Text -> Text.Text -> IO ResolvedRepository
 resolved source base policy = do
@@ -281,3 +282,6 @@ fixtureAssignment = either (error . show) id . parseAssignmentKey
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureAssignmentId :: Text -> AssignmentId
+fixtureAssignmentId = assignmentIdForDigest . Aeson.toJSON

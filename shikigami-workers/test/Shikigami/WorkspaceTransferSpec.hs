@@ -56,6 +56,7 @@ import Shikigami.StateRevision (StateRevision, advanceRevision, parseRevision)
 import Shikigami.StateRevision qualified as Generation
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
 import Shikigami.WorkerSession.Input (InstructionText, SessionLimit (..), parseInstructionText)
+import Shikigami.WorkerSession.Input qualified as WorkerInput
 import Shikigami.WorkerSession.Store qualified as Sessions
 import Shikigami.WorkerSession.Transfer
 import Shikigami.WorkerSession.Types hiding (assignmentIdFor)
@@ -117,7 +118,7 @@ tests fixture =
           Just (idle, _) <- right =<< run env (Sessions.inspectSession context.sessionId)
           (_, message) <- right =<< run env (Sessions.acceptMessage parent idle.revision (fixtureRevision 0) (fixtureOperationId "follow-up") (Instruction V1 FollowUp (fixtureInstruction "continue accepted work") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
           (_, started) <- right =<< run env (Sessions.startAssignment parent (advanceRevision idle.revision) (fixtureRevision 0) (fixtureOperationId "start-follow-up") message.assignmentId)
-          child <- maybe (fail "missing follow-up child") pure started.childWorkflowId
+          child <- maybe (fail "missing follow-up child") (pure . (.unWorkflowId)) started.childWorkflowId
           now <- getCurrentTime
           memory <- genSessionId
           selection <- right (resolveExecutionSelection (Selection.assignmentIdFor child) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just context.rootId) now)
@@ -169,7 +170,7 @@ tests fixture =
             Just (idle, _) <- right =<< run env (Sessions.inspectSession context.sessionId)
             (_, third) <- right =<< run env (Sessions.acceptMessage parent idle.revision (fixtureRevision 0) (fixtureOperationId "third-message") (Instruction V1 FollowUp (fixtureInstruction "continue again") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
             (_, started) <- right =<< run env (Sessions.startAssignment parent (advanceRevision idle.revision) (fixtureRevision 0) (fixtureOperationId "third-start") third.assignmentId)
-            thirdRun <- maybe (fail "missing third child") pure started.childWorkflowId
+            thirdRun <- maybe (fail "missing third child") (pure . (.unWorkflowId)) started.childWorkflowId
             selection <- right (resolveExecutionSelection (Selection.assignmentIdFor thirdRun) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just context.rootId) now)
             let next = assignment & #runId .~ thirdRun & #selection .~ selection
             host.load next >>= \case Left _ -> pure (); Right _ -> assertFailure "a session result hid an active prior execution"
@@ -231,7 +232,7 @@ tests fixture =
             Just (idle, _) <- right =<< run env (Sessions.inspectSession intent.sessionId)
             (_, nextMessage) <- right =<< run env (Sessions.acceptMessage parent idle.revision (fixtureRevision 1) (fixtureOperationId "successor-followup-message") (Instruction V1 FollowUp (fixtureInstruction "continue successor") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
             (_, nextStarted) <- right =<< run env (Sessions.startAssignment parent (advanceRevision idle.revision) (fixtureRevision 1) (fixtureOperationId "successor-followup-start") nextMessage.assignmentId)
-            nextRun <- maybe (fail "missing successor followup child") pure nextStarted.childWorkflowId
+            nextRun <- maybe (fail "missing successor followup child") (pure . (.unWorkflowId)) nextStarted.childWorkflowId
             nextSelection <- right (resolveExecutionSelection (Selection.assignmentIdFor nextRun) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just intent.rootId) now)
             let nextAssignment = assignmentFor nextRun nextSelection
                 assignmentFor run selected = SkillAssignment run intent.newWorker intent.newOwner session selected Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host cannot call models")
@@ -327,18 +328,18 @@ withWorkspacePolicy transferring policy fixture callback = Fixture.withFixture f
       old = compatibilityIdentity (fixtureAgentName "worker")
       successor = compatibilityIdentity (fixtureAgentName "successor")
       actor = compatibilityIdentity (fixtureAgentName "coordinator")
-      session = SessionAdmission V1 (SessionScope "fixture-parent" "worker") (ObjectiveRef "fixture-checkpoints" "objective") (parent & #name .~ fixtureAgentName "coordinator" & #delegates .~ map fixtureAgentName ["worker", "successor"]) (DelegateCtx (fixtureDelegationDepth 0) actor (Just parentSession) Nothing (Just (WorkflowId "parent")) [fixtureAgentName "coordinator"] Nothing (Just root) Nothing defaultDelegationBudget) (fixtureAgentName "worker") old (fixtureLimit 10) (fixtureLimit 4)
+      session = SessionAdmission V1 (SessionScope (WorkerInput.workerCoordinate "fixture-parent") (WorkerInput.workerCoordinate "worker")) (ObjectiveRef (WorkerInput.workerCoordinate "fixture-checkpoints") (WorkerInput.workerCoordinate "objective")) (parent & #name .~ fixtureAgentName "coordinator" & #delegates .~ map fixtureAgentName ["worker", "successor"]) (DelegateCtx (fixtureDelegationDepth 0) actor (Just parentSession) Nothing (Just (WorkflowId "parent")) [fixtureAgentName "coordinator"] Nothing (Just root) Nothing defaultDelegationBudget) (fixtureAgentName "worker") old (fixtureLimit 10) (fixtureLimit 4)
   _ <- right =<< run env Catalog.registerProjectionCatalog
   run env (Roots.enrollRoot root (Resources.Envelope (Map.fromList [(dimension, Resources.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now))) >>= (@?= Right Resources.Accepted)
   _ <- right =<< run env (Sessions.openSession session)
   access <- right =<< run env (Sessions.authorizeSession (sessionIdFor session) actor (pure (Right ())))
   (_, message) <- right =<< run env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send") (Instruction V1 FollowUp (fixtureInstruction "fixture") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
   (_, started) <- right =<< run env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId "start") message.assignmentId)
-  child <- maybe (fail "missing child") pure started.childWorkflowId
+  child <- maybe (fail "missing child") (pure . (.unWorkflowId)) started.childWorkflowId
   (binding, _) <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx storage (WorkspaceRequest child (Just (sessionIdFor session, message.assignmentId)) root old old (fixtureRevision 0)) repository))
   allocateWorkspace storage binding Reserved >>= (@?= Right ())
   run env (runTransaction (Workspaces.markWorkspaceReadyTx binding)) >>= (@?= Right ())
-  let version = ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) old True root (addUTCTime 3600 now)
+  let version = ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) old WorkerInput.ObjectiveActive root (addUTCTime 3600 now)
   intent <-
     if transferring
       then snd <$> (right =<< run env (Sessions.requestTransfer access (fixtureRevision 2) (fixtureRevision 0) (fixtureOperationId "transfer") version binding.workspace (fixtureAgentName "successor") successor))
@@ -389,7 +390,7 @@ establishSuccessor env binding intent proof = do
   established <- current
   (_, message) <- right =<< run env (Sessions.acceptMessage access established.revision (fixtureRevision 1) (fixtureOperationId "successor-message") (Instruction V1 FollowUp (fixtureInstruction "continue fixture") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
   (_, started) <- right =<< run env (Sessions.startAssignment access (advanceRevision established.revision) (fixtureRevision 1) (fixtureOperationId "successor-start") message.assignmentId)
-  maybe (fail "missing actual successor child") pure started.childWorkflowId
+  maybe (fail "missing actual successor child") (pure . (.unWorkflowId)) started.childWorkflowId
 
 run :: AppEnv -> Eff AppEffects a -> IO a
 run env action = runAppIO env action >>= right

@@ -69,7 +69,7 @@ tests fixture =
           (_, first) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "first") (input "first"))
           drive (Just (Session.WorkerSessionStart session)) >>= (@?= Suspended)
           started <- expectRight =<< run env (Store.readAssignment access first.assignmentId)
-          child <- maybe (assertFailure "missing child" >> fail "missing child") (pure . WorkflowId) started.childWorkflowId
+          child <- maybe (assertFailure "missing child" >> fail "missing child") pure started.childWorkflowId
           job <- childJob env child
           job.executionRequest @?= (input "first").selection
           job.executionPermissions @?= admission.context.executionPermissions
@@ -88,7 +88,7 @@ tests fixture =
           context <- expectRight =<< run env (Store.readAssignmentContext access second.assignmentId)
           map (\finding -> finding.receipt.assignmentId) context @?= [first.assignmentId]
           map (.output) context @?= [Just (Aeson.object ["finding" .= ("retained-first" :: Text)])]
-          secondChild <- maybe (assertFailure "missing second child" >> fail "missing child") (pure . WorkflowId) secondStarted.childWorkflowId
+          secondChild <- maybe (assertFailure "missing second child" >> fail "missing child") pure secondStarted.childWorkflowId
           secondJob <- childJob env secondChild
           assertBool "the actual child receives retained context" ("retained-first" `isInfixOf` show (Aeson.encode secondJob.triggerPayload))
           drive Nothing >>= (@?= Suspended)
@@ -118,7 +118,7 @@ tests fixture =
               dependencies = Fixture.routerDeps env behavior (Routing.RoutingRuntime (\_ -> fail "unexpected routing") (\_ _ _ -> fail "unexpected routing")) [worker]
           (_, message) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send") (Instruction V1 FollowUp (fixtureInstruction "recover input") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
           (_, started) <- expectRight =<< run env (Store.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId "start") message.assignmentId)
-          child <- maybe (assertFailure "missing mapping" >> fail "missing mapping") (pure . WorkflowId) started.childWorkflowId
+          child <- maybe (assertFailure "missing mapping" >> fail "missing mapping") pure started.childWorkflowId
           root <- maybe (assertFailure "missing root" >> fail "missing root") pure admission.context.executionRootId
           now <- getCurrentTime
           _ <- expectRight =<< run env (reserveEnrolledDelegationSlots root (delegationBudgetIdFor parentId) (Just (parentId, admission.context.budgetLimit)) (child :| []) now)
@@ -144,7 +144,7 @@ tests fixture =
         withFixture fixture \env admission _ -> do
           now <- getCurrentTime
           let root = fixtureRootId "exhausted-session-root"
-              limited = admission & #scope . #parent .~ "limited-coordinator" & #objective . #key .~ "limited-objective" & #context . #executionRootId .~ Just root
+              limited = admission & #scope . #parent .~ workerCoordinate "limited-coordinator" & #objective . #key .~ workerCoordinate "limited-objective" & #context . #executionRootId .~ Just root
           _ <- expectRight =<< run env (Roots.enrollRoot root (Resources.Envelope (Map.singleton Resources.LifetimeDescendants (Resources.Limited (fixtureAmount 0))) (addUTCTime 3600 now)))
           _ <- expectRight =<< run env (Store.openSession limited)
           access <- expectRight =<< run env (Store.authorizeSession (sessionIdFor limited) limited.context.identity (pure (Right ())))

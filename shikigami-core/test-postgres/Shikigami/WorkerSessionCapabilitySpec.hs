@@ -61,6 +61,7 @@ import Shikigami.WorkerSession.Capability
 import Shikigami.WorkerSession.Handoff (TransferServices (..))
 import Shikigami.WorkerSession.Identity (sessionWorkflowId, sessionWorkflowName)
 import Shikigami.WorkerSession.Input (InstructionText, SessionLimit (..), parseInstructionText)
+import Shikigami.WorkerSession.Input qualified as WorkerInput
 import Shikigami.WorkerSession.Position (MessagePosition, parseMessagePosition)
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Tools qualified as Tools
@@ -81,7 +82,7 @@ tests fixture =
   testGroup
     "WorkerSessionCapability"
     [ testCase "native listener owner identities retain historical wire bytes" do
-        let listener = Session.SessionListener (AwakeableId UUID.nil) 3 (WorkflowName "listener-name") (WorkflowId "listener:historical") initialRevision
+        let listener = Session.SessionListener (AwakeableId UUID.nil) (either (error . show) id (WorkerInput.parseWorkflowGeneration 3)) (WorkflowName "listener-name") (WorkflowId "listener:historical") initialRevision
             historical = "{\"after\":0,\"generation\":3,\"ownerId\":\"listener:historical\",\"ownerName\":\"listener-name\",\"token\":\"00000000-0000-0000-0000-000000000000\"}"
         Aeson.encode listener @?= historical
         Aeson.eitherDecode historical @?= Right listener,
@@ -119,7 +120,7 @@ tests fixture =
       testCase "find reuses the admitted session after parent rotation without replacing frozen context" $
         withCapabilityFixture fixture \env admission host scope authorizer _ _ -> do
           nextMemory <- genSessionId
-          let rotated = scope & #run . #runId .~ "rotated-parent" & #run . #sessionId .~ nextMemory & #context . #sessionId .~ Just nextMemory
+          let rotated = scope & #run . #runId .~ WorkflowId "rotated-parent" & #run . #sessionId .~ nextMemory & #context . #sessionId .~ Just nextMemory
               authority = CoordinationAuthority (\_ -> pure (Right (Just rotated))) (\_ ref -> pure (if ref == scopeFingerprint rotated then Right rotated else Left "missing"))
               nextHost = CoordinationHost host.services authority
           grant <- permit env nextHost rotated authorizer
@@ -131,18 +132,18 @@ tests fixture =
       testCase "foreign sessions and a scope count reset refuse without changing accepted work" $
         withCapabilityFixture fixture \env admission host scope authorizer _ _ -> do
           grant <- permit env host scope authorizer
-          run env (executeCommand host authorizer grant (fixtureOperationId "foreign") (InspectWorker (Session.WorkerSessionId "foreign") (fixturePosition (-1)) 1)) >>= (@?= Left Session.SessionMissing)
-          let slot = head scope.workers & #workerKey .~ "another-worker" & #sessionId .~ Nothing
+          run env (executeCommand host authorizer grant (fixtureOperationId "foreign") (InspectWorker (Session.workerSessionId "foreign") (fixturePosition (-1)) WorkerInput.firstAssignmentPageSize)) >>= (@?= Left Session.SessionMissing)
+          let slot = head scope.workers & #workerKey .~ WorkerInput.workerCoordinate "another-worker" & #sessionId .~ Nothing
               bounded = scope & #workers .~ [slot] & #maximumSessions .~ (fixtureLimit 1)
               authority = CoordinationAuthority (\_ -> pure (Right (Just bounded))) (\_ _ -> pure (Right bounded))
               restricted = CoordinationHost host.services authority
           limited <- permit env restricted bounded authorizer
-          run env (executeCommand restricted authorizer limited (fixtureOperationId "excess-session") (FindWorker "another-worker")) >>= (@?= Left Session.SessionLimitExceeded),
+          run env (executeCommand restricted authorizer limited (fixtureOperationId "excess-session") (FindWorker (WorkerInput.workerCoordinate "another-worker"))) >>= (@?= Left Session.SessionLimitExceeded),
       testCase "Flow event waits wake atomically and replay one retained event page" $
         withCapabilityFixture fixture \env admission host scope authorizer _ _ -> do
           let session = Session.sessionIdFor admission
-              body = Flow.runWorkers (Just host) authorizer scope.run (Right (Just (scopeFingerprint scope))) (Flow.awaitEvents "findings" session (fixtureRevision 0) 100)
-              drive = run env (runWorkflowWith (shikigamiWorkflowRunOptions env) flowName (WorkflowId scope.run.runId) body)
+              body = Flow.runWorkers (Just host) authorizer scope.run (Right (Just (scopeFingerprint scope))) (Flow.awaitEvents "findings" session (fixtureRevision 0) (fixtureLimit 100))
+              drive = run env (runWorkflowWith (shikigamiWorkflowRunOptions env) flowName scope.run.runId body)
           drive >>= (@?= Suspended)
           grant <- permit env host scope authorizer
           _ <- expectRight =<< run env (executeCommand host authorizer grant (fixtureOperationId "send") (SendWorker session (fixtureRevision 1) (fixtureRevision 0) (draft "finding")))
@@ -154,8 +155,8 @@ tests fixture =
       testCase "a listener journal conflict rolls back its wake and accepted message together" $
         withCapabilityFixture fixture \env admission host scope authorizer _ _ -> do
           let session = Session.sessionIdFor admission
-              body = Flow.runWorkers (Just host) authorizer scope.run (Right (Just (scopeFingerprint scope))) (Flow.awaitEvents "findings" session (fixtureRevision 0) 100)
-              workflow = WorkflowId scope.run.runId
+              body = Flow.runWorkers (Just host) authorizer scope.run (Right (Just (scopeFingerprint scope))) (Flow.awaitEvents "findings" session (fixtureRevision 0) (fixtureLimit 100))
+              workflow = scope.run.runId
           run env (runWorkflowWith (shikigamiWorkflowRunOptions env) flowName workflow body) >>= (@?= Suspended)
           token <- listenerToken env scope
           now <- getCurrentTime
@@ -169,9 +170,9 @@ tests fixture =
       testCase "an old listener cannot signal a rotated coordinator generation" $
         withCapabilityFixture fixture \env admission host scope authorizer _ _ -> do
           let session = Session.sessionIdFor admission
-              workflow = WorkflowId scope.run.runId
+              workflow = scope.run.runId
               options = shikigamiWorkflowRunOptions env
-              body = Flow.runWorkers (Just host) authorizer scope.run (Right (Just (scopeFingerprint scope))) (Flow.awaitEvents "findings" session (fixtureRevision 0) 100)
+              body = Flow.runWorkers (Just host) authorizer scope.run (Right (Just (scopeFingerprint scope))) (Flow.awaitEvents "findings" session (fixtureRevision 0) (fixtureLimit 100))
           run env (runWorkflowWith options flowName workflow body) >>= (@?= Suspended)
           token <- listenerToken env scope
           run env (runWorkflowWith options flowName workflow (continueAsNew (Aeson.object []) :: Eff (Workflow : AppEffects) ())) >>= (@?= ContinuedAsNew)
@@ -182,8 +183,8 @@ tests fixture =
       testCase "a collected listener cannot poison the retained session mailbox" $
         withCapabilityFixture fixture \env admission host scope authorizer _ _ -> do
           let session = Session.sessionIdFor admission
-              workflow = WorkflowId scope.run.runId
-              body = Flow.runWorkers (Just host) authorizer scope.run (Right (Just (scopeFingerprint scope))) (Flow.awaitEvents "findings" session (fixtureRevision 0) 100)
+              workflow = scope.run.runId
+              body = Flow.runWorkers (Just host) authorizer scope.run (Right (Just (scopeFingerprint scope))) (Flow.awaitEvents "findings" session (fixtureRevision 0) (fixtureLimit 100))
           run env (runWorkflowWith (shikigamiWorkflowRunOptions env) flowName workflow body) >>= (@?= Suspended)
           token <- listenerToken env scope
           now <- getCurrentTime
@@ -290,7 +291,7 @@ withCapabilityFixture fixture callback = withFixture fixture \env admission _ ->
   memory <- maybe (assertFailure "missing parent session" >> fail "missing parent session") pure admission.context.sessionId
   version <- checkpointVersion admission
   (checkpoints, _) <- fixtureCheckpoints version False
-  let run = CoordinatorRun "capability-parent" admission.context.identity memory admission.context.executionRootId admission.context.executionPermissions
+  let run = CoordinatorRun (WorkflowId "capability-parent") admission.context.identity memory admission.context.executionRootId admission.context.executionPermissions
       scope = CoordinationScope V1 run admission.scope.parent (admission.delegator & #behavior .~ CoordinatingSkill "fixture-coordinator") admission.context [WorkerSlot admission.scope.workerKey admission.worker admission.identity admission.objective (Just (Session.sessionIdFor admission))] (fixtureLimit 8) admission.maximumAssignments admission.mailboxLimit
       sessions = SessionRuntime env [admission.delegator & #name .~ fixtureAgentName "worker" & #delegates .~ map fixtureAgentName []] disabledDirectoryHandle (const (pure (Right ()))) (Just checkpoints)
   current <- newIORef (Just scope)
@@ -302,7 +303,7 @@ withCapabilityFixture fixture callback = withFixture fixture \env admission _ ->
 
 listenerToken :: AppEnv -> CoordinationScope -> IO AwakeableId
 listenerToken env scope = do
-  entries <- run env (loadStepIndex flowName (WorkflowId scope.run.runId) 0)
+  entries <- run env (loadStepIndex flowName scope.run.runId 0)
   value <- maybe (assertFailure "listener was not journaled" >> fail "missing listener") pure (Map.lookup "awkid:workers-events-findings" entries)
   case Aeson.fromJSON value of Aeson.Success token -> pure token; Aeson.Error err -> assertFailure err >> fail err
 
@@ -311,7 +312,7 @@ snapshotFor scope = do
   now <- getCurrentTime
   let descriptor = ModelDescriptor (fixtureModelAlias "worker-model") (fixtureModelRegistration "1") (Model.modelDescriptorDigest (toJSON ("fixture-model" :: Text))) (Coordinate.providerCoordinate "fixture") (Coordinate.providerCoordinate "fixture") (Coordinate.providerCoordinate "fixture") (Coordinate.providerCoordinate "fixture") Nothing (fixtureModelRegistration "fixture") (fixtureModelRegistration "1")
       selection = ExecutionSelection (fixtureAssignment "coordination-assignment") descriptor (Aeson.object []) [fixtureModelAlias "worker-model"] Nothing scope.run.rootId ProcessDefault now
-  pure (Replay.ExecutionSnapshot V1 (Replay.executionIdFor selection.assignmentId) scope.run.runId (fixtureAgentName "coordinator") scope.run.identity scope.run.sessionId selection Nothing (Replay.SkillInstructions "fixture" "fixture" "fixture") (Replay.ReplayContext 2 Nothing [Replay.RequestTurn [Replay.TextBlock "coordinate"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] Nothing)
+  pure (Replay.ExecutionSnapshot V1 (Replay.executionIdFor selection.assignmentId) scope.run.runId.unWorkflowId (fixtureAgentName "coordinator") scope.run.identity scope.run.sessionId selection Nothing (Replay.SkillInstructions "fixture" "fixture" "fixture") (Replay.ReplayContext 2 Nothing [Replay.RequestTurn [Replay.TextBlock "coordinate"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] Nothing)
 
 executeTool :: BoundTool -> Aeson.Value -> IO ToolOutput
 executeTool tool arguments = expectRight =<< (expectRight =<< runEff (runErrorNoCallStack @ShikumiError (runLLM (runErasedOutput tool.tool arguments))))

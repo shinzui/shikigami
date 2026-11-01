@@ -44,6 +44,7 @@ import Shikigami.StateRevision (StateRevision, advanceRevision, parseRevision)
 import Shikigami.WorkerSession.Checkpoint qualified as Checkpoint
 import Shikigami.WorkerSession.Identity (assignmentChildWorkflowIdV2)
 import Shikigami.WorkerSession.Input (InstructionText, SessionLimit (..), parseInstructionText)
+import Shikigami.WorkerSession.Input qualified as WorkerInput
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Types
 import Test.Tasty (TestTree, testGroup)
@@ -95,6 +96,39 @@ tests fixture =
                 run env (runTransaction (Tx.statement session.value readState)) >>= (@?= original)
             )
             [Aeson.Number 0, Aeson.Number 2, Aeson.Number 1.5, Aeson.String "1"],
+      testCase "retained session scope commitments refuse corruption and mismatched identity with rollback and exact repair" $
+        withFixture fixture \env admission access -> do
+          let session = sessionIdFor admission
+              root = maybe (error "fixture root missing") id admission.context.executionRootId
+              readState = preparable "SELECT binding FROM shikigami.worker_sessions WHERE session_id=$1" (E.param (E.nonNullable E.text)) (D.singleRow (D.column (D.nonNullable D.jsonb)))
+              replaceState = preparable "UPDATE shikigami.worker_sessions SET binding=$2 WHERE session_id=$1" ((fst >$< E.param (E.nonNullable E.text)) <> (snd >$< E.param (E.nonNullable E.jsonb))) D.noResult
+              countProbe = preparable "SELECT count(*) FROM shikigami.format_rollback_probe" E.noParams (D.singleRow (D.column (D.nonNullable D.int8)))
+          valid <- run env (Store.loadAdmission access)
+          valid @?= Right admission
+          run env (runTransaction (Store.rootSessionsTerminalTx root)) >>= (@?= Right False)
+          original <- run env (runTransaction (Tx.statement session.value readState))
+          run env (runTransaction (Tx.sql "CREATE TABLE shikigami.format_rollback_probe (value integer NOT NULL)"))
+          mapM_
+            ( \bad -> do
+                let corrupt = case original of Aeson.Object fields -> Aeson.Object (KeyMap.insert "scopeDigest" bad fields); value -> value
+                run env (runTransaction (Tx.statement (session.value, corrupt) replaceState))
+                run env (Store.loadAdmission access) >>= (@?= Left SessionBindingConflict)
+                run env (runTransaction (Store.rootSessionsTerminalTx root)) >>= (@?= Left SessionBindingConflict)
+                run
+                  env
+                  ( runTransaction do
+                      Tx.sql "INSERT INTO shikigami.format_rollback_probe VALUES (1)"
+                      _ <- Store.rootSessionsTerminalTx root
+                      Tx.sql "INSERT INTO shikigami.format_rollback_probe VALUES (2)"
+                  )
+                run env (runTransaction (Tx.statement () countProbe)) >>= (@?= (0 :: Int64))
+                run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "corrupt-scope-command") (instruction "must not be retained")) >>= (@?= Left SessionBindingConflict)
+                run env (runTransaction (Tx.statement (session.value, original) replaceState))
+                run env (Store.loadAdmission access) >>= (@?= valid)
+                run env (runTransaction (Store.rootSessionsTerminalTx root)) >>= (@?= Right False)
+                run env (runTransaction (Tx.statement session.value readState)) >>= (@?= original)
+            )
+            [Aeson.Null, Aeson.String "sha256:bad", Aeson.String ("sha256:" <> Text.replicate 64 "a")],
       testCase "malformed protected session metadata remains a binding refusal" do
         mapM_
           ( \assignment -> withFixture fixture \env admission access -> do
@@ -116,7 +150,7 @@ tests fixture =
               mapM_ (\(key, bad) -> assertBool "invalid admission limit refused at decode" (case Aeson.fromJSON (Aeson.Object (KeyMap.insert key (Aeson.toJSON (bad :: Integer)) fields)) :: Aeson.Result SessionAdmission of Aeson.Error _ -> True; Aeson.Success _ -> False)) [("maximumAssignments", 0), ("maximumAssignments", 1001), ("mailboxLimit", 0), ("mailboxLimit", 129)]
             _ -> assertFailure "admission did not encode as an object"
           run env (Store.openSession (admission & #maximumAssignments .~ (fixtureLimit 20))) >>= (@?= Left SessionBindingConflict)
-          run env (Store.openSession (admission & #objective . #key .~ "another-objective")) >>= (@?= Left SessionBindingConflict),
+          run env (Store.openSession (admission & #objective . #key .~ workerCoordinate "another-objective")) >>= (@?= Left SessionBindingConflict),
       testCase "active and idle follow-ups remain ordered and retain separate assignments/results" $
         withFixture fixture \env admission access -> do
           (_, first) <- accept env access 0 "send-1" (instruction "first")
@@ -127,9 +161,9 @@ tests fixture =
           (_, third) <- accept env access 4 "send-3" (instruction "third")
           map (.sequence) [first, second, third] @?= map fixtureRevision [0, 1, 2]
           assertBool "assignment identities differ" (first.assignmentId /= second.assignmentId && second.assignmentId /= third.assignmentId)
-          started.childWorkflowId @?= Just (assignmentChildWorkflowIdV2 (sessionIdFor admission) admission.worker first.assignmentId).unWorkflowId
+          started.childWorkflowId @?= Just (assignmentChildWorkflowIdV2 (sessionIdFor admission) admission.worker first.assignmentId)
           (_, next) <- expectRight =<< run env (Store.startAssignment access (fixtureRevision 5) (fixtureRevision 0) (fixtureOperationId "start-2") second.assignmentId)
-          next.childWorkflowId @?= Just (assignmentChildWorkflowIdV2 (sessionIdFor admission) admission.worker second.assignmentId).unWorkflowId
+          next.childWorkflowId @?= Just (assignmentChildWorkflowIdV2 (sessionIdFor admission) admission.worker second.assignmentId)
           assertBool "follow-up gets a new child" (started.childWorkflowId /= next.childWorkflowId)
           Store.readResult access first.assignmentId `inEnv` env >>= (@?= Right (Just (result, resultFor first "retained finding")))
           run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send-1") (instruction "first")) >>= (@?= Right (AlreadyAccepted, first))
@@ -191,7 +225,7 @@ tests fixture =
         withFixture fixture \env admission access -> do
           (_, first) <- accept env access 0 "send" (instruction "accepted instruction")
           _ <- expectRight =<< run env (Store.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId "start") first.assignmentId)
-          let wrong = instruction "interrupt" & #kind .~ Interrupt (AssignmentId "wrong-assignment")
+          let wrong = instruction "interrupt" & #kind .~ Interrupt (fixtureAssignmentId "wrong-assignment")
               valid = instruction "interrupt" & #kind .~ Interrupt first.assignmentId
           run env (Store.acceptMessage access (fixtureRevision 2) (fixtureRevision 0) (fixtureOperationId "interrupt") wrong) >>= (@?= Left InterruptTargetChanged)
           (_, accepted) <- accept env access 2 "interrupt" valid
@@ -289,7 +323,7 @@ tests fixture =
           provider.commit (intent & #expected . #revision .~ (fixtureRevision 99)) >>= (@?= Checkpoint.CheckpointConflict)
           Checkpoint.CheckpointAccepted receipt <- provider.commit intent
           let ack value hook = run env (Store.acceptCheckpointWith access (fixtureRevision 2) (fixtureRevision 0) (fixtureOperationId "ack") intent.operationId value hook)
-          ack (receipt & #fingerprint .~ "forged") (error "forged receipt integration") >>= (@?= Left AssignmentConflict)
+          ack (receipt & #fingerprint .~ WorkerInput.workerCommitmentFor "fixture-forged" Aeson.Null) (error "forged receipt integration") >>= (@?= Left AssignmentConflict)
           ack receipt (pure (Left (SessionInputRefused "integration fault"))) >>= (@?= Left (SessionInputRefused "integration fault"))
           (_, pending) <- current env admission
           pending.revision @?= (fixtureRevision 2)
@@ -324,7 +358,7 @@ checkpointVersion :: SessionAdmission -> IO Checkpoint.ObjectiveVersion
 checkpointVersion admission = do
   now <- getCurrentTime
   root <- maybe (assertFailure "fixture root missing" >> fail "fixture root missing") pure admission.context.executionRootId
-  pure (Checkpoint.ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) admission.identity True root (addUTCTime 3600 now))
+  pure (Checkpoint.ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) admission.identity WorkerInput.ObjectiveActive root (addUTCTime 3600 now))
 
 -- A test-only external owner: its transaction commits before the optional
 -- first acknowledgement is lost. Deduplication precedes optimistic validation.
@@ -343,7 +377,7 @@ fixtureCheckpoints initial loseFirst = do
   pure (Checkpoint.CheckpointProvider (\_ -> (\(_, version, _) -> Right version) <$> readIORef storage) commit, (\(_, _, count) -> count) <$> readIORef storage)
 
 resultFor :: MessageReceipt -> Text -> AssignmentResult
-resultFor message finding = AssignmentResult V1 message.assignmentId AssignmentSucceeded Nothing (object ["finding" .= finding]) ["opaque-artifact-reference"]
+resultFor message finding = AssignmentResult V1 message.assignmentId AssignmentSucceeded Nothing (object ["finding" .= finding]) [artifactReference "opaque-artifact-reference"]
 
 accept :: AppEnv -> Store.SessionAccess -> Integer -> Text -> Instruction -> IO (Admission, MessageReceipt)
 accept env access expected key value = expectRight =<< run env (Store.acceptMessage access (fixtureRevision expected) (fixtureRevision 0) (fixtureOperationId key) value)
@@ -368,8 +402,8 @@ withConfiguredFixture fixture configure callback = withShikigamiFreshDatabase fi
         configure $
           SessionAdmission
             V1
-            (SessionScope "fixture-coordinator" "logical-worker")
-            (ObjectiveRef "fixture-checkpoint-provider" "objective-1")
+            (SessionScope (WorkerInput.workerCoordinate "fixture-coordinator") (WorkerInput.workerCoordinate "logical-worker"))
+            (ObjectiveRef (WorkerInput.workerCoordinate "fixture-checkpoint-provider") (WorkerInput.workerCoordinate "objective-1"))
             (parent & #name .~ fixtureAgentName "coordinator" & #delegates .~ map fixtureAgentName ["worker"])
             (DelegateCtx (fixtureDelegationDepth 0) (compatibilityIdentity (fixtureAgentName "coordinator")) (Just parentSession) Nothing (Just (WorkflowId "original-parent")) [fixtureAgentName "coordinator"] (Just [fixtureModelAlias "worker-model"]) (Just root) Nothing defaultDelegationBudget)
             (fixtureAgentName "worker")
@@ -409,3 +443,6 @@ fixtureDelegationDepth = either (error . show) id . parseDelegationDepth . toInt
 
 fixtureModelAlias :: AliasText.Text -> Alias.ModelAlias
 fixtureModelAlias = either (error . show) id . Alias.parseModelAlias
+
+fixtureAssignmentId :: Text -> AssignmentId
+fixtureAssignmentId = assignmentIdForDigest . Aeson.toJSON

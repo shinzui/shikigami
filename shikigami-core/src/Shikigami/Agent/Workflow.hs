@@ -1014,7 +1014,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
     Nothing -> pure (Left ("unknown flow " <> flowName))
     Just flow@Flow.FlowDef {Flow.run} -> do
       (_, childWorkflowId) <- currentWorkflow
-      let coordinator = WorkerCapability.CoordinatorRun childWorkflowId.unWorkflowId job.identity sid job.executionRootId job.executionPermissions
+      let coordinator = WorkerCapability.CoordinatorRun childWorkflowId job.identity sid job.executionRootId job.executionPermissions
       coordinationPolicy <- step (StepName "worker-coordination-policy") (liftIO (FlowWorkers.resolveCoordinationPolicy deps.coordination deps.actionAuthorizer coordinator))
       let attentionInterpreter = PracticeReviewAttention.runPracticeReviewAttentionAtomic practiceReviewAttentionEnv
           decisionInterpreter action

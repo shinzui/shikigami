@@ -2,7 +2,7 @@
 module Shikigami.WorkerSessionLifecycle.Conformance (behaviorAssertions, focusedGuardAssertions) where
 
 import Keiki.Core (StepFailure (NoMatchingEdge), reconstituteEither, stepEither)
-import Shikigami.WorkerSession.Types (WorkerSessionId (..))
+import Shikigami.WorkerSession.Types (WorkerSessionId (value), workerSessionId)
 import Shikigami.WorkerSessionLifecycle.BehaviorHoles (behaviorWitnesses)
 import Shikigami.WorkerSessionLifecycle.Generated.BehaviorContract
 import Shikigami.WorkerSessionLifecycle.Generated.Domain
@@ -26,8 +26,8 @@ focusedGuardAssertions =
     ("idle worker session rejects a non-advancing revision", rejects (command owner 0 0))
   ]
   where
-    owner = WorkerSessionId "fixture"
-    other = WorkerSessionId "other"
+    owner = workerSessionId "fixture"
+    other = workerSessionId "other"
     seed = reconstituteEither workerSessionLifecycleTransducer [WorkerSessionAdmitted (WorkerSessionAdmittedData owner "fixture")]
     command identifier expected next = AcceptSessionMessage (AcceptSessionMessageData identifier expected next)
     accepts input = case seed of

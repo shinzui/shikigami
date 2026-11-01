@@ -550,7 +550,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
             . runSink sinkEnv
             . FlowDecision.runDecisionDisabled
             . FlowDelegate.runDelegate delegateEnv
-            . FlowWorkers.runWorkers Nothing denyAllActionAuthorizer (CoordinatorRun "disabled-flow-fixture" (compatibilityIdentity (fixtureAgentName flowAgent)) runtime.approval.currentSession Nothing Nothing) (Right Nothing)
+            . FlowWorkers.runWorkers Nothing denyAllActionAuthorizer (CoordinatorRun (WorkflowId "disabled-flow-fixture") (compatibilityIdentity (fixtureAgentName flowAgent)) runtime.approval.currentSession Nothing Nothing) (Right Nothing)
             . Routing.runRouting
               Routing.RoutingEnv
                 { Routing.agent = flowDecl,

@@ -77,7 +77,7 @@ import Shikigami.Trigger.RequestKey qualified as Addressed
 import Shikigami.WorkerSession.Capability (WorkerCommand (..))
 import Shikigami.WorkerSession.Position (MessagePosition, beforeMessages, parseMessagePosition)
 import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
-import Shikigami.WorkerSession.Types (WorkerSessionId (..))
+import Shikigami.WorkerSession.Types (WorkerSessionId, workerSessionId)
 import System.Exit (ExitCode (..), exitWith)
 import System.IO (hPutStrLn, stderr)
 
@@ -194,10 +194,10 @@ workersInfo = info (subparser commands <**> helper) (progDesc "Inspect continuin
         <*> switch (long "json")
     send = (\key op rev owner input -> action (runWorkersSend key op rev owner input)) <$> session <*> operation <*> revision <*> epoch <*> instruction
     interrupt = (\key op rev owner assignment input -> action (runWorkersInterrupt key op rev owner assignment input)) <$> session <*> operation <*> revision <*> epoch <*> strOption (long "assignment" <> metavar "ASSIGNMENT") <*> instruction
-    cancel = (\key op rev owner -> action (runWorkersControl op (CancelWorker (WorkerSessionId key) rev owner))) <$> session <*> operation <*> revision <*> epoch
-    transfer = (\key op rev owner provider resource target -> action (runWorkersControl op (TransferWorker (WorkerSessionId key) rev owner (WorkspaceRef provider resource) target))) <$> session <*> operation <*> revision <*> epoch <*> strOption (long "workspace-provider" <> metavar "PROVIDER") <*> strOption (long "workspace-resource" <> metavar "RESOURCE") <*> option agentReader (long "target" <> metavar "AGENT")
-    reconcile = (\key op -> action (runWorkersControl op (ReconcileWorker (WorkerSessionId key)))) <$> session <*> operation
-    integrate = (\key op -> action (runWorkersControl op (IntegrateWorkerEvents (WorkerSessionId key)))) <$> session <*> operation
+    cancel = (\key op rev owner -> action (runWorkersControl op (CancelWorker (workerSessionId key) rev owner))) <$> session <*> operation <*> revision <*> epoch
+    transfer = (\key op rev owner provider resource target -> action (runWorkersControl op (TransferWorker (workerSessionId key) rev owner (WorkspaceRef provider resource) target))) <$> session <*> operation <*> revision <*> epoch <*> strOption (long "workspace-provider" <> metavar "PROVIDER") <*> strOption (long "workspace-resource" <> metavar "RESOURCE") <*> option agentReader (long "target" <> metavar "AGENT")
+    reconcile = (\key op -> action (runWorkersControl op (ReconcileWorker (workerSessionId key)))) <$> session <*> operation
+    integrate = (\key op -> action (runWorkersControl op (IntegrateWorkerEvents (workerSessionId key)))) <$> session <*> operation
 
 executionsInfo :: ParserInfo AdminAction
 executionsInfo = info (subparser (command "inspect" inspectInfo) <**> helper) (progDesc "Inspect accepted execution progress without replay payloads")

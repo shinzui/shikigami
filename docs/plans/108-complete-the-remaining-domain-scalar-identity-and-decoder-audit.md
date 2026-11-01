@@ -281,6 +281,23 @@ attention-result decode condemns its owning reservation transaction. The full
 inventory and native gate will reconcile this with the next source batch rather
 than rebuilding the census for each wrapper. M2/M3 remain open.
 
+The continuing-session batch retains scoped objective/provider/parent/worker
+coordinates, command/checkpoint/fence/ownership commitments, artifact references,
+provider receipts, native coordinator/child workflow IDs, bounded paging,
+workflow generations and closed objective activity. Assignment IDs have a private
+canonical UUIDv5 decoder. The mapped session identity remains total as required
+by Keiro's published nominal-binding contract, while the admitted binding checks
+its exact original scope-to-UUIDv5 recipe. Its private carrier no longer exposes
+Generic construction or record update. All 626 core unit and 91 selected core
+PostgreSQL cases pass, including a new malformed/mismatched scope commitment
+rollback and exact-repair control. All 231 compiler controls and two additional
+record-update refusals pass. A small optional compiler-control filter permits
+focused checks for subsequent batches; the default still runs the entire suite.
+All 280 worker cases also pass serially (182.49 seconds). The workspace-wide build passes, including the Linux prototype build target;
+this is compilation evidence, not new Linux runtime qualification. Keep the
+full declaration refresh and zero-violation acceptance for the combined source
+candidate rather than paying a rebuild/census for each wrapper.
+
 ## Surprises & Discoveries
 
 

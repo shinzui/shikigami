@@ -39,8 +39,9 @@ import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.StateRevision qualified as Generation
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
+import Shikigami.WorkerSession.Input qualified as WorkerInput
 import Shikigami.WorkerSession.Transfer (TransferIntent (..))
-import Shikigami.WorkerSession.Types (AssignmentId (..), ObjectiveRef (..), WorkerSessionId (..))
+import Shikigami.WorkerSession.Types (AssignmentId (value), ObjectiveRef (..), WorkerSessionId (value), assignmentIdForDigest, workerSessionId)
 import Shikigami.Workspace.GitTypes qualified as Git
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Process
@@ -301,9 +302,9 @@ tests =
             ]
         mapM_ (\action -> verifyIssuedAction verifier now (statusRequest & #action .~ action) statusIssued >>= \answer -> assertBool "Git observation proof binds kind, input, anchor, assignment, actual claim and profile" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) changedObservations
         observation provisionAdmission gitDispatch profile "commit" (fixturePayloadDigest command.profile) "device:files" @?= Left FileEffectRefused
-        let workerSession = WorkerSessionId "retained-session"
-            transferBinding = provisionBinding & #request . #assignment .~ Just (workerSession, AssignmentId "retained-assignment")
-            intent = TransferIntent V1 workerSession (ObjectiveRef "checkpoints" "objective") owner (fixtureOperationId "handoff") (ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) owner True transferBinding.request.rootId expiry) owner (CompatibilityIdentity (fixtureAgentName "successor")) (fixtureAgentName "successor") (fixtureRevision 0) (fixtureRevision 1) transferBinding.request.rootId transferBinding.workspace
+        let workerSession = workerSessionId "retained-session"
+            transferBinding = provisionBinding & #request . #assignment .~ Just (workerSession, fixtureAssignmentId "retained-assignment")
+            intent = TransferIntent V1 workerSession (ObjectiveRef (WorkerInput.workerCoordinate "checkpoints") (WorkerInput.workerCoordinate "objective")) owner (fixtureOperationId "handoff") (ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) owner WorkerInput.ObjectiveActive transferBinding.request.rootId expiry) owner (CompatibilityIdentity (fixtureAgentName "successor")) (fixtureAgentName "successor") (fixtureRevision 0) (fixtureRevision 1) transferBinding.request.rootId transferBinding.workspace
         fenceAction <- right (workspaceTransferAction transferBinding intent)
         let fenceRequest = commitRequest & #action .~ fenceAction
             fenceGrant = commitGrant & #object .~ ObjectRef (ObjectType (Kikan.actionObjectType fenceAction)) (Kikan.actionObjectId fenceAction)
@@ -318,7 +319,7 @@ tests =
               intent & #actor .~ CompatibilityIdentity (fixtureAgentName "other-parent"),
               intent & #newOwner .~ CompatibilityIdentity (fixtureAgentName "other-successor"),
               intent & #newWorker .~ fixtureAgentName "other-worker",
-              intent & #objective . #key .~ "other-objective",
+              intent & #objective . #key .~ WorkerInput.workerCoordinate "other-objective",
               intent & #expected . #revision .~ (fixtureRevision 2),
               intent & #expected . #cutoff .~ addUTCTime 1 expiry,
               intent & #oldEpoch .~ (fixtureRevision 1) & #newEpoch .~ (fixtureRevision 2)
@@ -415,3 +416,6 @@ fixturePayloadRef locator digest size =
 
 fixturePayloadDigest :: Text -> PayloadDigest
 fixturePayloadDigest = either (error . show) id . parsePayloadDigest
+
+fixtureAssignmentId :: Text -> AssignmentId
+fixtureAssignmentId = assignmentIdForDigest . Aeson.toJSON

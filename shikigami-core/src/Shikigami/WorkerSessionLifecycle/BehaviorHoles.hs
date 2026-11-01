@@ -2,7 +2,7 @@
 module Shikigami.WorkerSessionLifecycle.BehaviorHoles (behaviorWitnesses) where
 
 import Shikigami.Prelude
-import Shikigami.WorkerSession.Types (WorkerSessionId (..))
+import Shikigami.WorkerSession.Types (WorkerSessionId (value), workerSessionId)
 import Shikigami.WorkerSessionLifecycle.Generated.BehaviorContract
 import Shikigami.WorkerSessionLifecycle.Generated.Domain
 
@@ -36,44 +36,44 @@ historyFor source = case source of
 
 commandFor :: Text -> Int -> WorkerSessionLifecycleCommand
 commandFor name revision = case name of
-  "AdmitWorkerSession" -> AdmitWorkerSession (AdmitWorkerSessionData (WorkerSessionId "fixture-session") "fixture-binding")
-  "AcceptSessionMessage" -> AcceptSessionMessage (AcceptSessionMessageData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "StartSessionAssignment" -> StartSessionAssignment (StartSessionAssignmentData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "ParkSessionAssignment" -> ParkSessionAssignment (ParkSessionAssignmentData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "ResumeSessionAssignment" -> ResumeSessionAssignment (ResumeSessionAssignmentData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "RecordSessionResult" -> RecordSessionResult (RecordSessionResultData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "MarkSessionUnresolved" -> MarkSessionUnresolved (MarkSessionUnresolvedData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "ReconcileSessionAssignment" -> ReconcileSessionAssignment (ReconcileSessionAssignmentData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "RequestSessionTransfer" -> RequestSessionTransfer (RequestSessionTransferData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "ReconcileSessionTransfer" -> ReconcileSessionTransfer (ReconcileSessionTransferData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "EstablishSessionOwner" -> EstablishSessionOwner (EstablishSessionOwnerData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "SubscribeSessionEvents" -> SubscribeSessionEvents (SubscribeSessionEventsData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "ObserveWorkerSession" -> ObserveWorkerSession (ObserveWorkerSessionData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "PrepareSessionCheckpoint" -> PrepareSessionCheckpoint (PrepareSessionCheckpointData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "ConsumeSessionEvents" -> ConsumeSessionEvents (ConsumeSessionEventsData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "FailWorkerSession" -> FailWorkerSession (FailWorkerSessionData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "CancelWorkerSession" -> CancelWorkerSession (CancelWorkerSessionData (WorkerSessionId "fixture-session") revision (revision + 1))
+  "AdmitWorkerSession" -> AdmitWorkerSession (AdmitWorkerSessionData (workerSessionId "fixture-session") "fixture-binding")
+  "AcceptSessionMessage" -> AcceptSessionMessage (AcceptSessionMessageData (workerSessionId "fixture-session") revision (revision + 1))
+  "StartSessionAssignment" -> StartSessionAssignment (StartSessionAssignmentData (workerSessionId "fixture-session") revision (revision + 1))
+  "ParkSessionAssignment" -> ParkSessionAssignment (ParkSessionAssignmentData (workerSessionId "fixture-session") revision (revision + 1))
+  "ResumeSessionAssignment" -> ResumeSessionAssignment (ResumeSessionAssignmentData (workerSessionId "fixture-session") revision (revision + 1))
+  "RecordSessionResult" -> RecordSessionResult (RecordSessionResultData (workerSessionId "fixture-session") revision (revision + 1))
+  "MarkSessionUnresolved" -> MarkSessionUnresolved (MarkSessionUnresolvedData (workerSessionId "fixture-session") revision (revision + 1))
+  "ReconcileSessionAssignment" -> ReconcileSessionAssignment (ReconcileSessionAssignmentData (workerSessionId "fixture-session") revision (revision + 1))
+  "RequestSessionTransfer" -> RequestSessionTransfer (RequestSessionTransferData (workerSessionId "fixture-session") revision (revision + 1))
+  "ReconcileSessionTransfer" -> ReconcileSessionTransfer (ReconcileSessionTransferData (workerSessionId "fixture-session") revision (revision + 1))
+  "EstablishSessionOwner" -> EstablishSessionOwner (EstablishSessionOwnerData (workerSessionId "fixture-session") revision (revision + 1))
+  "SubscribeSessionEvents" -> SubscribeSessionEvents (SubscribeSessionEventsData (workerSessionId "fixture-session") revision (revision + 1))
+  "ObserveWorkerSession" -> ObserveWorkerSession (ObserveWorkerSessionData (workerSessionId "fixture-session") revision (revision + 1))
+  "PrepareSessionCheckpoint" -> PrepareSessionCheckpoint (PrepareSessionCheckpointData (workerSessionId "fixture-session") revision (revision + 1))
+  "ConsumeSessionEvents" -> ConsumeSessionEvents (ConsumeSessionEventsData (workerSessionId "fixture-session") revision (revision + 1))
+  "FailWorkerSession" -> FailWorkerSession (FailWorkerSessionData (workerSessionId "fixture-session") revision (revision + 1))
+  "CancelWorkerSession" -> CancelWorkerSession (CancelWorkerSessionData (workerSessionId "fixture-session") revision (revision + 1))
   _ -> error "unknown worker session command"
 
 eventFor :: Text -> Int -> WorkerSessionLifecycleEvent
 eventFor name revision = case name of
-  "AdmitWorkerSession" -> WorkerSessionAdmitted (WorkerSessionAdmittedData (WorkerSessionId "fixture-session") "fixture-binding")
-  "AcceptSessionMessage" -> SessionMessageAccepted (SessionMessageAcceptedData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "StartSessionAssignment" -> SessionAssignmentStarted (SessionAssignmentStartedData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "ParkSessionAssignment" -> SessionAssignmentParked (SessionAssignmentParkedData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "ResumeSessionAssignment" -> SessionAssignmentResumed (SessionAssignmentResumedData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "RecordSessionResult" -> SessionResultRecorded (SessionResultRecordedData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "MarkSessionUnresolved" -> SessionBecameUnresolved (SessionBecameUnresolvedData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "ReconcileSessionAssignment" -> SessionAssignmentReconciled (SessionAssignmentReconciledData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "RequestSessionTransfer" -> SessionTransferRequested (SessionTransferRequestedData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "ReconcileSessionTransfer" -> SessionTransferReconciled (SessionTransferReconciledData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "EstablishSessionOwner" -> SessionOwnerEstablished (SessionOwnerEstablishedData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "SubscribeSessionEvents" -> SessionEventsSubscribed (SessionEventsSubscribedData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "ObserveWorkerSession" -> WorkerSessionObserved (WorkerSessionObservedData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "PrepareSessionCheckpoint" -> SessionCheckpointPrepared (SessionCheckpointPreparedData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "ConsumeSessionEvents" -> SessionEventsConsumed (SessionEventsConsumedData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "FailWorkerSession" -> WorkerSessionFailed (WorkerSessionFailedData (WorkerSessionId "fixture-session") revision (revision + 1))
-  "CancelWorkerSession" -> WorkerSessionCancelled (WorkerSessionCancelledData (WorkerSessionId "fixture-session") revision (revision + 1))
+  "AdmitWorkerSession" -> WorkerSessionAdmitted (WorkerSessionAdmittedData (workerSessionId "fixture-session") "fixture-binding")
+  "AcceptSessionMessage" -> SessionMessageAccepted (SessionMessageAcceptedData (workerSessionId "fixture-session") revision (revision + 1))
+  "StartSessionAssignment" -> SessionAssignmentStarted (SessionAssignmentStartedData (workerSessionId "fixture-session") revision (revision + 1))
+  "ParkSessionAssignment" -> SessionAssignmentParked (SessionAssignmentParkedData (workerSessionId "fixture-session") revision (revision + 1))
+  "ResumeSessionAssignment" -> SessionAssignmentResumed (SessionAssignmentResumedData (workerSessionId "fixture-session") revision (revision + 1))
+  "RecordSessionResult" -> SessionResultRecorded (SessionResultRecordedData (workerSessionId "fixture-session") revision (revision + 1))
+  "MarkSessionUnresolved" -> SessionBecameUnresolved (SessionBecameUnresolvedData (workerSessionId "fixture-session") revision (revision + 1))
+  "ReconcileSessionAssignment" -> SessionAssignmentReconciled (SessionAssignmentReconciledData (workerSessionId "fixture-session") revision (revision + 1))
+  "RequestSessionTransfer" -> SessionTransferRequested (SessionTransferRequestedData (workerSessionId "fixture-session") revision (revision + 1))
+  "ReconcileSessionTransfer" -> SessionTransferReconciled (SessionTransferReconciledData (workerSessionId "fixture-session") revision (revision + 1))
+  "EstablishSessionOwner" -> SessionOwnerEstablished (SessionOwnerEstablishedData (workerSessionId "fixture-session") revision (revision + 1))
+  "SubscribeSessionEvents" -> SessionEventsSubscribed (SessionEventsSubscribedData (workerSessionId "fixture-session") revision (revision + 1))
+  "ObserveWorkerSession" -> WorkerSessionObserved (WorkerSessionObservedData (workerSessionId "fixture-session") revision (revision + 1))
+  "PrepareSessionCheckpoint" -> SessionCheckpointPrepared (SessionCheckpointPreparedData (workerSessionId "fixture-session") revision (revision + 1))
+  "ConsumeSessionEvents" -> SessionEventsConsumed (SessionEventsConsumedData (workerSessionId "fixture-session") revision (revision + 1))
+  "FailWorkerSession" -> WorkerSessionFailed (WorkerSessionFailedData (workerSessionId "fixture-session") revision (revision + 1))
+  "CancelWorkerSession" -> WorkerSessionCancelled (WorkerSessionCancelledData (workerSessionId "fixture-session") revision (revision + 1))
   _ -> error "unknown worker session event"
 
 admitted :: WorkerSessionLifecycleEvent

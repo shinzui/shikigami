@@ -18,6 +18,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text qualified as Text
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, (:>))
 import Effectful.Dispatch.Dynamic (interpret, send)
+import Effectful.Exception (throwIO)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), currentRunGeneration, currentWorkflow, step)
 import Keiro.Workflow.Awakeable (awakeableNamed)
 import Kiroku.Store.Effect (Store)
@@ -29,13 +30,14 @@ import Shikigami.Prelude
 import Shikigami.StateRevision (StateRevision)
 import Shikigami.WorkerSession.Capability
 import Shikigami.WorkerSession.Handoff (TransferServices (..))
+import Shikigami.WorkerSession.Input (EventPageSize, firstAssignmentPageSize, parseWorkflowGeneration)
 import Shikigami.WorkerSession.Position (beforeMessages)
 import Shikigami.WorkerSession.Types
 import Shikigami.WorkerSession.Workflow (SessionRuntime (..))
 
 data Workers :: Effect where
   WorkerCommand :: Text -> Maybe OperationId -> WorkerCommand -> Workers m (Either SessionError WorkerReply)
-  AwaitEvents :: Text -> WorkerSessionId -> StateRevision "worker-event" -> Int -> Workers m (Either SessionError [EventReceipt])
+  AwaitEvents :: Text -> WorkerSessionId -> StateRevision "worker-event" -> EventPageSize -> Workers m (Either SessionError [EventReceipt])
 
 type instance DispatchOf Workers = Dynamic
 
@@ -47,7 +49,7 @@ command label input = send (WorkerCommand label Nothing input)
 commandWithKey :: (Workers :> es) => Text -> OperationId -> WorkerCommand -> Eff es (Either SessionError WorkerReply)
 commandWithKey label key input = send (WorkerCommand label (Just key) input)
 
-awaitEvents :: (Workers :> es) => Text -> WorkerSessionId -> StateRevision "worker-event" -> Int -> Eff es (Either SessionError [EventReceipt])
+awaitEvents :: (Workers :> es) => Text -> WorkerSessionId -> StateRevision "worker-event" -> EventPageSize -> Eff es (Either SessionError [EventReceipt])
 awaitEvents label session after limit = send (AwaitEvents label session after limit)
 
 resolveCoordinationPolicy :: Maybe CoordinationHost -> ActionAuthorizer -> CoordinatorRun -> IO (Either SessionError (Maybe Text))
@@ -63,14 +65,15 @@ runWorkers configured authorizer run policy = interpret \_ -> \case
       Right (WorkerEvents []) -> case enabled of
         Left err -> pure (Left err)
         Right (host, pinned) -> do
-          status <- step (StepName ("workers-state-" <> label)) (call host pinned (InspectWorker session beforeMessages 1) (operation label "status"))
+          status <- step (StepName ("workers-state-" <> label)) (call host pinned (InspectWorker session beforeMessages firstAssignmentPageSize) (operation label "status"))
           case status of
             Right (WorkerInspected page) | page.state.phase `elem` [Failed, Cancelled] -> pure (Right [])
             Left err -> pure (Left err)
             _ -> do
               (token, await) <- awakeableNamed (StepName ("workers-events-" <> label))
               (ownerName, ownerId) <- currentWorkflow
-              generation <- currentRunGeneration
+              generationNumber <- currentRunGeneration
+              generation <- either (throwIO . userError . Text.unpack) pure (parseWorkflowGeneration generationNumber)
               subscribed <- step (StepName ("workers-subscribe-" <> label)) do
                 key <- operation label "subscribe"
                 liftIO

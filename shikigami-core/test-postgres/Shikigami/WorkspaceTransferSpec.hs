@@ -14,6 +14,7 @@ import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (preparable)
 import Hasql.Transaction qualified as Tx
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
@@ -154,7 +155,7 @@ tests fixture =
         established <- sessionState env session
         (_, message) <- right =<< run env (Sessions.acceptMessage access established.revision (fixtureRevision 1) (fixtureOperationId "successor-message") instruction)
         (_, started) <- right =<< run env (Sessions.startAssignment access (advanceRevision established.revision) (fixtureRevision 1) (fixtureOperationId "successor-start") message.assignmentId)
-        runId <- maybe (fail "missing successor child") pure started.childWorkflowId
+        runId <- maybe (fail "missing successor child") (pure . (.unWorkflowId)) started.childWorkflowId
         let admission = original & #runId .~ runId & #assignmentId .~ Selection.assignmentIdFor runId & #owner .~ successor & #epoch .~ (fixtureRevision 1)
         Right (Just child) <- run env (runTransaction (lookupSessionChildTx runId))
         run env (runTransaction (successorWorkspaceTx child)) >>= (@?= Right binding)
@@ -205,7 +206,7 @@ withWorkspace :: DatabaseFixture -> (AppEnv -> SessionAdmission -> Sessions.Sess
 withWorkspace fixture callback = Fixture.withConfiguredFixture fixture (\admission -> admission & #delegator . #delegates .~ map fixtureAgentName ["worker", "successor"]) \env session access -> do
   (_, message) <- right =<< run env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "initial-message") instruction)
   (_, started) <- right =<< run env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId "initial-start") message.assignmentId)
-  runId <- maybe (fail "missing original child") pure started.childWorkflowId
+  runId <- maybe (fail "missing original child") (pure . (.unWorkflowId)) started.childWorkflowId
   root <- maybe (fail "missing root") pure session.context.executionRootId
   let base = Text.replicate 40 "a"
   catalog <- right (mkWorkspaceCatalog [RepositoryPolicy "mori://fixture/repository" "/approved/source" [base] base "policy-1"])

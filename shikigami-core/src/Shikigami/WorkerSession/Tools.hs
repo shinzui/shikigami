@@ -10,6 +10,7 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Effectful (Eff)
 import Effectful.Dispatch.Static (unsafeEff_)
+import Keiro.Workflow.Types (WorkflowId (..))
 import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.App (AppEffects, runAppIO)
 import Shikigami.Decision.Contract (versionedDigest)
@@ -27,7 +28,7 @@ import Shikumi.Tool (SomeTool (..), ToolError (..))
 import Shikumi.Tool.Output (ToolOutput (..), textToolOutput)
 
 coordinatorRunFor :: ExecutionSnapshot -> CoordinatorRun
-coordinatorRunFor snapshot = CoordinatorRun snapshot.runId snapshot.identity snapshot.sessionId snapshot.selection.rootId (Just snapshot.selection.permittedAliases)
+coordinatorRunFor snapshot = CoordinatorRun (WorkflowId snapshot.runId) snapshot.identity snapshot.sessionId snapshot.selection.rootId (Just snapshot.selection.permittedAliases)
 
 coordinationTools :: Maybe CoordinationHost -> ActionAuthorizer -> NativeToolFactory
 coordinationTools Nothing _ = NativeToolFactory (\_ -> pure (Right [])) (\_ _ _ -> pure (Right []))

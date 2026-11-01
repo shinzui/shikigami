@@ -184,7 +184,7 @@ tests fixture =
           replace (toJSON receipt)
           let replaceBody = replaceOwnedRow env "UPDATE shikigami.worker_session_payloads SET body=$3 WHERE session_id=$1 AND payload_id=$2" receipt.sessionId.value (payloadIdText receipt.output.payloadId)
           case originalBody of
-            Aeson.Object fields -> replaceBody (Aeson.Object (KeyMap.insert "content" (toJSON (result & #artifacts .~ ["different"])) fields))
+            Aeson.Object fields -> replaceBody (Aeson.Object (KeyMap.insert "content" (toJSON (result & #artifacts .~ [WS.artifactReference "different"])) fields))
             _ -> assertFailure "complete result envelope must be an object"
           run env retry >>= (@?= Left ObjectiveConflict)
           count env "shikigami.objective_receipts" >>= (@?= beforeReceipts)
@@ -428,7 +428,7 @@ tests fixture =
         withObjective fixture \env admission objective -> do
           now <- getCurrentTime
           let key = objectiveAssignment "late-result"
-              admitted = admission & #scope . #workerKey .~ "late-result" & #objective .~ S.referenceFor objective key
+              admitted = admission & #scope . #workerKey .~ WS.workerCoordinate "late-result" & #objective .~ S.referenceFor objective key
           (_, session) <- right =<< run env (Sessions.openSession admitted)
           let assignment = draft now "late-result" & #sessionId .~ Just session.sessionId & #owner .~ session.owner
           _ <- right =<< run env (O.executeCommand ownerHost objective (revision 0) (fixtureOperationId "graph") (SetAssignments [assignment]))
@@ -439,11 +439,11 @@ tests fixture =
           let instruction = WS.Instruction V1 WS.FollowUp (fixtureInstruction "accepted before cancellation") initialVersion.revision initialVersion.assignmentRevision initialVersion.criteriaRevision Nothing
           (_, message) <- right =<< run env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send") instruction)
           _ <- right =<< run env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId "start") message.assignmentId)
-          (_, result) <- right =<< run env (Sessions.recordResult access (fixtureRevision 2) (fixtureRevision 0) (fixtureOperationId "result") (WS.AssignmentResult V1 message.assignmentId WS.AssignmentSucceeded Nothing (Aeson.object []) ["artifact"]))
+          (_, result) <- right =<< run env (Sessions.recordResult access (fixtureRevision 2) (fixtureRevision 0) (fixtureOperationId "result") (WS.AssignmentResult V1 message.assignmentId WS.AssignmentSucceeded Nothing (Aeson.object []) [WS.artifactReference "artifact"]))
           _ <- right =<< run env (O.executeCommand ownerHost objective (revision 2) (fixtureOperationId "cancel") CancelObjective)
           cancelled <- get env objective
           version <- right (S.versionFor cancelled key)
-          version.active @?= False
+          version.active @?= WS.ObjectiveInactive
           (_, intent) <- right =<< run env (Sessions.prepareCheckpoint access (fixtureRevision 3) (fixtureRevision 0) (fixtureOperationId "prepare") version (fixtureRevision 0) (fixtureRevision 3))
           let evidence = ResultEvidence (evidenceKey "late") (criterionKey "human") (WorkerResult result (artifact "artifact")) NoJourney
           _ <- right =<< run env (O.executeInternal ownerHost objective (revision 3) (fixtureOperationId "reconcile") (IngestCheckpoint key intent [evidence] []))
@@ -511,7 +511,7 @@ get env objective = right =<< run env (O.readObjective ownerHost objective)
 checkpointPair :: AppEnv -> WS.SessionAdmission -> ObjectiveId -> IO (AssignmentDraft, AssignmentDraft, CP.CheckpointIntent, CP.CheckpointIntent, EvidenceInput, EvidenceInput)
 checkpointPair env admission objective = do
   now <- getCurrentTime
-  let new key = admission & #scope . #workerKey .~ key & #objective .~ S.referenceFor objective (objectiveAssignment key)
+  let new key = admission & #scope . #workerKey .~ WS.workerCoordinate key & #objective .~ S.referenceFor objective (objectiveAssignment key)
   (_, sa) <- right =<< run env (Sessions.openSession (new "a"))
   (_, sb) <- right =<< run env (Sessions.openSession (new "b"))
   let a = draft now "a" & #sessionId .~ Just sa.sessionId & #owner .~ sa.owner
@@ -531,7 +531,7 @@ checkpoint env actor _ current assignment key = do
   let instruction = WS.Instruction V1 WS.FollowUp (fixtureInstruction "perform") version.revision version.assignmentRevision version.criteriaRevision Nothing
   (_, message) <- right =<< run env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send") instruction)
   _ <- right =<< run env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId "start") message.assignmentId)
-  let result = WS.AssignmentResult V1 message.assignmentId WS.AssignmentSucceeded Nothing (Aeson.object []) ["artifact"]
+  let result = WS.AssignmentResult V1 message.assignmentId WS.AssignmentSucceeded Nothing (Aeson.object []) [WS.artifactReference "artifact"]
   (_, receipt) <- right =<< run env (Sessions.recordResult access (fixtureRevision 2) (fixtureRevision 0) (fixtureOperationId "result") result)
   (_, intent) <- right =<< run env (Sessions.prepareCheckpoint access (fixtureRevision 3) (fixtureRevision 0) (fixtureOperationId "prepare") version (fixtureRevision 0) (fixtureRevision 3))
   pure (intent, ResultEvidence (evidenceKey key) (criterionKey "human") (WorkerResult receipt (artifact "artifact")) NoJourney)

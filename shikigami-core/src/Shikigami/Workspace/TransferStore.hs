@@ -32,6 +32,7 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
+import Keiro.Workflow.Types (WorkflowId (..))
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId, operationIdText, parseOperationId)
@@ -43,6 +44,7 @@ import Shikigami.Execution.Transcript qualified as Transcript
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude
 import Shikigami.StateRevision
+import Shikigami.WorkerSession.Input (parseAssignmentId, providerReceiptFor)
 import Shikigami.WorkerSession.Transfer
 import Shikigami.WorkerSession.Types hiding (assignmentIdFor)
 import Shikigami.Workspace.Catalog
@@ -72,7 +74,7 @@ lookupSessionChildTx run = do
   pure case matches of
     Right [] -> Right Nothing
     Right [(state, binding, message)]
-      | state.sessionId == binding.sessionId && message.sessionId == state.sessionId && message.childWorkflowId == Just run && state.phase == Active && state.activeAssignment == Just message.assignmentId && message.phase == Running && message.epoch == state.epoch ->
+      | state.sessionId == binding.sessionId && message.sessionId == state.sessionId && message.childWorkflowId == Just (WorkflowId run) && state.phase == Active && state.activeAssignment == Just message.assignmentId && message.phase == Running && message.epoch == state.epoch ->
           Right (Just (SessionChild state.sessionId message.assignmentId message.sequence state.owner state.epoch binding.rootId state.handoff))
     _ -> Left WorkspaceBindingConflict
 
@@ -134,7 +136,7 @@ retainFenceTx binding intent = do
       settled <- workspaceSettledTx binding
       if control == Right (Just (Store.WorkspaceControl intent.oldOwner intent.oldEpoch Store.AdmissionFrozen)) && session && settled == Right True
         then do
-          let proof = FenceProof V1 binding.workspace intent.operationId (transferFingerprint intent) intent.oldEpoch intent.newEpoch (versionedDigest "shikigami.workspace-fence/1" (toJSON (workspaceBindingDigest binding, intent)))
+          let proof = FenceProof V1 binding.workspace intent.operationId (transferFingerprint intent) intent.oldEpoch intent.newEpoch (providerReceiptFor "shikigami.workspace-fence/1" (toJSON (workspaceBindingDigest binding, intent)))
           Tx.statement (binding.workspace.resource, intent.oldEpoch, proof) saveFence
           pure (Right proof)
         else pure (Left WorkspaceBindingConflict)
@@ -217,9 +219,12 @@ findFollowupWorkspaceTx run child storage repository = do
 -- hide by losing one of the JSON fields previously used to find it.
 priorWorkspacesTx :: SessionChild -> Transaction (Either WorkspaceError [WorkspaceBinding])
 priorWorkspacesTx child = do
-  assignments <- Tx.statement (child.session.value, child.sequence) selectPriorAssignments
-  retained <- traverse (Store.inspectWorkspaceTx . Store.workspaceRefForAssignment child.session . AssignmentId) assignments
-  pure (map fst . catMaybes <$> sequence retained)
+  parsed <- Tx.statement (child.session.value, child.sequence) selectPriorAssignments >>= checkedRead . traverse parseAssignmentId
+  case parsed of
+    Left err -> pure (Left err)
+    Right assignments -> do
+      retained <- traverse (Store.inspectWorkspaceTx . Store.workspaceRefForAssignment child.session) assignments
+      pure (map fst . catMaybes <$> sequence retained)
 
 matchesAdmission :: WorkspaceBinding -> WorkspaceAdmission -> Bool
 matchesAdmission binding admission = admission.workspace == binding.workspace && admission.bindingDigest == workspaceBindingDigest binding && admission.rootId == binding.request.rootId && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base
@@ -268,7 +273,7 @@ currentWorkspaceRequestTx binding = do
           | otherwise ->
               pure
                 ( Right case filter (\(_, _, _, admission) -> admission.owner == current.owner && admission.epoch == current.epoch) admissions of
-                    (run, session, assignment, _) : _ -> Just (WorkspaceRequest run (Just (WorkerSessionId session, AssignmentId assignment)) binding.request.rootId current.owner current.owner current.epoch)
+                    (run, session, assignment, _) : _ -> Just (WorkspaceRequest run (Just (session, assignment)) binding.request.rootId current.owner current.owner current.epoch)
                     [] | current.owner == binding.request.owner && current.epoch == binding.request.epoch -> Just binding.request
                     _ -> Nothing
                 )
@@ -334,7 +339,7 @@ selectChild run = preparable "SELECT s.state,s.binding,m.state FROM shikigami.wo
       unless (state.sessionId == binding.sessionId && message.sessionId == state.sessionId) (Left "inconsistent session child attribution")
       -- Unreadable attribution cannot authorize a standalone-allocation
       -- fallback. Keep at most two matches while validating the whole scan.
-      let next = if message.childWorkflowId == Just run then take 2 (pair : matches) else matches
+      let next = if message.childWorkflowId == Just (WorkflowId run) then take 2 (pair : matches) else matches
       length next `seq` pure next
 
 selectSession :: Statement Text (Maybe (Either Text (SessionState, SessionBinding)))
@@ -382,13 +387,16 @@ inspectAdmissionTx binding run = do
       Just admission | admission.runId /= run || admission.assignmentId /= assignmentIdFor run || not (matchesAdmission binding admission) -> Left "inconsistent retained admission"
       _ -> Right parsed
 
-admissionRow :: D.Row (Either Text (Text, Text, Text, WorkspaceAdmission))
+admissionRow :: D.Row (Either Text (Text, WorkerSessionId, AssignmentId, WorkspaceAdmission))
 admissionRow = assemble <$> text <*> text <*> text <*> jsonRow
   where
     text = D.column (D.nonNullable D.text)
-    assemble run session assignment admission = (\value -> (run, session, assignment, value)) <$> admission
+    assemble run session assignment admission = do
+      retained <- admission
+      parsed <- parseAssignmentId assignment
+      pure (run, workerSessionId session, parsed, retained)
 
-selectCurrentAdmission :: Statement Text [Either Text (Text, Text, Text, WorkspaceAdmission)]
+selectCurrentAdmission :: Statement Text [Either Text (Text, WorkerSessionId, AssignmentId, WorkspaceAdmission)]
 selectCurrentAdmission = preparable "SELECT run_id,session_id,assignment_id,admission FROM shikigami.workspace_successor_admissions WHERE resource=$1 ORDER BY sequence DESC" textParam (D.rowList admissionRow)
 
 selectPriorAssignments :: Statement (Text, StateRevision "worker-message") [Text]
@@ -428,7 +436,7 @@ priorAdmissionsSettledTx binding child = do
   where
     valid (run, session, assignment, admission) = do
       unless (run == admission.runId && admission.assignmentId == assignmentIdFor run && matchesAdmission binding admission) (Left "inconsistent prior workspace admission")
-      pure (WorkerSessionId session, AssignmentId assignment, admission)
+      pure (session, assignment, admission)
 
-priorAdmissions :: Statement (Text, StateRevision "worker-message") [Either Text (Text, Text, Text, WorkspaceAdmission)]
+priorAdmissions :: Statement (Text, StateRevision "worker-message") [Either Text (Text, WorkerSessionId, AssignmentId, WorkspaceAdmission)]
 priorAdmissions = preparable "SELECT run_id,session_id,assignment_id,admission FROM shikigami.workspace_successor_admissions WHERE resource=$1 AND sequence<$2 ORDER BY sequence" (contrazip2 textParam sequenceParam) (D.rowList admissionRow)

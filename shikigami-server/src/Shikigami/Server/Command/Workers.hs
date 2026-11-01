@@ -8,6 +8,7 @@ import Data.ByteString.Lazy qualified as Lazy
 import Data.ByteString.Lazy.Char8 qualified as LazyChar
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
@@ -35,7 +36,7 @@ import System.Exit (die)
 runWorkersInspect :: Text -> MessagePosition -> Int -> Bool -> AppConfig -> IO ()
 runWorkersInspect key after limit _asJson config = do
   env <- environment "workers inspect" config
-  result <- runAppIO env (Store.inspectSessionPage (WorkerSessionId key) after limit)
+  result <- runAppIO env (Store.inspectSessionPage (workerSessionId key) after limit)
   case result of
     Right (Right (Just page)) -> LazyChar.putStrLn (Aeson.encode page)
     Right (Right Nothing) -> die "worker session was not found"
@@ -44,12 +45,13 @@ runWorkersInspect key after limit _asJson config = do
 runWorkersSend :: Text -> OperationId -> StateRevision "worker-session" -> StateRevision "worker-owner" -> FilePath -> AppConfig -> IO ()
 runWorkersSend session key revision epoch path config = do
   instruction <- readInstruction path
-  runWorkersControl key (SendWorker (WorkerSessionId session) revision epoch instruction) config
+  runWorkersControl key (SendWorker (workerSessionId session) revision epoch instruction) config
 
 runWorkersInterrupt :: Text -> OperationId -> StateRevision "worker-session" -> StateRevision "worker-owner" -> Text -> FilePath -> AppConfig -> IO ()
 runWorkersInterrupt session key revision epoch assignment path config = do
   instruction <- readInstruction path
-  runWorkersControl key (InterruptWorker (WorkerSessionId session) revision epoch (AssignmentId assignment) instruction) config
+  checkedAssignment <- either (die . Text.unpack) pure (parseAssignmentId assignment)
+  runWorkersControl key (InterruptWorker (workerSessionId session) revision epoch checkedAssignment instruction) config
 
 runWorkersControl :: OperationId -> WorkerCommand -> AppConfig -> IO ()
 runWorkersControl key command config = do
@@ -70,7 +72,7 @@ runWorkersControl key command config = do
   admission <- case admitted of Right (Right value) -> pure value; _ -> die "accepted worker admission is unavailable"
   memory <- maybe (die "worker admission has no parent memory session") pure admission.context.sessionId
   agents <- loadedAgents <$> loadAgentsReport config.agentsDirectory
-  let run = CoordinatorRun ("operator-workers:" <> session.value) admission.context.identity memory admission.context.executionRootId admission.context.executionPermissions
+  let run = CoordinatorRun (WorkflowId ("operator-workers:" <> session.value)) admission.context.identity memory admission.context.executionRootId admission.context.executionPermissions
       scope = CoordinationScope V1 run admission.scope.parent admission.delegator admission.context [WorkerSlot admission.scope.workerKey admission.worker admission.identity admission.objective (Just session)] maximumSessionCapacity admission.maximumAssignments admission.mailboxLimit
       authority = CoordinationAuthority (\requested -> pure (if requested == run then Right (Just scope) else Left "foreign control scope")) (\requested pinned -> pure (if requested == run && pinned == scopeFingerprint scope then Right scope else Left "control scope unavailable"))
       sessions = SessionRuntime env agents directory.handle (Directory.identityLifecycleAdmission directory.handle) Nothing

@@ -23,6 +23,7 @@ module Shikigami.WorkerSession.Capability
   )
 where
 
+import Data.Aeson ((.:), (.:?), (.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
@@ -49,7 +50,7 @@ import Shikigami.Execution.Resources (Admission (..), Root (..), checkRoot)
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Transcript (PayloadRef (..))
 import Shikigami.FormatVersion (FormatVersion (V1))
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Checkpoint (CheckpointProvider (..), ObjectiveVersion (..))
 import Shikigami.WorkerSession.Handoff (TransferOutcome, TransferServices (..), requestHandoff, resumeHandoff)
@@ -62,17 +63,22 @@ import Shikigami.WorkerSession.Types
 import Shikigami.WorkerSession.Workflow (SessionRuntime (..), currentAssignmentAuthority)
 
 data CoordinatorRun = CoordinatorRun
-  { runId :: !Text,
+  { runId :: !WorkflowId,
     identity :: !AgentIdentity,
     sessionId :: !SessionId,
     rootId :: !(Maybe ExecutionRootId),
     permittedAliases :: !(Maybe [ModelAlias])
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+
+instance ToJSON CoordinatorRun where
+  toJSON value = Aeson.object ["runId" .= value.runId.unWorkflowId, "identity" .= value.identity, "sessionId" .= value.sessionId, "rootId" .= value.rootId, "permittedAliases" .= value.permittedAliases]
+
+instance FromJSON CoordinatorRun where
+  parseJSON = Aeson.withObject "CoordinatorRun" \fields -> CoordinatorRun <$> (WorkflowId <$> fields .: "runId") <*> fields .: "identity" <*> fields .: "sessionId" <*> fields .:? "rootId" <*> fields .:? "permittedAliases"
 
 data WorkerSlot = WorkerSlot
-  { workerKey :: !Text,
+  { workerKey :: !(WorkerCoordinate "worker-slot"),
     target :: !AgentName,
     identity :: !AgentIdentity,
     objective :: !ObjectiveRef,
@@ -84,7 +90,7 @@ data WorkerSlot = WorkerSlot
 data CoordinationScope = CoordinationScope
   { format :: !(FormatVersion "coordination-scope"),
     run :: !CoordinatorRun,
-    parentScope :: !Text,
+    parentScope :: !(WorkerCoordinate "parent-scope"),
     agent :: !AgentDecl,
     context :: !DelegateCtx,
     workers :: ![WorkerSlot],
@@ -133,10 +139,10 @@ instance FromJSON WorkerInstruction where
 instance Show WorkerInstruction where show _ = "WorkerInstruction <protected>"
 
 data WorkerCommand
-  = FindWorker {workerKey :: !Text}
+  = FindWorker {workerKey :: !(WorkerCoordinate "worker-slot")}
   | SendWorker {sessionId :: !WorkerSessionId, expectedRevision :: !(StateRevision "worker-session"), epoch :: !(StateRevision "worker-owner"), instruction :: !WorkerInstruction}
-  | InspectWorker {sessionId :: !WorkerSessionId, position :: !MessagePosition, limit :: !Int}
-  | ReadWorkerEvents {sessionId :: !WorkerSessionId, after :: !(StateRevision "worker-event"), limit :: !Int}
+  | InspectWorker {sessionId :: !WorkerSessionId, position :: !MessagePosition, pageSize :: !AssignmentPageSize}
+  | ReadWorkerEvents {sessionId :: !WorkerSessionId, after :: !(StateRevision "worker-event"), limit :: !EventPageSize}
   | ReadWorkerResult {sessionId :: !WorkerSessionId, assignmentId :: !AssignmentId}
   | InterruptWorker {sessionId :: !WorkerSessionId, expectedRevision :: !(StateRevision "worker-session"), epoch :: !(StateRevision "worker-owner"), assignmentId :: !AssignmentId, instruction :: !WorkerInstruction}
   | CancelWorker {sessionId :: !WorkerSessionId, expectedRevision :: !(StateRevision "worker-session"), epoch :: !(StateRevision "worker-owner")}
@@ -155,7 +161,7 @@ workerCommandOptions :: Aeson.Options
 workerCommandOptions =
   Aeson.defaultOptions
     { Aeson.rejectUnknownFields = True,
-      Aeson.fieldLabelModifier = \field -> if field == "position" then "after" else field
+      Aeson.fieldLabelModifier = \field -> case field of "position" -> "after"; "pageSize" -> "limit"; _ -> field
     }
 
 instance Show WorkerCommand where show _ = "WorkerCommand <protected>"
@@ -192,7 +198,7 @@ resolveGrant host authorizer run pinned = do
   case supplied of
     Right (Right Nothing) -> pure (Right Nothing)
     Right (Right (Just scope)) -> do
-      let valid = scope.format == V1 && scope.run == run && scope.context.identity == run.identity && scope.context.sessionId == Just run.sessionId && scope.context.executionRootId == run.rootId && scope.context.executionPermissions == run.permittedAliases && isJust run.rootId && not (Text.null scope.parentScope) && Text.length scope.parentScope <= 256 && not (null scope.workers) && length scope.workers <= sessionLimit scope.maximumSessions && length (nub (map (.workerKey) scope.workers)) == length scope.workers && maybe True (== scopeFingerprint scope) pinned
+      let valid = scope.format == V1 && scope.run == run && scope.context.identity == run.identity && scope.context.sessionId == Just run.sessionId && scope.context.executionRootId == run.rootId && scope.context.executionPermissions == run.permittedAliases && isJust run.rootId && not (Text.null (workerCoordinateText scope.parentScope)) && Text.length (workerCoordinateText scope.parentScope) <= 256 && not (null scope.workers) && length scope.workers <= sessionLimit scope.maximumSessions && length (nub (map (.workerKey) scope.workers)) == length scope.workers && maybe True (== scopeFingerprint scope) pinned
           admissions = [sessionAdmission scope worker | worker <- scope.workers]
       if not valid || any (either (const True) (const False) . validateAdmission) admissions
         then pure (Left SessionOwnerRefused)
@@ -264,8 +270,8 @@ executeAdmittedCommand host authorizer (CoordinationGrant scope) operation comma
     dispatch access session = case command of
       SendWorker {expectedRevision, epoch, instruction} -> send access session expectedRevision epoch (message FollowUp instruction)
       InterruptWorker {expectedRevision, epoch, assignmentId, instruction} -> send access session expectedRevision epoch (message (Interrupt assignmentId) instruction)
-      InspectWorker {position, limit} -> Store.inspectSessionPage session position limit <&> (>>= maybe (Left SessionMissing) (Right . WorkerInspected))
-      ReadWorkerEvents {after, limit} -> fmap WorkerEvents <$> Store.readEvents access after limit
+      InspectWorker {position, pageSize} -> Store.inspectSessionPage session position (sessionLimit pageSize) <&> (>>= maybe (Left SessionMissing) (Right . WorkerInspected))
+      ReadWorkerEvents {after, limit} -> fmap WorkerEvents <$> Store.readEvents access after (sessionLimit limit)
       ReadWorkerResult {assignmentId} -> fmap (WorkerResult . fmap (\(receipt, result) -> (receipt, if Lazy.length (Aeson.encode result) <= 16384 then Just result else Nothing))) <$> Store.readResult access assignmentId
       CancelWorker {expectedRevision, epoch} -> fmap (WorkerClosed . snd) <$> Store.closeSession access expectedRevision epoch operation AssignmentCancelled
       TransferWorker {expectedRevision, epoch, workspace, target} -> fmap TransferAccepted <$> requestHandoff host.services session expectedRevision epoch operation workspace target
@@ -305,7 +311,7 @@ executeAdmittedCommand host authorizer (CoordinationGrant scope) operation comma
         version <- trySync (liftIO (provider.current slot.objective))
         now <- liftIO getCurrentTime
         pure case (actual, version) of
-          (Right identity, Right (Right current)) | identity == slot.identity && current.active && current.owner == identity && current.ownerEpoch == initialRevision && Just current.rootId == scope.run.rootId && now < current.cutoff -> Right ()
+          (Right identity, Right (Right current)) | identity == slot.identity && objectiveIsActive current.active && current.owner == identity && current.ownerEpoch == initialRevision && Just current.rootId == scope.run.rootId && now < current.cutoff -> Right ()
           _ -> Left SessionOwnerRefused
       _ -> pure (Left SessionOwnerRefused)
     message kind draft = Instruction V1 kind draft.text draft.objectiveRevision draft.assignmentRevision draft.criteriaRevision draft.selection
@@ -368,7 +374,7 @@ commandSession = \case
 -- command input and must belong to the admitted parent run.
 subscribeCommand :: CoordinationHost -> ActionAuthorizer -> CoordinationGrant -> OperationId -> WorkerSessionId -> SessionListener -> Eff AppEffects (Either SessionError (StateRevision "worker-event"))
 subscribeCommand host authorizer (CoordinationGrant scope) operation session listener
-  | listener.ownerId /= WorkflowId scope.run.runId = pure (Left SessionOwnerRefused)
+  | listener.ownerId /= scope.run.runId = pure (Left SessionOwnerRefused)
   | otherwise =
       authorizeExact authorizer scope "subscribe" (toJSON (operation, session, listener)) >>= \case
         Left err -> pure (Left err)

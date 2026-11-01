@@ -62,6 +62,7 @@ import Shikigami.ObjectiveLifecycle.Generated.EventStream (objectiveLifecycleCat
 import Shikigami.ObjectiveLookup.Generated.ReadModel (objectiveLookupReadModel)
 import Shikigami.Prelude
 import Shikigami.WorkerSession.Checkpoint qualified as CP
+import Shikigami.WorkerSession.Input qualified as WorkerInput
 import Shikigami.WorkerSession.Types qualified as WS
 import Prelude hiding (read)
 
@@ -129,8 +130,8 @@ read access objective = protected do
 
 readVersion :: (ObjectiveEffects es) => Access -> WS.ObjectiveRef -> Eff es (Either ObjectiveError CP.ObjectiveVersion)
 readVersion access reference = protected do
-  unless (reference.provider == "shikigami-objective-v1") (abort ObjectiveMissing)
-  (objective, assignment) <- Tx.statement reference.key selectReference >>= maybe (abort ObjectiveMissing) pure
+  unless (WorkerInput.workerCoordinateText reference.provider == "shikigami-objective-v1") (abort ObjectiveMissing)
+  (objective, assignment) <- Tx.statement (WorkerInput.workerCoordinateText reference.key) selectReference >>= maybe (abort ObjectiveMissing) pure
   identifier <- requireDecoded (parseObjectiveId objective)
   current <- locked identifier
   checkAccess access current
@@ -266,7 +267,7 @@ versionFor objective key = do
   assignment <- maybe (Left ObjectiveMissing) Right (find ((== key) . (.definition.assignmentId)) objective.assignments)
   root <- maybe (Left (ObjectiveInvalid "assignment has no admitted resource root")) Right assignment.definition.rootId
   cutoff <- maybe (Left (ObjectiveInvalid "assignment has no admitted cutoff")) Right assignment.definition.cutoff
-  pure (CP.ObjectiveVersion objective.revision assignment.revision objective.criteriaRevision assignment.ownerEpoch assignment.definition.owner (objective.status == Open && assignment.definition.state `notElem` [Done, Withdrawn]) root cutoff)
+  pure (CP.ObjectiveVersion objective.revision assignment.revision objective.criteriaRevision assignment.ownerEpoch assignment.definition.owner (if objective.status == Open && assignment.definition.state `notElem` [Done, Withdrawn] then WorkerInput.ObjectiveActive else WorkerInput.ObjectiveInactive) root cutoff)
 
 validateTransition :: UTCTime -> Access -> StateRevision "objective" -> Mutation -> Objective -> Either ObjectiveError Objective
 validateTransition _now access expected mutation current = do
@@ -378,7 +379,7 @@ validateSources objective mutation = do
           unless (actual.sessionId == receipt.sessionId && actual.assignmentId == receipt.assignmentId && actual.output.digest == expectedDigest && result.assignmentId == actual.assignmentId && result.disposition == actual.disposition) (requireDecoded (Left () :: Either () ()))
           pure do
             unless (bound && actual == receipt) (Left ObjectiveInvalidEvidence)
-            unless (artifactRefText artifact `elem` result.artifacts) (Left ObjectiveInvalidEvidence)
+            unless (WorkerInput.artifactReference (artifactRefText artifact) `elem` result.artifacts) (Left ObjectiveInvalidEvidence)
         Nothing -> pure (Left ObjectiveInvalidEvidence)
     _ -> pure (Right ())
   bindings <- case mutation of
@@ -409,7 +410,7 @@ validateSources objective mutation = do
     matchesActor actor obj = not (null (rolesFor obj (RecordedAgent actor)))
 
 referenceFor :: ObjectiveId -> ObjectiveAssignmentId -> WS.ObjectiveRef
-referenceFor objective assignment = WS.ObjectiveRef "shikigami-objective-v1" (versionedDigest "shikigami.objective-assignment-ref/1" (toJSON (objective, assignment)))
+referenceFor objective assignment = WS.ObjectiveRef (WorkerInput.workerCoordinate "shikigami-objective-v1") (WorkerInput.workerCoordinate (versionedDigest "shikigami.objective-assignment-ref/1" (toJSON (objective, assignment))))
 
 locked :: ObjectiveId -> Transaction Objective
 locked identifier = do
@@ -420,7 +421,7 @@ locked identifier = do
 saveSnapshot :: Objective -> Transaction ()
 saveSnapshot objective = do
   Tx.statement ((objectiveIdText objective.objectiveId), objective) updateObjective
-  forM_ objective.assignments \assignment -> Tx.statement ((objectiveIdText objective.objectiveId), (objectiveAssignmentIdText assignment.definition.assignmentId), (referenceFor objective.objectiveId assignment.definition.assignmentId).key, assignment) saveAssignment
+  forM_ objective.assignments \assignment -> Tx.statement ((objectiveIdText objective.objectiveId), (objectiveAssignmentIdText assignment.definition.assignmentId), WorkerInput.workerCoordinateText (referenceFor objective.objectiveId assignment.definition.assignmentId).key, assignment) saveAssignment
 
 writePayload :: ObjectiveId -> Text -> Aeson.Value -> Transaction ()
 writePayload objective digest payload = Tx.statement ((objectiveIdText objective), digest, payload) insertPayload

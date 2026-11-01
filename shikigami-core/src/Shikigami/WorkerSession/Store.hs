@@ -179,13 +179,13 @@ openSessionWithLimit maximumSessions admission = guarded do
       result <- persist session (Generated.AdmitWorkerSession (Generated.AdmitWorkerSessionData session (payloadDigestText ref.digest))) do
         validateRoot True root
         void (Tx.statement (versionedDigest "shikigami.worker-session-scope-lock/1" (toJSON (admission.scope.parent, admission.context.identity))) lockScope)
-        existingScope <- readRows (admission.scope.parent, toJSON admission.context.identity) selectScopeBinding
+        existingScope <- readRows (workerCoordinateText admission.scope.parent, toJSON admission.context.identity) selectScopeBinding
         when (maybe False ((/= root) . (.rootId)) existingScope) (abort SessionBindingConflict)
-        count <- Tx.statement (admission.scope.parent, toJSON admission.context.identity) countScopeSessions
+        count <- Tx.statement (workerCoordinateText admission.scope.parent, toJSON admission.context.identity) countScopeSessions
         when (count >= fromIntegral (sessionLimit maximumSessions)) (abort SessionLimitExceeded)
         collision <- readRows session.value selectSession
         when (isJust collision) (abort SessionBindingConflict)
-        Tx.statement (session.value, scopeDigestFor admission, initial, binding) insertSession
+        Tx.statement (session.value, workerCommitmentText (scopeDigestFor admission), initial, binding) insertSession
         actual <- writePayload session encoded
         unless (actual == ref) (abort SessionBindingConflict)
       stored <- metadata (readRows session.value selectSession)
@@ -362,7 +362,7 @@ startAssignment access expected epoch operation assignment = guarded do
         pure (RetainedFinding receipt bounded)
       context <- writePayload state.sessionId (body "assignment-context" findings)
       let child = assignmentChildWorkflowIdV2 state.sessionId (fromMaybe admission.worker state.worker) assignment
-          started = message & #phase .~ Running & #epoch .~ state.epoch & #childWorkflowId .~ Just child.unWorkflowId & #context .~ Just context
+          started = message & #phase .~ Running & #epoch .~ state.epoch & #childWorkflowId .~ Just child & #context .~ Just context
       saveMessage started
       appendEvent state (AssignmentStarted started)
       pure (started, state & #phase .~ Active & #activeAssignment .~ Just assignment & #eventCursor .~ (advanceRevision state.eventCursor))
@@ -435,7 +435,7 @@ closeSession access expected epoch operation disposition =
 
 recordResult :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> AssignmentResult -> Eff es (Either SessionError (Admission, ResultReceipt))
 recordResult access expected epoch operation result = guarded do
-  unless (result.format == V1 && length result.artifacts <= 128 && all (\ref -> not (Text.null ref) && Text.length ref <= 256) result.artifacts) (throwIO (SessionAbort (SessionInputRefused "invalid assignment result")))
+  unless (result.format == V1 && length result.artifacts <= 128 && all (\ref -> not (Text.null ref) && Text.length ref <= 256) (artifactReferenceText <$> result.artifacts)) (throwIO (SessionAbort (SessionInputRefused "invalid assignment result")))
   ref <- either (throwIO . SessionAbort) pure (payloadReference encoded)
   mutate
     access
@@ -570,7 +570,7 @@ observeSession access@(SessionAccess session _ _) expected epoch operation wake 
 
 subscribeEvents :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> SessionListener -> Eff es (Either SessionError (Admission, StateRevision "worker-event"))
 subscribeEvents access@(SessionAccess session _ _) expected epoch operation listener = guarded do
-  unless (revisionNumber listener.after <= 100000 && listener.generation >= 0) (throwIO (SessionAbort SessionBindingConflict))
+  unless (revisionNumber listener.after <= 100000 && workflowGenerationInt listener.generation >= 0) (throwIO (SessionAbort SessionBindingConflict))
   _ <- validateListener listener
   existing <- metadata do
     (state, binding) <- getSession session
@@ -581,7 +581,7 @@ subscribeEvents access@(SessionAccess session _ _) expected epoch operation list
       pure (ref, current, status == Just Pending)
   live <- fmap catMaybes $ forM existing \(ref, current, pending) -> do
     generation <- currentGeneration current.ownerName current.ownerId
-    pure (if pending && generation == current.generation then Just ref else Nothing)
+    pure (if pending && generation == workflowGenerationInt current.generation then Just ref else Nothing)
   notify <- prepareListenerNotification session listener
   mutate
     access
@@ -603,19 +603,19 @@ validateListener :: (SessionReadEffects es) => SessionListener -> Eff es Awakeab
 validateListener listener = do
   row <- lookupAwakeable (awakeableIdToUuid listener.token) >>= maybe (throwIO (SessionAbort SessionBindingConflict)) pure
   generation <- currentGeneration listener.ownerName listener.ownerId
-  unless (WorkflowName row.ownerWorkflowName == listener.ownerName && WorkflowId row.ownerWorkflowId == listener.ownerId && listener.generation == generation) (throwIO (SessionAbort SessionBindingConflict))
+  unless (WorkflowName row.ownerWorkflowName == listener.ownerName && WorkflowId row.ownerWorkflowId == listener.ownerId && workflowGenerationInt listener.generation == generation) (throwIO (SessionAbort SessionBindingConflict))
   pure row
 
 prepareListenerNotification :: (SessionReadEffects es) => WorkerSessionId -> SessionListener -> Eff es (Transaction ())
 prepareListenerNotification session listener = do
   generation <- currentGeneration listener.ownerName listener.ownerId
   row <- lookupAwakeable (awakeableIdToUuid listener.token)
-  if generation /= listener.generation || isNothing row
+  if generation /= workflowGenerationInt listener.generation || isNothing row
     then pure (pure ())
     else do
       _ <- validateListener listener
       now <- liftIO getCurrentTime
-      append <- prepareJournalAppend listener.ownerName listener.ownerId listener.generation (StepRecorded (awakeableStepPrefix <> awakeableIdText listener.token) (toJSON session) now)
+      append <- prepareJournalAppend listener.ownerName listener.ownerId (workflowGenerationInt listener.generation) (StepRecorded (awakeableStepPrefix <> awakeableIdText listener.token) (toJSON session) now)
       pure do
         transitioned <- completeAwakeableTx (awakeableIdToUuid listener.token) (toJSON session) now
         status <- lookupAwakeableStatusTx (awakeableIdToUuid listener.token)
@@ -638,7 +638,7 @@ requestTransfer access expected epoch operation version workspace target success
     (\session revision -> Generated.RequestSessionTransfer (Generated.RequestSessionTransferData session revision (revision + 1)))
     \state binding admission -> do
       unless (isNothing state.checkpointIntent && maybe True ((== TransferEstablished) . (.stage)) state.handoff) (abort AssignmentConflict)
-      unless (version.active && version.owner == state.owner && version.ownerEpoch == epoch && version.rootId == binding.rootId && successor /= state.owner && successor /= binding.parentIdentity && all (\value -> not (Text.null value) && Text.length value <= 256) [workspace.provider, workspace.resource]) (abort SessionBindingConflict)
+      unless (objectiveIsActive version.active && version.owner == state.owner && version.ownerEpoch == epoch && version.rootId == binding.rootId && successor /= state.owner && successor /= binding.parentIdentity && all (\value -> not (Text.null value) && Text.length value <= 256) [workspace.provider, workspace.resource]) (abort SessionBindingConflict)
       void (require (either (const (Left SessionOwnerRefused)) Right (identityText successor)))
       require (either (const (Left SessionOwnerRefused)) Right (assertMayDelegate admission.delegator target))
       require (either (const (Left SessionOwnerRefused)) Right (checkCycle admission.context target))
@@ -758,7 +758,7 @@ validateWake session wake = do
   row <- lookupAwakeable (awakeableIdToUuid wake.token) >>= maybe (throwIO (SessionAbort SessionBindingConflict)) pure
   generation <- currentGeneration sessionWorkflowName (sessionWorkflowId session)
   let WorkflowName name = sessionWorkflowName
-  unless (row.ownerWorkflowName == name && row.ownerWorkflowId == session.value && wake.generation >= 0 && generation == wake.generation) (throwIO (SessionAbort SessionBindingConflict))
+  unless (row.ownerWorkflowName == name && row.ownerWorkflowId == session.value && workflowGenerationInt wake.generation >= 0 && generation == workflowGenerationInt wake.generation) (throwIO (SessionAbort SessionBindingConflict))
   pure row
 
 -- Prepared outside the checked writer, completed inside it. A message cannot
@@ -774,14 +774,14 @@ prepareNotification access@(SessionAccess session _ _) = do
   notifications <- forM listeners \listener -> (listener.after,) <$> prepareListenerNotification session listener
   generation <- currentGeneration sessionWorkflowName (sessionWorkflowId session)
   driver <- case wake of
-    Just published | published.generation == generation -> do
+    Just published | workflowGenerationInt published.generation == generation -> do
       row <- lookupAwakeable (awakeableIdToUuid published.token)
       case row of
         Nothing -> pure (pure ()) -- A retained session can outlive journal GC.
         Just _ -> do
           _ <- validateWake session published
           now <- liftIO getCurrentTime
-          append <- prepareJournalAppend sessionWorkflowName (sessionWorkflowId session) published.generation (StepRecorded (awakeableStepPrefix <> awakeableIdText published.token) (toJSON session) now)
+          append <- prepareJournalAppend sessionWorkflowName (sessionWorkflowId session) (workflowGenerationInt published.generation) (StepRecorded (awakeableStepPrefix <> awakeableIdText published.token) (toJSON session) now)
           pure do
             transitioned <- completeAwakeableTx (awakeableIdToUuid published.token) (toJSON session) now
             status <- lookupAwakeableStatusTx (awakeableIdToUuid published.token)
@@ -806,7 +806,7 @@ mutate access@(SessionAccess session actor _) expected epoch operation kind inpu
   unless (actor == binding.parentIdentity) (throwIO (SessionAbort SessionOwnerRefused))
   let fingerprint = commandFingerprint kind input
       decodeStored = \case
-        Just (digest, value) | digest == fingerprint -> case Aeson.fromJSON value of Aeson.Success result -> Right (AlreadyAccepted, result); _ -> Left SessionBindingConflict
+        Just (digest, value) | digest == workerCommitmentText fingerprint -> case Aeson.fromJSON value of Aeson.Success result -> Right (AlreadyAccepted, result); _ -> Left SessionBindingConflict
         Just _ -> Left MessageConflict
         Nothing -> Left SessionRevisionConflict
   old <- metadata (Tx.statement (session.value, operationKey operation) selectCommand)
@@ -826,15 +826,15 @@ mutate access@(SessionAccess session actor _) expected epoch operation kind inpu
           unless (reference == state.wake && listeners == state.listeners) (abort SessionRevisionConflict)
           notify next
         saveSession (next & #revision .~ (advanceRevision expected))
-        Tx.statement (session.value, operationKey operation, fingerprint, toJSON value) insertCommand
+        Tx.statement (session.value, operationKey operation, workerCommitmentText fingerprint, toJSON value) insertCommand
       stored <- metadata (Tx.statement (session.value, operationKey operation) selectCommand)
       pure $ case (result, stored) of
         (Right (), _) -> fmap (\(_, value) -> (Accepted, value)) (decodeStored stored)
         (_, Just _) -> decodeStored stored
         (Left err, _) -> Left err
 
-commandFingerprint :: Text -> Aeson.Value -> Text
-commandFingerprint kind input = versionedDigest "shikigami.worker-session-command/1" (toJSON (kind, input))
+commandFingerprint :: Text -> Aeson.Value -> WorkerCommitment "session-command"
+commandFingerprint kind input = workerCommitmentFor "shikigami.worker-session-command/1" (toJSON (kind, input))
 
 requireKey :: (SessionReadEffects es) => OperationId -> Eff es ()
 requireKey operation = unless (either (const False) (const True) (Resources.validateKey (operationKey operation))) (throwIO (SessionAbort MessageConflict))

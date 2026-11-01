@@ -4,6 +4,13 @@ from pathlib import Path
 import json
 import subprocess
 import tempfile
+import argparse
+import re
+
+arguments = argparse.ArgumentParser(description=__doc__)
+arguments.add_argument("--match", help="filter parameterized controls; public adapters and fixed smoke checks always run")
+pattern = arguments.parse_args().match
+selected = re.compile(pattern).search if pattern else lambda _: True
 
 ROOT = Path(__file__).resolve().parents[2]
 PLAN = json.loads((ROOT / "dist-newstyle/cache/plan.json").read_text())
@@ -72,6 +79,7 @@ import Shikigami.PracticeReview qualified as Review
 import Shikigami.PracticeReview.Evidence qualified as Evidence
 import Shikigami.Router.Declaration qualified as Declaration
 import Shikigami.Workspace.Instructions qualified as Instructions
+import Shikigami.WorkerSession.Input qualified as WorkerInput
 import Shikigami.WorkerSession.Types qualified as WorkerSession
 import Shikigami.Workspace.Types qualified as Workspace
 import Shikigami.Workspace.Store qualified as WorkspaceStore
@@ -83,7 +91,17 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''reviewDependency :: Text -> Either Text Review.DependencyName
+POSITIVE = '''workerScope :: WorkerSession.SessionScope -> WorkerInput.WorkerCoordinate "parent-scope"
+workerScope value = value.parent
+workerAssignment :: Aeson.Value -> WorkerSession.AssignmentId
+workerAssignment = WorkerInput.assignmentIdForDigest
+workerCommitment :: Text -> Aeson.Value -> WorkerInput.WorkerCommitment "checkpoint"
+workerCommitment = WorkerInput.workerCommitmentFor
+workerTechnicalIdentity :: Text -> WorkerSession.WorkerSessionId
+workerTechnicalIdentity = WorkerInput.workerSessionId
+workerGeneration :: Int -> Either Text WorkerInput.WorkflowGeneration
+workerGeneration = WorkerInput.parseWorkflowGeneration
+reviewDependency :: Text -> Either Text Review.DependencyName
 reviewDependency = Review.parseDependencyName
 reviewLineageSession :: Review.ReviewLineage -> SessionId
 reviewLineageSession value = value.childSessionId
@@ -291,6 +309,15 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('WorkerSession.WorkerSessionId', 'generic'),
+    ('WorkerSession.AssignmentId', 'generic'),
+    ('WorkerInput.WorkerCoordinate "worker-slot"', 'generic'),
+    ('WorkerInput.WorkerCommitment "session-command"', 'generic'),
+    ('WorkerInput.ArtifactReference', 'generic'),
+    ('WorkerInput.ProviderReceipt', 'generic'),
+    ('WorkerInput.WorkflowGeneration', 'generic'),
+    ('WorkerInput.AssignmentPageSize', 'generic'),
+    ('WorkerInput.EventPageSize', 'generic'),
     ('Review.DependencyName', 'generic'),
     ('Review.DocumentId', 'generic'),
     ('Review.TriggerKey', 'generic'),
@@ -427,6 +454,15 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         assert result.returncode != 0 and 'RunDisposition' in result.stderr, (source_kind, result.stderr)
         print('opaque boundary: run disposition ' + source_kind + ' substitution refused: passed', flush=True)
     for label, signature, expression in [
+        ('worker session record update', 'WorkerSession.WorkerSessionId -> Text -> WorkerSession.WorkerSessionId', '\\value raw -> value { WorkerSession.value = raw }'),
+        ('assignment record update', 'WorkerSession.AssignmentId -> Text -> WorkerSession.AssignmentId', '\\value raw -> value { WorkerSession.value = raw }'),
+        ('worker session raw coercion', 'Text -> WorkerSession.WorkerSessionId', 'coerce'),
+        ('assignment raw coercion', 'Text -> WorkerSession.AssignmentId', 'coerce'),
+        ('worker scope role substitution', 'WorkerInput.WorkerCoordinate "parent-scope" -> WorkerInput.WorkerCoordinate "worker-slot"', 'coerce'),
+        ('worker commitment role substitution', 'WorkerInput.WorkerCommitment "session-command" -> WorkerInput.WorkerCommitment "checkpoint"', 'coerce'),
+        ('worker generation coercion', 'Int -> WorkerInput.WorkflowGeneration', 'coerce'),
+        ('worker page size substitution', 'WorkerInput.AssignmentPageSize -> WorkerInput.EventPageSize', 'coerce'),
+        ('objective active boolean substitution', 'Bool -> WorkerInput.ObjectiveActivity', 'id'),
         ('review trigger/resolution substitution', 'Review.TriggerKey -> Review.ResolutionKey', 'coerce'),
         ('review dependency/document substitution', 'Review.DependencyName -> Review.DocumentId', 'coerce'),
         ('review raw key coercion', 'Text -> Review.TriggerKey', 'coerce'),
@@ -503,6 +539,8 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         ('generation coercion', 'Natural -> Decision.DecisionGeneration', 'coerce'),
         ('unrelated digest', 'Decision.ProgramParameterDigest -> Decision.DecisionPreparationId', 'id'),
         ('unrelated generation', 'Counter.AttemptCount "selection-calls" -> Decision.DecisionGeneration', 'id')]:
+        if not selected(label + ' ' + signature):
+            continue
         result = compile('bypass :: ' + signature + '\nbypass = ' + expression + '\n')
         assert result.returncode != 0 and 'Not in scope' not in result.stderr, (label, result.stderr)
         print('opaque boundary: ' + label + ' substitution refused: passed', flush=True)
@@ -518,6 +556,8 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         ('Decision.DecisionPreparationId', 'Text'),
         ('Decision.DecisionSlotLabel', 'Text'),
         ('Decision.DecisionGeneration', 'Natural')]:
+        if not selected(kind):
+            continue
         result = compile('bypass :: ' + representation + ' -> ' + kind + '\nbypass = ' + kind + '\n')
         assert result.returncode != 0 and kind.split('.')[-1] in result.stderr, (kind, result.stderr)
         assert any(fragment in result.stderr.lower() for fragment in ['not in scope', 'does not export', 'illegal term-level use']), (kind, result.stderr)
@@ -534,6 +574,8 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         assert result.returncode != 0 and native in result.stderr and 'match' in result.stderr, result.stderr
         print('opaque boundary: listener ' + field + ' retains native identity: passed', flush=True)
     for kind, operation in CASES:
+        if not selected(kind):
+            continue
         if operation == 'parse':
             body = 'bypass :: Aeson.Value -> Parser (' + kind + ')\nbypass = Aeson.genericParseJSON Aeson.defaultOptions\n'
         elif operation == 'render':
@@ -546,6 +588,8 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         print('opaque boundary: ' + kind + ' generic ' + operation + ' refused: passed', flush=True)
 
     for kind, view in [('Declaration.ValidatedRouterDeclaration', 'Declaration.RouterDeclarationView'), ('Evidence.ValidatedPinnedDiff', 'Evidence.PinnedDiffView')]:
+        if not selected(kind):
+            continue
         result = compile('bypass :: ' + view + ' -> ' + kind + '\nbypass = ' + kind + '\n')
         assert result.returncode != 0, (kind, 'constructor is public')
         assert kind.split('.')[-1].split()[0] in result.stderr and any(fragment in result.stderr.lower() for fragment in ['not in scope', 'does not export', 'illegal term-level use']), (kind, result.stderr)

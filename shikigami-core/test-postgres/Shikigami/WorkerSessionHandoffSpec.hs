@@ -32,6 +32,7 @@ import Shikigami.WorkerSession.Checkpoint qualified as Checkpoint
 import Shikigami.WorkerSession.Handoff qualified as Handoff
 import Shikigami.WorkerSession.Identity (assignmentChildWorkflowIdV2, sessionWorkflowId, sessionWorkflowName)
 import Shikigami.WorkerSession.Input (InstructionText, parseInstructionText)
+import Shikigami.WorkerSession.Input qualified as WorkerInput
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Transfer
 import Shikigami.WorkerSession.Types
@@ -91,7 +92,7 @@ tests fixture =
           latest.owner @?= successor
           (_, follow) <- expectRight =<< run env (Store.acceptMessage access established.revision (fixtureRevision 1) (fixtureOperationId "new-assignment") (instruction 2))
           (_, started) <- expectRight =<< run env (Store.startAssignment access (advanceRevision established.revision) (fixtureRevision 1) (fixtureOperationId "new-start") follow.assignmentId)
-          started.childWorkflowId @?= Just (assignmentChildWorkflowIdV2 intent.sessionId (fixtureAgentName "successor") follow.assignmentId).unWorkflowId,
+          started.childWorkflowId @?= Just (assignmentChildWorkflowIdV2 intent.sessionId (fixtureAgentName "successor") follow.assignmentId),
       testCase "a fenced workspace cannot establish ownership while an accepted assignment remains active" $
         withTransferFixture fixture False \env admission access owner -> do
           (_, message) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send") (instruction 1))
@@ -102,7 +103,7 @@ tests fixture =
           run env (Handoff.resumeHandoff owner.services (sessionIdFor admission)) >>= (@?= Right Handoff.HandoffPending)
           readIORef owner.ownershipUpdates >>= (@?= 0)
           pending <- current env admission
-          (_, receipt) <- expectRight =<< run env (Store.recordResult access pending.revision (fixtureRevision 0) (fixtureOperationId "finish") (AssignmentResult V1 message.assignmentId AssignmentSucceeded Nothing (Aeson.String "retained artifact") ["artifact-1"]))
+          (_, receipt) <- expectRight =<< run env (Store.recordResult access pending.revision (fixtureRevision 0) (fixtureOperationId "finish") (AssignmentResult V1 message.assignmentId AssignmentSucceeded Nothing (Aeson.String "retained artifact") [artifactReference "artifact-1"]))
           after <- current env admission
           after.phase @?= Transferring
           after.activeAssignment @?= Nothing
@@ -121,7 +122,7 @@ tests fixture =
           (_, message) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send") (instruction 1))
           drive >>= (@?= Suspended)
           started <- expectRight =<< run env (Store.readAssignment access message.assignmentId)
-          child <- maybe (assertFailure "missing mapping" >> fail "missing mapping") (pure . WorkflowId) started.childWorkflowId
+          child <- maybe (assertFailure "missing mapping" >> fail "missing mapping") pure started.childWorkflowId
           completed <- run env (runChildWorkflow options Agent.agentRunWorkflowName child (Agent.agentRunWorkflow dependencies Nothing))
           output <- case completed of Completed (Right result) -> pure result.behaviorOutput; _ -> assertFailure (show completed) >> fail "child failed"
           pending <- current env admission
@@ -152,7 +153,7 @@ tests fixture =
       testCase "fence proof substitution refuses without advancing ownership" $
         withTransferFixture fixture False \env admission access owner -> do
           intent <- expectRight =<< request env admission owner
-          let proof = FenceProof V1 (workspaceRef & #resource .~ "another-resource") intent.operationId (transferFingerprint intent) (fixtureRevision 0) (fixtureRevision 1) "foreign-proof"
+          let proof = FenceProof V1 (workspaceRef & #resource .~ "another-resource") intent.operationId (transferFingerprint intent) (fixtureRevision 0) (fixtureRevision 1) (fixtureProviderReceipt "foreign-proof")
           run env (Store.retainTransferFence access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId "foreign-proof") intent.operationId (FencedAndSettled proof)) >>= (@?= Left SessionBindingConflict)
           state <- current env admission
           state.epoch @?= (fixtureRevision 0)
@@ -221,7 +222,7 @@ withTransferFixture fixture loseAcknowledgement callback = withConfiguredFixture
           else do
             writeIORef fence (Just intent)
             pending <- readIORef inFlight
-            pure (if pending then FenceUnresolved else FencedAndSettled (FenceProof V1 intent.workspace intent.operationId (transferFingerprint intent) intent.oldEpoch intent.newEpoch "fixture-settled-proof"))
+            pure (if pending then FenceUnresolved else FencedAndSettled (FenceProof V1 intent.workspace intent.operationId (transferFingerprint intent) intent.oldEpoch intent.newEpoch (fixtureProviderReceipt "fixture-settled-proof")))
       admitWrite resource session actor epoch operation = do
         stored <- run env (Store.inspectSession session) >>= expectRight
         intent <- readIORef fence
@@ -279,3 +280,6 @@ fixtureInstruction value = either (error . show) id (parseInstructionText value)
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+fixtureProviderReceipt :: Text -> WorkerInput.ProviderReceipt
+fixtureProviderReceipt = either (error . show) id . WorkerInput.parseProviderReceipt

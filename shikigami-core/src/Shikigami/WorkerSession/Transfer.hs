@@ -26,6 +26,7 @@ import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
+import Shikigami.WorkerSession.Input
 import Shikigami.WorkerSession.Types (ObjectiveRef, WorkerSessionId)
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 
@@ -51,10 +52,10 @@ data FenceProof = FenceProof
   { format :: !(FormatVersion "workspace-fence"),
     workspace :: !WorkspaceRef,
     operationId :: !OperationId,
-    fingerprint :: !Text,
+    fingerprint :: !(WorkerCommitment "workspace-fence"),
     oldEpoch :: !(StateRevision "worker-owner"),
     newEpoch :: !(StateRevision "worker-owner"),
-    receipt :: !Text
+    receipt :: !ProviderReceipt
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -67,7 +68,7 @@ data OwnershipReceipt = OwnershipReceipt
   { format :: !(FormatVersion "ownership-receipt"),
     objective :: !ObjectiveRef,
     operationId :: !OperationId,
-    fingerprint :: !Text,
+    fingerprint :: !(WorkerCommitment "ownership"),
     revision :: !(StateRevision "objective")
   }
   deriving stock (Eq, Show, Generic)
@@ -95,11 +96,11 @@ newtype OwnershipProvider = OwnershipProvider
     transfer :: TransferIntent -> FenceProof -> IO OwnershipOutcome
   }
 
-transferFingerprint :: TransferIntent -> Text
-transferFingerprint intent = versionedDigest "shikigami.worker-session-transfer/1" (toJSON intent)
+transferFingerprint :: TransferIntent -> WorkerCommitment "workspace-fence"
+transferFingerprint intent = workerCommitmentFor "shikigami.worker-session-transfer/1" (toJSON intent)
 
-ownershipFingerprint :: TransferIntent -> FenceProof -> Text
-ownershipFingerprint intent proof = versionedDigest "shikigami.worker-session-owner/1" (toJSON (intent, proof))
+ownershipFingerprint :: TransferIntent -> FenceProof -> WorkerCommitment "ownership"
+ownershipFingerprint intent proof = workerCommitmentFor "shikigami.worker-session-owner/1" (toJSON (intent, proof))
 
 matchesFence :: TransferIntent -> FenceProof -> Bool
 matchesFence intent proof =
@@ -109,7 +110,7 @@ matchesFence intent proof =
     && proof.fingerprint == transferFingerprint intent
     && proof.oldEpoch == intent.oldEpoch
     && proof.newEpoch == intent.newEpoch
-    && proof.receipt /= ""
+    && providerReceiptText proof.receipt /= ""
 
 matchesOwnership :: TransferIntent -> FenceProof -> OwnershipReceipt -> Bool
 matchesOwnership intent proof receipt =

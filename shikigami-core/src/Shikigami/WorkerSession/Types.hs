@@ -2,7 +2,7 @@
 
 -- | Continuing-session state is distinct from Kioku memory and Danwa epochs.
 -- Objective identifiers are consumer references to the separately owned store.
-module Shikigami.WorkerSession.Types where
+module Shikigami.WorkerSession.Types (module Shikigami.WorkerSession.Types, module Shikigami.WorkerSession.Input) where
 
 import Data.Aeson ((.!=), (.:), (.:?), (.=))
 import Data.Aeson qualified as Aeson
@@ -30,19 +30,11 @@ import Shikigami.StateRevision
 import Shikigami.WorkerSession.Input
 import Shikigami.WorkerSession.Position
 
-newtype WorkerSessionId = WorkerSessionId {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
-
-newtype AssignmentId = AssignmentId {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
-
-data ObjectiveRef = ObjectiveRef {provider :: !Text, key :: !Text}
+data ObjectiveRef = ObjectiveRef {provider :: !(WorkerCoordinate "objective-provider"), key :: !(WorkerCoordinate "objective-locator")}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data SessionScope = SessionScope {parent :: !Text, workerKey :: !Text}
+data SessionScope = SessionScope {parent :: !(WorkerCoordinate "parent-scope"), workerKey :: !(WorkerCoordinate "worker-slot")}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -71,7 +63,7 @@ instance FromJSON SessionAdmission where
 
 data SessionBinding = SessionBinding
   { sessionId :: !WorkerSessionId,
-    scopeDigest :: !Text,
+    scopeDigest :: !(WorkerCommitment "session-scope"),
     scope :: !SessionScope,
     objective :: !ObjectiveRef,
     parentIdentity :: !AgentIdentity,
@@ -80,7 +72,13 @@ data SessionBinding = SessionBinding
     admission :: !PayloadRef
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving anyclass (ToJSON)
+
+instance FromJSON SessionBinding where
+  parseJSON input = do
+    binding <- Aeson.genericParseJSON Aeson.defaultOptions input
+    unless (binding.sessionId == sessionIdForScopeDigest binding.scopeDigest) (fail "worker session identity does not match its retained scope commitment")
+    pure binding
 
 data SessionPhase = Idle | Active | Parked | Unresolved | Transferring | Failed | Cancelled
   deriving stock (Eq, Show, Generic)
@@ -114,7 +112,7 @@ instance FromJSON SessionState where
 
 data SessionListener = SessionListener
   { token :: !AwakeableId,
-    generation :: !Int,
+    generation :: !WorkflowGeneration,
     ownerName :: !WorkflowName,
     ownerId :: !WorkflowId,
     after :: !(StateRevision "worker-event")
@@ -144,7 +142,7 @@ instance FromJSON SessionListener where
 
 instance Show SessionListener where show _ = "SessionListener <protected>"
 
-data SessionWake = SessionWake {token :: !AwakeableId, generation :: !Int}
+data SessionWake = SessionWake {token :: !AwakeableId, generation :: !WorkflowGeneration}
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -197,27 +195,61 @@ data MessageReceipt = MessageReceipt
     sequence :: !(StateRevision "worker-message"),
     assignmentId :: !AssignmentId,
     operationId :: !OperationId,
-    fingerprint :: !Text,
+    fingerprint :: !(WorkerCommitment "session-command"),
     kind :: !MessageKind,
     input :: !PayloadRef,
     assignmentRevision :: !(StateRevision "objective-assignment"),
     epoch :: !(StateRevision "worker-owner"),
     phase :: !AssignmentPhase,
-    childWorkflowId :: !(Maybe Text),
+    childWorkflowId :: !(Maybe WorkflowId),
     executionId :: !(Maybe ExecutionId),
     context :: !(Maybe PayloadRef),
     permittedAliases :: !(Maybe [ModelAlias])
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON)
+
+instance ToJSON MessageReceipt where
+  toJSON value =
+    Aeson.object
+      [ "format" .= value.format,
+        "sessionId" .= value.sessionId,
+        "sequence" .= value.sequence,
+        "assignmentId" .= value.assignmentId,
+        "operationId" .= value.operationId,
+        "fingerprint" .= value.fingerprint,
+        "kind" .= value.kind,
+        "input" .= value.input,
+        "assignmentRevision" .= value.assignmentRevision,
+        "epoch" .= value.epoch,
+        "phase" .= value.phase,
+        "childWorkflowId" .= fmap (.unWorkflowId) value.childWorkflowId,
+        "executionId" .= value.executionId,
+        "context" .= value.context,
+        "permittedAliases" .= value.permittedAliases
+      ]
 
 instance FromJSON MessageReceipt where
   parseJSON = Aeson.withObject "MessageReceipt" \fields -> do
     context <- fields .:? "context"
     aliases <- fields .:? "permittedAliases"
-    message <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (KeyMap.insert "permittedAliases" (toJSON (aliases :: Maybe [ModelAlias])) (KeyMap.insert "context" (toJSON (context :: Maybe PayloadRef)) fields)))
+    message <-
+      MessageReceipt
+        <$> fields .: "format"
+        <*> fields .: "sessionId"
+        <*> fields .: "sequence"
+        <*> fields .: "assignmentId"
+        <*> fields .: "operationId"
+        <*> fields .: "fingerprint"
+        <*> fields .: "kind"
+        <*> fields .: "input"
+        <*> fields .: "assignmentRevision"
+        <*> fields .: "epoch"
+        <*> fields .: "phase"
+        <*> (fields .:? "childWorkflowId" >>= traverse (either (fail . show) pure . mkWorkflowId))
+        <*> fields .:? "executionId"
+        <*> pure context
+        <*> pure aliases
     unless (message.format == V1 && revisionNumber message.sequence < 10000 && message.assignmentId == assignmentIdFor message.sessionId message.sequence message.operationId) (fail "unsupported assignment receipt identity")
-    _ <- traverse (either (fail . show) pure . mkWorkflowId) message.childWorkflowId
     unless (if message.phase == Queued then isNothing message.childWorkflowId else isJust message.childWorkflowId) (fail "assignment child mapping is missing or premature")
     pure message
 
@@ -249,7 +281,7 @@ data AssignmentResult = AssignmentResult
     disposition :: !ResultDisposition,
     executionId :: !(Maybe ExecutionId),
     output :: !Aeson.Value,
-    artifacts :: ![Text]
+    artifacts :: ![ArtifactReference]
   }
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -261,7 +293,7 @@ data ResultReceipt = ResultReceipt
     sessionId :: !WorkerSessionId,
     assignmentId :: !AssignmentId,
     operationId :: !OperationId,
-    fingerprint :: !Text,
+    fingerprint :: !(WorkerCommitment "session-command"),
     disposition :: !ResultDisposition,
     output :: !PayloadRef,
     cursor :: !(StateRevision "worker-event")
@@ -298,22 +330,22 @@ data SessionError
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-scopeDigestFor :: SessionAdmission -> Text
-scopeDigestFor admission = versionedDigest "shikigami.worker-session-scope/1" (toJSON (admission.scope, admission.context.identity, admission.identity))
+scopeDigestFor :: SessionAdmission -> WorkerCommitment "session-scope"
+scopeDigestFor admission = workerCommitmentFor "shikigami.worker-session-scope/1" (toJSON (admission.scope, admission.context.identity, admission.identity))
 
 -- Deterministic session/assignment correlation coordinates are UUIDv5 values;
 -- they are not allocated directory or Kioku entity identifiers.
 sessionIdFor :: SessionAdmission -> WorkerSessionId
-sessionIdFor = WorkerSessionId . UUID.toText . UUID.generateNamed UUID.namespaceURL . nameBytes . ("shikigami.worker-session:" <>) . scopeDigestFor
+sessionIdFor = sessionIdForScopeDigest . scopeDigestFor
 
 assignmentIdFor :: WorkerSessionId -> StateRevision "worker-message" -> OperationId -> AssignmentId
-assignmentIdFor session sequence operation = AssignmentId (UUID.toText (UUID.generateNamed UUID.namespaceURL (nameBytes (versionedDigest "shikigami.worker-assignment/1" (toJSON (session, sequence, operation))))))
+assignmentIdFor session sequence operation = assignmentIdForDigest (toJSON (session, sequence, operation))
 
 validateAdmission :: SessionAdmission -> Either SessionError ()
 validateAdmission admission = do
   unless (admission.identity /= admission.context.identity) (Left SessionOwnerRefused)
   unless (admission.format == V1) (Left (SessionInputRefused "invalid session bounds"))
-  unless (all validKey [admission.scope.parent, admission.scope.workerKey, admission.objective.provider, admission.objective.key, agentNameText admission.worker, agentNameText admission.delegator.name]) (Left (SessionInputRefused "invalid session scope or objective reference"))
+  unless (all validKey [workerCoordinateText admission.scope.parent, workerCoordinateText admission.scope.workerKey, workerCoordinateText admission.objective.provider, workerCoordinateText admission.objective.key, agentNameText admission.worker, agentNameText admission.delegator.name]) (Left (SessionInputRefused "invalid session scope or objective reference"))
   unless (isJust admission.context.executionRootId && isJust admission.context.sessionId) (Left (SessionInputRefused "continuing work requires an admitted root and parent memory session"))
   unless (length admission.context.lineage == depthInt admission.context.depth + 1 && length (nub admission.context.lineage) == length admission.context.lineage && take 1 (reverse admission.context.lineage) == [admission.delegator.name]) (Left (SessionInputRefused "delegation lineage does not match its parent and depth"))
   _ <- either (const (Left SessionOwnerRefused)) Right (identityText admission.context.identity)
@@ -327,6 +359,3 @@ validateAdmission admission = do
 validateInstruction :: Instruction -> Either SessionError ()
 validateInstruction instruction =
   unless (instruction.format == V1) (Left (SessionInputRefused "invalid instruction or objective/assignment revision"))
-
-instance CanonicalTypeName WorkerSessionId where
-  canonicalTypeName _ = "shikigami.WorkerSessionId.v1"
