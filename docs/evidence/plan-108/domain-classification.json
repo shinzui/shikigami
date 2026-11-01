@@ -8991,7 +8991,7 @@
         "shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs",
         "shikigami-core/src/Shikigami/AgentRun/Status.hs",
         "shikigami-core/test/Shikigami/DirectoryValueSpec.hs",
-        "shikigami-core/test-postgres/Shikigami/Directory/StoreSpec.hs",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs",
         "tests/types/opaque-values.py",
         "docs/evidence/plan-108/acceptance.md"
       ]
@@ -9015,7 +9015,7 @@
         "shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs",
         "shikigami-core/src/Shikigami/AgentRun/Status.hs",
         "shikigami-core/test/Shikigami/DirectoryValueSpec.hs",
-        "shikigami-core/test-postgres/Shikigami/Directory/StoreSpec.hs",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs",
         "tests/types/opaque-values.py",
         "docs/evidence/plan-108/acceptance.md"
       ]
@@ -9073,7 +9073,7 @@
         "shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs",
         "shikigami-core/src/Shikigami/AgentRun/Status.hs",
         "shikigami-core/test/Shikigami/DirectoryValueSpec.hs",
-        "shikigami-core/test-postgres/Shikigami/Directory/StoreSpec.hs",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs",
         "tests/types/opaque-values.py",
         "docs/evidence/plan-108/acceptance.md"
       ]
@@ -9114,7 +9114,7 @@
         "shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs",
         "shikigami-core/src/Shikigami/AgentRun/Status.hs",
         "shikigami-core/test/Shikigami/DirectoryValueSpec.hs",
-        "shikigami-core/test-postgres/Shikigami/Directory/StoreSpec.hs",
+        "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs",
         "tests/types/opaque-values.py",
         "docs/evidence/plan-108/acceptance.md"
       ]
