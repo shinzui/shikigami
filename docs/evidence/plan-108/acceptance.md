@@ -1202,7 +1202,20 @@ python3 -m unittest discover -s tools/style
 git diff --check
 ```
 
-The source bytes are retained in `closed-formats-source.json`. Native workflow
-compatibility and the final coherent build/census reconciliation remain pending
-for this candidate; no M2/M3 completion or reduced fresh violation count is claimed
-before those gates. The snapshot adds no Linux qualification.
+The source bytes are retained in `closed-formats-source.json`; all 51 hashes
+match. The native gate passes on `80f8f22` against `5628432`: no findings,
+replay-neutral verdict and 156 conformance checks. Exact reports are retained in
+`closed-formats-keiro-diff.json`, `closed-formats-replay-impact.json` and
+`closed-formats-keiro-gate.json`. The full build found two further prototype
+fixture consumers; their explicit V1 updates are committed in `0d93ca6`, without
+changing runtime workflow source.
+
+The full workspace build and fresh census pass on `0d93ca6`: 325 modules, 937
+declarations, fourteen entrypoints and 4,054 keys. Classification resolves all 23
+format findings, adds the closed scoped type and rebinds reviewed entries to the
+current source hashes. Totals: 3,214 compliant, 288 excluded and 552 violations,
+with zero missing/pending keys. The normal checker passes; resolved-only mode
+correctly fails with exactly 552 violations. All 24 infrastructure tests, 13 style
+tests and 14 upgrade-inventory mutation tests pass. The existing 124 frozen
+sources and 93 release items remain intact. M2/M3 and the guide remain open.
+This snapshot adds no Linux runtime qualification.

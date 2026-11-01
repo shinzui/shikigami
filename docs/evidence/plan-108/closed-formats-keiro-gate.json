@@ -1,0 +1,13 @@
+{
+  "sourceParent": "5628432",
+  "candidate": "80f8f22",
+  "finalBuildCandidate": "0d93ca6",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "command": "nix develop --no-write-lock-file -c just keiro-gate 5628432",
+  "exitCode": 0,
+  "nativeDiff": "closed-formats-keiro-diff.json",
+  "replayImpact": "closed-formats-replay-impact.json",
+  "generatedConformance": "156 checks passed",
+  "limitations": "No native findings; replay-neutral. Valid format 1 bytes, identities, steps, order and effects remain unchanged. Unsupported versions now refuse before typed record construction. The follow-up commit changes only two prototype fixture callers and the source snapshot; runtime workflow source is identical. No first-release exception or Linux runtime qualification is claimed."
+}

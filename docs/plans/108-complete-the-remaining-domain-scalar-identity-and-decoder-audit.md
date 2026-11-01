@@ -58,7 +58,7 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 
 
 - [x] M1a: Deliver the schema-2 census and independent coverage/freshness checker; all 24 positive/mutation tests pass, and the checker detects the current incomplete classification.
-- [x] M1b (2026-11-01): Classify all 4,053 declaration/member keys across the complete coherent census. Coverage/freshness check passes with zero missing or pending entries; all 24 checker tests pass. The inventory records 3,190 compliant entries, 288 exclusions and 575 explicit findings. See the M1 acceptance checkpoint in `docs/evidence/plan-108/acceptance.md`.
+- [x] M1b (2026-11-01): Complete semantic classification. Latest coherent census on `0d93ca6`: all 4,054 keys classified; 3,214 compliant, 288 exclusions and 552 explicit findings. Coverage/freshness and all 24 checker tests pass with zero missing or pending entries. The initial M1 checkpoint covered 4,053 keys before M2 added the closed format type.
 - [ ] M2: Resolve applicable scalar/identity/decoder findings in cohesive concept batches and verify actual refusal, rollback and recovery behavior.
 - [ ] M3: Accept the refreshed classification with zero unresolved violations, passing final behavioral evidence, and an updated guide disposition.
 
@@ -85,11 +85,11 @@ workspace and agent contracts: 625 additional keys. Current inventory coverage i
 remain explicit; source/interface/tool hashes and evidence paths validate before
 the checker refuses the remaining 2,372 missing keys. No runtime sources change.
 
-M1 is accepted on the unchanged `abb2cf0` source/build snapshot: all 4,053
-declaration/member keys are classified with authority, rationale and disposition.
-The normal coverage/freshness check and all 24 infrastructure tests pass. The
-resolved-only check correctly refuses the 575 remaining findings. M2 and M3 stay
-open; complete inventory coverage is not remediation or final guide acceptance.
+M1 was accepted on the `abb2cf0` snapshot with all 4,053 keys classified. After
+the first inventory-complete M2 batch, the coherent `0d93ca6` build/census has
+4,054 classified keys and 552 remaining findings. Normal coverage/freshness and
+all 24 infrastructure tests pass; resolved-only acceptance correctly fails.
+M2 and M3 stay open; complete inventory coverage is not final guide acceptance.
 
 Process-profile, Objective, cleanup/listing, directory, sink, HTTP acceptance and
 workspace binding/file/transfer read boundaries now have owning transactional
@@ -328,10 +328,10 @@ holds this durable owner boundary; it does not exempt the remaining scalars.
 ## Outcomes & Retrospective
 
 
-M1 is complete: the entire 4,053-key inventory and its source/build/tool
-freshness check pass, as do all 24 infrastructure tests. The completed review
-records 575 findings for M2; the normal checker permits these explicit findings,
-while resolved-only acceptance correctly fails. Earlier tested owner/value
+M1 is complete and refreshed: the entire 4,054-key inventory and its
+source/build/tool freshness check pass, as do all 24 infrastructure tests. The
+closed-format batch resolves 23 of the initial 575 findings, leaving 552 explicit
+findings for M2. Resolved-only acceptance correctly fails. Earlier tested owner/value
 remediations remain recorded in [the current evidence](../evidence/plan-108/acceptance.md).
 M2, M3 and the frozen guide disposition remain open. FRIC-36 and FRIC-37 remain
 logged for triage when the plan completes.
@@ -657,3 +657,13 @@ PostgreSQL and 135 public compiler controls, including actual owning ignored-rea
 rollback and exact repair for execution/session state. Native compatibility and
 coherent build/census reconciliation remain pending before those findings are
 marked resolved. See `docs/evidence/plan-108/closed-formats-source.json`.
+
+
+M2 closed-format reconciliation (2026-11-01): native gate passes on `80f8f22`
+against `5628432` with no findings, replay-neutral verdict and 156 conformance
+checks. The two prototype fixture consumers are updated in `0d93ca6`; the full
+workspace build and fresh census pass there (325 modules, 937 declarations,
+4,054 keys). All 23 format findings are resolved and the new closed scoped type
+is classified. Normal coverage passes with 552 findings; resolved-only acceptance
+correctly fails. The 124-source/93-item upgrade inventory and its 14 mutation
+tests, 13 style tests and 24 classification tests pass. M2/M3 remain open.
