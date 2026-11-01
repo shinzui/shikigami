@@ -58,7 +58,7 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 
 
 - [x] M1a: Deliver the schema-2 census and independent coverage/freshness checker; all 24 positive/mutation tests pass, and the checker detects the current incomplete classification.
-- [ ] M1b: Complete semantic classification of every declaration/member. Current coherent snapshot: 1,681 of 4,053 keys reviewed (41% inventory coverage); 2,372 keys across 113 source modules remain. Every entry needs authority, rationale and disposition; known violations remain explicit.
+- [x] M1b (2026-11-01): Classify all 4,053 declaration/member keys across the complete coherent census. Coverage/freshness check passes with zero missing or pending entries; all 24 checker tests pass. The inventory records 3,190 compliant entries, 288 exclusions and 575 explicit findings. See the M1 acceptance checkpoint in `docs/evidence/plan-108/acceptance.md`.
 - [ ] M2: Resolve applicable scalar/identity/decoder findings in cohesive concept batches and verify actual refusal, rollback and recovery behavior.
 - [ ] M3: Accept the refreshed classification with zero unresolved violations, passing final behavioral evidence, and an updated guide disposition.
 
@@ -85,11 +85,11 @@ workspace and agent contracts: 625 additional keys. Current inventory coverage i
 remain explicit; source/interface/tool hashes and evidence paths validate before
 the checker refuses the remaining 2,372 missing keys. No runtime sources change.
 
-Implementation is under way. The schema-2 census and coverage/freshness checker
-pass 24 positive/mutation tests against a successful full GHC 9.12.4 macOS build.
-The current census has 4,053 declaration/member keys. Semantic classification
-covers 1,681 keys: 1,379 compliant entries, 89 exclusions and 213 explicit violations;
-2,372 keys remain unreviewed, and both coverage modes correctly refuse completion.
+M1 is accepted on the unchanged `abb2cf0` source/build snapshot: all 4,053
+declaration/member keys are classified with authority, rationale and disposition.
+The normal coverage/freshness check and all 24 infrastructure tests pass. The
+resolved-only check correctly refuses the 575 remaining findings. M2 and M3 stay
+open; complete inventory coverage is not remediation or final guide acceptance.
 
 Process-profile, Objective, cleanup/listing, directory, sink, HTTP acceptance and
 workspace binding/file/transfer read boundaries now have owning transactional
@@ -328,13 +328,13 @@ holds this durable owner boundary; it does not exempt the remaining scalars.
 ## Outcomes & Retrospective
 
 
-Partial implementation acceptance is recorded in
-[the current evidence](../evidence/plan-108/acceptance.md): the coverage tooling,
-the named owner-decoding paths, closed policy format, one-off scope and checked
-decision preparation coordinates pass focused checks. The complete
-classification, 68 unresolved violations, remaining owners and M3 acceptance remain
-unfinished; all three milestone checkboxes stay open and the frozen guide stays
-deferred. FRIC-36 remains logged for triage when the plan completes.
+M1 is complete: the entire 4,053-key inventory and its source/build/tool
+freshness check pass, as do all 24 infrastructure tests. The completed review
+records 575 findings for M2; the normal checker permits these explicit findings,
+while resolved-only acceptance correctly fails. Earlier tested owner/value
+remediations remain recorded in [the current evidence](../evidence/plan-108/acceptance.md).
+M2, M3 and the frozen guide disposition remain open. FRIC-36 and FRIC-37 remain
+logged for triage when the plan completes.
 
 The prior upgrade work is in
 [plan107](107-adopt-current-haskell-and-service-architecture-practices.md) and
@@ -640,3 +640,12 @@ coverage/freshness checker, separating M1 discovery from M3 resolution, specifyi
 isolated PostgreSQL and compiler acceptance commands, and linking the governing
 ADRs directly. This revises the implementation instructions, not its completion
 status or the accepted upgrade scope.
+
+
+Revision note (2026-11-01): finish M1 semantic coverage before resuming M2.
+The final pass reviews remaining configuration, execution/capability, objective,
+worker-session, attestation, practice-review, flow, routing, sink and adapter
+contracts. A final primitive-member review corrects five missed scalar findings
+and distinguishes unused metadata, native replay content and diagnostics. All
+4,053 keys are now covered without exemptions based solely on persistence or
+primitive type; 575 concrete findings remain explicit.

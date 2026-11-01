@@ -1126,3 +1126,38 @@ rule selection, retained provisioning phases, repository/path/commitment domains
 activity routing/deduplication and raw turn references remain explicit findings.
 Exact payload content, native handles, refusal diagnostics and real outgoing status
 reports are classified according to their actual consumers.
+
+
+## M1 accepted: complete source-bound semantic inventory (2026-11-01)
+
+The complete coherent census remains the successful `abb2cf0` GHC 9.12.4 arm64
+macOS build: 324 library modules, 936 declarations, fourteen role entrypoints and
+4,053 declaration/member keys. Classification now covers every key: 3,190
+compliant, 288 not applicable and 575 explicit violations. There are zero missing,
+extra or pending entries. Each entry names its actual source/consumer authority,
+boundary, invariant, rationale and evidence. Typed composition does not certify
+nested scalar or live authorization invariants; retained records are not exempt
+merely because they are stored.
+
+The final primitive-member review records five further findings (registered task
+selection, compliance verdict, two finite confidence fields and an untyped route
+proposal). It also makes native replay-content metadata, unused declaration
+metadata, outgoing SQL/report projections and diagnostic observations explicit.
+The query report decoder parses its top-level identity/phase/verdict/reasons; it
+is not claimed to re-admit all raw evidence report JSON.
+
+Executed on this unchanged source/interface snapshot:
+
+```bash
+python3 -m unittest discover -s tools/domain -p 'test_*.py'
+python3 tools/domain/check_classification.py --classification docs/evidence/plan-108/domain-classification.json --census docs/evidence/keiro-0.22/domain-declarations.json
+python3 tools/domain/check_classification.py --classification docs/evidence/plan-108/domain-classification.json --census docs/evidence/keiro-0.22/domain-declarations.json --require-resolved
+git diff --check
+```
+
+Results: all 24 infrastructure tests pass. Normal checker passes with 4,053
+classified keys and fresh source/build/tool hashes. Resolved-only checker fails
+with exactly `unresolved violations: 575`, as required while M2 remains open.
+Whitespace check passes. This documentation-only milestone needs no source
+rebuild and claims no new runtime or Linux qualification. M2 remediation and M3
+final acceptance/guide disposition remain unfinished.
