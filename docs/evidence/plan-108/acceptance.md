@@ -610,3 +610,16 @@ representation changes in this batch. The existing native gate reports remain
 historical applicable evidence. The next coherent full build/census refresh must
 reconcile source-bound classification before using these results as audit
 coverage. M1/M2/M3 remain open.
+
+
+The coherent full `cabal build all --enable-tests -j1` and schema-2 census pass
+on `80f36e6`, with 323 modules, 925 module declarations, fourteen executable
+entrypoints and 4,027 audit keys. The source snapshot hashes match. Semantic
+rereview of all seven changed existing owner modules preserves their applicable
+entries, resolves 17 explicit policy violations and classifies the five new
+private scalar keys. Classification now covers 764 entries: 686 compliant,
+27 not applicable and 51 violations. All 3,263 unreviewed keys remain missing;
+both checker modes correctly refuse completion. No blanket exemption or hash-only
+renewal was applied. All 24 domain-tool mutation tests and the 124-source/93-item
+upgrade inventory audit with its 21 mutation controls pass. Frozen source hashes,
+release identities and the deferred guide disposition remain unchanged.

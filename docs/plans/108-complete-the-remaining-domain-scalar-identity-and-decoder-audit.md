@@ -63,8 +63,8 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 
 Implementation is under way. The schema-2 census and coverage/freshness checker
 pass 24 positive/mutation tests against a successful full GHC 9.12.4 macOS build.
-The current census has 4,022 declaration/member keys. Semantic classification
-covers 759 keys: 664 compliant entries, 27 exclusions and 68 explicit violations;
+The current census has 4,027 declaration/member keys. Semantic classification
+covers 764 keys: 686 compliant entries, 27 exclusions and 51 explicit violations;
 3,263 keys remain unreviewed, and both coverage modes correctly refuse completion.
 
 Process-profile, Objective, cleanup/listing, directory, sink, HTTP acceptance and
@@ -101,8 +101,11 @@ commitment inputs. It passes 77 focused unit, 131 PostgreSQL and 92 compiler
 controls, including negative pinned-policy rollback/recovery and an actual retry
 at the maximum Int ceiling. Negative previously unchecked limits now refuse;
 invalid historical snapshots are not rewritten or claimed replay-compatible.
-See `profile-policy-source.json`; coherent census reconciliation follows this
-source checkpoint. Profile/payload commitments and schema remain open findings.
+The coherent full build on `80f36e6` and refreshed census pass: 323 modules,
+925 module declarations and 4,027 keys. Seventeen policy findings are resolved;
+the five new private scalar keys are classified. See the source snapshot at
+`docs/evidence/plan-108/profile-policy-source.json`. Profile/payload commitments
+and schema remain open findings.
 
 The native workflow gate passes on `400cdc0` against `af76f1b`, with no findings
 and a replay-neutral native verdict. Exact reports accompany the current evidence.
