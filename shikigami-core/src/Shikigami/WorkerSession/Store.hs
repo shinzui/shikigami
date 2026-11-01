@@ -580,7 +580,7 @@ subscribeEvents access@(SessionAccess session _ _) expected epoch operation list
       status <- lookupAwakeableStatusTx (awakeableIdToUuid current.token)
       pure (ref, current, status == Just Pending)
   live <- fmap catMaybes $ forM existing \(ref, current, pending) -> do
-    generation <- currentGeneration (WorkflowName current.ownerName) (WorkflowId current.ownerId)
+    generation <- currentGeneration current.ownerName current.ownerId
     pure (if pending && generation == current.generation then Just ref else Nothing)
   notify <- prepareListenerNotification session listener
   mutate
@@ -602,20 +602,20 @@ subscribeEvents access@(SessionAccess session _ _) expected epoch operation list
 validateListener :: (SessionReadEffects es) => SessionListener -> Eff es AwakeableRow
 validateListener listener = do
   row <- lookupAwakeable (awakeableIdToUuid listener.token) >>= maybe (throwIO (SessionAbort SessionBindingConflict)) pure
-  generation <- currentGeneration (WorkflowName listener.ownerName) (WorkflowId listener.ownerId)
-  unless (row.ownerWorkflowName == listener.ownerName && row.ownerWorkflowId == listener.ownerId && listener.generation == generation) (throwIO (SessionAbort SessionBindingConflict))
+  generation <- currentGeneration listener.ownerName listener.ownerId
+  unless (WorkflowName row.ownerWorkflowName == listener.ownerName && WorkflowId row.ownerWorkflowId == listener.ownerId && listener.generation == generation) (throwIO (SessionAbort SessionBindingConflict))
   pure row
 
 prepareListenerNotification :: (SessionReadEffects es) => WorkerSessionId -> SessionListener -> Eff es (Transaction ())
 prepareListenerNotification session listener = do
-  generation <- currentGeneration (WorkflowName listener.ownerName) (WorkflowId listener.ownerId)
+  generation <- currentGeneration listener.ownerName listener.ownerId
   row <- lookupAwakeable (awakeableIdToUuid listener.token)
   if generation /= listener.generation || isNothing row
     then pure (pure ())
     else do
       _ <- validateListener listener
       now <- liftIO getCurrentTime
-      append <- prepareJournalAppend (WorkflowName listener.ownerName) (WorkflowId listener.ownerId) listener.generation (StepRecorded (awakeableStepPrefix <> awakeableIdText listener.token) (toJSON session) now)
+      append <- prepareJournalAppend listener.ownerName listener.ownerId listener.generation (StepRecorded (awakeableStepPrefix <> awakeableIdText listener.token) (toJSON session) now)
       pure do
         transitioned <- completeAwakeableTx (awakeableIdToUuid listener.token) (toJSON session) now
         status <- lookupAwakeableStatusTx (awakeableIdToUuid listener.token)

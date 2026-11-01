@@ -26,7 +26,7 @@ import Pgmq (MessageId)
 import Kioku.Id (SessionId)
 import Numeric.Natural (Natural)
 import GHC.Generics qualified as Generic
-import Keiro.Workflow.Types (WorkflowId)
+import Keiro.Workflow.Types (WorkflowId, WorkflowName)
 import Shikigami.Agent.Delegate.Depth qualified as Depth
 import Shikigami.Agent.ExpertiseKey qualified as Expertise
 import Shikigami.Agent.Name qualified as Name
@@ -65,6 +65,7 @@ import Shikigami.PracticeReview qualified as Review
 import Shikigami.PracticeReview.Evidence qualified as Evidence
 import Shikigami.Router.Declaration qualified as Declaration
 import Shikigami.Workspace.Instructions qualified as Instructions
+import Shikigami.WorkerSession.Types qualified as WorkerSession
 import Shikigami.Workspace.Types qualified as Workspace
 import Shikigami.Workspace.Store qualified as WorkspaceStore
 import Shikigami.Workspace.ProcessPolicy qualified as ProcessPolicy
@@ -75,7 +76,11 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''currentFormat :: Format.FormatVersion "execution-state"
+POSITIVE = '''listenerWorkflow :: WorkerSession.SessionListener -> WorkflowId
+listenerWorkflow value = value.ownerId
+listenerDefinition :: WorkerSession.SessionListener -> WorkflowName
+listenerDefinition value = value.ownerName
+currentFormat :: Format.FormatVersion "execution-state"
 currentFormat = Format.V1
 executionFormat :: Transcript.ExecutionState -> Format.FormatVersion "execution-state"
 executionFormat value = value.format
@@ -410,6 +415,10 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         result = compile('bypass :: Ledger.RunRequestRow -> ' + target + '\nbypass value = value.' + field + '\n')
         assert result.returncode != 0 and 'Not in scope' not in result.stderr, result.stderr
         print('opaque boundary: accepted ' + field + ' retains native identity: passed', flush=True)
+    for field, native in [('ownerId', 'WorkflowId'), ('ownerName', 'WorkflowName')]:
+        result = compile('bypass :: WorkerSession.SessionListener -> Text\nbypass value = value.' + field + '\n')
+        assert result.returncode != 0 and native in result.stderr and 'match' in result.stderr, result.stderr
+        print('opaque boundary: listener ' + field + ' retains native identity: passed', flush=True)
     for kind, operation in CASES:
         if operation == 'parse':
             body = 'bypass :: Aeson.Value -> Parser (' + kind + ')\nbypass = Aeson.genericParseJSON Aeson.defaultOptions\n'

@@ -123,3 +123,10 @@ qualification. Investigation and qualification evidence are recorded in
 - `mori://shinzui/kikan-en`, project-relative
   `kikan-en-contract/src/Kikan/En/Action.hs` (artifact-level URI pending), owns the
   released capability-tool action and exact proof verification contract.
+
+
+The event listener retains native Keiro WorkflowName and WorkflowId through
+generation lookup, awakeable ownership checks and journal notification. Its JSON
+codec keeps the existing text representation, including historical spellings;
+this nominal change adds no new identifier grammar or authority. The owner still
+checks the exact token, workflow coordinates and generation before mutation.

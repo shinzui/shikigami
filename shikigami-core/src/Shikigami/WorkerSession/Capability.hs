@@ -30,6 +30,7 @@ import Data.List (find, nub)
 import Data.Text qualified as Text
 import Effectful (Eff)
 import Effectful.Exception (trySync)
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kikan.En.Action (AgentAction (InvokeCapabilityTool), mkCapabilityToolTarget)
 import Kioku.Id (SessionId)
 import Shikigami.Action.Authorization (ActionAuthorizer (..))
@@ -367,7 +368,7 @@ commandSession = \case
 -- command input and must belong to the admitted parent run.
 subscribeCommand :: CoordinationHost -> ActionAuthorizer -> CoordinationGrant -> OperationId -> WorkerSessionId -> SessionListener -> Eff AppEffects (Either SessionError (StateRevision "worker-event"))
 subscribeCommand host authorizer (CoordinationGrant scope) operation session listener
-  | listener.ownerId /= scope.run.runId = pure (Left SessionOwnerRefused)
+  | listener.ownerId /= WorkflowId scope.run.runId = pure (Left SessionOwnerRefused)
   | otherwise =
       authorizeExact authorizer scope "subscribe" (toJSON (operation, session, listener)) >>= \case
         Left err -> pure (Left err)

@@ -14,6 +14,7 @@ import Data.Text qualified as AliasText
 import Data.Text qualified as AssignmentText
 import Data.Text qualified as Text
 import Data.Time (addUTCTime)
+import Data.UUID qualified as UUID
 import Effectful (Eff, runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
 import Keiro.Workflow (PatchId (..), Workflow, WorkflowId (..), WorkflowJournalEvent (..), WorkflowName (..), WorkflowOutcome (Completed, ContinuedAsNew, Suspended), WorkflowRunOptions (..), appendJournalEntry, continueAsNew, loadStepIndex, runWorkflowWith)
@@ -55,7 +56,7 @@ import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RouterWorkflowSpec qualified as Fixture
-import Shikigami.StateRevision (StateRevision, parseRevision)
+import Shikigami.StateRevision (StateRevision, initialRevision, parseRevision)
 import Shikigami.WorkerSession.Capability
 import Shikigami.WorkerSession.Handoff (TransferServices (..))
 import Shikigami.WorkerSession.Identity (sessionWorkflowId, sessionWorkflowName)
@@ -79,7 +80,12 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "WorkerSessionCapability"
-    [ testCase "admitted commands retain acknowledgements across objective changes and reject fresh revoked writes" $
+    [ testCase "native listener owner identities retain historical wire bytes" do
+        let listener = Session.SessionListener (AwakeableId UUID.nil) 3 (WorkflowName "listener-name") (WorkflowId "listener:historical") initialRevision
+            historical = "{\"after\":0,\"generation\":3,\"ownerId\":\"listener:historical\",\"ownerName\":\"listener-name\",\"token\":\"00000000-0000-0000-0000-000000000000\"}"
+        Aeson.encode listener @?= historical
+        Aeson.eitherDecode historical @?= Right listener,
+      testCase "admitted commands retain acknowledgements across objective changes and reject fresh revoked writes" $
         withCapabilityFixture fixture \env admission host scope authorizer revoked _ -> do
           grant <- permit env host scope authorizer
           let session = Session.sessionIdFor admission

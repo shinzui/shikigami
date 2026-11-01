@@ -4,7 +4,7 @@
 -- Objective identifiers are consumer references to the separately owned store.
 module Shikigami.WorkerSession.Types where
 
-import Data.Aeson ((.!=), (.:), (.:?))
+import Data.Aeson ((.!=), (.:), (.:?), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.List (nub)
@@ -13,7 +13,7 @@ import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID
 import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Workflow.Awakeable (AwakeableId)
-import Keiro.Workflow.Types (mkWorkflowId)
+import Keiro.Workflow.Types (WorkflowId (..), WorkflowName (..), mkWorkflowId)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), assertMayDelegate, checkCycle, checkDepth)
 import Shikigami.Agent.Delegate.Depth (depthInt)
@@ -25,7 +25,7 @@ import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Execution.Request (ExecutionRequest)
 import Shikigami.Execution.Transcript (ExecutionId, PayloadRef)
 import Shikigami.FormatVersion (FormatVersion (V1))
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Input
 import Shikigami.WorkerSession.Position
@@ -115,12 +115,32 @@ instance FromJSON SessionState where
 data SessionListener = SessionListener
   { token :: !AwakeableId,
     generation :: !Int,
-    ownerName :: !Text,
-    ownerId :: !Text,
+    ownerName :: !WorkflowName,
+    ownerId :: !WorkflowId,
     after :: !(StateRevision "worker-event")
   }
   deriving stock (Eq, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+
+-- Runtime-owned identities stay native through the owner checks. The retained
+-- JSON is the existing text adapter, including historical spellings.
+instance ToJSON SessionListener where
+  toJSON SessionListener {token, generation, ownerName, ownerId, after} =
+    Aeson.object
+      [ "token" .= token,
+        "generation" .= generation,
+        "ownerName" .= ownerName.unWorkflowName,
+        "ownerId" .= ownerId.unWorkflowId,
+        "after" .= after
+      ]
+
+instance FromJSON SessionListener where
+  parseJSON = Aeson.withObject "SessionListener" \fields ->
+    SessionListener
+      <$> fields .: "token"
+      <*> fields .: "generation"
+      <*> (WorkflowName <$> fields .: "ownerName")
+      <*> (WorkflowId <$> fields .: "ownerId")
+      <*> fields .: "after"
 
 instance Show SessionListener where show _ = "SessionListener <protected>"
 

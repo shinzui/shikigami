@@ -69,7 +69,7 @@ runWorkers configured authorizer run policy = interpret \_ -> \case
             Left err -> pure (Left err)
             _ -> do
               (token, await) <- awakeableNamed (StepName ("workers-events-" <> label))
-              (WorkflowName ownerName, WorkflowId ownerId) <- currentWorkflow
+              (ownerName, ownerId) <- currentWorkflow
               generation <- currentRunGeneration
               subscribed <- step (StepName ("workers-subscribe-" <> label)) do
                 key <- operation label "subscribe"
