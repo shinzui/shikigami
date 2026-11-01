@@ -58,8 +58,8 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 
 
 - [x] M1a: Deliver the schema-2 census and independent coverage/freshness checker; all 24 positive/mutation tests pass, and the checker detects the current incomplete classification.
-- [x] M1b (2026-11-01): Complete semantic classification. Latest coherent census on `be89d58`: all 4,060 keys classified; 3,225 compliant, 288 exclusions and 547 explicit findings. Coverage/freshness and all 24 checker tests pass with zero missing or pending entries. The initial M1 checkpoint covered 4,053 keys before M2 added the closed format type.
-- [ ] M2: Resolve applicable scalar/identity/decoder findings in cohesive concept batches and verify actual refusal, rollback and recovery behavior. Since complete M1 acceptance, 28 findings are resolved; 547 remain explicit in the current fresh inventory.
+- [x] M1b (2026-11-01): Complete semantic classification. Latest coherent census on `760ca05`: all 4,060 keys classified; 3,259 compliant, 288 exclusions and 513 explicit findings. Coverage/freshness and all 24 checker tests pass with zero missing or pending entries. The initial M1 checkpoint covered 4,053 keys before M2 added the closed format type.
+- [ ] M2: Resolve applicable scalar/identity/decoder findings in cohesive concept batches and verify actual refusal, rollback and recovery behavior. Since complete M1 acceptance, 62 findings are fixed or source-corrected; 513 remain explicit in the current fresh inventory.
 - [ ] M3: Accept the refreshed classification with zero unresolved violations, passing final behavioral evidence, and an updated guide disposition.
 
 Execution order correction (2026-10-31): finish M1b's remaining inventory before
@@ -342,9 +342,8 @@ changing M2/M3 acceptance.
 
 
 M1 is complete and refreshed: the entire 4,060-key inventory and its
-source/build/tool freshness check pass, as do all 24 infrastructure tests. The
-closed-format and resume-policy batches resolve 28 of the initial 575 findings,
-leaving 547 explicit findings for M2. Resolved-only acceptance correctly fails. Earlier tested owner/value
+source/build/tool freshness check pass, as do all 24 infrastructure tests. The accepted M2 batches fix or source-correct 62 of the initial 575 findings,
+leaving 513 explicit findings for M2. Resolved-only acceptance correctly fails. Earlier tested owner/value
 remediations remain recorded in [the current evidence](../evidence/plan-108/acceptance.md).
 M2, M3 and the frozen guide disposition remain open. FRIC-36 and FRIC-37 remain
 logged for triage when the plan completes.
@@ -711,3 +710,14 @@ Existing complete wire fixtures deliberately use opaque short digest labels, and
 all 48 attestation contract tests pass. Concrete computed ProfileDigest and
 PayloadDigest checks remain intact. The correction adds no runtime abstraction
 or admission rule and does not waive the remaining scalar/identity obligations.
+
+
+M2 run-inspection reconciliation (2026-11-01): the complete workspace build
+and fresh census pass on `760ca05` (325 modules, 940 declarations, 14 entrypoints
+and 4,060 keys). Native callback/CLI findings are resolved. Source review also
+corrects four keys for the existing nominal CredentialRef failure attribution
+and foreign EvidenceCursor; neither has an additional scalar grammar. Normal
+coverage/freshness and all 24 infrastructure tests pass with 3,259 compliant,
+288 exclusions and 513 explicit findings; resolved-only acceptance correctly
+fails. The authorization envelope's invariant description is corrected to its
+actual version 2 without marking that primitive field resolved. M2/M3 stay open.

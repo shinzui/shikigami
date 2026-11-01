@@ -1294,3 +1294,19 @@ while computed ProfileDigest/PayloadDigest retain their actual checked invariant
 substitution refusals and the expression executing the actual private CLI
 `sessionStep`. All four controls pass. This is compiler/pure-decoder evidence,
 not a live CLI/database test. Coherent full build/census reconciliation is pending.
+
+
+The complete workspace build and census refresh pass on `760ca05`: 325 modules,
+940 declarations, 14 entrypoints and 4,060 keys. Source/interface/tool freshness
+and all 24 checker tests pass. Both source findings are resolved. Four further
+source-supported corrections retain the existing CredentialRef and EvidenceCursor
+newtypes: the first labels a typed credential failure, while the second passes an
+opaque reader-issued cursor back unchanged under bounded pagination/repetition
+checks. Neither defines an extra grammar to enforce. No runtime change is made
+for these corrections. The authorization-envelope description is also corrected
+to its actual version 2; its primitive-field finding remains open.
+
+Current totals: 3,259 compliant, 288 exclusions, 513 violations, zero missing or
+pending entries. Resolved-only mode correctly exits 1 with `unresolved violations:
+513`. The frozen guide remains deferred and M2/M3 remain open. This refresh makes
+no new runtime, PostgreSQL, identity-migration or Linux qualification claim.
