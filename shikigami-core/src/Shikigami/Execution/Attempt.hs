@@ -7,6 +7,7 @@ module Shikigami.Execution.Attempt where
 import Data.Text qualified as Text
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Shikigami.Execution.Claim
+import Shikigami.Execution.Coordinate
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Resources (AttemptRequest (..))
 import Shikigami.Execution.SelectionStore (CallLimits, CallOutcome, CallReceipt (..))
@@ -30,7 +31,7 @@ instance FromJSON JobReference where
     unless (reference.format == V1) (fail "unsupported execution job version")
     pure reference
 
-data ExecutionWake = ExecutionWake {token :: !AwakeableId, generation :: !Int}
+data ExecutionWake = ExecutionWake {token :: !AwakeableId, generation :: !ExecutionGeneration}
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -38,7 +39,7 @@ instance Show ExecutionWake where show _ = "ExecutionWake <protected>"
 
 data ModelCallPreparation = ModelCallPreparation
   { limits :: !CallLimits,
-    fingerprint :: !Text
+    fingerprint :: !(ExecutionDigest "input")
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -62,7 +63,7 @@ data ExecutionAttempt = ExecutionAttempt
     executionId :: !ExecutionId,
     operationId :: !OperationId,
     request :: !AttemptRequest,
-    fingerprint :: !Text,
+    fingerprint :: !(ExecutionDigest "attempt"),
     call :: !(Maybe CallReceipt),
     wake :: !PayloadRef,
     phase :: !AttemptPhase,
@@ -79,7 +80,7 @@ data ExecutionAttempt = ExecutionAttempt
 instance FromJSON ExecutionAttempt where
   parseJSON value = do
     attempt <- genericParseJSON defaultOptions value
-    unless (attempt.format == V1 && attempt.request.operationId == attempt.operationId && not (Text.null attempt.fingerprint) && Text.length attempt.fingerprint <= 256) (fail "unsupported execution attempt identity")
+    unless (attempt.format == V1 && attempt.request.operationId == attempt.operationId && not (Text.null (executionDigestText attempt.fingerprint)) && Text.length (executionDigestText attempt.fingerprint) <= 256) (fail "unsupported execution attempt identity")
     unless (maybe True (\receipt -> receipt.request == attempt.request) attempt.call) (fail "execution call receipt differs from its attempt")
     when (attempt.phase `elem` [Claimed, DispatchStarted, AttemptUncertain, AttemptSuperseded]) do
       unless (attempt.generation > initialRevision && isJust attempt.owner && isJust attempt.expiresAt) (fail "execution claim has no owner")

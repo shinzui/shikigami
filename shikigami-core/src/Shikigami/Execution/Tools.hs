@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RankNTypes #-}
 
 -- | Trusted factories receive operation coordinates outside model arguments.
@@ -34,7 +35,7 @@ import Shikumi.Tool (ToolError (..), ToolRegistry, mkDynTool, mkRegistry, regist
 -- trusted factory receives those coordinates only when preparing actual work.
 data NativeToolFactory = NativeToolFactory
   { describe :: !(ExecutionSnapshot -> IO (Either ExecutionError [BoundTool])),
-    prepare :: !(ExecutionSnapshot -> OperationContext -> Maybe Text -> IO (Either ExecutionError [BoundTool]))
+    prepare :: !(ExecutionSnapshot -> OperationContext -> Maybe (ExecutionCoordinate "tool-name") -> IO (Either ExecutionError [BoundTool]))
   }
 
 data ExecutionToolMenu = ExecutionToolMenu
@@ -53,7 +54,7 @@ staticNativeTools registry =
       prepare = \_ _ requested -> pure (Right (filter (\tool -> maybe True (== tool.binding.name) requested) tools))
     }
   where
-    tools = [BoundTool (ToolBinding (someToolName tool) "native/1" (versionedDigest "shikigami.tool-schema/1" (someToolSchema tool)) UncertainEffect UnreportedInvoiceCost) tool | tool <- registryTools registry]
+    tools = [BoundTool (ToolBinding (executionCoordinate (someToolName tool)) (executionCoordinate "native/1") (executionDigestFor "shikigami.tool-schema/1" (someToolSchema tool)) UncertainEffect UnreportedInvoiceCost) tool | tool <- registryTools registry]
 
 describeExecutionTools :: Log.Logger -> ActionAuthorizer -> CapabilityProviderRegistry -> NativeToolFactory -> ExecutionSnapshot -> IO (Either ExecutionError ExecutionToolMenu)
 describeExecutionTools logger authorizer providers factory snapshot = do
@@ -63,14 +64,14 @@ describeExecutionTools logger authorizer providers factory snapshot = do
     Right tools -> withBoundTools logger authorizer providers snapshot Nothing Nothing tools \accepted ->
       pure (ExecutionToolMenu (toJSON (registryBaikai (mkRegistry (map (.tool) accepted)))) (map (.binding) accepted))
 
-withExecutionTools :: Log.Logger -> ActionAuthorizer -> CapabilityProviderRegistry -> NativeToolFactory -> ExecutionSnapshot -> DispatchContext -> Maybe Text -> ([BoundTool] -> IO a) -> IO (Either ExecutionError a)
+withExecutionTools :: Log.Logger -> ActionAuthorizer -> CapabilityProviderRegistry -> NativeToolFactory -> ExecutionSnapshot -> DispatchContext -> Maybe (ExecutionCoordinate "tool-name") -> ([BoundTool] -> IO a) -> IO (Either ExecutionError a)
 withExecutionTools logger authorizer providers factory snapshot context requested use = do
   native <- factory.prepare snapshot context.operation requested
   case native of
     Left err -> pure (Left err)
     Right tools -> withBoundTools logger authorizer providers snapshot (Just context) requested tools use
 
-withBoundTools :: Log.Logger -> ActionAuthorizer -> CapabilityProviderRegistry -> ExecutionSnapshot -> Maybe DispatchContext -> Maybe Text -> [BoundTool] -> ([BoundTool] -> IO a) -> IO (Either ExecutionError a)
+withBoundTools :: Log.Logger -> ActionAuthorizer -> CapabilityProviderRegistry -> ExecutionSnapshot -> Maybe DispatchContext -> Maybe (ExecutionCoordinate "tool-name") -> [BoundTool] -> ([BoundTool] -> IO a) -> IO (Either ExecutionError a)
 withBoundTools logger authorizer providers snapshot context requested tools use = case resolveAgentIdentity snapshot.identity of
   Left _ -> pure (Left ExecutionIdentityConflict)
   Right subject
@@ -87,7 +88,7 @@ withBoundTools logger authorizer providers snapshot context requested tools use 
               then pure (Left (ExecutionPolicyRefused "durable tools collide with the offered menu"))
               else do
                 result <- withCapabilityOverlays logger authorizer providers (scope subject) (mkResolvedCapabilitySet generic) (mkRegistry (map (.tool) allTools)) \registry _ ->
-                  let bound tool = case [binding | BoundTool {binding} <- allTools, binding.name == someToolName tool] of
+                  let bound tool = case [binding | BoundTool {binding} <- allTools, executionCoordinateText binding.name == someToolName tool] of
                         [binding] -> Right (BoundTool binding tool)
                         _ -> (\binding -> BoundTool binding tool) <$> overlayBinding tool
                    in case traverse bound (registryTools registry) of
@@ -100,10 +101,10 @@ withBoundTools logger authorizer providers snapshot context requested tools use 
     selected = filter needed (resolvedCapabilities snapshot.capabilities)
     governed = filter (durableAdapterInstalled providers) selected
     generic = filter (not . durableAdapterInstalled providers) selected
-    needed descriptor = maybe True (\name -> any (\tool -> overlayToolName descriptor.capability tool.name == name) descriptor.tools) requested
-    validNative tools = length tools <= 128 && length (nub (map (\bound -> bound.binding.name) tools)) == length tools && all (\bound -> bound.binding.name == someToolName bound.tool && bound.binding.schemaDigest == versionedDigest "shikigami.tool-schema/1" (someToolSchema bound.tool) && not (Text.null bound.binding.revision)) tools
+    needed descriptor = maybe True (\name -> any (\tool -> executionCoordinate (overlayToolName descriptor.capability tool.name) == name) descriptor.tools) requested
+    validNative tools = length tools <= 128 && length (nub (map (\bound -> bound.binding.name) tools)) == length tools && all (\bound -> executionCoordinateText bound.binding.name == someToolName bound.tool && bound.binding.schemaDigest == executionDigestFor "shikigami.tool-schema/1" (someToolSchema bound.tool) && not (Text.null (executionCoordinateText bound.binding.revision))) tools
     overlayBinding tool = case [(descriptor, entry) | descriptor <- selected, entry <- descriptor.tools, overlayToolName descriptor.capability entry.name == someToolName tool] of
-      [(descriptor, entry)] -> Right (ToolBinding (someToolName tool) (capabilityIdText descriptor.capability <> ":" <> capabilityRevisionText descriptor.revision) (versionedDigest "shikigami.tool-schema/1" (someToolSchema tool)) (recoveryFor entry.operationClass) UnreportedInvoiceCost)
+      [(descriptor, entry)] -> Right (ToolBinding (executionCoordinate (someToolName tool)) (executionCoordinate (capabilityIdText descriptor.capability <> ":" <> capabilityRevisionText descriptor.revision)) (executionDigestFor "shikigami.tool-schema/1" (someToolSchema tool)) (recoveryFor entry.operationClass) UnreportedInvoiceCost)
       _ -> Left (ExecutionPolicyRefused "leased tool is outside the admitted descriptor")
     recoveryFor Observation = RepeatableObservation
     recoveryFor IdempotentMutation = IdempotentEffect
@@ -111,7 +112,7 @@ withBoundTools logger authorizer providers snapshot context requested tools use 
 
 -- Description is data-only. Only accepted dispatch receives a preparation
 -- callback, whose actual invocation must recheck exact authority and ownership.
-prepareGovernedTools :: CapabilityProviderRegistry -> ExecutionSnapshot -> Maybe DispatchContext -> Maybe Text -> [CapabilityDescriptor] -> IO (Either ExecutionError [BoundTool])
+prepareGovernedTools :: CapabilityProviderRegistry -> ExecutionSnapshot -> Maybe DispatchContext -> Maybe (ExecutionCoordinate "tool-name") -> [CapabilityDescriptor] -> IO (Either ExecutionError [BoundTool])
 prepareGovernedTools registry snapshot context requested descriptors = do
   groups <- traverse prepareDescriptor descriptors
   pure (concat <$> sequence groups)
@@ -121,18 +122,18 @@ prepareGovernedTools registry snapshot context requested descriptors = do
     prepareDescriptor descriptor = case resolveDurableAdapter registry descriptor of
       Nothing -> pure refused
       Just adapter -> do
-        results <- traverse (prepareContract descriptor adapter) (filter (\contract -> maybe True (== overlayToolName descriptor.capability contract.name) requested) adapter.contracts)
+        results <- traverse (prepareContract descriptor adapter) (filter (\contract -> maybe True (== executionCoordinate (overlayToolName descriptor.capability (executionCoordinateText contract.name))) requested) adapter.contracts)
         pure (sequence results)
     prepareContract descriptor adapter contract = do
       raw <- case context of
-        Nothing -> pure (Right (mkDynTool contract.name contract.description contract.schema (\_ -> pure (Left (ToolRunFailed contract.name "description cannot execute")))))
+        Nothing -> pure (Right (mkDynTool (executionCoordinateText contract.name) contract.description contract.schema (\_ -> pure (Left (ToolRunFailed (executionCoordinateText contract.name) "description cannot execute")))))
         Just dispatch
           | dispatch.operation.executionId /= snapshot.executionId || dispatch.generation <= initialRevision -> pure refused
           | otherwise -> adapter.prepare snapshot dispatch contract.name
       pure do
         tool <- raw
-        unless (someToolName tool == contract.name && someToolDescription tool == contract.description && someToolSchema tool == contract.schema) refused
+        unless (someToolName tool == executionCoordinateText contract.name && someToolDescription tool == contract.description && someToolSchema tool == contract.schema) refused
         namespaced <- either (const refused) Right (namespaceCapabilityTools descriptor.capability [tool])
         case namespaced of
-          [actual] -> Right (BoundTool (ToolBinding (someToolName actual) (capabilityIdText descriptor.capability <> ":" <> capabilityRevisionText descriptor.revision) (versionedDigest "shikigami.tool-schema/1" contract.schema) contract.recovery contract.invoiceCost) actual)
+          [actual] -> Right (BoundTool (ToolBinding (executionCoordinate (someToolName actual)) (executionCoordinate (capabilityIdText descriptor.capability <> ":" <> capabilityRevisionText descriptor.revision)) (executionDigestFor "shikigami.tool-schema/1" contract.schema) contract.recovery contract.invoiceCost) actual)
           _ -> refused

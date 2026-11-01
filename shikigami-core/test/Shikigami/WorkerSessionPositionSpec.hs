@@ -13,7 +13,7 @@ import Shikigami.WorkerSession.Capability (WorkerCommand (InspectWorker, ReadWor
 import Shikigami.WorkerSession.Input
 import Shikigami.WorkerSession.Input qualified as WorkerInput
 import Shikigami.WorkerSession.Position
-import Shikigami.WorkerSession.Types (WorkerSessionId (value), workerSessionId)
+import Shikigami.WorkerSession.Types (WorkerSessionId, workerSessionId)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 

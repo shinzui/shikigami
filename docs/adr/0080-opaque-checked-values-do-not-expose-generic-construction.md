@@ -37,6 +37,15 @@ codecs. Keep Generic on ordinary records that need it. This is an abstraction
 rule for checked/opaque values, not a ban on generic record access or codecs.
 Do not add an unsafe instance or public constructor to restore compilation.
 
+Opaque values also must not export a real record selector for their private
+representation: a client can use that selector in a record update. ExecutionId,
+WorkerSessionId and AssignmentId use private positional representations. Their
+existing `.value` reads are supplied by read-only HasField instances; no record
+update or Generic construction is available. This preserves the mapped total
+identity codecs and the checked assignment decoder without exposing a setter.
+Compiler clients enable record-field disambiguation and check the actual update
+expression. An ambiguous selector error does not demonstrate opacity.
+
 ## Alternatives rejected
 
 Trusting callers to select the safe parser leaves the invariant unenforced.

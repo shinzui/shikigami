@@ -41,6 +41,7 @@ import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider (DurableAdapter (..), DurableToolContract (..))
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
+import Shikigami.Execution.Coordinate
 import Shikigami.Execution.Identity (OperationId, operationIdText)
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
@@ -125,25 +126,26 @@ fileAdapter :: FileMode -> IO () -> FileRuntime -> DurableAdapter
 fileAdapter mode checkpoint runtime =
   DurableAdapter
     (fileDescriptor mode)
-    [ DurableToolContract "read" readDescription readSchema RepeatableObservation NoInvoiceCost,
-      DurableToolContract "replace" replaceDescription replaceSchema IdempotentEffect NoInvoiceCost
+    [ DurableToolContract (executionCoordinate "read") readDescription readSchema RepeatableObservation NoInvoiceCost,
+      DurableToolContract (executionCoordinate "replace") replaceDescription replaceSchema IdempotentEffect NoInvoiceCost
     ]
-    ( \snapshot dispatch name ->
-        pure
-          ( Right
-              ( mkDynTool
-                  name
-                  (description name)
-                  (if name == "read" then readSchema else replaceSchema)
-                  ( \input -> unsafeEff_ do
-                      result <- if name == "read" then readFileFor mode runtime snapshot dispatch input else replaceFileFor mode checkpoint runtime snapshot dispatch input
-                      case result of
-                        Left FileEffectUnresolved -> throwIO (userError "workspace effect requires reconciliation")
-                        Left FileEffectUnavailable -> throwIO (userError "workspace effect evidence is unavailable")
-                        _ -> pure (either (const (Left (ToolRunFailed name "workspace operation refused"))) (Right . textToolOutput . Encoding.decodeUtf8 . Lazy.toStrict . Aeson.encode) result)
+    ( \snapshot dispatch requestedName ->
+        let name = executionCoordinateText requestedName
+         in pure
+              ( Right
+                  ( mkDynTool
+                      name
+                      (description name)
+                      (if name == "read" then readSchema else replaceSchema)
+                      ( \input -> unsafeEff_ do
+                          result <- if name == "read" then readFileFor mode runtime snapshot dispatch input else replaceFileFor mode checkpoint runtime snapshot dispatch input
+                          case result of
+                            Left FileEffectUnresolved -> throwIO (userError "workspace effect requires reconciliation")
+                            Left FileEffectUnavailable -> throwIO (userError "workspace effect evidence is unavailable")
+                            _ -> pure (either (const (Left (ToolRunFailed name "workspace operation refused"))) (Right . textToolOutput . Encoding.decodeUtf8 . Lazy.toStrict . Aeson.encode) result)
+                      )
                   )
               )
-          )
     )
   where
     description "read" = readDescription
@@ -180,12 +182,12 @@ withAccess mode runtime snapshot dispatch logical input perform = catch work (\(
           accepted <- owned (Execution.inspectOperation dispatch.operation.operationId)
           case (loaded, accepted, snapshot.workspace) of
             (Right (retained, _), Right (Just operation), Just admission)
-              | admission.filePolicy == Just (filePolicyFor mode) && retained == snapshot && fileDescriptor mode `elem` resolvedCapabilities snapshot.capabilities && dispatch.operation.executionId == snapshot.executionId && dispatch.operation.fingerprint == operation.fingerprint && dispatch.operation.scopeDigest == operation.specification.scopeDigest && operation.specification.name == wireName logical && operation.specification.kind == ToolOperation && dispatch.operation.idempotencyKey == operationKey dispatch.operation.operationId -> do
+              | admission.filePolicy == Just (filePolicyFor mode) && retained == snapshot && fileDescriptor mode `elem` resolvedCapabilities snapshot.capabilities && dispatch.operation.executionId == snapshot.executionId && dispatch.operation.fingerprint == operation.fingerprint && dispatch.operation.scopeDigest == operation.specification.scopeDigest && operation.specification.name == executionCoordinate (wireName logical) && operation.specification.kind == ToolOperation && dispatch.operation.idempotencyKey == dispatch.operation.operationId -> do
                   arguments <- owned (Execution.readReplayPayload @ToolOperationInput permit "operation-input" operation.input)
                   binding <- runTx runtime (Store.inspectWorkspaceTx admission.workspace)
                   case (arguments, binding) of
                     (Right tool, Right (Right (Just (bound, Ready))))
-                      | tool.invocation.arguments == input && tool.invocation.name == wireName logical && tool.binding `elem` snapshot.toolBindings && tool.binding.name == wireName logical && tool.binding.revision == "workspace.edit:" <> fileRevision mode && tool.binding.schemaDigest == versionedDigest "shikigami.tool-schema/1" (if logical == "read" then readSchema else replaceSchema) && tool.binding.recovery == (if logical == "read" then RepeatableObservation else IdempotentEffect) && tool.binding.invoiceCost == NoInvoiceCost && admission.bindingDigest == workspaceBindingDigest bound && admission.runId == snapshot.runId && admission.assignmentId == snapshot.selection.assignmentId && matchesWorkspaceAdmission bound admission && admission.owner == snapshot.identity && Just admission.rootId == snapshot.selection.rootId -> do
+                      | tool.invocation.arguments == input && tool.invocation.name == executionCoordinate (wireName logical) && tool.binding `elem` snapshot.toolBindings && tool.binding.name == executionCoordinate (wireName logical) && tool.binding.revision == executionCoordinate ("workspace.edit:" <> fileRevision mode) && tool.binding.schemaDigest == executionDigestFor "shikigami.tool-schema/1" (if logical == "read" then readSchema else replaceSchema) && tool.binding.recovery == (if logical == "read" then RepeatableObservation else IdempotentEffect) && tool.binding.invoiceCost == NoInvoiceCost && admission.bindingDigest == workspaceBindingDigest bound && admission.runId == snapshot.runId && admission.assignmentId == snapshot.selection.assignmentId && matchesWorkspaceAdmission bound admission && admission.owner == snapshot.identity && Just admission.rootId == snapshot.selection.rootId -> do
                           let check = do
                                 lifecycle <- runtime.lifecycle snapshot
                                 if isLeft lifecycle
@@ -253,7 +255,7 @@ withAccess mode runtime snapshot dispatch logical input perform = catch work (\(
                   let next = toolContinuation tool assistant
                       output =
                         if receipt.state == EditRefused
-                          then ToolReturned [TextBlock (renderToolError (ToolRunFailed "replace" "workspace operation refused"))] True
+                          then ToolReturned [TextBlock (renderToolError (ToolRunFailed "replace" "workspace operation refused"))] ToolFailed
                           else RichToolReturned (captureToolOutput (textToolOutput (Encoding.decodeUtf8 (Lazy.toStrict (Aeson.encode receipt)))))
                       original = Attempt.AttemptClaim (Attempt.JobReference V1 snapshot.executionId receipt.operationId receipt.attemptId) owner receipt.generation
                   accepted <- owned (Execution.recordLateExecutionReceipt permit state.revision original (Attempt.AttemptResult output next Nothing))
@@ -529,17 +531,17 @@ publishFileReceipt env operationId = protectRecovery do
     Right completed -> do
       let routing = registration.routing
           original = registration.receipt
-          key = operationIdText operationId
+          key = operationId
       (state, retained, _) <- recoveryExecution env (Execution.inspectExecution routing.executionId) >>= maybe (recoveryAbort FileEffectUnresolved) pure
       operation <- recoveryExecution env (Execution.inspectOperation operationId) >>= maybe (recoveryAbort FileEffectUnresolved) pure
       -- Match the executor's immutable specification and original claim before
       -- publishing any outcome. No caller-supplied continuation is accepted.
-      unless (validProcessRouting routing && routing.identity == retained.identity && retained.rootId == Just binding.request.rootId && registration.operation == OperationContext routing.executionId operationId key operation.fingerprint operation.specification.scopeDigest && operation.executionId == routing.executionId && operation.specification.kind == ToolOperation && operation.specification.name == "overlay__workspace-edit__replace" && operation.specification.recovery == IdempotentEffect && operation.input.digest == routing.inputDigest) (recoveryAbort FileEffectUnresolved)
+      unless (validProcessRouting routing && routing.identity == retained.identity && retained.rootId == Just binding.request.rootId && registration.operation == OperationContext routing.executionId operationId key operation.fingerprint operation.specification.scopeDigest && operation.executionId == routing.executionId && operation.specification.kind == ToolOperation && operation.specification.name == executionCoordinate "overlay__workspace-edit__replace" && operation.specification.recovery == IdempotentEffect && operation.input.digest == routing.inputDigest) (recoveryAbort FileEffectUnresolved)
       actual <- recoveryExecution env (Execution.inspectExecutionAttempt original.attemptId) >>= maybe (recoveryAbort FileEffectUnresolved) pure
       unless (actual.executionId == routing.executionId && actual.operationId == operationId && actual.owner == Just registration.claimOwner && actual.generation == original.generation && isNothing actual.call) (recoveryAbort FileEffectUnresolved)
       let reference = Attempt.JobReference V1 routing.executionId operationId original.attemptId
           claim = Attempt.AttemptClaim reference registration.claimOwner original.generation
-          outcome = if completed.state == EditRefused then ToolReturned [TextBlock (renderToolError (ToolRunFailed "replace" "workspace operation refused"))] True else RichToolReturned (captureToolOutput (textToolOutput (Encoding.decodeUtf8 (Lazy.toStrict (Aeson.encode completed)))))
+          outcome = if completed.state == EditRefused then ToolReturned [TextBlock (renderToolError (ToolRunFailed "replace" "workspace operation refused"))] ToolFailed else RichToolReturned (captureToolOutput (textToolOutput (Encoding.decodeUtf8 (Lazy.toStrict (Aeson.encode completed)))))
           receipt = Attempt.AttemptResult outcome routing.next Nothing
           acknowledge = recoveryExecution env (Execution.publishExecutionWake reference) >> pure FileReceiptAcknowledged
       case actual.phase of

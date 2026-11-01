@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RankNTypes #-}
 
 -- | Private per-assignment provider registry. Both blocking and streaming calls
@@ -47,6 +48,7 @@ import Shikigami.Decision.Contract (ModelDescriptor (..), modelAliasText, versio
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Execution.AssignmentKey (assignmentIdFor, conversationAssignmentIdFor)
 import Shikigami.Execution.Attempt (ModelCallPreparation (..))
+import Shikigami.Execution.Coordinate
 import Shikigami.Execution.Counter (callOrdinalNumber)
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Quantity (parseResourceAmount)
@@ -89,8 +91,8 @@ resolvePinnedEnv env selection = do
   let effective = (effectiveBindingOptions env.profile binding & #apiKey .~ Options.apiKey selected.options)
   pure (binding, selected & #options .~ effective)
 
-requestFingerprint :: ExecutionSelection -> Context.Context -> Options.Options -> Text
-requestFingerprint selection context options = versionedDigest "shikigami.execution-model-request/1" (object ["assignment" .= selection.assignmentId, "selection" .= selection, "context" .= context, "options" .= (options & #apiKey .~ (Nothing) & #evidence .~ (Nothing) & #metadata .~ (Map.delete "shikigami_call_id" (Options.metadata options)))])
+requestFingerprint :: ExecutionSelection -> Context.Context -> Options.Options -> ExecutionDigest "input"
+requestFingerprint selection context options = executionDigestFor "shikigami.execution-model-request/1" (object ["assignment" .= selection.assignmentId, "selection" .= selection, "context" .= context, "options" .= (options & #apiKey .~ (Nothing) & #evidence .~ (Nothing) & #metadata .~ (Map.delete "shikigami_call_id" (Options.metadata options)))])
 
 -- Preparation performs no reservation or external model IO. Its result is
 -- admitted with the queue entry by the execution owner's transaction.
@@ -234,7 +236,7 @@ buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = c
                           else pure (Left Calls.CallIdentityConflict)
                       Nothing -> do
                         attemptId <- newAttemptId
-                        let request = Resources.AttemptRequest attemptId (operationIdWithPrefix ('m' :| "odel:") fingerprint) quantities policy
+                        let request = Resources.AttemptRequest attemptId (operationIdWithPrefix ('m' :| "odel:") (executionDigestText fingerprint)) quantities policy
                         admissionTime <- getCurrentTime
                         transaction (Calls.reserveSelectionCallTx selection limits request fingerprint admissionTime)
                     case admitted of
@@ -338,10 +340,10 @@ outcomeFor _failed evidence =
       -- ceiling; they never become zero usage or a refunded reservation.
       known = Map.mapMaybe (either (const Nothing) Just . parseResourceAmount) (Map.fromList (maybe [] (\n -> [(Resources.Tokens, n)]) knownTokens <> maybe [] (\n -> [(Resources.CostMicroUsd, n)]) knownCost))
       missing = [dimension | dimension <- [Resources.Tokens, Resources.CostMicroUsd], Map.notMember dimension known]
-   in Calls.CallOutcome Calls.CallTerminal known missing (Text.take 256 <$> (evidence >>= (Evidence.observedValue . (.observedModel)))) (Text.take 256 . (.callId) <$> evidence) Nothing
+   in Calls.CallOutcome Calls.CallTerminal known missing (providerCoordinate . Text.take 256 <$> (evidence >>= (Evidence.observedValue . (.observedModel)))) (providerCoordinate . Text.take 256 . (.callId) <$> evidence) Nothing
 
 unknownOutcome :: Maybe Evidence.ModelCallEvidence -> Calls.CallOutcome
-unknownOutcome evidence = Calls.CallOutcome Calls.CallTransportUnknown Map.empty [Resources.Tokens, Resources.CostMicroUsd] (Text.take 256 <$> (evidence >>= (Evidence.observedValue . (.observedModel)))) (Text.take 256 . (.callId) <$> evidence) Nothing
+unknownOutcome evidence = Calls.CallOutcome Calls.CallTransportUnknown Map.empty [Resources.Tokens, Resources.CostMicroUsd] (providerCoordinate . Text.take 256 <$> (evidence >>= (Evidence.observedValue . (.observedModel)))) (providerCoordinate . Text.take 256 . (.callId) <$> evidence) Nothing
 
 -- Production shares its process-owned pool. Focused consumers may use AppEnv's
 -- scoped store interpreter without inventing a second runtime owner.

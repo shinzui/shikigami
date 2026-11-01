@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Exact-revision provider lookup and run-scoped capability leases.
 --
 -- A provider registry is operator-owned live state. A resolved capability set is
@@ -63,6 +65,7 @@ import Shikigami.Capability.Catalog
 import Shikigami.Capability.Overlay (CapabilityDescriptor (..), CapabilityId, CapabilityOperationClass (..), CapabilityRevision, CapabilityToolDescriptor (..), ResolvedCapabilitySet, capabilityIdText, capabilityRevisionText, resolvedCapabilities)
 import Shikigami.Capability.Tools (CapabilityToolError, composeCapabilityToolsWithNames)
 import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Execution.Coordinate (ExecutionCoordinate, executionCoordinateText)
 import Shikigami.Execution.Policy.Types (RecoveryClass (..), ToolInvoiceCost)
 import Shikigami.Execution.Runner (DispatchContext)
 import Shikigami.Execution.Transcript (ExecutionError, ExecutionSnapshot)
@@ -455,7 +458,7 @@ lifecycleFields CapabilityScope {runId, principal, mode} CapabilityDescriptor {c
 -- | Descriptions contain no executable callbacks. Menu inspection cannot
 -- prepare an attempt or launch a provider effect.
 data DurableToolContract = DurableToolContract
-  { name :: !Text,
+  { name :: !(ExecutionCoordinate "tool-name"),
     description :: !Text,
     schema :: !Aeson.Value,
     recovery :: !RecoveryClass,
@@ -465,7 +468,7 @@ data DurableToolContract = DurableToolContract
 data DurableAdapter = DurableAdapter
   { descriptor :: !CapabilityDescriptor,
     contracts :: ![DurableToolContract],
-    prepare :: !(ExecutionSnapshot -> DispatchContext -> Text -> IO (Either ExecutionError SomeTool))
+    prepare :: !(ExecutionSnapshot -> DispatchContext -> ExecutionCoordinate "tool-name" -> IO (Either ExecutionError SomeTool))
   }
 
 -- | Explicit operator installation, separate from generic overlay factories.
@@ -483,13 +486,13 @@ installDurableAdapters adapters (CapabilityProviderRegistry generic existing) = 
         else case mkCapabilityCatalog [descriptor] of
           Left _ -> invalid
           Right _
-            | sort (map (\contract -> contract.name) adapter.contracts) /= sort (map (\tool -> tool.name) descriptor.tools) -> invalid
+            | sort (map (\contract -> executionCoordinateText contract.name) adapter.contracts) /= sort (map (\tool -> tool.name) descriptor.tools) -> invalid
             | length (nub (map (\contract -> contract.name) adapter.contracts)) /= length adapter.contracts -> invalid
             | not (all (\contract -> Text.length contract.description <= 1024 && Lazy.length (Aeson.encode contract.schema) <= 65536 && objectSchema contract.schema && recoveryMatches descriptor contract) adapter.contracts) -> invalid
             | otherwise -> Right (Map.insert (capability, revision, descriptorDigest descriptor) adapter registry)
     objectSchema (Aeson.Object _) = True
     objectSchema _ = False
-    recoveryMatches descriptor contract = case [tool.operationClass | tool <- descriptor.tools, tool.name == contract.name] of
+    recoveryMatches descriptor contract = case [tool.operationClass | tool <- descriptor.tools, tool.name == executionCoordinateText contract.name] of
       [Observation] -> contract.recovery == RepeatableObservation
       [IdempotentMutation] -> contract.recovery `elem` [IdempotentEffect, UncertainEffect]
       [IrreversibleEmission] -> contract.recovery == UncertainEffect

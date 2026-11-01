@@ -1,0 +1,9 @@
+{
+  "sourceRevision": "cd10844",
+  "since": "f00315f",
+  "command": "nix develop --no-write-lock-file -c just keiro-gate f00315f",
+  "status": "passed",
+  "findings": 0,
+  "replayVerdict": "replay-neutral",
+  "conformanceControls": 156
+}

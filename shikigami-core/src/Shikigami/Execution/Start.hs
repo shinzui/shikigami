@@ -104,7 +104,7 @@ admitSkillExecutionWithWorkspace loadWorkspace runtime describe assignment = do
                               selection = assignment.selection,
                               sanctionedProfile = assignment.sanctionedProfile,
                               instructions = SkillInstructions skill.name skill.description skill.body,
-                              initialContext = ReplayContext 2 (Just (skill.description <> maybe "" (instructionPrompt . (.instructions)) workspace)) (input.history <> [RequestTurn [TextBlock (skillRequestText skill input.request)] Nothing]),
+                              initialContext = ReplayContext RequestContext (Just (skill.description <> maybe "" (instructionPrompt . (.instructions)) workspace)) (input.history <> [RequestTurn [TextBlock (skillRequestText skill input.request)] Nothing]),
                               capabilities = assignment.capabilities,
                               offeredTools = toJSON ([] :: [Aeson.Value]),
                               policy,

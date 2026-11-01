@@ -70,6 +70,7 @@ import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
 import Shikigami.Agent.RunJob (RunRouteKind (..))
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Behavior.Input (triggerOnly)
+import Shikigami.Behavior.Provider.Coordinate qualified as ProviderValue
 import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv)
 import Shikigami.Behavior.Skill (SkillDir (..))
 import Shikigami.Behavior.StubProvider (stubApiProvider, stubModel)
@@ -84,6 +85,7 @@ import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Catalog qualified as ExecutionCatalog
 import Shikigami.Execution.Claim qualified as Claim
+import Shikigami.Execution.Coordinate qualified as ExecutionValue
 import Shikigami.Execution.Counter (AttemptCount, AttemptLimit, attemptNumber, parseAttemptCount, parseAttemptLimit)
 import Shikigami.Execution.Driver qualified as Driver
 import Shikigami.Execution.Executor qualified as Executor
@@ -150,7 +152,7 @@ tests fixture =
           access <- expectRight =<< run env (Store.authorizeReplay snapshot.executionId snapshot.identity (pure (Right ())))
           (frozen, state) <- expectRight =<< run env (Store.loadExecution access)
           state.cursor @?= (fixtureRevision 0)
-          frozen.instructions.name @?= "durable-fixture"
+          executionCoordinateText frozen.instructions.name @?= "durable-fixture"
           frozen.policy.maxModelTurns @?= (fixturePolicy 3)
           frozen.toolBindings @?= [observationBinding]
           case frozen.initialContext.messages of
@@ -203,7 +205,7 @@ tests fixture =
           let admission = WorkspaceAdmission (WorkspaceRef "shikigami.workspace/1" "fixture") ("sha256:" <> Text.replicate 64 "a") original.runId original.selection.assignmentId rootId original.identity (fixtureRevision 0) bundle Nothing
               snapshot = original & #workspace .~ Just admission & #initialContext . #systemPrompt .~ Just (instructionPrompt bundle) & #capabilities .~ Overlay.mkResolvedCapabilitySet [descriptor]
               descriptor = Overlay.CapabilityDescriptor capability revision [Overlay.CapabilityToolDescriptor "edit" Overlay.IdempotentMutation]
-              contract = Capability.DurableToolContract "edit" "Edit fixture." (object []) IdempotentEffect NoInvoiceCost
+              contract = Capability.DurableToolContract (executionCoordinate "edit") "Edit fixture." (object []) IdempotentEffect NoInvoiceCost
               adapter =
                 Capability.DurableAdapter
                   descriptor
@@ -212,16 +214,16 @@ tests fixture =
                       accepted.executionId @?= snapshot.executionId
                       dispatch.operation.executionId @?= snapshot.executionId
                       dispatch.attemptId @?= fixtureAttemptId "fixture-attempt"
-                      name @?= "edit"
+                      executionCoordinateText name @?= "edit"
                       modifyIORef' prepared (+ 1)
                       pure (Right tool)
                   )
               tool = mkDynTool "edit" "Edit fixture." (object []) (\_ -> unsafeEff_ (assertFailure "description invoked a mutation") >> pure (Right (ToolOutput.textToolOutput "unused")))
               native = Tools.NativeToolFactory (\_ -> pure (Right [])) (\_ _ _ -> pure (Right []))
-              logical = Runner.OperationContext snapshot.executionId (fixtureOperationId "fixture-operation") "fixture-operation" "fingerprint" "scope"
+              logical = Runner.OperationContext snapshot.executionId (fixtureOperationId "fixture-operation") (fixtureOperationId "fixture-operation") (ExecutionValue.executionDigest "fingerprint") (ExecutionValue.executionDigest "scope")
               dispatch = Runner.DispatchContext logical (fixtureAttemptId "fixture-attempt") (fixtureOwner "owner") (fixtureGeneration 1)
               describe registry accepted = Tools.describeExecutionTools Log.silentLogger denyAllActionAuthorizer registry native accepted
-              prepare registry context accepted = Tools.withExecutionTools Log.silentLogger denyAllActionAuthorizer registry native accepted context (Just (overlayToolName capability "edit")) (pure . map (.binding))
+              prepare registry context accepted = Tools.withExecutionTools Log.silentLogger denyAllActionAuthorizer registry native accepted context (Just (executionCoordinate (overlayToolName capability "edit"))) (pure . map (.binding))
           registry <- expectRight (Capability.installDurableAdapters [adapter] emptyCapabilityProviderRegistry)
           menu <- expectRight =<< describe registry snapshot
           readIORef prepared >>= (@?= 0)
@@ -232,7 +234,7 @@ tests fixture =
           bindings @?= menu.toolBindings
           readIORef prepared >>= (@?= 1)
           _ <- prepare registry (dispatch & #generation .~ (fixtureGeneration 0)) snapshot >>= \case Left _ -> pure (); Right _ -> assertFailure "invalid generation reached callback"
-          _ <- prepare registry (dispatch & #operation . #executionId .~ ExecutionId "wrong") snapshot >>= \case Left _ -> pure (); Right _ -> assertFailure "wrong execution reached callback"
+          _ <- prepare registry (dispatch & #operation . #executionId .~ executionIdentity "wrong") snapshot >>= \case Left _ -> pure (); Right _ -> assertFailure "wrong execution reached callback"
           _ <- describe registry (snapshot & #workspace .~ Nothing) >>= \case Left _ -> pure (); Right _ -> assertFailure "historical snapshot gained mutation authority"
           _ <- describe emptyCapabilityProviderRegistry snapshot >>= \case Left _ -> pure (); Right _ -> assertFailure "descriptor alone gained mutation authority"
           readIORef prepared >>= (@?= 1)
@@ -241,7 +243,7 @@ tests fixture =
           changedRegistry <- expectRight (Capability.installDurableAdapters [changedAdapter] emptyCapabilityProviderRegistry)
           _ <- prepare changedRegistry dispatch snapshot >>= \case Left _ -> pure (); Right _ -> assertFailure "changed invocation schema was admitted"
           let collision = mkDynTool (overlayToolName capability "edit") "native collision" (object []) (\_ -> pure (Right (ToolOutput.textToolOutput "unused")))
-              collisionBinding = ToolBinding (overlayToolName capability "edit") "native/1" (versionedDigest "shikigami.tool-schema/1" (object [])) UncertainEffect NoInvoiceCost
+              collisionBinding = ToolBinding (executionCoordinate (overlayToolName capability "edit")) (executionCoordinate "native/1") (ExecutionValue.executionDigestFor "shikigami.tool-schema/1" (object [])) UncertainEffect NoInvoiceCost
               collidingNative = Tools.NativeToolFactory (\_ -> pure (Right [Executor.BoundTool collisionBinding collision])) (\_ _ _ -> pure (Right []))
           _ <- Tools.describeExecutionTools Log.silentLogger denyAllActionAuthorizer registry collidingNative snapshot >>= \case Left _ -> pure (); Right _ -> assertFailure "native tool replaced the overlay"
           readIORef prepared >>= (@?= 1)
@@ -331,7 +333,7 @@ tests fixture =
               map (\operation -> operation.specification.kind) operations @?= [ModelSummary, ModelTurn]
               summaryInput <- expectRight =<< run env (Store.readReplayPayload @ModelOperationInput access "operation-input" summary.input)
               regularInput <- expectRight =<< run env (Store.readReplayPayload @ModelOperationInput access "operation-input" regular.input)
-              summaryInput.maxOutputTokens @?= Just 128
+              (policyNumber <$> summaryInput.maxOutputTokens) @?= Just 128
               ((regularInput.provenance >>= (.summary)) <&> (.operationId)) @?= Just summary.specification.operationId
               ((regularInput.provenance >>= (.summary)) <&> (.outcome)) @?= summary.outcome
               assertBool "raw summary source provenance retained" (isJust (summaryInput.provenance >>= (.summarizes)))
@@ -365,7 +367,7 @@ tests fixture =
           settled.active @?= (fixtureCount 0)
           Map.lookup R.ModelAttempts settled.usage.settled @?= Just (fixtureAmount 1),
       testCase "driver parks one tool across approval restart and refuses revoked authority before submission" $
-        withConfiguredResourceFixture fixture (\snapshot -> toolConfiguration snapshot & #policy . #humanTools .~ ["observe"]) (Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot _ -> do
+        withConfiguredResourceFixture fixture (\snapshot -> toolConfiguration snapshot & #policy . #humanTools .~ (map ExecutionValue.executionCoordinate ["observe"])) (Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot _ -> do
           (executor, calls, toolCalls) <- driverRuntime env True
           withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
           permission <- reachPermission env executor snapshot 12
@@ -397,16 +399,16 @@ tests fixture =
         let assistant =
               ReplayAssistant
                 V1
-                [ThinkingBlock "opaque-redacted" (Just "signature") True (Just (ProviderReplay OpenAIResponses "exact-model" [object ["opaque" .= ("continuation" :: Text)]])), ToolBlock (ToolInvocation "call" "tool" (Aeson.String "{cut-off"))]
+                [ThinkingBlock "opaque-redacted" (Just "signature") True (Just (ProviderReplay OpenAIResponses (ProviderValue.providerCoordinate "exact-model") [object ["opaque" .= ("continuation" :: Text)]])), ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "call") (ExecutionValue.executionCoordinate "tool") (Aeson.String "{cut-off"))]
                 Stop
-                (Just "response")
+                (Just (ProviderValue.providerCoordinate "response"))
                 Nothing
                 (object ["tokens" .= (4 :: Int)])
                 Nothing
         Aeson.fromJSON (toJSON assistant) @?= Aeson.Success assistant
         restored <- expectRight (restoreAssistant assistant)
         length restored.content @?= 2
-        toolInvocations assistant @?= [ToolInvocation "call" "tool" (Aeson.String "{cut-off")]
+        toolInvocations assistant @?= [ToolInvocation (ProviderValue.providerCoordinate "call") (ExecutionValue.executionCoordinate "tool") (Aeson.String "{cut-off")]
         let future = case toJSON assistant of Aeson.Object fields -> Aeson.Object (KeyMap.insert "format" (toJSON (2 :: Int)) fields); value -> value
         assertBool "future assistant version rejected" (case Aeson.fromJSON @ReplayAssistant future of Aeson.Error _ -> True; _ -> False),
       testCase "attempt reservation and real queue acceptance roll back and deduplicate together" $
@@ -468,7 +470,7 @@ tests fixture =
                 let input = ToolOperationInput response (fixtureToolPosition 0) (head (toolInvocations assistant)) observationBinding
                     specification = toolSpec snapshot 1 input
                 _ <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
-                pure (Attempt.AttemptSubmission (Store.toolAttemptRequest (fixtureAttemptId "shared-tool-attempt") specification.operationId observationBinding) Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0))
+                pure (Attempt.AttemptSubmission (Store.toolAttemptRequest (fixtureAttemptId "shared-tool-attempt") specification.operationId observationBinding) Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) ExecutionValue.initialExecutionGeneration))
           a <- prepare first firstAccess
           b <- prepare second secondAccess
           (left, right) <- concurrently (run env (Store.submitExecutionAttemptWith firstAccess (fixtureRevision 3) a (\_ -> pure ()))) (run env (Store.submitExecutionAttemptWith secondAccess (fixtureRevision 3) b (\_ -> pure ())))
@@ -618,7 +620,7 @@ tests fixture =
           _ <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
           let request = Store.toolAttemptRequest (fixtureAttemptId "unreported-tool-invoice") specification.operationId binding
               enqueue _ = void (Tx.statement () (preparable "SELECT 1/0" E.noParams (D.singleRow (D.column (D.nonNullable D.int4)))))
-          refused <- run env (Store.submitExecutionAttemptWith access (fixtureRevision 3) (Attempt.AttemptSubmission request Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)) enqueue)
+          refused <- run env (Store.submitExecutionAttemptWith access (fixtureRevision 3) (Attempt.AttemptSubmission request Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) ExecutionValue.initialExecutionGeneration)) enqueue)
           case refused of Left (ResourceAdmissionRefused "tool invoice ceiling is unsupported") -> pure (); other -> assertFailure (show other)
           run env (Store.inspectExecutionAttempt request.attemptId) >>= (@?= Right Nothing)
           root <- expectRight =<< run env (Roots.inspectRoot rootId)
@@ -634,7 +636,7 @@ tests fixture =
                 generation <- currentRunGeneration
                 (token, await) <- awakeableNamed (StepName "observation")
                 liftIO (modifyIORef' tokens (<> [(generation, token)]))
-                armObservation (Attempt.ExecutionWake token generation) reference
+                armObservation (Attempt.ExecutionWake token (either (error . show) id (parseExecutionGeneration generation))) reference
                 if generation == 0 then continueAsNew True else void (await :: Eff (Workflow : AppEffects) Attempt.JobReference)
           run env (runWorkflow name workflow body) >>= (@?= ContinuedAsNew)
           run env (runWorkflow name workflow body) >>= (@?= Suspended)
@@ -650,7 +652,7 @@ tests fixture =
           claim <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) reference (fixtureOwner "rotation-executor") 60)
           run env (Store.startExecutionAttempt access (fixtureRevision 3) claim) >>= (@?= Right R.Accepted)
           run env (Store.completeExecutionAttempt access (fixtureRevision 4) claim terminalAttempt) >>= (@?= Right R.Accepted)
-          run env (Store.refreshExecutionWake access (fixtureRevision 5) (Attempt.ExecutionWake currentToken 1)) >>= (@?= Right R.Accepted)
+          run env (Store.refreshExecutionWake access (fixtureRevision 5) (Attempt.ExecutionWake currentToken (either (error . show) id (ExecutionValue.parseExecutionGeneration 1)))) >>= (@?= Right R.Accepted)
           run env (Store.publishExecutionWake reference) >>= (@?= Right ())
           run env (runWorkflow name workflow body) >>= (@?= Completed ()),
       testCase "each tool has a separate immutable operation and accepted outcome" $
@@ -662,17 +664,17 @@ tests fixture =
           run env (Store.acceptOperation access (fixtureRevision 2) firstSpec (toJSON firstInput)) >>= (@?= Right (R.AlreadyAccepted, first))
           let altered = firstInput & #invocation . #arguments .~ object ["injected" .= True]
           run env (Store.acceptOperation access (fixtureRevision 2) firstSpec (toJSON altered)) >>= (@?= Left OperationConflict)
-          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 3) firstSpec.operationId (ToolReturned [TextBlock "opaque accepted-message reference"] False) (NeedTool response (fixtureToolPosition 1)) Nothing) >>= (@?= Right R.Accepted)
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 3) firstSpec.operationId (ToolReturned [TextBlock "opaque accepted-message reference"] ExecutionValue.ToolSucceeded) (NeedTool response (fixtureToolPosition 1)) Nothing) >>= (@?= Right R.Accepted)
           let secondInput = ToolOperationInput response (fixtureToolPosition 1) (toolInvocations assistant !! 1) observationBinding
           (_, second) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 4) (toolSpec snapshot 2 secondInput) (toJSON secondInput))
           assertBool "tool identity uses committed cursor" (first.specification.operationId /= second.specification.operationId)
-          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 5) second.specification.operationId (ToolReturned [TextBlock "second result"] False) NeedModel Nothing) >>= (@?= Right R.Accepted)
-          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 3) firstSpec.operationId (ToolReturned [TextBlock "opaque accepted-message reference"] False) (NeedTool response (fixtureToolPosition 1)) Nothing) >>= (@?= Right R.AlreadyAccepted)
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 5) second.specification.operationId (ToolReturned [TextBlock "second result"] ExecutionValue.ToolSucceeded) NeedModel Nothing) >>= (@?= Right R.Accepted)
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 3) firstSpec.operationId (ToolReturned [TextBlock "opaque accepted-message reference"] ExecutionValue.ToolSucceeded) (NeedTool response (fixtureToolPosition 1)) Nothing) >>= (@?= Right R.AlreadyAccepted)
           (_, state) <- expectRight =<< run env (Store.loadExecution access)
           state.cursor @?= (fixtureRevision 3)
           state.modelTurns @?= (fixtureProgress 1),
       testCase "bound approval uses the real opaque token path and resumes the same tool" $
-        withConfiguredFixture fixture (\snapshot -> toolConfiguration snapshot & #policy . #humanTools .~ ["observe"]) \env snapshot access -> do
+        withConfiguredFixture fixture (\snapshot -> toolConfiguration snapshot & #policy . #humanTools .~ (map ExecutionValue.executionCoordinate ["observe"])) \env snapshot access -> do
           (response, assistant) <- commitToolRequest env snapshot access
           let input = ToolOperationInput response (fixtureToolPosition 0) (head (toolInvocations assistant)) observationBinding
               specification = toolSpec snapshot 1 input
@@ -723,8 +725,7 @@ tests fixture =
                     [observationBinding]
                     ( \context -> do
                         context.operationId @?= specification.operationId
-                        let key = operationIdText specification.operationId
-                        context.idempotencyKey @?= key
+                        context.idempotencyKey @?= specification.operationId
                         pure (Right ())
                     )
                 )
@@ -732,7 +733,7 @@ tests fixture =
           run env (Runner.prepareAcceptedTool now True Nothing freshAccess specification.operationId [observationBinding] (\_ -> assertFailure "stop gate should run first" >> pure (Right ()))) >>= (@?= Left (ExecutionPolicyRefused "execution stop requested"))
           run env (Runner.prepareAcceptedTool permission.expiresAt False Nothing freshAccess specification.operationId [observationBinding] (\_ -> assertFailure "expired permission reached authorization" >> pure (Right ()))) >>= (@?= Left (ExecutionPolicyRefused "tool permission expired")),
       testCase "expired permission refuses approval and records timeout without a new turn" $
-        withConfiguredFixture fixture (\snapshot -> toolConfiguration snapshot & #policy . #humanTools .~ ["observe"] & #policy . #permissionSeconds .~ (fixturePolicy 1)) \env snapshot access -> do
+        withConfiguredFixture fixture (\snapshot -> toolConfiguration snapshot & #policy . #humanTools .~ (map ExecutionValue.executionCoordinate ["observe"]) & #policy . #permissionSeconds .~ (fixturePolicy 1)) \env snapshot access -> do
           (response, assistant) <- commitToolRequest env snapshot access
           let input = ToolOperationInput response (fixtureToolPosition 0) (head (toolInvocations assistant)) observationBinding
               specification = toolSpec snapshot 1 input
@@ -743,7 +744,7 @@ tests fixture =
           run env (Store.resolveOperationPermission access (fixtureRevision 4) specification.operationId permission.reviewRequestId (Approved (object []))) >>= (@?= Left (ExecutionPolicyRefused "tool permission expired"))
           run env (Store.resolveOperationPermission access (fixtureRevision 4) specification.operationId permission.reviewRequestId TimedOut) >>= (@?= Right R.Accepted)
           run env (Store.resolveOperationPermission access (fixtureRevision 4) specification.operationId permission.reviewRequestId TimedOut) >>= (@?= Right R.AlreadyAccepted)
-          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 5) specification.operationId (ToolReturned [TextBlock "forbidden callback"] False) NeedModel Nothing) >>= (@?= Left (ExecutionPolicyRefused "tool permission was not approved"))
+          run env (Store.recordOutcomeAndAdvance access (fixtureRevision 5) specification.operationId (ToolReturned [TextBlock "forbidden callback"] ExecutionValue.ToolSucceeded) NeedModel Nothing) >>= (@?= Left (ExecutionPolicyRefused "tool permission was not approved"))
           (_, state) <- expectRight =<< run env (Store.loadExecution access)
           state.modelTurns @?= (fixtureProgress 1)
           state.cursor @?= (fixtureRevision 1),
@@ -812,7 +813,7 @@ tests fixture =
           state.cursor @?= (fixtureRevision 0)
           length operations @?= 1,
       testCase "bound execution identity preserves its private event JSON" do
-        let event = Lifecycle.ExecutionAdvanced (Lifecycle.ExecutionAdvancedData (ExecutionId "fixture-execution") 1 2)
+        let event = Lifecycle.ExecutionAdvanced (Lifecycle.ExecutionAdvancedData (executionIdentity "fixture-execution") 1 2)
             expected = object ["kind" .= ("ExecutionAdvanced" :: Text), "executionId" .= ("fixture-execution" :: Text), "expected" .= (1 :: Int), "revision" .= (2 :: Int)]
             codec = executionLifecycleEventStreamDef.eventCodec
         codec.encode event @?= expected
@@ -841,7 +842,7 @@ tests fixture =
           payloadCount env snapshot.executionId >>= (@?= payloads)
           -- Exercise the production relational precondition: a model operation
           -- cannot accept a tool outcome, and the late hook must not run.
-          run env (Store.recordOutcomeAndAdvanceWith access (fixtureRevision 1) operation.specification.operationId (ToolReturned [] False) NeedModel Nothing (error "typed refusal reached late hook")) >>= (@?= Left OperationConflict)
+          run env (Store.recordOutcomeAndAdvanceWith access (fixtureRevision 1) operation.specification.operationId (ToolReturned [] ExecutionValue.ToolSucceeded) NeedModel Nothing (error "typed refusal reached late hook")) >>= (@?= Left OperationConflict)
           lifecycleVersion env snapshot.executionId >>= (@?= before)
           let request =
                 Rebuild.RebuildRequest
@@ -1132,7 +1133,7 @@ nativeExecutorCase fixture billing = testCase (show billing <> " preserves rich 
             (const (pure (Right ())))
             (const selectedRuntime)
             ( \_ context requested use -> do
-                requested @?= Just "observe"
+                requested @?= Just (ExecutionValue.executionCoordinate "observe")
                 context.attemptId @?= reference.attemptId
                 current <- expectRight =<< run env (Store.inspectExecutionAttempt reference.attemptId)
                 case current of
@@ -1143,7 +1144,7 @@ nativeExecutorCase fixture billing = testCase (show billing <> " preserves rich 
                   Nothing -> assertFailure "dispatch had no retained attempt"
                 context.operation.operationId @?= specification.operationId
                 let key = operationIdText specification.operationId
-                context.operation.idempotencyKey @?= key
+                operationIdText context.operation.idempotencyKey @?= key
                 _ <- use [Executor.BoundTool binding tool]
                 pure (Left (ExecutionPolicyRefused "fixture lease release failed"))
             )
@@ -1151,7 +1152,7 @@ nativeExecutorCase fixture billing = testCase (show billing <> " preserves rich 
         request = Store.toolAttemptRequest (fixtureAttemptId "native-tool-attempt") specification.operationId binding
         reference = Attempt.JobReference V1 snapshot.executionId specification.operationId request.attemptId
     run env (runTransaction (registerAwakeableTx UUID.nil "shikigami.execution" (executionWorkflowId snapshot.executionId).unWorkflowId))
-    _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 3) (Attempt.AttemptSubmission request Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)) (\_ -> pure ()))
+    _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 3) (Attempt.AttemptSubmission request Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) ExecutionValue.initialExecutionGeneration)) (\_ -> pure ()))
     Executor.executeAcceptedAttempt executor snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
     Executor.executeAcceptedAttempt executor snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
     readIORef invocations >>= (@?= 1)
@@ -1257,7 +1258,7 @@ toolRecoveryCase fixture recovery = testCase (show recovery <> " retains its log
         secondRequest = Store.toolAttemptRequest (fixtureAttemptId "recovery-native-attempt") specification.operationId binding
         first = Attempt.JobReference V1 snapshot.executionId specification.operationId firstRequest.attemptId
         second = first & #attemptId .~ secondRequest.attemptId
-        submission request = Attempt.AttemptSubmission request Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)
+        submission request = Attempt.AttemptSubmission request Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) ExecutionValue.initialExecutionGeneration)
     _ <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
     acceptedMessages <- newIORef (Map.empty :: Map.Map Text Text)
     keys <- newIORef ([] :: [Text])
@@ -1272,10 +1273,10 @@ toolRecoveryCase fixture recovery = testCase (show recovery <> " retains its log
             ( \_ context _ use -> do
                 context.operation.operationId @?= specification.operationId
                 let expectedKey = operationIdText specification.operationId
-                context.operation.idempotencyKey @?= expectedKey
+                operationIdText context.operation.idempotencyKey @?= expectedKey
                 let tool = mkDynTool "observe" "Accepted native message." (object []) \_ -> unsafeEff_ do
-                      modifyIORef' keys (<> [context.operation.idempotencyKey])
-                      existing <- atomicModifyIORef' acceptedMessages (\messages -> (Map.insert context.operation.idempotencyKey "opaque-accepted-message" messages, Map.lookup context.operation.idempotencyKey messages))
+                      modifyIORef' keys (<> [operationIdText context.operation.idempotencyKey])
+                      existing <- atomicModifyIORef' acceptedMessages (\messages -> (Map.insert (operationIdText context.operation.idempotencyKey) "opaque-accepted-message" messages, Map.lookup (operationIdText context.operation.idempotencyKey) messages))
                       case existing of
                         Nothing -> Exception.throwIO (userError "accepted message response was lost")
                         Just reference -> pure (Right (ToolOutput.textToolOutput reference))
@@ -1310,7 +1311,7 @@ toolRecoveryCase fixture recovery = testCase (show recovery <> " retains its log
         (_, chosen) <- expectRight =<< run env (Store.loadExecution access)
         chosen.cursor @?= (fixtureRevision 2)
         chosen.pendingReceipts @?= (fixtureProgress 1)
-        let late = Attempt.AttemptResult (ToolReturned [TextBlock "opaque-accepted-message"] False) (NeedTool response (fixtureToolPosition 1)) Nothing
+        let late = Attempt.AttemptResult (ToolReturned [TextBlock "opaque-accepted-message"] ExecutionValue.ToolSucceeded) (NeedTool response (fixtureToolPosition 1)) Nothing
         run env (Store.recordLateExecutionReceipt access chosen.revision former late) >>= (@?= Right R.Accepted)
         (_, settled) <- expectRight =<< run env (Store.loadExecution access)
         settled.cursor @?= chosen.cursor
@@ -1321,14 +1322,14 @@ toolRecoveryCase fixture recovery = testCase (show recovery <> " retains its log
         Map.lookup R.ToolAttempts root.usage.settled @?= Just (fixtureAmount 2)
 
 concurrentModelSubmission :: Operation -> Attempt.AttemptSubmission
-concurrentModelSubmission operation = modelSubmission operation & #modelCall .~ Just (Attempt.ModelCallPreparation (Calls.CallLimits (Just (fixtureLimit 8)) (Just (fixtureLimit 2)) (Just (fixtureLimit 2)) Nothing (Just (fixtureAmount 1000))) "actual-request-digest")
+concurrentModelSubmission operation = modelSubmission operation & #modelCall .~ Just (Attempt.ModelCallPreparation (Calls.CallLimits (Just (fixtureLimit 8)) (Just (fixtureLimit 2)) (Just (fixtureLimit 2)) Nothing (Just (fixtureAmount 1000))) (executionDigest "actual-request-digest"))
 
 modelSubmission :: Operation -> Attempt.AttemptSubmission
 modelSubmission operation =
   Attempt.AttemptSubmission
     (R.AttemptRequest (fixtureAttemptId "prepared-model-attempt") operation.specification.operationId (Map.fromList [(R.ActiveWork, (fixtureAmount 1)), (R.ModelAttempts, (fixtureAmount 1)), (R.Tokens, (fixtureAmount 10))]) R.EnforcedCeiling)
-    (Just (Attempt.ModelCallPreparation (Calls.CallLimits (Just (fixtureLimit 8)) (Just (fixtureLimit 2)) (Just (fixtureLimit 1)) Nothing (Just (fixtureAmount 1000))) "actual-request-digest"))
-    (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)
+    (Just (Attempt.ModelCallPreparation (Calls.CallLimits (Just (fixtureLimit 8)) (Just (fixtureLimit 2)) (Just (fixtureLimit 1)) Nothing (Just (fixtureAmount 1000))) (executionDigest "actual-request-digest")))
+    (Attempt.ExecutionWake (AwakeableId UUID.nil) ExecutionValue.initialExecutionGeneration)
 
 terminalAttempt :: Attempt.AttemptResult
 terminalAttempt = Attempt.AttemptResult modelOutcome (NeedValidation (mustRight (Store.outcomeReference modelOutcome))) (Just terminal)
@@ -1347,13 +1348,13 @@ queueCount :: AppEnv -> IO Int64
 queueCount env = (.queueLength) <$> run env (runTransaction (Tx.statement runQueueName PgmqQueue.queueMetrics))
 
 observationBinding :: ToolBinding
-observationBinding = ToolBinding "observe" "1" (versionedDigest "shikigami.tool-schema/1" (object [])) RepeatableObservation NoInvoiceCost
+observationBinding = ToolBinding (ExecutionValue.executionCoordinate "observe") (ExecutionValue.executionCoordinate "1") (ExecutionValue.executionDigestFor "shikigami.tool-schema/1" (object [])) RepeatableObservation NoInvoiceCost
 
 toolConfiguration :: ExecutionSnapshot -> ExecutionSnapshot
 toolConfiguration snapshot = snapshot & #toolBindings .~ [observationBinding] & #offeredTools .~ toJSON [BaikaiTool.mkTool "observe" "Observe fixture." (object [])]
 
 toolSpec :: ExecutionSnapshot -> Integer -> ToolOperationInput -> OperationSpec
-toolSpec snapshot cursor input = OperationSpec (operationIdFor snapshot.executionId (fixtureRevision cursor)) ToolOperation input.binding.recovery input.binding.name (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) (toolScopeDigest input.binding) (Just input.position)
+toolSpec snapshot cursor input = OperationSpec (operationIdFor snapshot.executionId (fixtureRevision cursor)) ToolOperation input.binding.recovery input.binding.name (ExecutionValue.executionDigestFor "shikigami.harness-policy/1" (toJSON snapshot.policy)) (toolScopeDigest input.binding) (Just input.position)
 
 commitToolRequest :: AppEnv -> ExecutionSnapshot -> Store.ReplayAccess -> IO (PayloadRef, ReplayAssistant)
 commitToolRequest = commitToolRequestWith terminal
@@ -1362,7 +1363,7 @@ commitToolRequestWith :: Calls.CallOutcome -> AppEnv -> ExecutionSnapshot -> Sto
 commitToolRequestWith callOutcome env snapshot access = do
   (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
   receipt <- reserveCall env snapshot operation
-  let assistant = ReplayAssistant V1 [ToolBlock (ToolInvocation "first" "observe" (object [])), ToolBlock (ToolInvocation "second" "observe" (object []))] ToolUse Nothing Nothing (object []) Nothing
+  let assistant = ReplayAssistant V1 [ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "first") (ExecutionValue.executionCoordinate "observe") (object [])), ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "second") (ExecutionValue.executionCoordinate "observe") (object []))] ToolUse Nothing Nothing (object []) Nothing
       outcome = ModelReturned assistant Nothing
   ref <- expectRight (Store.outcomeReference outcome)
   run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId outcome (NeedTool ref (fixtureToolPosition 0)) (Just (receipt, callOutcome))) >>= (@?= Right R.Accepted)
@@ -1375,13 +1376,13 @@ secretInput :: Value
 secretInput = object ["request" .= ("PRIVATE_REPLAY_MARKER" :: Text)]
 
 modelOutcome :: OperationOutcome
-modelOutcome = ModelReturned (ReplayAssistant V1 [TextBlock "accepted reply"] Stop (Just "response") Nothing (object []) Nothing) (Just (object ["raw" .= ("provider evidence" :: Text)]))
+modelOutcome = ModelReturned (ReplayAssistant V1 [TextBlock "accepted reply"] Stop (Just (ProviderValue.providerCoordinate "response")) Nothing (object []) Nothing) (Just (object ["raw" .= ("provider evidence" :: Text)]))
 
 terminal :: Calls.CallOutcome
-terminal = Calls.CallOutcome Calls.CallTerminal (Map.singleton R.Tokens (fixtureAmount 3)) [R.CostMicroUsd] (Just "served-model") (Just "provider-call") Nothing
+terminal = Calls.CallOutcome Calls.CallTerminal (Map.singleton R.Tokens (fixtureAmount 3)) [R.CostMicroUsd] (Just (ProviderValue.providerCoordinate "served-model")) (Just (ProviderValue.providerCoordinate "provider-call")) Nothing
 
 spec :: ExecutionSnapshot -> Integer -> OperationSpec
-spec snapshot cursor = OperationSpec (operationIdFor snapshot.executionId (fixtureRevision cursor)) ModelTurn RepeatableObservation "model" (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) "scope-digest" Nothing
+spec snapshot cursor = OperationSpec (operationIdFor snapshot.executionId (fixtureRevision cursor)) ModelTurn RepeatableObservation (ExecutionValue.executionCoordinate "model") (ExecutionValue.executionDigestFor "shikigami.harness-policy/1" (toJSON snapshot.policy)) (ExecutionValue.executionDigest "scope-digest") Nothing
 
 reserveCall :: AppEnv -> ExecutionSnapshot -> Operation -> IO Calls.CallReceipt
 reserveCall env snapshot operation = do
@@ -1389,7 +1390,7 @@ reserveCall env snapshot operation = do
   let operationKey = operationIdText operation.specification.operationId
       request = R.AttemptRequest (fixtureAttemptId ("attempt:" <> operationKey)) operation.specification.operationId (Map.fromList [(R.ActiveWork, (fixtureAmount 1)), (R.ModelAttempts, (fixtureAmount 1)), (R.Tokens, (fixtureAmount 10)), (R.CostMicroUsd, (fixtureAmount 0))]) R.EnforcedCeiling
       limits = Calls.CallLimits (Just (fixtureLimit 8)) (Just (fixtureLimit 2)) (Just (fixtureLimit 1)) Nothing (Just (fixtureAmount 1000))
-  result <- expectRight =<< run env (Calls.reserveSelectionCall snapshot.selection limits request "actual-request-digest" now)
+  result <- expectRight =<< run env (Calls.reserveSelectionCall snapshot.selection limits request (executionDigest "actual-request-digest") now)
   case result of Calls.NewCall receipt -> pure receipt; _ -> assertFailure "new actual attempt expected"
 
 anotherSnapshot :: ExecutionSnapshot -> Text -> ExecutionSnapshot
@@ -1409,7 +1410,7 @@ withConfiguredResourceFixture fixture configure editLimits use = withShikigamiFr
   let env = AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing
       limits = editLimits (Map.insert R.Tokens (R.Limited (fixtureAmount 1000)) (Map.fromList [(dimension, R.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]))
       selection = mustRight (resolveExecutionSelection (fixtureAssignment "transcript-assignment") (mustRight (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just rootId) now)
-      snapshot = configure (ExecutionSnapshot V1 (executionIdFor selection.assignmentId) "transcript-run" (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (SkillInstructions "fixture" "system" "PRIVATE_REPLAY_MARKER") (ReplayContext 1 (Just "system") [UserTurn [TextBlock "PRIVATE_REPLAY_MARKER"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing)
+      snapshot = configure (ExecutionSnapshot V1 (executionIdFor selection.assignmentId) "transcript-run" (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "PRIVATE_REPLAY_MARKER") (ReplayContext LegacyContext (Just "system") [UserTurn [TextBlock "PRIVATE_REPLAY_MARKER"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing)
   _ <- expectRight =<< run env Catalog.registerProjectionCatalog
   run env (Roots.enrollRoot rootId (R.Envelope limits (addUTCTime 3600 now))) >>= (@?= Right R.Accepted)
   run env (Store.admitExecution snapshot) >>= (@?= Right R.Accepted)

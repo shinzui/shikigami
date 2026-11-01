@@ -117,7 +117,7 @@ continuingCase config prefix stage = withQualification config prefix \q -> case 
     Just operation <- right =<< run q.env (Execution.inspectOperation late.reference.operationId)
     result <- maybe (fail "late old-owner outcome absent") pure operation.outcome
     outcome <- right =<< run q.env (Execution.readReplayPayload @OperationOutcome access "operation-outcome" result)
-    unless (case outcome of ToolReturned _ True -> True; RichToolReturned output -> output.failed; _ -> False) (fail "late old-owner accepted edit succeeded")
+    unless (case outcome of ToolReturned _ ToolFailed -> True; RichToolReturned output -> toolFailed output.failed; _ -> False) (fail "late old-owner accepted edit succeeded")
     retained <- Bytes.readFile (workspaceFiles item.binding.storageRoot item.binding </> "src/dependency.txt")
     unless (retained == "new dependency\n") (fail "late old-owner edit changed accepted bytes")
     putStrLn "PASS a real accepted late old-owner edit and unestablished successor admission both refuse under fresh authority"

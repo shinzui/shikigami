@@ -2,7 +2,7 @@
 module Shikigami.ExecutionLifecycle.Conformance (behaviorAssertions, focusedGuardAssertions) where
 
 import Keiki.Core (StepFailure (NoMatchingEdge), reconstituteEither, stepEither)
-import Shikigami.Execution.Transcript (ExecutionId (..))
+import Shikigami.Execution.Transcript (ExecutionId (..), executionIdentity)
 import Shikigami.ExecutionLifecycle.BehaviorHoles (behaviorWitnesses)
 import Shikigami.ExecutionLifecycle.Generated.BehaviorContract
 import Shikigami.ExecutionLifecycle.Generated.Domain
@@ -26,8 +26,8 @@ focusedGuardAssertions =
     ("active execution rejects a non-advancing revision", rejects (command owner 0 0))
   ]
   where
-    owner = ExecutionId "fixture"
-    other = ExecutionId "other"
+    owner = executionIdentity "fixture"
+    other = executionIdentity "other"
     seed = reconstituteEither executionLifecycleTransducer [ExecutionAdmitted (ExecutionAdmittedData owner "fixture")]
     command identifier expected next = AdvanceExecution (AdvanceExecutionData identifier expected next)
     accepts input = case seed of

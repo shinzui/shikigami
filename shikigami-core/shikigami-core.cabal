@@ -104,6 +104,7 @@ library
     Shikigami.Execution.Attempt
     Shikigami.Execution.Catalog
     Shikigami.Execution.Claim
+    Shikigami.Execution.Coordinate
     Shikigami.Execution.Counter
     Shikigami.Execution.Driver
     Shikigami.Execution.Ephemeral

@@ -9,7 +9,7 @@ import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig, revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Execution.Store (inspectExecutionPage)
-import Shikigami.Execution.Transcript (ExecutionId (..))
+import Shikigami.Execution.Transcript (ExecutionId (..), executionIdentity)
 import Shikigami.Migrations (verifyShikigamiMigrations)
 import System.Exit (die)
 
@@ -18,7 +18,7 @@ runExecutionsInspect key after limit _asJson config = do
   connection <- revealSecretText <$> requireDatabaseUrl "executions inspect" config
   verifyShikigamiMigrations connection
   tracer <- noopTracer
-  result <- runAppIO (AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing) (inspectExecutionPage (ExecutionId key) after limit)
+  result <- runAppIO (AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing) (inspectExecutionPage (executionIdentity key) after limit)
   case result of
     Left _ -> die "execution store is unavailable"
     Right (Left _) -> die "execution inspection was refused; verify the catalog and page bounds"

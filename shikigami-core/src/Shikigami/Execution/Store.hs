@@ -94,6 +94,7 @@ import Shikigami.Execution.AssignmentKey (AssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Catalog (withLiveExecution)
 import Shikigami.Execution.Claim
+import Shikigami.Execution.Coordinate
 import Shikigami.Execution.Identity (AttemptId, ExecutionRootId, OperationId, attemptIdText, operationIdText)
 import Shikigami.Execution.Payload
 import Shikigami.Execution.Policy (ContextView (..), ModelOperationInput (..), validateTerminalOutput, validateToolInvocation)
@@ -125,7 +126,7 @@ data ExecutionBinding = ExecutionBinding
     assignmentId :: !AssignmentKey,
     descriptor :: !ModelDescriptor,
     snapshotDigest :: !PayloadDigest,
-    policyDigest :: !Text
+    policyDigest :: !(ExecutionDigest "policy")
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -186,7 +187,7 @@ admitExecution snapshot
       Left refusal -> pure (Left refusal)
       Right ref -> do
         let execution = snapshot.executionId
-            binding = ExecutionBinding snapshot.identity snapshot.selection.rootId snapshot.selection.assignmentId snapshot.selection.descriptor ref.digest (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy))
+            binding = ExecutionBinding snapshot.identity snapshot.selection.rootId snapshot.selection.assignmentId snapshot.selection.descriptor ref.digest (executionDigestFor "shikigami.harness-policy/1" (toJSON snapshot.policy))
             state = ExecutionState V1 execution initialRevision Active initialRevision NeedModel ref Nothing Nothing noRepairs noModelTurns Nothing Nothing noPendingReceipts
         result <- persistChecked
           execution
@@ -236,7 +237,7 @@ loadExecution access@(ReplayAccess execution _ _) = protected do
   (state, binding) <- getExecution execution
   _ <- checkAccess access binding
   snapshot <- readPayload access binding "snapshot" state.snapshot
-  unless (state.snapshot.digest == binding.snapshotDigest && snapshot.executionId == execution && snapshot.selection.assignmentId == binding.assignmentId && snapshot.identity == binding.identity && snapshot.selection.rootId == binding.rootId && snapshot.selection.descriptor == binding.descriptor && versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy) == binding.policyDigest) (abort CorruptReplay)
+  unless (state.snapshot.digest == binding.snapshotDigest && snapshot.executionId == execution && snapshot.selection.assignmentId == binding.assignmentId && snapshot.identity == binding.identity && snapshot.selection.rootId == binding.rootId && snapshot.selection.descriptor == binding.descriptor && executionDigestFor "shikigami.harness-policy/1" (toJSON snapshot.policy) == binding.policyDigest) (abort CorruptReplay)
   pure (snapshot, state)
 
 -- Bounded metadata only. Protected body columns are never selected here.
@@ -333,7 +334,7 @@ acceptOperation access@(ReplayAccess execution _ _) expected specification input
     Just (state, binding) -> case payloadReference body of
       Left err -> pure (Left err)
       Right ref -> do
-        let fingerprint = versionedDigest "shikigami.execution-operation-request/1" (toJSON (specification, ref, binding.snapshotDigest))
+        let fingerprint = executionDigestFor "shikigami.execution-operation-request/1" (toJSON (specification, ref, binding.snapshotDigest))
             operation = Operation V1 execution state.cursor specification fingerprint ref Nothing Nothing NotMarkedUncertain Nothing
         old <- findOperation specification.operationId
         case old of
@@ -405,7 +406,7 @@ parkOperationPermission access@(ReplayAccess execution _ _) expected operationId
               snapshot <- checkedPayload access actualBinding "snapshot" state.snapshot
               unless (operation.specification.kind == ToolOperation && operation.specification.name `elem` (snapshot :: ExecutionSnapshot).policy.humanTools && operation.specification.name `notElem` snapshot.policy.deniedTools) (throwE (ExecutionPolicyRefused "tool permission is outside the pinned policy"))
               now <- checkedStatement () currentTime
-              let review = reviewRequestIdFor (WorkflowName "shikigami.execution") (executionWorkflowId execution) 0 (operationKey operationId <> ":" <> operation.fingerprint)
+              let review = reviewRequestIdFor (WorkflowName "shikigami.execution") (executionWorkflowId execution) 0 (operationKey operationId <> ":" <> executionDigestText operation.fingerprint)
                   permission = PermissionBinding review operation.fingerprint operation.specification.scopeDigest operation.specification.policyDigest (addUTCTime (fromIntegral (policyNumber snapshot.policy.permissionSeconds)) now) Nothing
               pure (state, current, permission)
           )
@@ -504,7 +505,7 @@ submitAttempt retired access@(ReplayAccess execution _ _) expected submission en
   (_, binding) <- readMetadata (getExecution execution)
   operation <- findOperation submission.request.operationId >>= maybe (throwIO (ExecutionAbort OperationMissing)) pure
   wakeRef <- either (throwIO . ExecutionAbort) pure (payloadReference wakeBody)
-  let fingerprint = versionedDigest "shikigami.execution-attempt/1" (toJSON (operation.fingerprint, submission.request, submission.modelCall, wakeRef))
+  let fingerprint = executionDigestFor "shikigami.execution-attempt/1" (toJSON (operation.fingerprint, submission.request, submission.modelCall, wakeRef))
       reference = Attempt.JobReference V1 execution submission.request.operationId submission.request.attemptId
       duplicate existing = if existing.executionId == execution && existing.operationId == submission.request.operationId && existing.request == submission.request && existing.fingerprint == fingerprint then Right (AlreadyAccepted, existing) else Left AttemptConflict
   old <- readMetadata (readRows (attemptKey submission.request.attemptId) selectExecutionAttempt)
@@ -566,7 +567,7 @@ submitAttempt retired access@(ReplayAccess execution _ _) expected submission en
               void (readPayload @ToolOperationInput access actualBinding "operation-input" operation.input)
               forM_ actualBinding.rootId \rootId -> do
                 root <- Roots.inspectRootTx rootId >>= either (abort . ResourceAdmissionRefused . Text.pack . show) pure
-                let request = Resources.OperationRequest operation.specification.operationId Nothing Resources.ToolOperation Map.empty operation.fingerprint
+                let request = Resources.OperationRequest operation.specification.operationId Nothing Resources.ToolOperation Map.empty (executionCoordinate (executionDigestText operation.fingerprint))
                 Roots.reserveOperationsTx rootId root.revision [request] now >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
                 Roots.beginAttemptTx rootId root.revision submission.request now >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
               pure Nothing
@@ -705,7 +706,7 @@ loadModelReplayWindow access@(ReplayAccess execution _ _) = protected do
         message <- case outcome of
           ToolReturned blocks failed -> pure (ToolTurn input.invocation.callId input.invocation.name blocks failed Nothing)
           RichToolReturned result -> pure (ToolTurn input.invocation.callId input.invocation.name (observationBlocks result) result.failed Nothing)
-          OperationDenied reason -> pure (ToolTurn input.invocation.callId input.invocation.name [TextBlock reason] True Nothing)
+          OperationDenied reason -> pure (ToolTurn input.invocation.callId input.invocation.name [TextBlock reason] ToolFailed Nothing)
           _ -> abort UnresolvedOperation
         let pending = group <> [message]
         unless (Lazy.length (Aeson.encode pending) <= fromIntegral byteLimit) (abort (ExecutionPolicyRefused "required tool observations exceed the context ceiling"))
@@ -734,11 +735,11 @@ publishExecutionWake reference = catchExecutionWith id do
         Nothing -> pure (Left (ExecutionPolicyRefused "execution wake is unavailable"))
         Just row -> do
           generation <- currentGeneration (WorkflowName row.ownerWorkflowName) (WorkflowId row.ownerWorkflowId)
-          if generation /= wake.generation
+          if generation /= executionGenerationInt wake.generation
             then pure (Right ())
             else do
               now <- liftIO getCurrentTime
-              append <- prepareJournalAppend (WorkflowName row.ownerWorkflowName) (WorkflowId row.ownerWorkflowId) wake.generation (StepRecorded (awakeableStepPrefix <> awakeableIdText wake.token) (toJSON reference) now)
+              append <- prepareJournalAppend (WorkflowName row.ownerWorkflowName) (WorkflowId row.ownerWorkflowId) (executionGenerationInt wake.generation) (StepRecorded (awakeableStepPrefix <> awakeableIdText wake.token) (toJSON reference) now)
               runTransaction do
                 transitioned <- completeAwakeableTx (awakeableIdToUuid wake.token) (toJSON reference) now
                 status <- lookupAwakeableStatusTx (awakeableIdToUuid wake.token)
@@ -1243,7 +1244,7 @@ finishExecution access@(ReplayAccess execution _ _) expected result = catchExecu
 
 validateOperation :: OperationSpec -> Either ExecutionError ()
 validateOperation specification = do
-  unless (all (\text -> not (Text.null text) && Text.length text <= 256) [specification.name, specification.policyDigest, specification.scopeDigest]) (Left OperationConflict)
+  unless (all (\text -> not (Text.null text) && Text.length text <= 256) [executionCoordinateText specification.name, executionDigestText specification.policyDigest, executionDigestText specification.scopeDigest]) (Left OperationConflict)
 
 advance :: ExecutionId -> StateRevision "execution" -> Generated.ExecutionLifecycleCommand
 advance execution expected = Generated.AdvanceExecution (Generated.AdvanceExecutionData execution (fromInteger (revisionNumber expected)) (fromInteger (revisionNumber (advanceRevision expected))))

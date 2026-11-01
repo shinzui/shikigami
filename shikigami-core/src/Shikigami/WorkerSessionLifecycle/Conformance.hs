@@ -2,7 +2,7 @@
 module Shikigami.WorkerSessionLifecycle.Conformance (behaviorAssertions, focusedGuardAssertions) where
 
 import Keiki.Core (StepFailure (NoMatchingEdge), reconstituteEither, stepEither)
-import Shikigami.WorkerSession.Types (WorkerSessionId (value), workerSessionId)
+import Shikigami.WorkerSession.Types (WorkerSessionId, workerSessionId)
 import Shikigami.WorkerSessionLifecycle.BehaviorHoles (behaviorWitnesses)
 import Shikigami.WorkerSessionLifecycle.Generated.BehaviorContract
 import Shikigami.WorkerSessionLifecycle.Generated.Domain

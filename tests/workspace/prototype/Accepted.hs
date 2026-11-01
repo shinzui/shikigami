@@ -28,6 +28,7 @@ import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Agent.Decl (Behavior (Skill))
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
+import Shikigami.Behavior.Provider.Coordinate qualified as ProviderValue
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Capability.Catalog
 import Shikigami.Capability.Overlay
@@ -35,6 +36,7 @@ import Shikigami.Capability.Provider
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Decision.ModelCatalog (modelCatalog)
 import Shikigami.Execution.Attempt qualified as Attempt
+import Shikigami.Execution.Coordinate qualified as ExecutionValue
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy.Types
@@ -79,37 +81,37 @@ preparePlan upgrade env authorizer current client binding admission mode = do
       descriptors = [supervisedWorkspaceEditDescriptor, (workspaceExecAdapter client).descriptor] <> [workspaceGitDescriptor | upgrade]
   catalog <- right (mkCapabilityCatalog descriptors)
   capabilities <- right (resolveGovernedCapabilityOverlays (durableAdapterInstalled providers) catalog (\_ _ -> Right ()) (ResolutionSubject (Just "fixture") Durable (Skill "fixture") Nothing) (map (.capability) descriptors))
-  let initial = ExecutionSnapshot V1 (executionIdFor admission.assignmentId) binding.request.runId (fixtureAgentName "fixture") admission.owner session selection Nothing (SkillInstructions "fixture" "system" "body") (ReplayContext 2 (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "fixture edit and validation"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
+  let initial = ExecutionSnapshot V1 (executionIdFor admission.assignmentId) binding.request.runId (fixtureAgentName "fixture") admission.owner session selection Nothing (SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "body") (ReplayContext RequestContext (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "fixture edit and validation"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
   menu <- right =<< Tools.describeExecutionTools Log.silentLogger authorizer providers native initial
-  let edit = only (filter (\tool -> tool.name == "overlay__workspace-edit__replace") menu.toolBindings)
-      validate = only (filter (\tool -> tool.name == "overlay__workspace-exec__validate") menu.toolBindings)
-      commit = only (filter (\tool -> tool.name == "overlay__workspace-git__commit") menu.toolBindings)
+  let edit = only (filter (\tool -> tool.name == executionCoordinate "overlay__workspace-edit__replace") menu.toolBindings)
+      validate = only (filter (\tool -> tool.name == executionCoordinate "overlay__workspace-exec__validate") menu.toolBindings)
+      commit = only (filter (\tool -> tool.name == executionCoordinate "overlay__workspace-git__commit") menu.toolBindings)
       selected = [edit, validate] <> [commit | upgrade]
-      filterTool (Aeson.Object fields) = KeyMap.lookup "name" fields `elem` map (Just . Aeson.String . (.name)) selected
+      filterTool (Aeson.Object fields) = KeyMap.lookup "name" fields `elem` map (Just . Aeson.String . executionCoordinateText . (.name)) selected
       filterTool _ = False
       offered = case menu.offeredTools of Aeson.Array values -> Aeson.Array (Vector.filter filterTool values); value -> value
       snapshot = initial & #offeredTools .~ offered & #toolBindings .~ selected
       editInput = Aeson.toJSON (if upgrade then Replacement "src/dependency.txt" (Just (contentDigest "old dependency\n")) "new dependency\n" else Replacement "src/mode" (Just (contentDigest "complete\n")) (mode <> "\n"))
       validateInput = Aeson.object ["rule" Aeson..= ("validate" :: Text.Text)]
       commitInput = Aeson.toJSON (GitCommitRequest binding.base "chore(deps): upgrade fixture dependency")
-      assistant = ReplayAssistant V1 ([ToolBlock (ToolInvocation "edit-mode" edit.name editInput), ToolBlock (ToolInvocation "validate-mode" validate.name validateInput)] <> [ToolBlock (ToolInvocation "commit-upgrade" commit.name commitInput) | upgrade]) ToolUse Nothing Nothing (Aeson.object []) Nothing
-      model = OperationSpec (operationIdFor snapshot.executionId (fixtureRevision 0)) ModelTurn RepeatableObservation "model" (policyDigest snapshot) "scope" Nothing
+      assistant = ReplayAssistant V1 ([ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "edit-mode") edit.name editInput), ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "validate-mode") validate.name validateInput)] <> [ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "commit-upgrade") commit.name commitInput) | upgrade]) ToolUse Nothing Nothing (Aeson.object []) Nothing
+      model = OperationSpec (operationIdFor snapshot.executionId (fixtureRevision 0)) ModelTurn RepeatableObservation (ExecutionValue.executionCoordinate "model") (policyDigest snapshot) (ExecutionValue.executionDigest "scope") Nothing
   void (right =<< run env Catalog.registerProjectionCatalog)
   void (right =<< run env (Execution.admitExecution snapshot))
   access <- right =<< run env (Execution.authorizeReplay snapshot.executionId snapshot.identity (current snapshot))
   (_, operation) <- right =<< run env (Execution.acceptOperation access (fixtureRevision 0) model (Aeson.object []))
   let key = operationIdText operation.specification.operationId
       request = Resources.AttemptRequest (fixtureAttemptId ("model:" <> key)) operation.specification.operationId (Map.fromList [(Resources.ActiveWork, (fixtureAmount 1)), (Resources.ModelAttempts, (fixtureAmount 1)), (Resources.Tokens, (fixtureAmount 10)), (Resources.CostMicroUsd, (fixtureAmount 0))]) Resources.EnforcedCeiling
-  reservation <- right =<< run env (Calls.reserveSelectionCall selection (Calls.CallLimits Nothing Nothing Nothing Nothing Nothing) request "fixture-model" now)
+  reservation <- right =<< run env (Calls.reserveSelectionCall selection (Calls.CallLimits Nothing Nothing Nothing Nothing Nothing) request (executionDigest "fixture-model") now)
   call <- case reservation of Calls.NewCall value -> pure value; _ -> fail "new fixture model call required"
   let outcome = ModelReturned assistant Nothing
   response <- right (Execution.outcomeReference outcome)
   void (right =<< run env (Execution.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId outcome (NeedTool response (fixtureToolPosition 0)) (Just (call, Calls.CallOutcome Calls.CallTerminal (Map.fromList [(Resources.Tokens, (fixtureAmount 1)), (Resources.CostMicroUsd, (fixtureAmount 0))]) [] Nothing Nothing Nothing))))
-  first <- submit env snapshot access (ToolOperationInput response (fixtureToolPosition 0) (ToolInvocation "edit-mode" edit.name editInput) edit)
+  first <- submit env snapshot access (ToolOperationInput response (fixtureToolPosition 0) (ToolInvocation (ProviderValue.providerCoordinate "edit-mode") edit.name editInput) edit)
   executePrepared env authorizer current client first
   (_, afterEdit) <- right =<< run env (Execution.loadExecution access)
   unless (afterEdit.cursor == (fixtureRevision 2) && afterEdit.next == NeedTool response (fixtureToolPosition 1)) (fail "native edit did not advance")
-  submit env snapshot access (ToolOperationInput response (fixtureToolPosition 1) (ToolInvocation "validate-mode" validate.name validateInput) validate)
+  submit env snapshot access (ToolOperationInput response (fixtureToolPosition 1) (ToolInvocation (ProviderValue.providerCoordinate "validate-mode") validate.name validateInput) validate)
   where
     only [value] = value
     only _ = error "fixture exact tool binding missing"
@@ -142,7 +144,7 @@ submit env snapshot access input = do
   (_, accepted) <- right =<< run env (Execution.loadExecution access)
   awakeable <- UUID.nextRandom
   run env (runTransaction (registerAwakeableTx awakeable "shikigami.execution" (executionWorkflowId snapshot.executionId).unWorkflowId))
-  let submission = Attempt.AttemptSubmission (Execution.toolAttemptRequest reference.attemptId reference.operationId input.binding) Nothing (Attempt.ExecutionWake (AwakeableId awakeable) 0)
+  let submission = Attempt.AttemptSubmission (Execution.toolAttemptRequest reference.attemptId reference.operationId input.binding) Nothing (Attempt.ExecutionWake (AwakeableId awakeable) ExecutionValue.initialExecutionGeneration)
   void (right =<< run env (Execution.submitExecutionAttemptWith access accepted.revision submission (\_ -> pure ())))
   pure (Prepared snapshot reference)
 
@@ -167,8 +169,8 @@ registry file client = must (installDurableAdapters [supervisedWorkspaceEditAdap
 native :: Tools.NativeToolFactory
 native = Tools.NativeToolFactory (\_ -> pure (Right [])) (\_ _ _ -> pure (Right []))
 
-policyDigest :: ExecutionSnapshot -> Text.Text
-policyDigest snapshot = versionedDigest "shikigami.harness-policy/1" (Aeson.toJSON snapshot.policy)
+policyDigest :: ExecutionSnapshot -> ExecutionDigest "policy"
+policyDigest snapshot = ExecutionValue.executionDigestFor "shikigami.harness-policy/1" (Aeson.toJSON snapshot.policy)
 
 run :: AppEnv -> Eff AppEffects a -> IO a
 run env action = right =<< runAppIO env action
@@ -192,7 +194,7 @@ prepareTools env authorizer current client admission calls = do
       descriptors = map (.descriptor) adapters
   catalog <- right (mkCapabilityCatalog descriptors)
   capabilities <- right (resolveGovernedCapabilityOverlays (durableAdapterInstalled providers) catalog (\_ _ -> Right ()) (ResolutionSubject (Just "fixture") Durable (Skill "fixture") Nothing) (map (.capability) descriptors))
-  let initial = ExecutionSnapshot V1 (executionIdFor admission.assignmentId) admission.runId (fixtureAgentName "fixture") admission.owner session selection Nothing (SkillInstructions "fixture" "system" "body") (ReplayContext 2 (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "qualified workspace operation"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
+  let initial = ExecutionSnapshot V1 (executionIdFor admission.assignmentId) admission.runId (fixtureAgentName "fixture") admission.owner session selection Nothing (SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "body") (ReplayContext RequestContext (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "qualified workspace operation"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
   menu <- right =<< Tools.describeExecutionTools Log.silentLogger authorizer providers native initial
   let snapshot = initial & #offeredTools .~ menu.offeredTools & #toolBindings .~ menu.toolBindings
   void (right =<< run env Catalog.registerProjectionCatalog)
@@ -208,14 +210,14 @@ appendTools env current snapshot calls = do
   access <- right =<< run env (Execution.authorizeReplay snapshot.executionId snapshot.identity (current snapshot))
   (_, state) <- right =<< run env (Execution.loadExecution access)
   unless (state.next == NeedModel) (fail "fixture did not reach model boundary")
-  let invocations = [ToolInvocation ("fixture-call-" <> Text.pack (show index)) name input | (index, (name, input)) <- zip [0 :: Int ..] calls]
+  let invocations = [ToolInvocation (ProviderValue.providerCoordinate ("fixture-call-" <> Text.pack (show index))) (executionCoordinate name) input | (index, (name, input)) <- zip [0 :: Int ..] calls]
       assistant = ReplayAssistant V1 (map ToolBlock invocations) ToolUse Nothing Nothing (Aeson.object []) Nothing
-      model = OperationSpec (operationIdFor snapshot.executionId state.cursor) ModelTurn RepeatableObservation "model" (policyDigest snapshot) "fixture-model" Nothing
+      model = OperationSpec (operationIdFor snapshot.executionId state.cursor) ModelTurn RepeatableObservation (ExecutionValue.executionCoordinate "model") (policyDigest snapshot) (ExecutionValue.executionDigest "fixture-model") Nothing
   (_, operation) <- right =<< run env (Execution.acceptOperation access state.revision model (Aeson.object []))
   now <- getCurrentTime
   let key = operationIdText operation.specification.operationId
       request = Resources.AttemptRequest (fixtureAttemptId ("model:" <> key)) operation.specification.operationId (Map.fromList [(Resources.ActiveWork, (fixtureAmount 1)), (Resources.ModelAttempts, (fixtureAmount 1)), (Resources.Tokens, (fixtureAmount 10)), (Resources.CostMicroUsd, (fixtureAmount 0))]) Resources.EnforcedCeiling
-  reserved <- right =<< run env (Calls.reserveSelectionCall snapshot.selection (Calls.CallLimits Nothing Nothing Nothing Nothing Nothing) request "fixture-model" now)
+  reserved <- right =<< run env (Calls.reserveSelectionCall snapshot.selection (Calls.CallLimits Nothing Nothing Nothing Nothing Nothing) request (executionDigest "fixture-model") now)
   call <- case reserved of Calls.NewCall value -> pure value; _ -> fail "expected new fixture call"
   let outcome = ModelReturned assistant Nothing
   response <- right (Execution.outcomeReference outcome)

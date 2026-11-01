@@ -71,7 +71,7 @@ tests =
       testCase "fixed context preserves every instruction through selection and refuses insufficient budget" $ do
         bundle <- right (mkInstructionBundle 65536 repository base [("AGENTS.md", "PRIVATE_ROOT"), ("src/AGENTS.md", "PRIVATE_NESTED")])
         let prompt = Just ("Operator restrictions" <> instructionPrompt bundle)
-            context = ReplayContext 2 prompt [RequestTurn [TextBlock "work"] Nothing, UserTurn [TextBlock (Text.replicate 3000 "old")] Nothing, UserTurn [TextBlock "recent"] Nothing]
+            context = ReplayContext RequestContext prompt [RequestTurn [TextBlock "work"] Nothing, UserTurn [TextBlock (Text.replicate 3000 "old")] Nothing, UserTurn [TextBlock "recent"] Nothing]
             policy = defaultHarnessPolicy & #contextBytes .~ (fixturePolicy 2048) & #keepRecentMessages .~ (fixturePolicy 1)
         selected <- right (selectContextView policy context)
         selected.context.systemPrompt @?= prompt

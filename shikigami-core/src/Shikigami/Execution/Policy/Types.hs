@@ -9,6 +9,7 @@ import Data.List (nub)
 import Data.Text qualified as Text
 import Dhall (FromDhall)
 import Numeric.Natural (Natural)
+import Shikigami.Execution.Coordinate
 import Shikigami.Execution.Policy.Limits
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude
@@ -24,7 +25,7 @@ data ToolInvoiceCost = NoInvoiceCost | UnreportedInvoiceCost
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data OutputRequirement = AnyReply | NonemptyReply | JsonFields ![Text]
+data OutputRequirement = AnyReply | NonemptyReply | JsonFields ![ExecutionCoordinate "json-field"]
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON, FromDhall)
 
@@ -33,8 +34,8 @@ data HarnessOverrides = HarnessOverrides
     outputRepairs :: !(Maybe Natural),
     contextBytes :: !(Maybe Natural),
     keepRecentMessages :: !(Maybe Natural),
-    deniedTools :: ![Text],
-    humanTools :: ![Text],
+    deniedTools :: ![ExecutionCoordinate "tool-name"],
+    humanTools :: ![ExecutionCoordinate "tool-name"],
     permissionSeconds :: !(Maybe Natural),
     output :: !(Maybe OutputRequirement),
     recoveryAttempts :: !(Maybe Natural),
@@ -58,8 +59,8 @@ data HarnessPolicy = HarnessPolicy
     outputRepairs :: !RepairLimit,
     contextBytes :: !ContextByteLimit,
     keepRecentMessages :: !RecentMessageMinimum,
-    deniedTools :: ![Text],
-    humanTools :: ![Text],
+    deniedTools :: ![ExecutionCoordinate "tool-name"],
+    humanTools :: ![ExecutionCoordinate "tool-name"],
     permissionSeconds :: !PermissionLifetime,
     output :: !OutputRequirement,
     recoveryAttempts :: !RecoveryAttemptLimit,
@@ -88,7 +89,7 @@ validateHarnessPolicy policy = do
     JsonFields names -> unless (validNames names) (Left "invalid output field list")
     _ -> Right ()
   where
-    validNames names = length names <= 128 && all (\name -> not (Text.null name) && Text.length name <= 256) names
+    validNames names = length names <= 128 && all (\name -> not (Text.null (executionCoordinateText name)) && Text.length (executionCoordinateText name) <= 256) names
 
 -- Operator options establish ceilings; declaration overrides narrow those
 -- ceilings and add restrictions. Neither path grants a tool or model binding.

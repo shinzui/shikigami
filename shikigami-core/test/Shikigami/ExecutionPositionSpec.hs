@@ -10,9 +10,11 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
+import Shikigami.Behavior.Provider.Coordinate qualified as ProviderValue
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Claim
+import Shikigami.Execution.Coordinate qualified as ExecutionValue
 import Shikigami.Execution.Identity (AttemptId, OperationId, operationIdText, parseOperationId)
 import Shikigami.Execution.Identity qualified as Entity
 import Shikigami.Execution.Payload (parsePayloadByteCount, parsePayloadDigest, parsePayloadId)
@@ -56,7 +58,7 @@ tests =
             request = Resources.AttemptRequest reference.attemptId reference.operationId Map.empty Resources.AdmittedUnknownUsage
             now = UTCTime (fromGregorian 2026 10 30) 0
             claim = Attempt.AttemptClaim reference owner generation
-            attempt = Attempt.ExecutionAttempt V1 execution reference.operationId request "fingerprint" Nothing payload Attempt.Claimed (Just owner) generation (Just now) Nothing Nothing Nothing
+            attempt = Attempt.ExecutionAttempt V1 execution reference.operationId request (ExecutionValue.executionDigest "fingerprint") Nothing payload Attempt.Claimed (Just owner) generation (Just now) Nothing Nothing Nothing
             claimWire = Aeson.object ["reference" .= reference, "owner" .= Aeson.String "fixture", "generation" .= (3 :: Integer)]
             attemptWire = Aeson.object ["format" .= (1 :: Int), "executionId" .= execution, "operationId" .= reference.operationId, "request" .= request, "fingerprint" .= Aeson.String "fingerprint", "call" .= Aeson.Null, "wake" .= payload, "phase" .= Attempt.Claimed, "owner" .= Aeson.String "fixture", "generation" .= (3 :: Integer), "expiresAt" .= now, "outcome" .= Aeson.Null, "lateReceipt" .= Aeson.Null, "uncertainty" .= Aeson.Null]
         assertWire claim claimWire
@@ -74,11 +76,11 @@ tests =
           _ -> assertFailure "attempt control was not an object",
       testCase "tool positions retain full input, continuation and specification bytes" do
         let position = checkedToolPosition 3
-            invocation = ToolInvocation "call" "observe" (Aeson.object [])
-            binding = ToolBinding "observe" "1" "schema" RepeatableObservation NoInvoiceCost
+            invocation = ToolInvocation (ProviderValue.providerCoordinate "call") (ExecutionValue.executionCoordinate "observe") (Aeson.object [])
+            binding = ToolBinding (ExecutionValue.executionCoordinate "observe") (ExecutionValue.executionCoordinate "1") (ExecutionValue.executionDigest "schema") RepeatableObservation NoInvoiceCost
             input = ToolOperationInput payload position invocation binding
             next = NeedTool payload position
-            specification = OperationSpec (operationIdFor execution (revision 7)) ToolOperation RepeatableObservation "observe" "policy" "scope" (Just position)
+            specification = OperationSpec (operationIdFor execution (revision 7)) ToolOperation RepeatableObservation (ExecutionValue.executionCoordinate "observe") (ExecutionValue.executionDigest "policy") (ExecutionValue.executionDigest "scope") (Just position)
             inputWire = Aeson.object ["response" .= payload, "position" .= (3 :: Int), "invocation" .= invocation, "binding" .= binding]
             nextWire = Aeson.object ["tag" .= Aeson.String "NeedTool", "contents" .= [Aeson.toJSON payload, Aeson.toJSON (3 :: Int)]]
             specWire = Aeson.object ["operationId" .= specification.operationId, "kind" .= ToolOperation, "recovery" .= RepeatableObservation, "name" .= Aeson.String "observe", "policyDigest" .= Aeson.String "policy", "scopeDigest" .= Aeson.String "scope", "responsePosition" .= (3 :: Int)]
@@ -113,8 +115,8 @@ tests =
         let expected = "operation:" <> versionedDigest "shikigami.execution-operation/1" (Aeson.toJSON (execution, 7 :: Integer))
         Aeson.toJSON (operationIdFor execution (revision 7)) @?= Aeson.toJSON expected,
       testCase "operation codec retains numeric position and rejects another identity" do
-        let specification = OperationSpec (operationIdFor execution (revision 7)) ModelTurn RepeatableObservation "model" "policy" "scope" Nothing
-            operation = Operation V1 execution (revision 7) specification "fingerprint" payload Nothing Nothing NotMarkedUncertain Nothing
+        let specification = OperationSpec (operationIdFor execution (revision 7)) ModelTurn RepeatableObservation (ExecutionValue.executionCoordinate "model") (ExecutionValue.executionDigest "policy") (ExecutionValue.executionDigest "scope") Nothing
+            operation = Operation V1 execution (revision 7) specification (ExecutionValue.executionDigest "fingerprint") payload Nothing Nothing NotMarkedUncertain Nothing
             encoded = Aeson.toJSON operation
         Aeson.fromJSON encoded @?= Aeson.Success operation
         case encoded of
@@ -131,7 +133,7 @@ tests =
           _ -> assertFailure "operation did not encode as an object"
     ]
   where
-    execution = ExecutionId "execution:position-codec"
+    execution = executionIdentity "execution:position-codec"
     payload = fixturePayloadRef "payload:fixture" ("sha256:" <> Text.replicate 64 "a") 1
     refusedState value = case Aeson.fromJSON value :: Aeson.Result ExecutionState of
       Aeson.Error _ -> pure ()

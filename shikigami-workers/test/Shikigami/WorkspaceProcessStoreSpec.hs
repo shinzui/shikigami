@@ -26,10 +26,11 @@ import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Execution.Claim qualified as Claim
+import Shikigami.Execution.Coordinate qualified as ExecutionValue
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Payload (parsePayloadDigest)
 import Shikigami.Execution.Runner (OperationContext (..))
-import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (NeedModel))
+import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (NeedModel), executionIdentity)
 import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
@@ -276,7 +277,7 @@ withProcess fixture use = Fixture.withFixture fixture \env _ root repository -> 
   now <- getCurrentTime
   let command = ProcessCommand "validate" digest "/bin/validate" [] "" (Map.fromList [("HOME", "/scratch"), ("TMPDIR", "/scratch")]) 30 1024
       operation = fixtureOperationId "process-operation"
-      logical = OperationContext (ExecutionId "process-execution") operation "process-operation" "input-fingerprint" "scope"
+      logical = OperationContext (executionIdentity "process-execution") operation (fixtureOperationId "process-operation") (ExecutionValue.executionDigest "input-fingerprint") (ExecutionValue.executionDigest "scope")
       fingerprint = processFingerprint binding digest logical command
       record = ProcessRecord operation (fixtureAttemptId "original-attempt") (fixtureOwner "original-claim") (fixtureGeneration 1) (workspaceBindingDigest binding) digest fingerprint command (addUTCTime 30 now) (processUnit operation fingerprint) Nothing Nothing ProcessReserved Nothing Nothing
   use env binding record
@@ -313,7 +314,7 @@ fixtureAgentName = either (error . show) id . mkAgentName
 malformedProcessMetadata :: DatabaseFixture -> Transaction () -> IO ()
 malformedProcessMetadata fixture corrupt = withProcess fixture \env binding original -> do
   let inputDigest = either (error . show) id (parsePayloadDigest original.fingerprint)
-      routing = ProcessRouting ProcessRoutingV1 (ExecutionId "process-routing") binding.request.owner inputDigest NeedModel
+      routing = ProcessRouting ProcessRoutingV1 (executionIdentity "process-routing") binding.request.owner inputDigest NeedModel
       proposed = original & #routing .~ Just routing
   run env (reserveProcessTx binding proposed) >>= (@?= Right proposed)
   run env (inspectProcessTx proposed.operationId) >>= (@?= Right (Just proposed))

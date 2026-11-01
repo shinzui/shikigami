@@ -37,6 +37,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Numeric.Natural (Natural)
 import Shikigami.Agent.Decl (DelegationBudget, delegationBudgetInt)
 import Shikigami.Agent.Delegate.Context (DelegationBudgetId (..))
+import Shikigami.Execution.Coordinate (executionCoordinate)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId, executionRootIdText, operationIdWithPrefix, parseExecutionRootId)
 import Shikigami.Execution.Quantity (oneAmount)
 import Shikigami.Execution.Resources qualified as Resources
@@ -166,7 +167,7 @@ reserveEnrolledDelegationSlots root budgetId seed childIds now = runTransaction 
                 then pure result
                 else Tx.condemn >> pure (Left (DelegationResourceRefused Resources.IdentityConflict))
   where
-    request (WorkflowId child) = Resources.OperationRequest (operationIdWithPrefix ('d' :| "elegate:") child) Nothing Resources.ChildOperation (Map.singleton Resources.LifetimeDescendants oneAmount) "delegation-v1"
+    request (WorkflowId child) = Resources.OperationRequest (operationIdWithPrefix ('d' :| "elegate:") child) Nothing Resources.ChildOperation (Map.singleton Resources.LifetimeDescendants oneAmount) (executionCoordinate "delegation-v1")
 
 bindRootStatement :: Statement (DelegationBudgetId, Text, Bool) Bool
 bindRootStatement =

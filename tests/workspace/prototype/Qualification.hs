@@ -124,7 +124,7 @@ runTools q first = loop first []
   where
     loop prepared previous = do
       Just operation <- right =<< run q.env (Execution.inspectOperation prepared.reference.operationId)
-      when (operation.specification.name == "overlay__workspace-exec__validate") do
+      when (operation.specification.name == executionCoordinate "overlay__workspace-exec__validate") do
         clock <- doesFileExist "/run/shikigami-workspace-prototype.clock-steps"
         when clock (void (readProcess "/usr/bin/timeout" ["40", q.prefix </> "root/bin/probe", "--await-clock-step"] ""))
       executeConfigured q prepared
@@ -139,7 +139,7 @@ resultValue q prepared = do
   result <- maybe (fail "qualification result missing") pure operation.outcome
   outcome <- right =<< run q.env (Execution.readReplayPayload @OperationOutcome access "operation-outcome" result)
   case outcome of
-    RichToolReturned output | not output.failed -> case output.blocks of [TextBlock text] -> right (Aeson.eitherDecodeStrict (Encoding.encodeUtf8 text)); _ -> fail "qualification JSON absent"
+    RichToolReturned output | not (toolFailed output.failed) -> case output.blocks of [TextBlock text] -> right (Aeson.eitherDecodeStrict (Encoding.encodeUtf8 text)); _ -> fail "qualification JSON absent"
     _ -> fail "qualification operation refused"
 
 integrationCase :: FilePath -> FilePath -> IO ()

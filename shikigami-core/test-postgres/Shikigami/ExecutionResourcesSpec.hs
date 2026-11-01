@@ -23,6 +23,7 @@ import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent))
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Delegation.BudgetStore
+import Shikigami.Execution.Coordinate (executionCoordinate)
 import Shikigami.Execution.Counter (AttemptCount, noAttempts, parseAttemptCount)
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
@@ -159,7 +160,7 @@ tests fixture =
         run env (reserveOperation rid (fixtureRevision 0) (child "one") now) >>= (@?= Right Accepted),
       testCase "conflicting duplicate batch rolls back its first insert" $ withFixture fixture \env -> do
         seed env []
-        let altered = OperationRequest (fixtureOperationId "one") Nothing ToolOperation Map.empty "different"
+        let altered = OperationRequest (fixtureOperationId "one") Nothing ToolOperation Map.empty (executionCoordinate "different")
         run env (reserveOperations rid (fixtureRevision 0) [model "one", altered] now) >>= (@?= Left IdentityConflict)
         run env (begin "a" "one") >>= (@?= Left OperationMissing),
       testCase "replay after lost response spends nothing and cannot widen" $ withFixture fixture \env -> do
@@ -266,7 +267,7 @@ tests fixture =
         seed env [(LifetimeDescendants, (fixtureAmount 2))]
         let allocation = fixtureAllocationId "worker"
             slice = Envelope (Map.singleton LifetimeDescendants (Limited (fixtureAmount 2))) (addUTCTime 3600 now)
-            scoped = OperationRequest (fixtureOperationId "one") (Just allocation) ChildOperation (Map.singleton LifetimeDescendants (fixtureAmount 1)) "child-v1"
+            scoped = OperationRequest (fixtureOperationId "one") (Just allocation) ChildOperation (Map.singleton LifetimeDescendants (fixtureAmount 1)) (executionCoordinate "child-v1")
         run env (narrowAllocation rid (fixtureRevision 0) allocation Nothing slice now) >>= (@?= Right Accepted)
         run env (reserveOperation rid (fixtureRevision 0) (child "direct") now) >>= (@?= Left (ResourceExhausted LifetimeDescendants))
         run env (reserveOperation rid (fixtureRevision 0) scoped now) >>= (@?= Right Accepted)
@@ -278,7 +279,7 @@ tests fixture =
       testCase "missing roots and scopes never seed allowance" $ withFixture fixture \env -> do
         run env (reserveOperation rid (fixtureRevision 0) (child "one") now) >>= (@?= Left RootMissing)
         seed env []
-        let scoped = OperationRequest (fixtureOperationId "one") (Just (fixtureAllocationId "missing")) ChildOperation (Map.singleton LifetimeDescendants (fixtureAmount 1)) "child-v1"
+        let scoped = OperationRequest (fixtureOperationId "one") (Just (fixtureAllocationId "missing")) ChildOperation (Map.singleton LifetimeDescendants (fixtureAmount 1)) (executionCoordinate "child-v1")
         run env (reserveOperation rid (fixtureRevision 0) scoped now) >>= (@?= Left AllocationMissing),
       testCase "transaction hook rolls settlement back with the accepted outcome" $ withFixture fixture \env -> do
         seed env []
@@ -375,10 +376,10 @@ seed :: AppEnv -> [(Dimension, ResourceAmount)] -> IO ()
 seed env limits = run env (enrollRoot rid (envelope limits)) >>= (@?= Right Accepted)
 
 model :: String -> OperationRequest
-model key = OperationRequest (fixtureOperationId (fromString key)) Nothing ModelOperation Map.empty "model-v1"
+model key = OperationRequest (fixtureOperationId (fromString key)) Nothing ModelOperation Map.empty (executionCoordinate "model-v1")
 
 child :: String -> OperationRequest
-child key = OperationRequest (fixtureOperationId (fromString key)) Nothing ChildOperation (Map.singleton LifetimeDescendants (fixtureAmount 1)) "child-v1"
+child key = OperationRequest (fixtureOperationId (fromString key)) Nothing ChildOperation (Map.singleton LifetimeDescendants (fixtureAmount 1)) (executionCoordinate "child-v1")
 
 reserveModel :: AppEnv -> String -> IO ()
 reserveModel env key = run env (reserveOperation rid (fixtureRevision 0) (model key) now) >>= (@?= Right Accepted)

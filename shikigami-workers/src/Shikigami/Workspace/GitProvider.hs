@@ -45,6 +45,7 @@ import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider (DurableAdapter (..), DurableToolContract (..))
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
+import Shikigami.Execution.Coordinate
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
@@ -118,7 +119,7 @@ transferredGitBinding :: Text -> ToolBinding
 transferredGitBinding = gitBindingFor True
 
 gitBindingFor :: Bool -> Text -> ToolBinding
-gitBindingFor transferable name = ToolBinding ("overlay__workspace-git__" <> name) (if transferable then "workspace.git:2" else "workspace.git:1") (versionedDigest "shikigami.tool-schema/1" (gitSchema name)) (if name == "commit" then IdempotentEffect else RepeatableObservation) NoInvoiceCost
+gitBindingFor transferable name = ToolBinding (executionCoordinate ("overlay__workspace-git__" <> name)) (executionCoordinate (if transferable then "workspace.git:2" else "workspace.git:1")) (executionDigestFor "shikigami.tool-schema/1" (gitSchema name)) (if name == "commit" then IdempotentEffect else RepeatableObservation) NoInvoiceCost
 
 gitDescription :: Text -> Text
 gitDescription "status" = "Inspect the isolated local repository's exact HEAD, captured tree and changed paths."
@@ -141,23 +142,24 @@ gitAdapterFor :: Bool -> GitBackend -> FileRuntime -> DurableAdapter
 gitAdapterFor transferable backend runtime =
   DurableAdapter
     (gitDescriptorFor transferable)
-    [DurableToolContract name (gitDescription name) (gitSchema name) (gitBindingFor transferable name).recovery NoInvoiceCost | name <- ["status", "diff", "commit"]]
-    ( \snapshot dispatch name ->
-        pure
-          ( Right
-              ( mkDynTool
-                  name
-                  (gitDescription name)
-                  (gitSchema name)
-                  ( \input -> unsafeEff_ do
-                      result <- runGitToolFor transferable backend runtime snapshot dispatch name input
-                      case result of
-                        Left FileEffectUnresolved -> throwIO (userError "workspace Git effect requires reconciliation")
-                        Left FileEffectUnavailable -> throwIO (userError "workspace Git evidence is unavailable")
-                        _ -> pure (either (const (Left (ToolRunFailed name "workspace operation refused"))) (Right . textToolOutput . Encoding.decodeUtf8 . Lazy.toStrict . Aeson.encode) result)
+    [DurableToolContract (executionCoordinate name) (gitDescription name) (gitSchema name) (gitBindingFor transferable name).recovery NoInvoiceCost | name <- ["status", "diff", "commit"]]
+    ( \snapshot dispatch requestedName ->
+        let name = executionCoordinateText requestedName
+         in pure
+              ( Right
+                  ( mkDynTool
+                      name
+                      (gitDescription name)
+                      (gitSchema name)
+                      ( \input -> unsafeEff_ do
+                          result <- runGitToolFor transferable backend runtime snapshot dispatch name input
+                          case result of
+                            Left FileEffectUnresolved -> throwIO (userError "workspace Git effect requires reconciliation")
+                            Left FileEffectUnavailable -> throwIO (userError "workspace Git evidence is unavailable")
+                            _ -> pure (either (const (Left (ToolRunFailed name "workspace operation refused"))) (Right . textToolOutput . Encoding.decodeUtf8 . Lazy.toStrict . Aeson.encode) result)
+                      )
                   )
               )
-          )
     )
 
 runGitTool :: GitBackend -> FileRuntime -> ExecutionSnapshot -> DispatchContext -> Text -> Aeson.Value -> IO (Either FileEffectError Aeson.Value)
@@ -205,8 +207,8 @@ loadAcceptedTool transferable descriptor expected runtime snapshot dispatch inpu
   (retained, _) <- execute runtime.appEnv (Execution.loadExecution access)
   operation <- execute runtime.appEnv (Execution.inspectOperation dispatch.operation.operationId) >>= maybe (abort FileEffectRefused) pure
   admission <- maybe (abort FileEffectRefused) pure snapshot.workspace
-  let key = operationIdText dispatch.operation.operationId
-  unless (retained == snapshot && admission.filePolicy == Just (if transferable then transferableFilePolicy else supervisedFilePolicy) && descriptor `elem` resolvedCapabilities snapshot.capabilities && dispatch.operation == OperationContext snapshot.executionId dispatch.operation.operationId key operation.fingerprint operation.specification.scopeDigest && operation.executionId == snapshot.executionId && operation.specification.kind == ToolOperation && operation.specification.name == expected.name && operation.specification.recovery == expected.recovery && operation.specification.scopeDigest == toolScopeDigest expected && operation.specification.policyDigest == versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) (abort FileEffectRefused)
+  let key = dispatch.operation.operationId
+  unless (retained == snapshot && admission.filePolicy == Just (if transferable then transferableFilePolicy else supervisedFilePolicy) && descriptor `elem` resolvedCapabilities snapshot.capabilities && dispatch.operation == OperationContext snapshot.executionId dispatch.operation.operationId key operation.fingerprint operation.specification.scopeDigest && operation.executionId == snapshot.executionId && operation.specification.kind == ToolOperation && operation.specification.name == expected.name && operation.specification.recovery == expected.recovery && operation.specification.scopeDigest == toolScopeDigest expected && operation.specification.policyDigest == executionDigestFor "shikigami.harness-policy/1" (toJSON snapshot.policy)) (abort FileEffectRefused)
   tool <- execute runtime.appEnv (Execution.readReplayPayload @ToolOperationInput access "operation-input" operation.input)
   unless (tool.binding == expected && expected `elem` snapshot.toolBindings && tool.invocation.name == expected.name && tool.invocation.arguments == input && operation.specification.responsePosition == Just tool.position) (abort FileEffectRefused)
   response <- execute runtime.appEnv (Execution.readReplayPayload @OperationOutcome access "operation-outcome" tool.response)
@@ -401,13 +403,13 @@ publishGitReceipt env operationId = protect do
       expected <- case filter (\tool -> operation.specification.scopeDigest == toolScopeDigest tool) [gitBinding "commit", transferredGitBinding "commit"] of
         [tool] -> pure tool
         _ -> abort FileEffectUnresolved
-      let key = operationIdText operationId
+      let key = operationId
       unless (routing.identity == retained.identity && retained.rootId == Just binding.request.rootId && record.operation == OperationContext routing.executionId operationId key operation.fingerprint operation.specification.scopeDigest && operation.executionId == routing.executionId && operation.specification.kind == ToolOperation && operation.specification.name == expected.name && operation.specification.recovery == expected.recovery && operation.specification.scopeDigest == toolScopeDigest expected && operation.input.digest == routing.inputDigest) (abort FileEffectUnresolved)
       actual <- execute env (Execution.inspectExecutionAttempt record.attemptId) >>= maybe (abort FileEffectUnresolved) pure
       unless (actual.executionId == routing.executionId && actual.operationId == operationId && actual.owner == Just record.claimOwner && actual.generation == record.generation && isNothing actual.call) (abort FileEffectUnresolved)
       let reference = Attempt.JobReference V1 routing.executionId operationId record.attemptId
           claim = Attempt.AttemptClaim reference record.claimOwner record.generation
-          outcome = either (\err -> ToolReturned [TextBlock (renderToolError err)] True) (RichToolReturned . captureToolOutput) result
+          outcome = either (\err -> ToolReturned [TextBlock (renderToolError err)] ToolFailed) (RichToolReturned . captureToolOutput) result
           receipt = Attempt.AttemptResult outcome routing.next Nothing
           acknowledge = execute env (Execution.publishExecutionWake reference) >> pure GitReceiptAcknowledged
       case actual.phase of
@@ -463,25 +465,26 @@ workspaceIntegrationDescriptor = CapabilityDescriptor (must (mkCapabilityId "wor
     must :: (Show e) => Either e a -> a; must = either (error . show) id
 
 integrationBinding :: ToolBinding
-integrationBinding = ToolBinding "overlay__workspace-integrate__plan" "workspace.integrate:1" (versionedDigest "shikigami.tool-schema/1" Integration.schema) RepeatableObservation NoInvoiceCost
+integrationBinding = ToolBinding (executionCoordinate "overlay__workspace-integrate__plan") (executionCoordinate "workspace.integrate:1") (executionDigestFor "shikigami.tool-schema/1" Integration.schema) RepeatableObservation NoInvoiceCost
 
 workspaceIntegrationAdapter :: FileRuntime -> DurableAdapter
 workspaceIntegrationAdapter = workspaceIntegrationAdapterWithBackend nativeGitBackend
 
 workspaceIntegrationAdapterWithBackend :: GitBackend -> FileRuntime -> DurableAdapter
-workspaceIntegrationAdapterWithBackend backend runtime = DurableAdapter workspaceIntegrationDescriptor [DurableToolContract "plan" description Integration.schema RepeatableObservation NoInvoiceCost] \snapshot dispatch name ->
-  pure
-    ( Right
-        ( mkDynTool
-            name
-            description
-            Integration.schema
-            ( \input -> unsafeEff_ do
-                result <- protect (integration backend runtime snapshot dispatch name input)
-                pure (either (const (Left (ToolRunFailed name "workspace integration refused"))) (Right . textToolOutput . Encoding.decodeUtf8 . Lazy.toStrict . Aeson.encode) result)
+workspaceIntegrationAdapterWithBackend backend runtime = DurableAdapter workspaceIntegrationDescriptor [DurableToolContract (executionCoordinate "plan") description Integration.schema RepeatableObservation NoInvoiceCost] \snapshot dispatch requestedName ->
+  let name = executionCoordinateText requestedName
+   in pure
+        ( Right
+            ( mkDynTool
+                name
+                description
+                Integration.schema
+                ( \input -> unsafeEff_ do
+                    result <- protect (integration backend runtime snapshot dispatch name input)
+                    pure (either (const (Left (ToolRunFailed name "workspace integration refused"))) (Right . textToolOutput . Encoding.decodeUtf8 . Lazy.toStrict . Aeson.encode) result)
+                )
             )
         )
-    )
   where
     description = "Plan exact retained worker artifacts in this separate clean workspace. Conflicts change no files or HEAD. Apply returned replacements, validate and commit using the governed tools."
 

@@ -29,6 +29,7 @@ import Shikigami.Decision.Contract (ModelAlias, ModelDescriptor (..), versionedD
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Execution.AssignmentKey (AssignmentKey, assignmentIdFor, assignmentKeyText, conversationAssignmentIdFor, parseAssignmentKey)
+import Shikigami.Execution.Coordinate qualified as ExecutionValue
 import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Execution.Request
@@ -152,7 +153,7 @@ tests =
         declaration <- mustRight <$> loadAgent "test/fixtures/harness-agent.dhall"
         policy <- pure (mustRight (Harness.narrowHarnessPolicy Harness.defaultHarnessPolicy declaration.harness))
         policy.maxModelTurns @?= (fixturePolicy 2)
-        policy.deniedTools @?= ["write"]
+        policy.deniedTools @?= (map ExecutionValue.executionCoordinate ["write"])
         policy.output @?= Harness.NonemptyReply
         Aeson.eitherDecode (Aeson.encode declaration) @?= Right declaration,
       testCase "historical declarations omit the new default and recover it on decode" do

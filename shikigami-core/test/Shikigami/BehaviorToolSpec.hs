@@ -40,6 +40,7 @@ import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
 import Shikigami.Capability.Catalog (ExecutionMode (Durable))
 import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider
+import Shikigami.Execution.Coordinate qualified as ExecutionValue
 import Shikigami.Execution.Ephemeral (EphemeralResult (..), runEphemeralBehavior)
 import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
 import Shikigami.Execution.Policy.Types
@@ -121,7 +122,7 @@ ephemeralTests =
               result <- runEphemeralBehavior 30 policy env decl (triggerOnly Aeson.Null)
               case result of Left HarnessPolicyRefused {} -> pure (); _ -> assertFailure "expected permanent policy refusal"
           )
-          [defaultHarnessPolicy & #deniedTools .~ [namespacedRead], defaultHarnessPolicy & #humanTools .~ [namespacedRead]]
+          [defaultHarnessPolicy & #deniedTools .~ (map ExecutionValue.executionCoordinate [namespacedRead]), defaultHarnessPolicy & #humanTools .~ (map ExecutionValue.executionCoordinate [namespacedRead])]
         readIORef invocations >>= (@?= 0),
       testCase "an uncertain native effect is invoked once without automatic retry" do
         invocations <- newIORef (0 :: Int)

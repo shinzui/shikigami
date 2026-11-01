@@ -30,6 +30,7 @@ import Shikigami.Capability.Provider (DurableAdapter (..))
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Claim qualified as Claim
+import Shikigami.Execution.Coordinate qualified as ExecutionValue
 import Shikigami.Execution.Counter (AttemptCount, parseAttemptCount)
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity
@@ -194,7 +195,7 @@ tests fixture =
         (_, uncertain) <- right =<< run env (Execution.loadExecution access)
         let replacement = reference & #attemptId .~ fixtureAttemptId "git-replacement"
             tool = head snapshot.toolBindings
-            submission = Attempt.AttemptSubmission (Execution.toolAttemptRequest replacement.attemptId replacement.operationId tool) Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)
+            submission = Attempt.AttemptSubmission (Execution.toolAttemptRequest replacement.attemptId replacement.operationId tool) Nothing (Attempt.ExecutionWake (AwakeableId UUID.nil) ExecutionValue.initialExecutionGeneration)
         _ <- right =<< run env (Execution.recoverExecutionAttemptWith access uncertain.revision reference.attemptId submission (\_ -> pure ()))
         execute executor snapshot replacement
         readIORef writes >>= (@?= 1)
@@ -376,7 +377,7 @@ withIntegrationTool :: AppEnv -> WorkspaceAdmission -> FileRuntime -> GitBackend
 withIntegrationTool env admission runtime backend input use = do
   token <- UUID.nextRandom
   let adapter = workspaceIntegrationAdapterWithBackend backend
-  Fixture.withAcceptedWorkspaceTool 1 adapter (fixtureAgentName "worker") integrationBinding.name token env admission runtime input \snapshot access reference -> do
+  Fixture.withAcceptedWorkspaceTool 1 adapter (fixtureAgentName "worker") (executionCoordinateText integrationBinding.name) token env admission runtime input \snapshot access reference -> do
     execute (Fixture.executorForAdapter adapter runtime) snapshot reference
     Just operation <- right =<< run env (Execution.inspectOperation reference.operationId)
     result <- maybe (fail "missing integration result") pure operation.outcome
@@ -384,7 +385,7 @@ withIntegrationTool env admission runtime backend input use = do
     use output
 
 outputValue :: OperationOutcome -> IO Aeson.Value
-outputValue (RichToolReturned result) | not result.failed = case result.blocks of
+outputValue (RichToolReturned result) | not (toolFailed result.failed) = case result.blocks of
   [TextBlock value] -> right (Aeson.eitherDecodeStrict (Encoding.encodeUtf8 value))
   _ -> fail "expected exact integration JSON"
 outputValue _ = fail "expected successful integration"
@@ -401,8 +402,8 @@ asEither (Aeson.Success value) _ = Right value
 asEither (Aeson.Error err) _ = Left err
 
 assertRefused :: OperationOutcome -> Assertion
-assertRefused (ToolReturned _ True) = pure ()
-assertRefused (RichToolReturned result) | result.failed = pure ()
+assertRefused (ToolReturned _ ToolFailed) = pure ()
+assertRefused (RichToolReturned result) | toolFailed result.failed = pure ()
 assertRefused _ = assertFailure "expected bounded refusal"
 
 fixtureRevision :: Integer -> StateRevision scope

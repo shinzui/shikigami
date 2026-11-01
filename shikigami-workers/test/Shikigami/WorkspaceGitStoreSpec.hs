@@ -19,10 +19,11 @@ import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Execution.Claim qualified as Claim
+import Shikigami.Execution.Coordinate qualified as ExecutionValue
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Payload (PayloadDigest, parsePayloadDigest)
 import Shikigami.Execution.Runner (OperationContext (..))
-import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (NeedModel))
+import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (NeedModel), executionIdentity)
 import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
@@ -114,7 +115,7 @@ tests fixture =
         let keys = [Text.pack ("git-page-" <> show index) | index <- [1 .. 66 :: Int]]
         mapM_
           ( \key -> do
-              let logical = proposed.operation & #operationId .~ fixtureOperationId key & #idempotencyKey .~ key
+              let logical = proposed.operation & #operationId .~ fixtureOperationId key & #idempotencyKey .~ fixtureOperationId key
                   value = proposed & #operation .~ logical
                   entry = value & #fingerprint .~ gitFingerprint binding value
               retained <- right =<< run env (reserveGitTx binding entry)
@@ -145,7 +146,7 @@ withGit fixture use = Fixture.withFixture fixture \env _ root repository -> do
   allocateWorkspace root binding Reserved >>= (@?= Right ())
   run env (Store.markWorkspaceReadyTx binding) >>= (@?= Right ())
   now <- getCurrentTime
-  let logical = OperationContext (ExecutionId "git-execution") (fixtureOperationId "git-operation") "git-operation" digest digest
+  let logical = OperationContext (executionIdentity "git-execution") (fixtureOperationId "git-operation") (fixtureOperationId "git-operation") (ExecutionValue.executionDigest digest) (ExecutionValue.executionDigest digest)
       record = GitRecord GitRecordV1 logical (fixtureAttemptId "original-attempt") (fixtureOwner "original-claim") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest "device:parent" candidate.parent digest now (GitRouting logical.executionId owner (fixturePayloadDigest digest) NeedModel) GitReserved Nothing
   use env binding (record & #fingerprint .~ gitFingerprint binding record)
 

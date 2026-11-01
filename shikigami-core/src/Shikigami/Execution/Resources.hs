@@ -8,6 +8,7 @@ import Data.Aeson (FromJSON (..), FromJSONKey, ToJSON (..), ToJSONKey)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
+import Shikigami.Execution.Coordinate
 import Shikigami.Execution.Counter
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Quantity
@@ -104,7 +105,7 @@ data OperationRequest = OperationRequest
     allocationId :: !(Maybe AllocationId),
     kind :: !OperationKind,
     quantities :: !Quantities,
-    fingerprint :: !Text
+    fingerprint :: !(ExecutionCoordinate "resource-fingerprint")
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -207,7 +208,7 @@ validateOperation :: OperationRequest -> Either ResourceError ()
 validateOperation request = do
   let key = operationIdText request.operationId
   validateKey key
-  validateKey request.fingerprint
+  validateKey (executionCoordinateText request.fingerprint)
   case request.kind of
     ChildOperation -> unless (request.quantities == Map.singleton LifetimeDescendants oneAmount) invalid
     _ -> unless (Map.null request.quantities) invalid

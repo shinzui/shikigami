@@ -27,6 +27,7 @@ import Shikigami.App (AppEffects, runAppIO)
 import Shikigami.Capability.Provider (DurableAdapter (..), DurableToolContract (..))
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Claim qualified as Claim
+import Shikigami.Execution.Coordinate qualified as ExecutionValue
 import Shikigami.Execution.Counter (AttemptCount, parseAttemptCount)
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Policy.Types
@@ -342,7 +343,7 @@ withProcessVersion transferred toolCount fixture configure acknowledge use = do
       makeRuntime file = configure (SupervisorRuntime file.appEnv file.authorizer (const (pure (Right ()))) file.lifecycle select backend)
       install file = adapterWithVersion transferred id (makeRuntime file) observed file
       qualify admission = admission & #filePolicy .~ Just (if transferred then transferableFilePolicy else supervisedFilePolicy)
-  Fixture.withEffectAdapterForTools toolCount qualify install workspaceExecBinding.name "validate" (Just (Aeson.object ["rule" .= ("validate" :: Text.Text)])) fixture \_ _ snapshot _ reference file _ ->
+  Fixture.withEffectAdapterForTools toolCount qualify install (executionCoordinateText workspaceExecBinding.name) "validate" (Just (Aeson.object ["rule" .= ("validate" :: Text.Text)])) fixture \_ _ snapshot _ reference file _ ->
     use file (makeRuntime file) observed calls snapshot reference
   where
     boot = "11111111-1111-4111-8111-111111111111"
@@ -358,10 +359,10 @@ adapterWithRequest :: (SupervisorRequest -> SupervisorRequest) -> SupervisorRunt
 adapterWithRequest = adapterWithVersion False
 
 adapterWithVersion :: Bool -> (SupervisorRequest -> SupervisorRequest) -> SupervisorRuntime -> IORef (Maybe SupervisorRequest) -> FileRuntime -> DurableAdapter
-adapterWithVersion transferred alter runtime observed file = DurableAdapter (if transferred then transferredWorkspaceExecDescriptor else workspaceExecDescriptor) [DurableToolContract "validate" "Validate one reviewed rule." workspaceExecSchema UncertainEffect NoInvoiceCost] \snapshot dispatch name ->
+adapterWithVersion transferred alter runtime observed file = DurableAdapter (if transferred then transferredWorkspaceExecDescriptor else workspaceExecDescriptor) [DurableToolContract (ExecutionValue.executionCoordinate "validate") "Validate one reviewed rule." workspaceExecSchema UncertainEffect NoInvoiceCost] \snapshot dispatch name ->
   pure
     ( Right
-        ( mkDynTool name "Validate one reviewed rule." workspaceExecSchema \(_input :: Aeson.Value) -> unsafeEff_ do
+        ( mkDynTool (executionCoordinateText name) "Validate one reviewed rule." workspaceExecSchema \(_input :: Aeson.Value) -> unsafeEff_ do
             let request = SupervisorRequest snapshot.executionId dispatch.operation.operationId dispatch.attemptId dispatch.owner dispatch.generation
             writeIORef observed (Just request)
             result <- superviseProcess runtime (alter request)

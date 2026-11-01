@@ -2,7 +2,7 @@
 module Shikigami.WorkerSessionLifecycle.BehaviorHoles (behaviorWitnesses) where
 
 import Shikigami.Prelude
-import Shikigami.WorkerSession.Types (WorkerSessionId (value), workerSessionId)
+import Shikigami.WorkerSession.Types (WorkerSessionId, workerSessionId)
 import Shikigami.WorkerSessionLifecycle.Generated.BehaviorContract
 import Shikigami.WorkerSessionLifecycle.Generated.Domain
 

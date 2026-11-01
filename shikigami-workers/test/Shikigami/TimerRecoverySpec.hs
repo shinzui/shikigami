@@ -37,9 +37,10 @@ import Kiroku.Store.Types (EventId (..))
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Attempt (ExecutionWake (..), JobReference (..))
+import Shikigami.Execution.Coordinate qualified as ExecutionValue
 import Shikigami.Execution.Identity (AttemptId, OperationId)
 import Shikigami.Execution.Timer (armObservation)
-import Shikigami.Execution.Transcript (ExecutionId (..))
+import Shikigami.Execution.Transcript (ExecutionId (..), executionIdentity)
 import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
@@ -63,12 +64,12 @@ tests fixture =
                 scheduler = testSchedulerEnv (StoreConnection.pool store)
                 name = WorkflowName "shikigami.execution"
                 workflowId = WorkflowId "timer-execution-fixture"
-                reference = JobReference V1 (ExecutionId "execution-fixture") (fixtureOperationId "operation-fixture") (fixtureAttemptId "attempt-fixture")
+                reference = JobReference V1 (executionIdentity "execution-fixture") (fixtureOperationId "operation-fixture") (fixtureAttemptId "attempt-fixture")
                 body :: Eff (Workflow : AppEffects) JobReference
                 body = do
                   generation <- currentRunGeneration
                   (token, await) <- awakeableNamed (StepName "observation")
-                  armObservation (ExecutionWake token generation) reference
+                  armObservation (ExecutionWake token (either (error . show) id (ExecutionValue.parseExecutionGeneration generation))) reference
                   await
                 drive = runAppIO appEnv (runWorkflowWith (shikigamiWorkflowRunOptions appEnv) name workflowId body)
             drive >>= assertEqual "workflow parks" (Right Suspended)

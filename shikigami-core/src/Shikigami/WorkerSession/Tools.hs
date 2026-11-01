@@ -14,6 +14,7 @@ import Keiro.Workflow.Types (WorkflowId (..))
 import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.App (AppEffects, runAppIO)
 import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Execution.Coordinate
 import Shikigami.Execution.Executor (BoundTool (..))
 import Shikigami.Execution.Policy.Types (RecoveryClass (IdempotentEffect), ToolInvoiceCost (NoInvoiceCost))
 import Shikigami.Execution.Runner (OperationContext (..))
@@ -38,11 +39,11 @@ coordinationTools (Just host) authorizer =
         granted <- owned (resolveGrant host authorizer (coordinatorRunFor snapshot) Nothing)
         pure (fmap (maybe [] (\grant -> [bound grant Nothing | grantSupportsSkill grant])) granted),
       prepare = \snapshot context requested ->
-        if maybe False (/= name) requested
+        if maybe False (/= executionCoordinate name) requested
           then pure (Right [])
-          else case filter ((== name) . (.name)) snapshot.toolBindings of
+          else case filter ((== executionCoordinate name) . (.name)) snapshot.toolBindings of
             [] -> pure (Right [])
-            [binding] -> case Text.stripPrefix prefix binding.revision of
+            [binding] -> case Text.stripPrefix prefix (executionCoordinateText binding.revision) of
               Nothing -> pure (Left (ExecutionPolicyRefused "unsupported coordination binding"))
               Just pinned -> do
                 granted <- owned (resolveGrant host authorizer (coordinatorRunFor snapshot) (Just pinned))
@@ -64,7 +65,7 @@ coordinationTools (Just host) authorizer =
         _ -> Left (ExecutionPolicyRefused "admitted coordination authority unavailable")
     bound grant context =
       BoundTool
-        (ToolBinding name (prefix <> grantFingerprint grant) (versionedDigest "shikigami.tool-schema/1" schema) IdempotentEffect NoInvoiceCost)
+        (ToolBinding (executionCoordinate name) (executionCoordinate (prefix <> grantFingerprint grant)) (executionDigestFor "shikigami.tool-schema/1" schema) IdempotentEffect NoInvoiceCost)
         ( DynTool name "Control only the continuing workers admitted for this assignment. Stable operation identity is supplied by the durable harness. Results contain bounded metadata and accepted findings." schema \arguments ->
             case (context, Aeson.fromJSON arguments) of
               (Nothing, _) -> pure (Left (ToolRunFailed name "description does not authorize execution"))

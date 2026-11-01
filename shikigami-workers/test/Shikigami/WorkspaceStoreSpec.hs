@@ -29,7 +29,7 @@ import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshData
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
-import Shikigami.WorkerSession.Types (AssignmentId (value), WorkerSessionId (value), assignmentIdForDigest, workerSessionId)
+import Shikigami.WorkerSession.Types (AssignmentId, WorkerSessionId, assignmentIdForDigest, workerSessionId)
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.InstructionLoader

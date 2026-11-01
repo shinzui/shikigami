@@ -5,19 +5,19 @@ import Data.Aeson (Value (String))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Keiro.Codec.Nominal (NominalBinding (..), NominalFixture (..), NominalFixtureCases (..))
-import Shikigami.Execution.Transcript (ExecutionId (..))
+import Shikigami.Execution.Transcript (ExecutionId (..), executionIdentity)
 
 initialExecutionIdentity :: ExecutionId
-initialExecutionIdentity = ExecutionId ""
+initialExecutionIdentity = executionIdentity ""
 
 executionIdentityBinding :: NominalBinding ExecutionId Text
-executionIdentityBinding = NominalBinding {nominalToRepresentation = \identity -> identity.value, nominalFromRepresentation = ExecutionId}
+executionIdentityBinding = NominalBinding {nominalToRepresentation = \identity -> identity.value, nominalFromRepresentation = executionIdentity}
 
 executionIdentityCases :: NominalFixtureCases ExecutionId
 executionIdentityCases =
   NominalFixtureCases
-    ( NominalFixture "empty" (String "") (ExecutionId "")
-        :| [ NominalFixture "technical" (String "technical:identity-1") (ExecutionId "technical:identity-1"),
-             NominalFixture "unicode" (String "identité-2") (ExecutionId "identité-2")
+    ( NominalFixture "empty" (String "") (executionIdentity "")
+        :| [ NominalFixture "technical" (String "technical:identity-1") (executionIdentity "technical:identity-1"),
+             NominalFixture "unicode" (String "identité-2") (executionIdentity "identité-2")
            ]
     )

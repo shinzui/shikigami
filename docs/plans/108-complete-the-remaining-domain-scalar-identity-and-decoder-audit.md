@@ -281,22 +281,43 @@ attention-result decode condemns its owning reservation transaction. The full
 inventory and native gate will reconcile this with the next source batch rather
 than rebuilding the census for each wrapper. M2/M3 remain open.
 
+The combined native gate on `cd10844` against `f00315f` passes with no findings,
+a replay-neutral verdict and all 156 conformance controls. Its reports are retained
+as `review-worker-*` under `docs/evidence/plan-108/`.
+
 The continuing-session batch retains scoped objective/provider/parent/worker
 coordinates, command/checkpoint/fence/ownership commitments, artifact references,
 provider receipts, native coordinator/child workflow IDs, bounded paging,
 workflow generations and closed objective activity. Assignment IDs have a private
 canonical UUIDv5 decoder. The mapped session identity remains total as required
 by Keiro's published nominal-binding contract, while the admitted binding checks
-its exact original scope-to-UUIDv5 recipe. Its private carrier no longer exposes
-Generic construction or record update. All 626 core unit and 91 selected core
+its exact original scope-to-UUIDv5 recipe. Its private carrier removes Generic construction. The initial record-update
+probe was later found to fail from selector ambiguity; the execution batch below
+corrects that representation and verifies the actual update boundary. All 626 core unit and 91 selected core
 PostgreSQL cases pass, including a new malformed/mismatched scope commitment
-rollback and exact-repair control. All 231 compiler controls and two additional
-record-update refusals pass. A small optional compiler-control filter permits
+rollback and exact-repair control. All 231 compiler controls passed; two additional record-update probes
+were inconclusive because their selector was ambiguous. A small optional compiler-control filter permits
 focused checks for subsequent batches; the default still runs the entire suite.
 All 280 worker cases also pass serially (182.49 seconds). The workspace-wide build passes, including the Linux prototype build target;
 this is compilation evidence, not new Linux runtime qualification. Keep the
 full declaration refresh and zero-violation acceptance for the combined source
 candidate rather than paying a rebuild/census for each wrapper.
+
+The execution source batch retains nominal tool/provider/skill coordinates, scoped
+policy/schema/input/attempt/context commitments, native operation idempotency,
+bounded context positions and summary token counts, closed result/retry states,
+nonnegative wake generations and native timer workflow coordinates. It preserves
+existing exact commitment labels, including ephemeral markers, and all current
+owner/preimage checks and valid wire bytes. Private mapped IDs now use positional
+representations with read-only HasField getters; actual record updates are rejected
+without an ambiguous-selector diagnostic. All 626 core unit, 471 core PostgreSQL
+and 280 serial worker tests pass. A separate real retained-attention corruption
+control passes: failure rolls back the tentative association, and exact repair
+recovers the original reservation/message. The focused public compiler gate passes
+32 controls, with 14 focused smoke/update controls independently verifying the
+corrected getter boundary. The full workspace build also passes, including
+the Linux prototype target. These source changes await the combined census refresh;
+remaining findings and M2/M3 stay open.
 
 ## Surprises & Discoveries
 

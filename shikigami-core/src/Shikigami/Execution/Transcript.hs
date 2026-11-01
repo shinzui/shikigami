@@ -2,7 +2,7 @@
 
 -- | Application replay records. No decoder for Baikai Response, Context,
 -- Options or ModelCallEvidence is implied by these codecs.
-module Shikigami.Execution.Transcript where
+module Shikigami.Execution.Transcript (module Shikigami.Execution.Transcript, module Shikigami.Execution.Coordinate) where
 
 import Baikai.Api (Api)
 import Baikai.Content qualified as Content
@@ -33,9 +33,11 @@ import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileView)
+import Shikigami.Behavior.Provider.Coordinate
 import Shikigami.Capability.Overlay (ResolvedCapabilitySet)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.AssignmentKey (AssignmentKey)
+import Shikigami.Execution.Coordinate
 import Shikigami.Execution.Identity (OperationId, operationIdWithPrefix)
 import Shikigami.Execution.Payload (PayloadByteCount, PayloadDigest, PayloadId)
 import Shikigami.Execution.Policy.Types
@@ -49,12 +51,8 @@ import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), instructionPro
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikumi.Tool.Output qualified as Tool
 
-newtype ExecutionId = ExecutionId {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
-
 executionIdFor :: AssignmentKey -> ExecutionId
-executionIdFor assignment = ExecutionId ("execution:" <> versionedDigest "shikigami.execution/1" (toJSON assignment))
+executionIdFor assignment = executionIdentity ("execution:" <> versionedDigest "shikigami.execution/1" (toJSON assignment))
 
 -- Technical journal identity is independent of resource keys, whose digest
 -- prefixes contain separators reserved by Keiro's stream naming protocol.
@@ -74,7 +72,7 @@ data PayloadRef = PayloadRef
 
 data ProviderReplay = ProviderReplay
   { api :: !Api,
-    model :: !Text,
+    model :: !(ProviderCoordinate "provider-model-id"),
     items :: ![Aeson.Value]
   }
   deriving stock (Eq, Generic)
@@ -83,8 +81,8 @@ data ProviderReplay = ProviderReplay
 instance Show ProviderReplay where show _ = "ProviderReplay <protected>"
 
 data ToolInvocation = ToolInvocation
-  { callId :: !Text,
-    name :: !Text,
+  { callId :: !(ProviderCoordinate "provider-tool-call-id"),
+    name :: !(ExecutionCoordinate "tool-name"),
     arguments :: !Aeson.Value
   }
   deriving stock (Eq, Generic)
@@ -106,10 +104,10 @@ data ReplayAssistant = ReplayAssistant
   { format :: !(FormatVersion "replay-assistant"),
     blocks :: ![ReplayBlock],
     stopReason :: !StopReason,
-    responseId :: !(Maybe Text),
+    responseId :: !(Maybe (ProviderCoordinate "provider-response-id")),
     timestamp :: !(Maybe UTCTime),
     usage :: !Aeson.Value,
-    failure :: !(Maybe (Bool, Text))
+    failure :: !(Maybe (Retryability, Text))
   }
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON)
@@ -130,14 +128,14 @@ data ReplayMessage
   = UserTurn ![ReplayBlock] !(Maybe UTCTime)
   | RequestTurn ![ReplayBlock] !(Maybe UTCTime)
   | AssistantTurn !ReplayAssistant
-  | ToolTurn !Text !Text ![ReplayBlock] !Bool !(Maybe UTCTime)
+  | ToolTurn !(ProviderCoordinate "provider-tool-call-id") !(ExecutionCoordinate "tool-name") ![ReplayBlock] !ToolResultState !(Maybe UTCTime)
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
 instance Show ReplayMessage where show _ = "ReplayMessage <protected>"
 
 data ReplayContext = ReplayContext
-  { format :: !Int,
+  { format :: !ReplayContextFormat,
     systemPrompt :: !(Maybe Text),
     messages :: ![ReplayMessage]
   }
@@ -161,14 +159,13 @@ contextRequest messages = listToMaybe [message | message@RequestTurn {} <- messa
 validContextHeader :: ReplayContext -> Bool
 validContextHeader context =
   length context.messages <= 10000 && case context.format of
-    1 -> requests == 0
-    2 -> requests == 1
-    _ -> False
+    LegacyContext -> requests == 0
+    RequestContext -> requests == 1
   where
     requests = length [() | RequestTurn {} <- context.messages]
 
 data SkillInstructions = SkillInstructions
-  { name :: !Text,
+  { name :: !(ExecutionCoordinate "skill-name"),
     description :: !Text,
     body :: !Text
   }
@@ -178,9 +175,9 @@ data SkillInstructions = SkillInstructions
 instance Show SkillInstructions where show _ = "SkillInstructions <protected>"
 
 data ToolBinding = ToolBinding
-  { name :: !Text,
-    revision :: !Text,
-    schemaDigest :: !Text,
+  { name :: !(ExecutionCoordinate "tool-name"),
+    revision :: !(ExecutionCoordinate "tool-revision"),
+    schemaDigest :: !(ExecutionDigest "tool-schema"),
     recovery :: !RecoveryClass,
     invoiceCost :: !ToolInvoiceCost
   }
@@ -211,8 +208,8 @@ toolContinuation input assistant = case nextToolPosition input.position of
   Just position | toolPositionNumber position < length (toolInvocations assistant) -> NeedTool input.response position
   _ -> NeedModel
 
-toolScopeDigest :: ToolBinding -> Text
-toolScopeDigest = versionedDigest "shikigami.execution-tool-scope/1" . toJSON
+toolScopeDigest :: ToolBinding -> ExecutionDigest "tool-scope"
+toolScopeDigest = executionDigestFor "shikigami.execution-tool-scope/1" . toJSON
 
 data PermissionResolution = PermissionApproved | PermissionDenied | PermissionExpired
   deriving stock (Eq, Show, Generic)
@@ -220,9 +217,9 @@ data PermissionResolution = PermissionApproved | PermissionDenied | PermissionEx
 
 data PermissionBinding = PermissionBinding
   { reviewRequestId :: !ReviewRequestId,
-    fingerprint :: !Text,
-    scopeDigest :: !Text,
-    policyDigest :: !Text,
+    fingerprint :: !(ExecutionDigest "input"),
+    scopeDigest :: !(ExecutionDigest "tool-scope"),
+    policyDigest :: !(ExecutionDigest "policy"),
     expiresAt :: !UTCTime,
     resolution :: !(Maybe PermissionResolution)
   }
@@ -263,9 +260,9 @@ instance FromJSON ExecutionSnapshot where
     case snapshot.selection.effectiveOptions of
       Aeson.Object options -> unless (all (\key -> case KeyMap.lookup key options of Nothing -> True; Just Aeson.Null -> True; Just (Aeson.Object fields) -> KeyMap.null fields; _ -> False) ["headers", "metadata", "apiKey"]) (fail "execution snapshot contains unsupported private model options")
       _ -> fail "execution snapshot options are unsupported"
-    unless (length snapshot.toolBindings <= 128 && length (nub (map (\(binding :: ToolBinding) -> binding.name) snapshot.toolBindings)) == length snapshot.toolBindings && all validBinding snapshot.toolBindings) (fail "invalid immutable tool bindings")
+    unless (length snapshot.toolBindings <= 128 && length (nub (map (\(binding :: ToolBinding) -> executionCoordinateText binding.name) snapshot.toolBindings)) == length snapshot.toolBindings && all validBinding snapshot.toolBindings) (fail "invalid immutable tool bindings")
     unless (null snapshot.toolBindings) $ case Aeson.fromJSON snapshot.offeredTools of
-      Aeson.Success tools -> unless (sort (map (\(tool :: BaikaiTool.Tool) -> tool.name) tools) == sort (map (\(binding :: ToolBinding) -> binding.name) snapshot.toolBindings) && all (\(tool :: BaikaiTool.Tool) -> any (\(binding :: ToolBinding) -> binding.name == tool.name && binding.schemaDigest == versionedDigest "shikigami.tool-schema/1" tool.parameters) snapshot.toolBindings) tools) (fail "execution tool bindings differ from the frozen menu")
+      Aeson.Success tools -> unless (sort (map (\(tool :: BaikaiTool.Tool) -> tool.name) tools) == sort (map (\(binding :: ToolBinding) -> executionCoordinateText binding.name) snapshot.toolBindings) && all (\(tool :: BaikaiTool.Tool) -> any (\(binding :: ToolBinding) -> executionCoordinateText binding.name == tool.name && binding.schemaDigest == executionDigestFor "shikigami.tool-schema/1" tool.parameters) snapshot.toolBindings) tools) (fail "execution tool bindings differ from the frozen menu")
       Aeson.Error _ -> fail "execution tool menu is unsupported"
     forM_ snapshot.workspace \admission -> do
       unless (admission.runId == snapshot.runId && admission.assignmentId == snapshot.selection.assignmentId && Just admission.rootId == snapshot.selection.rootId && admission.owner == snapshot.identity) (fail "workspace differs from its accepted execution")
@@ -273,7 +270,7 @@ instance FromJSON ExecutionSnapshot where
       unless (maybe False (instructionPrompt admission.instructions `Text.isSuffixOf`) snapshot.initialContext.systemPrompt) (fail "workspace instructions are absent from fixed context")
     pure snapshot
     where
-      validBinding binding = all (\value -> not (Text.null value) && Text.length value <= 256) [binding.name, binding.revision, binding.schemaDigest]
+      validBinding binding = all (\value -> not (Text.null value) && Text.length value <= 256) [executionCoordinateText binding.name, executionCoordinateText binding.revision, executionDigestText binding.schemaDigest]
 
 validateSnapshot :: ExecutionSnapshot -> Either ExecutionError ()
 validateSnapshot snapshot = case Aeson.fromJSON (toJSON snapshot) of
@@ -329,9 +326,9 @@ data OperationSpec = OperationSpec
   { operationId :: !OperationId,
     kind :: !OperationKind,
     recovery :: !RecoveryClass,
-    name :: !Text,
-    policyDigest :: !Text,
-    scopeDigest :: !Text,
+    name :: !(ExecutionCoordinate "tool-name"),
+    policyDigest :: !(ExecutionDigest "policy"),
+    scopeDigest :: !(ExecutionDigest "tool-scope"),
     responsePosition :: !(Maybe ToolPosition)
   }
   deriving stock (Eq, Show, Generic)
@@ -356,7 +353,7 @@ data Operation = Operation
     executionId :: !ExecutionId,
     position :: !(StateRevision "execution-operation"),
     specification :: !OperationSpec,
-    fingerprint :: !Text,
+    fingerprint :: !(ExecutionDigest "input"),
     input :: !PayloadRef,
     outcome :: !(Maybe PayloadRef),
     continuation :: !(Maybe NextWork),
@@ -379,7 +376,7 @@ instance FromJSON Operation where
 data ReplayToolResult = ReplayToolResult
   { format :: !(FormatVersion "replay-tool-result"),
     blocks :: ![ReplayBlock],
-    failed :: !Bool,
+    failed :: !ToolResultState,
     structuredContent :: !(Maybe Aeson.Value),
     extensionBlocks :: ![Aeson.Value]
   }
@@ -397,7 +394,7 @@ instance FromJSON ReplayToolResult where
       valid (TextBlock _) = True; valid ImageBlock {} = True; valid _ = False
 
 captureToolOutput :: Tool.ToolOutput -> ReplayToolResult
-captureToolOutput output = ReplayToolResult V1 (map capture (Vector.toList output.result.content)) output.result.isError output.structuredContent output.extensionBlocks
+captureToolOutput output = ReplayToolResult V1 (map capture (Vector.toList output.result.content)) (toolResultState output.result.isError) output.structuredContent output.extensionBlocks
   where
     capture (Content.ToolResultText text) = TextBlock text.text
     capture (Content.ToolResultImage image) = ImageBlock image
@@ -409,7 +406,7 @@ observationBlocks result = result.blocks <> maybe [] (\value -> [TextBlock ("Str
 
 data OperationOutcome
   = ModelReturned !ReplayAssistant !(Maybe Aeson.Value)
-  | ToolReturned ![ReplayBlock] !Bool
+  | ToolReturned ![ReplayBlock] !ToolResultState
   | RichToolReturned !ReplayToolResult
   | OperationDenied !Text
   | OperationUnresolved !Text
@@ -449,17 +446,17 @@ captureAssistant response =
     { format = V1,
       blocks = map assistantBlock (Vector.toList response.message.content),
       stopReason = response.message.stopReason,
-      responseId = response.responseId,
+      responseId = providerCoordinate <$> response.responseId,
       timestamp = response.message.timestamp,
       usage = toJSON response.message.usage,
-      failure = (\err -> (Error.isRetryable err, Text.take 512 (Error.message err))) <$> Response.responseError response
+      failure = (\err -> (retryability (Error.isRetryable err), Text.take 512 (Error.message err))) <$> Response.responseError response
     }
   where
     assistantBlock = \case
       Content.AssistantText text -> TextBlock text.text
-      Content.AssistantToolCall call -> ToolBlock (ToolInvocation call.id_ call.name call.arguments)
+      Content.AssistantToolCall call -> ToolBlock (ToolInvocation (providerCoordinate call.id_) (executionCoordinate call.name) call.arguments)
       Content.AssistantThinking thinking -> ThinkingBlock thinking.thinking thinking.signature thinking.redacted (replay <$> thinking.replayState)
-    replay value = ProviderReplay value.replayApi value.replayModel (Vector.toList value.replayItems)
+    replay value = ProviderReplay value.replayApi (providerCoordinate value.replayModel) (Vector.toList value.replayItems)
 
 restoreAssistant :: ReplayAssistant -> Either ExecutionError Message.AssistantPayload
 restoreAssistant assistant = do
@@ -478,8 +475,8 @@ restoreAssistant assistant = do
   where
     restore = \case
       TextBlock text -> Right (Content.AssistantText (Content.TextContent text))
-      ThinkingBlock text signature redacted replay -> Right (Content.AssistantThinking (Content.ThinkingContent text signature redacted ((\value -> Content.ThinkingReplay value.api value.model (Vector.fromList value.items)) <$> replay)))
-      ToolBlock call -> Right (Content.AssistantToolCall (Content.ToolCall call.callId call.name call.arguments))
+      ThinkingBlock text signature redacted replay -> Right (Content.AssistantThinking (Content.ThinkingContent text signature redacted ((\value -> Content.ThinkingReplay value.api (providerCoordinateText value.model) (Vector.fromList value.items)) <$> replay)))
+      ToolBlock call -> Right (Content.AssistantToolCall (Content.ToolCall (providerCoordinateText call.callId) (executionCoordinateText call.name) call.arguments))
       ImageBlock {} -> Left UnsupportedReplay
 
 restoreContext :: ReplayContext -> Either ExecutionError Context.Context
@@ -498,7 +495,7 @@ restoreContext context = do
         pure (Message.UserMessage (Message.UserPayload (Vector.fromList content) timestamp))
       ToolTurn callId name blocks failed timestamp -> do
         content <- traverse tool blocks
-        pure (Message.ToolResultMessage (Message.ToolResultPayload callId name (Vector.fromList content) failed timestamp))
+        pure (Message.ToolResultMessage (Message.ToolResultPayload (providerCoordinateText callId) (executionCoordinateText name) (Vector.fromList content) (toolFailed failed) timestamp))
     user (TextBlock text) = Right (Content.UserText (Content.TextContent text))
     user (ImageBlock image) = Right (Content.UserImage image)
     user _ = Left UnsupportedReplay
@@ -511,6 +508,3 @@ toolInvocations assistant = [call | ToolBlock call <- assistant.blocks]
 
 assistantText :: ReplayAssistant -> Text
 assistantText assistant = Text.concat [text | TextBlock text <- assistant.blocks]
-
-instance CanonicalTypeName ExecutionId where
-  canonicalTypeName _ = "shikigami.ExecutionId.v1"

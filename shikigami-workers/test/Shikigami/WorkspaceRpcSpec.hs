@@ -25,7 +25,7 @@ import Shikigami.StateRevision qualified as Generation
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
 import Shikigami.WorkerSession.Input qualified as WorkerInput
 import Shikigami.WorkerSession.Transfer
-import Shikigami.WorkerSession.Types (ObjectiveRef (..), WorkerSessionId (value), workerSessionId)
+import Shikigami.WorkerSession.Types (ObjectiveRef (..), WorkerSessionId, workerSessionId)
 import Shikigami.Workspace.Process
 import Shikigami.Workspace.Rpc
 import System.Directory (createDirectory, getTemporaryDirectory, removeDirectoryRecursive)

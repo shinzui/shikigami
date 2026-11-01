@@ -27,9 +27,10 @@ import Data.Maybe (listToMaybe)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
+import Shikigami.Behavior.Provider.Coordinate (providerCoordinateText)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId)
-import Shikigami.Execution.Policy.Limits (policyNumber)
+import Shikigami.Execution.Policy.Limits (SummaryTokenLimit, policyNumber)
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.ToolPosition
 import Shikigami.Execution.Transcript
@@ -54,7 +55,7 @@ validateToolInvocation policy pinned offered assistant position = do
   unless (assistant.format == V1 && assistant.stopReason == ToolUse && isNothing assistant.failure) (deny "assistant did not finish a tool request")
   let calls = toolInvocations assistant
       ids = map (\(call :: ToolInvocation) -> call.callId) calls
-  unless (not (null calls) && length calls <= 128 && length (nub ids) == length ids && all (\value -> not (Text.null value) && Text.length value <= 256) ids) (deny "invalid tool call identities")
+  unless (not (null calls) && length calls <= 128 && length (nub ids) == length ids && all (\value -> not (Text.null (providerCoordinateText value)) && Text.length (providerCoordinateText value) <= 256) ids) (deny "invalid tool call identities")
   call <- maybe (deny "tool response position is invalid") Right (listToMaybe (drop (toolPositionNumber position) calls))
   case call.arguments of
     Aeson.Object _ -> Right ()
@@ -80,14 +81,14 @@ validateTerminalOutput policy assistant = do
     AnyReply -> Right ()
     NonemptyReply -> unless (not (Text.null (Text.strip reply))) (Left ExecutionOutputInvalid)
     JsonFields fields -> case Aeson.eitherDecodeStrict (Text.encodeUtf8 reply) of
-      Right (Aeson.Object value) -> unless (all (\key -> KeyMap.member (Key.fromText key) value) fields) (Left ExecutionOutputInvalid)
+      Right (Aeson.Object value) -> unless (all (\key -> KeyMap.member (Key.fromText (executionCoordinateText key)) value) fields) (Left ExecutionOutputInvalid)
       _ -> Left ExecutionOutputInvalid
   pure (Aeson.object ["reply" .= reply])
 
 data ModelOperationInput = ModelOperationInput
   { format :: !(FormatVersion "model-operation"),
     view :: !ContextView,
-    maxOutputTokens :: !(Maybe Int),
+    maxOutputTokens :: !(Maybe SummaryTokenLimit),
     provenance :: !(Maybe ContextProvenance)
   }
   deriving stock (Eq, Generic)
@@ -102,7 +103,7 @@ instance Show ModelOperationInput where show _ = "ModelOperationInput <protected
 instance FromJSON ModelOperationInput where
   parseJSON value = do
     input <- Aeson.genericParseJSON Aeson.defaultOptions value
-    unless (input.format == V1 && maybe True (\n -> n >= 1 && n <= 32768) input.maxOutputTokens) (fail "unsupported model operation input")
+    unless (input.format == V1 && maybe True (\n -> policyNumber n >= 1 && policyNumber n <= 32768) input.maxOutputTokens) (fail "unsupported model operation input")
     pure input
 
 -- References are protected with the model input. They explain compaction
@@ -111,7 +112,7 @@ data ContextProvenance = ContextProvenance
   { format :: !(FormatVersion "context-provenance"),
     predecessor :: !(Maybe PayloadRef),
     summary :: !(Maybe SummaryReference),
-    summarizes :: !(Maybe Text)
+    summarizes :: !(Maybe (ExecutionDigest "context"))
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON)
@@ -119,13 +120,13 @@ data ContextProvenance = ContextProvenance
 instance FromJSON ContextProvenance where
   parseJSON value = do
     provenance <- Aeson.genericParseJSON Aeson.defaultOptions value
-    unless (provenance.format == V1 && maybe True (\digest -> not (Text.null digest) && Text.length digest <= 256) provenance.summarizes) (fail "unsupported context provenance")
+    unless (provenance.format == V1 && maybe True (\digest -> not (Text.null (executionDigestText digest)) && Text.length (executionDigestText digest) <= 256) provenance.summarizes) (fail "unsupported context provenance")
     pure provenance
 
 data SummaryReference = SummaryReference
   { operationId :: !OperationId,
     outcome :: !PayloadRef,
-    sourceDigest :: !Text
+    sourceDigest :: !(ExecutionDigest "context")
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -150,19 +151,19 @@ prepareModelOperationInput policy kind source predecessor latestSummary = do
       Just _ -> Left UnsupportedReplay
       Nothing -> do
         anchor <- maybe (Left CorruptReplay) Right (contextRequest source.messages)
-        let omitted = [message | (position, message) <- zip [0 ..] context.messages, position `elem` selected.omitted]
+        let omitted = [message | (position, message) <- zip [0 ..] context.messages, position `elem` (contextPositionNumber <$> selected.omitted)]
             instruction = UserTurn [TextBlock "Summarize the preceding omitted context as factual context for a later model turn. Preserve useful facts and unresolved questions. Return plain text. Do not request tools or claim new permissions."] Nothing
         summary <- selectContextView policy (ReplayContext source.format source.systemPrompt ([anchor] <> omitted <> [instruction]))
         unless (null summary.omitted) (Left (ExecutionPolicyRefused "summary source exceeds the context ceiling"))
-        pure (ModelSummary, ModelOperationInput V1 summary (policyNumber <$> policy.summaryTokens) (Just (ContextProvenance V1 predecessor Nothing (Just selected.sourceDigest))))
+        pure (ModelSummary, ModelOperationInput V1 summary policy.summaryTokens (Just (ContextProvenance V1 predecessor Nothing (Just selected.sourceDigest))))
 
 -- The complete transcript remains authoritative. This value is a protected
 -- model-facing view with reproducible provenance, never a replacement history.
 data ContextView = ContextView
   { context :: !ReplayContext,
-    sourceDigest :: !Text,
-    kept :: ![Int],
-    omitted :: ![Int]
+    sourceDigest :: !(ExecutionDigest "context"),
+    kept :: ![ContextPosition],
+    omitted :: ![ContextPosition]
   }
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -193,7 +194,9 @@ selectContextView policy source = do
       kept = map fst retained
       keptSet = Set.fromList kept
   unless (fits requiredBytes requiredCount) (Left (ExecutionPolicyRefused "required context exceeds the configured byte ceiling"))
-  pure (ContextView (ReplayContext source.format source.systemPrompt (map snd retained)) (versionedDigest "shikigami.execution-context/1" (toJSON source)) kept (filter (`Set.notMember` keptSet) [0 .. count - 1]))
+  keptPositions <- traverse (either (const (Left UnsupportedReplay)) Right . parseContextPosition) kept
+  omittedPositions <- traverse (either (const (Left UnsupportedReplay)) Right . parseContextPosition) (filter (`Set.notMember` keptSet) [0 .. count - 1])
+  pure (ContextView (ReplayContext source.format source.systemPrompt (map snd retained)) (executionDigestFor "shikigami.execution-context/1" (toJSON source)) keptPositions omittedPositions)
   where
     request = contextRequest source.messages
     firstUser = fromMaybe (-1) (listToMaybe [position | (position, message) <- zip [0 ..] source.messages, Just message == request])

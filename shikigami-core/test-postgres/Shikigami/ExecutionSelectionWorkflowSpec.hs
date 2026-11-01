@@ -65,6 +65,7 @@ import Shikigami.Decision.ModelCatalog
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Claim qualified as Claim
+import Shikigami.Execution.Coordinate qualified as ExecutionValue
 import Shikigami.Execution.Counter (AttemptCount, AttemptLimit, noAttempts, parseAttemptCount, parseAttemptLimit)
 import Shikigami.Execution.Driver qualified as Driver
 import Shikigami.Execution.Executor qualified as Executor
@@ -128,7 +129,7 @@ tests fixture =
                   (head facts).receipt.rootId @?= Just root
                   assertBool "request digest only" (not ("marker" `Text.isInfixOf` Text.pack (show facts)))
                   assertBool "stored inspection sources exclude credentials" (not ("fixture-secret" `Text.isInfixOf` Text.pack (show (encode (assignment, facts)))))
-                  ((head facts).outcome >>= (.reportedModel)) @?= Just "served-model"
+                  ((head facts).outcome >>= (.reportedModel)) @?= Just (Coordinate.providerCoordinate "served-model")
                   pure selection
               )
               aliases
@@ -173,16 +174,16 @@ tests fixture =
               selection = select now root catalog "coordinator"
               selectedRuntime = runtime app store base catalog
               execution = Replay.executionIdFor selection.assignmentId
-              snapshot = Replay.ExecutionSnapshot V1 execution "prepared-http" (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (Replay.SkillInstructions "fixture" "system" "body") (Replay.ReplayContext 1 (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
+              snapshot = Replay.ExecutionSnapshot V1 execution "prepared-http" (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (Replay.SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "body") (Replay.ReplayContext Replay.LegacyContext (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
               operationId = Replay.operationIdFor execution (fixtureRevision 0)
-              specification = Replay.OperationSpec operationId Replay.ModelTurn RepeatableObservation "model" (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) "scope" Nothing
+              specification = Replay.OperationSpec operationId Replay.ModelTurn RepeatableObservation (ExecutionValue.executionCoordinate "model") (ExecutionValue.executionDigestFor "shikigami.harness-policy/1" (toJSON snapshot.policy)) (ExecutionValue.executionDigest "scope") Nothing
               context = systemUser "system" "marker"
           _ <- expectRight =<< run app Catalog.registerProjectionCatalog
           run app (Durable.admitExecution snapshot) >>= (@?= Right Accepted)
           access <- expectRight =<< run app (Durable.authorizeReplay execution snapshot.identity (pure (Right ())))
           _ <- expectRight =<< run app (Durable.acceptOperation access (fixtureRevision 0) specification (toJSON context))
           (request, preparedCall) <- expectRight =<< preparePinnedExecutionCall selectedRuntime selection operationId (fixtureAttemptId "prepared-http-attempt") context Nothing
-          let submission = Attempt.AttemptSubmission request (Just preparedCall) (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)
+          let submission = Attempt.AttemptSubmission request (Just preparedCall) (Attempt.ExecutionWake (AwakeableId UUID.nil) ExecutionValue.initialExecutionGeneration)
               reference = Attempt.JobReference V1 execution operationId request.attemptId
           (_, attempt) <- expectRight =<< run app (Durable.submitExecutionAttemptWith access (fixtureRevision 1) submission (\_ -> pure ()))
           claim <-
@@ -219,9 +220,9 @@ tests fixture =
               selection = select now root catalog "coordinator"
               selectedRuntime = runtime app store base catalog
               execution = Replay.executionIdFor selection.assignmentId
-              snapshot = Replay.ExecutionSnapshot V1 execution "executor-http" (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (Replay.SkillInstructions "fixture" "system" "body") (Replay.ReplayContext 1 (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
+              snapshot = Replay.ExecutionSnapshot V1 execution "executor-http" (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (Replay.SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "body") (Replay.ReplayContext Replay.LegacyContext (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
               operationId = Replay.operationIdFor execution (fixtureRevision 0)
-              specification = Replay.OperationSpec operationId Replay.ModelTurn RepeatableObservation "model" (versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) "scope" Nothing
+              specification = Replay.OperationSpec operationId Replay.ModelTurn RepeatableObservation (ExecutionValue.executionCoordinate "model") (ExecutionValue.executionDigestFor "shikigami.harness-policy/1" (toJSON snapshot.policy)) (ExecutionValue.executionDigest "scope") Nothing
               executor authority = Executor.ExecutionRuntime app (const authority) (const authority) (const selectedRuntime) (\_ _ _ use -> Right <$> use []) 5
           _ <- expectRight =<< run app Catalog.registerProjectionCatalog
           run app (Durable.admitExecution snapshot) >>= (@?= Right Accepted)
@@ -232,7 +233,7 @@ tests fixture =
           context <- expectRight (Executor.modelContext snapshot operation input)
           (request, preparedCall) <- expectRight =<< preparePinnedExecutionCall selectedRuntime selection operationId (fixtureAttemptId "executor-http-attempt") context Nothing
           let reference = Attempt.JobReference V1 execution operationId request.attemptId
-          _ <- expectRight =<< run app (Durable.submitExecutionAttemptWith access (fixtureRevision 1) (Attempt.AttemptSubmission request (Just preparedCall) (Attempt.ExecutionWake (AwakeableId UUID.nil) 0)) (\_ -> pure ()))
+          _ <- expectRight =<< run app (Durable.submitExecutionAttemptWith access (fixtureRevision 1) (Attempt.AttemptSubmission request (Just preparedCall) (Attempt.ExecutionWake (AwakeableId UUID.nil) ExecutionValue.initialExecutionGeneration)) (\_ -> pure ()))
           Executor.executeAcceptedAttempt (executor (pure (Right ()))) snapshot.identity reference >>= (@?= Left (Replay.ExecutionPolicyRefused "execution wake is unavailable"))
           (_, committed) <- expectRight =<< run app (Durable.loadExecution access)
           committed.cursor @?= (fixtureRevision 1)
@@ -311,7 +312,7 @@ tests fixture =
               selection = mustRight (resolveExecutionSelection (fixtureAssignment "ledger-assignment") catalog (Right fallback) Nothing Nothing Nothing Nothing (Just root) now)
               limits = Calls.CallLimits (Just (fixtureLimit 3)) (Just (fixtureLimit 1)) (Just (fixtureLimit 1)) Nothing Nothing
               request key = AttemptRequest (fixtureAttemptId key) (fixtureOperationId "logical") (Map.fromList [(ActiveWork, (fixtureAmount 1)), (ModelAttempts, (fixtureAmount 1))]) AdmittedUnknownUsage
-              reserve key = run app (Calls.reserveSelectionCall selection limits (request key) "digest" now)
+              reserve key = run app (Calls.reserveSelectionCall selection limits (request key) (ExecutionValue.executionDigest "digest") now)
           (a, b) <- concurrently (reserve "one") (reserve "two")
           receipt <- case (a, b) of
             (Right (Calls.NewCall r), Left _) -> pure r
@@ -329,8 +330,8 @@ tests fixture =
                 )
                 [0, -1, toInteger (maxBound :: Int64) + 1]
             _ -> assertFailure "receipt wire was not an object"
-          run app (Calls.reserveSelectionCall selection limits receipt.request "digest" now) >>= (@?= Right (Calls.ExistingCall receipt))
-          let terminal = Calls.CallOutcome Calls.CallTerminal (Map.singleton Tokens (fixtureAmount 3)) [CostMicroUsd] (Just "served") (Just "provider-call") Nothing
+          run app (Calls.reserveSelectionCall selection limits receipt.request (ExecutionValue.executionDigest "digest") now) >>= (@?= Right (Calls.ExistingCall receipt))
+          let terminal = Calls.CallOutcome Calls.CallTerminal (Map.singleton Tokens (fixtureAmount 3)) [CostMicroUsd] (Just (Coordinate.providerCoordinate "served")) (Just (Coordinate.providerCoordinate "provider-call")) Nothing
           run app (Calls.finishSelectionCall receipt terminal) >>= (@?= Right Accepted)
           run app (Calls.finishSelectionCall receipt terminal) >>= (@?= Right AlreadyAccepted)
           next <- expectRight =<< reserve "retry"
@@ -608,7 +609,7 @@ refusedAssignmentSettlement fixture reconcile = withRuntime fixture \app _ _ -> 
       limits = mustRight (Calls.callLimitsFor selection Nothing)
       request = AttemptRequest (fixtureAttemptId "counter-refusal") (fixtureOperationId "counter-operation") (Map.fromList [(ActiveWork, fixtureAmount 1), (ModelAttempts, fixtureAmount 1), (Tokens, fixtureAmount 10), (CostMicroUsd, fixtureAmount 0)]) EnforcedCeiling
       terminal = Calls.CallOutcome Calls.CallTerminal (Map.fromList [(Tokens, fixtureAmount 3), (CostMicroUsd, fixtureAmount 0)]) [] Nothing Nothing Nothing
-  admitted <- expectRight =<< run app (Calls.reserveSelectionCall selection limits request "counter-fingerprint" now)
+  admitted <- expectRight =<< run app (Calls.reserveSelectionCall selection limits request (ExecutionValue.executionDigest "counter-fingerprint") now)
   receipt <- case admitted of Calls.NewCall value -> pure value; _ -> assertFailure "new admitted call expected"
   if reconcile
     then run app (Calls.finishSelectionCall receipt (Calls.CallOutcome Calls.CallTransportUnknown Map.empty [Tokens, CostMicroUsd] Nothing Nothing Nothing)) >>= (@?= Right Accepted)
@@ -657,7 +658,7 @@ malformedSelectionRow fixture row = withRuntime fixture \app _ _ -> do
       limits = mustRight (Calls.callLimitsFor selection Nothing)
       request = AttemptRequest (fixtureAttemptId "corrupt-selection-1") (fixtureOperationId "corrupt-operation") (Map.fromList [(ActiveWork, fixtureAmount 1), (ModelAttempts, fixtureAmount 1), (Tokens, fixtureAmount 10), (CostMicroUsd, fixtureAmount 0)]) EnforcedCeiling
       terminal = Calls.CallOutcome Calls.CallTerminal (Map.fromList [(Tokens, fixtureAmount 3), (CostMicroUsd, fixtureAmount 0)]) [] Nothing Nothing Nothing
-      reserve call = run app (Calls.reserveSelectionCall selection limits call "corrupt-fingerprint" now)
+      reserve call = run app (Calls.reserveSelectionCall selection limits call (ExecutionValue.executionDigest "corrupt-fingerprint") now)
   admitted <- expectRight =<< reserve request
   receipt <- case admitted of Calls.NewCall value -> pure value; _ -> assertFailure "new admitted call expected"
   _ <- expectRight =<< reserve (request & #attemptId .~ fixtureAttemptId "corrupt-selection-2")

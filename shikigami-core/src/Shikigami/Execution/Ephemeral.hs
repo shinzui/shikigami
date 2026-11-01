@@ -60,11 +60,11 @@ runEphemeralBehavior duration base env decl input = case narrowHarnessPolicy bas
           loaded <- loadSkillManifest (SkillDir (Text.unpack path))
           case loaded of
             Left err -> pure (Left err)
-            Right manifest -> loop [] policy 0 0 0 ModelTurn (ReplayContext 2 (Just manifest.description) [RequestTurn [TextBlock (skillRequestText manifest input)] Nothing]) Nothing
+            Right manifest -> loop [] policy 0 0 0 ModelTurn (ReplayContext RequestContext (Just manifest.description) [RequestTurn [TextBlock (skillRequestText manifest input)] Nothing]) Nothing
         _ -> fmap (\value -> EphemeralResult value 0 0 (EphemeralRecording [])) <$> runBehavior env decl input
   where
     tools = registryTools env.tools
-    bindings = [ToolBinding (someToolName tool) "ephemeral/1" (versionedDigest "shikigami.tool-schema/1" (someToolSchema tool)) UncertainEffect UnreportedInvoiceCost | tool <- tools]
+    bindings = [ToolBinding (executionCoordinate (someToolName tool)) (executionCoordinate "ephemeral/1") (executionDigestFor "shikigami.tool-schema/1" (someToolSchema tool)) UncertainEffect UnreportedInvoiceCost | tool <- tools]
     micros = fromInteger (max 1 (min 3500000000 (ceiling (duration * 1000000))))
     refused = Left . HarnessPolicyRefused . boundedBehaviorDetail
     loop journal policy calls toolCount repairs kind source summary
@@ -73,7 +73,7 @@ runEphemeralBehavior duration base env decl input = case narrowHarnessPolicy bas
       | otherwise = case prepareModelOperationInput policy kind source Nothing summary of
           Left err -> pure (refused (Text.pack (show err)))
           Right (_, accepted) | not (withinPayload (toJSON accepted)) -> pure (refused "accepted model input exceeds the payload ceiling")
-          Right (actualKind, accepted) -> case (restoreContext accepted.view.context, narrowOutput env.options accepted.maxOutputTokens) of
+          Right (actualKind, accepted) -> case (restoreContext accepted.view.context, narrowOutput env.options (policyNumber <$> accepted.maxOutputTokens)) of
             (Right context, Right options) -> do
               let request = context & #tools .~ if actualKind == ModelSummary then Vector.empty else registryBaikai env.tools
               case validateResponseRequest env.model options request of
@@ -96,9 +96,9 @@ runEphemeralBehavior duration base env decl input = case narrowHarnessPolicy bas
                               then case validateTerminalOutput (policy & #output .~ NonemptyReply) assistant of
                                 Left _ -> pure (refused "summary output is invalid")
                                 Right _ -> do
-                                  let execution = ExecutionId "ephemeral"
+                                  let execution = executionIdentity "ephemeral"
                                       position = advanceRevisions (fromIntegral calls) initialRevision
-                                      specification = OperationSpec (operationIdFor execution position) ModelSummary RepeatableObservation "summary" "ephemeral" "ephemeral" Nothing
+                                      specification = OperationSpec (operationIdFor execution position) ModelSummary RepeatableObservation (executionCoordinate "summary") (executionDigest "ephemeral") (executionDigest "ephemeral") Nothing
                                       reference value = do
                                         payloadId <- parsePayloadId "ephemeral"
                                         digest <- parsePayloadDigest (versionedDigest "shikigami.ephemeral-payload/1" value)
@@ -106,7 +106,7 @@ runEphemeralBehavior duration base env decl input = case narrowHarnessPolicy bas
                                         pure (PayloadRef payloadId digest bytes)
                                   case (reference (toJSON accepted), reference (toJSON assistant)) of
                                     (Right input, Right output) -> do
-                                      let operation = Operation V1 execution position specification "ephemeral" input (Just output) (Just NeedModel) NotMarkedUncertain Nothing
+                                      let operation = Operation V1 execution position specification (executionDigest "ephemeral") input (Just output) (Just NeedModel) NotMarkedUncertain Nothing
                                       loop retained policy calls' toolCount repairs kind source (Just (operation, accepted, assistant))
                                     _ -> pure (refused "ephemeral payload reference is invalid")
                               else
@@ -128,7 +128,7 @@ runEphemeralBehavior duration base env decl input = case narrowHarnessPolicy bas
         go accepted ((position, invocation) : remaining) = case either (Left . ExecutionPolicyRefused) (validateToolInvocation policy bindings bindings assistant) (parseToolPosition position) of
           Left err -> pure (refused (Text.pack (show err)))
           Right ToolNeedsPermission {} -> pure (refused "human permission requires shikigami-agent-run")
-          Right (ToolAdmitted binding) -> case find ((== binding.name) . someToolName) tools of
+          Right (ToolAdmitted binding) -> case find ((== executionCoordinateText binding.name) . someToolName) tools of
             Nothing -> pure (refused "accepted tool is unavailable")
             Just tool -> do
               registry <- newProviderRegistryFrom []
@@ -137,7 +137,7 @@ runEphemeralBehavior duration base env decl input = case narrowHarnessPolicy bas
                 Left err -> pure (Left err)
                 Right (Left _) -> pure (refused "tool outcome is uncertain; no automatic retry")
                 Right (Right value) -> do
-                  let observation = either (\err -> ToolTurn invocation.callId invocation.name [TextBlock (renderToolError err)] True Nothing) (\output -> let retained = captureToolOutput output in ToolTurn invocation.callId invocation.name (observationBlocks retained) retained.failed Nothing) value
+                  let observation = either (\err -> ToolTurn invocation.callId invocation.name [TextBlock (renderToolError err)] ToolFailed Nothing) (\output -> let retained = captureToolOutput output in ToolTurn invocation.callId invocation.name (observationBlocks retained) retained.failed Nothing) value
                   if withinPayload (toJSON observation) then go (observation : accepted) remaining else pure (refused "tool output exceeds the payload ceiling")
     withinPayload value = Lazy.length (Aeson.encode value) <= 1048576
     bounded :: IO a -> IO (Either RunError a)

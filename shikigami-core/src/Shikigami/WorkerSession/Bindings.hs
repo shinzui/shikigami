@@ -5,7 +5,7 @@ import Data.Aeson (Value (String))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Keiro.Codec.Nominal (NominalBinding (..), NominalFixture (..), NominalFixtureCases (..))
-import Shikigami.WorkerSession.Types (WorkerSessionId (value), workerSessionId)
+import Shikigami.WorkerSession.Types (WorkerSessionId, workerSessionId)
 
 initialWorkerSessionIdentity :: WorkerSessionId
 initialWorkerSessionIdentity = workerSessionId ""

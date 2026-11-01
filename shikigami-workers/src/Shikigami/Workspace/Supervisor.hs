@@ -45,6 +45,7 @@ import Shikigami.Capability.Overlay
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Claim
+import Shikigami.Execution.Coordinate
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy.Types (RecoveryClass (..), ToolInvoiceCost (..))
 import Shikigami.Execution.Resources qualified as Resources
@@ -161,7 +162,7 @@ transferredWorkspaceExecBinding :: ToolBinding
 transferredWorkspaceExecBinding = execBindingFor True
 
 execBindingFor :: Bool -> ToolBinding
-execBindingFor transferable = ToolBinding "overlay__workspace-exec__validate" (if transferable then "workspace.exec:2" else "workspace.exec:1") (versionedDigest "shikigami.tool-schema/1" workspaceExecSchema) UncertainEffect NoInvoiceCost
+execBindingFor transferable = ToolBinding (executionCoordinate "overlay__workspace-exec__validate") (executionCoordinate (if transferable then "workspace.exec:2" else "workspace.exec:1")) (executionDigestFor "shikigami.tool-schema/1" workspaceExecSchema) UncertainEffect NoInvoiceCost
 
 superviseProcess :: SupervisorRuntime -> SupervisorRequest -> IO (Either SupervisorError ProcessRecord)
 superviseProcess runtime request = protect do
@@ -204,7 +205,7 @@ loadAccepted runtime request = do
   admission <- maybe (abort SupervisorRefused) pure snapshot.workspace
   let transferable = admission.filePolicy == Just transferableFilePolicy
       expected = execBindingFor transferable
-  unless (admission.filePolicy == Just (if transferable then transferableFilePolicy else supervisedFilePolicy) && execDescriptorFor transferable `elem` resolvedCapabilities snapshot.capabilities && operation.executionId == snapshot.executionId && operation.specification.kind == ToolOperation && operation.specification.name == expected.name && operation.specification.recovery == UncertainEffect && operation.specification.scopeDigest == toolScopeDigest expected && operation.specification.policyDigest == versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)) (abort SupervisorRefused)
+  unless (admission.filePolicy == Just (if transferable then transferableFilePolicy else supervisedFilePolicy) && execDescriptorFor transferable `elem` resolvedCapabilities snapshot.capabilities && operation.executionId == snapshot.executionId && operation.specification.kind == ToolOperation && operation.specification.name == expected.name && operation.specification.recovery == UncertainEffect && operation.specification.scopeDigest == toolScopeDigest expected && operation.specification.policyDigest == executionDigestFor "shikigami.harness-policy/1" (toJSON snapshot.policy)) (abort SupervisorRefused)
   tool <- execute runtime (Execution.readReplayPayload @ToolOperationInput access "operation-input" operation.input)
   unless (tool.binding == expected && tool.binding `elem` snapshot.toolBindings && tool.invocation.name == expected.name && operation.specification.responsePosition == Just tool.position) (abort SupervisorRefused)
   response <- execute runtime (Execution.readReplayPayload @OperationOutcome access "operation-outcome" tool.response)
@@ -220,7 +221,7 @@ loadAccepted runtime request = do
   (command, profile) <- runtime.selectRule binding admission rule >>= either (const (abort SupervisorRefused)) pure
   profileIdentity <- Systemd.systemdProfileIdentity profile
   unless (validProcessCommand command && command.rule == rule && command.profile == profileIdentity) (abort SupervisorRefused)
-  let key = operationIdText request.operationId
+  let key = request.operationId
       context = OperationContext snapshot.executionId request.operationId key operation.fingerprint operation.specification.scopeDigest
       dispatch = DispatchContext context request.attemptId request.owner request.generation
   pure (AcceptedProcess snapshot access binding admission dispatch command profile routing)
@@ -397,14 +398,14 @@ publishProcessReceipt runtime operationId = protect do
       metadata <- execute runtime (Execution.inspectExecution routing.executionId) >>= maybe (abort SupervisorUnresolved) pure
       let (state, retained, _) = metadata
       operation <- execute runtime (Execution.inspectOperation operationId) >>= maybe (abort SupervisorUnresolved) pure
-      let key = operationIdText operationId
+      let key = operationId
           context = OperationContext routing.executionId operationId key operation.fingerprint operation.specification.scopeDigest
       unless (routing.identity == retained.identity && retained.rootId == Just binding.request.rootId && operation.executionId == routing.executionId && operation.specification.kind == ToolOperation && operation.specification.name == workspaceExecBinding.name && operation.specification.scopeDigest `elem` map toolScopeDigest [workspaceExecBinding, transferredWorkspaceExecBinding] && operation.specification.recovery == UncertainEffect && operation.input.digest == routing.inputDigest && record.fingerprint == processFingerprint binding record.instructionDigest context record.command) (abort SupervisorUnresolved)
       actual <- execute runtime (Execution.inspectExecutionAttempt record.attemptId) >>= maybe (abort SupervisorUnresolved) pure
       unless (actual.executionId == routing.executionId && actual.operationId == operationId && actual.owner == Just record.claimOwner && actual.generation == record.generation && isNothing actual.call) (abort SupervisorUnresolved)
       let reference = Attempt.JobReference V1 routing.executionId operationId record.attemptId
           claim = Attempt.AttemptClaim reference record.claimOwner record.generation
-          outcome = either (\err -> ToolReturned [TextBlock (renderToolError err)] True) (RichToolReturned . captureToolOutput) result
+          outcome = either (\err -> ToolReturned [TextBlock (renderToolError err)] ToolFailed) (RichToolReturned . captureToolOutput) result
           receipt = Attempt.AttemptResult outcome routing.next Nothing
           acknowledged = execute runtime (Execution.publishExecutionWake reference) >> pure ProcessReceiptAcknowledged
       case actual.phase of

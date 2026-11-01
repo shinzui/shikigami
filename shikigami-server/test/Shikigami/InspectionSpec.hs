@@ -25,7 +25,7 @@ import Kiroku.Store.Append (appendToStream)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Types (EventData (..), EventType (..), ExpectedVersion (..), StreamName (..))
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
-import Shikigami.Execution.Transcript (ExecutionId (..))
+import Shikigami.Execution.Transcript (ExecutionId (..), executionIdentity)
 import Shikigami.ExecutionLifecycle.Generated.Domain qualified as Execution
 import Shikigami.ExecutionLifecycle.Generated.EventStream (executionLifecycleCategory, executionLifecycleEventStream)
 import Shikigami.Inspection.Aggregates (aggregateCatalog)
@@ -64,12 +64,12 @@ tests fixture =
           tracer <- noopTracer
           let env = AppEnv (defaultConnectionSettings connection) tracer Nothing (Just store)
               identifier = "inspection-execution"
-              command = Execution.AdmitExecution (Execution.AdmitExecutionData (ExecutionId identifier) "PRIVATE_SNAPSHOT_DIGEST")
+              command = Execution.AdmitExecution (Execution.AdmitExecutionData (executionIdentity identifier) "PRIVATE_SNAPSHOT_DIGEST")
           recorded <- runAppIO env (runCommand defaultRunCommandOptions executionLifecycleEventStream (Stream.entityStream executionLifecycleCategory identifier) command)
           case recorded of
             Right (Right _) -> pure ()
             _ -> assertFailure "failed to append native execution fixture"
-          second <- runAppIO env (runCommand defaultRunCommandOptions executionLifecycleEventStream (Stream.entityStream executionLifecycleCategory "inspection-execution-2") (Execution.AdmitExecution (Execution.AdmitExecutionData (ExecutionId "inspection-execution-2") "PRIVATE_SECOND_DIGEST")))
+          second <- runAppIO env (runCommand defaultRunCommandOptions executionLifecycleEventStream (Stream.entityStream executionLifecycleCategory "inspection-execution-2") (Execution.AdmitExecution (Execution.AdmitExecutionData (executionIdentity "inspection-execution-2") "PRIVATE_SECOND_DIGEST")))
           case second of
             Right (Right _) -> pure ()
             _ -> assertFailure "failed to append second native fixture"

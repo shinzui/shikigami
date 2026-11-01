@@ -4,10 +4,10 @@
 
 -- | Checked continuing-session admission values.
 module Shikigami.WorkerSession.Input
-  ( WorkerSessionId (value),
+  ( WorkerSessionId,
     workerSessionId,
     sessionIdForScopeDigest,
-    AssignmentId (value),
+    AssignmentId,
     parseAssignmentId,
     assignmentIdForDigest,
     SessionLimit (..),
@@ -52,6 +52,7 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TextEncoding
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUIDv5
+import GHC.Records (HasField (..))
 import GHC.TypeLits (Symbol)
 import Keiki.Shape (CanonicalTypeName (..))
 import Shikigami.Decision.Contract (versionedDigest)
@@ -259,7 +260,7 @@ instance FromJSON WorkflowGeneration where
 -- This is the total mapped technical identity required by the Keiro nominal
 -- contract. The session owner binds an admitted identity to its scope digest;
 -- arbitrary carrier text is not admission authority.
-newtype WorkerSessionId = WorkerSessionId {value :: Text}
+newtype WorkerSessionId = WorkerSessionId Text
   deriving stock (Eq, Ord, Show)
   deriving newtype (ToJSON, FromJSON)
 
@@ -272,7 +273,7 @@ sessionIdForScopeDigest digest = WorkerSessionId (UUID.toText (UUIDv5.generateNa
 instance CanonicalTypeName WorkerSessionId where
   canonicalTypeName _ = "shikigami.WorkerSessionId.v1"
 
-newtype AssignmentId = AssignmentId {value :: Text}
+newtype AssignmentId = AssignmentId Text
   deriving stock (Eq, Ord, Show)
 
 parseAssignmentId :: Text -> Either Text AssignmentId
@@ -325,3 +326,9 @@ instance ToJSON EventPageSize where
 
 instance FromJSON EventPageSize where
   parseJSON input = parseJSON input >>= either (fail . Text.unpack) pure . parseSessionLimit
+
+instance HasField "value" WorkerSessionId Text where
+  getField (WorkerSessionId raw) = raw
+
+instance HasField "value" AssignmentId Text where
+  getField (AssignmentId raw) = raw

@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | A bounded generation decides/submits work; the queue executor performs IO
 -- outside the workflow lease. Durable rows, rather than a replay-local counter,
 -- determine which operation and actual attempt may run next.
@@ -20,6 +22,7 @@ import Data.List (find)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Map.Strict qualified as Map
 import Data.Maybe (listToMaybe)
+import Data.Text qualified as Text
 import Data.Time (diffUTCTime)
 import Effectful (Eff, IOE, runEff)
 import Effectful.Error.Static (Error, runErrorNoCallStack, throwError, tryError)
@@ -75,7 +78,7 @@ data ExecutionDriverResult = ExecutionDriverResult
 data ExecutionAction
   = ExecutionDone !ExecutionDriverResult
   | ObserveExecution !Attempt.JobReference
-  | ReviewTool !SessionId !Text !PermissionBinding
+  | ReviewTool !SessionId !(ExecutionCoordinate "tool-name") !PermissionBinding
   | RotateExecution
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -96,7 +99,8 @@ executionWorkflow runtime initial = do
   seed <- restoreSeed (ExecutionSeed Nothing)
   start <- step (StepName "ingest-execution") (maybe (throwIO (userError "execution resumed without its admitted start")) pure (seed.start <|> initial))
   (token, awaitObservation) <- Generated.allocateDeclaredAwait Generated.observationAwait
-  generation <- currentRunGeneration
+  generationNumber <- currentRunGeneration
+  generation <- either (throwIO . userError . Text.unpack) pure (parseExecutionGeneration generationNumber)
   let wake = Attempt.ExecutionWake token generation
   action <- step (StepName "advance-execution") (liftIO (advanceExecution runtime start wake) >>= require)
   case action of
@@ -113,7 +117,7 @@ executionWorkflow runtime initial = do
         Approval.requestBoundApproval
           permission.reviewRequestId
           session
-          (ApprovalRequest ("Allow tool " <> tool <> "?") (Aeson.object ["executionId" .= start.executionId, "fingerprint" .= permission.fingerprint, "scopeDigest" .= permission.scopeDigest]) ViaDanwa)
+          (ApprovalRequest ("Allow tool " <> executionCoordinateText tool <> "?") (Aeson.object ["executionId" .= start.executionId, "fingerprint" .= permission.fingerprint, "scopeDigest" .= permission.scopeDigest]) ViaDanwa)
           (max 0 (diffUTCTime permission.expiresAt now))
       _ <- step (StepName "resolve-tool-permission") do
         metadata <- liftIO (runExecutionStore runtime (Store.inspectExecution start.executionId)) >>= require
@@ -272,7 +276,7 @@ decide runtime start wake = do
     admitModel access snapshot state kind = do
       (source, predecessor, summary) <- checked (owned (Store.loadModelReplayWindow access))
       (acceptedKind, input) <- either throwError pure (prepareModelOperationInput snapshot.policy kind source predecessor summary)
-      let spec = OperationSpec (operationIdFor start.executionId state.cursor) acceptedKind RepeatableObservation (if acceptedKind == ModelSummary then "summary" else "model") (policyDigest snapshot) (versionedDigest "shikigami.execution-model-scope/1" (toJSON snapshot.selection)) Nothing
+      let spec = OperationSpec (operationIdFor start.executionId state.cursor) acceptedKind RepeatableObservation (executionCoordinate (if acceptedKind == ModelSummary then "summary" else "model")) (policyDigest snapshot) (executionDigestFor "shikigami.execution-model-scope/1" (toJSON snapshot.selection)) Nothing
       _ <- checked (owned (Store.acceptOperation access state.revision spec (toJSON input)))
       pure RotateExecution
     submit retired access snapshot state operation
@@ -289,11 +293,11 @@ decide runtime start wake = do
               else do
                 input <- checked (owned (Store.readReplayPayload @ModelOperationInput access "operation-input" operation.input))
                 context <- either throwError pure (modelContext snapshot operation input)
-                result <- liftIO (preparePinnedExecutionCall (runtime.selectionRuntime snapshot) snapshot.selection operation.specification.operationId attemptId context input.maxOutputTokens)
+                result <- liftIO (preparePinnedExecutionCall (runtime.selectionRuntime snapshot) snapshot.selection operation.specification.operationId attemptId context (policyNumber <$> input.maxOutputTokens))
                 (request, prepared) <- either (throwError . ExecutionPolicyRefused) pure result
                 pure (request, Just prepared)
           now <- liftIO getCurrentTime
           (_, accepted) <- checked (owned ((case retired of Nothing -> Store.submitExecutionAttemptWith; Just old -> \permit revision -> Store.recoverExecutionAttemptWith permit revision old) access state.revision (Attempt.AttemptSubmission request prepared wake) (enqueue now snapshot.identity snapshot.agent)))
           pure (ObserveExecution (Attempt.JobReference V1 start.executionId accepted.operationId accepted.request.attemptId))
     enqueue now identity agent reference = void (enqueueRunJobTx (addressedRunJob now identity agent ExecutionOperationRoute (toJSON reference) (runKeyWithPrefix ('e' :| "xecution:") (versionedDigest "shikigami.execution-job/1" (toJSON reference)))))
-    policyDigest snapshot = versionedDigest "shikigami.harness-policy/1" (toJSON snapshot.policy)
+    policyDigest snapshot = executionDigestFor "shikigami.harness-policy/1" (toJSON snapshot.policy)

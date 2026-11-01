@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RankNTypes #-}
 
 -- | One queue delivery observes or executes an already prepared attempt.
@@ -63,7 +64,7 @@ data ExecutionRuntime = ExecutionRuntime
     replayAuthority :: !(AgentIdentity -> IO (Either Text ())),
     authorize :: !(ExecutionSnapshot -> IO (Either Text ())),
     selectionRuntime :: !(ExecutionSnapshot -> SelectionRuntime),
-    withTools :: !(forall a. ExecutionSnapshot -> Runner.DispatchContext -> Maybe Text -> ([BoundTool] -> IO a) -> IO (Either ExecutionError a)),
+    withTools :: !(forall a. ExecutionSnapshot -> Runner.DispatchContext -> Maybe (ExecutionCoordinate "tool-name") -> ([BoundTool] -> IO a) -> IO (Either ExecutionError a)),
     timeoutSeconds :: !Int
   }
 
@@ -194,7 +195,7 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
             built <- buildPreparedExecutionEnv selectedRuntime snapshot.selection (PreparedSelectionCall receipt terminal)
             case built of
               Left _ -> denied access lease "pinned model binding is unavailable"
-              Right selected -> case narrowOutput selected.options request.maxOutputTokens of
+              Right selected -> case narrowOutput selected.options (policyNumber <$> request.maxOutputTokens) of
                 Left _ -> denied access lease "requested model output is outside the pinned ceiling"
                 Right options | Left _ <- validateResponseRequest selected.model options context -> denied access lease "model request is incompatible with the pinned API"
                 Right options -> completeBehaviorRequest selected selected.model context options >> pure (Right ())
@@ -203,7 +204,7 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
         (_, Left err) -> pure (Left err)
         _ -> pure (Left AttemptMissing)
     dispatchTool access snapshot lease operation = do
-      let context = Runner.OperationContext snapshot.executionId operation.specification.operationId (operationKey operation.specification.operationId) operation.fingerprint operation.specification.scopeDigest
+      let context = Runner.OperationContext snapshot.executionId operation.specification.operationId operation.specification.operationId operation.fingerprint operation.specification.scopeDigest
       let dispatchContext = Runner.DispatchContext context lease.reference.attemptId lease.owner lease.generation
       handled <- withTools snapshot dispatchContext (Just operation.specification.name) \tools -> do
         now <- getCurrentTime
@@ -213,7 +214,7 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
           Right Runner.ToolPermissionNeeded -> denied access lease "tool permission is unavailable"
           Right (Runner.ToolReady request) -> case find (\bound -> bound.binding == request.input.binding) tools of
             Nothing -> denied access lease "pinned tool binding is unavailable"
-            Just bound | someToolName bound.tool == bound.binding.name && versionedDigest "shikigami.tool-schema/1" (someToolSchema bound.tool) == bound.binding.schemaDigest -> do
+            Just bound | someToolName bound.tool == executionCoordinateText bound.binding.name && executionDigestFor "shikigami.tool-schema/1" (someToolSchema bound.tool) == bound.binding.schemaDigest -> do
               -- Nested LLM operations cannot escape root admission through the
               -- process-global provider registry. They require their own work.
               emptyRegistry <- newProviderRegistryFrom []
@@ -224,7 +225,7 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
                   result <- runEff . runErrorNoCallStack @ShikumiError . runLLMWith emptyRegistry $ runErasedOutput bound.tool request.input.invocation.arguments
                   case result of
                     Left _ -> markUnknown access lease
-                    Right (Left err) -> commit access lease (Attempt.AttemptResult (ToolReturned [TextBlock (renderToolError err)] True) next Nothing)
+                    Right (Left err) -> commit access lease (Attempt.AttemptResult (ToolReturned [TextBlock (renderToolError err)] ToolFailed) next Nothing)
                     Right (Right output) -> commit access lease (Attempt.AttemptResult (RichToolReturned (captureToolOutput output)) next Nothing)
                 _ -> denied access lease "accepted tool response is unavailable"
             _ -> denied access lease "live tool schema differs from its immutable binding"
@@ -256,6 +257,6 @@ modelContext snapshot operation input = do
   unless (contextRequest input.view.context.messages == contextRequest snapshot.initialContext.messages) (Left CorruptReplay)
   context <- restoreContext input.view.context
   tools <- case Aeson.fromJSON snapshot.offeredTools of Aeson.Success value -> Right (value :: [Tool.Tool]); _ -> Left UnsupportedReplay
-  unless (length tools <= 128 && sort (map (\(tool :: Tool.Tool) -> tool.name) tools) == sort (map (\(binding :: ToolBinding) -> binding.name) snapshot.toolBindings) && all (\(tool :: Tool.Tool) -> any (\(binding :: ToolBinding) -> binding.name == tool.name && binding.schemaDigest == versionedDigest "shikigami.tool-schema/1" tool.parameters) snapshot.toolBindings) tools) (Left UnsupportedReplay)
-  when (operation.specification.kind == ModelSummary && (isNothing snapshot.policy.summaryTokens || maybe True (\requested -> maybe True (\cap -> requested > policyNumber cap) snapshot.policy.summaryTokens) input.maxOutputTokens)) (Left (ExecutionPolicyRefused "summary output exceeds the pinned ceiling"))
+  unless (length tools <= 128 && sort (map (\(tool :: Tool.Tool) -> tool.name) tools) == sort (map (\(binding :: ToolBinding) -> executionCoordinateText binding.name) snapshot.toolBindings) && all (\(tool :: Tool.Tool) -> any (\(binding :: ToolBinding) -> executionCoordinateText binding.name == tool.name && binding.schemaDigest == executionDigestFor "shikigami.tool-schema/1" tool.parameters) snapshot.toolBindings) tools) (Left UnsupportedReplay)
+  when (operation.specification.kind == ModelSummary && (isNothing snapshot.policy.summaryTokens || maybe True (\requested -> maybe True (\cap -> requested > cap) snapshot.policy.summaryTokens) input.maxOutputTokens)) (Left (ExecutionPolicyRefused "summary output exceeds the pinned ceiling"))
   pure (context & #tools .~ if operation.specification.kind == ModelSummary then Vector.empty else Vector.fromList tools)

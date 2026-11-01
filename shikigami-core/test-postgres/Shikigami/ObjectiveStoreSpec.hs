@@ -29,7 +29,7 @@ import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkA
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId, operationIdText)
 import Shikigami.Execution.Payload (payloadIdText)
-import Shikigami.Execution.Transcript (ExecutionId (..), PayloadRef (..))
+import Shikigami.Execution.Transcript (ExecutionId (..), PayloadRef (..), executionIdentity)
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId, fixtureRootId)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
@@ -384,13 +384,13 @@ tests fixture =
         withObjective fixture \env _ objective -> do
           now <- getCurrentTime
           let assignment = draft now "a"
-              reference = RetainedResult (runReference "verifier-run") (ExecutionId "verifier-execution") (resultCommitment "sha256:retained-result") (artifact "artifact")
+              reference = RetainedResult (runReference "verifier-run") (executionIdentity "verifier-execution") (resultCommitment "sha256:retained-result") (artifact "artifact")
               verifiedHost = (ownerHost & #verifyResult .~ (\source -> pure (if source == reference then Right (EvidenceVerification CheckPassed (Just (criterionKey "auto")) JourneyObserved) else Left ObjectiveInvalidEvidence)))
               send expected key command = run env (O.executeCommand verifiedHost objective (revision expected) (fixtureOperationId key) command)
           _ <- right =<< send 0 "criteria" (ReviseCriteria [Criterion (criterionKey "auto") (description "verified journey") Automatic JourneyRequired])
           _ <- right =<< send 1 "graph" (SetAssignments [assignment & #state .~ Done])
           -- A fabricated result cannot acquire a verifier disposition.
-          send 2 "fake" (RecordEvidence assignment.assignmentId (ResultEvidence (evidenceKey "fake") (criterionKey "auto") (RetainedResult (runReference "fake-run") (ExecutionId "fake") (resultCommitment "fake") (artifact "artifact")) JourneyObserved)) >>= (@?= Left ObjectiveInvalidEvidence)
+          send 2 "fake" (RecordEvidence assignment.assignmentId (ResultEvidence (evidenceKey "fake") (criterionKey "auto") (RetainedResult (runReference "fake-run") (executionIdentity "fake") (resultCommitment "fake") (artifact "artifact")) JourneyObserved)) >>= (@?= Left ObjectiveInvalidEvidence)
           evidenceReceipt <- right =<< send 2 "verified" (RecordEvidence assignment.assignmentId (ResultEvidence (evidenceKey "verified") (criterionKey "auto") reference JourneyObserved))
           -- Recovery does not contact an unavailable evidence owner again.
           run env (O.executeCommand ownerHost objective (revision 2) (fixtureOperationId "verified") (RecordEvidence assignment.assignmentId (ResultEvidence (evidenceKey "verified") (criterionKey "auto") reference JourneyObserved))) >>= (@?= Right evidenceReceipt)
@@ -484,7 +484,7 @@ request :: CreateRequest
 request = CreateRequest (title "deliver") (goal "integrated goal") (instructions "instructions") [Criterion (criterionKey "human") (description "review integration") HumanVerifiable JourneyOptional] []
 
 origin :: CreationOrigin
-origin = ExecutionOrigin (runReference "recorded-run") (ExecutionId "recorded-execution") (fixtureOperationId "accepted-operation")
+origin = ExecutionOrigin (runReference "recorded-run") (executionIdentity "recorded-execution") (fixtureOperationId "accepted-operation")
 
 draft :: UTCTime -> Text -> AssignmentDraft
 draft now key = AssignmentDraft (objectiveAssignment key) (instructions "work") [] (compatibilityIdentity (fixtureAgentName "worker")) Pending Nothing (Just (fixtureRootId "session-root")) (Just (addUTCTime 3600 now))

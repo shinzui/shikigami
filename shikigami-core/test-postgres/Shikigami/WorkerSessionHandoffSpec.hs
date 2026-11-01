@@ -20,7 +20,7 @@ import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Identity (OperationId)
 import Shikigami.Execution.Resources (Admission (..), Cancellation (..), Root (..))
 import Shikigami.Execution.ResourcesStore qualified as Roots
-import Shikigami.Execution.Transcript (ExecutionId (..))
+import Shikigami.Execution.Transcript (ExecutionId (..), executionIdentity)
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
@@ -143,7 +143,7 @@ tests fixture =
         withTransferFixture fixture False \env admission access owner -> do
           (_, message) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send") (instruction 1))
           _ <- expectRight =<< run env (Store.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId "start") message.assignmentId)
-          _ <- expectRight =<< run env (Store.recordResult access (fixtureRevision 2) (fixtureRevision 0) (fixtureOperationId "finish") (AssignmentResult V1 message.assignmentId AssignmentSucceeded (Just (ExecutionId "unavailable-execution")) Aeson.Null []))
+          _ <- expectRight =<< run env (Store.recordResult access (fixtureRevision 2) (fixtureRevision 0) (fixtureOperationId "finish") (AssignmentResult V1 message.assignmentId AssignmentSucceeded (Just (executionIdentity "unavailable-execution")) Aeson.Null []))
           _ <- expectRight =<< requestAt env admission owner (fixtureRevision 3)
           writeIORef owner.inFlight False
           run env (Handoff.resumeHandoff owner.services (sessionIdFor admission)) >>= (@?= Right Handoff.HandoffPending)

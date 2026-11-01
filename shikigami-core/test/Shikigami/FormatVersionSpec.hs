@@ -8,7 +8,7 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Shikigami.Execution.Attempt (JobReference (..))
 import Shikigami.Execution.Identity (newAttemptId)
 import Shikigami.Execution.Policy.Types (defaultHarnessPolicy)
-import Shikigami.Execution.Transcript (ExecutionId (..))
+import Shikigami.Execution.Transcript (ExecutionId (..), executionIdentity)
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Test.Tasty (TestTree, testGroup)
@@ -24,7 +24,7 @@ tests =
         mapM_ refuse invalidVersions,
       testCase "complete execution job references reject unsupported versions" do
         attempt <- newAttemptId
-        assertCompleteFormats (JobReference V1 (ExecutionId "execution") (fixtureOperationId "operation") attempt),
+        assertCompleteFormats (JobReference V1 (executionIdentity "execution") (fixtureOperationId "operation") attempt),
       testCase "complete harness policies reject unsupported versions" do
         assertCompleteFormats defaultHarnessPolicy
     ]

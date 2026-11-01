@@ -39,6 +39,7 @@ import Shikigami.Decision.Contract qualified as Model
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
+import Shikigami.Execution.Coordinate qualified as ExecutionValue
 import Shikigami.Execution.Executor (BoundTool (..))
 import Shikigami.Execution.Identity (OperationId)
 import Shikigami.Execution.Policy.Types (defaultHarnessPolicy)
@@ -238,7 +239,7 @@ tests fixture =
           drive dependencies allowed >>= (@?= Suspended)
           access <- expectRight =<< run env (Execution.authorizeReplay (execution allowed) admission.context.identity (pure (Right ())))
           (snapshot, _) <- expectRight =<< run env (Execution.loadExecution access)
-          assertBool "admitted worker tool is frozen" (any (\binding -> binding.name == "workers") snapshot.toolBindings)
+          assertBool "admitted worker tool is frozen" (any (\binding -> binding.name == Replay.executionCoordinate "workers") snapshot.toolBindings)
           let refused = job "coordinator-no-authority"
           denied <- drive (dependencies & #coordination .~ Nothing) refused
           case denied of Completed (Left _) -> pure (); _ -> assertFailure (show denied)
@@ -258,12 +259,12 @@ tests fixture =
           let factory = Tools.coordinationTools (Just host) authorizer
           [described] <- expectRight =<< factory.describe snapshot
           let accepted = snapshot & #toolBindings .~ [described.binding] & #offeredTools .~ toJSON [lowerSomeTool described.tool]
-              context = OperationContext accepted.executionId (fixtureOperationId "trusted-operation") "trusted-key" "fingerprint" "scope"
+              context = OperationContext accepted.executionId (fixtureOperationId "trusted-operation") (fixtureOperationId "trusted-key") (ExecutionValue.executionDigest "fingerprint") (ExecutionValue.executionDigest "scope")
               input = toJSON (SendWorker (Session.sessionIdFor admission) (fixtureRevision 0) (fixtureRevision 0) (draft "PRIVATE_NATIVE_INSTRUCTION"))
-          [prepared] <- expectRight =<< factory.prepare accepted context (Just "workers")
+          [prepared] <- expectRight =<< factory.prepare accepted context (Just (ExecutionValue.executionCoordinate "workers"))
           output <- executeTool prepared input
           writeIORef current Nothing
-          [reacquired] <- expectRight =<< factory.prepare accepted context (Just "workers")
+          [reacquired] <- expectRight =<< factory.prepare accepted context (Just (ExecutionValue.executionCoordinate "workers"))
           replay <- executeTool reacquired input
           acceptedReply output @?= Accepted
           acceptedReply replay @?= AlreadyAccepted
@@ -312,7 +313,7 @@ snapshotFor scope = do
   now <- getCurrentTime
   let descriptor = ModelDescriptor (fixtureModelAlias "worker-model") (fixtureModelRegistration "1") (Model.modelDescriptorDigest (toJSON ("fixture-model" :: Text))) (Coordinate.providerCoordinate "fixture") (Coordinate.providerCoordinate "fixture") (Coordinate.providerCoordinate "fixture") (Coordinate.providerCoordinate "fixture") Nothing (fixtureModelRegistration "fixture") (fixtureModelRegistration "1")
       selection = ExecutionSelection (fixtureAssignment "coordination-assignment") descriptor (Aeson.object []) [fixtureModelAlias "worker-model"] Nothing scope.run.rootId ProcessDefault now
-  pure (Replay.ExecutionSnapshot V1 (Replay.executionIdFor selection.assignmentId) scope.run.runId.unWorkflowId (fixtureAgentName "coordinator") scope.run.identity scope.run.sessionId selection Nothing (Replay.SkillInstructions "fixture" "fixture" "fixture") (Replay.ReplayContext 2 Nothing [Replay.RequestTurn [Replay.TextBlock "coordinate"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] Nothing)
+  pure (Replay.ExecutionSnapshot V1 (Replay.executionIdFor selection.assignmentId) scope.run.runId.unWorkflowId (fixtureAgentName "coordinator") scope.run.identity scope.run.sessionId selection Nothing (Replay.SkillInstructions (ExecutionValue.executionCoordinate "fixture") "fixture" "fixture") (Replay.ReplayContext Replay.RequestContext Nothing [Replay.RequestTurn [Replay.TextBlock "coordinate"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] Nothing)
 
 executeTool :: BoundTool -> Aeson.Value -> IO ToolOutput
 executeTool tool arguments = expectRight =<< (expectRight =<< runEff (runErrorNoCallStack @ShikumiError (runLLM (runErasedOutput tool.tool arguments))))

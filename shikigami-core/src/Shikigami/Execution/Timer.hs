@@ -3,6 +3,8 @@
 -- generation after rotation.
 module Shikigami.Execution.Timer (armObservation, observationFireAction, observationTimerKind) where
 
+import Data.Aeson ((.:), (.=))
+import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseMaybe)
 import Data.Text qualified as Text
 import Data.Time (addUTCTime)
@@ -18,21 +20,27 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId)
 import Shikigami.Execution.Attempt
-import Shikigami.Prelude
+import Shikigami.Execution.Coordinate (executionGenerationInt)
+import Shikigami.Prelude hiding ((.=))
 
 data ObservationTimer = ObservationTimer
   { kind :: !Text,
-    ownerName :: !Text,
-    ownerId :: !Text,
+    ownerName :: !WorkflowName,
+    ownerId :: !WorkflowId,
     wake :: !ExecutionWake,
     reference :: !JobReference
   }
   deriving stock (Generic)
-  deriving anyclass (ToJSON, FromJSON)
+
+instance ToJSON ObservationTimer where
+  toJSON value = Aeson.object ["kind" .= value.kind, "ownerName" .= value.ownerName.unWorkflowName, "ownerId" .= value.ownerId.unWorkflowId, "wake" .= value.wake, "reference" .= value.reference]
+
+instance FromJSON ObservationTimer where
+  parseJSON = Aeson.withObject "ObservationTimer" \fields -> ObservationTimer <$> fields .: "kind" <*> (WorkflowName <$> fields .: "ownerName") <*> (WorkflowId <$> fields .: "ownerId") <*> fields .: "wake" <*> fields .: "reference"
 
 armObservation :: (Workflow :> es, Store :> es, IOE :> es) => ExecutionWake -> JobReference -> Eff es ()
 armObservation wake reference = do
-  (WorkflowName nameText, WorkflowId workflowText) <- currentWorkflow
+  (ownerName@(WorkflowName nameText), ownerId@(WorkflowId workflowText)) <- currentWorkflow
   generation <- currentRunGeneration
   now <- liftIO getCurrentTime
   let request =
@@ -41,21 +49,21 @@ armObservation wake reference = do
             processManagerName = nameText,
             correlationId = workflowText,
             fireAt = addUTCTime 60 now,
-            payload = toJSON (ObservationTimer observationTimerKind nameText workflowText wake reference)
+            payload = toJSON (ObservationTimer observationTimerKind ownerName ownerId wake reference)
           }
   void (runTransaction (scheduleTimerOnceTx request))
 
 observationFireAction :: (Store :> es, IOE :> es) => TimerRow -> Eff es (Maybe EventId)
 observationFireAction row = case (parseMaybe parseJSON row.payload :: Maybe ObservationTimer) of
   Just timer | timer.kind == observationTimerKind -> do
-    generation <- currentGeneration (WorkflowName timer.ownerName) (WorkflowId timer.ownerId)
-    if generation /= timer.wake.generation
+    generation <- currentGeneration timer.ownerName timer.ownerId
+    if generation /= executionGenerationInt timer.wake.generation
       then void (cancelTimer row.timerId) >> pure Nothing
       else do
         now <- liftIO getCurrentTime
         let label = awakeableStepPrefix <> awakeableIdText timer.wake.token
-            entryId = deterministicJournalId (WorkflowName timer.ownerName) (WorkflowId timer.ownerId) timer.wake.generation label
-        append <- prepareJournalAppend (WorkflowName timer.ownerName) (WorkflowId timer.ownerId) timer.wake.generation (StepRecorded label (toJSON timer.reference) now)
+            entryId = deterministicJournalId timer.ownerName timer.ownerId (executionGenerationInt timer.wake.generation) label
+        append <- prepareJournalAppend timer.ownerName timer.ownerId (executionGenerationInt timer.wake.generation) (StepRecorded label (toJSON timer.reference) now)
         result <- runTransaction do
           transitioned <- completeAwakeableTx (awakeableIdToUuid timer.wake.token) (toJSON timer.reference) now
           status <- lookupAwakeableStatusTx (awakeableIdToUuid timer.wake.token)

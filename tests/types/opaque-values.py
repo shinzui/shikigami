@@ -19,6 +19,8 @@ CORE_UNITS = [entry["id"] for entry in PLAN["install-plan"]
 assert len(CORE_UNITS) == 1, CORE_UNITS
 CORE_UNIT = CORE_UNITS[0]
 HEADER = '''{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 module OpaqueBoundary where
@@ -60,6 +62,8 @@ import Shikigami.AgentRun.RequestKey qualified as Request
 import Shikigami.Agent.Run.Key qualified as FullKey
 import Shikigami.Trigger.RequestKey qualified as Addressed
 import Shikigami.FormatVersion qualified as Format
+import Shikigami.Execution.Coordinate qualified as ExecutionValue
+import Shikigami.Execution.Runner qualified as Runner
 import Shikigami.Execution.Transcript qualified as Transcript
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Identity qualified as Entity
@@ -91,7 +95,29 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''workerScope :: WorkerSession.SessionScope -> WorkerInput.WorkerCoordinate "parent-scope"
+POSITIVE = '''executionIdentity :: Text -> Transcript.ExecutionId
+executionIdentity = ExecutionValue.executionIdentity
+executionRead :: Transcript.ExecutionId -> Text
+executionRead value = value.value
+workerRead :: WorkerSession.WorkerSessionId -> Text
+workerRead value = value.value
+assignmentRead :: WorkerSession.AssignmentId -> Text
+assignmentRead value = value.value
+operationKey :: Runner.OperationContext -> Entity.OperationId
+operationKey value = value.idempotencyKey
+toolName :: Transcript.ToolBinding -> ExecutionValue.ExecutionCoordinate "tool-name"
+toolName value = value.name
+policyCommitment :: Text -> ExecutionValue.ExecutionDigest "policy"
+policyCommitment = ExecutionValue.executionDigest
+contextPosition :: Int -> Either Text ExecutionValue.ContextPosition
+contextPosition = ExecutionValue.parseContextPosition
+replayModel :: Transcript.ProviderReplay -> ProviderCoordinate.ProviderCoordinate "provider-model-id"
+replayModel value = value.model
+replayCall :: Transcript.ToolInvocation -> ProviderCoordinate.ProviderCoordinate "provider-tool-call-id"
+replayCall value = value.callId
+requestContext :: ExecutionValue.ReplayContextFormat
+requestContext = ExecutionValue.RequestContext
+workerScope :: WorkerSession.SessionScope -> WorkerInput.WorkerCoordinate "parent-scope"
 workerScope value = value.parent
 workerAssignment :: Aeson.Value -> WorkerSession.AssignmentId
 workerAssignment = WorkerInput.assignmentIdForDigest
@@ -309,6 +335,13 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('Transcript.ExecutionId', 'generic'),
+    ('ExecutionValue.ExecutionCoordinate "tool-name"', 'generic'),
+    ('ExecutionValue.ExecutionCoordinate "tool-revision"', 'generic'),
+    ('ExecutionValue.ExecutionDigest "input"', 'generic'),
+    ('ExecutionValue.ExecutionDigest "policy"', 'generic'),
+    ('ExecutionValue.ContextPosition', 'generic'),
+    ('ExecutionValue.ExecutionGeneration', 'generic'),
     ('WorkerSession.WorkerSessionId', 'generic'),
     ('WorkerSession.AssignmentId', 'generic'),
     ('WorkerInput.WorkerCoordinate "worker-slot"', 'generic'),
@@ -454,6 +487,18 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         assert result.returncode != 0 and 'RunDisposition' in result.stderr, (source_kind, result.stderr)
         print('opaque boundary: run disposition ' + source_kind + ' substitution refused: passed', flush=True)
     for label, signature, expression in [
+        ('execution identity record update', 'Transcript.ExecutionId -> Text -> Transcript.ExecutionId', '\\value raw -> value { ExecutionValue.value = raw }'),
+        ('execution identity coercion', 'Text -> Transcript.ExecutionId', 'coerce'),
+        ('execution coordinate raw coercion', 'Text -> ExecutionValue.ExecutionCoordinate "tool-name"', 'coerce'),
+        ('execution coordinate role substitution', 'ExecutionValue.ExecutionCoordinate "tool-name" -> ExecutionValue.ExecutionCoordinate "tool-revision"', 'coerce'),
+        ('execution digest role substitution', 'ExecutionValue.ExecutionDigest "input" -> ExecutionValue.ExecutionDigest "policy"', 'coerce'),
+        ('context position coercion', 'Int -> ExecutionValue.ContextPosition', 'coerce'),
+        ('execution generation coercion', 'Int -> ExecutionValue.ExecutionGeneration', 'coerce'),
+        ('replay format numeric substitution', 'Int -> ExecutionValue.ReplayContextFormat', 'id'),
+        ('replay tool result boolean substitution', 'Bool -> ExecutionValue.ToolResultState', 'id'),
+        ('replay failure boolean substitution', 'Bool -> ExecutionValue.Retryability', 'id'),
+        ('replay state role substitution', 'ExecutionValue.ToolResultState -> ExecutionValue.Retryability', 'id'),
+        ('replay provider reference role substitution', 'ProviderCoordinate.ProviderCoordinate "provider-response-id" -> ProviderCoordinate.ProviderCoordinate "provider-tool-call-id"', 'coerce'),
         ('worker session record update', 'WorkerSession.WorkerSessionId -> Text -> WorkerSession.WorkerSessionId', '\\value raw -> value { WorkerSession.value = raw }'),
         ('assignment record update', 'WorkerSession.AssignmentId -> Text -> WorkerSession.AssignmentId', '\\value raw -> value { WorkerSession.value = raw }'),
         ('worker session raw coercion', 'Text -> WorkerSession.WorkerSessionId', 'coerce'),
@@ -542,7 +587,9 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         if not selected(label + ' ' + signature):
             continue
         result = compile('bypass :: ' + signature + '\nbypass = ' + expression + '\n')
-        assert result.returncode != 0 and 'Not in scope' not in result.stderr, (label, result.stderr)
+        assert result.returncode != 0 and ('record update' in label or 'Not in scope' not in result.stderr), (label, result.stderr)
+        if 'record update' in label:
+            assert 'value' in result.stderr and 'ambiguous' not in result.stderr.lower(), (label, result.stderr)
         print('opaque boundary: ' + label + ' substitution refused: passed', flush=True)
     for kind, representation in [
         ('SinkCoordinate.SinkOrdinal', 'Int'),

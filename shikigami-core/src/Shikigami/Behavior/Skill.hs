@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | The skill arm: load a skill's @SKILL.md@, build a @baikai@ 'Context' from its
 -- description (system prompt) and instruction body (user message), run a completion,
 -- and render the assistant reply as a JSON value. baikai ships no @SKILL.md@ parser,
@@ -41,6 +43,7 @@ import Kioku.Api.Types (MemoryRecord (..))
 import Shikigami.Behavior.Compatibility
 import Shikigami.Behavior.Error (RunError (..), boundedBehaviorDetail)
 import Shikigami.Behavior.Input (BehaviorInput (..))
+import Shikigami.Execution.Coordinate (ExecutionCoordinate, executionCoordinate)
 import Shikumi.Error (ShikumiError (..), isTransient)
 import Shikumi.Error qualified as ShikumiError
 import Shikumi.LLM (runLLM)
@@ -54,10 +57,10 @@ newtype SkillDir = SkillDir FilePath
 -- | The parsed @SKILL.md@: required name + description from the YAML frontmatter, plus
 -- the Markdown instruction body and any declared allowed-tools.
 data SkillManifest = SkillManifest
-  { name :: !Text,
+  { name :: !(ExecutionCoordinate "skill-name"),
     description :: !Text,
     body :: !Text,
-    allowedTools :: ![Text]
+    allowedTools :: ![ExecutionCoordinate "tool-name"]
   }
   deriving stock (Eq, Show)
 
@@ -86,7 +89,7 @@ parseManifest t =
             (Just n, Just d) ->
               Right
                 SkillManifest
-                  { name = n,
+                  { name = executionCoordinate n,
                     description = d,
                     body = Text.unlines bodyLines,
                     allowedTools = []

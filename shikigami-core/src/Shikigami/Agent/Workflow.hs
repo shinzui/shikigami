@@ -650,7 +650,7 @@ runDurableSkillStep deps profile overlays job decl sid prior selection path = do
             menu <- ExecutionTools.describeExecutionTools deps.logger deps.actionAuthorizer deps.capabilities.providers factory snapshot
             pure do
               admitted <- menu
-              when (coordinating && not (any (\binding -> binding.name == "workers") admitted.toolBindings)) (Left (Execution.ExecutionPolicyRefused "coordinating Skill scope was not admitted"))
+              when (coordinating && not (any (\binding -> binding.name == Execution.executionCoordinate "workers") admitted.toolBindings)) (Left (Execution.ExecutionPolicyRefused "coordinating Skill scope was not admitted"))
               pure admitted
       assignment =
         ExecutionStart.SkillAssignment

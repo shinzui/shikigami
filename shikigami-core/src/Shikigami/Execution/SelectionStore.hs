@@ -23,7 +23,9 @@ import Shikigami.Attestation.CallFacts (CallComplianceFacts)
 import Shikigami.Attestation.PolicyValue
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileView)
+import Shikigami.Behavior.Provider.Coordinate
 import Shikigami.Execution.AssignmentKey (AssignmentKey, assignmentKeyText)
+import Shikigami.Execution.Coordinate
 import Shikigami.Execution.Counter
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Quantity
@@ -75,7 +77,7 @@ data CallReceipt = CallReceipt
   { assignmentId :: !AssignmentKey,
     rootId :: !(Maybe ExecutionRootId),
     request :: !AttemptRequest,
-    fingerprint :: !Text,
+    fingerprint :: !(ExecutionDigest "input"),
     ordinal :: !CallOrdinal,
     startedAt :: !UTCTime
   }
@@ -90,8 +92,8 @@ data CallOutcome = CallOutcome
   { phase :: !CallPhase,
     known :: !Quantities,
     missing :: ![Dimension],
-    reportedModel :: !(Maybe Text),
-    providerCallId :: !(Maybe Text),
+    reportedModel :: !(Maybe (ProviderCoordinate "provider-model-id")),
+    providerCallId :: !(Maybe (ProviderCoordinate "provider-call-id")),
     compliance :: !(Maybe CallComplianceFacts)
   }
   deriving stock (Eq, Show, Generic)
@@ -120,10 +122,10 @@ data CallAdmissionFailure
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-reserveSelectionCall :: (Store :> es) => ExecutionSelection -> CallLimits -> AttemptRequest -> Text -> UTCTime -> Eff es (Either CallAdmissionFailure CallReservation)
+reserveSelectionCall :: (Store :> es) => ExecutionSelection -> CallLimits -> AttemptRequest -> ExecutionDigest "input" -> UTCTime -> Eff es (Either CallAdmissionFailure CallReservation)
 reserveSelectionCall selection limits request fingerprint now = runTransaction (reserveSelectionCallTx selection limits request fingerprint now)
 
-reserveSelectionCallTx :: ExecutionSelection -> CallLimits -> AttemptRequest -> Text -> UTCTime -> Transaction (Either CallAdmissionFailure CallReservation)
+reserveSelectionCallTx :: ExecutionSelection -> CallLimits -> AttemptRequest -> ExecutionDigest "input" -> UTCTime -> Transaction (Either CallAdmissionFailure CallReservation)
 reserveSelectionCallTx selection limits request fingerprint now = do
   result <- reserve
   case result of Left _ -> Tx.condemn; Right _ -> pure ()
@@ -134,9 +136,9 @@ reserveSelectionCallTx selection limits request fingerprint now = do
       Left err -> pure (Left (CallResourcesRefused err))
       Right () -> reserveValidated
     validate = do
-      validateKey fingerprint
-      validateOperation (OperationRequest request.operationId Nothing ModelOperation Map.empty fingerprint)
-      validateAttempt (assignmentLimits limits) (OperationRequest request.operationId Nothing ModelOperation Map.empty fingerprint) request
+      validateKey (executionDigestText fingerprint)
+      validateOperation (OperationRequest request.operationId Nothing ModelOperation Map.empty (executionCoordinate (executionDigestText fingerprint)))
+      validateAttempt (assignmentLimits limits) (OperationRequest request.operationId Nothing ModelOperation Map.empty (executionCoordinate (executionDigestText fingerprint))) request
     reserveValidated = do
       root <- traverse Resources.inspectRootTx selection.rootId
       case sequence root of
@@ -170,7 +172,7 @@ reserveSelectionCallTx selection limits request fingerprint now = do
                                 Right count | maybe False (attemptLimitExceeded count) limits.retries -> pure (Left CallRetryLimitExceeded)
                                 Right _ -> case (selection.rootId, state) of
                                   (Just rootId, Just rootState) -> do
-                                    let operation = OperationRequest request.operationId Nothing ModelOperation Map.empty fingerprint
+                                    let operation = OperationRequest request.operationId Nothing ModelOperation Map.empty (executionCoordinate (executionDigestText fingerprint))
                                     reserved <- Resources.reserveOperationsTx rootId rootState.revision [operation] now
                                     case reserved of
                                       Left err -> pure (Left (CallResourcesRefused err))

@@ -6,6 +6,7 @@ import Shikigami.Agent.Decl (Behavior (Skill))
 import Shikigami.Capability.Catalog
 import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider
+import Shikigami.Execution.Coordinate qualified as ExecutionValue
 import Shikigami.Execution.Policy.Types
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
@@ -31,7 +32,7 @@ tests =
       testCase "duplicate revisions and incomplete recovery contracts fail installation" $ do
         assertBool "duplicate exact adapter" (isLeft (installDurableAdapters [adapter, adapter] emptyCapabilityProviderRegistry))
         assertBool "missing tool contract" (isLeft (installDurableAdapters [DurableAdapter descriptor [] unavailable] emptyCapabilityProviderRegistry))
-        let invalid = DurableToolContract "edit" "Edit." (object []) RepeatableObservation NoInvoiceCost
+        let invalid = DurableToolContract (ExecutionValue.executionCoordinate "edit") "Edit." (object []) RepeatableObservation NoInvoiceCost
         assertBool "mutation cannot borrow observation recovery" (isLeft (installDurableAdapters [DurableAdapter descriptor [invalid] unavailable] emptyCapabilityProviderRegistry)),
       testCase "installed adapters do not replace declaration or policy authorization" $ do
         registry <- right (installDurableAdapters [adapter] emptyCapabilityProviderRegistry)
@@ -43,7 +44,7 @@ tests =
     capability = either (error . show) id (mkCapabilityId "workspace.edit")
     revision = either (error . show) id (mkCapabilityRevision "1")
     descriptor = CapabilityDescriptor capability revision [CapabilityToolDescriptor "edit" IdempotentMutation]
-    adapter = DurableAdapter descriptor [DurableToolContract "edit" "Edit." (object []) IdempotentEffect NoInvoiceCost] unavailable
+    adapter = DurableAdapter descriptor [DurableToolContract (ExecutionValue.executionCoordinate "edit") "Edit." (object []) IdempotentEffect NoInvoiceCost] unavailable
     unavailable _ _ _ = assertFailure "admission invoked an adapter callback" >> fail "unreachable"
     subject = ResolutionSubject (Just "worker") Durable (Skill "fixture") Nothing
     allow _ _ = Right ()

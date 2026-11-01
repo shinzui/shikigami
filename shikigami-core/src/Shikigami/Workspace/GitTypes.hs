@@ -12,6 +12,7 @@ import Data.Text qualified as Text
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Claim
+import Shikigami.Execution.Coordinate (executionDigestText)
 import Shikigami.Execution.Identity (AttemptId, OperationId, attemptIdText, operationIdText)
 import Shikigami.Execution.Payload (PayloadDigest)
 import Shikigami.Execution.Runner (OperationContext (..))
@@ -92,10 +93,10 @@ validGitCandidate :: GitCandidate -> Bool
 validGitCandidate value = all validGitObject [value.parent, value.tree, value.result] && value.result /= value.parent && not (null value.paths) && length value.paths <= 256 && sort (nub value.paths) == value.paths && all (\path -> validWorkspacePath path && Text.all (< '\DEL') path) value.paths
 
 validGitRecord :: GitRecord -> Bool
-validGitRecord record = bounded operation && bounded execution && bounded attempt && record.operation.idempotencyKey == operation && digestText record.operation.fingerprint && digestText record.operation.scopeDigest && record.generation > initialRevision && all digestText [record.bindingDigest, record.instructionDigest, record.profileDigest, record.fingerprint] && bounded record.target && Text.length record.target <= 128 && validGitObject record.expectedParent && record.routing.executionId == record.operation.executionId && validRouting && validPhase && Bytes.length (Aeson.encode record) <= 65536
+validGitRecord record = bounded operation && bounded execution && bounded attempt && record.operation.idempotencyKey == record.operation.operationId && digestText (executionDigestText record.operation.fingerprint) && digestText (executionDigestText record.operation.scopeDigest) && record.generation > initialRevision && all digestText [record.bindingDigest, record.instructionDigest, record.profileDigest, record.fingerprint] && bounded record.target && Text.length record.target <= 128 && validGitObject record.expectedParent && record.routing.executionId == record.operation.executionId && validRouting && validPhase && Bytes.length (Aeson.encode record) <= 65536
   where
     operation = operationIdText record.operation.operationId
-    ExecutionId execution = record.operation.executionId
+    execution = record.operation.executionId.value
     attempt = attemptIdText record.attemptId
     validRouting = either (const False) bounded (identityText record.routing.identity) && validNext record.routing.next && Bytes.length (Aeson.encode record.routing) <= 4096
     validNext NeedModel = True

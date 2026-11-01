@@ -45,7 +45,7 @@ import OpenTelemetry.Trace qualified as Trace
 import OpenTelemetry.Trace.Core qualified as TraceCore
 import Pgmq qualified
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
-import Shikigami.Execution.Transcript (ExecutionId (..))
+import Shikigami.Execution.Transcript (ExecutionId (..), executionIdentity)
 import Shikigami.ExecutionLifecycle.Generated.Domain qualified as Execution
 import Shikigami.ExecutionLifecycle.Generated.EventStream (executionLifecycleCategory, executionLifecycleEventStream)
 import Shikigami.Inspection.Runtime (InspectionRuntime (..), withInspectionRuntime)
@@ -84,7 +84,7 @@ tests fixture =
           tracer <- noopTracer
           let env = AppEnv (defaultConnectionSettings "postgresql://127.0.0.1:1/not-used") tracer Nothing (Just store)
               identifier = "http-inspection"
-          appended <- runAppIO env (runCommand defaultRunCommandOptions executionLifecycleEventStream (Stream.entityStream executionLifecycleCategory identifier) (Execution.AdmitExecution (Execution.AdmitExecutionData (ExecutionId identifier) "HTTP_PRIVATE_DIGEST")))
+          appended <- runAppIO env (runCommand defaultRunCommandOptions executionLifecycleEventStream (Stream.entityStream executionLifecycleCategory identifier) (Execution.AdmitExecution (Execution.AdmitExecutionData (executionIdentity identifier) "HTTP_PRIVATE_DIGEST")))
           assertBool "native aggregate fixture" (case appended of Right (Right _) -> True; _ -> False)
           forM_ ["/", "/keiro/aggregate/types", "/kiroku/capabilities", "/pgmq/queues"] \path -> do
             denied <- request manager runtime.port methodGet path [] ""
@@ -222,7 +222,7 @@ tests fixture =
                     options :: RunCommandOptions
                     options = defaultRunCommandOptions {metadata = Just (object ["retained" .= True])}
                 Trace.inSpan tracer "inspection-metadata" Trace.defaultSpanArguments do
-                  recorded <- runAppIO env (runCommand options executionLifecycleEventStream (Stream.entityStream executionLifecycleCategory "inspection-trace") (Execution.AdmitExecution (Execution.AdmitExecutionData (ExecutionId "inspection-trace") "private-trace-digest")))
+                  recorded <- runAppIO env (runCommand options executionLifecycleEventStream (Stream.entityStream executionLifecycleCategory "inspection-trace") (Execution.AdmitExecution (Execution.AdmitExecutionData (executionIdentity "inspection-trace") "private-trace-digest")))
                   assertBool "native traced command succeeds" (case recorded of Right (Right _) -> True; _ -> False)
                 events <- runAppIO env (readStreamForward (StreamName "executionLifecycle-inspection-trace") (StreamVersion 0) 10) >>= either (fail . show) pure
                 case Vector.toList events of

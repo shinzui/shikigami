@@ -12,6 +12,7 @@ import Data.Aeson.Key (Key)
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Lazy qualified as LazyByteString
+import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Int (Int64)
@@ -20,8 +21,9 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Time (UTCTime (..), fromGregorian, secondsToNominalDiffTime)
 import Data.Vector qualified as Vector
-import Effectful (runEff)
+import Effectful (liftIO, runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
+import Effectful.Exception qualified as EffException
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
 import Hasql.Pool qualified as Pool
@@ -586,8 +588,58 @@ atomicAttentionTests databaseFixture =
                 >>= either (assertFailure . show) pure
             counts @?= (1, 2, 1)
             outbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
+            fmap length outbox @?= Right 1,
+      testCase "corrupt retained attention results roll back association and recover after exact repair" do
+        verdict <- targetSuspectVerdict
+        firstVerdict <- expectRight (validateVerdict verdict)
+        secondReviewId <- newReviewId
+        secondVerdict <- expectRight (validateVerdict (verdict & #reviewId .~ secondReviewId & #triggerIdempotencyKey .~ reviewTriggerKey "attention-repair-two"))
+        recipients <- expectRight (mkAttentionRecipientMap [("team-example-service", "recipient_target")])
+        (withShikigamiFreshDatabase databaseFixture) \connectionString ->
+          withStore (defaultConnectionSettings connectionString) \KirokuStore {pool} -> do
+            tracer <- noopTracer
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connectionString, tracer, metrics = Nothing, store = Nothing}
+                identifier = "practice-review-attention-decoder"
+                counts = Pool.use pool (Session.statement () attentionCountsStatement) >>= either (assertFailure . show) pure
+                replace value = Pool.use pool (Session.statement (identifier, value) replaceAttentionStepStatement) >>= either (assertFailure . show) pure
+            outcome <- runEff . runErrorNoCallStack . withKirokuStore appEnv.connectionSettings . runStoreResource $
+              runWorkflowWith (shikigamiWorkflowRunOptions appEnv) (WorkflowName "shikigami.practice-review.attention-test") (WorkflowId identifier) $
+                runPracticeReviewAttentionAtomic (attentionEnv recipients "kioku_session_01kvxa7d2cezhs874g3n8dfgme") do
+                  original <- requestPracticeReviewAttention firstVerdict
+                  liftIO (assertBool "positive reservation was not retained" (isReserved original))
+                  liftIO (counts >>= (@?= (1, 1, 1)))
+                  let originalWire = Aeson.toJSON original
+                      corrupt = corruptAttentionKey (attentionKeyText original.attentionKey) originalWire
+                  liftIO (assertBool "corruption control did not change the key" (corrupt /= originalWire))
+                  liftIO (replace corrupt)
+                  refused <- EffException.trySync (requestPracticeReviewAttention secondVerdict)
+                  liftIO case refused of Left _ -> pure (); Right _ -> assertFailure "unreadable retained result was accepted"
+                  liftIO (counts >>= (@?= (1, 1, 1)))
+                  liftIO (replace originalWire)
+                  recovered <- requestPracticeReviewAttention secondVerdict
+                  liftIO (recovered @?= original)
+                  liftIO (counts >>= (@?= (1, 2, 1)))
+                  pure (Aeson.toJSON recovered)
+            _ <- decodeAttentionOutcome outcome
+            outbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
             fmap length outbox @?= Right 1
     ]
+
+-- Mutate the exact native key independently of the generic sum encoding.
+corruptAttentionKey :: Text -> Value -> Value
+corruptAttentionKey target = go
+  where
+    go (Object fields) = Object (fmap go fields)
+    go (Array values) = Array (fmap go values)
+    go (String raw) | raw == target = String "malformed-attention-key"
+    go value = value
+
+replaceAttentionStepStatement :: Statement (Text, Value) ()
+replaceAttentionStepStatement =
+  preparable
+    "UPDATE keiro.keiro_workflow_steps SET result=$2 WHERE workflow_id=$1 AND workflow_name='shikigami.practice-review.attention-test' AND generation=0 AND step_name='practice-review-attention'"
+    ((fst >$< Encoders.param (Encoders.nonNullable Encoders.text)) <> (snd >$< Encoders.param (Encoders.nonNullable Encoders.jsonb)))
+    Decoders.noResult
 
 attentionEnv :: AttentionRecipientMap -> Text -> PracticeReviewAttentionEnv
 attentionEnv recipients runIdentifier =

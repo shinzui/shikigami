@@ -28,11 +28,12 @@ import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Claim qualified as Claim
+import Shikigami.Execution.Coordinate qualified as ExecutionValue
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Payload (PayloadDigest, parsePayloadByteCount, parsePayloadDigest, parsePayloadId)
 import Shikigami.Execution.Runner
 import Shikigami.Execution.ToolPosition (ToolPosition, parseToolPosition)
-import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadRef (..))
+import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadRef (..), executionIdentity)
 import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude ((&), (.~))
@@ -41,7 +42,7 @@ import Shikigami.StateRevision qualified as Generation
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
 import Shikigami.WorkerSession.Input qualified as WorkerInput
 import Shikigami.WorkerSession.Transfer (TransferIntent (..))
-import Shikigami.WorkerSession.Types (AssignmentId (value), ObjectiveRef (..), WorkerSessionId (value), assignmentIdForDigest, workerSessionId)
+import Shikigami.WorkerSession.Types (AssignmentId, ObjectiveRef (..), WorkerSessionId, assignmentIdForDigest, workerSessionId)
 import Shikigami.Workspace.GitTypes qualified as Git
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Process
@@ -78,7 +79,7 @@ tests =
         let owner = VerifiedIdentity actor
             request = WorkspaceRequest "run" Nothing (fixtureRootId "root") owner owner (fixtureRevision 0)
             binding = WorkspaceBinding workspaceId request (WorkspaceRef "shikigami.workspace/1" "resource") "mori://fixture/repo" (Text.replicate 40 "a") "policy-1" "/private/workspaces" "/operator/source"
-            logical = OperationContext (ExecutionId "execution") (fixtureOperationId "operation") "operation" "fingerprint" "scope"
+            logical = OperationContext (executionIdentity "execution") (fixtureOperationId "operation") (fixtureOperationId "operation") (ExecutionValue.executionDigest "fingerprint") (ExecutionValue.executionDigest "scope")
             dispatch = DispatchContext logical (fixtureAttemptId "attempt") (fixtureOwner "claim-owner") (fixtureGeneration 1)
             now = read "2026-10-29 12:00:00 UTC"
             expiry = addUTCTime 30 now
@@ -109,8 +110,8 @@ tests =
               workspaceFileAction binding admission (dispatch & #owner .~ (fixtureOwner "other-claim")) "replace" "src/file" "device:parent" "input-hash",
               workspaceFileAction binding admission (dispatch & #generation .~ (fixtureGeneration 2)) "replace" "src/file" "device:parent" "input-hash",
               workspaceFileAction binding admission (dispatch & #operation . #operationId .~ fixtureOperationId "other-operation") "replace" "src/file" "device:parent" "input-hash",
-              workspaceFileAction binding admission (dispatch & #operation . #fingerprint .~ "other-fingerprint") "replace" "src/file" "device:parent" "input-hash",
-              workspaceFileAction binding admission (dispatch & #operation . #scopeDigest .~ "other-scope") "replace" "src/file" "device:parent" "input-hash",
+              workspaceFileAction binding admission (dispatch & #operation . #fingerprint .~ ExecutionValue.executionDigest "other-fingerprint") "replace" "src/file" "device:parent" "input-hash",
+              workspaceFileAction binding admission (dispatch & #operation . #scopeDigest .~ ExecutionValue.executionDigest "other-scope") "replace" "src/file" "device:parent" "input-hash",
               workspaceFileAction binding admission dispatch "read" "src/file" "device:parent" "input-hash",
               workspaceFileAction binding admission dispatch "replace" "src/other" "device:parent" "input-hash",
               workspaceFileAction binding admission dispatch "replace" "src/file" "device:other-parent" "input-hash",
@@ -157,8 +158,8 @@ tests =
                 dispatch & #owner .~ (fixtureOwner "other-claim"),
                 dispatch & #generation .~ (fixtureGeneration 2),
                 dispatch & #operation . #operationId .~ fixtureOperationId "other-operation",
-                dispatch & #operation . #fingerprint .~ "other-fingerprint",
-                dispatch & #operation . #scopeDigest .~ "other-scope"
+                dispatch & #operation . #fingerprint .~ ExecutionValue.executionDigest "other-fingerprint",
+                dispatch & #operation . #scopeDigest .~ ExecutionValue.executionDigest "other-scope"
               ]
         processActions <-
           mapM
@@ -244,7 +245,7 @@ tests =
           (changedPolicyAction : changedProvision)
         workspaceProvisionAction provisionBinding (provisionAdmission & #filePolicy .~ Just nativeFilePolicy) profile boot "device:files" "device:scratch" @?= Left FileEffectRefused
         workspaceProvisionAction provisionBinding provisionAdmission (profile & #instructionDigest .~ command.profile) boot "device:files" "device:scratch" @?= Left FileEffectRefused
-        let gitLogical = logical & #fingerprint .~ command.profile & #scopeDigest .~ command.profile
+        let gitLogical = logical & #fingerprint .~ ExecutionValue.executionDigest command.profile & #scopeDigest .~ ExecutionValue.executionDigest command.profile
             gitDispatch = dispatch & #operation .~ gitLogical
             candidate = Git.GitCandidate provisionBinding.base (Text.replicate 40 "b") (Text.replicate 40 "c") ["src/file"]
             rawGit = Git.GitRecord Git.GitRecordV1 gitLogical gitDispatch.attemptId gitDispatch.owner gitDispatch.generation (workspaceBindingDigest provisionBinding) (bundleDigest provisionAdmission.instructions) (Git.gitProfileDigest profile) "device:files" provisionBinding.base command.profile now (Git.GitRouting gitLogical.executionId owner (fixturePayloadDigest command.profile) NeedModel) Git.GitPrepared (Just candidate)
