@@ -1,0 +1,18 @@
+{
+  "sourceParent": "754ae61",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "files": {
+    "shikigami-core/shikigami-core.cabal": "651fbfdd0a440e5ae029b39017d5702099c83f9dafe37853de27028c1b6832c2",
+    "shikigami-core/src/Shikigami/AgentRun/Ledger.hs": "c99aa8a01e42dcec2b8438041f9f38fce567ab743f7816f1c742736e09f2f6b5",
+    "shikigami-core/src/Shikigami/AgentRun/Status.hs": "72c2a5bca544d4c54cad1cdf3c0d6f50eb1b5d0095b05b3ed92f8e4fbeb3d350",
+    "shikigami-core/test-postgres/Shikigami/AgentRun/LedgerSpec.hs": "b7a9baa90f7e3bc6d008dbf57325637bd6a7a79c9548aa41eb4715435e3517a5",
+    "shikigami-core/test/Main.hs": "347aafa6603fe0256337073b6662f2a8508c99447890c5bc018b5e78fcb87381",
+    "shikigami-core/test/Shikigami/AgentRunValueSpec.hs": "ba9f7507bc3592d079cbfd76ed9e54b8c9be15f4afa321b0332154f8188ede5f",
+    "shikigami-server/src/Shikigami/AgentRun/Handler.hs": "ad9645151b261776597bf89a88e665c3d34bb2a17f5d16471e6ee100e9f75fe6",
+    "shikigami-server/src/Shikigami/Server/Command/Runs.hs": "3d77a68aec2dff36d45bff4cbfe13dc78c6746598fc9009b4d34cc4ae0818e2f",
+    "shikigami-server/test/Shikigami/AgentRun/HandlerSpec.hs": "cbfe5c148878a259387daf1467395300bfc1429a48c39ddbda943ff094c70530",
+    "shikigami-workers/test/Shikigami/AgentRun/StatusSpec.hs": "f289f7f4eb54254487b2a5a460c1dede83a5f0891119e732526956b6c38a22d4",
+    "tests/types/opaque-values.py": "5e9258a6080ff4b984b7d785f9a576174112f0618ae3137eb9abb16ef76b3645"
+  }
+}

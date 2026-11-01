@@ -80,7 +80,7 @@ runStatusFailureText = \case
 
 gatherRunFacts :: KirokuStore -> AgentName -> Text -> IO (Either RunStatusFailure (Maybe RunFacts))
 gatherRunFacts store agent runId = do
-  request <- lookupRunRequest store.pool agent runId
+  request <- lookupRunRequest store.pool agent (WorkflowId runId)
   case request of
     Left _ -> pure (Left unavailable)
     Right accepted -> do

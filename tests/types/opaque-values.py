@@ -20,6 +20,9 @@ import Data.Aeson.Types (Parser)
 import Data.Coerce (coerce)
 import Data.ByteString (ByteString)
 import Data.Text (Text)
+import Data.Int (Int64)
+import Data.UUID (UUID)
+import Pgmq (MessageId)
 import Numeric.Natural (Natural)
 import GHC.Generics qualified as Generic
 import Keiro.Workflow.Types (WorkflowId)
@@ -64,7 +67,15 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''profileSnapshot :: Profile.SanctionedExecutionProfile -> Snapshot.ResolvedProfile
+POSITIVE = '''requestFingerprint :: Text -> Either Text Ledger.PayloadFingerprint
+requestFingerprint = Ledger.parsePayloadFingerprint
+requestCaller :: Text -> Ledger.CallerAttribution
+requestCaller = Ledger.callerAttribution
+acceptedWorkflow :: Ledger.RunRequestRow -> WorkflowId
+acceptedWorkflow value = value.runId
+acceptedQueueMessage :: Ledger.RunRequestRow -> MessageId
+acceptedQueueMessage value = value.queueMessageId
+profileSnapshot :: Profile.SanctionedExecutionProfile -> Snapshot.ResolvedProfile
 profileSnapshot = Snapshot.resolvedProfileFor
 snapshotView :: Snapshot.ResolvedProfile -> Snapshot.ResolvedProfileView
 snapshotView = Snapshot.resolvedProfileView
@@ -210,6 +221,8 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('Ledger.PayloadFingerprint', 'generic'),
+    ('Ledger.CallerAttribution', 'generic'),
     ('Snapshot.ResolvedProfile', 'generic'),
     ('Profile.ProfileDigest', 'generic'),
     ('Attestation.PayloadDigest', 'generic'),
@@ -299,6 +312,9 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         assert result.returncode != 0 and 'RunDisposition' in result.stderr, (source_kind, result.stderr)
         print('opaque boundary: run disposition ' + source_kind + ' substitution refused: passed', flush=True)
     for label, signature, expression in [
+        ('payload fingerprint UUID coercion', 'UUID -> Ledger.PayloadFingerprint', 'coerce'),
+        ('payload fingerprint raw coercion', 'Text -> Ledger.PayloadFingerprint', 'coerce'),
+        ('caller attribution raw coercion', 'Text -> Ledger.CallerAttribution', 'coerce'),
         ('snapshot view coercion', 'Snapshot.ResolvedProfileView -> Snapshot.ResolvedProfile', 'coerce'),
         ('profile digest raw coercion', 'Text -> Profile.ProfileDigest', 'coerce'),
         ('attestation digest raw coercion', 'Text -> Attestation.PayloadDigest', 'coerce'),
@@ -322,6 +338,8 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         assert result.returncode != 0 and 'Not in scope' not in result.stderr, (label, result.stderr)
         print('opaque boundary: ' + label + ' substitution refused: passed', flush=True)
     for kind, representation in [
+        ('Ledger.PayloadFingerprint', 'Text'),
+        ('Ledger.CallerAttribution', 'Text'),
         ('Snapshot.ResolvedProfile', 'Snapshot.ResolvedProfileView'),
         ('Profile.ProfileDigest', 'Text'),
         ('Attestation.PayloadDigest', 'Text'),
@@ -336,6 +354,10 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
     result = compile('bypass :: DecisionEvidence.StoredDecisionCall -> Text\nbypass value = value.correlationId\n')
     assert result.returncode != 0 and 'CallCorrelationId' in result.stderr and 'Text' in result.stderr, result.stderr
     print('opaque boundary: stored call retains native correlation: passed', flush=True)
+    for field, target in [('runId', 'Text'), ('queueMessageId', 'Int64')]:
+        result = compile('bypass :: Ledger.RunRequestRow -> ' + target + '\nbypass value = value.' + field + '\n')
+        assert result.returncode != 0 and 'Not in scope' not in result.stderr, result.stderr
+        print('opaque boundary: accepted ' + field + ' retains native identity: passed', flush=True)
     for kind, operation in CASES:
         if operation == 'parse':
             body = 'bypass :: Aeson.Value -> Parser ' + kind + '\nbypass = Aeson.genericParseJSON Aeson.defaultOptions\n'

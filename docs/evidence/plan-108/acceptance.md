@@ -775,3 +775,58 @@ renewal. Classification now covers 772 keys: 699 compliant, 28 not applicable,
 coverage. The 124-source/93-item frozen upgrade inventory and 21 mutation controls
 pass; the earlier unchanged-tool 24-case result remains applicable. M1/M2/M3 and
 the guide disposition remain open/deferred.
+
+
+## Native acceptance identities and checked payload commitments
+
+`ledger-values-source.json` binds the arm64 macOS/GHC 9.12.4 candidate to parent
+`754ae61`. The acceptance record now retains native Keiro WorkflowId and PGMQ
+MessageId, a private checked PayloadFingerprint and nominal CallerAttribution.
+SQL, Relay cursor, HTTP, CLI and logging adapters unwrap at their transport
+seams. No workflow/request identity formula, native allocation or valid wire
+value changes; caller text is captured exactly, with no invented local grammar.
+
+Before compiling the edited ledger, the retained pre-change compiled producer
+was queried directly:
+
+```bash
+nix develop --no-write-lock-file -c cabal exec -- ghc -ignore-dot-ghci -package shikigami-core -e 'import qualified Shikigami.AgentRun.Ledger as Ledger' -e 'import qualified Data.Aeson as A' -e 'print (Ledger.payloadFingerprint A.Null, Ledger.payloadFingerprint (A.object []))'
+```
+
+The outputs were `148bdfa9-7596-5319-a197-ead64880df40` for null and
+`417e0a20-e3f9-59fc-8d1f-f51ab83a4318` for the empty object. Those literal bytes
+are pinned in AgentRunValueSpec. The new fingerprint parser requires canonical
+lowercase UUIDv5 with the RFC 4122 variant, matching the unchanged URL-namespace
+producer over encoded payload bytes. It allocates no entity and is not converted
+to TypeID. Existing malformed/unproducible stored strings now refuse; they are
+not normalized or overwritten. No first-release compatibility waiver is used.
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-test -j1 --test-show-details=direct --test-option=-p --test-option='/acceptance ledger values/'
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test shikigami-workers-test shikigami-server-test -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/HTTP acceptance ledger/||/run status composition/||/agent-run HTTP/'
+nix develop --no-write-lock-file -c python3 tests/types/opaque-values.py
+python3 tools/style/check_haskell.py
+git diff --check
+```
+
+All 3 value tests, 6 core PostgreSQL acceptance cases, 10 worker status cases,
+9 HTTP cases and 115 compiler controls pass. The selected consumers were first
+listed (25 nonzero cases across the three suites). Native queue identity is
+compared to the actual PGMQ message witness, and workflow identity to the
+unchanged runJobWorkflowId producer. Existing HTTP pinned id, status, cursor,
+URL, replay, conflict and attribution behavior remains passing.
+
+The complete public acceptance corruption fixture now also injects an empty
+fingerprint, another UUID version and a non-RFC variant. Direct/by-id reads,
+full pages and discarded page probes, disposition reconciliation and duplicate
+acceptance refuse. Ignored composed refusals roll back earlier/later writes;
+tentative duplicate sends do not increase the original queue length. Exact
+repair recovers the original request, caller, timestamp, run key and native
+message id. Public factories/native projections compile before constructor,
+UUID/Text coercion, Generic bypass and implicit native-id flattening controls.
+
+No workflow body, label, durable identity formula, migration, dependency or valid
+HTTP representation changes, so no new native workflow/migration/HTTP-representation
+gate is required beyond the actual HTTP behavioral suite. Coherent full build
+and census reconciliation follow this source checkpoint; all milestones stay
+open. The prior native profile gate remains retained as applicable evidence.

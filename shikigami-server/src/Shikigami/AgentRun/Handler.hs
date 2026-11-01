@@ -7,6 +7,7 @@ import Data.ByteString.Builder (toLazyByteString)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
+import Keiro.Workflow.Types (WorkflowId (..))
 import Network.HTTP.Types.URI (encodePathSegments)
 import Relay.Pagination (Direction (..), PageRequest (..))
 import Relay.Pagination.Servant qualified as Relay
@@ -64,16 +65,16 @@ agentRunServer env caller agent = AgentRunApi {request = requestRun, show = show
             | otherwise -> do
                 now <- liftIO getCurrentTime
                 let job = addressedRunJob now identity agent AgentWorkflowRoute body.payload (Ledger.httpRunKey agent body.idempotencyKey)
-                outcome <- liftIO (Ledger.acceptRunRequest env.pool job body.idempotencyKey caller.callerId)
+                outcome <- liftIO (Ledger.acceptRunRequest env.pool job body.idempotencyKey (Ledger.callerAttribution caller.callerId))
                 case outcome of
                   Left _ -> pure (RunRequestUnavailable unavailable)
                   Right (Ledger.Accepted row) -> logOutcome "server.run.accepted" row >> pure (RunAccepted (accepted row, location row))
                   Right (Ledger.Replayed row) -> logOutcome "server.run.replayed" row >> pure (RunReplayed (accepted row, location row))
                   Right (Ledger.Conflicting row) -> logOutcome "server.run.conflict" row >> pure (RunConflict (problem IdempotencyKeyConflict "This key was already accepted with a different payload."))
     unavailable = problem Unavailable "The run store or lifecycle directory is unavailable."
-    logOutcome event row = Log.logInfo env.logger event ["agent" .= row.agentName, "run_id" .= row.runId, "caller" .= caller.callerId]
-    accepted row = AgentRunAccepted row.runId (agentNameText row.agentName) (requestKeyText row.idempotencyKey) "accepted" row.acceptedAt
-    location row = Text.decodeUtf8 . LBS.toStrict . toLazyByteString $ encodePathSegments ["agents", agentNameText row.agentName, "runs", row.runId]
+    logOutcome event row = Log.logInfo env.logger event ["agent" .= row.agentName, "run_id" .= row.runId.unWorkflowId, "caller" .= caller.callerId]
+    accepted row = AgentRunAccepted row.runId.unWorkflowId (agentNameText row.agentName) (requestKeyText row.idempotencyKey) "accepted" row.acceptedAt
+    location row = Text.decodeUtf8 . LBS.toStrict . toLazyByteString $ encodePathSegments ["agents", agentNameText row.agentName, "runs", row.runId.unWorkflowId]
 
 statusView :: Status.RunStatusView -> AgentRunStatus
 statusView view =
@@ -90,4 +91,4 @@ statusView view =
     (fmap (\failure -> RunFailureView (Status.failureKindText failure.kind) failure.reason) view.failure)
 
 requestView :: Ledger.RunRequestRow -> RunRequestView
-requestView row = RunRequestView row.runId (requestKeyText row.idempotencyKey) row.acceptedAt row.requestedBy (Ledger.renderRunDisposition row.disposition)
+requestView row = RunRequestView row.runId.unWorkflowId (requestKeyText row.idempotencyKey) row.acceptedAt (Ledger.callerAttributionText row.requestedBy) (Ledger.renderRunDisposition row.disposition)

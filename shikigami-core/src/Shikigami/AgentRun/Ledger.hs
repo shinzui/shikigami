@@ -5,7 +5,13 @@ module Shikigami.AgentRun.Ledger
     RunDisposition (..),
     renderRunDisposition,
     httpRunKey,
+    PayloadFingerprint,
+    parsePayloadFingerprint,
+    payloadFingerprintText,
     payloadFingerprint,
+    CallerAttribution,
+    callerAttribution,
+    callerAttributionText,
     acceptRunRequest,
     lookupRunRequest,
     lookupRunRequestTx,
@@ -18,15 +24,16 @@ module Shikigami.AgentRun.Ledger
   )
 where
 
-import Data.Aeson (Value, encode, object, withObject, (.:), (.=))
+import Data.Aeson (Value, encode, object, withObject, withText, (.:), (.=))
 import Data.Aeson.Types (parseEither)
 import Data.Bifunctor (first)
+import Data.Bits ((.&.))
 import Data.ByteString qualified as BS
 import Data.ByteString.Lazy qualified as LBS
 import Data.Foldable (toList)
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
-import Data.Int (Int64)
+import Data.Text qualified as Text
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID
 import Hasql.Decoders qualified as D
@@ -57,18 +64,53 @@ import Shikigami.Trigger.Enqueue (enqueueRunJobTx)
 httpRunKey :: AgentName -> RequestKey -> RunKey
 httpRunKey agent key = runKeyWithPrefix ('h' :| "ttp-run-v2:") (versionedDigest "shikigami.http-run/2" (object ["agent" .= agent, "key" .= key]))
 
+-- | The original UUIDv5 payload commitment, not an allocated entity identity.
+newtype PayloadFingerprint = PayloadFingerprint UUID.UUID
+  deriving stock (Eq, Ord, Show)
+
+parsePayloadFingerprint :: Text -> Either Text PayloadFingerprint
+parsePayloadFingerprint raw = case UUID.fromText raw of
+  Just value
+    | let (_, version, variant, _) = UUID.toWords value,
+      raw == UUID.toText value,
+      version .&. 0xf000 == 0x5000,
+      variant .&. 0xc0000000 == 0x80000000 ->
+        Right (PayloadFingerprint value)
+  _ -> Left "request payload fingerprint requires a canonical RFC 4122 UUIDv5"
+
+payloadFingerprintText :: PayloadFingerprint -> Text
+payloadFingerprintText (PayloadFingerprint value) = UUID.toText value
+
+instance ToJSON PayloadFingerprint where
+  toJSON = toJSON . payloadFingerprintText
+  toEncoding = toEncoding . payloadFingerprintText
+
+instance FromJSON PayloadFingerprint where
+  parseJSON = withText "request payload fingerprint" (either (fail . Text.unpack) pure . parsePayloadFingerprint)
+
 -- Aeson's ordered object encoding makes object member order immaterial.
-payloadFingerprint :: Value -> Text
-payloadFingerprint = UUID.toText . UUID.generateNamed UUID.namespaceURL . BS.unpack . LBS.toStrict . encode
+payloadFingerprint :: Value -> PayloadFingerprint
+payloadFingerprint = PayloadFingerprint . UUID.generateNamed UUID.namespaceURL . BS.unpack . LBS.toStrict . encode
+
+-- | Exact attribution supplied by the authenticated HTTP adapter. The caller's
+-- authority owns its vocabulary; retaining a claim grants no authentication.
+newtype CallerAttribution = CallerAttribution Text
+  deriving stock (Eq, Ord, Show)
+
+callerAttribution :: Text -> CallerAttribution
+callerAttribution = CallerAttribution
+
+callerAttributionText :: CallerAttribution -> Text
+callerAttributionText (CallerAttribution value) = value
 
 data RunRequestRow = RunRequestRow
   { agentName :: !AgentName,
     idempotencyKey :: !RequestKey,
-    runId :: !Text,
+    runId :: !WorkflowId,
     runKey :: !RunKey,
-    payloadFingerprint :: !Text,
-    requestedBy :: !Text,
-    queueMessageId :: !Int64,
+    payloadFingerprint :: !PayloadFingerprint,
+    requestedBy :: !CallerAttribution,
+    queueMessageId :: !MessageId,
     acceptedAt :: !UTCTime,
     disposition :: !RunDisposition,
     dispositionDetail :: !(Maybe Text),
@@ -95,7 +137,7 @@ parseRunDisposition = \case
 data AcceptOutcome = Accepted !RunRequestRow | Replayed !RunRequestRow | Conflicting !RunRequestRow
   deriving stock (Eq, Show)
 
-acceptRunRequest :: Pool -> RunJob -> RequestKey -> Text -> IO (Either Text AcceptOutcome)
+acceptRunRequest :: Pool -> RunJob -> RequestKey -> CallerAttribution -> IO (Either Text AcceptOutcome)
 acceptRunRequest pool job key caller
   | job.idempotencyKey /= httpRunKey job.agentName key = pure (Left "HTTP run key does not match its acceptance coordinates.")
   | otherwise = do
@@ -115,22 +157,22 @@ acceptRunRequest pool job key caller
     agent = job.agentName
     fingerprint = payloadFingerprint job.triggerPayload
     accept = do
-      MessageId message <- enqueueRunJobTx job
-      let row = RunRequestRow agent key (runJobWorkflowId job).unWorkflowId job.idempotencyKey fingerprint caller message job.occurredAt RunAccepted Nothing Nothing
+      message <- enqueueRunJobTx job
+      let row = RunRequestRow agent key (runJobWorkflowId job) job.idempotencyKey fingerprint caller message job.occurredAt RunAccepted Nothing Nothing
       inserted <- Tx.statement row insertStatement
       case inserted of
         Just acceptedAt -> pure (Just (row & #acceptedAt .~ acceptedAt))
         Nothing -> Tx.condemn >> pure Nothing
 
-lookupRunRequest :: Pool -> AgentName -> Text -> IO (Either Text (Maybe RunRequestRow))
+lookupRunRequest :: Pool -> AgentName -> WorkflowId -> IO (Either Text (Maybe RunRequestRow))
 lookupRunRequest pool agent runId = runRead pool (lookupRunRequestTx agent runId)
 
-lookupRunRequestTx :: AgentName -> Text -> Tx.Transaction (Either Text (Maybe RunRequestRow))
+lookupRunRequestTx :: AgentName -> WorkflowId -> Tx.Transaction (Either Text (Maybe RunRequestRow))
 lookupRunRequestTx agent runId = Tx.statement (agent, runId) lookupIdStatement >>= checkedRead . sequence
 
 -- | The operator knows the workflow UUID before a journal can name its agent.
 -- Refuse ambiguous ids rather than selecting an arbitrary agent's request.
-lookupRunRequestById :: Pool -> Text -> IO (Either Text (Maybe RunRequestRow))
+lookupRunRequestById :: Pool -> WorkflowId -> IO (Either Text (Maybe RunRequestRow))
 lookupRunRequestById pool runId = do
   rows <- runRead pool (Tx.statement runId statement >>= checkedRead . sequence)
   pure $ case rows of
@@ -139,7 +181,7 @@ lookupRunRequestById pool runId = do
     Right [row] -> Right (Just row)
     Right _ -> Left "The run identifier is ambiguous."
   where
-    statement = preparable ("SELECT " <> columns <> " FROM shikigami.agent_run_requests WHERE run_id=$1 LIMIT 2") (E.param (E.nonNullable E.text)) (D.rowList rowDecoder)
+    statement = preparable ("SELECT " <> columns <> " FROM shikigami.agent_run_requests WHERE run_id=$1 LIMIT 2") ((.unWorkflowId) >$< E.param (E.nonNullable E.text)) (D.rowList rowDecoder)
 
 safeUse :: Pool -> Session.Session a -> IO (Either Text a)
 safeUse pool action = first (const "The run acceptance store is unavailable.") <$> Pool.use pool action
@@ -164,7 +206,7 @@ rowDecoder =
   where
     text = D.column (D.nonNullable D.text)
     assemble agent key run runKey fingerprint caller message accepted disposition detail observed =
-      RunRequestRow <$> mkAgentName agent <*> parseRequestKey key <*> pure run <*> parseRunKey runKey <*> pure fingerprint <*> pure caller <*> pure message <*> pure accepted <*> parseRunDisposition disposition <*> pure detail <*> pure observed
+      RunRequestRow <$> mkAgentName agent <*> parseRequestKey key <*> pure (WorkflowId run) <*> parseRunKey runKey <*> parsePayloadFingerprint fingerprint <*> pure (callerAttribution caller) <*> pure (MessageId message) <*> pure accepted <*> parseRunDisposition disposition <*> pure detail <*> pure observed
 
 checkedRead :: Either Text a -> Tx.Transaction (Either Text a)
 checkedRead = \case
@@ -179,8 +221,8 @@ runRead pool action = do
 lookupKeyStatement :: Statement (AgentName, RequestKey) (Maybe (Either Text RunRequestRow))
 lookupKeyStatement = preparable ("SELECT " <> columns <> " FROM shikigami.agent_run_requests WHERE agent_name=$1 AND idempotency_key=$2") (((agentNameText . fst) >$< E.param (E.nonNullable E.text)) <> ((requestKeyText . snd) >$< E.param (E.nonNullable E.text))) (D.rowMaybe rowDecoder)
 
-lookupIdStatement :: Statement (AgentName, Text) (Maybe (Either Text RunRequestRow))
-lookupIdStatement = preparable ("SELECT " <> columns <> " FROM shikigami.agent_run_requests WHERE agent_name=$1 AND run_id=$2") (((agentNameText . fst) >$< E.param (E.nonNullable E.text)) <> (snd >$< E.param (E.nonNullable E.text))) (D.rowMaybe rowDecoder)
+lookupIdStatement :: Statement (AgentName, WorkflowId) (Maybe (Either Text RunRequestRow))
+lookupIdStatement = preparable ("SELECT " <> columns <> " FROM shikigami.agent_run_requests WHERE agent_name=$1 AND run_id=$2") (((agentNameText . fst) >$< E.param (E.nonNullable E.text)) <> (((.unWorkflowId) . snd) >$< E.param (E.nonNullable E.text))) (D.rowMaybe rowDecoder)
 
 insertStatement :: Statement RunRequestRow (Maybe UTCTime)
 insertStatement =
@@ -188,11 +230,11 @@ insertStatement =
     "INSERT INTO shikigami.agent_run_requests (agent_name,idempotency_key,run_id,run_key,payload_fingerprint,requested_by,queue_message_id) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (agent_name,idempotency_key) DO NOTHING RETURNING accepted_at"
     ( ((agentNameText . (.agentName)) >$< E.param (E.nonNullable E.text))
         <> ((requestKeyText . (.idempotencyKey)) >$< E.param (E.nonNullable E.text))
-        <> ((.runId) >$< E.param (E.nonNullable E.text))
+        <> (((.unWorkflowId) . (.runId)) >$< E.param (E.nonNullable E.text))
         <> ((runKeyText . (.runKey)) >$< E.param (E.nonNullable E.text))
-        <> ((.payloadFingerprint) >$< E.param (E.nonNullable E.text))
-        <> ((.requestedBy) >$< E.param (E.nonNullable E.text))
-        <> ((.queueMessageId) >$< E.param (E.nonNullable E.int8))
+        <> ((payloadFingerprintText . (.payloadFingerprint)) >$< E.param (E.nonNullable E.text))
+        <> ((callerAttributionText . (.requestedBy)) >$< E.param (E.nonNullable E.text))
+        <> (((.unMessageId) . (.queueMessageId)) >$< E.param (E.nonNullable E.int8))
     )
     (D.rowMaybe (D.column (D.nonNullable D.timestamptz)))
 
@@ -278,5 +320,5 @@ listRunRequestsTx agent request = case Relay.paginateSnippet runSort request bas
     runSort =
       Relay.SortSpec
         ( Relay.KeyColumn "accepted_at" Relay.Desc (.acceptedAt) Relay.timestamptzKey
-            :| [Relay.KeyColumn "run_id" Relay.Asc (.runId) Relay.textKey]
+            :| [Relay.KeyColumn "run_id" Relay.Asc ((.unWorkflowId) . (.runId)) Relay.textKey]
         )

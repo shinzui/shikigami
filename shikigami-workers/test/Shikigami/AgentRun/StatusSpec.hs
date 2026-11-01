@@ -6,7 +6,6 @@ import Data.Aeson qualified as Aeson
 import Data.Foldable (toList)
 import Data.Generics.Labels ()
 import Data.IORef (modifyIORef', newIORef, readIORef)
-import Data.Int (Int64)
 import Effectful (Eff, IOE, (:>))
 import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Session
@@ -74,7 +73,7 @@ tests fixture =
       testCase "reconciliation targets the original queue id and leaves unrelated dead letters available" $
         withFixture fixture \store job _connection -> do
           accepted <- acceptedRequest store job
-          other <- sendDeadLetter store (accepted.queueMessageId + 1) (Aeson.String "other failure")
+          other <- sendDeadLetter store (Pgmq.MessageId (accepted.queueMessageId.unMessageId + 1)) (Aeson.String "other failure")
           _ <- sendDeadLetter store accepted.queueMessageId (Aeson.String "matching failure")
           view <- getStatus store job
           fmap (.reason) view.failure @?= Just "matching failure"
@@ -162,7 +161,7 @@ tests fixture =
           assertBool "terminal disposition has a completion time" (isJust view.completedAt)
           let unrelated = job & #idempotencyKey .~ Ledger.httpRunKey (fixtureAgentName "heartbeat") (fixtureRequestKey "not-http-accepted")
           recordRunJobOutcome Log.silentLogger store.pool unrelated (Dead "unrelated")
-          Ledger.lookupRunRequest store.pool unrelated.agentName (runJobWorkflowId unrelated).unWorkflowId >>= (@?= Right Nothing),
+          Ledger.lookupRunRequest store.pool unrelated.agentName (runJobWorkflowId unrelated) >>= (@?= Right Nothing),
       testCase "drain lifecycle refusal is terminal and storage failure stays an error" $
         withFixture fixture \store job _connection -> do
           declaration <- right =<< loadAgent "../agents/heartbeat.dhall"
@@ -193,7 +192,7 @@ withFixture fixture body = withShikigamiFreshDatabase fixture \connection -> wit
   _ <- right =<< ensureRunQueue store.pool
   now <- getCurrentTime
   let job = addressedRunJob now (compatibilityIdentity (fixtureAgentName "heartbeat")) (fixtureAgentName "heartbeat") AgentWorkflowRoute (Aeson.object []) (Ledger.httpRunKey (fixtureAgentName "heartbeat") (fixtureRequestKey "status-test"))
-  _ <- right =<< Ledger.acceptRunRequest store.pool job (fixtureRequestKey "status-test") "test"
+  _ <- right =<< Ledger.acceptRunRequest store.pool job (fixtureRequestKey "status-test") (Ledger.callerAttribution "test")
   body store job connection
 
 right :: (Show e) => Either e a -> IO a
@@ -201,10 +200,10 @@ right = either (assertFailure . show) pure
 
 acceptedRequest :: KirokuStore -> RunJob -> IO Ledger.RunRequestRow
 acceptedRequest store job = do
-  row <- right =<< Ledger.lookupRunRequest store.pool job.agentName (runJobWorkflowId job).unWorkflowId
+  row <- right =<< Ledger.lookupRunRequest store.pool job.agentName (runJobWorkflowId job)
   maybe (assertFailure "missing accepted request") pure row
 
-sendDeadLetter :: KirokuStore -> Int64 -> Aeson.Value -> IO Pgmq.MessageId
+sendDeadLetter :: KirokuStore -> Pgmq.MessageId -> Aeson.Value -> IO Pgmq.MessageId
 sendDeadLetter store originalId reason =
   right =<< Pool.use store.pool (Pgmq.sendMessage (Pgmq.SendMessage RunJobs.runJob.jobQueue.dlqName (Pgmq.MessageBody body) Nothing))
   where

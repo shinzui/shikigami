@@ -441,6 +441,7 @@ test-suite shikigami-core-test
   main-is: Main.hs
   other-modules:
     Shikigami.AgentLoaderSpec
+    Shikigami.AgentRunValueSpec
     Shikigami.AgentValueSpec
     Shikigami.AppConfigSpec
     Shikigami.ApprovalNotificationSpec

@@ -20,6 +20,7 @@ import Shikigami.Agent.Decl (Priority (Normal), RecipientFrom (SubjectOwner), Si
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.AgentLoaderSpec qualified as AgentLoaderSpec
+import Shikigami.AgentRunValueSpec qualified as AgentRunValueSpec
 import Shikigami.AgentValueSpec qualified as AgentValueSpec
 import Shikigami.AppConfigSpec qualified as AppConfigSpec
 import Shikigami.ApprovalNotificationSpec qualified as ApprovalNotificationSpec
@@ -96,6 +97,7 @@ main =
         [ testGroup "Sink" [kizashiTests, kawaTests, danwaTests, traceHeaderTests],
           testGroup "Trigger" [scheduleTests, streamTests, danwaIntegrationTests],
           AgentValueSpec.tests,
+          AgentRunValueSpec.tests,
           PayloadValueSpec.tests,
           WorkspaceCatalogSpec.tests,
           WorkspaceInstructionsSpec.tests,

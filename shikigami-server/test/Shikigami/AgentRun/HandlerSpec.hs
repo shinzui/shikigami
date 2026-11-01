@@ -62,7 +62,7 @@ tests fixture =
           _ <- right =<< Job.runJobEff runtime (Job.purgeDlq RunJobs.runJob)
           repeated <- request "GET" ("/agents/heartbeat/runs/" <> Text.unpack accepted.runId) Aeson.Null
           Http.responseBody repeated @?= Http.responseBody result
-          Ledger.lookupRunRequest store.pool (fixtureAgentName "heartbeat") accepted.runId >>= \case
+          Ledger.lookupRunRequest store.pool (fixtureAgentName "heartbeat") (WorkflowId accepted.runId) >>= \case
             Right (Just row) -> row.disposition @?= Ledger.RunDeadLettered
             _ -> assertFailure "terminal receipt was not persisted",
       testCase "corrupt stored run history is a non-retryable typed internal failure" $

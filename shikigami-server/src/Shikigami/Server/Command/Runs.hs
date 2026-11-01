@@ -135,7 +135,7 @@ runRunsShow wfName wfId asJson config = do
       Left storeError -> die ("store error: " <> Text.pack (show storeError))
       Right Nothing
         | asJson && wfName == "shikigami.agent-run" -> do
-            accepted <- Ledger.lookupRunRequestById store.pool wfId
+            accepted <- Ledger.lookupRunRequestById store.pool (WorkflowId wfId)
             case accepted of
               Left _ -> die "run lifecycle store is unavailable"
               Right Nothing -> die ("no workflow instance named " <> wfName <> " with id " <> wfId)

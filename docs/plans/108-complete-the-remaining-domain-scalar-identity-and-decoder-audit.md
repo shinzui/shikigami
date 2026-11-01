@@ -129,6 +129,14 @@ proved before fixture-only guard-loss corruption. See
 928 module declarations and 4,034 keys. The ownership violation is resolved;
 the new private wrapper, transfer view and typed refusal keys are classified.
 
+The acceptance-ledger scalar source candidate passes 3 value tests, 6 core
+PostgreSQL, 10 worker status, 9 HTTP and 115 compiler controls. It retains native
+workflow/queue identities, a checked original UUIDv5 payload commitment and
+nominal authenticated attribution. Valid bytes, pinned HTTP ids and identity
+formulas stay unchanged; complete corruption/paging/rollback/recovery controls
+cover malformed fingerprints. See `docs/evidence/plan-108/ledger-values-source.json`.
+Coherent full build and census reconciliation follow this source checkpoint.
+
 The native workflow gate passes on `400cdc0` against `af76f1b`, with no findings
 and a replay-neutral native verdict. Exact reports accompany the current evidence.
 The full build, fresh census and focused checks are checkpoints, not milestone
