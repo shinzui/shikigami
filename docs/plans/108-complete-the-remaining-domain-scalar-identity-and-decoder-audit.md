@@ -63,8 +63,8 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 
 Implementation is under way. The schema-2 census and coverage/freshness checker
 pass 24 positive/mutation tests against a successful full GHC 9.12.4 macOS build.
-The current census has 4,034 declaration/member keys. Semantic classification
-covers 772 keys: 699 compliant entries, 28 exclusions and 45 explicit violations;
+The current census has 4,038 declaration/member keys. Semantic classification
+covers 776 keys: 707 compliant entries, 28 exclusions and 41 explicit violations;
 3,262 keys remain unreviewed, and both coverage modes correctly refuse completion.
 
 Process-profile, Objective, cleanup/listing, directory, sink, HTTP acceptance and
@@ -135,7 +135,9 @@ workflow/queue identities, a checked original UUIDv5 payload commitment and
 nominal authenticated attribution. Valid bytes, pinned HTTP ids and identity
 formulas stay unchanged; complete corruption/paging/rollback/recovery controls
 cover malformed fingerprints. See `docs/evidence/plan-108/ledger-values-source.json`.
-Coherent full build and census reconciliation follow this source checkpoint.
+The coherent full build and refreshed census pass on `f556e24`: 323 modules,
+930 module declarations and 4,038 keys. All four ledger scalar findings are
+resolved and the two new private scalar types are classified.
 
 The native workflow gate passes on `400cdc0` against `af76f1b`, with no findings
 and a replay-neutral native verdict. Exact reports accompany the current evidence.
@@ -208,6 +210,14 @@ fixtures now prove the guard first, then remove it only in their disposable
 database to qualify owner refusal under injected constraint loss. Direct
 snapshot decoding and custom lookup callbacks also require their own binding
 checks because they do not inherit the SQL constraint.
+
+2026-11-01: [FRIC-37](../friction-log/37-embedded-git-metadata-rebuilds-the-runtime-closure-at-audit-checkpoints.md)
+records the required build cost from core Git metadata: a new source checkpoint
+changes App.Version and recompiles/relinks the runtime closure. Commit source
+before the final Cabal gates/build and refresh the census afterwards; make the
+evidence-only commit last to avoid unnecessary extra cycles. Earlier build and
+compiler timing friction remains separate. This does not weaken freshness or
+semantic review requirements.
 
 ## Decision Log
 

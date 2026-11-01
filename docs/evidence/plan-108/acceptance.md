@@ -830,3 +830,22 @@ HTTP representation changes, so no new native workflow/migration/HTTP-representa
 gate is required beyond the actual HTTP behavioral suite. Coherent full build
 and census reconciliation follow this source checkpoint; all milestones stay
 open. The prior native profile gate remains retained as applicable evidence.
+
+
+The full `cabal build all --enable-tests -j1` and refreshed schema-2 census pass
+on `f556e24`: 323 modules, 930 module declarations, fourteen entrypoints and
+4,038 keys. Snapshot/source/compiler/interface/tool identities match. Semantic
+rereview covers Ledger, Status, the HTTP handler and operator Runs adapter.
+The four explicit ledger findings are resolved, and the new fingerprint and
+attribution declaration/representation keys are classified. Classification now
+has 776 entries: 707 compliant, 28 not applicable and 41 violations, with all
+3,262 missing keys still explicit through checker refusal. Both checker modes
+correctly fail incomplete coverage. The frozen 124-source/93-item inventory and
+21 mutation controls pass; unchanged-tool 24-case evidence remains applicable.
+The guide and all milestones remain open/deferred.
+
+FRIC-37 records the repeated closure build caused by embedded Git metadata at
+required source checkpoints. Source is committed before the final coherent build
+and the census follows all Cabal gates; a later evidence-only commit does not
+claim a new executable test candidate. This preserves freshness while avoiding
+avoidable repeated builds. Friction remains to be triaged at plan completion.
