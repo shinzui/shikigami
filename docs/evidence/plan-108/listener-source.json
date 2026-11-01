@@ -1,0 +1,27 @@
+{
+  "candidate": "b355dfa",
+  "sourceParent": "92ce39a",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "files": {
+    "shikigami-core/src/Shikigami/Flow/Workers.hs": "46dd8c3362cb4eddd654f9fe03d5310f4170db887dc885b73bda11410887b3d5",
+    "shikigami-core/src/Shikigami/WorkerSession/Capability.hs": "8525dae7955a55526831303c668837abf4dc5e0ea6499173c061302ce1141fa7",
+    "shikigami-core/src/Shikigami/WorkerSession/Store.hs": "d3778190054b4ea87c9578ee6f4612062287653717c8df4a0d96a533aa22bc4e",
+    "shikigami-core/src/Shikigami/WorkerSession/Types.hs": "6aef41e277e354f8b1d2474c2f77b19e6a82692bb1cf14d1b9ca9ddf6dac6915",
+    "shikigami-core/test-postgres/Shikigami/WorkerSessionCapabilitySpec.hs": "91799573abdbf9b7d7974397f13da564e19a1e25c6b489c766aa65cca6278c6a",
+    "tests/types/opaque-values.py": "16388348a30a11438db70aa65edf3280cbfe24682c1fd727bc0122167575fd82",
+    "docs/adr/0066-worker-commands-require-retained-scopes-and-fresh-exact-authority.md": "5b6a48ce46a85304f15168bc1d8fc2eba98211256a8fdc65be04b9b008e2ab22"
+  },
+  "historicalEncoder": {
+    "source": "92ce39a compiled public SessionListener",
+    "json": "{\"after\":0,\"generation\":3,\"ownerId\":\"listener:historical\",\"ownerName\":\"listener-name\",\"token\":\"00000000-0000-0000-0000-000000000000\"}",
+    "command": "cabal exec -- ghc -v0 -package-id <core-unit> <temporary sample using SessionListener> -e main"
+  },
+  "tests": {
+    "WorkerSessionCapability": 12,
+    "WorkerSessionStore": 18
+  },
+  "limitations": "Representation-only listener identity change; no parser/domain broadening, allocation, workflow label/effect change or Linux qualification. Workflow gate and compiler results are retained separately.",
+  "compilerControls": 137,
+  "compilerCommand": "nix develop --no-write-lock-file -c python3 tests/types/opaque-values.py"
+}

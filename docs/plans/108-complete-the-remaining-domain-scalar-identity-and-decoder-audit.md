@@ -58,8 +58,8 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 
 
 - [x] M1a: Deliver the schema-2 census and independent coverage/freshness checker; all 24 positive/mutation tests pass, and the checker detects the current incomplete classification.
-- [x] M1b (2026-11-01): Complete semantic classification. Latest coherent census on `760ca05`: all 4,060 keys classified; 3,259 compliant, 288 exclusions and 513 explicit findings. Coverage/freshness and all 24 checker tests pass with zero missing or pending entries. The initial M1 checkpoint covered 4,053 keys before M2 added the closed format type.
-- [ ] M2: Resolve applicable scalar/identity/decoder findings in cohesive concept batches and verify actual refusal, rollback and recovery behavior. Since complete M1 acceptance, 62 findings are fixed or source-corrected; 513 remain explicit in the current fresh inventory.
+- [x] M1b (2026-11-01): Complete semantic classification. Latest coherent census on `b355dfa`: all 4,060 keys classified; 3,278 compliant, 289 exclusions and 493 explicit findings. Coverage/freshness and all 24 checker tests pass with zero missing or pending entries. The initial M1 checkpoint covered 4,053 keys before M2 added the closed format type.
+- [ ] M2: Resolve applicable scalar/identity/decoder findings in cohesive concept batches and verify actual refusal, rollback and recovery behavior. Since complete M1 acceptance, 82 findings are fixed or source-corrected; 493 remain explicit in the current fresh inventory.
 - [ ] M3: Accept the refreshed classification with zero unresolved violations, passing final behavioral evidence, and an updated guide disposition.
 
 Execution order correction (2026-10-31): finish M1b's remaining inventory before
@@ -342,8 +342,8 @@ changing M2/M3 acceptance.
 
 
 M1 is complete and refreshed: the entire 4,060-key inventory and its
-source/build/tool freshness check pass, as do all 24 infrastructure tests. The accepted M2 batches fix or source-correct 62 of the initial 575 findings,
-leaving 513 explicit findings for M2. Resolved-only acceptance correctly fails. Earlier tested owner/value
+source/build/tool freshness check pass, as do all 24 infrastructure tests. The accepted M2 batches fix or source-correct 82 of the initial 575 findings,
+leaving 493 explicit findings for M2. Resolved-only acceptance correctly fails. Earlier tested owner/value
 remediations remain recorded in [the current evidence](../evidence/plan-108/acceptance.md).
 M2, M3 and the frozen guide disposition remain open. FRIC-36 and FRIC-37 remain
 logged for triage when the plan completes.
@@ -721,3 +721,32 @@ coverage/freshness and all 24 infrastructure tests pass with 3,259 compliant,
 288 exclusions and 513 explicit findings; resolved-only acceptance correctly
 fails. The authorization envelope's invariant description is corrected to its
 actual version 2 without marking that primitive field resolved. M2/M3 stay open.
+
+
+M2 listener source checkpoint (2026-11-01): native WorkflowName/WorkflowId survive
+the existing generation and awakeable owner checks without duplicate wrappers.
+The five existing Haskell files retain historical JSON and owner behavior. A wire
+golden captured from the old compiled encoder passes; all 30 selected listener/
+store cases pass, including ignored-refusal rollback, notification journal
+conflicts and old-generation refusal. The native gate on `b355dfa` against
+`92ce39a` has no findings, is replay-neutral and passes 156 conformance checks.
+See `listener-source.json` and `listener-keiro-gate.json`. Coherent build/census
+reconciliation is pending; the two field findings are not yet marked resolved.
+
+Scope review traces 18 more findings to their actual consumers: 12 HTTP endpoint
+configuration fields convert into native Request/BaseUrl/ClientEnv at explicit
+client adapters, five Kafka settings convert into native broker/topic/group types
+at the subscription/producer adapters, and one configured caller label reaches
+only audit logging. These source-supported corrections add no runtime types or
+new grammar. Recipient identities, routing guards, authenticated API callers and
+other domain policy fields remain independently audited; configuration origin
+alone is not an exemption.
+
+
+M2 listener/boundary reconciliation (2026-11-01): the full workspace build and
+fresh census pass on `b355dfa`: 325 modules, 940 declarations, 14 entrypoints
+and 4,060 keys. The two native listener findings are resolved, and the 18
+source-supported boundary/diagnostic corrections are included. All 137 compiler
+controls pass. Normal coverage/freshness and all 24 infrastructure tests pass
+with 3,278 compliant entries, 289 exclusions and 493 remaining findings.
+Resolved-only acceptance correctly fails; M2/M3 and the guide remain open.

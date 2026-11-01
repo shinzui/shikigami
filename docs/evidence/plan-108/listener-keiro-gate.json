@@ -1,0 +1,13 @@
+{
+  "candidate": "b355dfa",
+  "base": "92ce39a",
+  "command": "nix develop --no-write-lock-file -c just keiro-gate 92ce39a",
+  "exitCode": 0,
+  "findings": [],
+  "replayVerdict": "replay-neutral",
+  "conformanceChecks": 156,
+  "reports": [
+    "docs/evidence/plan-108/listener-keiro-diff.json",
+    "docs/evidence/plan-108/listener-replay-impact.json"
+  ]
+}

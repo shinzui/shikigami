@@ -1310,3 +1310,55 @@ Current totals: 3,259 compliant, 288 exclusions, 513 violations, zero missing or
 pending entries. Resolved-only mode correctly exits 1 with `unresolved violations:
 513`. The frozen guide remains deferred and M2/M3 remain open. This refresh makes
 no new runtime, PostgreSQL, identity-migration or Linux qualification claim.
+
+
+## Native listener owners and boundary review (2026-11-01)
+
+Source candidate `b355dfa` retains Keiro WorkflowName/WorkflowId in SessionListener
+through generation lookup, awakeable owner comparison and journal notification.
+Only the retained JSON codec renders/parses text, with the original accepted
+spellings. No token, authority, generation, identity recipe, label or step changes.
+`listener-source.json` binds all seven source/test/ADR paths and records the exact
+JSON captured from the old compiled encoder. Its golden includes a historical
+owner spelling, proving this is a nominal representation change without a new
+grammar. The existing owner checks remain responsible for binding the token.
+
+Commands from the repository root on arm64 macOS/GHC 9.12.4:
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/WorkerSessionCapability/||/WorkerSessionStore/' --test-option=--list-tests
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/WorkerSessionCapability/||/WorkerSessionStore/'
+nix develop --no-write-lock-file -c python3 tests/types/opaque-values.py
+nix develop --no-write-lock-file -c just keiro-gate 92ce39a
+```
+
+The selected groups contain and pass 12 capability and 18 store cases (30 total),
+including the old wire golden, notification journal-conflict rollback, rotated
+listener refusal and existing ignored-read rollback/repair. All 137 existing-plus-
+extended public compiler controls pass. Positive native listener field clients
+compile before the new Text-substitution refusals. The workflow gate passes with
+no findings, replay-neutral verdict and 156 generated conformance checks. Reports:
+`listener-keiro-diff.json`, `listener-replay-impact.json`, `listener-keiro-gate.json`.
+There is no new gate infrastructure, parser helper module, first-release waiver,
+dependency change or Linux qualification.
+
+Source/consumer review also corrects 18 existing findings without runtime edits.
+Twelve endpoint fields in App.Config/Sink.Config are explicitly client-adapter
+representations: the native HTTP Request/BaseUrl/ClientEnv owns URL admission
+before IO. Five Kafka connection/subscription settings reach native BrokerAddress,
+TopicName and ConsumerGroupId in Trigger.Consumer/Trigger.Publish. Importing the
+Kafka FFI stack into core configuration or adding application URL wrappers would
+not improve a domain-side concept at those explicit adapter seams. The remaining
+configured Kikan callerId is only an audit-log label, separate from verified
+principal and OAuth client identity. This is the frozen guide's explicit adapter/
+incidental allowance, not an exemption based solely on configuration or storage.
+Actual recipients, routing guards, authenticated HTTP callers and other policy
+values remain separately classified. Coherent build/census reconciliation follows.
+
+
+The complete workspace build and fresh census pass on `b355dfa`: 325 modules,
+940 declarations, 14 entrypoints and 4,060 keys. Both listener fields are resolved,
+and the source-traced boundary corrections are included. Coverage/freshness and
+all 24 checker tests pass with 3,278 compliant, 289 exclusions and 493 remaining
+findings. Resolved-only mode correctly refuses those 493 findings. M2/M3 and the
+frozen guide remain open; this is not final exhaustive acceptance.
