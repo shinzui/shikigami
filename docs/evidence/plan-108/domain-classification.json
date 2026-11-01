@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "censusSha256": "d43213a9b80051d75f66e37be538cf4ebfb92f650dad555156d398bddcff179d",
+  "censusSha256": "c3a802c398caf71f9f4bffa48b87536439ce43c6e1c2d8f033aff9a8f08de165",
   "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
   "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
   "sourcePath": "runtime-patterns/architecture/domain-newtypes-and-typeids.md",

@@ -1362,3 +1362,47 @@ and the source-traced boundary corrections are included. Coverage/freshness and
 all 24 checker tests pass with 3,278 compliant, 289 exclusions and 493 remaining
 findings. Resolved-only mode correctly refuses those 493 findings. M2/M3 and the
 frozen guide remain open; this is not final exhaustive acceptance.
+
+
+## Broad acceptance checkpoint (2026-11-01)
+
+Runtime source is unchanged from `d1b4b93`; this checkpoint changes documentation,
+friction evidence and build-bound inventory only. On arm64 macOS/GHC 9.12.4,
+the six runtime unit suites pass 1,070 cases: core 618, API 31, client 9,
+server 95, agent 37 and workers 280. Core domain conformance passes with 143
+`PASS` lines and zero `FAIL` lines. All 466 core PostgreSQL cases pass using
+the disposable migrated fixture, with one test thread. These results qualify
+the existing runtime; they do not resolve the 493 nominal-value findings.
+
+The initial combined unit run failed 13 worker Git-provider cases under parallel
+load. Its first failure passes alone in 2.00 seconds; the entire 280-case worker
+suite then passes serially in 181.11 seconds. FRIC-38 records this test-tooling
+constraint. The accepted invocation retains the five-second executor deadline:
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-test shikigami-api-test shikigami-client-test shikigami-server-test shikigami-agent-test shikigami-workers-test shikigami-core-domain-test -j1 --test-show-details=direct
+nix develop --no-write-lock-file -c cabal test shikigami-workers-test shikigami-client-test shikigami-server-test -j1 --test-show-details=direct --test-option=--num-threads=1
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test -j1 --test-show-details=direct --test-option=--num-threads=1
+```
+
+The first command reached core, domain, API, agent and workers before stopping on
+the worker failures; the second supplies the passing serial worker, client and
+server results. A simultaneous first PostgreSQL build collided on an App.Version
+object rename; its later complete run passes. Future builds should run sequentially.
+All 24 classification infrastructure tests, 14 upgrade-audit mutation tests, the
+frozen upgrade audit and Haskell style checks pass. Existing public compiler and
+native workflow evidence remains applicable because no runtime source changed;
+this checkpoint does not claim a new compiler or workflow-gate run.
+
+The coverage document now states the completed 4,060-key classification rather
+than the obsolete unclassified 322-module worklist. All 493 findings retain their
+violation dispositions, and exhaustive remediation and final guide compliance
+remain open. No wrappers, new runtime abstractions, migrations or dependencies
+are added at this checkpoint.
+
+The complete `cabal build all --enable-tests -j1` and census refresh also pass
+on this candidate: 325 modules, 940 declarations and 14 role entrypoints.
+All source path/hash pairs are unchanged from the previous census; only compiled
+artifact bindings are refreshed. Normal classification acceptance passes all
+4,060 keys with fresh source/build/tool hashes. Resolved-only acceptance exits 1
+with `unresolved violations: 493`, as required. No disposition is relaxed.

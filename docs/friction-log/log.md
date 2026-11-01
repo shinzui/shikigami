@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-01
+* **Addition**: FRIC-38 records detour tooling friction with mori://shinzui/shikigami: Parallel worker acceptance exceeds Git fixture deadlines
 * **Addition**: FRIC-37 records slowdown tooling friction with mori://shinzui/shikigami: Embedded Git metadata rebuilds the runtime closure at audit checkpoints
 
 ## 2026-10-31

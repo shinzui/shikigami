@@ -37,6 +37,11 @@ provenance:
       at: 2026-10-31T20:50:24Z
       mode: "implement"
       note: "Continue directory and sink receipt transactional corruption refusal and recovery acceptance."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-01T14:00:56Z
+      mode: "implement"
+      note: "Run final acceptance and apply the user-directed minimal completion scope."
 ---
 
 # Complete the remaining domain scalar identity and decoder audit
@@ -220,6 +225,16 @@ The full build, fresh census and focused checks are checkpoints, not milestone
 completion. Continue the remaining classification and applicable remediation
 before final M3 validation. See [the current evidence](../evidence/plan-108/acceptance.md)
 and `decision-coordinates-source.json` for the latest tested source snapshot.
+
+The 2026-11-01 broad acceptance checkpoint on runtime source `d1b4b93` passes
+all 1,070 runtime unit cases, 143 domain conformance controls and 466 core
+PostgreSQL cases. The 280-case worker suite requires serial execution to avoid
+Git fixture deadline contention (FRIC-38); the acceptance command below reflects
+that constraint without changing runtime timeouts. No runtime source is changed.
+The full build and refreshed 325-module/940-declaration census pass; all 4,060 keys have fresh source/build/tool hashes.
+Resolved-only acceptance still correctly refuses 493 violations.
+M2/M3 remain open with unchanged acceptance criteria; see the latest acceptance
+note. The remaining findings are neither resolved nor reclassified.
 
 ## Surprises & Discoveries
 
@@ -578,14 +593,16 @@ nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test -j1 
 nix develop --no-write-lock-file -c just domain-value-types
 ```
 
-M3's final pass runs all core PostgreSQL cases serially, the six runtime package unit
-suites, compiler checks, and the domain conformance suite. Expect Tasty suites to
+M3's final pass runs all core PostgreSQL cases and the six runtime package unit
+suites serially, plus compiler checks and the domain conformance suite. Serial
+worker execution avoids contention against the Git fixtures' five-second executor
+deadline; it does not change that deadline (FRIC-38). Expect Tasty suites to
 report passing tests with nonzero counts; skipped database cases do not count.
 The domain suite prints `PASS` lines and a RunEvidence report, and must exit zero.
 It verifies declared contracts, not exhaustive semantic coverage.
 
 ```bash
-nix develop --no-write-lock-file -c cabal test shikigami-core-test shikigami-api-test shikigami-client-test shikigami-server-test shikigami-agent-test shikigami-workers-test shikigami-core-domain-test -j1 --test-show-details=direct
+nix develop --no-write-lock-file -c cabal test shikigami-core-test shikigami-api-test shikigami-client-test shikigami-server-test shikigami-agent-test shikigami-workers-test shikigami-core-domain-test -j1 --test-show-details=direct --test-option=--num-threads=1
 nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test -j1 --test-show-details=direct --test-option=--num-threads=1
 nix develop --no-write-lock-file -c just domain-value-types
 python3 tools/domain/check_classification.py --classification docs/evidence/plan-108/domain-classification.json --census docs/evidence/keiro-0.22/domain-declarations.json --require-resolved
