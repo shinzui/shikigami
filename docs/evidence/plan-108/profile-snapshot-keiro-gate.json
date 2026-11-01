@@ -1,0 +1,12 @@
+{
+  "sourceParent": "4af3303",
+  "candidate": "e7aa4ae",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "command": "nix develop --no-write-lock-file -c just keiro-gate 4af3303",
+  "exitCode": 0,
+  "nativeDiff": "profile-snapshot-keiro-diff.json",
+  "replayImpact": "profile-snapshot-replay-impact.json",
+  "generatedConformance": "passed",
+  "limitations": "Native declarations, labels, identities and the five journaled policy-error alternatives are unchanged. Complete valid snapshot bytes and actual owner/workflow controls are qualified separately; unreadable binding admission narrows explicitly without a first-release waiver."
+}

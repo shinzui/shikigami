@@ -752,3 +752,26 @@ workflow/conversation imports and the pure refusal-rendering projection change
 to the private snapshot API, so native evolution qualification against
 `4af3303` is still required before this checkpoint is accepted. Coherent full
 build/census reconciliation follows it. All milestones remain open.
+
+
+The native `just keiro-gate 4af3303` passes on `e7aa4ae`. Retained reports are
+`profile-snapshot-keiro-diff.json` (no findings),
+`profile-snapshot-replay-impact.json` (`replay-neutral`) and
+`profile-snapshot-keiro-gate.json` (command/candidate/base/platform and limits).
+All ten members remain declared at language 6 and all 156 generated conformance
+checks pass. These native reports do not certify invalid-metadata admission;
+that narrower decoder domain and complete valid-byte controls are qualified
+separately above, without a first-release waiver.
+
+The subsequent full `cabal build all --enable-tests -j1` and schema-2 census
+pass on `e7aa4ae`: 323 modules, 928 module declarations, fourteen entrypoints and
+4,034 keys. All source/snapshot/compiler/interface/tool identities match. The
+semantic rereview covers all eleven changed owner modules. The former public
+snapshot fields move to the explicit transfer view; the private wrapper seals
+their binding. The ownership violation is resolved and the new wrapper/view/data
+refusal keys are classified, with no blanket persistence exemption or hash-only
+renewal. Classification now covers 772 keys: 699 compliant, 28 not applicable,
+45 violations and 3,262 missing. Both checker modes correctly refuse missing
+coverage. The 124-source/93-item frozen upgrade inventory and 21 mutation controls
+pass; the earlier unchanged-tool 24-case result remains applicable. M1/M2/M3 and
+the guide disposition remain open/deferred.

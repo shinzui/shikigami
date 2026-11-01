@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "purpose": "unclassified audit worklist; not a compliance claim",
-  "sourceParent": "5a6344348dc31a7526b57c7f13e02afde678aaa5",
+  "sourceParent": "e7aa4ae966e13d9e780fa2583690fc165e83cdf7",
   "buildRoot": "dist-newstyle/build/aarch64-osx/ghc-9.12.4",
   "compiler": "9.12.4",
   "toolSha256": "71385931ef63d9585d131d00e334139f31d59d47627c002c4849f7868f67f9ba",
@@ -14,7 +14,7 @@
       "sourcePath": "shikigami-agent/src/Shikigami/Agent/Capability/OneOff.hs",
       "sourceSha256": "0b8ed1f0aefc18887bc2be75c2d52d6253086123966b816db3e10adab0973e19",
       "module": "Shikigami.Agent.Capability.OneOff",
-      "interfaceSha256": "02b3e16050affcb08debc9330697ea300d71da244b3838f5f6b4050e7e5ca074",
+      "interfaceSha256": "590d01cc3f8e78fc579f4f95c4a3fb91a9c9111164583f5f02f9167be3efffaf",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-agent-0.1.0.0/build/Shikigami/Agent/Capability/OneOff.hi",
       "compiledSourceMd5": "f08cfef93f923325e1f8bae10466c39e",
       "declarations": [
@@ -52,7 +52,7 @@
       "sourcePath": "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs",
       "sourceSha256": "76ab6887215d5cf8f78914bb0815501f64afa58050865a7bf799f0b2c7043906",
       "module": "Shikigami.Agent.Capability.Workspace",
-      "interfaceSha256": "c2ccff10e293f1041d6f940a854817dcdce36cc1d751377ba809d6908b9d5732",
+      "interfaceSha256": "bd53766284424ff8353851b10d4928e2560fe36cede9df97c72f09c57b18d5e1",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-agent-0.1.0.0/build/Shikigami/Agent/Capability/Workspace.hi",
       "compiledSourceMd5": "a5287947852640c7babb35d1a04d0064",
       "declarations": [
@@ -242,7 +242,7 @@
       "sourcePath": "shikigami-agent/src/Shikigami/Agent/Command.hs",
       "sourceSha256": "33afad7d3f236ddafbb448b909607e120b54de4fb28d789e5a98ba8ba7d83568",
       "module": "Shikigami.Agent.Command",
-      "interfaceSha256": "45ee1585e99dfd4168cf4afaf0169840de27870f0fe315584d99cfcf5a91115e",
+      "interfaceSha256": "0ca95e17895ed0dddbcfc005094576b6dccd892d4066a75cd80a82241104f8c1",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-agent-0.1.0.0/build/Shikigami/Agent/Command.hi",
       "compiledSourceMd5": "d67c9acf667fca3ed90487a6cd6bfc89",
       "declarations": []
@@ -251,7 +251,7 @@
       "sourcePath": "shikigami-agent/src/Shikigami/Agent/Command/AgentRun.hs",
       "sourceSha256": "7f4a452e42d6646abfa4300e54d10c6b33ca5a4c4d1fa355840c33b7128bd622",
       "module": "Shikigami.Agent.Command.AgentRun",
-      "interfaceSha256": "76e4e499ab34d17daa05b60bb5d8be1c70da8190d4206cbe1f3f4b9de9c3b64d",
+      "interfaceSha256": "9b5036c073ba35341b37281ee25f260fa647d5f4eef2604288ab710cb253109c",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-agent-0.1.0.0/build/Shikigami/Agent/Command/AgentRun.hi",
       "compiledSourceMd5": "fd65f80ee1204bd387383ae4c55180fb",
       "declarations": []
@@ -260,7 +260,7 @@
       "sourcePath": "shikigami-agent/src/Shikigami/Agent/Command/Launch.hs",
       "sourceSha256": "61cb1ee8f3c9f2d848b294210539cdf43bd2652951499ee3371a0bc7b2bbb901",
       "module": "Shikigami.Agent.Command.Launch",
-      "interfaceSha256": "c13c75287eee6fa9af4c20a63eb47f5b97afc105a5569547aa735879d3625173",
+      "interfaceSha256": "dab90d82a2ed6899adf8e58302184e157396d033e32c40d71fd581d9df5c771e",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-agent-0.1.0.0/build/Shikigami/Agent/Command/Launch.hi",
       "compiledSourceMd5": "65f152900f78a7ce56d34cb34dd7e9e2",
       "declarations": [
@@ -342,7 +342,7 @@
       "sourcePath": "shikigami-agent/src/Shikigami/Agent/Command/RunBehavior.hs",
       "sourceSha256": "e1d63d4919ed74b40d94528f2271b755997bcf50094ca4f6a9e59eb0b24c4efb",
       "module": "Shikigami.Agent.Command.RunBehavior",
-      "interfaceSha256": "d08d84a2f6a3c622549244e515632aca7a8378a614bd754e7870fec128a9cf65",
+      "interfaceSha256": "49f72118ccc132c1ead7007e0c0b6f1f4fbfbd7f25b97bbe4519a844329bcc96",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-agent-0.1.0.0/build/Shikigami/Agent/Command/RunBehavior.hi",
       "compiledSourceMd5": "80392a88da2a9777645a37f7ef9742b0",
       "declarations": []
@@ -919,7 +919,7 @@
       "sourcePath": "shikigami-client/src/Shikigami/Client/Command.hs",
       "sourceSha256": "65af8eb86663f3e2590cb27376f67c4f350e3ca239ee18f3744cb9697aad0257",
       "module": "Shikigami.Client.Command",
-      "interfaceSha256": "7a0a39e661b383f49dd284a1a3a7b6ac4efa1dc52730691447e621c7d638b1a0",
+      "interfaceSha256": "03747ee0f2f0ca7177dc55c72d1727c3daeb73bb4d1ff23ee60ebfff721c57af",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-client-0.1.0.0/build/Shikigami/Client/Command.hi",
       "compiledSourceMd5": "84ecf6597ce57d1917eb523915018d6f",
       "declarations": [
@@ -971,7 +971,7 @@
       "sourcePath": "shikigami-client/src/Shikigami/Client/Version.hs",
       "sourceSha256": "163865eaf961b1689b300357d4aab3364eb5582496ddfc4fbd4ef46ebbd700b3",
       "module": "Shikigami.Client.Version",
-      "interfaceSha256": "7795412413dfd47ccf41e1cd2db2be0efcc7ef18ff8389f8615b1daa0162d674",
+      "interfaceSha256": "96e92d8007cf432b4704b0fc011c14e72ebf2873d79fc05337e73a1b2cb25b5a",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-client-0.1.0.0/build/Shikigami/Client/Version.hi",
       "compiledSourceMd5": "f6bfa83786388c88f242092560e7e5c5",
       "declarations": []
@@ -980,7 +980,7 @@
       "sourcePath": "shikigami-core/inspection/Shikigami/Inspection/Catalog.hs",
       "sourceSha256": "d62352f684d8c9675df6fd2ff658772d4270bc128caed65fe1560c69a94a7d71",
       "module": "Shikigami.Inspection.Catalog",
-      "interfaceSha256": "6c2faa7d34a2b924af91942261b7eb0aa727c6d0a3c97e528cf14ea793bfd9bf",
+      "interfaceSha256": "571665d9430fabd5f3eb53d1a4e61c690915f0ce801e11b9ac0255742106834d",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/l/inspection/build/inspection/Shikigami/Inspection/Catalog.hi",
       "compiledSourceMd5": "3c9b6eb028c4640626f4736420c6d236",
       "declarations": []
@@ -989,7 +989,7 @@
       "sourcePath": "shikigami-core/inspection/Shikigami/Inspection/Runtime.hs",
       "sourceSha256": "893091569f0605ba59d764f905c610dc3a4dd051be56bac80d075dd7e2f4c327",
       "module": "Shikigami.Inspection.Runtime",
-      "interfaceSha256": "77d77e7a3c1a519348847ad36d6727f476fa3999180da468f359a12f75ddcaeb",
+      "interfaceSha256": "a9ce25746c6b1e0b17e7dff5a92acbdf6c1043b2d44a083dc4a41c97103a3b61",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/l/inspection/build/inspection/Shikigami/Inspection/Runtime.hi",
       "compiledSourceMd5": "63b14ccabc34b74d9ee97924ff681fee",
       "declarations": [
@@ -1117,7 +1117,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Action/Authorization/Config.hs",
       "sourceSha256": "e9d93c19ac1b8316399da2b092c100e4e6f55dc24e5c45d32bba568938e355dc",
       "module": "Shikigami.Action.Authorization.Config",
-      "interfaceSha256": "6b509edec7af5a1563dccfbe0b815b5bb5b1451f8c4f30c9bbcc7b7bdce65461",
+      "interfaceSha256": "3aa2332bb319ef4d094c78191f88e30e92f92cf7e245d428921806cdd15639ac",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Action/Authorization/Config.hi",
       "compiledSourceMd5": "7c16f28ead8985108cafea7a8b54ecd5",
       "declarations": []
@@ -1369,7 +1369,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Agent/Approval/Notification.hs",
       "sourceSha256": "9943e1717e5773bd26cc8946ad38c71d1f527407010af37628eee4968dfbb888",
       "module": "Shikigami.Agent.Approval.Notification",
-      "interfaceSha256": "7fd014a8d05db3e8500efd57e7886ff54f76afadac6dc27d8e16afb4cc575f34",
+      "interfaceSha256": "633a1cfc7c24ebcae2d6c02cc33fb3dae26c77950d2bfed87a858495284c84ec",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Agent/Approval/Notification.hi",
       "compiledSourceMd5": "019927e42fed5715236f2568e7b9034e",
       "declarations": []
@@ -1527,11 +1527,11 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Agent/Conversation.hs",
-      "sourceSha256": "dcfdddfd170cdd165259b38cd32e3bb186a7694b419567c387da6670b5f964e2",
+      "sourceSha256": "7768d383a7d889eb5752c0f195bb4fd8cf835d628df9bfb365c0ec93ed2a27ab",
       "module": "Shikigami.Agent.Conversation",
-      "interfaceSha256": "8ac5ae738693ddacd0d18352a8200401e60dda69eb4f0f768506f43def67149e",
+      "interfaceSha256": "d7080ce7a9e559e15ee3858cab4b6c09c9e79a781e195e62815c76daca7944dc",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Agent/Conversation.hi",
-      "compiledSourceMd5": "dab81c24f8f2c63a223d256dc1957888",
+      "compiledSourceMd5": "35677c4200eb1bb05ca1adba1f6e8428",
       "declarations": [
         {
           "name": "AssistantTurnAndReply",
@@ -2847,11 +2847,11 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Agent/Workflow.hs",
-      "sourceSha256": "5387ab712bd9b39c1552a2ee81bc7f2556688f44f6bc935c235612f6b8520d25",
+      "sourceSha256": "17a67b7fd580204ba6a911055bd64ec818df62fd1d4bf54d02f3d37e0110aaea",
       "module": "Shikigami.Agent.Workflow",
-      "interfaceSha256": "eb2e7ed08ba397307a0ecfcdbe0b1d68ac96351d17f125e88e715985c445e318",
+      "interfaceSha256": "44882335289d5f96a86d8ef4f421fa09874c8854e8b8931c485b1d7a8719232f",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Agent/Workflow.hi",
-      "compiledSourceMd5": "f4bab9fa40c6da84701ff3daa2c4296f",
+      "compiledSourceMd5": "76c4f7b866c483553a147eb261c81847",
       "declarations": [
         {
           "name": "AgentRunDeps",
@@ -3152,7 +3152,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/AgentRun/Status.hs",
       "sourceSha256": "f517db4af772dde92ef084642cf4f28ca3fecccf5fc41af21a05f23f45014947",
       "module": "Shikigami.AgentRun.Status",
-      "interfaceSha256": "95af02324908279dde31bf237ec92be2bed1c8ab0fdcb3bf4c5af474fb61f596",
+      "interfaceSha256": "bcb8e6a38753df3f9ad32623d7a66fd27434ed1d8f0438aedd14d7037474e4c4",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/AgentRun/Status.hi",
       "compiledSourceMd5": "280ed1c3d51841ac55ef4a27af375cf8",
       "declarations": [
@@ -3323,7 +3323,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/App/Config.hs",
       "sourceSha256": "8c159d3ca9a64cafeaf9e037c0ab6451f3549a92e3b40bce81b3b8ec5136fa6a",
       "module": "Shikigami.App.Config",
-      "interfaceSha256": "1df35cad72cbacbb8ca742cbfc1a0891847d36899d1329121e5bc56871ef626c",
+      "interfaceSha256": "177b9e7dc12f1aaf0c14ff2d572a4b37d65a30291046f81b4494483006d7016c",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/App/Config.hi",
       "compiledSourceMd5": "6a6d538eba2151472b6d698a1e0cf2b4",
       "declarations": [
@@ -3709,7 +3709,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/App/Config/Load.hs",
       "sourceSha256": "1b2ffceef917c24cda13565cd27e0df4af9284e7df52b660886d475ccd1aa8e1",
       "module": "Shikigami.App.Config.Load",
-      "interfaceSha256": "2fd48edfe9fb19a73a5225249eb9e6733ea1d733bfa8beea74963979b14a6169",
+      "interfaceSha256": "6cbad586f8069efc9f8d1d4d49e370741430896013197106856af159fc43d50e",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/App/Config/Load.hi",
       "compiledSourceMd5": "6888351c4222d931bed6bbf319269200",
       "declarations": [
@@ -3767,7 +3767,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/App/Role.hs",
       "sourceSha256": "310f4238bb41a8e92ee472c6968d96d62e1a8b100dc048393d088b314d8edd6c",
       "module": "Shikigami.App.Role",
-      "interfaceSha256": "beb9306e89bf0e40c8cb3d9dfaaae324a184d8512fb3f5c372fb52a38a5d30e8",
+      "interfaceSha256": "807534f3a6f6af37c3bbd6b266b922ba78f5487aa84ead5417da34366af2ad1b",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/App/Role.hi",
       "compiledSourceMd5": "1b1bab078b098dce39c8b715aa2ab4c6",
       "declarations": [
@@ -3797,7 +3797,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/App/Version.hs",
       "sourceSha256": "91b1129e8299d3764bb38ab815c1ad142989f6431e2d4e57477f29aa0d865f2e",
       "module": "Shikigami.App.Version",
-      "interfaceSha256": "cd6e46cdbd07b33bc2c4d82e930608c0d1586e98ece33c9aa0e45d34605888e8",
+      "interfaceSha256": "dd68706de342ce464cbaaf7714bd5209cc70c52a613d734df53a31e8a84e2606",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/App/Version.hi",
       "compiledSourceMd5": "dd6597b4a2c65f6573c7e20ea295b010",
       "declarations": []
@@ -4565,7 +4565,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Attestation/EvidenceStore.hs",
       "sourceSha256": "e774022a1d1c1f87a5ac8a2997557de676af2c1133fad25f2a3da459b72fed79",
       "module": "Shikigami.Attestation.EvidenceStore",
-      "interfaceSha256": "9303a449e5b6748223fd21216331251ca44a97bc3a94737cc4516efffbe03da3",
+      "interfaceSha256": "24b6c629b375dd1f032c51b7a6666c51ba12e6b7eb2596e8dcb71286c0374042",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Attestation/EvidenceStore.hi",
       "compiledSourceMd5": "5464d0900381838a7394b1f00440d868",
       "declarations": [
@@ -5051,12 +5051,44 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
-      "sourceSha256": "80d8001815d4a7e07d9bb19ebb69dda35b956d620175a6961a02ee7d9a9b0346",
+      "sourceSha256": "2edf10f44689eacc4b57e767af9f8c4dcf807d89ab07319c39ca20ab6a0081a9",
       "module": "Shikigami.Attestation.Resolve",
-      "interfaceSha256": "0d60dad0204825d5d7dd3967c932487a9614f71340641709ba789345477547f6",
+      "interfaceSha256": "c286efeb5ce4a50ba8d2dab0e4af33b82a44c90f5cf233d4853c6fa055dc24f5",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Attestation/Resolve.hi",
-      "compiledSourceMd5": "710080ce3a0994040827e83a955cef2b",
+      "compiledSourceMd5": "203541a6842b4ccc081d5215588d5294",
       "declarations": [
+        {
+          "name": "ProfileMetadataRefusal",
+          "kind": "data",
+          "declaration": "data ProfileMetadataRefusal\n    = ProfileMetadataUnreadable !Shikigami.Attestation.Profile.ProfileId\n                                !(GHC.Internal.Maybe.Maybe\n                                    Shikigami.Attestation.Profile.ProfileVersion)",
+          "members": [
+            {
+              "member": "ProfileMetadataUnreadable.#1",
+              "type": "!ProfileId"
+            },
+            {
+              "member": "ProfileMetadataUnreadable.#2",
+              "type": "!(Maybe ProfileVersion)"
+            }
+          ],
+          "sourceDeclaration": "data ProfileMetadataRefusal = ProfileMetadataUnreadable !ProfileId !(Maybe ProfileVersion)\n  deriving stock (Eq, Show)"
+        },
+        {
+          "name": "ProfileReadFailure",
+          "kind": "data",
+          "declaration": "data ProfileReadFailure\n    = ProfileReadMetadata !ProfileMetadataRefusal\n    | ProfileReadPolicy !ProfileResolutionError",
+          "members": [
+            {
+              "member": "ProfileReadMetadata.#1",
+              "type": "!ProfileMetadataRefusal"
+            },
+            {
+              "member": "ProfileReadPolicy.#1",
+              "type": "!ProfileResolutionError"
+            }
+          ],
+          "sourceDeclaration": "data ProfileReadFailure\n  = ProfileReadMetadata !ProfileMetadataRefusal\n  | ProfileReadPolicy !ProfileResolutionError"
+        },
         {
           "name": "ProfileResolutionError",
           "kind": "data",
@@ -5124,30 +5156,42 @@
         {
           "name": "ProfileStore",
           "kind": "newtype",
-          "declaration": "newtype ProfileStore\n    = ProfileStore {findProfiles :: Shikigami.Attestation.Profile.ProfileId\n                                    -> GHC.Internal.Maybe.Maybe\n                                         Shikigami.Attestation.Profile.ProfileVersion\n                                    -> GHC.Types.IO [ResolvedProfile]}",
+          "declaration": "newtype ProfileStore\n    = ProfileStore {findProfiles :: Shikigami.Attestation.Profile.ProfileId\n                                    -> GHC.Internal.Maybe.Maybe\n                                         Shikigami.Attestation.Profile.ProfileVersion\n                                    -> GHC.Types.IO\n                                         (GHC.Internal.Data.Either.Either\n                                            ProfileResolutionError [ResolvedProfile])}",
           "members": [
             {
               "member": "ProfileStore.findProfiles",
-              "type": "ProfileId -> Maybe ProfileVersion -> IO [ResolvedProfile]"
+              "type": "ProfileId -> Maybe ProfileVersion -> IO (Either ProfileResolutionError [ResolvedProfile])"
             }
           ],
-          "sourceDeclaration": "newtype ProfileStore = ProfileStore\n  { findProfiles :: ProfileId -> Maybe ProfileVersion -> IO [ResolvedProfile]\n  }"
+          "sourceDeclaration": "newtype ProfileStore = ProfileStore\n  { findProfiles :: ProfileId -> Maybe ProfileVersion -> IO (Either ProfileResolutionError [ResolvedProfile])\n  }"
         },
         {
           "name": "ResolvedProfile",
-          "kind": "data",
-          "declaration": "data ResolvedProfile\n    = ResolvedProfile {profile :: !Shikigami.Attestation.Profile.SanctionedExecutionProfile,\n                       ref :: !Shikigami.Attestation.Profile.SanctionedExecutionProfileRef}",
+          "kind": "newtype",
+          "declaration": "newtype ResolvedProfile = ResolvedProfile ResolvedProfileView",
           "members": [
             {
-              "member": "ResolvedProfile.profile",
+              "member": "ResolvedProfile.#1",
+              "type": "ResolvedProfileView"
+            }
+          ],
+          "sourceDeclaration": "newtype ResolvedProfile = ResolvedProfile ResolvedProfileView\n  deriving stock (Eq, Show)"
+        },
+        {
+          "name": "ResolvedProfileView",
+          "kind": "data",
+          "declaration": "data ResolvedProfileView\n    = ResolvedProfileView {profile :: !Shikigami.Attestation.Profile.SanctionedExecutionProfile,\n                           ref :: !Shikigami.Attestation.Profile.SanctionedExecutionProfileRef}",
+          "members": [
+            {
+              "member": "ResolvedProfileView.profile",
               "type": "!SanctionedExecutionProfile"
             },
             {
-              "member": "ResolvedProfile.ref",
+              "member": "ResolvedProfileView.ref",
               "type": "!SanctionedExecutionProfileRef"
             }
           ],
-          "sourceDeclaration": "data ResolvedProfile = ResolvedProfile\n  { profile :: !SanctionedExecutionProfile,\n    ref :: !SanctionedExecutionProfileRef\n  }\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
+          "sourceDeclaration": "data ResolvedProfileView = ResolvedProfileView\n  { profile :: !SanctionedExecutionProfile,\n    ref :: !SanctionedExecutionProfileRef\n  }\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
         }
       ]
     },
@@ -5567,18 +5611,18 @@
       "sourcePath": "shikigami-core/src/Shikigami/Behavior/Provider.hs",
       "sourceSha256": "4a92aae0c5956c65b7e4560699d94ef2b76e980c4f8ce32462807b0d5f3276fd",
       "module": "Shikigami.Behavior.Provider",
-      "interfaceSha256": "9702df5da4b2cae2d660cee0967bd5b10a13b3e9466281a0d398333200435d40",
+      "interfaceSha256": "d6039cd3401c37dc349f7025eb6bfdd31801983a904722afc737d067539296f5",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Behavior/Provider.hi",
       "compiledSourceMd5": "d9a651d893059429247f5fadbde60a96",
       "declarations": []
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Behavior/Provider/Call.hs",
-      "sourceSha256": "10f7026e44016e75a6beea90446d2634a934007d5ec03858812334d3fb95a752",
+      "sourceSha256": "a4f9d7e9c67df6bafd0e13f475b634c4930a9d3ce718ed14da92bb0c626a0de1",
       "module": "Shikigami.Behavior.Provider.Call",
-      "interfaceSha256": "234617564d4ff3ea6db9fbf74163085a00040014067a7dbdafeb103da2153d41",
+      "interfaceSha256": "dd563caef15382cfa84922d4f7a67735fb494731fce3b633c010585a8a6ff31d",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Behavior/Provider/Call.hi",
-      "compiledSourceMd5": "93b05a41ae8b3a67a44bf2371f4aabaa",
+      "compiledSourceMd5": "5702b2c81fbe5a2b8831a46de77219e4",
       "declarations": [
         {
           "name": "ProfileViolation",
@@ -5785,7 +5829,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Capability/Catalog.hs",
       "sourceSha256": "63327468899f75657d63ac076e07c06a5f28e0e6c3304b3a8dc27a11e51f7f68",
       "module": "Shikigami.Capability.Catalog",
-      "interfaceSha256": "42bbc26f03b6f75a7689ca957f89cd72eabcefaa2877c0311365b9c563679494",
+      "interfaceSha256": "30912846b730d0df4f437c0de2c83dc56f21f643458925456616e5d114e9ad70",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Capability/Catalog.hi",
       "compiledSourceMd5": "2f6dc8f965fba2410bec172d2451d4a9",
       "declarations": [
@@ -6026,7 +6070,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Capability/Provider.hs",
       "sourceSha256": "da86cab4cc90d7231dc5038919328a4a902467374f44e61491960392fc3d7111",
       "module": "Shikigami.Capability.Provider",
-      "interfaceSha256": "021a7e67a8226c026d27d14b0825f99ff6ab4ad0e4e8c9af1b1966b5f6cd0be5",
+      "interfaceSha256": "ddd847ce05a52b62d5fbb01388cadedaa42fd45e6e6b0ddf4285bcc8b37d19a9",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Capability/Provider.hi",
       "compiledSourceMd5": "ccfe855ad452eb0c500a600fd462a843",
       "declarations": [
@@ -6767,11 +6811,11 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Decision/Evidence.hs",
-      "sourceSha256": "f633d5fb47c918c4d8dbe9737d19f01d509aab81ad8aa1d2f8bb51e0d71afb2a",
+      "sourceSha256": "eb18828e1157e396e1385284b79a358639c0572d486ead10e2f66074ffab8472",
       "module": "Shikigami.Decision.Evidence",
-      "interfaceSha256": "5f81ae64e48406c7b148622fab5e7f2b02a30d5a4df929d4e8e84841b57b935a",
+      "interfaceSha256": "0bf1d8d0c92f78e62222052c2df72bdaa53a4011443f1fe83cdec98f6420e665",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Decision/Evidence.hi",
-      "compiledSourceMd5": "0d986624cb0383c3f11254371bd70abb",
+      "compiledSourceMd5": "f8fe13aaf8cf67f64199afadfdc7f5dd",
       "declarations": [
         {
           "name": "DecisionEvidenceReport",
@@ -7007,11 +7051,11 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Decision/ModelCatalog.hs",
-      "sourceSha256": "5f819b614d159f5407cd4d39c6dd42ea481ea7e86229f6c468c91989a9ab2e4c",
+      "sourceSha256": "06b1d88e822214054b86c16f46d5833d2db892515d00ee65ede91f0fb14d0baa",
       "module": "Shikigami.Decision.ModelCatalog",
-      "interfaceSha256": "368ed2e4d295b1a236c3f380cb23018ee459de901e5437778ce990414b44cfee",
+      "interfaceSha256": "eaf7e12065207d1857da711e9e5d2c59e57551d9a1468bfda97d64f1b3ba3915",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Decision/ModelCatalog.hi",
-      "compiledSourceMd5": "b7b61b79d9ca0323c32c6fb6d4be29c0",
+      "compiledSourceMd5": "3cd729650f34519b62ad282bda3b6d46",
       "declarations": [
         {
           "name": "ModelBinding",
@@ -7129,7 +7173,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Diagrams.hs",
       "sourceSha256": "9a3ae70b739d295873508525d4a7f4a7c1f5c53efa3c2689d710a1bc5710c4df",
       "module": "Shikigami.Diagrams",
-      "interfaceSha256": "3c70e4fd4c5d443bbe355dfa9c617f93bcdc8843724b6039a47d094a179dc4fd",
+      "interfaceSha256": "50b15280de3889c776b0a6bab531a5b856b212fc032f000ff9c62105627d509e",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Diagrams.hi",
       "compiledSourceMd5": "7c9a0d56efe5546bbf7371739eed38c1",
       "declarations": []
@@ -7476,7 +7520,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Execution/Attempt.hs",
       "sourceSha256": "ed0bae3e8e28b737b317d2622a4b3b8e337abcefbe4f5dc330de2aaee7137e12",
       "module": "Shikigami.Execution.Attempt",
-      "interfaceSha256": "163c9ddf422c55362601272306ddc82361ffd8fa5bee2274d28b5167644d0961",
+      "interfaceSha256": "33b6e3807ff811194f0745db69a7c3b7a3520e5dd28920d0b90c2846fce01b06",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/Attempt.hi",
       "compiledSourceMd5": "6067302c0664e4ba2f01e00ca31a69d1",
       "declarations": [
@@ -7685,7 +7729,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Execution/Bindings.hs",
       "sourceSha256": "06f5c4cdc6ec788eca880e60c36c29dd327fdcade418ae6ac9ed52b06d2bd33f",
       "module": "Shikigami.Execution.Bindings",
-      "interfaceSha256": "1d7cb644baae8c646768eda04770e357caa4d779832043e738165203814cf011",
+      "interfaceSha256": "8ab9158bc67686f69c8946003ce14217a7cc8bd0e668594a90c1a2da9c2bb9d7",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/Bindings.hi",
       "compiledSourceMd5": "64dbe9e873aaad9f87d0112b809f1da9",
       "declarations": []
@@ -7694,7 +7738,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Execution/Catalog.hs",
       "sourceSha256": "21d6db1c5945b2384385ab18481857cb850440de5537066625547ce689be108e",
       "module": "Shikigami.Execution.Catalog",
-      "interfaceSha256": "60c8a8760b66a5b95e2d6352f220de2f27e012af92421011642ef548f25fa78b",
+      "interfaceSha256": "88b93c9fcb220f9e86e1c65d560b63669175cccf371fc750a0a724089ea95b21",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/Catalog.hi",
       "compiledSourceMd5": "34e373895729d2dc03d4c86622f00c01",
       "declarations": []
@@ -7771,7 +7815,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Execution/Driver.hs",
       "sourceSha256": "b8353f64514c8769953680c49292d3e9bb54fad6fc238a587041294b44328344",
       "module": "Shikigami.Execution.Driver",
-      "interfaceSha256": "6449a9a168bbf68350eafa8edb706810032183697b69097e6ed82e1808c60497",
+      "interfaceSha256": "5655e38542fa201648d3b9b96884a8bca2d20c3afd7ff3730ddc9bfdf416f12b",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/Driver.hi",
       "compiledSourceMd5": "ff3f4ac1e7335ab3fab043df20453713",
       "declarations": [
@@ -7864,7 +7908,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Execution/Ephemeral.hs",
       "sourceSha256": "57706ccd4c19bde5e480f04f183f0ff7525d4fa47514d2e73c603de55fc0b6f9",
       "module": "Shikigami.Execution.Ephemeral",
-      "interfaceSha256": "7559f2cca1a97410d98a0dbabcf43787f1f4cd18ba7b504ee4237a5cc0340fbe",
+      "interfaceSha256": "d28e99266732a2eb0e79f6c45b668c2d6214cd94b0171d34969b6657d140041b",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/Ephemeral.hi",
       "compiledSourceMd5": "41cb1aada4c285909d930eeea788983d",
       "declarations": [
@@ -7910,7 +7954,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Execution/Executor.hs",
       "sourceSha256": "dfa63855fc98db8abdfaae6959916306926d9e571ae904c12c68a8800c7b8c7c",
       "module": "Shikigami.Execution.Executor",
-      "interfaceSha256": "77d16c039ffa12009e70334eb8c5e91187c461d27f13419b717d2d23a683b9e9",
+      "interfaceSha256": "05ed6028286e0b414f348e030261447f2f9627c33f052a4a5cbc776a18664132",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/Executor.hi",
       "compiledSourceMd5": "75daa69e85cd596527b8a3735466cf10",
       "declarations": [
@@ -7980,7 +8024,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Execution/Foreground.hs",
       "sourceSha256": "5bc2cd20f27960b048e38d85a40da83d82206287c8e8b7f06598680ce0556da0",
       "module": "Shikigami.Execution.Foreground",
-      "interfaceSha256": "0f104d9e623783f967540830c94f00ea4979a978117c48502f358ebb29bb77bd",
+      "interfaceSha256": "0be031040294dd943e681da16d9953d3ed32e8008b706563f1c7987ea4348126",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/Foreground.hi",
       "compiledSourceMd5": "ad6cbc152d9bad1d5bd04ac1aaa05122",
       "declarations": []
@@ -8110,7 +8154,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Execution/Policy.hs",
       "sourceSha256": "e5affa9e18c02005a758caa90bf921587734e66d15d3c1e5066b7ba711dcb102",
       "module": "Shikigami.Execution.Policy",
-      "interfaceSha256": "9aa176eb6e2a3d546d5704426aed5c566dd58d7ff08e6132cfd87efdadda0228",
+      "interfaceSha256": "2c3d59d4034da1e2fd032448c0049979566011a930687dd1a297887ca3587d83",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/Policy.hi",
       "compiledSourceMd5": "f7c418ea788c31e4ec9424d6a1a4297e",
       "declarations": [
@@ -8895,7 +8939,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Execution/Runner.hs",
       "sourceSha256": "f0966cb91e50bd35f5cf498dced1b2ba5c4931662d15e6166bef79222ab42a25",
       "module": "Shikigami.Execution.Runner",
-      "interfaceSha256": "923bc7e8e32ae48f9aabb1376697e9b46717de0632da1df99104d3cdf58ac70d",
+      "interfaceSha256": "aa9bcd7da62a1f2f03b2756bdaad128ac1e852cbd5b3f1f6329b502ea42c9574",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/Runner.hi",
       "compiledSourceMd5": "78f641e2b64bf8050267bf8f44769a89",
       "declarations": [
@@ -8987,11 +9031,11 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Execution/Selection.hs",
-      "sourceSha256": "73fd9c9a4060d303f30643df2911ec6c74a5fa02915b0e890abc41c0fe0ba768",
+      "sourceSha256": "93ee3e9e2d3f60c58418f3a1f609969ce1d90341d52e56a428a0579abf34eaae",
       "module": "Shikigami.Execution.Selection",
-      "interfaceSha256": "ed4b50a31dfc4656c8337617c1b79f676dde7dd887e5fcfb3d348bdf3e258668",
+      "interfaceSha256": "e0758e59b3e927724ac961758ba5d20fdc0aa794a92634cf37e77184f91a091a",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/Selection.hi",
-      "compiledSourceMd5": "99c60c419bc99cdd660f1e69a805a9f5",
+      "compiledSourceMd5": "6bccf1f1ad2a46f73b9fe7e96f034bfe",
       "declarations": [
         {
           "name": "ExecutionSelection",
@@ -9051,11 +9095,11 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Execution/SelectionRuntime.hs",
-      "sourceSha256": "e4d32c02c0aca9ab8846a364b3ed364a39e51ff3c1211faa2ce94d99065336bb",
+      "sourceSha256": "49e284cc70d4cc733a2868c9e2e015fe00372dca2160e2224a0b9e1ec5f505a6",
       "module": "Shikigami.Execution.SelectionRuntime",
-      "interfaceSha256": "ed54e28435665546e34f664e8727800ea4fbc82622aec5aaa7f9dfa77f89aada",
+      "interfaceSha256": "df1763bc2436d9859da73a656745eeb5e455b5098b3b6288dd4adeee5f3ac5f1",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/SelectionRuntime.hi",
-      "compiledSourceMd5": "5c526204e667dbba172c18fe1c06322f",
+      "compiledSourceMd5": "92dcc29c037b91a5e4724ded18cbbab8",
       "declarations": [
         {
           "name": "PreparedSelectionCall",
@@ -9113,11 +9157,11 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Execution/SelectionStore.hs",
-      "sourceSha256": "9cfa8182a62a2dd48e406cd92fa0299e769e2ad1de65eeb157b258dae346ed15",
+      "sourceSha256": "0299e10cb4e4d31aef1397c1f00d9b2d62f0fe094f34d8dc77c48dd611369bb2",
       "module": "Shikigami.Execution.SelectionStore",
-      "interfaceSha256": "ae596794b0f70d5bd72bc69e960076c482b134a774c0205b9870f7629b12f4ac",
+      "interfaceSha256": "b9442b32a3d57ac02e62e46dea96af04d732eead719d929ba4921ea30ae508bb",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/SelectionStore.hi",
-      "compiledSourceMd5": "ef500319a3e4317406700aeded4efaaf",
+      "compiledSourceMd5": "59fd065ec4ca5c6488df1647cf7ad1bc",
       "declarations": [
         {
           "name": "Assignment",
@@ -9300,7 +9344,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Execution/Start.hs",
       "sourceSha256": "038b158f81dfd076c1f75b87d3bf1e9d4d2c1a4b9850fe8ef6a628f11b8a77b5",
       "module": "Shikigami.Execution.Start",
-      "interfaceSha256": "60d652c67e6b0cb30b486ede9a96f34fceecbc269526d32058a0b77a3272c10a",
+      "interfaceSha256": "34a9997c15f29b9cdf524c75646b3f74ffd654bd94458aa06b30c89818aaed3b",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/Start.hi",
       "compiledSourceMd5": "4ac2a8613e730367ba330b88ba68b8e6",
       "declarations": [
@@ -9374,7 +9418,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Execution/Store.hs",
       "sourceSha256": "f65f59c631bd84ac6e5a8a2bef344f2adc5f76894bb4d92a36a54b36d9a07b3d",
       "module": "Shikigami.Execution.Store",
-      "interfaceSha256": "3eb80208b8802c819a8734325acfcc70dbe085a5761386f1cb8a8f427e08475b",
+      "interfaceSha256": "64eaf789b3e3016b032a4221eef08d3d7bf592a746d2dc2995a808c6ff57a635",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/Store.hi",
       "compiledSourceMd5": "d50c6c4bddc32ec311d31caaea48e97a",
       "declarations": [
@@ -9501,7 +9545,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Execution/Timer.hs",
       "sourceSha256": "bdf8cc60ebd2628c77c9c6b350ee57dc25cb05bcb0708bac5db7fedab1dcebde",
       "module": "Shikigami.Execution.Timer",
-      "interfaceSha256": "b74dbff46ad3841bb1be0b2624c8aec7654822aed03a3cf93cbf9711866b8d80",
+      "interfaceSha256": "82f32b11064a39786e242f918fa3438b7dd45164c1dd37f92ec4d85dfd9eea46",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/Timer.hi",
       "compiledSourceMd5": "70db19a268d997d53b95ab21ef89506f",
       "declarations": [
@@ -9561,7 +9605,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Execution/Tools.hs",
       "sourceSha256": "7b767bb432956bd2ff66a651c3e74d777458a8bc229fdc8b471eae6f4995afc5",
       "module": "Shikigami.Execution.Tools",
-      "interfaceSha256": "d2ba8aaf3edecad5ab2510fc1bf66efaccec0d98fb36dd6ff35cecbe4b7badc4",
+      "interfaceSha256": "c2a269e2bd168efb18cbe72968a8e92ca6a2fec31260b4022712d4689838fd55",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/Tools.hi",
       "compiledSourceMd5": "60cc084d0076277eba1b9f45c9b1ac76",
       "declarations": [
@@ -9601,11 +9645,11 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Execution/Transcript.hs",
-      "sourceSha256": "c357697b08da8f9ba8f923d2b675938bef697589e79267f884b22d075547d2a0",
+      "sourceSha256": "0e9cff87fbb5cd26d8ab73d001de4ddc31727baf95151365ff1eff251cdd66f5",
       "module": "Shikigami.Execution.Transcript",
-      "interfaceSha256": "f826ce2ea8a2014f2bcf8ab05aef106b9d2f7a1c720e448691fa9a20a9480f6d",
+      "interfaceSha256": "4200f365f9a0f59aa51e93a6bca70fad5ecab0626967279099ac303a89c95da3",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/Transcript.hi",
-      "compiledSourceMd5": "d834d75d3766075fbdcb34bd062c1314",
+      "compiledSourceMd5": "4f683accc9c10e4142901a083f5cf359",
       "declarations": [
         {
           "name": "ExecutionError",
@@ -10284,7 +10328,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/ExecutionLifecycle/BehaviorHoles.hs",
       "sourceSha256": "583a54b3e12a85d340da3f5fa8b787de5d7d2fb059e1dd976ae17bbe7f864443",
       "module": "Shikigami.ExecutionLifecycle.BehaviorHoles",
-      "interfaceSha256": "5ccc317090bf87e202429de4430faf48600f539e5585a4522233eaa1b7805e7c",
+      "interfaceSha256": "d1f56134fd516e8c1543885d69adeca25120df278de74a0dcf3d751a2df99e4b",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/ExecutionLifecycle/BehaviorHoles.hi",
       "compiledSourceMd5": "fd3668a3f97ca500a68e590cb0af8451",
       "declarations": []
@@ -10293,7 +10337,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/ExecutionLifecycle/Conformance.hs",
       "sourceSha256": "37b4d31e223ccea0c6a9b607a7f1849c2e884f44258cd8a2a073bf25d1cc5bff",
       "module": "Shikigami.ExecutionLifecycle.Conformance",
-      "interfaceSha256": "cc59cd49e832904c9c98905647759bf1f096ec508e735906bcdbe55d3035d52b",
+      "interfaceSha256": "b9d0682a41cd1cc1c555a4e4bfebb5a36ee00a39c29ccff0f3104e79fb7991bc",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/ExecutionLifecycle/Conformance.hi",
       "compiledSourceMd5": "dff08ae30fd25a80921445fddc4b3e4e",
       "declarations": []
@@ -10326,7 +10370,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Flow.hs",
       "sourceSha256": "0c6049ce25d5a8f556e0473cfb1aabe6e5714e1ad0d2dbd3284605d42969e37a",
       "module": "Shikigami.Flow",
-      "interfaceSha256": "9f12ab1a0f7a6f2f2652d930a1060f7b932e7e5704453f9d4fa9e7d4719a5b7f",
+      "interfaceSha256": "4e428363872f326581d61bbf2fbc98be8cd41d8b420655e4c1719971afd69c7d",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Flow.hi",
       "compiledSourceMd5": "ab6e623a09078d09ead4b42909311c83",
       "declarations": [
@@ -10457,7 +10501,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Flow/AtRiskCustomer.hs",
       "sourceSha256": "1eba6caf28fd231256bfa95a5899df64d6c06ed544086a5b8cfc58f240fd72bb",
       "module": "Shikigami.Flow.AtRiskCustomer",
-      "interfaceSha256": "bc3c013fc2566d4eab1bf07c9d18ddf4fbc13e9f5aa77cdf351718ab317d5c85",
+      "interfaceSha256": "8b42300d3c3de6bbe4f3d09130a19f64a9b2eb0183a1acaf1d6c82c4b3f901d9",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Flow/AtRiskCustomer.hi",
       "compiledSourceMd5": "64af055f4216236ac713596cc25a7a1d",
       "declarations": [
@@ -10487,7 +10531,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Flow/Capability.hs",
       "sourceSha256": "543ddd1d0eaeac842040aa7bbfa6201db51d260634cfc6fdda59df92905ad8b3",
       "module": "Shikigami.Flow.Capability",
-      "interfaceSha256": "504a15098863e1fdba2975fdc6c1853262bb76e821e74d4a30efbd8bd62a262e",
+      "interfaceSha256": "6e94a97fcab4f8450dac4a5ce587aff2287ac3f9912a191e8478a580b6fbc9e3",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Flow/Capability.hi",
       "compiledSourceMd5": "b45d6e9c57334b2db0e3c73b8bf9ba64",
       "declarations": [
@@ -10660,7 +10704,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Flow/Decision.hs",
       "sourceSha256": "971a90f1f25acde1d61c8bdcac3b04d674d980741bb188ebb52d6681e73dd91b",
       "module": "Shikigami.Flow.Decision",
-      "interfaceSha256": "1b070da0166554bdce13aceba0899edfeabdee6445ed093fd1f2f581871506bd",
+      "interfaceSha256": "36635b95f5cd7cdcb4c06c36688217d0db99a3ef0e52353cf92c1d3f3303fe05",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Flow/Decision.hi",
       "compiledSourceMd5": "0d62ff927251783ea2426e358e184ddd",
       "declarations": [
@@ -10902,7 +10946,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Flow/OpenTelemetryPracticeReview.hs",
       "sourceSha256": "5670209f3d699619791a06d22e534159845efadba8a07fef4d22835e4792bd81",
       "module": "Shikigami.Flow.OpenTelemetryPracticeReview",
-      "interfaceSha256": "84390d50627aacc50cf61391e5f1f7f524ee69b9b36c049cd5c82ed56a7321e1",
+      "interfaceSha256": "9f6a4f8ea4419189e68864e2b059ca45219b63cd3352c93f28ddf20e394febc0",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Flow/OpenTelemetryPracticeReview.hi",
       "compiledSourceMd5": "1cb5d6fca8a5263669378aa7eed4da09",
       "declarations": [
@@ -11053,7 +11097,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Flow/ShikumiDecisionExample.hs",
       "sourceSha256": "8eb65c07a6a5f5bfcce70974c76db4c39959ad41c3448de2dac36c2be81ff8bc",
       "module": "Shikigami.Flow.ShikumiDecisionExample",
-      "interfaceSha256": "2285e9e1104a569585f344778cbadf03176cb8f4357ee76f41273a7d97a1a560",
+      "interfaceSha256": "9e1735ce6e7c55925a69c61a834adacea5f83e522a3cc5b17ee1d150237d1af9",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Flow/ShikumiDecisionExample.hi",
       "compiledSourceMd5": "c44170e4736cb111a967c203d111634d",
       "declarations": []
@@ -11062,7 +11106,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Flow/Workers.hs",
       "sourceSha256": "7fb69c961049fe790435e0ab6a2a2ae71b668dfce2cbf89bdc4fac652c37abce",
       "module": "Shikigami.Flow.Workers",
-      "interfaceSha256": "4c2fe9bb9a1ee3582d0c00c1e6d349babe0f30384eef9ae70d0916e433173183",
+      "interfaceSha256": "23e0ca63773b52a682a9fc6460de21af10aae5947e037ffc3286cf370407816d",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Flow/Workers.hi",
       "compiledSourceMd5": "d10ac21cde2ab5675b9d6ff99d467e5a",
       "declarations": [
@@ -11117,7 +11161,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Inspection/Aggregates.hs",
       "sourceSha256": "9a8578f892dfcccf5c7d4a5ef67044e79e456d3b8f7b72dd487cf16d42c7d191",
       "module": "Shikigami.Inspection.Aggregates",
-      "interfaceSha256": "fcdf71f6985d88e3cdd92234538d0fc1328673aeb9530d3b615b61eb69dd8c8f",
+      "interfaceSha256": "6da9ac16c6959f1d01f6a526fa616e961189fdfb8fc2a47134d338079c648aa5",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Inspection/Aggregates.hi",
       "compiledSourceMd5": "118ee9bdd16ba50908ac4d8d74fd42b5",
       "declarations": []
@@ -11433,7 +11477,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Objective/Acceptance.hs",
       "sourceSha256": "d459460433a3d49573165571ca1f534cc36f4ea6a9cbda5710d017f05981bfc7",
       "module": "Shikigami.Objective.Acceptance",
-      "interfaceSha256": "ef6c813a5c38e71afe78410f99ff80f93e8eba0fd3030b17fb4ecda107548d9c",
+      "interfaceSha256": "694758dc9b0562d35db9f64ce80de35f3a58f92eb916a10c3cabcbce4b7c47c9",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Objective/Acceptance.hi",
       "compiledSourceMd5": "322ad974680f38a1926a2b1b6e5a5e18",
       "declarations": []
@@ -11442,7 +11486,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Objective/Authority.hs",
       "sourceSha256": "5c0d1b8b1028e77b8280ae488f34ee352b63bab84c5aa6a09719fdf299eb856b",
       "module": "Shikigami.Objective.Authority",
-      "interfaceSha256": "1b9cf65695b3e18b226db75ad572cac073ed4e956b572e2ab040b5b6b6082576",
+      "interfaceSha256": "e96560e20d9ecb306ddae55fbd9524b396fcef3499e801c170869ad2a20b1bb2",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Objective/Authority.hi",
       "compiledSourceMd5": "4526668db7dea30c009bcb0a637d9bd5",
       "declarations": [
@@ -11480,7 +11524,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Objective/Capability.hs",
       "sourceSha256": "883afbe97d22dee22bd8f77b6b45cda40e80c1b3d81a242c0b0f8899f782af4e",
       "module": "Shikigami.Objective.Capability",
-      "interfaceSha256": "d0d4c6b67ceeea065a880f260fc1230f7b8f6af868dbf8e1c4b34c39dc9ee0f2",
+      "interfaceSha256": "5a0820305a1f95e1b474b108dd7e6882e7eca3840c082e816c35a3dccf4a8cc1",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Objective/Capability.hi",
       "compiledSourceMd5": "ffee616bf56e69f24095c05495df471f",
       "declarations": [
@@ -11522,7 +11566,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Objective/Catalog.hs",
       "sourceSha256": "b5fc8e170a2cded7e6092f02c4246c83e39c33a5287752822b4da281aa3cb173",
       "module": "Shikigami.Objective.Catalog",
-      "interfaceSha256": "98465081e08dd2e954c695373081020af86e4abcdb44bf79371be262cf25114a",
+      "interfaceSha256": "22cae97049bd9e500d718be18ebf1aabd980a8f66071bf55631e9b344f68229e",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Objective/Catalog.hi",
       "compiledSourceMd5": "ac5269294757b4b16847f034a7f586c3",
       "declarations": []
@@ -11531,7 +11575,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Objective/Command.hs",
       "sourceSha256": "f98828601bd56013d500b763a8d635560c4386b2f67de6a8f45064be75d56b5a",
       "module": "Shikigami.Objective.Command",
-      "interfaceSha256": "f344e796005ecb421723c45def934f44e3f5697fff29e0e4376974b43bad207a",
+      "interfaceSha256": "a541e507ee22db87ed7fb5824375903b46db6a24dd880e5ca936df12738ab6b8",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Objective/Command.hi",
       "compiledSourceMd5": "9c993fe594b5f29c4c5c9e19e8eb0cc2",
       "declarations": [
@@ -11862,7 +11906,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Objective/Store.hs",
       "sourceSha256": "b10db2cbcdfb1fccd35dbdb4d1afec4e1cbceaa93d3dc63b9841e63389d27a3a",
       "module": "Shikigami.Objective.Store",
-      "interfaceSha256": "cfa75120cf1d82ded4449bd20cfebd832c99b38afb08e4fbba56b72ec055a5d6",
+      "interfaceSha256": "3d3ea6cf747e717125fbd64514d654d2f9dbf9ba33e8d19aa7f68f4261e7c203",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Objective/Store.hi",
       "compiledSourceMd5": "48b1caa7b068d8203a8ad01128a0448c",
       "declarations": [
@@ -11891,7 +11935,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Objective/Types.hs",
       "sourceSha256": "1df73e4dd6a7b07c382b5d6cc4dfd1cd46538bf92b8b2bff1f2fc2d3901901d4",
       "module": "Shikigami.Objective.Types",
-      "interfaceSha256": "e78bc4c85a8efff71238b943c3e4f6e88bf52b9ce692b8b5fa66e0cc6380fb7f",
+      "interfaceSha256": "65a64b27c60e176ea44aa0cf2f0a5312f9e1735c5b4c0cd6cac7d4695bcdfa49",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Objective/Types.hi",
       "compiledSourceMd5": "650b4b885cf12281a1522b391ba0fc4b",
       "declarations": [
@@ -12535,7 +12579,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/ObjectiveLifecycle/BehaviorHoles.hs",
       "sourceSha256": "3a6eb565be28dbce5a9068940eaff9b5171190b7bcfc581d52ed9c6e6408bd6f",
       "module": "Shikigami.ObjectiveLifecycle.BehaviorHoles",
-      "interfaceSha256": "750d2de61d22c9942997f2577845432f0a31ab3a35ff4c62af2cdfd3349ab1b9",
+      "interfaceSha256": "0a5d3092a4c5d86a091faa6810cf41b0dba26d7d505128d52d0a8a964be2217e",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/ObjectiveLifecycle/BehaviorHoles.hi",
       "compiledSourceMd5": "de9c284053f8f6eefba0dd812de508ac",
       "declarations": []
@@ -12544,7 +12588,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/ObjectiveLifecycle/Conformance.hs",
       "sourceSha256": "006894da93fe6d2d1dab1d771aedd8eb46f849cefb096c26ba1a6221b9af1d30",
       "module": "Shikigami.ObjectiveLifecycle.Conformance",
-      "interfaceSha256": "4be6d60d67db30dac1e6732559658ebfc7e65ff32ecd9831e2ae4c17cebf68a8",
+      "interfaceSha256": "244f69f997162340594b98cb42b5d889ccc86cd744d8fc485d6965a8356ba9c0",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/ObjectiveLifecycle/Conformance.hi",
       "compiledSourceMd5": "26437304a2f5a62fff0867b71e9bac00",
       "declarations": []
@@ -13306,7 +13350,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/PracticeReview/Attention.hs",
       "sourceSha256": "1bcc57e682e571685fa29f9c78580517ffed484a280ef7db0a2b2b23379978b7",
       "module": "Shikigami.PracticeReview.Attention",
-      "interfaceSha256": "ba8609686ef7cbba033bdfddb7745a21f0a50a8726827d571f70b5317dff67b7",
+      "interfaceSha256": "db6ed519b64c150630ddd851d951674e5dbb662a22164b8615f63051c52a2bf6",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/PracticeReview/Attention.hi",
       "compiledSourceMd5": "19a756e853cbc690af706177922b10b2",
       "declarations": [
@@ -15090,11 +15134,11 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Program/DecisionRunner.hs",
-      "sourceSha256": "c9dc70e99d1c7e2cbf9882c0e3cd51b91c49251f4cb54965032a9a77b017ca96",
+      "sourceSha256": "5afe206ed4baaeb1f015ec4c505cc806d76088066fedc078c3c2198a100d1278",
       "module": "Shikigami.Program.DecisionRunner",
-      "interfaceSha256": "92af12c810188fe4179acfa2cbd1a8b454f5cc1af5c26220e13fb62aaf21f784",
+      "interfaceSha256": "cf390558d40ae6956d0594b3c25cdba10ed605e4bd5a52a53a6b769a22fc6ecc",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Program/DecisionRunner.hi",
-      "compiledSourceMd5": "18a6a69e4d87724dadf2ce329e784cb4",
+      "compiledSourceMd5": "fdefe126f408c5da9c7d2eed7430af5e",
       "declarations": [
         {
           "name": "DecisionAbort",
@@ -15163,7 +15207,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/ProjectionCatalog/ProjectionCatalogHoles.hs",
       "sourceSha256": "b2d9b772b0759e2316feb7456bc607f43540cc48c5d8c36f06f24b08429ea440",
       "module": "Shikigami.ProjectionCatalog.ProjectionCatalogHoles",
-      "interfaceSha256": "7b8388e2c16b543b82c7f83eac79ce6ed0e7acd928b34d762b81283067aac6a0",
+      "interfaceSha256": "771b1dee037c336f784e8b422584bce32b03672b9072205def2ffae4e574f866",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/ProjectionCatalog/ProjectionCatalogHoles.hi",
       "compiledSourceMd5": "476673203e7ae5a5b29b505d5d12e69e",
       "declarations": []
@@ -15598,7 +15642,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/RunEvidence/Catalog.hs",
       "sourceSha256": "3478ecd830591040b91127fd73f016a36319ba221fc247f871d8079f669a76f6",
       "module": "Shikigami.RunEvidence.Catalog",
-      "interfaceSha256": "fcf30c30dc2bb55e1224d25dcf08a747214a78165663a0b7b9f14a73ec96e468",
+      "interfaceSha256": "cc569ce59034551b4c255f6cd7307976a156cc9ecffb3dbe29abdcd896fc5e40",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/RunEvidence/Catalog.hi",
       "compiledSourceMd5": "696b970290d99616f2c5f8c7aefe25c5",
       "declarations": []
@@ -15799,7 +15843,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Runtime.hs",
       "sourceSha256": "d24bd7631c61f0be0b12a9df527dd4552b86c3e3c28bd8d7a0f932624832995e",
       "module": "Shikigami.Runtime",
-      "interfaceSha256": "7f6b7339e3ed522087216457794d958cda84f2a771e9171301b5537ebc996343",
+      "interfaceSha256": "415c265a83f42b837ab2285c63cbdeb04a1f63e2c37de2d0c3b53e97d8832f20",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Runtime.hi",
       "compiledSourceMd5": "588251a9a372ee04b1c46bf57050bcaf",
       "declarations": []
@@ -15808,7 +15852,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Sink.hs",
       "sourceSha256": "255298cdac8b643c1678c099af4e3db117f8cacfe53ab4c1d9c2cb17edb000bc",
       "module": "Shikigami.Sink",
-      "interfaceSha256": "b0aeb194605316354f24c4c408062b0ba04c304cfc2ec54d47aacb167c58e874",
+      "interfaceSha256": "b947257487fce931ea2a77b81474c32ed512df7a5a01131bb310790dfae93902",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Sink.hi",
       "compiledSourceMd5": "3a88fd8e5e4930d8f7270155f72aba67",
       "declarations": []
@@ -15817,7 +15861,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Sink/Auth.hs",
       "sourceSha256": "5fc2ccfd99cf3a2ee0ad138402e4328ff9ec8352233cd2afb27d4960440addbe",
       "module": "Shikigami.Sink.Auth",
-      "interfaceSha256": "cd6d428d20f9eead2f3b9032956b1d4c424e6c118dfdd42cfdf1ab084a2bd577",
+      "interfaceSha256": "6af9f569c46985c1f6d19354f782d8367841d24852319e7aa44995ed0c1cbe59",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Sink/Auth.hi",
       "compiledSourceMd5": "96af5a096558d5b66f8a88de8fee7d47",
       "declarations": [
@@ -15862,7 +15906,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Sink/Auth/Internal.hs",
       "sourceSha256": "97f0f63309245539e206cfb002023862903508ab6815aa784e9a71018a510a44",
       "module": "Shikigami.Sink.Auth.Internal",
-      "interfaceSha256": "3bbb8be93663c824f063e76f1e3dbd2f4e02c7b55db861eca144cf505b7c2968",
+      "interfaceSha256": "fa25c9738e947e2fbca5e8854a376508e3be42eeb0fa47ad41bdc47a63c314a1",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Sink/Auth/Internal.hi",
       "compiledSourceMd5": "44e0013b9658f17032298743f2e111ea",
       "declarations": [
@@ -15884,7 +15928,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Sink/Authorization.hs",
       "sourceSha256": "2b8cee8904041116382cd24fb2c0965716766f97d7f371f34063c5cd7fedc484",
       "module": "Shikigami.Sink.Authorization",
-      "interfaceSha256": "4b5ceae34916e77e281d067697463fc393ed211945a3d6e910535186fe6706f7",
+      "interfaceSha256": "6cd7d4f389a9eefdde75eec015f88a426d95947c9ea855776113795f475920b7",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Sink/Authorization.hi",
       "compiledSourceMd5": "14c9d52318bc8b1c86b81beb72d0c5d4",
       "declarations": []
@@ -15975,7 +16019,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Sink/Danwa.hs",
       "sourceSha256": "f61a95a801edc40def63d4ea2dbb6efa6dcfcc9d676af54507d1d854e1a90707",
       "module": "Shikigami.Sink.Danwa",
-      "interfaceSha256": "f3be037ec9bfd2d2350c72e005a6c31868913a1ceb41c60a18208cba8b39e6ef",
+      "interfaceSha256": "71a474e40f776ef60c6f2d1bed28848c477a2ad9b6f4f505cc303fc7a3bc3e5a",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Sink/Danwa.hi",
       "compiledSourceMd5": "ae833049140778eca53abaacf0e3252e",
       "declarations": [
@@ -16256,7 +16300,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Sink/Http.hs",
       "sourceSha256": "b804977b5973f31e7d92c85bc8398397e26607e85f8d810e4dbb0013963781ae",
       "module": "Shikigami.Sink.Http",
-      "interfaceSha256": "89b81af65c83fe1a246277536928c513256be3a26d9325b05f027df917207027",
+      "interfaceSha256": "bd3a1676e58df86b1e3dbbd1c61db27c11d7e7c5e8e519a18fd4ffc243c1ebfa",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Sink/Http.hi",
       "compiledSourceMd5": "4b0c78a7b111053334a5fb7d67002d06",
       "declarations": [
@@ -16425,7 +16469,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Sink/Intent.hs",
       "sourceSha256": "0b77f10adc25045767e63f8e25dca7b6c66011484960e967e6199ab0fb77093c",
       "module": "Shikigami.Sink.Intent",
-      "interfaceSha256": "e58bd5322fd823c68158716b602ab0b4d17f4ee97007ac96fca38e9948df8c2a",
+      "interfaceSha256": "051da570cbbdc5a817dac579509fcddf40e32f16104a06ec066717fdcb75f92a",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Sink/Intent.hi",
       "compiledSourceMd5": "a23778b63eeb3be3421695fb91d234a5",
       "declarations": [
@@ -16507,7 +16551,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Sink/KanmonClient.hs",
       "sourceSha256": "5d5b3a5b3878ea4a9e21c076049107c3f3c45a87b76592a41bd7cc15e685a604",
       "module": "Shikigami.Sink.KanmonClient",
-      "interfaceSha256": "950f4e3464621d095c48296fe5633cebdb7e72834513239fde20752fa52f94e6",
+      "interfaceSha256": "b69d2823d2528e44a269dafece46210f2eeffa56180dd1dab3fdc09f7999e68f",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Sink/KanmonClient.hi",
       "compiledSourceMd5": "bae5c87e814d695e83882621735902fe",
       "declarations": [
@@ -16537,7 +16581,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Sink/KawaClient.hs",
       "sourceSha256": "45664cccc6b5932eba85d277f33f9333c04a0d3e1c115d4768232db372ec450a",
       "module": "Shikigami.Sink.KawaClient",
-      "interfaceSha256": "8f4686eefe8df68140beeb51bc1d8c29475e15f53cb0263a45bb74d0cf1bf4aa",
+      "interfaceSha256": "83208464bd6bf150a1082932e5af75695d9109239506abaf1bc3e8c59cb53e6e",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Sink/KawaClient.hi",
       "compiledSourceMd5": "80c13646aed12a96e893f33f0b424378",
       "declarations": [
@@ -16567,7 +16611,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Sink/KizashiClient.hs",
       "sourceSha256": "62323bff6c4fad2d9872b4c58aed6cd256ec58722817798722cbb1e99ab51074",
       "module": "Shikigami.Sink.KizashiClient",
-      "interfaceSha256": "d483b09f31acdbcc0a013e01eb9668c7655712e7513cda8e5d1d895ed467d0f3",
+      "interfaceSha256": "4c6ea36f27a79f8cafb660c7064b984d21cc24b263e9831f8ea526b7ec578f9e",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Sink/KizashiClient.hi",
       "compiledSourceMd5": "9b88a03f31c9b2f112a8e4e06dda398e",
       "declarations": [
@@ -16631,7 +16675,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Sink/ReiAction.hs",
       "sourceSha256": "5cd9c7096ac96f4359aad7394c65255a8a9b0bddd30ca91689db14834d606cd9",
       "module": "Shikigami.Sink.ReiAction",
-      "interfaceSha256": "81e21c82dfb6b70c0867ce57e07e377c07900d7859193ea8fa5ef905f906862f",
+      "interfaceSha256": "de064e080043bf2ceb404fa27ef3a0bd8dca94a9922e5bc14ba067a4e08cbd62",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Sink/ReiAction.hi",
       "compiledSourceMd5": "2f25bc5e0b41f77c4e1385ec0b3d5e93",
       "declarations": []
@@ -16640,7 +16684,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Sink/Types.hs",
       "sourceSha256": "deda8c6eeef791cf8f9ec3133fd42fcb5d11f387b34b0c796c6e706f80b6bff8",
       "module": "Shikigami.Sink.Types",
-      "interfaceSha256": "8d5c5bd7000a6a723225e149ec6282a95882c276bb8e1622305e0d3c5a312078",
+      "interfaceSha256": "43b6ce51fca49146d22b886fdad349dbe8772b7a76418d5dde0155cc9b148cf2",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Sink/Types.hi",
       "compiledSourceMd5": "2e236535b5f93f0d177f69a54f050ffb",
       "declarations": [
@@ -17163,7 +17207,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Bindings.hs",
       "sourceSha256": "38537dedcaa425e5019812d001f3cb31cfc718ff36e6b633d2b74bc05ef3ccf0",
       "module": "Shikigami.WorkerSession.Bindings",
-      "interfaceSha256": "d60988893624134cf4f04b3b3413866b28acf3304d63da87dbf5a8d1e36cf7fc",
+      "interfaceSha256": "c69558c337c2cf093da1a4cddbb4ebba0bcb09124107941dc56fa43e089b021c",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/WorkerSession/Bindings.hi",
       "compiledSourceMd5": "5cf75a75d720f80222d070fb96f72adc",
       "declarations": []
@@ -17172,7 +17216,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Capability.hs",
       "sourceSha256": "2cb85f6cac5dd7405f4680f1ade5231d53b7414f953e4c2f85a6d4b70185ac4d",
       "module": "Shikigami.WorkerSession.Capability",
-      "interfaceSha256": "2d936e9c4461e8066b479f28190476e690c3d6d5155cb3945b06210876085e88",
+      "interfaceSha256": "a89eae724e4d7a18eea7d9e46a34016dc582c25095bec8c85350aaff711b35c4",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/WorkerSession/Capability.hi",
       "compiledSourceMd5": "fb6b1039d85dddd85b9c80df6ac6883e",
       "declarations": [
@@ -17522,7 +17566,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Catalog.hs",
       "sourceSha256": "6f1b628273ba62a254bb98f2ae3c27db9d7c0d4aaf838db0de0e31c3effbe0d1",
       "module": "Shikigami.WorkerSession.Catalog",
-      "interfaceSha256": "70da44be5deaba6697dd92f77768af4cfcfd4f5e79f756b601ef3eec8387e117",
+      "interfaceSha256": "34952036d66c30f6f2a1778c5cd763b9ba648310ec8bafb9743c8e5edc27d2ed",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/WorkerSession/Catalog.hi",
       "compiledSourceMd5": "af8cd0d10e4a5955cb099a598ebe777f",
       "declarations": []
@@ -17531,7 +17575,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Checkpoint.hs",
       "sourceSha256": "f1746b588308ba1cf78498167a4b42de04545405f0cbbadd6f7c25c58d95bd97",
       "module": "Shikigami.WorkerSession.Checkpoint",
-      "interfaceSha256": "6c73b1ae3ff879c5e235b5acf572a611ee7f1203091f13efb773e1be09ee2265",
+      "interfaceSha256": "8cc967211ca83b48d8afac1c3b4e457ad3d07a1a33aac0da0808f4f946aaac1d",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/WorkerSession/Checkpoint.hi",
       "compiledSourceMd5": "df7556eb8b5c105479b711a082996a9b",
       "declarations": [
@@ -17685,7 +17729,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Handoff.hs",
       "sourceSha256": "063f8ad00811eaf033886629c92fc983a9ec4806618683cc25849403eb021351",
       "module": "Shikigami.WorkerSession.Handoff",
-      "interfaceSha256": "1e6fed0cb9767bcfc21a6b7e1aaac4e09ecf221307ff4d19fb7e74524c00ac9d",
+      "interfaceSha256": "4e1fbe38a52b2d0350dfcbb97f5086258438c202c647df9fcff2195f6780a2eb",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/WorkerSession/Handoff.hi",
       "compiledSourceMd5": "49078ee232e41fe9e100560d144aad68",
       "declarations": [
@@ -17731,7 +17775,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Identity.hs",
       "sourceSha256": "75ab288b9e5bfa93e43363aaa5f760903b1d506d51fe3c564105a409365d4299",
       "module": "Shikigami.WorkerSession.Identity",
-      "interfaceSha256": "dacd1e086c9020948ef6b61e4d6fce655be0ccb7cfad673c4b58341873099ae3",
+      "interfaceSha256": "3f3095d7c31bac4a1911f0585c908e4645292b0e48689c728ff2c659dba1921d",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/WorkerSession/Identity.hi",
       "compiledSourceMd5": "acc6592de3386be645e3cfe22fafa35c",
       "declarations": []
@@ -17798,7 +17842,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Integration.hs",
       "sourceSha256": "9a719cc38c51fa40126bff008d56fa47259934b6af0bf0c61cc191ca7b85f293",
       "module": "Shikigami.WorkerSession.Integration",
-      "interfaceSha256": "aa889e8714ba5d1c98df2be175e87d011d5fe6cbbe23180442791aeab58e5674",
+      "interfaceSha256": "546de9270bb23a1a0028eea86e708e4feebd6e5384aea8fdbe642d6809a102dd",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/WorkerSession/Integration.hi",
       "compiledSourceMd5": "21d0587af393b447df5772001f54bb86",
       "declarations": [
@@ -17867,7 +17911,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Store.hs",
       "sourceSha256": "6c7c087e4505b7a9a7443117334c86aee8ccf7adb1fdfde1820c6143e7372a04",
       "module": "Shikigami.WorkerSession.Store",
-      "interfaceSha256": "4f894c987f43262b26d394149bc29bd1bdccc4fcbceb9e9a86adc203e23a8184",
+      "interfaceSha256": "548a036b61173414311a6d2d0cebdb98bdb1bcb434d6ec25c77a6dda5499c894",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/WorkerSession/Store.hi",
       "compiledSourceMd5": "da3d6b6508a9051f47562343d58e19b4",
       "declarations": [
@@ -17923,7 +17967,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Tools.hs",
       "sourceSha256": "4503bf01047896de662284ff1d442b09c664757448cc048c8d8412ba379ea1bd",
       "module": "Shikigami.WorkerSession.Tools",
-      "interfaceSha256": "b89dc824936074dfa757f46eeb5945eeae61042e7994c0f785896a11fceb26e6",
+      "interfaceSha256": "3adaaea06114f4f53df3fe4768c3b471acc2002cef7600d618f14a010cdd94d5",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/WorkerSession/Tools.hi",
       "compiledSourceMd5": "0405ef5cec4aeae2d9158a028e1140af",
       "declarations": []
@@ -17932,7 +17976,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Transfer.hs",
       "sourceSha256": "d23c0e7fa704e244cc04552a9012a519f32b3d2bbd11fc18a0550175a2476b78",
       "module": "Shikigami.WorkerSession.Transfer",
-      "interfaceSha256": "54ec90c43ec2e194f4d3958743f98fdcc8f7ac5ddd33d1e7d67304caa1dccbf1",
+      "interfaceSha256": "2f7fd4645314154c64e65c23f63d21ba71e67f32c74f5ef317996fcc2b1d48f8",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/WorkerSession/Transfer.hi",
       "compiledSourceMd5": "37d4a431f40d6f6ccc1b61357c45717b",
       "declarations": [
@@ -18118,7 +18162,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Types.hs",
       "sourceSha256": "a0ead57ce71c574abf8540518b7533a6b16049f83166e2ba540ef4bc85513050",
       "module": "Shikigami.WorkerSession.Types",
-      "interfaceSha256": "a98c245d7779f33c3faa4c9d95e06388da11331a7a06e3231fc35c1c475ac018",
+      "interfaceSha256": "9cdbd26e12b3152f9330fc599e6d69e50f130871e7600da0559208ca089e88f1",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/WorkerSession/Types.hi",
       "compiledSourceMd5": "37afe77269b482c5edbd0c068a8c03f6",
       "declarations": [
@@ -18744,7 +18788,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Workflow.hs",
       "sourceSha256": "2ece8ef2901fded40c1d43dbb6131b2db31e198998a12164f215099e15672da4",
       "module": "Shikigami.WorkerSession.Workflow",
-      "interfaceSha256": "f5c64ee401b28c78afe030587bc2c9efa4404d458edc897302f891f81445ba7b",
+      "interfaceSha256": "d65e5a77917e8fc225dfd7a1a704257a422bae4dd70385a7ff7e7be7c67a623b",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/WorkerSession/Workflow.hi",
       "compiledSourceMd5": "73c6c6cb4dbee278df6eb5e9bb0c72b1",
       "declarations": [
@@ -18838,7 +18882,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/WorkerSessionLifecycle/BehaviorHoles.hs",
       "sourceSha256": "ad8cb172ff98e691244df65294114ff517da12ba75efe3d03ecdc935a16a1f75",
       "module": "Shikigami.WorkerSessionLifecycle.BehaviorHoles",
-      "interfaceSha256": "5c31e304e3c44287dca1da4e5c93e098342c8ddf84c765ed2d9d2495b442561c",
+      "interfaceSha256": "578ac9c190173cea1135283d99eb48c9ed274eda42f7391ff30d7e3c260ca0c2",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/WorkerSessionLifecycle/BehaviorHoles.hi",
       "compiledSourceMd5": "9d0d1fbfd7fcf9156dfe3513e5c126f2",
       "declarations": []
@@ -18847,7 +18891,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/WorkerSessionLifecycle/Conformance.hs",
       "sourceSha256": "ec0a7d2b4e84aa4ad4939e1651c6d991c2d73f62ff754221bbb74a375e6a1af8",
       "module": "Shikigami.WorkerSessionLifecycle.Conformance",
-      "interfaceSha256": "5437b2a5f779c703d336742d88d92edd6afc3dbcfb86a4fdf23c6c0fd30e952d",
+      "interfaceSha256": "8a4a787ad695ed94ff6c6814b7d0f2a68ed6844f351f4df46a6d7e6ac18c3918",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/WorkerSessionLifecycle/Conformance.hi",
       "compiledSourceMd5": "603d15798d83cbf6eb7dc34d961f43e9",
       "declarations": []
@@ -18880,7 +18924,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Workflow/Registry.hs",
       "sourceSha256": "94604f2ec125b1ef4e4f71d744273694efce33b874ba649101c3a5d0b154ae89",
       "module": "Shikigami.Workflow.Registry",
-      "interfaceSha256": "3b779dbcb55dfda92e725902a644f4081866fe93c75fbb7c120bc2a9e52d2878",
+      "interfaceSha256": "1d0de34a77a4d490b57d84395b6b2da1fe808883e19dbe30c497a5035f12cac4",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Workflow/Registry.hi",
       "compiledSourceMd5": "e1c153bea8ff4f0f3637a1cca43032ce",
       "declarations": []
@@ -18898,7 +18942,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Workspace/Admission.hs",
       "sourceSha256": "ef14f35ecfe2b799d8faf1b67fd5fc08079bc8cd4ec95ba5c43e4d1d9c746fee",
       "module": "Shikigami.Workspace.Admission",
-      "interfaceSha256": "eaf636e30c65479c5509118dce5faadcf77022b9a5b411428c5bcc51de6fe16b",
+      "interfaceSha256": "385419a80c8d73d956ab4003e36c6c48ebf83d6fdfc9fce01a48465541806735",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Workspace/Admission.hi",
       "compiledSourceMd5": "deafd4980909340a3b0ecfc609726355",
       "declarations": [
@@ -18997,7 +19041,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Workspace/CleanupStore.hs",
       "sourceSha256": "848c6aca1a8ead12841753b3155e9b10f644b2ada192a12cd76dc7d30dc498a0",
       "module": "Shikigami.Workspace.CleanupStore",
-      "interfaceSha256": "86f15c1468471dbd60a01fe7343b0e771a98d8906dbc3ea357a0969a65132baa",
+      "interfaceSha256": "a9b1bb4a3e2c15a622d10a56229f7d5f50c0f0d43e1dc66764dd173895c69c3b",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Workspace/CleanupStore.hi",
       "compiledSourceMd5": "2cf93db5b56d69695fb93fb6837b6d26",
       "declarations": [
@@ -19035,7 +19079,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Workspace/GitStore.hs",
       "sourceSha256": "b678756cc5335c88bd0452489a0a0433bef3376d5527a0669f02bf3b1669441d",
       "module": "Shikigami.Workspace.GitStore",
-      "interfaceSha256": "964169b4e7944260ef1c1f6fc1bdcbe720b6de8cf56ca3650bc8d81fe587158f",
+      "interfaceSha256": "01a95f7aa28c559563bed0f04aa3ece0197ca9351fe1a29f2ff230d1ac600ded",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Workspace/GitStore.hi",
       "compiledSourceMd5": "abc249f5374aa2ec251456e2e748436b",
       "declarations": []
@@ -19044,7 +19088,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Workspace/GitTypes.hs",
       "sourceSha256": "ed0df7d71e36c243caa848082032ed44638841c4da8229ed42faad140f69f146",
       "module": "Shikigami.Workspace.GitTypes",
-      "interfaceSha256": "c0b028c57a8a59fc906a30618ed903979fcbb295c6eda118382b5ea9fd5ed00f",
+      "interfaceSha256": "335b8499d24fabeea73db6c092c8a71176fb454da574285f8561ac1a6e841148",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Workspace/GitTypes.hi",
       "compiledSourceMd5": "efc1125bea1b575a314c74e6c3ec1f33",
       "declarations": [
@@ -19309,7 +19353,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Workspace/Process.hs",
       "sourceSha256": "4955ac1af25a5b7520f3d4427882b2b33d0e4aba79067da48030cadd79e7e4bb",
       "module": "Shikigami.Workspace.Process",
-      "interfaceSha256": "d05eb3ce720812b23527366bb923b1cd1cb4e12f009e595d06da1f45081e8e7d",
+      "interfaceSha256": "a0697d06ef8ae1a834ac0ae75d5518aaccda0b103916ccb129abf0f68d00357b",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Workspace/Process.hi",
       "compiledSourceMd5": "32743a2efe6a9f3cd18513096ad06cbf",
       "declarations": [
@@ -19564,7 +19608,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
       "sourceSha256": "a6d6dba287d398aec852acbcec6a11f355371ba2f680272484c86c1ff85d3a96",
       "module": "Shikigami.Workspace.ProcessPolicy",
-      "interfaceSha256": "b7acb7b7476d5003572d41d7e5f498083db3f30179ddd57cb979ddc5ee142582",
+      "interfaceSha256": "ff39c22403dd8fa9c777382ae75b1020eb795b9718416f0f3d6ced82eacc04fd",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Workspace/ProcessPolicy.hi",
       "compiledSourceMd5": "73fb6112dce0d0a4cd3a389c77db1d94",
       "declarations": [
@@ -19728,7 +19772,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessProfileStore.hs",
       "sourceSha256": "788a515dacce7b0d23d2a5cae6e9a2dba1a07d0b6690f285eb4df81a1a9dbd71",
       "module": "Shikigami.Workspace.ProcessProfileStore",
-      "interfaceSha256": "5cee2f2aa4a56b9abc9a1455bfb8fe85a7df1b48eb3919fc4676b658097104fd",
+      "interfaceSha256": "321e63ffc8044147c802afc52cbad0e8f17c0aa88431b15417881f91e567010e",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Workspace/ProcessProfileStore.hi",
       "compiledSourceMd5": "581c46785162810c18bfd4baec1dad70",
       "declarations": []
@@ -19737,7 +19781,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessStore.hs",
       "sourceSha256": "2408ebdd8ce27b9953f07a5a0e52e821d0d63b75f2e34c3729bb7c3eb1eb7bcf",
       "module": "Shikigami.Workspace.ProcessStore",
-      "interfaceSha256": "0c7cf4d71aa715d81b90312bcd2c11149a5e7db29f0a1659dbb135793c1903d9",
+      "interfaceSha256": "96fa596537ab0bd013bd179a8d5c6b9dda774cb581be16ac378094e5af8abde0",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Workspace/ProcessStore.hi",
       "compiledSourceMd5": "96c3e51a9c4a362de1b90444447307e0",
       "declarations": []
@@ -19746,7 +19790,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Workspace/Provider.hs",
       "sourceSha256": "393ef818b0aa1db27db90fb60c8da782c0955588a0e6501544c8a7299d20fc2a",
       "module": "Shikigami.Workspace.Provider",
-      "interfaceSha256": "17f09a652d552ff5f886829ec7024c79740d61e311ef78b13403683f21162935",
+      "interfaceSha256": "28043a4eead5ef6569c8a953916005b17d6cc23d895f5401fa95fc72bccd879c",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Workspace/Provider.hi",
       "compiledSourceMd5": "83031859989fc04a07008d01e2496947",
       "declarations": [
@@ -19892,7 +19936,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Workspace/Settings.hs",
       "sourceSha256": "6dd59236da3b8021c57272d4837213cebe6158799a00222966d10ad4056746ed",
       "module": "Shikigami.Workspace.Settings",
-      "interfaceSha256": "68a002c8fc9fe5a58a870fa306e1b4bc8f8ae70fae042a69c973a2bb596cab6e",
+      "interfaceSha256": "a65511e838b88c80d7d0c11abd109556939ef180e292c271b99b49efa40fdaf3",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Workspace/Settings.hi",
       "compiledSourceMd5": "1501455b0ea518b88acca542e11ad804",
       "declarations": [
@@ -20058,7 +20102,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Workspace/Store.hs",
       "sourceSha256": "ed6ad426b5313f749ae4344031302776ab741c5b318f86e78e2a180aff87e648",
       "module": "Shikigami.Workspace.Store",
-      "interfaceSha256": "b234a2e6ed250dba88fe6665e600730641e92d131f5fab492cfe7558f880fb2f",
+      "interfaceSha256": "4402cf571f3bae37f5ec8dd09af67f984bc0e0b8a1a5182d92966618d77f954b",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Workspace/Store.hi",
       "compiledSourceMd5": "ed943037620f4e235f7d7fb48cac109a",
       "declarations": [
@@ -20088,7 +20132,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Workspace/TransferStore.hs",
       "sourceSha256": "9766aa39af91b85a7179c4d210fbdd734049f1d5a01e8b2d797ac297255e8fc9",
       "module": "Shikigami.Workspace.TransferStore",
-      "interfaceSha256": "567e19ec712c69acc5b47b628bb447cbf233177fdd9ac75537b3be93faeae905",
+      "interfaceSha256": "a9387f3425a32a3845480817f22285f962c8e0ae96854b9078189086956d4efe",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Workspace/TransferStore.hi",
       "compiledSourceMd5": "fd8206f692d38c67af03895ad5796f4c",
       "declarations": [
@@ -20134,7 +20178,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Workspace/Types.hs",
       "sourceSha256": "3fa117beffc716b32f3e4fdb38d3beb705c50ed6c36f167c993b9e0ce5126ced",
       "module": "Shikigami.Workspace.Types",
-      "interfaceSha256": "954558cf4bcd0b67e10fbf8a3011362b4a31bc4277e30c1a00843a313c5ac3e9",
+      "interfaceSha256": "5f81677a36e8039ea235b4f53bc038f63a28ad3fed4adca3685e44e75b1cf465",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Workspace/Types.hi",
       "compiledSourceMd5": "68c8cfee64bd86427ec5880b002598c2",
       "declarations": [
@@ -20242,7 +20286,7 @@
       "sourcePath": "shikigami-migrations/app/Shikigami/Migrations/Version.hs",
       "sourceSha256": "c9243c5abef69e98c4c703a04e1e0667055a3747e7e4f5993a01697ca5dfe13f",
       "module": "Shikigami.Migrations.Version",
-      "interfaceSha256": "d0b51a89285e92a323a9bc1df77781386d2230401a866f91be5a8cd93a4e7f10",
+      "interfaceSha256": "9c258ceaebc9fadecfe90884c0172c5ec0baeb343ec9bc06c86a4d94c778320f",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-migrations-0.1.0.0/x/shikigami-migrate/build/shikigami-migrate/shikigami-migrate-tmp/Shikigami/Migrations/Version.hi",
       "compiledSourceMd5": "3731fd8b31de6c71b060960468246367",
       "declarations": []
@@ -20277,7 +20321,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Agent/Handler.hs",
       "sourceSha256": "7b70bf98773386fe676cacfe852bf5dbd46ad0252b40f3de3b93c18ddb3f1149",
       "module": "Shikigami.Agent.Handler",
-      "interfaceSha256": "3f3288a91b729a248997e4a87402785f67f06fc662316e7f7af4ef04aea07f97",
+      "interfaceSha256": "04d6189e29cb3a2b66c2520e9d18040b65e3c44e78ca3ad0e61337f9e73580d8",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Agent/Handler.hi",
       "compiledSourceMd5": "f9969fe32de14c42c3b4845528d57ec1",
       "declarations": []
@@ -20286,7 +20330,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/AgentRun/Handler.hs",
       "sourceSha256": "2f163ecf1f28420453baaffd9b9a0caeff501dba0c5d1ae3fca68f963d38b772",
       "module": "Shikigami.AgentRun.Handler",
-      "interfaceSha256": "23cfc1c7c1a44a9ac697936ebdb8b270b63f61453b55dcce65520eca77f45363",
+      "interfaceSha256": "5c6e0d442e6af7da5475f49f55a2cd5a5ef3daee2dbeda0dfc1cf017b0c7991d",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/AgentRun/Handler.hi",
       "compiledSourceMd5": "5536292b8e5da25252d1e73320467b6c",
       "declarations": []
@@ -20295,7 +20339,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Caller/Verifier.hs",
       "sourceSha256": "e73891affe9c8f62723e0ab4872afa67a3d397c3640fb126975d4db12eb54c7e",
       "module": "Shikigami.Caller.Verifier",
-      "interfaceSha256": "d6e09690fdb54d74bd9c185ec1e7db5607fdf162efa8cc02b53e129a19395405",
+      "interfaceSha256": "0380da4e94ccf39c68c48fe090b7568384662e0a2dc39bec7c9d19462e7d8b61",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Caller/Verifier.hi",
       "compiledSourceMd5": "5106b9e6f49badb0c8cbfbcdc6f15348",
       "declarations": []
@@ -20313,7 +20357,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Inspection/Server.hs",
       "sourceSha256": "555b13a1579be3a9dccfa86e5bdfaa93034308d9ac21ae6bafe7524100b6261b",
       "module": "Shikigami.Inspection.Server",
-      "interfaceSha256": "a0f4e422a426ac69d32e3daf355f2fb191137a9caf336bc7c68a93ab1007649b",
+      "interfaceSha256": "1c6f18f36c8e115071a80bbdcc9d27b60a40f29a4f5b71a73a19d1603e58ea35",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Inspection/Server.hi",
       "compiledSourceMd5": "76bfcc2ede3a8cf205b41780701e1637",
       "declarations": []
@@ -20322,7 +20366,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/App.hs",
       "sourceSha256": "f1ae52537c92b6dc01451f8785626440d2e8331dcebf5ec6f1a5bc5cc3cbdb26",
       "module": "Shikigami.Server.App",
-      "interfaceSha256": "eed2930db1dd2707f079820911b8cfedaec82c6820ee03c547f9c659a743ed06",
+      "interfaceSha256": "35b08992c8a2df40c694d82033ecdd166ef327b84b8c9d1c0788d98354fac4f1",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/App.hi",
       "compiledSourceMd5": "c073bba470d7706265d70539b5df996c",
       "declarations": []
@@ -20331,7 +20375,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Boot.hs",
       "sourceSha256": "bb4eaa62c4770353e7a6a7920c3f009505a6a9d7c5ad1b46613f86a78836bfe0",
       "module": "Shikigami.Server.Boot",
-      "interfaceSha256": "88ca266e6bf7e006879d1000bd65f2d534f099bfc9e91845157f490998dc53a6",
+      "interfaceSha256": "123750aae59cea6dd3c8ff156a7eaa37a19638f939c7b9d8617df7233f00b1b1",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Boot.hi",
       "compiledSourceMd5": "a117a025b1c68b3c0f22e3b2ae67644e",
       "declarations": []
@@ -20340,7 +20384,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command.hs",
       "sourceSha256": "f41df8750b0c8ef26e943e9db0f26ddccd3bd4e00d3d04ea4bec901f970aeeb4",
       "module": "Shikigami.Server.Command",
-      "interfaceSha256": "a3eb9206e07cf110b6fcb590ac95a30c8644e70c2fb0e85aab81511595981edd",
+      "interfaceSha256": "c7bd5d870e1d5db7f65eebcdaefd17de587a409fdeca1dc27dbd3f2da0c1dc01",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command.hi",
       "compiledSourceMd5": "9d808a9d9d74d1bedf178ec54ca222a0",
       "declarations": [
@@ -20357,7 +20401,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Agents.hs",
       "sourceSha256": "0d4fb1867eea4e3385e7584d6475aa2ff9741307a35a40a6156f9e9ec29c251a",
       "module": "Shikigami.Server.Command.Agents",
-      "interfaceSha256": "4e6c06e53eba57ec0c7103330c19147b982c4d897f877f1e79468c6b044735ce",
+      "interfaceSha256": "68e379c66ced1f1cafc8d71cbc060b95cd266c074aca2b6d24f8dcfbbcc4fbbd",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/Agents.hi",
       "compiledSourceMd5": "542d5c8c7fc38b3d6c53f3b1558432cc",
       "declarations": [
@@ -20479,7 +20523,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/DanwaSpike.hs",
       "sourceSha256": "bb1b69f8ab8141415365a269cc7bae631d08a58aa51d400b7b788abcd5fdefb3",
       "module": "Shikigami.Server.Command.DanwaSpike",
-      "interfaceSha256": "1fff5911c16ce208df082eb4b5b2e47f86f8ba4dee9cfde42ce730c14aca85d8",
+      "interfaceSha256": "1f2db3d4aac7d4ce48dded7d65bdf8ec69ed6149f285ec16f2af8595c440c211",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/DanwaSpike.hi",
       "compiledSourceMd5": "4a77a2358b97cbb596e56fda521a7d96",
       "declarations": []
@@ -20488,7 +20532,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/EnqueueRun.hs",
       "sourceSha256": "921403f874ad25f63df2a2f0f23d4fd472abfc9faed02f4057eebd5e8ef5685c",
       "module": "Shikigami.Server.Command.EnqueueRun",
-      "interfaceSha256": "429bfefe707f5825f9acb151aeb3bf8941291365a4496a7bf451863c6c91d819",
+      "interfaceSha256": "e7dd84cdb69c196207b7de954b9eba3e1dbcbfb61419f257fb61af1223b54ae6",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/EnqueueRun.hi",
       "compiledSourceMd5": "53e4a6c80527b6117c0091cfb8fbbb32",
       "declarations": []
@@ -20497,7 +20541,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Executions.hs",
       "sourceSha256": "6a6b95a81f64a088cd7d1395c2c2d9c409e021bb27bcd22133522af0fb37e67c",
       "module": "Shikigami.Server.Command.Executions",
-      "interfaceSha256": "bfab1703778e660545247853154522ada49a51ba8a2b6001a5c33ad67d03832c",
+      "interfaceSha256": "921d5bb311ca4429518434b1eb00244d4af4f2d89a14a2031cb80a8924e575d0",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/Executions.hi",
       "compiledSourceMd5": "6bee0671cfd6f2b20c72a7a89289722b",
       "declarations": []
@@ -20506,7 +20550,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Grants.hs",
       "sourceSha256": "0e0f081805d81f915bc97b5597b478190c7dbdf5ba00a6d65048f29d33cdc2a0",
       "module": "Shikigami.Server.Command.Grants",
-      "interfaceSha256": "25b13d1a2bd599d56b6f83bee2fd97f000e74890edb7ff7a7e2fd6b14ba39a00",
+      "interfaceSha256": "5dbe9842e64b8cc2cc80103ed1813900142d22a0effa8e385995c34ff80368af",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/Grants.hi",
       "compiledSourceMd5": "f2794a989a83cf900ae10f8526706358",
       "declarations": []
@@ -20515,7 +20559,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Ops.hs",
       "sourceSha256": "77899d6edf10e48bc999e6984282f35dbb7fb736eb702f963781922b7face61e",
       "module": "Shikigami.Server.Command.Ops",
-      "interfaceSha256": "2bc35a506b2b7141fcfccc71e1a13bab789baa1cc41ef48926cde21d8a485a0b",
+      "interfaceSha256": "60d7abc76dde7dee3ac52d37e3476ebbfd3b1afe4799da5fd0b135e973639bbd",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/Ops.hi",
       "compiledSourceMd5": "09857328f9fd6060c18058d3f2621f26",
       "declarations": []
@@ -20524,7 +20568,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/PublishFixture.hs",
       "sourceSha256": "f3812c3137bf58d5a6fd881f74fba8768e12ac94b7ecec8db7615bc5121a96c2",
       "module": "Shikigami.Server.Command.PublishFixture",
-      "interfaceSha256": "32b817cdb11ead0046731effb5c9b0834a420d0fd2006dca84256cd113273b65",
+      "interfaceSha256": "a5d065caef58203e19d9e30db3acd501a34010e5c2fa67cfc977c178c5e3e9af",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/PublishFixture.hi",
       "compiledSourceMd5": "1384cdbb747b023d801a83817b60f61f",
       "declarations": []
@@ -20533,7 +20577,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/RenderLifecycle.hs",
       "sourceSha256": "442d7980c8d7aaceea4f089c674b7c273c4dd97e2c7953ec496b85bf9731dfae",
       "module": "Shikigami.Server.Command.RenderLifecycle",
-      "interfaceSha256": "f6701b2ca001936f4f0abe51b308b47f68eabfdedf055bb6c5cb2a2692059858",
+      "interfaceSha256": "d4d7a16427327a3199329e1b56522187e931cc060e77f37b774c27876850e986",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/RenderLifecycle.hi",
       "compiledSourceMd5": "05c1c9a81724538a575929ee35ccc10f",
       "declarations": []
@@ -20542,7 +20586,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/ResolveApproval.hs",
       "sourceSha256": "9c3fb04eac0cfa9f0c7f3be43492454d6273502317a3377bb95b062a22b04d3f",
       "module": "Shikigami.Server.Command.ResolveApproval",
-      "interfaceSha256": "3c6a8ea6c90fd08c5754620b74e426b3c5c6b07f5dc97f58b7380cd17bd76d79",
+      "interfaceSha256": "e73a7cb86e05a4298e429d129be7ac3c31d321ffe3de6290a443742d7c52904c",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/ResolveApproval.hi",
       "compiledSourceMd5": "1dda02d00ef6ab3d1bbc9834ae9b309a",
       "declarations": []
@@ -20551,7 +20595,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Resources.hs",
       "sourceSha256": "27ed32734e3ad8809483f109f8718d973028b07f5751741df48a2fd9083b6330",
       "module": "Shikigami.Server.Command.Resources",
-      "interfaceSha256": "1c886caaa05ad782a54666eef9592f22e277148807698ce74c1e020c2085dba4",
+      "interfaceSha256": "aa77c63db44336e34c280b7faf3fe782b8850a3cde1bc3112ae4f4bd0f72ac5c",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/Resources.hi",
       "compiledSourceMd5": "2c341d2061c7bee9b28668c37d17f584",
       "declarations": []
@@ -20560,7 +20604,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Runs.hs",
       "sourceSha256": "cded4adc8adcd7b2f6e0ae66f1b521035315f2e3b3c941fa3cf4df98d1d383c4",
       "module": "Shikigami.Server.Command.Runs",
-      "interfaceSha256": "08e695fb2634627aeded6c950e8641082f358883d7fc04bd10587bebd7b878a1",
+      "interfaceSha256": "77aafed2bdffc2d4cee8e30b934fe40a98625ca12f95539ff418bf8da73e518b",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/Runs.hi",
       "compiledSourceMd5": "7708c4f698433a4a4301f4b21e1dbc1e",
       "declarations": [
@@ -20598,7 +20642,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/StubKanmon.hs",
       "sourceSha256": "e513fd0e16b4cac0dfa55d0e80be46135cbef3d0887819ecd2e6d9e649d81127",
       "module": "Shikigami.Server.Command.StubKanmon",
-      "interfaceSha256": "4c1861cc373dbb23c7950b9a9eb061250e791be06c38a2174b774b54599900a2",
+      "interfaceSha256": "73433e09e2e940d57c0ac8271f4c927058fa5a8d27d4c9e1e524da9785eb7659",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/StubKanmon.hi",
       "compiledSourceMd5": "db0bbc4ebd9938bafb3dcb110fbf5ef6",
       "declarations": []
@@ -20607,7 +20651,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/StubKawa.hs",
       "sourceSha256": "dc7928196956048145378693b434e9952966ff4d05396d579b8f9f1596a8e8bb",
       "module": "Shikigami.Server.Command.StubKawa",
-      "interfaceSha256": "6f3c01f2bd578fdf5af00b7991a1d6216a4bdf69f89883bf50d95f1e0cbacaa8",
+      "interfaceSha256": "8d0dcba6435780879eb6c30bacc0c697f2e7584c0790fc5c87df068c8f69457e",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/StubKawa.hi",
       "compiledSourceMd5": "1c75ea79ecde904e6c1ede9fff0804e2",
       "declarations": []
@@ -20616,7 +20660,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Validate.hs",
       "sourceSha256": "2a5f5c9df568d1c6f93d6162ccd3f6e8fbd8a9687bf2b78e4cd8320690c5813c",
       "module": "Shikigami.Server.Command.Validate",
-      "interfaceSha256": "981a18d7695d3b04bd19f3682f328775db04ed71af40c33d286ccdc61f2cd69c",
+      "interfaceSha256": "4decc2d2593ec6ce5b70a8fb398745685b16c75114d1872f447e8ac74376b7b7",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/Validate.hi",
       "compiledSourceMd5": "30bc7c1dbb036ef1aceecf13b0843dd5",
       "declarations": []
@@ -20625,7 +20669,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Workers.hs",
       "sourceSha256": "64c79ee33f93942425ecc040d5a594441aeaf2406c4365087a7e29196cf34a1a",
       "module": "Shikigami.Server.Command.Workers",
-      "interfaceSha256": "a8f6e3da91839adfe131f44de12582dd6ad3b66bacdfde0f2c1f039f095b1959",
+      "interfaceSha256": "93bca6c41c9b4fa6dcacfbca2cf2dfd2f82a2608bacf25bed68c465f1df2a3dd",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/Workers.hi",
       "compiledSourceMd5": "3a8955f6eb9b3f10cd3f7be30a258277",
       "declarations": []
@@ -20634,7 +20678,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Config.hs",
       "sourceSha256": "013a5361f192510655063257a9a3ca814527297c2a11b8e1c128a95636204a68",
       "module": "Shikigami.Server.Config",
-      "interfaceSha256": "7f8770a2b9b7b23aea0fb10a03faec62edd732ed24be1b369cf3e6e8b0daf460",
+      "interfaceSha256": "7f6c7da356f0158701ab48da1ae92ca54f825abe54bf3f257d36011ff78e72f5",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Config.hi",
       "compiledSourceMd5": "4d49da9ff7a679e0b4db0a47cd660fa7",
       "declarations": [
@@ -20669,7 +20713,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Seam.hs",
       "sourceSha256": "ea9d6a0b42e3ebaf9c7d57ed66fdba14ea9183e93d563c813dc855a13ef14f0b",
       "module": "Shikigami.Server.Seam",
-      "interfaceSha256": "b4e2c88ba9b7559d0e65743aa2d5fa54115304769cca25281fabac43457b49a6",
+      "interfaceSha256": "be34dbd09982226bba4a49f963bacd58b953da920b260a5e024a7b344be4b1e7",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Seam.hi",
       "compiledSourceMd5": "2287e5f8b126ccecf22fb720a0f03405",
       "declarations": [
@@ -20769,7 +20813,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Sink/KanmonStub.hs",
       "sourceSha256": "eb38eefc3405b73115dc8cab79fe0873dc5159f1a8b470500fc275551723939e",
       "module": "Shikigami.Sink.KanmonStub",
-      "interfaceSha256": "3d1f465bac157edbe0ac7cba2a3d25101a67ca73c3c2d772a478ef04a712bd13",
+      "interfaceSha256": "5117424c3646fb7877a5978a45e7ef33e747cedcfc49a1e2b0c62d1d6f79db94",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Sink/KanmonStub.hi",
       "compiledSourceMd5": "5a100ad3d1b4e6519c85e9af522861d2",
       "declarations": [
@@ -20815,7 +20859,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Sink/KawaStub.hs",
       "sourceSha256": "8a3e315c959fdc3178767509fddaacf4e9b7ff7782b922f9690e1c855fb47fa1",
       "module": "Shikigami.Sink.KawaStub",
-      "interfaceSha256": "20b94c035768120fdb1d78edc3ace4164d47713ca8883f990b88503bcf540df0",
+      "interfaceSha256": "794c55d805233cbb979b6a9c7b5fcb93ab1c4c8d8ab2cbb9244d744e8964616b",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Sink/KawaStub.hi",
       "compiledSourceMd5": "5de97098109ed1e9818203a7ec5d48cb",
       "declarations": [
@@ -20874,7 +20918,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs",
       "sourceSha256": "60cbe46ef049f2c5a29251585e75f9be48a3b7fd69ff55c2ea336b0c5af4061a",
       "module": "Shikigami.Agent.RunJob.Worker",
-      "interfaceSha256": "86ba8f2bc07329c4a6642527ffd46a9c759e6283439c689fe1cc107153b39d85",
+      "interfaceSha256": "b65b700dbfcd4ca736c7b3e133b03ed98d099676edf0a54d7534751e1e3ab0ed",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Agent/RunJob/Worker.hi",
       "compiledSourceMd5": "866b5b1d2e0c948dd9f66aef8c00cd26",
       "declarations": [
@@ -20924,7 +20968,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
       "sourceSha256": "1032b1f6a093678240cf92fc537e10651290183e6276ee436faf52b4de8ac0a7",
       "module": "Shikigami.Agent.Workflow.Resume",
-      "interfaceSha256": "8ec01464759fbc524d1d5b6974d8837079191b02b7bee930dd937e6faccd8dbe",
+      "interfaceSha256": "0b47b95ab2683fd90e7934c0a18001b4026d4dd40e895dac95a719ca35119ac8",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Agent/Workflow/Resume.hi",
       "compiledSourceMd5": "dc99e90300767179d01efc70d720fa2c",
       "declarations": [
@@ -20958,7 +21002,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Flow/SinkOutbox/Publisher.hs",
       "sourceSha256": "a1dfffc36fcc396d8cfbe44b10f40679fee37a073d13d1069d8fa2ef3396f181",
       "module": "Shikigami.Flow.SinkOutbox.Publisher",
-      "interfaceSha256": "9474aa7e249ddff82c71fa2776467dd8767f95b190313f1aa7c828f46e21883f",
+      "interfaceSha256": "24788cd0e8a1ffc6a896b4d06c23e416c390d072657ace2941e4cbd86a430c24",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Flow/SinkOutbox/Publisher.hi",
       "compiledSourceMd5": "fb8b1f17bc6917f871ba11f2d0ba443a",
       "declarations": []
@@ -20967,7 +21011,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Health/Supervision.hs",
       "sourceSha256": "57e1ee63a8a608ef82a4964b445cb543241832d0946a37e8328ead3d2c61d763",
       "module": "Shikigami.Health.Supervision",
-      "interfaceSha256": "ec1ffd1af30e5e65b5f9e827c9e87c2252a6c332789eb0fc073c330ceb20c288",
+      "interfaceSha256": "831496863e1a8053853b64079bd6769c928dbdf188e65d8f034f0b7ebdcba258",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Health/Supervision.hi",
       "compiledSourceMd5": "ceb96980218b34f2e0af8e0c64d49830",
       "declarations": [
@@ -20989,7 +21033,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Health/Worker.hs",
       "sourceSha256": "22628fa1b09da0bb2b2bbefb85b99ce09853a71f60f78b65e1f6dd17a608cb8f",
       "module": "Shikigami.Health.Worker",
-      "interfaceSha256": "958e646c179c3f92724292751dbcacd9984187915ecb518243b2086c649008d7",
+      "interfaceSha256": "648ed0f768df3a2ceebd3c8fbcf45fed62c7b04d1e3aa0dcbb01109c01fd9ab9",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Health/Worker.hi",
       "compiledSourceMd5": "1ea2cfac83d81e52dc353df9db019f90",
       "declarations": [
@@ -21038,7 +21082,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Inspection/Consumer.hs",
       "sourceSha256": "666a7d583b083eb1170d0598d5ad6df9bf77f9abebfe319211120c287afd4f44",
       "module": "Shikigami.Inspection.Consumer",
-      "interfaceSha256": "e0648029a16a75603b1cc1321851a6f50d0fad777e2ccbd0477af5bb189619bb",
+      "interfaceSha256": "32f453fcbfe198c71d6ebfa68eafb98100f429178f0c4566c3164e9d1d5fe857",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Inspection/Consumer.hi",
       "compiledSourceMd5": "deae4c6a033a047d8dcf520fd2feefc3",
       "declarations": [
@@ -21103,7 +21147,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Telemetry/Sampler.hs",
       "sourceSha256": "5db9c20907d982ab83c8a30b71208863475627ba5ed5d8a4f91c3fc700957c92",
       "module": "Shikigami.Telemetry.Sampler",
-      "interfaceSha256": "8b57ff152f824c927c3254f9ac8535253584d5bc75c8f513a22c790a3e8a32bf",
+      "interfaceSha256": "56a2cd22166524d1925cb52434c6f4afa6a70c27405ed3a0f277f75ab0ff4253",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Telemetry/Sampler.hi",
       "compiledSourceMd5": "503cff13a50355c5f5b7bdfc17ef0ffa",
       "declarations": [
@@ -21120,7 +21164,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Trigger/Consumer.hs",
       "sourceSha256": "55d7aa115a03454bbc6850e129fa2e68239ca5422f2a01fdece8de1258e85b3e",
       "module": "Shikigami.Trigger.Consumer",
-      "interfaceSha256": "171181b51986801aea962986859ca39eb4b068b2d46f4ba7ed4bf85a19232701",
+      "interfaceSha256": "4f714dff2de493fa6aca3725f7e44324207f88abe29cb7445e624fd9b234e445",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Trigger/Consumer.hi",
       "compiledSourceMd5": "a3c1c61457f921cced0b85b8a181cbd3",
       "declarations": [
@@ -21321,7 +21365,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Trigger/Scheduler.hs",
       "sourceSha256": "52425ede3b3953980fc518a3e381a012153d3a5071698d14e558d419e0f96b23",
       "module": "Shikigami.Trigger.Scheduler",
-      "interfaceSha256": "dc5c3989105e3c9aa43566ad7404ffd09946e5538ec48c5ad97515c7e9efcaa2",
+      "interfaceSha256": "3a886e08c7db03f8c7fb5401c2289dba516ed70d155265db6d0ccec6ee494c56",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Trigger/Scheduler.hi",
       "compiledSourceMd5": "cb494c80aa0264d39a94091c6f975cd1",
       "declarations": [
@@ -21383,7 +21427,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Trigger/Timer.hs",
       "sourceSha256": "f10aaee633aff3bf4c8b25e1864ea1cb55fb9d20eee9dd05c6d497df1c8a4589",
       "module": "Shikigami.Trigger.Timer",
-      "interfaceSha256": "d6eae5286d31e42db5100a4b38808359ddf822e9bf3419800ce8d5eac41bb474",
+      "interfaceSha256": "36ffcc62573aff2ecad0217d9ef285875599e1a15e3de1ccfc1c776d75c90589",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Trigger/Timer.hi",
       "compiledSourceMd5": "4dda3186e19b4fd21d113911755f1645",
       "declarations": []
@@ -21392,7 +21436,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workers/Command.hs",
       "sourceSha256": "d3c68cd6b9c063669697deff2a1976e15b4d39d2da128fba60ec1ff46d8ebf2b",
       "module": "Shikigami.Workers.Command",
-      "interfaceSha256": "e43e2550269878b7a0620e3b8a084ff989fa4c905bb2c4f8b18faa9678124203",
+      "interfaceSha256": "53a5a9c7045c91620bdc934d3be831cc2801fb62064963cad6563cdf394d27c7",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workers/Command.hi",
       "compiledSourceMd5": "f1346c9ac4e7e76efa36f8793a8cb6e1",
       "declarations": []
@@ -21401,7 +21445,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workers/Command/Scheduler.hs",
       "sourceSha256": "58df8751d256a897c9d479c26609222dc1c88c79d5b55a3f6537372296c9595d",
       "module": "Shikigami.Workers.Command.Scheduler",
-      "interfaceSha256": "3d4c45a18d00faa83525bbe471e7ca54d8b4436201a3e9688b2454ed8935abe2",
+      "interfaceSha256": "0d64c593aa1f2c79b0d44938b77fc91d94df1845cb3a247d3d7d41681d0acc5a",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workers/Command/Scheduler.hi",
       "compiledSourceMd5": "54c0ab9c0cb00f80cf8a54f1cbe134fe",
       "declarations": []
@@ -21410,7 +21454,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workers/Command/Worker.hs",
       "sourceSha256": "f955ba6f14d24c27a6327b5553da9a7f1d1da2dcf6fbbc6ac4beef30e6a1e137",
       "module": "Shikigami.Workers.Command.Worker",
-      "interfaceSha256": "16ac2a94b054dcf1acd45387ff9c921cf2b42ce73e796663db90ebff5b04500b",
+      "interfaceSha256": "0d5458cac2f731e504a6332b5a69b45932baae7110a4fbe3ae46d68c649b0a30",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workers/Command/Worker.hi",
       "compiledSourceMd5": "0c1b906783aa9e4fa8edd8b6af3a7476",
       "declarations": []
@@ -21419,7 +21463,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workers/Config.hs",
       "sourceSha256": "78733c5c067980aca561a749430f3d67f4ea842bfd72f1a082f939d7de6c6c2b",
       "module": "Shikigami.Workers.Config",
-      "interfaceSha256": "4450bd35c6bf71284494bf77132263a842d6a5920d2c008a01f86d394283c70d",
+      "interfaceSha256": "32fd46af6a397c8af1973822c069e8c04a131b21c3de971f0e23e2b8f0660a38",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workers/Config.hi",
       "compiledSourceMd5": "bcb0ea04bf54bea23b6818272f761649",
       "declarations": [
@@ -21561,7 +21605,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workers/Registry.hs",
       "sourceSha256": "a23d88ddf013529f36b44e0a00045c22395803eec414df279e4a302c534acd68",
       "module": "Shikigami.Workers.Registry",
-      "interfaceSha256": "a643313764431271aad33400355ebaa4dcf414f87bac8c11d9dd9604c95a6f43",
+      "interfaceSha256": "765cd59f83e4c5bd1e3dedfe81f61c7c1ed80e7f7f9d5648d0a0a0f80c533ec9",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workers/Registry.hi",
       "compiledSourceMd5": "f6b1f925b9a4413ef91a6d48aeec20c2",
       "declarations": []
@@ -21587,7 +21631,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workers/Subscription.hs",
       "sourceSha256": "cb465ddefa704e9573908d378c3b0d9c0a0c147fda0954d802f6e3d9d0c716ab",
       "module": "Shikigami.Workers.Subscription",
-      "interfaceSha256": "61b67d5b09437ba2d7d39aa31d4d7738dfb311f3707f21574a1fc7fdbee75138",
+      "interfaceSha256": "8f85d91ba7288b34f3606e1edbe4a2621b1f3acf26507bcd755a308f5f548f92",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workers/Subscription.hi",
       "compiledSourceMd5": "9a3aa848b04dca0b385c2fd1f408d3d8",
       "declarations": []
@@ -21596,7 +21640,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Allocation.hs",
       "sourceSha256": "13c7a006eb3a7f414d0f06282b34911b28646bce9a4856dd6b103a684ca6066a",
       "module": "Shikigami.Workspace.Allocation",
-      "interfaceSha256": "038c93732948f769ad30187538072a55470ae6fd195785251fac272880e989be",
+      "interfaceSha256": "8d6439708f344a3bd0c40f168cfedd39773ff8f1c1e045e3d61580f1508f0d0d",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/Allocation.hi",
       "compiledSourceMd5": "1f50b622ca5578feef52ccd070252ff5",
       "declarations": []
@@ -21605,7 +21649,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs",
       "sourceSha256": "27026defb7f2689e875b0a3addab128f8d1093d24d77adb1297a04a7bcd8d035",
       "module": "Shikigami.Workspace.Cleanup",
-      "interfaceSha256": "53000f149f15589f71423017dd0704d282e4cea7757e7387a7524d5cad893f04",
+      "interfaceSha256": "18037e21f554fa2d76d4457cd409e1aed7686f76b455986f627d099dcc30b5f5",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/Cleanup.hi",
       "compiledSourceMd5": "9951dc5b04887cc6ceac0f08a9bce9d2",
       "declarations": [
@@ -21662,7 +21706,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Collector.hs",
       "sourceSha256": "6023d609647855708b1d9eff0e5437f516fd5fbdafbe4efdea70339fd8324e54",
       "module": "Shikigami.Workspace.Collector",
-      "interfaceSha256": "691ef8b6c9b4c4cc144dff3469fb733166d948de97c3741b3cf33bc3193ec598",
+      "interfaceSha256": "58928bfde12699107a33141a138feda3cff868ac0047b7a252f0c1e4900dd3e5",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/Collector.hi",
       "compiledSourceMd5": "fe652465575caa157f2e0044991e47d6",
       "declarations": [
@@ -21767,7 +21811,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/ConfiguredHost.hs",
       "sourceSha256": "0839dd9bf185721b6f537d188cbaefd015ddf7fe295b4415bb649e54df0dd42b",
       "module": "Shikigami.Workspace.ConfiguredHost",
-      "interfaceSha256": "3a5752fc53d4009be485efeeeb3add1184c4ca71b78b7a1949a3c5ef0e6d61ab",
+      "interfaceSha256": "6d74c426864269c44fa53ab38d47543fd16470d24f6c7d0974e024879f3b18f9",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/ConfiguredHost.hi",
       "compiledSourceMd5": "d1a1e45e48337356eef9d6d18c68c7e0",
       "declarations": []
@@ -21805,7 +21849,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Daemon.hs",
       "sourceSha256": "1a0fb4bdf463c94075e8f14e23ccb8d006cf2685aa904f360d8e1dfca2cc3b0e",
       "module": "Shikigami.Workspace.Daemon",
-      "interfaceSha256": "3b02b98a92b8d86fa428069a994b140449752951e8df8720b7b10e0d70f12e13",
+      "interfaceSha256": "288b27094f7cdedbb1db87da09a19868e2c1c5a731095d9119271aed5b776480",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/Daemon.hi",
       "compiledSourceMd5": "442f57cfa7bfda971ecb3cf2ff85a4af",
       "declarations": []
@@ -21814,7 +21858,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/FileProvider.hs",
       "sourceSha256": "83b1b1bc91e6966714c0a993fe9fbeef3681051a9889e85ed15cc1d030a2b9e5",
       "module": "Shikigami.Workspace.FileProvider",
-      "interfaceSha256": "dcf42f2b56622d3cd83f566e71f691208b23b9b9c73415fa83e0c214270eca93",
+      "interfaceSha256": "7cc92accdc546bf32a9759432983fd8b0c10b0aa7db6ae6c3b469dd8f8473557",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/FileProvider.hi",
       "compiledSourceMd5": "9164eee390a4ed3eb8b9e31c5d464f8f",
       "declarations": [
@@ -21878,7 +21922,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Git.hs",
       "sourceSha256": "9e0f6b756ae15f5bfb81777251a8896f75e425db88329080a9b689c6178df090",
       "module": "Shikigami.Workspace.Git",
-      "interfaceSha256": "14e97b78ecd9f0b0c28b78ac40f933ad65f17b0d63e17c77525a5c119d2ad194",
+      "interfaceSha256": "01c881f63a6fe5fc449cb177ab5c1f5dffbecb5f768f9e87fb1ebc32a332e193",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/Git.hi",
       "compiledSourceMd5": "4bfc3ea0799388d39022fa539daabcea",
       "declarations": []
@@ -21887,7 +21931,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/GitCapture.hs",
       "sourceSha256": "64d1b7aa05cae83c3dc9be13c9c962628cf4566e6175933c0c0a989a7a715d13",
       "module": "Shikigami.Workspace.GitCapture",
-      "interfaceSha256": "6d202123d94940303eba78edc98075e6202551478e36beb69104e8331ce67fd1",
+      "interfaceSha256": "4197113d37f7e64397b20d92c999d6414fdb517e0004fc184cdef735c7355965",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/GitCapture.hi",
       "compiledSourceMd5": "ca1fa9dd635d2d64fddcbdfa1f269805",
       "declarations": [
@@ -21917,7 +21961,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/GitObjects.hs",
       "sourceSha256": "2cd0547b9ec03ac50028586439d26cdd136d5a0eb45b9a05463362355a829dde",
       "module": "Shikigami.Workspace.GitObjects",
-      "interfaceSha256": "cbdce2777e1e97c88fdd764cd30214b98c3184439f82fce288710726ae723fab",
+      "interfaceSha256": "801fc29be1ed526ce4f227e03b2fe653f2f1d413d07743b5a40c154cba945de8",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/GitObjects.hi",
       "compiledSourceMd5": "012f178327c6d4008fa138b657d5af25",
       "declarations": [
@@ -21963,7 +22007,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/GitProvider.hs",
       "sourceSha256": "3ef0105b7f242c79fad1cdb9d9be98f13c9622da90ef6fecb155b8cd7cedb539",
       "module": "Shikigami.Workspace.GitProvider",
-      "interfaceSha256": "f6a811576faaf7799d83d3eb88049964bdf3ac2365e6122e58ea6d20a6404c09",
+      "interfaceSha256": "2e8a65b452cae1ad40d2625f081eedc635d67465f900251d9c28f973d7f08070",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/GitProvider.hi",
       "compiledSourceMd5": "4f6a502c40acffba4123e8a100d805fd",
       "declarations": [
@@ -22044,7 +22088,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Host.hs",
       "sourceSha256": "057c093865805c9a328c909fb089f3cbc7a3bd82418dbada5d1194f049d486ab",
       "module": "Shikigami.Workspace.Host",
-      "interfaceSha256": "e467e1300979a9b26597e0f4e416233e581ccea3f2ad911cdc34eef20fa141cb",
+      "interfaceSha256": "49055b8f414d72d7531910e0a10da48bc05d9d7dacfb163c60d70616542545ea",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/Host.hi",
       "compiledSourceMd5": "6ccf68ab2d5d83b81f0694ac3cd07208",
       "declarations": []
@@ -22053,7 +22097,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/InstructionLoader.hs",
       "sourceSha256": "df3965623ad665b0838fd6ef5bf83bb1663ba88bd2e7631341631ed5bfa18833",
       "module": "Shikigami.Workspace.InstructionLoader",
-      "interfaceSha256": "aee603f6db4bf81685caa456b0bad643377e7fc36903d96174b44bdbc273837b",
+      "interfaceSha256": "116979ce1e678595c0690660eaf8730ffcdb5e9542cde5131a40ab7ba275ecab",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/InstructionLoader.hi",
       "compiledSourceMd5": "79cc736bea6668f9a41496ded5caefec",
       "declarations": []
@@ -22062,7 +22106,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Integration.hs",
       "sourceSha256": "a157f0bbd76e732534b7eb792efb648b1ebabc451a75c8bb867b14747432e9bd",
       "module": "Shikigami.Workspace.Integration",
-      "interfaceSha256": "9e607b3662b58e7fa3e28d27f85d2f2128b61484f2a00b24da4113e8fcc5f166",
+      "interfaceSha256": "06cd55dbee756c872a02ab2bf7d22606a0aac40a36fed694300a1861f0e97935",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/Integration.hi",
       "compiledSourceMd5": "516e58a3266378adbaa55d468ceee470",
       "declarations": [
@@ -22124,7 +22168,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Maintenance.hs",
       "sourceSha256": "3a12dc52d3f33c6168f9615453bb09716e2ff4732e5a8d7e8805886cde524e33",
       "module": "Shikigami.Workspace.Maintenance",
-      "interfaceSha256": "747971683811b4f44e4fed1ad70bffdc22b256ea3cbd7a8104e101526248c6ed",
+      "interfaceSha256": "05441f76f6763ce1c5098f87280c9ca7b070119bb85d2a0b1a9d662ac30851a8",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/Maintenance.hi",
       "compiledSourceMd5": "6b67bd95c2f5b19878adeab53b961c1d",
       "declarations": [
@@ -22150,7 +22194,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/ProcessProvider.hs",
       "sourceSha256": "1e0cb1ced8ac8583ec4843d67a7ed4703eea6d249135382d996a2f8034f2b3a4",
       "module": "Shikigami.Workspace.ProcessProvider",
-      "interfaceSha256": "87add540b455550b33042863a8c0267ff06adbc86956889f49b253732ab30e8b",
+      "interfaceSha256": "0487974da05d4d56bf44a22cd36df29efc42a8c76befa146b9d282832508b763",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/ProcessProvider.hi",
       "compiledSourceMd5": "22ea4096033636a789d88cac421c4544",
       "declarations": [
@@ -22184,7 +22228,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Profile.hs",
       "sourceSha256": "fcb4c5fde0af3524b4ca6c341666962e08e6e10d1626669b9345befa9455595e",
       "module": "Shikigami.Workspace.Profile",
-      "interfaceSha256": "30a5872adaf599d4a337782e0e09de40f9539953a9569c63a369f46e8380cd01",
+      "interfaceSha256": "78bebde20531d9b41e074728a88f291d8826b53755dd35a2d04f1f4b24149da0",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/Profile.hi",
       "compiledSourceMd5": "ceac136e345a24b0626abc3d2dc58721",
       "declarations": []
@@ -22193,7 +22237,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Provision.hs",
       "sourceSha256": "3a74724c0332335f09cb18da6f8f8aa612f6579130e3eee54c487cd587608be1",
       "module": "Shikigami.Workspace.Provision",
-      "interfaceSha256": "1af9087e7208b3e09e290172f054293059fc33e817021475f81fd3aa6ddf6270",
+      "interfaceSha256": "580c70a5ad76272cfec86e784940e6be2116afe431eddfcd0b9815bc9167d335",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/Provision.hi",
       "compiledSourceMd5": "54dd58508dca893638f9cdc134e4e17e",
       "declarations": [
@@ -22309,7 +22353,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Rpc.hs",
       "sourceSha256": "c0eb26edf34ab6cf7d50d6d19a7a03639f82754ce36f676f7f508f17c3b2d39f",
       "module": "Shikigami.Workspace.Rpc",
-      "interfaceSha256": "2ac8f7357a2d2324eb879b9b7ec57c330578c61e8b146dfdd507bb00784e4c30",
+      "interfaceSha256": "5012fd128226df14ee9ccb70ebfbee0a2c2ecfc6c88b7e7694f7213d8c73e5f0",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/Rpc.hi",
       "compiledSourceMd5": "88cb98fd76ba11b56070db03e6b675f5",
       "declarations": [
@@ -22442,7 +22486,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Service.hs",
       "sourceSha256": "031a3bdc32b9c2c1205a8457a27a7e16143accb55130d62350e0f8c27c3163bc",
       "module": "Shikigami.Workspace.Service",
-      "interfaceSha256": "c4afb92e94e63ee01211b4887ffbc5d1020b09359b6ecf61027a5784a0139349",
+      "interfaceSha256": "2c1c140ec8f023e7eb8395e5801b72372cfd52d829f02697f4c1c286ed708f70",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/Service.hi",
       "compiledSourceMd5": "7e77cf422d663681ef11f46a5801c570",
       "declarations": [
@@ -22524,7 +22568,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Supervisor.hs",
       "sourceSha256": "8381df7ae219224814cb70cb2987f856c9b9922c81a2ae0f9e3f8379e80b0c1f",
       "module": "Shikigami.Workspace.Supervisor",
-      "interfaceSha256": "b30cd244605bce4fa30c39f2e517f184f5ddb1d8d19154f284ff9362270cbc72",
+      "interfaceSha256": "1b67f09e1e488e7fb610582759386c20279e5e9fad6272103a4348619d8b4d72",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/Supervisor.hi",
       "compiledSourceMd5": "157fdb18742bacf3a569e68cbf834df6",
       "declarations": [
@@ -22688,7 +22732,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Systemd.hs",
       "sourceSha256": "4f9fed6f04862432f09718b7d58ec7c4b135450ce0844c5f81a6358a2a2cfa52",
       "module": "Shikigami.Workspace.Systemd",
-      "interfaceSha256": "7789fa86f1d060f123c1c1298c9a6ab035359410ee18e0eb656b418b04a8054a",
+      "interfaceSha256": "67621bf1a89c022016244c949c2a30f26b17c7ad3d3e6bec8e8c5ece5464cdd2",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/Systemd.hi",
       "compiledSourceMd5": "f08257b1b258d237450843bdfe28b68b",
       "declarations": [
@@ -22741,7 +22785,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Transfer.hs",
       "sourceSha256": "d2bf7aaad23cb4a75f1c31684e580d30c193ce22ed5d37ff9c9ed0fd653a8832",
       "module": "Shikigami.Workspace.Transfer",
-      "interfaceSha256": "2a9caf373b6ccf62dc5a30d6ad90d39579afdb1de4bab2603072d50e66eea9ea",
+      "interfaceSha256": "ce6a4e41eb80d78a5a7af96c5fce8f99e44343d63e323c94f42218227de6992e",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/Transfer.hi",
       "compiledSourceMd5": "e4ffac5939a15cf4c1ac1b9deae49b0a",
       "declarations": [
@@ -22763,7 +22807,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/TransferClient.hs",
       "sourceSha256": "82a22a61b111c95fe3da7549d32329d6f2679b1f2bd10ef9df8653873523f005",
       "module": "Shikigami.Workspace.TransferClient",
-      "interfaceSha256": "6678ba9807e53b72cdb4cda8f58cd88253508c26f5c094a026cb3169663bf73a",
+      "interfaceSha256": "10d9a8b9baf76cbc8832bf406f310f7181964aa5ea5810949d68f01c6b572911",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/TransferClient.hi",
       "compiledSourceMd5": "a611fd82a05e9e79f61bba12d38fcd34",
       "declarations": []
@@ -22774,7 +22818,7 @@
       "sourcePath": "shikigami-agent/app/agent-launch/Main.hs",
       "sourceSha256": "0f69d8c8b75356ff063419da493912ee728c976594c3d78cb831e7dd92bdb98f",
       "module": "Main",
-      "interfaceSha256": "6772c24302bb68d62fc50ac0c89147bb5bcc26681f29843ab85319bc2528f64e",
+      "interfaceSha256": "62925ecac153408127cac323781d2c6f83e7a3e1701c09c40089555f38c790f9",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-agent-0.1.0.0/x/shikigami-agent-launch/build/shikigami-agent-launch/shikigami-agent-launch-tmp/Main.hi",
       "compiledSourceMd5": "58a42f8e006570b44faefc87688b3e6d",
       "declarations": []
@@ -22783,7 +22827,7 @@
       "sourcePath": "shikigami-agent/app/agent-run/Main.hs",
       "sourceSha256": "39b77637fb092fc2c7522709203f14b38c141a87f15f71dbb9102fa19ebe5d35",
       "module": "Main",
-      "interfaceSha256": "a52b496b8a87da7e0a1c007c0256931bbef7371c157560eda50843b9e6664c91",
+      "interfaceSha256": "0f1657121a0ff12f325e14b9c6c012543596cd14b0eb54b3a371c5f070f5acfc",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-agent-0.1.0.0/x/shikigami-agent-run/build/shikigami-agent-run/shikigami-agent-run-tmp/Main.hi",
       "compiledSourceMd5": "0f0c7a7bc247b22802777bfa99706fc9",
       "declarations": []
@@ -22792,7 +22836,7 @@
       "sourcePath": "shikigami-agent/app/run-behavior/Main.hs",
       "sourceSha256": "960c92613f679862569d1cb50b8887e6d99bd6e307ccc4f6bc36e59f26f61afb",
       "module": "Main",
-      "interfaceSha256": "174ed27025f77771cfb2a2a8c18309d71f92453b6941f67b3528198a6ad8efa4",
+      "interfaceSha256": "38ad8222310c5f970319b2309aa38255c19b66f5923490e6a85229096cc1597d",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-agent-0.1.0.0/x/shikigami-run-behavior/build/shikigami-run-behavior/shikigami-run-behavior-tmp/Main.hi",
       "compiledSourceMd5": "872a396f8b610654f49e32129b574ed4",
       "declarations": []
@@ -22810,7 +22854,7 @@
       "sourcePath": "shikigami-client/app/Main.hs",
       "sourceSha256": "3eca180a6b451f46987eccfb8eecc097824c1c223cc3a5b9cafaac2d10fd8418",
       "module": "Main",
-      "interfaceSha256": "89b3a88c73ba6f71208528ffa3ded266786271d9819339d7671149eff1df8a0e",
+      "interfaceSha256": "d7d412d605dd691f38f6c788953078142eae267a96c9c703842d41bc20c6172b",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-client-0.1.0.0/x/shikigami-client/build/shikigami-client/shikigami-client-tmp/Main.hi",
       "compiledSourceMd5": "f65729e2a7db8dfb9a3f6a5b3b6c6c54",
       "declarations": []
@@ -22819,7 +22863,7 @@
       "sourcePath": "shikigami-migrations/app/Main.hs",
       "sourceSha256": "a1d4be2f4055b382ce13f7efa28f4b1d5ea524b113ede3c79d317fb94a179202",
       "module": "Main",
-      "interfaceSha256": "1f6cceecbc9a4bab30276a861e7a4a838e1b121119013bcaec491ea2caf12457",
+      "interfaceSha256": "79e6d6cc73abbd83b7c284b5bf47186a98eaca6f5af397f376a434dea7a644ff",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-migrations-0.1.0.0/x/shikigami-migrate/build/shikigami-migrate/shikigami-migrate-tmp/Main.hi",
       "compiledSourceMd5": "a74e22d719261437483e372044723d6e",
       "declarations": [
@@ -22841,7 +22885,7 @@
       "sourcePath": "shikigami-server/app/admin/Main.hs",
       "sourceSha256": "60c690060eba75279536187476b9fccc599e5e2fce7512b62802e4eea654e483",
       "module": "Main",
-      "interfaceSha256": "26e228be7e6ae620f5b4209f60ba4046d175b090455d73aea25fc8199b8f2f55",
+      "interfaceSha256": "846e9ec025f621df6976bb5e4f5d79f2dd2e60e9a5611917c5dca14a28bf28c7",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/x/shikigami/build/shikigami/shikigami-tmp/Main.hi",
       "compiledSourceMd5": "f272b6ddcab000c0c979351ea99ef71c",
       "declarations": []
@@ -22850,7 +22894,7 @@
       "sourcePath": "shikigami-server/app/server/Main.hs",
       "sourceSha256": "bc6d2ab480dbc76f43c39af3301eaa372a5b62818e7e914db869aa11791e2fe1",
       "module": "Main",
-      "interfaceSha256": "6e7fef595b730b69507bf5fac5fe301ebce79cacb538683f5d9e833fcfccf22d",
+      "interfaceSha256": "406029da2b19f5b51d1858cdcf4f55a1d2f58c06a78b7fd5c24e0ec9b1e68f30",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/x/shikigami-server/build/shikigami-server/shikigami-server-tmp/Main.hi",
       "compiledSourceMd5": "ad9f24eb395595f20019b06aade2a72f",
       "declarations": []
@@ -22859,7 +22903,7 @@
       "sourcePath": "shikigami-workers/app/consume-events/Main.hs",
       "sourceSha256": "c45b1aa9c0b98648449057981176cfe1620ba113665de9e82b37910ff6f0f23e",
       "module": "Main",
-      "interfaceSha256": "7e51aaf92cfe9dc76bfb2dbc6271c6c5b1be747e5335ef613519c46cae487d75",
+      "interfaceSha256": "7922a691af3823131241eca420dd1c3bf8695f0cfa00a438ab5f796c4eec7cb3",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/x/shikigami-consume-events/build/shikigami-consume-events/shikigami-consume-events-tmp/Main.hi",
       "compiledSourceMd5": "44166cf86488655b834c89df8a2e0781",
       "declarations": []
@@ -22868,7 +22912,7 @@
       "sourcePath": "shikigami-workers/app/consume-stream/Main.hs",
       "sourceSha256": "0707635bb6897294b2b5133e0d832c46f1135782e8590f8f95e8c16ab6d7e096",
       "module": "Main",
-      "interfaceSha256": "593b57e907c4b1247cf85be3ad5f36a5120d2cd830fc8c127e4537a7bb407a10",
+      "interfaceSha256": "c616f4744e851f4d96aec1f48029a7b307d8364ef645be820732fd9433d495c7",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/x/shikigami-consume-stream/build/shikigami-consume-stream/shikigami-consume-stream-tmp/Main.hi",
       "compiledSourceMd5": "8dfc46b1ff1d6cd4564c90b3fad66da6",
       "declarations": []
@@ -22877,7 +22921,7 @@
       "sourcePath": "shikigami-workers/app/scheduler/Main.hs",
       "sourceSha256": "b1950f202a3a9e13526e59f28eb6644d77a5da1d79f3153f7b3673359d289e3a",
       "module": "Main",
-      "interfaceSha256": "67c98b85bf33d4e7dfed5cbd80ca49c6f97f746a416ffe7a8b5e12c207dd37df",
+      "interfaceSha256": "a362475f01bfa84c22128d5144e1faf8f7e1a2771d2ad59f7235977d4acb3bd5",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/x/shikigami-scheduler/build/shikigami-scheduler/shikigami-scheduler-tmp/Main.hi",
       "compiledSourceMd5": "6f24bc5a5474dc988060094a4a426804",
       "declarations": []
@@ -22886,7 +22930,7 @@
       "sourcePath": "shikigami-workers/app/worker/Main.hs",
       "sourceSha256": "157acd723c534a475b5526b183e180dac507c65b70ecbd039356fb20610915d6",
       "module": "Main",
-      "interfaceSha256": "d9dda270c7fc99515009b331d7885103db3d4764514573954703f19e72661005",
+      "interfaceSha256": "4f0f35773373ee6c9af834f1943e122bc152471943bf21942936845ce5dcb67a",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/x/shikigami-worker/build/shikigami-worker/shikigami-worker-tmp/Main.hi",
       "compiledSourceMd5": "8542c898382b9a22933ddd079c4a0ac9",
       "declarations": []
@@ -22895,7 +22939,7 @@
       "sourcePath": "shikigami-workers/app/workspace-collector/Main.hs",
       "sourceSha256": "a321056ce0b66f443acffb03f8fa14a84aa7d5e5f673d0626d38c5b962805b4d",
       "module": "Main",
-      "interfaceSha256": "d2f9449bd0961958975b742000a7a370c476fa152fb4df67b9f138bab0372cb0",
+      "interfaceSha256": "3dc2765d16368adfe25fc89915d752a86ab1a17d3be224f0d09d8b418bbec0cd",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/x/shikigami-workspace-collector/build/shikigami-workspace-collector/shikigami-workspace-collector-tmp/Main.hi",
       "compiledSourceMd5": "9abdb39bd8b1d6d05170b0df0ce6a37b",
       "declarations": []
@@ -22904,7 +22948,7 @@
       "sourcePath": "shikigami-workers/app/workspace-supervisor/Main.hs",
       "sourceSha256": "eb602e6ed70e8eeb4ccb677ab490e3755c7b384826feb913b742bf073dfd32c3",
       "module": "Main",
-      "interfaceSha256": "7db2ad2a9f5072cd915b97aba462053f9173868f18a9bab55283bf5b1c8217db",
+      "interfaceSha256": "de835fd055fa3068e7426c458ddad56f28a034066fd3b0ae89dc2a979886a07b",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/x/shikigami-workspace-supervisor/build/shikigami-workspace-supervisor/shikigami-workspace-supervisor-tmp/Main.hi",
       "compiledSourceMd5": "2cc0c28b6e7a3aefd652651c15085279",
       "declarations": []
