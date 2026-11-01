@@ -84,7 +84,7 @@ import Shikigami.Attestation.Profile
   ( AllowedCall (..),
     EvidenceStrength (EvidenceModelObserved),
     Issuer (..),
-    ProfileDigest (..),
+    ProfileDigest,
     ProfileId (..),
     ProfileLifecycle (Active),
     ProfileVersion (..),
@@ -94,6 +94,7 @@ import Shikigami.Attestation.Profile
     ThinkingLevel (ThinkingHigh),
     defaultProhibitions,
     noSignerRequirements,
+    profileDigestText,
     unlimitedProfileLimits,
   )
 import Shikigami.Attestation.Resolve (ProfileResolutionError (..), ResolvedProfile (..), postgresProfileStore, resolveProfile)
@@ -3154,9 +3155,6 @@ profileIdText (ProfileId value) = value
 
 profileVersionText :: ProfileVersion -> Text
 profileVersionText (ProfileVersion value) = value
-
-profileDigestText :: ProfileDigest -> Text
-profileDigestText (ProfileDigest value) = value
 
 issuerText :: Issuer -> Text
 issuerText (Issuer value) = value

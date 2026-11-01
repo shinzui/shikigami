@@ -364,7 +364,8 @@ stubProfileVersion :: Profile.ProfileVersion
 stubProfileVersion = Profile.ProfileVersion "1"
 
 assertProfileViolationNamesDigest :: ResolvedProfile -> ProfileViolation -> IO ()
-assertProfileViolationNamesDigest ResolvedProfile {ref = Profile.SanctionedExecutionProfileRef _ _ (Profile.ProfileDigest digest)} violation = do
+assertProfileViolationNamesDigest ResolvedProfile {ref = Profile.SanctionedExecutionProfileRef _ _ claimedDigest} violation = do
+  let digest = Profile.profileDigestText claimedDigest
   let rendered = renderProfileViolation violation
   assertBool
     ("violation should name the attempted tuple: " <> Text.unpack rendered)

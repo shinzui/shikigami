@@ -1,0 +1,18 @@
+{
+  "sourceParent": "5ed80e8",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "files": {
+    "shikigami-core/src/Shikigami/Attestation/Envelope.hs": "aed5826915d0b0daf81e79678fb69203b5e6ca4592849ec19b557702cf71a720",
+    "shikigami-core/src/Shikigami/Attestation/Profile.hs": "7772fe23a0669d10b00ef72bb0b6c1fc4fd76e99ccb25993fcef8c51ada7612f",
+    "shikigami-core/src/Shikigami/Attestation/Resolve.hs": "80d8001815d4a7e07d9bb19ebb69dda35b956d620175a6961a02ee7d9a9b0346",
+    "shikigami-core/src/Shikigami/Behavior/Provider/Call.hs": "10f7026e44016e75a6beea90446d2634a934007d5ec03858812334d3fb95a752",
+    "shikigami-core/test-postgres/Shikigami/AgentWorkflowSpec.hs": "f11ad1e125fa5b4c4b2c23efda870ed13372a6ee9e765ed59003e2accb444d6d",
+    "shikigami-core/test-postgres/Shikigami/DecisionEvidenceSpec.hs": "d6ec653ee56c1dc89787d9114af87a1182f92aca78d6aceb95f99ef5fcb6b7a2",
+    "shikigami-core/test-postgres/Shikigami/ProfileResolutionSpec.hs": "4453493bb2ccbcbe0dbbba2a21503b83dce5a9660d4277af483109b1e52413c9",
+    "shikigami-core/test-postgres/Shikigami/RunEvidenceSpec.hs": "96979273e96a7614cdcecbc6174efe42fe0709bc2c844c08c3e4a00dc24a337b",
+    "shikigami-core/test/Shikigami/AttestationContractsSpec.hs": "293be742c0cba9e6932bf5e3c6b767ae2b946aefacec6d24000cacbf5907edb1",
+    "shikigami-core/test/Shikigami/BehaviorProviderSpec.hs": "6ba05223e0ef5a52667b2257b8f28ce5b9659ce99debeeba2261e090dbabd96a",
+    "tests/types/opaque-values.py": "b6012a7a066284d24d7bb885b6664d9879d59a2ddee84465528edd056ac9b7b6"
+  }
+}

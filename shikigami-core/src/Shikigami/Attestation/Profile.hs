@@ -29,7 +29,10 @@ module Shikigami.Attestation.Profile
   ( -- * Identity
     ProfileId (..),
     ProfileVersion (..),
-    ProfileDigest (..),
+    ProfileDigest,
+    parseProfileDigest,
+    profileDigestText,
+    profileContentDigest,
     Issuer (..),
 
     -- * Lifecycle
@@ -57,8 +60,10 @@ module Shikigami.Attestation.Profile
   )
 where
 
-import Baikai.Evidence (EvidenceStrength (..))
+import Baikai.Evidence (EvidenceStrength (..), commitmentDigest)
 import Baikai.ThinkingLevel (ThinkingLevel (..))
+import Data.Aeson (withText)
+import Data.Text qualified as Text
 import Shikigami.Attestation.PolicyValue
 import Shikigami.Behavior.Provider.Coordinate
 import Shikigami.Prelude
@@ -85,9 +90,27 @@ newtype ProfileVersion = ProfileVersion {value :: Text}
 -- that computation in
 -- @docs/plans/50-fail-closed-profile-resolution-and-run-pinning.md@; signing
 -- still belongs to plan 52.
-newtype ProfileDigest = ProfileDigest {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
+newtype ProfileDigest = ProfileDigest Text
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON)
+
+parseProfileDigest :: Text -> Either Text ProfileDigest
+parseProfileDigest raw
+  | Text.length raw == 71 && "sha256:" `Text.isPrefixOf` raw && Text.all hex (Text.drop 7 raw) = Right (ProfileDigest raw)
+  | otherwise = Left "profile digest requires sha256 and 64 lowercase hexadecimal digits"
+  where
+    hex character = (character >= '0' && character <= '9') || (character >= 'a' && character <= 'f')
+
+profileDigestText :: ProfileDigest -> Text
+profileDigestText (ProfileDigest raw) = raw
+
+instance FromJSON ProfileDigest where
+  parseJSON = withText "profile digest" (either (fail . Text.unpack) pure . parseProfileDigest)
+
+-- | The original canonical content commitment. This owns construction so the
+-- opaque representation does not depend on the envelope importing its constructor.
+profileContentDigest :: SanctionedExecutionProfile -> ProfileDigest
+profileContentDigest = ProfileDigest . commitmentDigest . toJSON
 
 -- | Who issued a profile. A verifier checks this against its trusted issuers;
 -- kikan IR-6 invariant 7 requires an unknown issuer to fail closed.

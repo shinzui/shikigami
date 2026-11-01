@@ -58,6 +58,22 @@ own, implemented in terms of baikai's encoder.**
   commit differing only in case would digest differently.
 
 
+`ProfileDigest` and `PayloadDigest` are private, non-Generic values. Their parsers
+and complete-document JSON decoders accept exactly `sha256:` followed by 64
+lowercase hexadecimal digits, matching their concrete canonical producers. The
+profile owner now constructs its digest through `profileContentDigest`; the
+existing envelope `profileDigest` facade delegates to it without changing the
+hash input or encoder. Renderers replace public constructor access at SQL and
+presentation adapters. Syntax alone does not verify a claim: profile resolution
+and decision admission still compare the computed content commitment, and an
+attestation verifier/signing service remains separate work.
+
+`SchemaVersion` is the closed supported vocabulary. The producer still emits
+`shikigami.agent-run-attestation/1` byte for byte. Unknown versions fail explicitly
+when a complete payload is decoded; they do not become supported domain values.
+The public constant and checked parser are its construction boundary.
+
+
 ## Alternatives rejected
 
 **Use `Data.Aeson.encode` and pin the bytes with a test.** A test pins what the
@@ -110,6 +126,19 @@ the test working.
 `ModelCallEvidence`, because that type derives `ToJSON` but not `FromJSON` and an
 attestation that cannot be decoded is useless to the verifier it exists for. This
 also preserves the producer's exact bytes, which is what the digest covers.
+
+
+Previously unchecked malformed commitment strings and unsupported schema names
+now fail decoding. This deliberately narrows invalid or unsupported admission;
+it does not normalize or rewrite retained documents, alter valid canonical
+payload bytes, waive compatibility under a first-release exception, or claim
+that an unsupported historical payload can resume. Compiler clients exercise
+public factories before constructor, coercion and Generic refusal controls.
+Complete reference, payload and envelope mutations exercise the actual codecs.
+The profile SQL reader preserves its existing exception seam for malformed data
+and native query failures; tests distinguish their diagnostics from absence and
+prove exact row recovery after repair. Decision evidence's composable readers
+continue to condemn their owning transaction for an invalid pinned reference.
 
 
 ## References

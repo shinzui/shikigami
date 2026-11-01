@@ -44,19 +44,23 @@ import Shikigami.Attestation.Envelope
     AttestationPayload (..),
     CallEvidenceSet (..),
     CompletenessVerdict (..),
-    PayloadDigest (..),
+    PayloadDigest,
     SanctionedVerdict (..),
-    SchemaVersion (..),
+    SchemaVersion,
     attestationPayloadDigest,
     canonicalPayloadBytes,
     currentAttestationSchemaVersion,
+    parsePayloadDigest,
+    parseSchemaVersion,
+    payloadDigestText,
+    schemaVersionText,
   )
 import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile
   ( AllowedCall (..),
     EvidenceStrength (..),
     Issuer (..),
-    ProfileDigest (..),
+    ProfileDigest,
     ProfileId (..),
     ProfileLifecycle (..),
     ProfileLimits (..),
@@ -68,6 +72,9 @@ import Shikigami.Attestation.Profile
     ThinkingLevel (..),
     defaultProhibitions,
     noSignerRequirements,
+    parseProfileDigest,
+    profileContentDigest,
+    profileDigestText,
     unlimitedProfileLimits,
   )
 import Shikigami.Attestation.Reviewed
@@ -107,7 +114,20 @@ profileTests :: TestTree
 profileTests =
   testGroup
     "sanctioned execution profile"
-    [ testCase "complete profiles reject negative quantities at every policy axis" do
+    [ testCase "a complete profile reference admits only canonical SHA-256 commitments" do
+        roundTrips "complete profile reference" sampleProfileRef
+        let computed = profileContentDigest fullProfile
+        parseProfileDigest (profileDigestText computed) @?= Right computed
+        encode computed @?= encode (profileDigestText computed)
+        mapM_
+          ( \raw -> do
+              assertBool "profile parser refused" (isLeft (parseProfileDigest raw))
+              case toJSON sampleProfileRef of
+                Object fields -> assertBool "complete reference refused" (case fromJSON (Object (KeyMap.insert "digest" (toJSON raw) fields)) :: Result SanctionedExecutionProfileRef of Error _ -> True; Success _ -> False)
+                _ -> error "profile reference was not an object"
+          )
+          ["", "sha256:short", "SHA256:" <> Text.replicate 64 "a", "sha256:" <> Text.replicate 64 "A", "sha256:" <> Text.replicate 63 "0", "sha256:" <> Text.replicate 65 "0"],
+      testCase "complete profiles reject negative quantities at every policy axis" do
         roundTrips "valid complete profile" fullProfile
         let mutate section key value = case toJSON fullProfile of
               Object fields -> case KeyMap.lookup section fields of
@@ -260,7 +280,7 @@ sampleProfileRef =
   SanctionedExecutionProfileRef
     { profileId = ProfileId "sanctioned-review",
       version = ProfileVersion "1",
-      digest = ProfileDigest "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      digest = either (error . show) id (parseProfileDigest "sha256:0000000000000000000000000000000000000000000000000000000000000000")
     }
 
 minimalProfileBytes :: ByteString
@@ -566,9 +586,33 @@ envelopeTests =
           Error _ -> pure ()
         assertEqual
           "the current version names its producer"
-          (SchemaVersion "shikigami.agent-run-attestation/1")
-          currentAttestationSchemaVersion,
+          "shikigami.agent-run-attestation/1"
+          (schemaVersionText currentAttestationSchemaVersion),
       -- Canonical means one logical value has exactly one byte encoding.
+      testCase "a complete payload refuses unsupported schema versions" do
+        roundTrips "valid complete payload" samplePayload
+        parseSchemaVersion (schemaVersionText currentAttestationSchemaVersion) @?= Right currentAttestationSchemaVersion
+        mapM_
+          ( \raw -> do
+              assertBool "unknown version parser refused" (isLeft (parseSchemaVersion raw))
+              case toJSON samplePayload of
+                Object fields -> assertBool "unknown complete payload refused" (case fromJSON (Object (KeyMap.insert "schemaVersion" (toJSON raw) fields)) :: Result AttestationPayload of Error _ -> True; Success _ -> False)
+                _ -> error "payload was not an object"
+          )
+          ["", "shikigami.agent-run-attestation/2", "other.agent-run-attestation/1"],
+      testCase "a complete envelope refuses malformed payload commitments" do
+        roundTrips "valid complete envelope" sampleAttestation
+        let computed = attestationPayloadDigest samplePayload
+        parsePayloadDigest (payloadDigestText computed) @?= Right computed
+        encode computed @?= encode (payloadDigestText computed)
+        mapM_
+          ( \raw -> do
+              assertBool "payload parser refused" (isLeft (parsePayloadDigest raw))
+              case toJSON sampleAttestation of
+                Object fields -> assertBool "complete envelope refused" (case fromJSON (Object (KeyMap.insert "payloadDigest" (toJSON raw) fields)) :: Result AgentRunAttestation of Error _ -> True; Success _ -> False)
+                _ -> error "envelope was not an object"
+          )
+          ["", "sha256:short", "SHA256:" <> Text.replicate 64 "a", "sha256:" <> Text.replicate 64 "A", "sha256:" <> Text.replicate 63 "0", "sha256:" <> Text.replicate 65 "0"],
       testCase "canonical bytes are stable across repeated calls" do
         assertEqual
           "same payload, same bytes"
@@ -674,7 +718,7 @@ pinnedCanonicalPayload =
   "{\"agentArtifacts\":{\"declarationDigest\":\"sha256:decl\"},\"agentVersion\":{\"agentVersion\":\"2026-08-05.1\",\"declarationDigest\":\"sha256:11111111111111111111111111111111\",\"logicalAgentId\":\"architecture-reviewer\"},\"callEvidence\":{\"merkleRoot\":\"sha256:merkle\",\"type\":\"call_evidence_merkle_root\"},\"completeness\":{\"type\":\"evidence_complete\"},\"issuedAt\":\"2026-08-05T00:00:00Z\",\"issuer\":\"shinzui/shikigami\",\"profile\":{\"digest\":\"sha256:0000000000000000000000000000000000000000000000000000000000000000\",\"profileId\":\"sanctioned-review\",\"version\":\"1\"},\"reviewClass\":\"architecture-practice\",\"reviewResultDigest\":\"sha256:result\",\"reviewed\":{\"baseCommit\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"diffDigest\":\"sha256:diff\",\"headCommit\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"pathScope\":[\"shikigami-core/src\"],\"repository\":\"mori://shinzui/shikigami\"},\"runId\":\"run-1\",\"sanctioned\":{\"type\":\"sanctioned\"},\"schemaVersion\":\"shikigami.agent-run-attestation/1\",\"strength\":\"runtime-attested\"}"
 
 pinnedPayloadDigest :: PayloadDigest
-pinnedPayloadDigest = PayloadDigest "sha256:3a00e20cdb4d53408be548e6ccaaf613ef6f07e446167b1547fbfbde31dec02e"
+pinnedPayloadDigest = either (error . show) id (parsePayloadDigest "sha256:3a00e20cdb4d53408be548e6ccaaf613ef6f07e446167b1547fbfbde31dec02e")
 
 -- ---------------------------------------------------------------------------
 -- Helpers

@@ -9,11 +9,15 @@
 -- 'canonicalPayloadBytes' takes a payload, and a payload has no signature field.
 module Shikigami.Attestation.Envelope
   ( -- * Schema identity
-    SchemaVersion (..),
+    SchemaVersion,
+    parseSchemaVersion,
+    schemaVersionText,
     currentAttestationSchemaVersion,
 
     -- * Digest
-    PayloadDigest (..),
+    PayloadDigest,
+    parsePayloadDigest,
+    payloadDigestText,
 
     -- * Verdicts
     CallEvidenceSet (..),
@@ -35,10 +39,11 @@ module Shikigami.Attestation.Envelope
 where
 
 import Baikai.Evidence (canonicalEncode, commitmentDigest)
-import Data.Aeson (Value)
+import Data.Aeson (Value, withText)
 import Data.ByteString (ByteString)
+import Data.Text qualified as Text
 import Shikigami.Attestation.Agent (AgentArtifactSet, AgentVersionRef)
-import Shikigami.Attestation.Profile (Issuer, ProfileDigest (..), SanctionedExecutionProfile, SanctionedExecutionProfileRef)
+import Shikigami.Attestation.Profile (Issuer, ProfileDigest, SanctionedExecutionProfile, SanctionedExecutionProfileRef, profileContentDigest)
 import Shikigami.Attestation.Reviewed (NonConformingReason, ResultDigest, ReviewedArtifact)
 import Shikigami.Attestation.Strength (AttestationStrength)
 import Shikigami.Prelude
@@ -48,9 +53,22 @@ import Shikigami.Prelude
 -- ---------------------------------------------------------------------------
 
 -- | Which version of the attestation contract a document speaks.
-newtype SchemaVersion = SchemaVersion {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
+data SchemaVersion = AttestationV1
+  deriving stock (Eq, Ord, Show)
+
+parseSchemaVersion :: Text -> Either Text SchemaVersion
+parseSchemaVersion "shikigami.agent-run-attestation/1" = Right AttestationV1
+parseSchemaVersion _ = Left "unsupported attestation schema version"
+
+schemaVersionText :: SchemaVersion -> Text
+schemaVersionText AttestationV1 = "shikigami.agent-run-attestation/1"
+
+instance ToJSON SchemaVersion where
+  toJSON = toJSON . schemaVersionText
+  toEncoding = toEncoding . schemaVersionText
+
+instance FromJSON SchemaVersion where
+  parseJSON = withText "attestation schema version" (either (fail . Text.unpack) pure . parseSchemaVersion)
 
 -- | The schema version this build produces.
 --
@@ -63,7 +81,7 @@ newtype SchemaVersion = SchemaVersion {value :: Text}
 -- The string names the producer as well as the number so that a document found
 -- out of context still says what it is.
 currentAttestationSchemaVersion :: SchemaVersion
-currentAttestationSchemaVersion = SchemaVersion "shikigami.agent-run-attestation/1"
+currentAttestationSchemaVersion = AttestationV1
 
 -- ---------------------------------------------------------------------------
 -- Digest
@@ -71,9 +89,22 @@ currentAttestationSchemaVersion = SchemaVersion "shikigami.agent-run-attestation
 
 -- | A digest over a payload's canonical bytes, self-describing as
 -- @sha256:\<hex\>@.
-newtype PayloadDigest = PayloadDigest {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
+newtype PayloadDigest = PayloadDigest Text
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON)
+
+parsePayloadDigest :: Text -> Either Text PayloadDigest
+parsePayloadDigest raw
+  | Text.length raw == 71 && "sha256:" `Text.isPrefixOf` raw && Text.all hex (Text.drop 7 raw) = Right (PayloadDigest raw)
+  | otherwise = Left "attestation payload digest requires sha256 and 64 lowercase hexadecimal digits"
+  where
+    hex character = (character >= '0' && character <= '9') || (character >= 'a' && character <= 'f')
+
+payloadDigestText :: PayloadDigest -> Text
+payloadDigestText (PayloadDigest raw) = raw
+
+instance FromJSON PayloadDigest where
+  parseJSON = withText "attestation payload digest" (either (fail . Text.unpack) pure . parsePayloadDigest)
 
 -- ---------------------------------------------------------------------------
 -- Verdicts
@@ -262,7 +293,7 @@ attestationPayloadDigest = PayloadDigest . commitmentDigest . toJSON
 -- uses the same canonical encoder as 'attestationPayloadDigest', so profile and
 -- attestation commitments cannot drift onto subtly different JSON rules.
 profileDigest :: SanctionedExecutionProfile -> ProfileDigest
-profileDigest = ProfileDigest . commitmentDigest . toJSON
+profileDigest = profileContentDigest
 
 -- ---------------------------------------------------------------------------
 -- Encoding

@@ -107,6 +107,14 @@ the five new private scalar keys are classified. See the source snapshot at
 `docs/evidence/plan-108/profile-policy-source.json`. Profile/payload commitments
 and schema remain open findings.
 
+The attestation commitment/schema source candidate passes 50 unit, 133
+PostgreSQL and 103 public compiler controls. Canonical bytes and the pinned
+payload digest remain unchanged; malformed commitment and unsupported schema
+admission now refuse. See
+`docs/evidence/plan-108/attestation-commitments-source.json`. Coherent build/census
+reconciliation follows this checkpoint. A newly found resolver profile/reference
+and requested-coordinate ownership gap remains open for the next owner batch.
+
 The native workflow gate passes on `400cdc0` against `af76f1b`, with no findings
 and a replay-neutral native verdict. Exact reports accompany the current evidence.
 The full build, fresh census and focused checks are checkpoints, not milestone
@@ -163,6 +171,13 @@ as well as JSON decoding before it can authorize another deletion. Its completio
 path now inspects that plan first. Keep historical absent ownership and the
 existing numeric/colon target rule; do not invent a narrower filesystem identity
 format as part of decoder remediation. ADR-107 records this extension.
+
+2026-10-31: `Attestation.Resolve.validateCandidate` checks content hash and
+lifecycle, but does not verify content/reference id/version equality or that a
+custom store candidate matches the requested coordinates. The new checked digest
+syntax cannot establish these bindings. Keep this ownership finding explicit
+until construction and the real read seam reject the mismatches, with positive,
+corruption and exact-repair controls.
 
 ## Decision Log
 

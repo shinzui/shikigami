@@ -30,6 +30,8 @@ import Shikigami.Router.SelectionLimit qualified as Limit
 import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Agent.Principal qualified as Principal
 import Shikigami.App.Config qualified as Config
+import Shikigami.Attestation.Envelope qualified as Attestation
+import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.PolicyValue qualified as Policy
 import Shikigami.Attestation.Reviewed qualified as Reviewed
 import Shikigami.Capability.Overlay qualified as Overlay
@@ -61,7 +63,13 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''policyCeiling :: Int -> Either Text (Policy.Ceiling "calls" Int)
+POSITIVE = '''profileDigest :: Text -> Either Text Profile.ProfileDigest
+profileDigest = Profile.parseProfileDigest
+attestationDigest :: Text -> Either Text Attestation.PayloadDigest
+attestationDigest = Attestation.parsePayloadDigest
+attestationVersion :: Text -> Either Text Attestation.SchemaVersion
+attestationVersion = Attestation.parseSchemaVersion
+policyCeiling :: Int -> Either Text (Policy.Ceiling "calls" Int)
 policyCeiling = Policy.mkCeiling
 policyPermission :: Policy.Permission "aliasesAllowed"
 policyPermission = Policy.Permitted
@@ -193,6 +201,9 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('Profile.ProfileDigest', 'generic'),
+    ('Attestation.PayloadDigest', 'generic'),
+    ('Attestation.SchemaVersion', 'generic'),
     ('Policy.Ceiling "calls" Int', 'generic'),
     ('Policy.Permission "aliasesAllowed"', 'generic'),
     ('Policy.PolicyCoordinate "signing-key-id"', 'generic'),
@@ -278,6 +289,11 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         assert result.returncode != 0 and 'RunDisposition' in result.stderr, (source_kind, result.stderr)
         print('opaque boundary: run disposition ' + source_kind + ' substitution refused: passed', flush=True)
     for label, signature, expression in [
+        ('profile digest raw coercion', 'Text -> Profile.ProfileDigest', 'coerce'),
+        ('attestation digest raw coercion', 'Text -> Attestation.PayloadDigest', 'coerce'),
+        ('attestation version raw coercion', 'Text -> Attestation.SchemaVersion', 'coerce'),
+        ('attestation/profile commitment substitution', 'Attestation.PayloadDigest -> Profile.ProfileDigest', 'id'),
+        ('attestation/profile commitment coercion', 'Attestation.PayloadDigest -> Profile.ProfileDigest', 'coerce'),
         ('ceiling raw coercion', 'Int -> Policy.Ceiling "calls" Int', 'coerce'),
         ('ceiling unit substitution', 'Policy.Ceiling "calls" Int -> Policy.Ceiling "tokens" Int', 'id'),
         ('ceiling unit coercion', 'Policy.Ceiling "calls" Int -> Policy.Ceiling "tokens" Int', 'coerce'),
@@ -295,6 +311,9 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         assert result.returncode != 0 and 'Not in scope' not in result.stderr, (label, result.stderr)
         print('opaque boundary: ' + label + ' substitution refused: passed', flush=True)
     for kind, representation in [
+        ('Profile.ProfileDigest', 'Text'),
+        ('Attestation.PayloadDigest', 'Text'),
+        ('Attestation.SchemaVersion', 'Text'),
         ('Decision.DecisionPreparationId', 'Text'),
         ('Decision.DecisionSlotLabel', 'Text'),
         ('Decision.DecisionGeneration', 'Natural')]:

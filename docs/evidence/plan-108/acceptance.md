@@ -623,3 +623,49 @@ both checker modes correctly refuse completion. No blanket exemption or hash-onl
 renewal was applied. All 24 domain-tool mutation tests and the 124-source/93-item
 upgrade inventory audit with its 21 mutation controls pass. Frozen source hashes,
 release identities and the deferred guide disposition remain unchanged.
+
+
+## Canonical attestation commitments and supported schema
+
+`attestation-commitments-source.json` binds the arm64 macOS/GHC 9.12.4 source
+candidate to parent `5ed80e8`. Profile and payload commitments are private,
+non-Generic values with checked SHA-256 parsers, renderers and unchanged
+canonical producers. The supported schema is closed at the existing
+`shikigami.agent-run-attestation/1` literal. Unknown versions and malformed
+commitment strings refuse complete-document decoding; retained bytes are not
+normalized or rewritten. This narrows invalid/unsupported admission without
+using a first-release exception or claiming unsupported historical replay.
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-test -j1 --test-show-details=direct --test-option=-p --test-option='/attestation contracts/||/a pinned profile/'
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/profile resolution/||/durable decision evidence/||/run evidence/||/durable typed decisions/||/ExecutionSelectionWorkflow/||/profile/'
+nix develop --no-write-lock-file -c python3 tests/types/opaque-values.py
+python3 tools/style/check_haskell.py
+git diff --check
+```
+
+All 50 unit, 133 PostgreSQL and 103 public compiler controls pass. The complete
+profile reference, payload and envelope first round-trip validly, then reject a
+single malformed commitment or unsupported schema member. The original pinned
+canonical payload bytes and digest remain unchanged. Public-client factories
+compile before constructor, raw/cross-domain coercion and Generic bypasses are
+rejected. The SQL profile test starts with a valid resolved profile, injects a
+malformed stored digest, checks the explicit owner diagnostic and unchanged
+complete row, then proves exact repair recovers the original row/profile.
+Missing-row behavior remains distinct; an actual missing SQL relation produces
+query context rather than a decoder diagnostic. That read-only store retains
+its existing IO-exception seam. Decision-evidence composable reads instead
+condemn the transaction for an invalid pinned reference, preserving all earlier
+rollback and original-row recovery assertions.
+
+Profile content hashing moved behind its private type; the envelope facade uses
+that same computation. Its input and canonical encoder are unchanged. Syntax
+checks do not confer trust, establish reference/content binding on their own,
+or implement signing. No workflow source, durable identity formula, migration,
+dependency or valid HTTP representation changes. A coherent full build and
+census reconciliation follow this source checkpoint; all milestones stay open.
+
+Review of `Attestation.Resolve` also found that a well-formed candidate with a
+matching hash can disagree with its reference's profile id/version or the
+requested lookup coordinates. That ownership gap remains explicit pending its
+own construction/owner batch; digest syntax tests do not certify it.

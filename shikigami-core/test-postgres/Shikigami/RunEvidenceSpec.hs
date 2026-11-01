@@ -671,7 +671,7 @@ sampleProfileRef =
   SanctionedExecutionProfileRef
     { profileId = ProfileId "review",
       version = ProfileVersion "v1",
-      digest = ProfileDigest "sha256:profile"
+      digest = profileContentDigest baselineProfile
     }
 
 fixtureSource :: [RecordedCallEvidence] -> EvidenceSource

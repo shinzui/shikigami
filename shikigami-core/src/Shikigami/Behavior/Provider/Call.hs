@@ -130,13 +130,10 @@ renderProfileRef (Profile.SanctionedExecutionProfileRef profileId version digest
     <> " version "
     <> profileVersionText version
     <> " digest "
-    <> profileDigestText digest
+    <> Profile.profileDigestText digest
 
 profileIdText :: Profile.ProfileId -> Text
 profileIdText (Profile.ProfileId value) = value
 
 profileVersionText :: Profile.ProfileVersion -> Text
 profileVersionText (Profile.ProfileVersion value) = value
-
-profileDigestText :: Profile.ProfileDigest -> Text
-profileDigestText (Profile.ProfileDigest value) = value

@@ -1,12 +1,14 @@
 module Shikigami.ProfileResolutionSpec (tests) where
 
 import Contravariant.Extras (contrazip2)
+import Control.Exception (IOException, displayException, try)
 import Control.Lens (view)
 import Data.Aeson (Value, toJSON)
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
+import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import GHC.Generics (Generic)
 import Hasql.Decoders qualified as Decoders
@@ -23,7 +25,7 @@ import Shikigami.Attestation.Resolve
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
+import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase, (@?=))
 
 tests :: DatabaseFixture -> TestTree
 tests databaseFixture =
@@ -69,6 +71,39 @@ tests databaseFixture =
               assertEqual "claimed digest" claimed claimed'
               assertBool "the recomputed digest changed" (computed /= claimed)
             other -> assertFailure ("expected MutableProfile, got " <> show other),
+      testCase "malformed stored commitment refuses and exact repair recovers the original profile" do
+        withPool databaseFixture \pool -> do
+          let content = sampleProfile Active Nothing (ProfileVersion "1")
+              digest = profileDigest content
+              store = postgresProfileStore pool
+              readProfile = resolveProfile store testNow sampleId Nothing
+              document = preparable "SELECT to_jsonb(p) FROM shikigami.sanctioned_execution_profiles p" mempty (Decoders.singleRow (Decoders.column (Decoders.nonNullable Decoders.jsonb))) :: Statement () Value
+              setDigest = preparable "UPDATE shikigami.sanctioned_execution_profiles SET profile_digest=$1" (Encoders.param (Encoders.nonNullable Encoders.text)) Decoders.noResult :: Statement Text ()
+              run :: Statement params result -> params -> IO result
+              run statement value = Pool.use pool (Session.statement value statement) >>= either (fail . show) pure
+          insertProfile pool content digest
+          readProfile >>= (@?= Right (resolvedProfile content digest))
+          before <- run document ()
+          run setDigest "sha256:short"
+          corrupt <- run document ()
+          refused <- try @IOException readProfile
+          case refused of
+            Left err -> assertBool "the owner identifies a malformed commitment" ("profile digest requires" `Text.isInfixOf` Text.pack (displayException err))
+            Right value -> assertFailure ("unproducible digest became a profile result: " <> show value)
+          run document () >>= (@?= corrupt)
+          run setDigest (profileDigestText digest)
+          readProfile >>= (@?= Right (resolvedProfile content digest))
+          run document () >>= (@?= before)
+          -- A genuine query failure remains an exception with SQL context,
+          -- separate from absent profiles and the explicit decoder diagnostic.
+          Pool.use pool (Session.script "ALTER TABLE shikigami.sanctioned_execution_profiles RENAME TO withheld_profile_rows") >>= either (fail . show) pure
+          unavailable <- try @IOException readProfile
+          case unavailable of
+            Left err -> do
+              let detail = Text.pack (displayException err)
+              assertBool "SQL context retained" ("sanctioned_execution_profiles" `Text.isInfixOf` detail)
+              assertBool "query failure is not a decoder failure" (not ("profile digest requires" `Text.isInfixOf` detail))
+            Right value -> assertFailure ("SQL failure became a profile result: " <> show value),
       testCase "ambiguous seam match is refused, listing versions" do
         let firstProfile = sampleProfile Active Nothing (ProfileVersion "1")
             secondProfile = sampleProfile Active Nothing (ProfileVersion "2")
@@ -207,9 +242,6 @@ profileIdText (ProfileId value) = value
 
 profileVersionText :: ProfileVersion -> Text
 profileVersionText (ProfileVersion value) = value
-
-profileDigestText :: ProfileDigest -> Text
-profileDigestText (ProfileDigest value) = value
 
 issuerText :: Issuer -> Text
 issuerText (Issuer value) = value

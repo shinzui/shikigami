@@ -25,12 +25,14 @@ import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
 import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Profile
-  ( ProfileDigest (..),
+  ( ProfileDigest,
     ProfileId (..),
     ProfileLifecycle (..),
     ProfileVersion (..),
     SanctionedExecutionProfile (..),
     SanctionedExecutionProfileRef (..),
+    parseProfileDigest,
+    profileDigestText,
   )
 import Shikigami.Prelude
 
@@ -176,6 +178,7 @@ decodeProfileRow (storedId, storedVersion, contentValue, storedDigest) = do
   content <- case fromJSON contentValue of
     Success decoded -> Right decoded
     Error err -> Left ("cannot decode sanctioned execution profile: " <> Text.pack err)
+  digest <- parseProfileDigest storedDigest
   pure
     ResolvedProfile
       { profile = content,
@@ -183,7 +186,7 @@ decodeProfileRow (storedId, storedVersion, contentValue, storedDigest) = do
           SanctionedExecutionProfileRef
             { profileId = ProfileId storedId,
               version = ProfileVersion storedVersion,
-              digest = profileDigestFromText storedDigest
+              digest
             }
       }
 
@@ -192,9 +195,3 @@ profileIdText (ProfileId value) = value
 
 profileVersionText :: ProfileVersion -> Text
 profileVersionText (ProfileVersion value) = value
-
-profileDigestText :: ProfileDigest -> Text
-profileDigestText (ProfileDigest value) = value
-
-profileDigestFromText :: Text -> ProfileDigest
-profileDigestFromText = ProfileDigest
