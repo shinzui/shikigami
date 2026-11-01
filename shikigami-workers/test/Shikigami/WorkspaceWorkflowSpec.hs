@@ -64,6 +64,7 @@ import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.PracticeReview.Capability qualified as Practice
 import Shikigami.Prelude ((&), (.~))
+import Shikigami.Repository (RepositoryId (..))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config
@@ -91,6 +92,7 @@ import Shikigami.Workspace.Settings
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import Shikigami.WorkspaceStoreSpec qualified as Fixture
 import System.Directory (createFileLink, doesPathExist, makeAbsolute)
 import System.FilePath ((</>))
@@ -123,7 +125,7 @@ tests fixture =
           cleanupWorkspace runtime job.identity binding.workspace >>= (@?= Right ())
           doesPathExist (workspaceScratch root binding) >>= (@?= False)
           doesPathExist (workspaceMetadata root binding) >>= (@?= True)
-          readFile (binding.source </> "dependency.txt") >>= (@?= "old dependency\n")
+          readFile ((workspaceLocatorPath binding.source) </> "dependency.txt") >>= (@?= "old dependency\n")
           readFile (root </> "retained-sibling") >>= (@?= "sibling")
           Right (Just (_, True)) <- run env (runTransaction (inspectCleanupTx binding))
           catalog <- right (WorkspaceCatalog.mkWorkspaceCatalog [WorkspaceCatalog.RepositoryPolicy binding.repository binding.source [binding.base] binding.base binding.policyRevision])
@@ -131,7 +133,7 @@ tests fixture =
           run env (runTransaction (Store.reserveWorkspaceTx root binding.request repository)) >>= (@?= Left WorkspaceBindingConflict)
           (foreignBinding, _) <- right =<< run env (runTransaction (Store.reserveWorkspaceTx (root <> "-other") (binding.request & #runId .~ WorkflowId "foreign-workspace") repository))
           listing <- right =<< listWorkspaces runtime job.identity Nothing
-          assertBool "operator listing omits other storage roots, local paths and private instructions" (all (\secret -> not (secret `Text.isInfixOf` Text.pack (show (Aeson.encode listing)))) [Text.pack root, Text.pack binding.source, "PRIVATE_WORKFLOW_POLICY", foreignBinding.workspace.resource])
+          assertBool "operator listing omits other storage roots, local paths and private instructions" (all (\secret -> not (secret `Text.isInfixOf` Text.pack (show (Aeson.encode listing)))) [Text.pack root, Text.pack (workspaceLocatorPath binding.source), "PRIVATE_WORKFLOW_POLICY", (workspaceCoordinateText foreignBinding.workspace.resource)])
           Agent.runAgentRunWorkflow deps job >>= assertCompleted,
       testCase "corrupt cleanup refuses ignored reads and resumes the retained plan after repair" $
         withWorkflow fixture \env root job _ deps _ -> do
@@ -143,7 +145,7 @@ tests fixture =
           Right (Just (plan, False)) <- run env (runTransaction (inspectCleanupTx binding))
           run env (runTransaction (prepareCleanupTx binding plan)) >>= (@?= Right False)
           let replace value = run env (runTransaction (Tx.statement value (preparable "UPDATE shikigami.workspace_cleanup SET plan=$1" (E.param (E.nonNullable E.jsonb)) D.noResult)))
-          forM_ [Aeson.Null, Aeson.toJSON (plan & #userId .~ (-1)), Aeson.toJSON (plan & #filesTarget .~ "invalid"), Aeson.toJSON (plan & #bindingDigest .~ "wrong")] \invalid -> do
+          forM_ [Aeson.Null, (case Aeson.toJSON plan of Aeson.Object fields -> Aeson.Object (KeyMap.insert "userId" (Aeson.Number (-1)) fields); _ -> error "complete cleanup plan was not an object"), Aeson.toJSON (plan & #filesTarget .~ (workspaceCoordinate ("invalid"))), Aeson.toJSON (plan & #bindingDigest .~ (workspaceCoordinate ("wrong")))] \invalid -> do
             replace invalid
             run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Left WorkspaceBindingConflict)
             run env (runTransaction (prepareCleanupTx binding plan)) >>= (@?= Left WorkspaceBindingConflict)
@@ -209,7 +211,7 @@ tests fixture =
       testCase "terminal cleanup refuses a prepared mutation without inferring settlement from a free lock" $
         withWorkflow fixture \env root job _ deps _ -> do
           binding <- finishWorkspace env job deps
-          run env (runTransaction (Store.reserveWorkspaceEffectTx binding job.identity (fixtureRevision 0) (fixtureOperationId "pending-cleanup-effect") "pending")) >>= (@?= Right Nothing)
+          run env (runTransaction (Store.reserveWorkspaceEffectTx binding job.identity (fixtureRevision 0) (fixtureOperationId "pending-cleanup-effect") (workspaceCoordinate ("pending")))) >>= (@?= Right Nothing)
           cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
           run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Right Nothing)
           doesPathExist (workspaceFiles root binding) >>= (@?= True),
@@ -261,10 +263,11 @@ tests fixture =
           (snapshot, _) <- right =<< run env (Execution.loadExecution access)
           admission <- maybe (fail "workspace admission missing") pure snapshot.workspace
           principal <- right (identityText job.identity)
-          let digest = "sha256:" <> Text.replicate 64 "a"
-              policy = ProcessPolicy ProcessPolicyV1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") digest [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] ["dependency.txt"]
-              process = WorkspaceProcessSettings "/run/shikigami/supervisor.sock" 0 5 60 (IdentityRange 64000 64031) (Map.singleton binding.repository policy)
-              settings = WorkspaceSettings root [WorkspaceRepository binding.repository binding.source [WorkspaceRevision binding.base (bundleDigest admission.instructions)] binding.base "policy-1" [""] ["dependency.txt"]] [WorkspaceGrant "workspace-worker" principal binding.repository Nothing] (Just process)
+          let digest :: WorkspaceCoordinate scope
+              digest = workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")
+              policy = ProcessPolicy ProcessPolicyV1 (ProcessImage (workspaceLocator "/qualified/root") digest (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")) digest [CommandRule (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)] [(workspaceCoordinate "")] [(workspaceCoordinate "dependency.txt")]
+              process = WorkspaceProcessSettings (workspaceLocator "/run/shikigami/supervisor.sock") ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60) (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031)) (Map.singleton binding.repository policy)
+              settings = WorkspaceSettings (workspaceLocator root) [WorkspaceRepository binding.repository binding.source [WorkspaceRevision binding.base (bundleDigest admission.instructions)] binding.base (workspaceCoordinate "policy-1") [(workspaceCoordinate "")] [(workspaceCoordinate "dependency.txt")]] [WorkspaceGrant ((either (error . show) id . mkAgentName) "workspace-worker") (declarationCoordinate principal) binding.repository Nothing] (Just process)
           host <- right (configuredWorkspaceHost env store.pool disabledDirectoryHandle allowAllActionAuthorizerForTests settings)
           let resumed = (deps & #capabilities .~ (host.capabilities) & #workspace .~ (Just ((host & #load .~ (\_ -> assertFailure "old file assignment attempted process provisioning" >> fail "unreachable")))))
           _ <- right =<< driveExecutionForeground (Agent.executionRuntime resumed) (ExecutionStart execution) 30
@@ -272,12 +275,12 @@ tests fixture =
           readFile (workspaceFiles root binding </> "dependency.txt") >>= (@?= "workflow replacement\n")
           length <$> readIORef observed >>= (@?= 2),
       testCase "operator principal mismatch refuses before source allocation" $
-        withWorkflowConfig (\settings -> settings & #grants .~ [WorkspaceGrant "workspace-worker" "other-principal" "mori://fixture/repo" Nothing]) fixture \_ root job _ deps observed -> do
+        withWorkflowConfig (\settings -> settings & #grants .~ [WorkspaceGrant ((either (error . show) id . mkAgentName) "workspace-worker") (declarationCoordinate "other-principal") (RepositoryId "mori://fixture/repo") Nothing]) fixture \_ root job _ deps observed -> do
           Agent.runAgentRunWorkflow deps job >>= assertRefused
           doesPathExist root >>= (@?= False)
           readIORef observed >>= (@?= []),
       testCase "unreviewed instruction digest refuses before protected execution or model dispatch" $
-        withWorkflowConfig (\settings -> settings & #repositories .~ [(entry & #revisions .~ ([(revision & #instructionDigest .~ ("sha256:" <> Text.replicate 64 "0")) | revision <- entry.revisions])) | entry <- settings.repositories]) fixture \env _ job _ deps observed -> do
+        withWorkflowConfig (\settings -> settings & #repositories .~ [(entry & #revisions .~ ([(revision & #instructionDigest .~ workspaceCoordinate ("sha256:" <> Text.replicate 64 "0")) | revision <- entry.revisions])) | entry <- settings.repositories]) fixture \env _ job _ deps observed -> do
           Agent.runAgentRunWorkflow deps job >>= assertRefused
           let execution = executionIdFor (assignmentIdFor (runJobWorkflowId job).unWorkflowId)
           run env (Execution.inspectExecution execution) >>= (@?= Right Nothing)
@@ -302,7 +305,7 @@ tests fixture =
             Right _ -> pure ()
           host `seq` pure (),
       testCase "a configured write restriction refuses the accepted target without a file effect" $
-        withWorkflowConfig (\settings -> settings & #repositories .~ [entry & #writePaths .~ ["other"] | entry <- settings.repositories]) fixture \env root job _ deps observed -> do
+        withWorkflowConfig (\settings -> settings & #repositories .~ [entry & #writePaths .~ [(workspaceCoordinate "other")] | entry <- settings.repositories]) fixture \env root job _ deps observed -> do
           Agent.runAgentRunWorkflow deps job >>= assertSuspended
           let execution = executionIdFor (assignmentIdFor (runJobWorkflowId job).unWorkflowId)
           _ <- right =<< driveExecutionForeground (Agent.executionRuntime deps) (ExecutionStart execution) 30
@@ -314,7 +317,7 @@ tests fixture =
           length <$> readIORef observed >>= (@?= 2)
     ]
   where
-    supervised settings = settings & #process .~ Just (WorkspaceProcessSettings "/run/shikigami/supervisor.sock" 0 5 60 (IdentityRange 64000 64031) (Map.fromList [(entry.identity, ProcessPolicy ProcessPolicyV1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") digest [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] entry.readPaths entry.writePaths) | entry <- settings.repositories]))
+    supervised settings = settings & #process .~ Just (WorkspaceProcessSettings (workspaceLocator "/run/shikigami/supervisor.sock") ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60) (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031)) (Map.fromList [(entry.identity, ProcessPolicy ProcessPolicyV1 (ProcessImage (workspaceLocator "/qualified/root") (workspaceCoordinate (digest)) (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")) (workspaceCoordinate (digest)) [CommandRule (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)] entry.readPaths entry.writePaths) | entry <- settings.repositories]))
     digest = "sha256:" <> Text.replicate 64 "a"
 
 withWorkflow :: DatabaseFixture -> (AppEnv -> FilePath -> RunJob -> WorkspaceHost -> Agent.AgentRunDeps -> IORef [Context.Context] -> IO a) -> IO a
@@ -336,12 +339,12 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
   let complete model context options = do
         ordinal <- atomicModifyIORef' observed (\values -> (values <> [context], length values))
         response <- Provider.complete stubApiProvider model context options
-        pure (if ordinal == 0 then response & #message . #stopReason .~ ToolUse & #message . #content .~ Vector.singleton (Content.AssistantToolCall (Content.ToolCall "edit" "overlay__workspace-edit__replace" (Aeson.toJSON (Replacement "dependency.txt" (Just (contentDigest "old dependency\n")) "workflow replacement\n")))) else response)
+        pure (if ordinal == 0 then response & #message . #stopReason .~ ToolUse & #message . #content .~ Vector.singleton (Content.AssistantToolCall (Content.ToolCall "edit" "overlay__workspace-edit__replace" (Aeson.toJSON (Replacement (workspaceCoordinate ("dependency.txt")) (Just (contentDigest "old dependency\n")) "workflow replacement\n")))) else response)
       provider = (stubApiProvider & #complete .~ (complete) & #stream .~ (liftCompleteToStream complete))
   providers <- Provider.newProviderRegistryFrom [provider]
-  expected <- right (mkInstructionBundle 65536 "mori://fixture/repo" (repositoryBase repository) [("AGENTS.md", "PRIVATE_WORKFLOW_POLICY: validate changes")])
+  expected <- right (mkInstructionBundle 65536 (RepositoryId "mori://fixture/repo") (repositoryBase repository) [(workspaceCoordinate "AGENTS.md", "PRIVATE_WORKFLOW_POLICY: validate changes")])
   principal <- right (identityText (CompatibilityIdentity (fixtureAgentName "workspace-worker")))
-  let settings = WorkspaceSettings root [WorkspaceRepository "mori://fixture/repo" source [WorkspaceRevision (repositoryBase repository) (bundleDigest expected)] (repositoryBase repository) "policy-1" [""] ["dependency.txt"]] [WorkspaceGrant "workspace-worker" principal "mori://fixture/repo" Nothing] Nothing
+  let settings = WorkspaceSettings (workspaceLocator root) [WorkspaceRepository (RepositoryId "mori://fixture/repo") (workspaceLocator source) [WorkspaceRevision (repositoryBase repository) (bundleDigest expected)] (repositoryBase repository) (workspaceCoordinate "policy-1") [(workspaceCoordinate "")] [(workspaceCoordinate "dependency.txt")]] [WorkspaceGrant ((either (error . show) id . mkAgentName) "workspace-worker") (declarationCoordinate principal) (RepositoryId "mori://fixture/repo") Nothing] Nothing
   host <- right (configuredWorkspaceHost env store.pool disabledDirectoryHandle authorizer (configure settings))
   let declaration = original & #name .~ fixtureAgentName "workspace-worker" & #behavior .~ Skill (declarationCoordinate ((Text.pack skill))) & #identity .~ Just (IdentityDecl (declarationCoordinate ("workspace-principal"))) & #capabilityOverlays .~ [workspaceEditDescriptor.capability] & #sinks .~ []
       identity = CompatibilityIdentity (fixtureAgentName "workspace-worker")
@@ -401,7 +404,7 @@ right :: (Show e) => Either e a -> IO a
 right = either (\err -> assertFailure (show err) >> fail "unreachable") pure
 
 maintenance :: AppEnv -> FilePath -> MaintenanceRuntime
-maintenance env root = MaintenanceRuntime env root allowAllActionAuthorizerForTests (\_ -> pure (Right ())) (pure ())
+maintenance env root = MaintenanceRuntime env (workspaceLocator root) allowAllActionAuthorizerForTests (\_ -> pure (Right ())) (pure ())
 
 admittedBinding :: AppEnv -> RunJob -> IO WorkspaceBinding
 admittedBinding env job = do

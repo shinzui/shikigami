@@ -51,6 +51,7 @@ import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 
 data SessionChild = SessionChild
   { session :: !WorkerSessionId,
@@ -80,7 +81,7 @@ lookupSessionChildTx run = do
 
 inspectTransferTx :: WorkspaceBinding -> StateRevision "worker-owner" -> Transaction (Either WorkspaceError (Maybe (TransferIntent, Maybe FenceProof)))
 inspectTransferTx binding epoch = do
-  retained <- Tx.statement (binding.workspace.resource, epoch) selectTransfer
+  retained <- Tx.statement ((workspaceCoordinateText binding.workspace.resource), epoch) selectTransfer
   checkedRead do
     parsed <- sequence retained
     case parsed of
@@ -108,7 +109,7 @@ beginTransferTx binding intent = do
           case frozen of
             Left err -> pure (Left err)
             Right () -> do
-              Tx.statement (binding.workspace.resource, intent.oldEpoch, intent) insertTransfer
+              Tx.statement ((workspaceCoordinateText binding.workspace.resource), intent.oldEpoch, intent) insertTransfer
               actual <- inspectTransferTx binding intent.oldEpoch
               pure (if actual == Right (Just (intent, Nothing)) then Right Nothing else Left WorkspaceBindingConflict)
         else pure (Left WorkspaceBindingConflict)
@@ -137,14 +138,14 @@ retainFenceTx binding intent = do
       if control == Right (Just (Store.WorkspaceControl intent.oldOwner intent.oldEpoch Store.AdmissionFrozen)) && session && settled == Right True
         then do
           let proof = FenceProof V1 binding.workspace intent.operationId (transferFingerprint intent) intent.oldEpoch intent.newEpoch (providerReceiptFor "shikigami.workspace-fence/1" (toJSON (workspaceBindingDigest binding, intent)))
-          Tx.statement (binding.workspace.resource, intent.oldEpoch, proof) saveFence
+          Tx.statement ((workspaceCoordinateText binding.workspace.resource), intent.oldEpoch, proof) saveFence
           pure (Right proof)
         else pure (Left WorkspaceBindingConflict)
     _ -> pure (Left WorkspaceBindingConflict)
 
 pendingWorkspaceOperationsTx :: WorkspaceBinding -> Transaction (Either WorkspaceError [(OperationId, Text)])
 pendingWorkspaceOperationsTx binding = do
-  retained <- Tx.statement binding.workspace.resource pendingOperations
+  retained <- Tx.statement (workspaceCoordinateText binding.workspace.resource) pendingOperations
   case traverse checked retained of
     Left err -> Tx.condemn >> pure (Left err)
     Right values -> pure (Right values)
@@ -171,10 +172,10 @@ admitSuccessorTx binding admission = do
                 new = Store.WorkspaceControl intent.newOwner intent.newEpoch Store.AdmissionOpen
             if settled == Right True && earlier == Right True && (control == Right (Just old) || control == Right (Just new))
               then do
-                Tx.statement (admission.runId.unWorkflowId, binding.workspace.resource, current.session.value, current.assignment.value, current.sequence, admission) insertAdmission
+                Tx.statement (admission.runId.unWorkflowId, (workspaceCoordinateText binding.workspace.resource), current.session.value, current.assignment.value, current.sequence, admission) insertAdmission
                 stored <- inspectAdmissionTx binding admission.runId
                 if stored == Right (Just admission)
-                  then Tx.statement (binding.workspace.resource, toJSON intent.newOwner, intent.newEpoch) establishControl >> pure (Right ())
+                  then Tx.statement ((workspaceCoordinateText binding.workspace.resource), toJSON intent.newOwner, intent.newEpoch) establishControl >> pure (Right ())
                   else pure (Left WorkspaceBindingConflict)
               else pure (Left WorkspaceBindingConflict)
           _ -> pure (Left WorkspaceBindingConflict)
@@ -197,7 +198,7 @@ admitFollowupTx binding admission = do
           settled <- workspaceSettledTx binding
           if prior == Right True && settled == Right True && control == Right (Just (Store.WorkspaceControl current.owner current.epoch Store.AdmissionOpen))
             then do
-              Tx.statement (admission.runId.unWorkflowId, binding.workspace.resource, session.value, current.assignment.value, current.sequence, admission) insertAdmission
+              Tx.statement (admission.runId.unWorkflowId, (workspaceCoordinateText binding.workspace.resource), session.value, current.assignment.value, current.sequence, admission) insertAdmission
               actual <- inspectAdmissionTx binding admission.runId
               pure (if actual == Right (Just admission) then Right () else Left WorkspaceBindingConflict)
             else pure (Left WorkspaceBindingConflict)
@@ -208,7 +209,7 @@ findFollowupWorkspaceTx run child storage repository = do
   retained <- priorWorkspacesTx child
   pure do
     candidates <- retained
-    let matches binding = binding.request.runId /= run && binding.repository == repositoryIdentity repository && binding.base == repositoryBase repository && binding.policyRevision == repositoryPolicyRevision repository && binding.source == repositorySource repository && binding.storageRoot == storage && binding.request.rootId == child.rootId && binding.request.owner == child.owner && binding.request.epoch == child.epoch
+    let matches binding = binding.request.runId /= run && binding.repository == repositoryIdentity repository && binding.base == repositoryBase repository && binding.policyRevision == repositoryPolicyRevision repository && binding.source == repositorySource repository && workspaceLocatorPath binding.storageRoot == storage && binding.request.rootId == child.rootId && binding.request.owner == child.owner && binding.request.epoch == child.epoch
     case filter matches candidates of
       [] -> Right Nothing
       [binding] -> Right (Just binding)
@@ -265,7 +266,7 @@ currentWorkspaceRequestTx binding = do
   control <- Store.inspectWorkspaceControlTx binding
   case control of
     Right (Just current) -> do
-      retained <- Tx.statement binding.workspace.resource selectCurrentAdmission >>= checkedRead . sequence
+      retained <- Tx.statement (workspaceCoordinateText binding.workspace.resource) selectCurrentAdmission >>= checkedRead . sequence
       case retained of
         Left err -> pure (Left err)
         Right admissions
@@ -360,7 +361,7 @@ saveFence = preparable "UPDATE shikigami.workspace_transfers SET proof=$3 WHERE 
 workspaceSettledTx :: WorkspaceBinding -> Transaction (Either WorkspaceError Bool)
 workspaceSettledTx binding = do
   effects <- Store.workspaceEffectsSettledTx binding
-  noCleanup <- Tx.statement binding.workspace.resource noCleanupPlan
+  noCleanup <- Tx.statement (workspaceCoordinateText binding.workspace.resource) noCleanupPlan
   pure ((&& noCleanup) <$> effects)
 
 noCleanupPlan :: Statement Text Bool
@@ -423,7 +424,7 @@ assignmentSettlement = preparable "SELECT m.state,r.state FROM shikigami.worker_
 
 priorAdmissionsSettledTx :: WorkspaceBinding -> SessionChild -> Transaction (Either WorkspaceError Bool)
 priorAdmissionsSettledTx binding child = do
-  retained <- Tx.statement (binding.workspace.resource, child.sequence) priorAdmissions >>= checkedRead . sequence
+  retained <- Tx.statement (workspaceCoordinateText binding.workspace.resource, child.sequence) priorAdmissions >>= checkedRead . sequence
   case retained of
     Left err -> pure (Left err)
     Right rows -> do

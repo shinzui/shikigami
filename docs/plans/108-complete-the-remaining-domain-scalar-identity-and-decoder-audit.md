@@ -67,6 +67,20 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 - [ ] M2: Resolve applicable scalar/identity/decoder findings in cohesive concept batches and verify actual refusal, rollback and recovery behavior. Since complete M1 acceptance, 154 findings are fixed or source-corrected; 421 remain explicit in the current fresh inventory.
 - [ ] M3: Accept the refreshed classification with zero unresolved violations, passing final behavioral evidence, and an updated guide disposition.
 
+Workspace scalar implementation (2026-11-01): workspace records retain scoped
+coordinates/locators, native repository identities, bounded process/RPC/Unix
+quantities, and named output/settlement/file-policy/Git-mode states. Existing
+grammar, authority, association and hash recipes stay with their owners;
+string/number/boolean wire encodings are preserved. The formatted full workspace
+build passes, including the Linux prototype. All 626 core unit, 472 PostgreSQL
+(129.85 seconds), 280 serial worker tests (184.17 seconds), and 15 focused workspace
+compiler controls pass. The PostgreSQL result also covers the final cron-claim
+separation in the preceding declaration batch. Exact source hashes are retained
+in `docs/evidence/plan-108/workspace-values-source.json`. Style and whitespace
+checks pass. No Linux runtime qualification is inferred from fixture compilation.
+The classification remains the explicitly historical `1e7f619` snapshot until
+the combined implementation is built and reconciled; M2 and M3 remain open.
+
 Execution order correction (2026-10-31): finish M1b's remaining inventory before
 starting another M2 source refactor. Earlier small remediation batches produced
 tested fixes but repeatedly paid full build/census costs without closing the

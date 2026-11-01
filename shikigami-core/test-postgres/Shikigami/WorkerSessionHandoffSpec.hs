@@ -39,6 +39,7 @@ import Shikigami.WorkerSession.Types
 import Shikigami.WorkerSession.Workflow qualified as Session
 import Shikigami.WorkerSessionStoreSpec (checkpointVersion, withConfiguredFixture)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
+import Shikigami.Workspace.Value
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -153,7 +154,7 @@ tests fixture =
       testCase "fence proof substitution refuses without advancing ownership" $
         withTransferFixture fixture False \env admission access owner -> do
           intent <- expectRight =<< request env admission owner
-          let proof = FenceProof V1 (workspaceRef & #resource .~ "another-resource") intent.operationId (transferFingerprint intent) (fixtureRevision 0) (fixtureRevision 1) (fixtureProviderReceipt "foreign-proof")
+          let proof = FenceProof V1 (workspaceRef & #resource .~ (workspaceCoordinate "another-resource")) intent.operationId (transferFingerprint intent) (fixtureRevision 0) (fixtureRevision 1) (fixtureProviderReceipt "foreign-proof")
           run env (Store.retainTransferFence access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId "foreign-proof") intent.operationId (FencedAndSettled proof)) >>= (@?= Left SessionBindingConflict)
           state <- current env admission
           state.epoch @?= (fixtureRevision 0)
@@ -190,7 +191,7 @@ data Owners = Owners
   }
 
 workspaceRef :: WorkspaceRef
-workspaceRef = WorkspaceRef "fixture-workspace-owner" "retained-workspace"
+workspaceRef = WorkspaceRef (workspaceCoordinate "fixture-workspace-owner") (workspaceCoordinate "retained-workspace")
 
 successor :: AgentIdentity
 successor = compatibilityIdentity (fixtureAgentName "successor")

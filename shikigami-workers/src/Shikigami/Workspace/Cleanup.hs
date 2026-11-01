@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Explicit operator cleanup. Terminal execution and settled-effect facts
 -- authorize retirement, while fresh exact authority authorizes filesystem IO.
 -- Provider metadata/receipts and reserved Unix identities are never deleted.
@@ -31,12 +33,13 @@ import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.TransferStore (currentWorkspaceRequestTx)
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import System.FilePath ((</>))
 import System.Posix.User (getEffectiveUserID)
 
 data MaintenanceRuntime = MaintenanceRuntime
   { appEnv :: !AppEnv,
-    storageRoot :: !FilePath,
+    storageRoot :: !(WorkspaceLocator "storage-root"),
     authorizer :: !ActionAuthorizer,
     current :: !(AgentIdentity -> IO (Either Text ())),
     afterFiles :: !(IO ())
@@ -54,7 +57,7 @@ listWorkspaces :: MaintenanceRuntime -> AgentIdentity -> Maybe Text -> IO (Eithe
 listWorkspaces runtime actor cursor = protect do
   unless (maybe True validResource cursor) (abort CleanupRefused)
   grant runtime actor "list" (toJSON (runtime.storageRoot, cursor))
-  page <- transact runtime (listWorkspacesTx runtime.storageRoot cursor) >>= either (const (abort CleanupRefused)) pure
+  page <- transact runtime (listWorkspacesTx (workspaceLocatorPath runtime.storageRoot) cursor) >>= either (const (abort CleanupRefused)) pure
   rows <- forM (filter ((== runtime.storageRoot) . (.storageRoot)) page) \binding -> do
     retired <- transact runtime (inspectCleanupTx binding) >>= either (const (abort CleanupRefused)) pure
     eligible <- transact runtime (cleanupEligibleTx binding) >>= either (const (abort CleanupRefused)) pure
@@ -63,13 +66,13 @@ listWorkspaces runtime actor cursor = protect do
 
 cleanupWorkspace :: MaintenanceRuntime -> AgentIdentity -> WorkspaceRef -> IO (Either CleanupError ())
 cleanupWorkspace runtime actor ref = protect do
-  unless (ref.provider == "shikigami.workspace/1" && validResource ref.resource) (abort CleanupRefused)
+  unless (ref.provider == workspaceCoordinate "shikigami.workspace/1" && validResource (workspaceCoordinateText ref.resource)) (abort CleanupRefused)
   grant runtime actor "inspect-cleanup" (toJSON ref)
   (binding, state) <- transact runtime (Store.inspectWorkspaceTx ref) >>= either (const (abort CleanupRefused)) pure >>= maybe (abort CleanupRefused) pure
   unless (state == Ready && binding.storageRoot == runtime.storageRoot) (abort CleanupRefused)
-  let metadata = workspaceMetadata binding.storageRoot binding
-      directory = binding.storageRoot </> Text.unpack binding.workspace.resource
-  needFile =<< checkPrivateDirectory binding.storageRoot
+  let metadata = workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding
+      directory = (workspaceLocatorPath binding.storageRoot) </> Text.unpack (workspaceCoordinateText binding.workspace.resource)
+  needFile =<< checkPrivateDirectory (workspaceLocatorPath binding.storageRoot)
   needFile =<< checkPrivateDirectory metadata
   locked <-
     withWorkspaceLock metadata $
@@ -79,9 +82,10 @@ cleanupWorkspace runtime actor ref = protect do
           Just (original, _) -> pure original
           Nothing -> do
             profile <- transact runtime (inspectProcessProfileTx binding.workspace) >>= either (const (abort CleanupRefused)) pure
-            uid <- maybe (fromIntegral <$> getEffectiveUserID) (pure . (.userId) . fst) profile
-            files <- anchor (workspaceFiles binding.storageRoot binding)
-            scratch <- anchor (workspaceScratch binding.storageRoot binding)
+            rawUid <- maybe (fromIntegral <$> getEffectiveUserID) (pure . workspaceIdentityNumber . (.userId) . fst) profile
+            uid <- either (const (abort CleanupRefused)) pure (parseCleanupIdentity rawUid)
+            files <- anchor (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding)
+            scratch <- anchor (workspaceScratch (workspaceLocatorPath binding.storageRoot) binding)
             current <- transact runtime (currentWorkspaceRequestTx binding) >>= either (const (abort CleanupRefused)) pure >>= maybe (abort CleanupRefused) pure
             pure (CleanupPlan (workspaceBindingDigest binding) files scratch uid (Just current))
         let authorize = grant runtime actor "cleanup" (toJSON (binding, plan))
@@ -89,15 +93,15 @@ cleanupWorkspace runtime actor ref = protect do
         done <- transact runtime (prepareCleanupTx binding plan) >>= either (const (abort CleanupRefused)) pure
         unless done do
           authorize
-          needFile =<< cleanupContainedRoot directory "files" plan.filesTarget plan.userId
+          needFile =<< cleanupContainedRoot directory "files" (workspaceCoordinateText plan.filesTarget) (cleanupIdentityNumber plan.userId)
           runtime.afterFiles
           authorize
-          needFile =<< cleanupContainedRoot directory "scratch" plan.scratchTarget plan.userId
+          needFile =<< cleanupContainedRoot directory "scratch" (workspaceCoordinateText plan.scratchTarget) (cleanupIdentityNumber plan.userId)
           transact runtime (completeCleanupTx binding plan) >>= either (const (abort CleanupUnresolved)) pure
   either (const (abort CleanupUnresolved)) pure locked
 
-anchor :: FilePath -> IO Text
-anchor root = withContainedFile root ".shikigami-cleanup-target" containedTargetIdentity >>= either (const (abort CleanupRefused)) pure
+anchor :: FilePath -> IO (WorkspaceCoordinate "file-target")
+anchor root = withContainedFile root ".shikigami-cleanup-target" containedTargetIdentity >>= either (const (abort CleanupRefused)) (pure . workspaceCoordinate)
 
 grant :: MaintenanceRuntime -> AgentIdentity -> Text -> Aeson.Value -> IO ()
 grant runtime actor kind value = do

@@ -58,6 +58,7 @@ import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript (ExecutionSnapshot (..), ExecutionState (..), operationIdFor)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude ((&), (.~))
+import Shikigami.Repository (RepositoryId (..))
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
@@ -81,6 +82,7 @@ import Shikigami.Workspace.Store qualified as Workspaces
 import Shikigami.Workspace.Supervisor (SupervisorRequest (..))
 import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import System.Directory (createDirectory, doesFileExist)
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
@@ -142,7 +144,7 @@ main = catch dispatch \(failure :: SomeException) -> do
                 pure result
           executeGitWithBackend (nativeGitBackend & #capture .~ capture) env authorizer current client item.prepared
         ["freeze", config, prefix, name] -> withCase config prefix name \env _ _ _ item -> do
-          requireRight =<< withWorkspaceLock (workspaceMetadata item.binding.storageRoot item.binding) do
+          requireRight =<< withWorkspaceLock (workspaceMetadata (workspaceLocatorPath item.binding.storageRoot) item.binding) do
             requireRight =<< transact env (Workspaces.freezeWorkspaceTx item.binding item.binding.request.owner item.binding.request.epoch)
             pure (Right ())
         ["duplicate", config, prefix, name] -> withCase config prefix name \env _ _ client item -> do
@@ -196,10 +198,10 @@ nativeProvision configFile specFile = do
   void (git ["-C", source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "fixture base"])
   base <- Text.strip . Encoding.decodeUtf8 <$> git ["-C", source, "rev-parse", "HEAD"]
   properties <- Systemd.systemdPropertiesIdentity
-  let policy = ProcessPolicy ProcessPolicyV1 spec.image properties [CommandRule "validate" "/bin/probe" ["validate"] "" (Map.singleton "HOME" "/scratch") 30 1024] [""] ["src"]
+  let policy = ProcessPolicy ProcessPolicyV1 spec.image properties [CommandRule (workspaceCoordinate "validate") (workspaceCoordinate "/bin/probe") [(workspaceCoordinate "validate")] (workspaceCoordinate "") (Map.singleton (workspaceCoordinate "HOME") (workspaceCoordinate "/scratch")) ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)] [(workspaceCoordinate "")] [(workspaceCoordinate "src")]
       request = WorkspaceRequest (WorkflowId "native-fixture") Nothing (fixtureRootId "native-fixture-root") principal principal (fixtureRevision 0)
-  catalog <- requireRight (mkWorkspaceCatalog [RepositoryPolicy "mori://fixture/repo" source [base] base (processPolicyIdentity policy)])
-  repository <- requireRight (resolveRepository catalog "mori://fixture/repo" Nothing)
+  catalog <- requireRight (mkWorkspaceCatalog [RepositoryPolicy (RepositoryId "mori://fixture/repo") (workspaceLocator source) [workspaceCoordinate base] (workspaceCoordinate base) (processPolicyIdentity policy)])
+  repository <- requireRight (resolveRepository catalog (RepositoryId "mori://fixture/repo") Nothing)
   (binding, state) <- requireRight =<< transact env (Workspaces.reserveWorkspaceTx storage request repository)
   requireRight =<< allocateWorkspace storage binding state
   requireRight =<< transact env (Workspaces.markWorkspaceReadyTx binding)
@@ -210,7 +212,7 @@ nativeProvision configFile specFile = do
   let current = identityLifecycleAdmission directory.handle principal
       interrupted = ProvisionRuntime env authorizer current (nativeProvisionBackend & #afterReady .~ (writeIORef reachedReady True >> throwIO (userError "fixture lost ready acknowledgement")))
       runtime = ProvisionRuntime env authorizer current nativeProvisionBackend
-      pool = IdentityRange 64000 64031
+      pool = IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031)
   first <- provisionWorkspaceProfile interrupted binding admission policy pool
   injected <- readIORef reachedReady
   unless (injected && first == Left ProvisionUnresolved) (fail ("missing injected ready acknowledgement loss: " <> either show (const "unexpected ready result") first))
@@ -283,7 +285,7 @@ withRuntime configFile use = do
   authorizer <- requireRight =<< buildConfiguredActionAuthorizer Log.silentLogger config
   directory <- requireRight =<< startDirectory Log.silentLogger config.directorySettings
   socket <- maybe (fail "fixture supervisor configuration missing") (pure . (.socketPath)) config.workspaceSupervisorSettings
-  use env authorizer (identityLifecycleAdmission directory.handle . (.identity)) (ProcessClient socket 0 5 60)
+  use env authorizer (identityLifecycleAdmission directory.handle . (.identity)) (ProcessClient socket ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60))
 
 prepareCase :: FilePath -> FilePath -> String -> Text.Text -> IO ()
 prepareCase config prefix name mode = do
@@ -298,16 +300,16 @@ prepareCase config prefix name mode = do
         policy = initial.profile.policy
     catalog <- requireRight (mkWorkspaceCatalog [RepositoryPolicy initial.binding.repository initial.binding.source [base] base (processPolicyIdentity policy)])
     repository <- requireRight (resolveRepository catalog initial.binding.repository Nothing)
-    (binding, state) <- requireRight =<< transact env (Workspaces.reserveWorkspaceTx initial.binding.storageRoot request repository)
-    requireRight =<< allocateWorkspace binding.storageRoot binding state
+    (binding, state) <- requireRight =<< transact env (Workspaces.reserveWorkspaceTx (workspaceLocatorPath initial.binding.storageRoot) request repository)
+    requireRight =<< allocateWorkspace (workspaceLocatorPath binding.storageRoot) binding state
     requireRight =<< transact env (Workspaces.markWorkspaceReadyTx binding)
     admission <- (\value -> value & #filePolicy .~ Just supervisedFilePolicy) <$> (requireRight =<< loadWorkspaceAdmission binding (fixtureAssignment ("case-assignment-" <> Text.pack name)) 65536)
     now <- getCurrentTime
     void (requireRight =<< transact env (Roots.enrollRootTx request.rootId (Resources.Envelope (Map.fromList [(dimension, Resources.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now))))
     -- This fresh boundary uses the same configured C13 verifier as the daemon.
-    profile <- requireRight =<< provisionWorkspaceProfile (ProvisionRuntime env authorizer (currentIdentity owner) nativeProvisionBackend) binding admission policy (IdentityRange 64000 64031)
+    profile <- requireRight =<< provisionWorkspaceProfile (ProvisionRuntime env authorizer (currentIdentity owner) nativeProvisionBackend) binding admission policy (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031))
     prepared <- if mode == "upgrade" then prepareUpgrade env authorizer current client binding admission else prepareAccepted env authorizer current client binding admission mode
-    let path = workspaceFiles binding.storageRoot binding </> "src/mode"
+    let path = workspaceFiles (workspaceLocatorPath binding.storageRoot) binding </> "src/mode"
     actual <- readProcess "/usr/bin/stat" ["-c", "%u", path] ""
     unless (Text.strip (Text.pack actual) == Text.pack (show profile.userId)) (fail "native edit lost workspace ownership")
     Lazy.writeFile (caseFile prefix name) (Aeson.encode (PreparedCase binding prepared))
@@ -336,9 +338,9 @@ inspectCase env prefix name item = do
   process <- requireRight =<< transact env (Processes.inspectProcessTx item.prepared.reference.operationId)
   git <- requireRight =<< transact env (Git.inspectGitTx item.prepared.reference.operationId)
   let state = (\(value, _, _) -> value) <$> metadata
-      operationDirectory record = workspaceMetadata item.binding.storageRoot item.binding </> Text.unpack ("process-" <> Text.drop 7 (versionedDigest "shikigami.workspace-process-directory/1" (Aeson.toJSON (record.operationId, record.fingerprint))))
-      capture record = "shikigami-capture-" <> Text.drop (Text.length ("shikigami-workspace-" :: Text.Text)) record.unit
-      body = Aeson.object ["state" Aeson..= state, "actual" Aeson..= actual, "process" Aeson..= process, "git" Aeson..= git, "files" Aeson..= workspaceFiles item.binding.storageRoot item.binding, "directory" Aeson..= (operationDirectory <$> process), "capture" Aeson..= (capture <$> process)]
+      operationDirectory record = workspaceMetadata (workspaceLocatorPath item.binding.storageRoot) item.binding </> Text.unpack ("process-" <> Text.drop 7 (versionedDigest "shikigami.workspace-process-directory/1" (Aeson.toJSON (record.operationId, record.fingerprint))))
+      capture record = "shikigami-capture-" <> Text.drop (Text.length ("shikigami-workspace-" :: Text.Text)) (workspaceCoordinateText record.unit)
+      body = Aeson.object ["state" Aeson..= state, "actual" Aeson..= actual, "process" Aeson..= process, "git" Aeson..= git, "files" Aeson..= workspaceFiles (workspaceLocatorPath item.binding.storageRoot) item.binding, "directory" Aeson..= (operationDirectory <$> process), "capture" Aeson..= (capture <$> process)]
   -- Private fixture control data; never print paths, protected bodies or argv.
   Lazy.writeFile (prefix </> ("status-" <> name <> ".json")) (Aeson.encode body)
 
@@ -348,7 +350,7 @@ verifyCase env _prefix _name expected item = do
   Just actual <- stored env (Execution.inspectExecutionAttempt item.prepared.reference.attemptId)
   Just process <- requireRight =<< transact env (Processes.inspectProcessTx item.prepared.reference.operationId)
   root <- stored env (Roots.inspectRoot item.binding.request.rootId)
-  let path = workspaceFiles item.binding.storageRoot item.binding </> "src/launch-count"
+  let path = workspaceFiles (workspaceLocatorPath item.binding.storageRoot) item.binding </> "src/launch-count"
   exists <- doesFileExist path
   launches <- if exists then Bytes.length <$> Bytes.readFile path else pure 0
   unless (launches == if expected == "refused" then 0 else 1) (fail "unexpected launch count")
@@ -362,7 +364,7 @@ verifyCase env _prefix _name expected item = do
     _ -> case process.receipt of
       Just receipt -> unless (process.phase == ProcessSettled && validProcessReceipt process receipt && actual.phase == Attempt.AttemptCommitted && state.cursor == (fixtureRevision 3) && root.active == noAttempts && root.unknown == noAttempts && if expected == "cancelled" then receipt.termination == ProcessCancelled && not (processSucceeded receipt) else expected == "success" && processSucceeded receipt) (fail "original receipt did not settle")
       Nothing -> fail "completion receipt missing"
-  source <- requireRight =<< runWorkspaceGit item.binding.storageRoot 1024 ["-C", item.binding.source, "status", "--porcelain"]
+  source <- requireRight =<< runWorkspaceGit (workspaceLocatorPath item.binding.storageRoot) 1024 ["-C", workspaceLocatorPath item.binding.source, "status", "--porcelain"]
   unless (Bytes.null source) (fail "source repository changed")
   putStrLn "PASS original accepted operation retains one launch and conservative receipt accounting"
 
@@ -375,21 +377,21 @@ verifyGitCase env expected item = do
   Just validation <- requireRight =<< transact env (Processes.inspectProcessTx (operationIdFor item.prepared.snapshot.executionId (fixtureRevision 2)))
   unless (maybe False processSucceeded validation.receipt && validation.instructionDigest == record.instructionDigest) (fail "upgrade validation evidence missing")
   unless (record.attemptId == actual.request.attemptId && record.generation == actual.generation && actual.phase == Attempt.AttemptCommitted && state.cursor == (fixtureRevision 4) && root.active == noAttempts && root.unknown == noAttempts) (fail "original Git actual did not settle")
-  let metadata = workspaceMetadata item.binding.storageRoot item.binding
+  let metadata = workspaceMetadata (workspaceLocatorPath item.binding.storageRoot) item.binding
   headId <- requireRight =<< GitObjects.readHead metadata
   case expected of
     "applied" -> do
       candidate <- maybe (fail "commit candidate missing") pure record.candidate
-      unless (record.phase == GitApplied && headId == candidate.result && candidate.parent == item.binding.base && candidate.paths == ["src/dependency.txt"]) (fail "unexpected upgrade commit")
+      unless (record.phase == GitApplied && headId == candidate.result && candidate.parent == item.binding.base && map workspaceCoordinateText candidate.paths == ["src/dependency.txt"]) (fail "unexpected upgrade commit")
       published <- requireRight =<< GitObjects.verifyPublishedCommit metadata candidate
       unless published (fail "commit object evidence mismatched")
-      count <- requireRight =<< runWorkspaceGit item.binding.storageRoot 128 ["--git-dir=" <> metadata, "rev-list", "--count", Text.unpack item.binding.base <> "..HEAD"]
+      count <- requireRight =<< runWorkspaceGit (workspaceLocatorPath item.binding.storageRoot) 128 ["--git-dir=" <> metadata, "rev-list", "--count", Text.unpack (workspaceCoordinateText item.binding.base) <> "..HEAD"]
       unless (count == "1\n") (fail "duplicate local commit")
-      large <- requireRight =<< runWorkspaceGit item.binding.storageRoot 128 ["--git-dir=" <> metadata, "cat-file", "-s", Text.unpack candidate.result <> ":src/large-fixture.bin"]
+      large <- requireRight =<< runWorkspaceGit (workspaceLocatorPath item.binding.storageRoot) 128 ["--git-dir=" <> metadata, "cat-file", "-s", Text.unpack (workspaceCoordinateText candidate.result) <> ":src/large-fixture.bin"]
       unless (large == "1048577\n") (fail "unchanged large blob was not preserved")
     "refused" -> unless (record.phase == GitRefused && record.candidate /= Nothing && headId == item.binding.base) (fail "publication denial changed HEAD")
     _ -> fail "unsupported Git expectation"
-  source <- requireRight =<< runWorkspaceGit item.binding.storageRoot 1024 ["-C", item.binding.source, "status", "--porcelain"]
+  source <- requireRight =<< runWorkspaceGit (workspaceLocatorPath item.binding.storageRoot) 1024 ["-C", workspaceLocatorPath item.binding.source, "status", "--porcelain"]
   unless (Bytes.null source) (fail "source repository changed")
   putStrLn "PASS validated dependency upgrade retains its exact local commit and original actual receipt"
 

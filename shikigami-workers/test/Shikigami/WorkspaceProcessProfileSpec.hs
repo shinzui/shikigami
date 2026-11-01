@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- Database/policy evidence only; marking the fixture profile ready below is a
 -- trusted test interpreter and does not qualify native identity provisioning.
 module Shikigami.WorkspaceProcessProfileSpec (tests, withProfiles) where
@@ -30,6 +32,7 @@ import Shikigami.Workspace.Profile
 import Shikigami.Workspace.Store qualified as Workspaces
 import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import Shikigami.WorkspaceStoreSpec qualified as Fixture
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
@@ -45,8 +48,8 @@ tests fixture =
         one @?= two
         (profile, state) <- right one
         state @?= ProfileReserved
-        profile.userId @?= 62000
-        profile.groupId @?= 62000
+        profile.userId @?= ((either (error . show) id . parseWorkspaceIdentity) (62000))
+        profile.groupId @?= ((either (error . show) id . parseWorkspaceIdentity) (62000))
         profile.policy @?= policy
         run env (readyProcessProfileTx binding profile) >>= (@?= Right ())
         run env reserve >>= (@?= Right (profile, ProfileReady))
@@ -70,27 +73,27 @@ tests fixture =
         (profile, _) <- right =<< run env (reserveProcessProfileTx binding instructions policy pool)
         run env (reserveProcessProfileTx binding other policy pool) >>= (@?= Left WorkspaceBindingConflict)
         run env (reserveProcessProfileTx binding instructions (policy & #rules .~ []) pool) >>= (@?= Left InvalidWorkspaceRequest)
-        run env (readyProcessProfileTx binding (profile & #userId .~ 62001 & #groupId .~ 62001)) >>= (@?= Left WorkspaceBindingConflict)
+        run env (readyProcessProfileTx binding (profile & #userId .~ ((either (error . show) id . parseWorkspaceIdentity) 62001) & #groupId .~ ((either (error . show) id . parseWorkspaceIdentity) 62001))) >>= (@?= Left WorkspaceBindingConflict)
         run env (readyProcessProfileTx binding (profile & #bindingDigest .~ other)) >>= (@?= Left WorkspaceBindingConflict)
         run env (inspectProcessProfileTx binding.workspace) >>= (@?= Right (Just (profile, ProfileReserved))),
       testCase "supervisor resolves only ready retained rules with matching instructions and compiled containment properties" $ withProfiles fixture \env policy create -> do
         (binding, admission) <- create "one"
         (profile, _) <- right =<< run env (reserveProcessProfileTx binding (bundleDigest admission.instructions) policy pool)
-        assertLeft =<< retainedProcessRule env binding admission "validate"
+        assertLeft =<< retainedProcessRule env binding admission (workspaceCoordinate ("validate"))
         run env (readyProcessProfileTx binding profile) >>= (@?= Right ())
-        (command, systemd) <- right =<< retainedProcessRule env binding admission "validate"
-        command.rule @?= "validate"
-        command.arguments @?= ["$HOME", "%n"]
+        (command, systemd) <- right =<< retainedProcessRule env binding admission (workspaceCoordinate ("validate"))
+        command.rule @?= (workspaceCoordinate ("validate"))
+        command.arguments @?= [(workspaceCoordinate ("$HOME")), (workspaceCoordinate ("%n"))]
         systemd.userId @?= profile.userId
         Systemd.systemdProfileIdentity systemd >>= (@?= command.profile)
-        assertLeft =<< retainedProcessRule env binding admission "unreviewed"
-        assertLeft =<< retainedProcessRule env binding (admission & #filePolicy .~ Just nativeFilePolicy) "validate"
-        assertLeft =<< retainedProcessRule env binding (admission & #bindingDigest .~ other) "validate"
+        assertLeft =<< retainedProcessRule env binding admission (workspaceCoordinate ("unreviewed"))
+        assertLeft =<< retainedProcessRule env binding (admission & #filePolicy .~ Just nativeFilePolicy) (workspaceCoordinate "validate")
+        assertLeft =<< retainedProcessRule env binding (admission & #bindingDigest .~ other) (workspaceCoordinate "validate")
         assertLeft =<< retainedSystemdProfile (profile & #policy . #propertiesDigest .~ other),
       testCase "invalid pools and a frozen owner refuse before allocating or publishing identity readiness" $ withProfiles fixture \env policy create -> do
         (binding, admission) <- create "one"
         let reserve range = run env (reserveProcessProfileTx binding (bundleDigest admission.instructions) policy range)
-        reserve (IdentityRange 0 10) >>= (@?= Left InvalidWorkspaceRequest)
+        assertBool "unreserved Unix identities refuse before pool construction" (case parseWorkspaceIdentity 0 of Left _ -> True; _ -> False)
         run env (inspectProcessProfileTx binding.workspace) >>= (@?= Right Nothing)
         (profile, _) <- right =<< reserve pool
         run env (Workspaces.freezeWorkspaceTx binding binding.request.owner binding.request.epoch) >>= (@?= Right ())
@@ -101,11 +104,11 @@ tests fixture =
 withProfiles :: DatabaseFixture -> (AppEnv -> ProcessPolicy -> (Text.Text -> IO (WorkspaceBinding, WorkspaceAdmission)) -> IO a) -> IO a
 withProfiles fixture use = Fixture.withFixture fixture \env source root repository -> do
   properties <- Systemd.systemdPropertiesIdentity
-  let image = ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector"
-      rule = CommandRule "validate" "/bin/validate" ["$HOME", "%n"] "" (Map.singleton "HOME" "/scratch") 30 1024
-      policy = ProcessPolicy ProcessPolicyV1 image properties [rule] [""] ["src"]
+  let image = ProcessImage (workspaceLocator "/qualified/root") digest (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")
+      rule = CommandRule (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [(workspaceCoordinate "$HOME"), (workspaceCoordinate "%n")] (workspaceCoordinate "") (Map.singleton (workspaceCoordinate "HOME") (workspaceCoordinate "/scratch")) ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)
+      policy = ProcessPolicy ProcessPolicyV1 image properties [rule] [(workspaceCoordinate "")] [(workspaceCoordinate "src")]
       base = repositoryBase repository
-  catalog <- right (mkWorkspaceCatalog [RepositoryPolicy (repositoryIdentity repository) source [base] base (processPolicyIdentity policy)])
+  catalog <- right (mkWorkspaceCatalog [RepositoryPolicy (repositoryIdentity repository) (workspaceLocator source) [base] base (processPolicyIdentity policy)])
   selected <- right (resolveRepository catalog (repositoryIdentity repository) Nothing)
   let create name = do
         let owner = CompatibilityIdentity (fixtureAgentName "profile-worker")
@@ -118,11 +121,11 @@ withProfiles fixture use = Fixture.withFixture fixture \env source root reposito
   use env policy create
 
 pool :: IdentityRange
-pool = IdentityRange 62000 62001
+pool = IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 62000) ((either (error . show) id . parseWorkspaceIdentity) 62001)
 
-digest, other :: Text.Text
-digest = "sha256:" <> Text.replicate 64 "a"
-other = "sha256:" <> Text.replicate 64 "b"
+digest, other :: WorkspaceCoordinate scope
+digest = workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")
+other = workspaceCoordinate ("sha256:" <> Text.replicate 64 "b")
 
 run :: AppEnv -> Transaction a -> IO a
 run env action = right =<< runAppIO env (runTransaction action)

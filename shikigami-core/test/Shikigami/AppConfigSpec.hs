@@ -69,6 +69,7 @@ import Shikigami.Sink.Auth (TokenSource (..), credentialToken, matchesBearerHead
 import Shikigami.Sink.Permission (SinkKind (..))
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..), parseCron)
 import Shikigami.Workspace.Settings (WorkspaceSettings (..), WorkspaceSupervisorSettings (..))
+import Shikigami.Workspace.Value
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -334,8 +335,8 @@ precedenceTests =
         config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_WORKSPACE_SUPERVISOR", settings), ("PG_CONNECTION_STRING", "postgresql:///fixture")]
         case config.workspaceSupervisorSettings of
           Just selected -> do
-            selected.socketPath @?= "/run/shikigami/private.sock"
-            selected.users @?= [1000]
+            selected.socketPath @?= (workspaceLocator ("/run/shikigami/private.sock"))
+            selected.users @?= [((either (error . show) id . parseRpcPeerUserId) (1000))]
           Nothing -> assertFailure "supervisor configuration absent"
         missingRequirements WorkspaceSupervisorRole config @?= []
         fmap renderKey (missingRequirements WorkspaceSupervisorRole defaultAppConfig) @?= ["database.connection_string", "workspace.supervisor"]
@@ -349,7 +350,7 @@ precedenceTests =
         let supplied = "{\"storageRoot\":\"/private/workspaces\",\"repositories\":[{\"identity\":\"mori://fixture/repo\",\"source\":\"/private/approved-source\",\"revisions\":[{\"base\":\"" <> Text.replicate 40 "a" <> "\",\"instructionDigest\":\"sha256:" <> Text.replicate 64 "b" <> "\"}],\"defaultRevision\":\"" <> Text.replicate 40 "a" <> "\",\"policyRevision\":\"reviewed-1\",\"readPaths\":[\"\"],\"writePaths\":[\"src\"]}],\"grants\":[{\"agent\":\"worker\",\"principal\":\"agent_fixture\",\"repository\":\"mori://fixture/repo\"}]}"
         config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_WORKSPACES", supplied)]
         case config.workspaceSettings of
-          Just settings -> settings.storageRoot @?= "/private/workspaces"
+          Just settings -> settings.storageRoot @?= (workspaceLocator ("/private/workspaces"))
           Nothing -> assertFailure "workspace settings did not resolve"
         let report = runWith (diagnosticOptions ExplainJson) [] [("SHIKIGAMI_WORKSPACES", supplied)]
         report.exitCode @?= 0

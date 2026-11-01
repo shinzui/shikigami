@@ -28,6 +28,7 @@ import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude
+import Shikigami.Repository (RepositoryId (..))
 import Shikigami.StateRevision (StateRevision, advanceRevision, parseRevision)
 import Shikigami.StateRevision qualified as Generation
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
@@ -43,6 +44,7 @@ import Shikigami.Workspace.Provider
 import Shikigami.Workspace.Store qualified as Workspaces
 import Shikigami.Workspace.TransferStore
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -56,7 +58,7 @@ tests fixture =
       testCase "retained transfer corruption cannot authorize another freeze or fence" (corruptTransferReads fixture),
       testCase "cleanup absence and SQL failure remain distinct" $ withWorkspace fixture \env _ _ binding _ -> do
         run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Right Nothing)
-        run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing)) >>= (@?= Right [binding])
+        run env (runTransaction (listWorkspacesTx (workspaceLocatorPath binding.storageRoot) Nothing)) >>= (@?= Right [binding])
         failed <-
           runAppIO
             env
@@ -69,10 +71,10 @@ tests fixture =
       testCase "cleanup listing refuses a corrupt member beside a valid allocation and rolls back" $ withWorkspace fixture \env _ _ binding _ -> do
         catalog <- right (mkWorkspaceCatalog [RepositoryPolicy binding.repository binding.source [binding.base] binding.base binding.policyRevision])
         repository <- right (resolveRepository catalog binding.repository Nothing)
-        (second, _) <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx binding.storageRoot (binding.request & #runId .~ WorkflowId "cleanup-list-second" & #assignment .~ Nothing) repository))
-        listed <- right =<< run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing))
+        (second, _) <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx (workspaceLocatorPath binding.storageRoot) (binding.request & #runId .~ WorkflowId "cleanup-list-second" & #assignment .~ Nothing) repository))
+        listed <- right =<< run env (runTransaction (listWorkspacesTx (workspaceLocatorPath binding.storageRoot) Nothing))
         length listed @?= 2
-        let replace value = run env (runTransaction (Tx.statement (second.workspace.resource, value) (preparable "UPDATE shikigami.workspace_bindings SET binding=$2 WHERE resource=$1" (contrazip2 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.jsonb))) D.noResult)))
+        let replace value = run env (runTransaction (Tx.statement (workspaceCoordinateText second.workspace.resource, value) (preparable "UPDATE shikigami.workspace_bindings SET binding=$2 WHERE resource=$1" (contrazip2 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.jsonb))) D.noResult)))
         forM_ ["repository", "storageRoot"] \field -> do
           -- Both an ordinary required field and the old JSON selector must
           -- remain visible to the owning whole-page decoder.
@@ -82,7 +84,7 @@ tests fixture =
               env
               ( runTransaction do
                   frozen <- Workspaces.freezeWorkspaceTx binding binding.request.owner binding.request.epoch
-                  refused <- listWorkspacesTx binding.storageRoot Nothing
+                  refused <- listWorkspacesTx (workspaceLocatorPath binding.storageRoot) Nothing
                   pure (frozen, refused)
               )
           frozen @?= Right ()
@@ -90,7 +92,7 @@ tests fixture =
           control <- right =<< run env (runTransaction (Workspaces.inspectWorkspaceControlTx binding))
           fmap Workspaces.workspaceFrozen control @?= Just False
           replace (Aeson.toJSON second)
-          recovered <- right =<< run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing))
+          recovered <- right =<< run env (runTransaction (listWorkspacesTx (workspaceLocatorPath binding.storageRoot) Nothing))
           length recovered @?= 2,
       testCase "only retained child mappings supply session assignment coordinates" $ withWorkspace fixture \env _ _ binding original -> do
         current <- right =<< run env (runTransaction (lookupSessionChildTx binding.request.runId))
@@ -122,8 +124,8 @@ tests fixture =
       testCase "prepared file effects preserve uncertainty until factual settlement after freeze" $ withWorkspace fixture \env session access binding original -> do
         let operation = fixtureOperationId "pending-file"
             digest = "sha256:" <> Text.replicate 64 "a"
-            prepared = FileReceipt operation (fixtureAttemptId "original-actual") (fixtureGeneration 1) digest (workspaceBindingDigest binding) (bundleDigest original.instructions) "dependency.txt" "1:2" Nothing digest EditPrepared
-        _ <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceEffectTx binding session.identity (fixtureRevision 0) operation digest))
+            prepared = FileReceipt operation (fixtureAttemptId "original-actual") (fixtureGeneration 1) (workspaceCoordinate digest) (workspaceBindingDigest binding) (bundleDigest original.instructions) (workspaceCoordinate ("dependency.txt")) (workspaceCoordinate ("1:2")) Nothing (workspaceCoordinate digest) EditPrepared
+        _ <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceEffectTx binding session.identity (fixtureRevision 0) operation (workspaceCoordinate digest)))
         run env (runTransaction (Workspaces.recordWorkspaceReceiptTx binding prepared)) >>= (@?= Right ())
         intent <- request env session access binding
         _ <- right =<< run env (runTransaction (beginTransferTx binding intent))
@@ -208,12 +210,12 @@ withWorkspace fixture callback = Fixture.withConfiguredFixture fixture (\admissi
   (_, started) <- right =<< run env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId "initial-start") message.assignmentId)
   runId <- maybe (fail "missing original child") pure started.childWorkflowId
   root <- maybe (fail "missing root") pure session.context.executionRootId
-  let base = Text.replicate 40 "a"
-  catalog <- right (mkWorkspaceCatalog [RepositoryPolicy "mori://fixture/repository" "/approved/source" [base] base "policy-1"])
-  repository <- right (resolveRepository catalog "mori://fixture/repository" Nothing)
+  let base = workspaceCoordinate (Text.replicate 40 "a")
+  catalog <- right (mkWorkspaceCatalog [RepositoryPolicy (RepositoryId "mori://fixture/repository") (workspaceLocator "/approved/source") [base] base (workspaceCoordinate "policy-1")])
+  repository <- right (resolveRepository catalog (RepositoryId "mori://fixture/repository") Nothing)
   (binding, _) <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx "/private/owned-workspaces" (WorkspaceRequest runId (Just (sessionIdFor session, started.assignmentId)) root session.identity session.identity (fixtureRevision 0)) repository))
   run env (runTransaction (Workspaces.markWorkspaceReadyTx binding)) >>= (@?= Right ())
-  instructions <- right (mkInstructionBundle 65536 binding.repository binding.base [("AGENTS.md", "validate before committing")])
+  instructions <- right (mkInstructionBundle 65536 binding.repository binding.base [(workspaceCoordinate "AGENTS.md", "validate before committing")])
   let original = WorkspaceAdmission binding.workspace (workspaceBindingDigest binding) runId (Selection.assignmentIdFor runId.unWorkflowId) root session.identity (fixtureRevision 0) instructions (Just transferableFilePolicy)
   callback env session access binding original
 
@@ -278,7 +280,7 @@ corruptWorkspaceReads fixture = withWorkspace fixture \env _ _ binding _ -> do
         fmap Workspaces.workspaceFrozen control @?= Just False
         run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Right (Just (binding, Ready)))
     )
-    [Aeson.Null, Aeson.toJSON (binding & #workspace . #resource .~ "wrong-address")]
+    [Aeson.Null, Aeson.toJSON (binding & #workspace . #resource .~ (workspaceCoordinate "wrong-address"))]
   replace "UPDATE shikigami.workspace_controls SET owner=$1" Aeson.Null
   run env (runTransaction (Workspaces.inspectWorkspaceControlTx binding)) >>= (@?= Left WorkspaceBindingConflict)
   ignored <-
@@ -364,12 +366,12 @@ workspacePages fixture = withWorkspace fixture \env _ _ binding _ -> do
   repository <- right (resolveRepository catalog binding.repository Nothing)
   siblings <- forM [1 .. 21 :: Int] \number -> do
     let request = binding.request & #runId .~ WorkflowId ("list-page-" <> Text.pack (show number)) & #assignment .~ Nothing
-    fst <$> (right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx binding.storageRoot request repository)))
-  (foreignRoot, _) <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx (binding.storageRoot <> "-other") (binding.request & #runId .~ WorkflowId "foreign-root-page" & #assignment .~ Nothing) repository))
-  first <- right =<< run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing))
+    fst <$> (right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx (workspaceLocatorPath binding.storageRoot) request repository)))
+  (foreignRoot, _) <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx (workspaceLocatorPath binding.storageRoot <> "-other") (binding.request & #runId .~ WorkflowId "foreign-root-page" & #assignment .~ Nothing) repository))
+  first <- right =<< run env (runTransaction (listWorkspacesTx (workspaceLocatorPath binding.storageRoot) Nothing))
   length first @?= 20
   let cursor = (.workspace.resource) (last first)
-  second <- right =<< run env (runTransaction (listWorkspacesTx binding.storageRoot (Just cursor)))
+  second <- right =<< run env (runTransaction (listWorkspacesTx (workspaceLocatorPath binding.storageRoot) (Just (workspaceCoordinateText cursor))))
   length second @?= 2
   let resources = map (.workspace.resource) (first <> second)
   assertBool "foreign storage root is absent" (foreignRoot.workspace.resource `notElem` resources)

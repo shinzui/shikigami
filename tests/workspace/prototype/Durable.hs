@@ -84,6 +84,7 @@ import Shikigami.Workspace.Settings
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.Supervisor (workspaceExecDescriptor)
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import System.FilePath ((</>))
 
 -- The native provision fixture supplies only approved immutable coordinates.
@@ -103,9 +104,9 @@ workflowCase configFile prefix stage = do
   withStore env.connectionSettings \store -> do
     principal <- right (identityText initial.binding.request.owner)
     socket <- maybe (fail "fixture socket missing") (pure . (.socketPath)) config.workspaceSupervisorSettings
-    let repository = WorkspaceRepository initial.binding.repository initial.binding.source [WorkspaceRevision initial.binding.base (bundleDigest initial.admission.instructions)] initial.binding.base "workflow-reviewed" initial.profile.policy.readPaths initial.profile.policy.writePaths
-        process = WorkspaceProcessSettings socket 0 5 60 (IdentityRange 64000 64031) (Map.singleton repository.identity initial.profile.policy)
-        settings = WorkspaceSettings initial.binding.storageRoot [repository] [WorkspaceGrant "workspace-upgrade" principal repository.identity Nothing] (Just process)
+    let repository = WorkspaceRepository initial.binding.repository initial.binding.source [WorkspaceRevision initial.binding.base (bundleDigest initial.admission.instructions)] initial.binding.base (workspaceCoordinate "workflow-reviewed") initial.profile.policy.readPaths initial.profile.policy.writePaths
+        process = WorkspaceProcessSettings socket ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60) (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031)) (Map.singleton repository.identity initial.profile.policy)
+        settings = WorkspaceSettings initial.binding.storageRoot [repository] [WorkspaceGrant ((either (error . show) id . mkAgentName) "workspace-upgrade") (declarationCoordinate principal) repository.identity Nothing] (Just process)
         code = "/var/lib/shikigami-workspace-fixture-code"
         skill = code </> "agents/skills/triage-note"
     host <- right (configuredWorkspaceHost env store.pool directory.handle authorizer settings)
@@ -127,16 +128,16 @@ workflowCase configFile prefix stage = do
                     & #message
                     . #content
                     .~ Vector.fromList
-                      [ Content.AssistantToolCall (Content.ToolCall "upgrade" "overlay__workspace-edit__replace" (Aeson.toJSON (Replacement "src/dependency.txt" (Just (contentDigest "old dependency\n")) "new dependency\n"))),
+                      [ Content.AssistantToolCall (Content.ToolCall "upgrade" "overlay__workspace-edit__replace" (Aeson.toJSON (Replacement (workspaceCoordinate "src/dependency.txt") (Just (contentDigest "old dependency\n")) "new dependency\n"))),
                         Content.AssistantToolCall (Content.ToolCall "validate" "overlay__workspace-exec__validate" (Aeson.object ["rule" Aeson..= ("validate" :: Text.Text)])),
-                        Content.AssistantToolCall (Content.ToolCall "commit" "overlay__workspace-git__commit" (Aeson.toJSON (GitCommitRequest initial.binding.base "chore(deps): upgrade fixture dependency")))
+                        Content.AssistantToolCall (Content.ToolCall "commit" "overlay__workspace-git__commit" (Aeson.toJSON (GitCommitRequest initial.binding.base (workspaceCoordinate "chore(deps): upgrade fixture dependency"))))
                       ]
                 )
             else do
               validation <- resultJson "overlay__workspace-exec__validate" results
               commit <- resultJson "overlay__workspace-git__commit" results
               receipt <- case Aeson.fromJSON @ProcessReceipt validation of Aeson.Success value -> pure value; Aeson.Error err -> fail err
-              unless (receipt.termination == ProcessExited && receipt.exitCode == Just 0 && receipt.descendantsEmpty && receipt.outputComplete) (fail "validation was not successful")
+              unless (receipt.termination == ProcessExited && maybe False ((== 0) . processExitStatusNumber) receipt.exitCode && descendantsSettled receipt.descendantsEmpty && outputCollected receipt.outputComplete) (fail "validation was not successful")
               let evidence = Aeson.object ["git" Aeson..= commit, "validation" Aeson..= validation, "summary" Aeson..= ("Upgraded dependency and validated the committed tree." :: Text.Text)]
               pure (response & #message . #content .~ Vector.singleton (Content.AssistantText (Content.TextContent (Encoding.decodeUtf8 (Lazy.toStrict (Aeson.encode evidence))))))
         provider = stubApiProvider {Provider.complete = complete, Provider.stream = liftCompleteToStream complete}
@@ -216,9 +217,9 @@ workflowCase configFile prefix stage = do
         admission <- maybe (fail "admitted workspace absent") pure snapshot.workspace
         Just (binding, _) <- right =<< run env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
         unless (admission.filePolicy == Just supervisedFilePolicy) (fail "wrong filesystem profile")
-        let metadataPath = workspaceMetadata binding.storageRoot binding
+        let metadataPath = workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding
         headId <- right =<< Objects.readHead metadataPath
-        count <- right =<< runWorkspaceGit prefix 128 ["--git-dir=" <> metadataPath, "rev-list", "--count", Text.unpack binding.base <> "..HEAD"]
+        count <- right =<< runWorkspaceGit prefix 128 ["--git-dir=" <> metadataPath, "rev-list", "--count", Text.unpack (workspaceCoordinateText binding.base) <> "..HEAD"]
         unless (Text.strip (Encoding.decodeUtf8 count) == "1" && headId /= binding.base) (fail "upgrade did not publish exactly one commit")
         resultRef <- maybe (fail "terminal result absent") pure state.result
         output <- right =<< run env (Execution.readReplayPayload @Aeson.Value access "execution-result" resultRef)
@@ -228,9 +229,9 @@ workflowCase configFile prefix stage = do
         git <- field "git" evidence
         candidateValue <- field "commit" git
         exact <- case Aeson.fromJSON @GitCandidate candidateValue of Aeson.Success value -> pure value; Aeson.Error err -> fail err
-        unless (exact.result == headId && exact.parent == binding.base && exact.paths == ["src/dependency.txt"]) (fail "terminal Git evidence did not match publication")
-        field "instructionDigest" git >>= \value -> unless (value == Aeson.String (bundleDigest admission.instructions)) (fail "instruction identity missing")
-        sourceStatus <- right =<< runWorkspaceGit prefix 4096 ["-C", binding.source, "status", "--porcelain"]
+        unless (exact.result == headId && exact.parent == binding.base && map workspaceCoordinateText exact.paths == ["src/dependency.txt"]) (fail "terminal Git evidence did not match publication")
+        field "instructionDigest" git >>= \value -> unless (value == Aeson.toJSON (bundleDigest admission.instructions)) (fail "instruction identity missing")
+        sourceStatus <- right =<< runWorkspaceGit prefix 4096 ["-C", workspaceLocatorPath binding.source, "status", "--porcelain"]
         unless (Bytes.null sourceStatus) (fail "source repository changed")
         calls <- Bytes.readFile (prefix </> "workflow-model-calls")
         unless (calls == "1\n1\n") (fail "restart or redelivery repeated model dispatch")

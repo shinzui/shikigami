@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 
 -- | Trusted system-service transport, not an execution-authority boundary.
@@ -33,6 +34,7 @@ import Shikigami.Prelude
 import Shikigami.Workspace.ContainedFile
 import Shikigami.Workspace.Process
 import Shikigami.Workspace.ProcessPolicy (immutableHelper)
+import Shikigami.Workspace.Value
 import System.Directory (doesFileExist)
 import System.Exit (ExitCode (..))
 import System.IO (IOMode (..), withBinaryFile, withFile)
@@ -47,13 +49,13 @@ data SystemdError = SystemdUnsupported | SystemdRefused | SystemdUncertain
 -- Operator-built immutable root and workspace-specific unprivileged identity.
 -- No caller of the eventual socket protocol may choose these paths or ids.
 data SystemdProfile = SystemdProfile
-  { rootDirectory :: !FilePath,
-    rootIdentity :: !Text,
-    environmentExecutable :: !Text,
-    deadlineExecutable :: !Text,
-    collectorExecutable :: !FilePath,
-    userId :: !Int,
-    groupId :: !Int
+  { rootDirectory :: !(WorkspaceLocator "image-root"),
+    rootIdentity :: !(WorkspaceCoordinate "image-digest"),
+    environmentExecutable :: !(WorkspaceLocator "environment-executable"),
+    deadlineExecutable :: !(WorkspaceLocator "deadline-executable"),
+    collectorExecutable :: !(WorkspaceLocator "collector-executable"),
+    userId :: !(WorkspaceIdentity),
+    groupId :: !(WorkspaceIdentity)
   }
   deriving stock (Generic)
 
@@ -67,12 +69,12 @@ foreign import ccall safe "shikigami_workspace_stop" stopUnit :: CString -> CStr
 -- authority. A successful stop request supplies no completion or fencing proof.
 stopProcess :: ProcessRecord -> IO (Either SystemdError ())
 stopProcess record = guarded record do
-  if record.unit /= processUnit record.operationId record.fingerprint || not (digestText record.fingerprint) || record.phase `notElem` [ProcessLaunchRequested, ProcessRunning, ProcessUnresolved]
+  if record.unit /= processUnit record.operationId record.fingerprint || not (digestText (workspaceCoordinateText record.fingerprint)) || record.phase `notElem` [ProcessLaunchRequested, ProcessRunning, ProcessUnresolved]
     then pure (Left SystemdRefused)
-    else withCString (Text.unpack record.unit) \unit ->
-      withCString (Text.unpack record.fingerprint) \fingerprint ->
-        withCString (Text.unpack (fromMaybe "" record.bootId)) \boot ->
-          withCString (Text.unpack (fromMaybe "" record.invocationId)) \invocation -> do
+    else withCString (Text.unpack (workspaceCoordinateText record.unit)) \unit ->
+      withCString (Text.unpack (workspaceCoordinateText record.fingerprint)) \fingerprint ->
+        withCString (Text.unpack (maybe "" workspaceCoordinateText record.bootId)) \boot ->
+          withCString (Text.unpack (maybe "" workspaceCoordinateText record.invocationId)) \invocation -> do
             result <- stopUnit unit fingerprint boot invocation
             pure (if result == 0 then Right () else Left SystemdUncertain)
 
@@ -82,13 +84,13 @@ systemdProperties = do
   -- This is a compiled-in, shared qualification asset, not external JSON.
   either (const (ioError (userError "invalid compiled workspace profile"))) pure (Aeson.eitherDecodeStrict body)
 
-systemdProfileIdentity :: SystemdProfile -> IO Text
+systemdProfileIdentity :: SystemdProfile -> IO (WorkspaceCoordinate "process-profile")
 systemdProfileIdentity profile = do
   properties <- systemdProperties
-  pure (versionedDigest "shikigami.workspace-systemd-profile/2" (toJSON (profile.rootDirectory, profile.rootIdentity, profile.environmentExecutable, profile.deadlineExecutable, profile.collectorExecutable, profile.userId, profile.groupId, properties)))
+  pure (workspaceCoordinate (versionedDigest "shikigami.workspace-systemd-profile/2" (toJSON (profile.rootDirectory, profile.rootIdentity, profile.environmentExecutable, profile.deadlineExecutable, profile.collectorExecutable, profile.userId, profile.groupId, properties))))
 
-systemdPropertiesIdentity :: IO Text
-systemdPropertiesIdentity = versionedDigest "shikigami.workspace-systemd-properties/2" . toJSON <$> systemdProperties
+systemdPropertiesIdentity :: IO (WorkspaceCoordinate "process-properties")
+systemdPropertiesIdentity = workspaceCoordinate . versionedDigest "shikigami.workspace-systemd-properties/2" . toJSON <$> systemdProperties
 
 -- Status is diagnostic liveness only, never proof that the command settled.
 -- Lost/failed capture retains uncertainty even if systemd stopped the command.
@@ -131,29 +133,29 @@ processArguments now profile files scratch metadata record = do
   identity <- systemdProfileIdentity profile
   pure do
     remaining <- remainingSeconds now record
-    unless (validProfile profile && all safeAbsolute [files, scratch, metadata] && record.command.profile == identity && validLaunchRecord record && safeDirectory record.command.directory && safeAbsolute (Text.unpack record.command.executable)) (Left SystemdRefused)
-    let cwd = "/workspace" <> if Text.null record.command.directory then "" else "/" <> record.command.directory
+    unless (validProfile profile && all safeAbsolute [files, scratch, metadata] && record.command.profile == identity && validLaunchRecord record && safeDirectory (workspaceCoordinateText record.command.directory) && safeAbsolute (Text.unpack (workspaceCoordinateText record.command.executable))) (Left SystemdRefused)
+    let cwd = "/workspace" <> if Text.null (workspaceCoordinateText record.command.directory) then "" else "/" <> (workspaceCoordinateText record.command.directory)
         dynamic =
-          [ "RootDirectory=" <> Text.pack profile.rootDirectory,
+          [ "RootDirectory=" <> Text.pack (workspaceLocatorPath profile.rootDirectory),
             "User=" <> tshow profile.userId,
             "Group=" <> tshow profile.groupId,
             "BindPaths=" <> Text.pack files <> ":/workspace " <> Text.pack scratch <> ":/scratch",
             "WorkingDirectory=" <> cwd,
             "RuntimeMaxSec=" <> tshow remaining,
-            "Description=shikigami-workspace/1 " <> record.fingerprint,
+            "Description=shikigami-workspace/1 " <> (workspaceCoordinateText record.fingerprint),
             "StandardOutput=file:" <> Text.pack metadata <> "/stdout.pipe",
             "StandardError=file:" <> Text.pack metadata <> "/stderr.pipe"
           ]
-        environment = [key <> "=" <> value | (key, value) <- Map.toAscList record.command.environment]
+        environment = [workspaceCoordinateText key <> "=" <> workspaceCoordinateText value | (key, value) <- Map.toAscList record.command.environment]
     pure
       ( map
           Text.unpack
-          ( ["--quiet", "--no-ask-password", "--expand-environment=no", "--unit=" <> record.unit]
+          ( ["--quiet", "--no-ask-password", "--expand-environment=no", "--unit=" <> (workspaceCoordinateText record.unit)]
               <> concatMap (\property -> ["--property", property]) (properties <> dynamic)
-              <> ["--", profile.deadlineExecutable, "1", tshow (floor (utcTimeToPOSIXSeconds record.deadline * 1000000000) :: Integer), "--", profile.environmentExecutable, "-i"]
+              <> ["--", Text.pack (workspaceLocatorPath profile.deadlineExecutable), "1", tshow (floor (utcTimeToPOSIXSeconds record.deadline * 1000000000) :: Integer), "--", Text.pack (workspaceLocatorPath profile.environmentExecutable), "-i"]
               <> environment
-              <> [record.command.executable]
-              <> record.command.arguments
+              <> [(workspaceCoordinateText record.command.executable)]
+              <> map workspaceCoordinateText record.command.arguments
           )
       )
 
@@ -161,7 +163,7 @@ collectorArguments :: UTCTime -> SystemdProfile -> FilePath -> ProcessRecord -> 
 collectorArguments now profile metadata record = do
   _ <- remainingSeconds now record
   unless (validProfile profile && safeAbsolute metadata && validLaunchRecord record) (Left SystemdRefused)
-  let watchdog = record.command.timeoutSeconds + 30
+  let watchdog = processSecondsNumber record.command.timeoutSeconds + 30
       name = captureUnit record
       properties =
         [ "Type=exec",
@@ -170,7 +172,7 @@ collectorArguments now profile metadata record = do
           "RuntimeMaxSec=" <> tshow (watchdog + 10),
           "StandardOutput=null",
           "StandardError=null",
-          "Description=shikigami-capture/1 " <> record.fingerprint,
+          "Description=shikigami-capture/1 " <> (workspaceCoordinateText record.fingerprint),
           "LimitCORE=0",
           "NoNewPrivileges=yes",
           "CapabilityBoundingSet=",
@@ -184,7 +186,7 @@ collectorArguments now profile metadata record = do
         Text.unpack
         ( ["--quiet", "--no-ask-password", "--expand-environment=no", "--unit=" <> name]
             <> concatMap (\property -> ["--property", property]) properties
-            <> ["--", Text.pack profile.collectorExecutable, Text.pack metadata, record.unit, record.fingerprint, tshow record.command.outputBytes, tshow watchdog]
+            <> ["--", Text.pack (workspaceLocatorPath profile.collectorExecutable), Text.pack metadata, (workspaceCoordinateText record.unit), (workspaceCoordinateText record.fingerprint), tshow record.command.outputBytes, tshow watchdog]
         )
     )
 
@@ -217,7 +219,7 @@ startProcess profile files scratch metadata record = guarded record do
 
 -- Missing backend support is a bounded refusal. This check does not replace
 -- qualification of the effective profile or confer authority on the caller.
-systemdBootIdentity :: IO (Either SystemdError Text)
+systemdBootIdentity :: IO (Either SystemdError (WorkspaceCoordinate "boot-id"))
 systemdBootIdentity
   | Platform.os /= "linux" = pure (Left SystemdUnsupported)
   | otherwise = catch work (\(_ :: IOException) -> pure (Left SystemdUnsupported))
@@ -229,7 +231,7 @@ systemdBootIdentity
       pure do
         body <- either (const (Left SystemdUnsupported)) Right (Encoding.decodeUtf8' bytes)
         unless (uid == 0 && cgroup && Text.length body == 37 && Text.last body == '\n' && hostIdentity (Text.init body)) (Left SystemdUnsupported)
-        pure (Text.init body)
+        pure (workspaceCoordinate (Text.init body))
 
 guarded :: ProcessRecord -> IO (Either SystemdError a) -> IO (Either SystemdError a)
 guarded record work = catch action (\(_ :: IOException) -> pure (Left SystemdUncertain))
@@ -254,14 +256,14 @@ transport arguments = do
 remainingSeconds :: UTCTime -> ProcessRecord -> Either SystemdError Int
 remainingSeconds now record = do
   let remaining = floor (diffUTCTime record.deadline now) :: Integer
-  unless (remaining >= 1 && remaining <= toInteger record.command.timeoutSeconds) (Left SystemdRefused)
+  unless (remaining >= 1 && remaining <= toInteger (processSecondsNumber record.command.timeoutSeconds)) (Left SystemdRefused)
   pure (fromInteger remaining)
 
 validLaunchRecord :: ProcessRecord -> Bool
-validLaunchRecord record = validProcessCommand record.command && maybe False validProcessRouting record.routing && digestText record.fingerprint && record.unit == processUnit record.operationId record.fingerprint && record.phase == ProcessLaunchRequested && maybe False hostIdentity record.bootId && isNothing record.invocationId && isNothing record.receipt
+validLaunchRecord record = validProcessCommand record.command && maybe False validProcessRouting record.routing && digestText (workspaceCoordinateText record.fingerprint) && record.unit == processUnit record.operationId record.fingerprint && record.phase == ProcessLaunchRequested && maybe False (hostIdentity . workspaceCoordinateText) record.bootId && isNothing record.invocationId && isNothing record.receipt
 
 validProfile :: SystemdProfile -> Bool
-validProfile profile = all safeAbsolute [profile.rootDirectory, profile.collectorExecutable, Text.unpack profile.environmentExecutable, Text.unpack profile.deadlineExecutable] && all immutableHelper [profile.environmentExecutable, profile.deadlineExecutable] && digestText profile.rootIdentity && profile.userId > 0 && profile.groupId > 0
+validProfile profile = all safeAbsolute [workspaceLocatorPath profile.rootDirectory, workspaceLocatorPath profile.collectorExecutable, workspaceLocatorPath profile.environmentExecutable, workspaceLocatorPath profile.deadlineExecutable] && all (immutableHelper . Text.pack) [workspaceLocatorPath profile.environmentExecutable, workspaceLocatorPath profile.deadlineExecutable] && digestText (workspaceCoordinateText profile.rootIdentity) && workspaceIdentityNumber profile.userId > 0 && workspaceIdentityNumber profile.groupId > 0
 
 safeAbsolute :: FilePath -> Bool
 safeAbsolute path = case Text.stripPrefix "/" (Text.pack path) of
@@ -275,4 +277,4 @@ tshow :: (Show a) => a -> Text
 tshow = Text.pack . show
 
 captureUnit :: ProcessRecord -> Text
-captureUnit record = "shikigami-capture-" <> Text.drop (Text.length ("shikigami-workspace-" :: Text)) record.unit
+captureUnit record = "shikigami-capture-" <> Text.drop (Text.length ("shikigami-workspace-" :: Text)) (workspaceCoordinateText record.unit)

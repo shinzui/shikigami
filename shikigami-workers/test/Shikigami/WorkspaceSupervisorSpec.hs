@@ -52,6 +52,7 @@ import Shikigami.Workspace.Store qualified as Workspaces
 import Shikigami.Workspace.Supervisor
 import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import Shikigami.WorkspaceFileProviderSpec qualified as Fixture
 import Shikigami.WorkspaceRpcSpec (withListener)
 import Shikumi.Tool (mkDynTool)
@@ -86,8 +87,8 @@ tests fixture =
         (reconcileProcess runtime reference.operationId >>= (@?= Left SupervisorUnavailable))
           `finally` transaction file (Tx.sql "ALTER TABLE shikigami.fixture_unavailable_processes RENAME TO workspace_processes"),
       testCase "transfer-aware process revision uses the peer service and independent original-attempt publisher" $ withProcessVersion True 1 fixture id True \file runtime _ calls snapshot reference -> withListener \path listener uid -> do
-        let client = ProcessClient path uid 3 3
-        withAsync (serveRpc (RpcPolicy [uid] 2 3) listener (dispatchSupervisorRpc runtime)) \_ -> do
+        let client = ProcessClient (workspaceLocator path) ((either (error . show) id . parseRpcPeerUserId) uid) ((either (error . show) id . parseRpcRequestSeconds) 3) ((either (error . show) id . parseRpcWaitSeconds) 3)
+        withAsync (serveRpc (RpcPolicy [(either (error . show) id . parseRpcPeerUserId) uid] ((either (error . show) id . parseRpcConcurrency) 2) ((either (error . show) id . parseRpcRequestSeconds) 3)) listener (dispatchSupervisorRpc runtime)) \_ -> do
           Executor.executeAcceptedAttempt (Fixture.executorForAdapter (const (transferredWorkspaceExecAdapter client)) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
           publishProcessReceipt runtime reference.operationId >>= (@?= Right ProcessReceiptAcknowledged)
           readIORef calls >>= (@?= (1, 1)),
@@ -102,7 +103,7 @@ tests fixture =
                 Just record | record.phase == Attempt.AttemptCommitted -> pure ()
                 _ -> threadDelay 20000 >> waitCommitted
         withListener \_ listener uid ->
-          withAsync (serveSupervisor (RpcPolicy [uid] 2 3) listener revoked) \_ ->
+          withAsync (serveSupervisor (RpcPolicy [(either (error . show) id . parseRpcPeerUserId) uid] ((either (error . show) id . parseRpcConcurrency) 2) ((either (error . show) id . parseRpcRequestSeconds) 3)) listener revoked) \_ ->
             timeout 5000000 waitCommitted >>= (@?= Just ())
         readIORef calls >>= (@?= (1, 1)),
       testCase "independent paged scan acknowledges original facts without a worker request or live read authority" $ withProcess fixture id False \file runtime observed calls snapshot reference -> do
@@ -123,8 +124,8 @@ tests fixture =
         readIORef calls >>= (@?= (1, 1)),
       testCase "accepted executor uses the peer-checked client and server with one original launch and identical receipt acknowledgement" $ withProcess fixture id True \file runtime _ calls snapshot reference ->
         withListener \path listener uid -> do
-          let client = ProcessClient path uid 3 5
-          withAsync (serveRpc (RpcPolicy [uid] 2 3) listener (dispatchSupervisorRpc runtime)) \_ -> do
+          let client = ProcessClient (workspaceLocator path) ((either (error . show) id . parseRpcPeerUserId) uid) ((either (error . show) id . parseRpcRequestSeconds) 3) ((either (error . show) id . parseRpcWaitSeconds) 5)
+          withAsync (serveRpc (RpcPolicy [(either (error . show) id . parseRpcPeerUserId) uid] ((either (error . show) id . parseRpcConcurrency) 2) ((either (error . show) id . parseRpcRequestSeconds) 3)) listener (dispatchSupervisorRpc runtime)) \_ -> do
             Executor.executeAcceptedAttempt (Fixture.executorForAdapter (const (workspaceExecAdapter client)) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
             Just actual <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
             actual.phase @?= Attempt.AttemptCommitted
@@ -132,8 +133,8 @@ tests fixture =
             readIORef calls >>= (@?= (1, 1)),
       testCase "a failed peer check retains an uncertain accepted attempt without any supervisor launch" $ withProcess fixture id True \file runtime _ calls snapshot reference ->
         withListener \path listener uid -> do
-          let client = ProcessClient path ((uid + 1) `mod` 4294967296) 3 5
-          withAsync (serveRpc (RpcPolicy [uid] 2 3) listener (dispatchSupervisorRpc runtime)) \_ -> do
+          let client = ProcessClient (workspaceLocator path) ((either (error . show) id . parseRpcPeerUserId) ((uid + 1) `mod` 4294967296)) ((either (error . show) id . parseRpcRequestSeconds) 3) ((either (error . show) id . parseRpcWaitSeconds) 5)
+          withAsync (serveRpc (RpcPolicy [(either (error . show) id . parseRpcPeerUserId) uid] ((either (error . show) id . parseRpcConcurrency) 2) ((either (error . show) id . parseRpcRequestSeconds) 3)) listener (dispatchSupervisorRpc runtime)) \_ -> do
             Executor.executeAcceptedAttempt (Fixture.executorForAdapter (const (workspaceExecAdapter client)) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
             Just actual <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
             actual.phase @?= Attempt.AttemptUncertain
@@ -141,14 +142,14 @@ tests fixture =
             readIORef calls >>= (@?= (0, 0)),
       testCase "restarted Unix service observes original facts and acknowledges after authority revocation" $ withProcess fixture id False \file runtime _ calls snapshot reference ->
         withListener \path listener uid -> do
-          let client = ProcessClient path uid 3 5
-          withAsync (serveRpc (RpcPolicy [uid] 2 3) listener (dispatchSupervisorRpc runtime)) \_ ->
+          let client = ProcessClient (workspaceLocator path) ((either (error . show) id . parseRpcPeerUserId) uid) ((either (error . show) id . parseRpcRequestSeconds) 3) ((either (error . show) id . parseRpcWaitSeconds) 5)
+          withAsync (serveRpc (RpcPolicy [(either (error . show) id . parseRpcPeerUserId) uid] ((either (error . show) id . parseRpcConcurrency) 2) ((either (error . show) id . parseRpcRequestSeconds) 3)) listener (dispatchSupervisorRpc runtime)) \_ ->
             Executor.executeAcceptedAttempt (Fixture.executorForAdapter (const (workspaceExecAdapter client)) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
           Just actual <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
           actual.phase @?= Attempt.AttemptUncertain
           let revoked = runtime & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked")) & #authorizer .~ denyAllActionAuthorizer & #selectRule .~ (\_ _ _ -> pure (Left "revoked"))
-          withAsync (serveRpc (RpcPolicy [uid] 2 3) listener (dispatchSupervisorRpc revoked)) \_ -> do
-            result <- right =<< callRpc path uid 3 (RpcObserve reference.operationId)
+          withAsync (serveRpc (RpcPolicy [(either (error . show) id . parseRpcPeerUserId) uid] ((either (error . show) id . parseRpcConcurrency) 2) ((either (error . show) id . parseRpcRequestSeconds) 3)) listener (dispatchSupervisorRpc revoked)) \_ -> do
+            result <- right =<< callRpc (workspaceLocator path) ((either (error . show) id . parseRpcPeerUserId) uid) ((either (error . show) id . parseRpcRequestSeconds) 3) (RpcObserve reference.operationId)
             case result of
               RpcView value -> do
                 value.phase @?= ProcessSettled
@@ -346,11 +347,11 @@ withProcessVersion transferred toolCount fixture configure acknowledge use = do
   Fixture.withEffectAdapterForTools toolCount qualify install (executionCoordinateText workspaceExecBinding.name) "validate" (Just (Aeson.object ["rule" .= ("validate" :: Text.Text)])) fixture \_ _ snapshot _ reference file _ ->
     use file (makeRuntime file) observed calls snapshot reference
   where
-    boot = "11111111-1111-4111-8111-111111111111"
+    boot = workspaceCoordinate "11111111-1111-4111-8111-111111111111"
     select _ _ rule = do
-      let profile = Systemd.SystemdProfile "/qualified/root" ("sha256:" <> Text.replicate 64 "a") "/bin/env" "/bin/deadline" "/qualified/collector" 62001 62001
+      let profile = Systemd.SystemdProfile (workspaceLocator "/qualified/root") (workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")) (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector") ((either (error . show) id . parseWorkspaceIdentity) 62001) ((either (error . show) id . parseWorkspaceIdentity) 62001)
       identity <- Systemd.systemdProfileIdentity profile
-      pure (if rule == "validate" then Right (ProcessCommand rule identity "/bin/validate" [] "" (Map.singleton "HOME" "/scratch") 30 1024, profile) else Left "unknown fixture rule")
+      pure (if rule == workspaceCoordinate "validate" then Right (ProcessCommand rule identity (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") (Map.singleton (workspaceCoordinate "HOME") (workspaceCoordinate "/scratch")) ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024), profile) else Left "unknown fixture rule")
 
 adapter :: SupervisorRuntime -> IORef (Maybe SupervisorRequest) -> FileRuntime -> DurableAdapter
 adapter = adapterWithRequest id

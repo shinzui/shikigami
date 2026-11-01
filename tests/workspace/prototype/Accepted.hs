@@ -63,6 +63,7 @@ import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.ProcessProvider
 import Shikigami.Workspace.Provider (Replacement (..), contentDigest)
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 
 data Prepared = Prepared {snapshot :: !ExecutionSnapshot, reference :: !Attempt.JobReference}
   deriving stock (Generic)
@@ -94,9 +95,9 @@ preparePlan upgrade env authorizer current client binding admission mode = do
       filterTool _ = False
       offered = case menu.offeredTools of Aeson.Array values -> Aeson.Array (Vector.filter filterTool values); value -> value
       snapshot = initial & #offeredTools .~ offered & #toolBindings .~ selected
-      editInput = Aeson.toJSON (if upgrade then Replacement "src/dependency.txt" (Just (contentDigest "old dependency\n")) "new dependency\n" else Replacement "src/mode" (Just (contentDigest "complete\n")) (mode <> "\n"))
+      editInput = Aeson.toJSON (if upgrade then Replacement (workspaceCoordinate "src/dependency.txt") (Just (contentDigest "old dependency\n")) "new dependency\n" else Replacement (workspaceCoordinate "src/mode") (Just (contentDigest "complete\n")) (mode <> "\n"))
       validateInput = Aeson.object ["rule" Aeson..= ("validate" :: Text.Text)]
-      commitInput = Aeson.toJSON (GitCommitRequest binding.base "chore(deps): upgrade fixture dependency")
+      commitInput = Aeson.toJSON (GitCommitRequest binding.base (workspaceCoordinate "chore(deps): upgrade fixture dependency"))
       assistant = ReplayAssistant V1 ([ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "edit-mode") edit.name editInput), ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "validate-mode") validate.name validateInput)] <> [ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "commit-upgrade") commit.name commitInput) | upgrade]) ToolUse Nothing Nothing (Aeson.object []) Nothing
       model = OperationSpec (operationIdFor snapshot.executionId (fixtureRevision 0)) ModelTurn RepeatableObservation (ExecutionValue.executionCoordinate "model") (policyDigest snapshot) (ExecutionValue.executionDigest "scope") Nothing
   void (right =<< run env Catalog.registerProjectionCatalog)

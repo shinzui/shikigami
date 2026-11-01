@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Reserve a workspace-specific Unix identity and complete operator policy
 -- before provisioning. Identities are not recycled by expiry or reboot.
 module Shikigami.Workspace.ProcessProfileStore (reserveProcessProfileTx, inspectProcessProfileTx, readyProcessProfileTx) where
@@ -17,10 +19,11 @@ import Shikigami.Workspace.ProcessPolicy
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 
-reserveProcessProfileTx :: WorkspaceBinding -> Text -> ProcessPolicy -> IdentityRange -> Transaction (Either WorkspaceError (ProcessProfile, ProfileState))
+reserveProcessProfileTx :: WorkspaceBinding -> WorkspaceCoordinate "instructions-digest" -> ProcessPolicy -> IdentityRange -> Transaction (Either WorkspaceError (ProcessProfile, ProfileState))
 reserveProcessProfileTx binding instructions policy range
-  | not (validProcessPolicy policy && validIdentityRange range && digestText instructions && binding.policyRevision == processPolicyIdentity policy) = pure (Left InvalidWorkspaceRequest)
+  | not (validProcessPolicy policy && validIdentityRange range && digestText (workspaceCoordinateText instructions) && binding.policyRevision == processPolicyIdentity policy) = pure (Left InvalidWorkspaceRequest)
   | otherwise = do
       owner <- Store.checkWorkspaceOwnerTx binding binding.request.owner binding.request.epoch
       case owner of
@@ -39,21 +42,23 @@ reserveProcessProfileTx binding instructions policy range
                   -- A dedicated singleton row serializes different workspaces
                   -- competing for the operator's reserved identity pool.
                   _ <- Tx.statement () lockAllocator
-                  identity <- Tx.statement (range.firstId, range.lastId) nextIdentity
+                  identity <- Tx.statement (workspaceIdentityNumber range.firstId, workspaceIdentityNumber range.lastId) nextIdentity
                   case identity of
                     Nothing -> pure (Left WorkspaceAllocationRefused)
-                    Just uid -> do
-                      let profile = ProcessProfile (workspaceBindingDigest binding) instructions policy uid uid
-                      Tx.statement (binding.workspace.resource, uid, profile) insertProfile
-                      pure (Right (profile, ProfileReserved))
+                    Just raw -> case parseWorkspaceIdentity raw of
+                      Left _ -> Tx.condemn >> pure (Left WorkspaceBindingConflict)
+                      Right uid -> do
+                        let profile = ProcessProfile (workspaceBindingDigest binding) instructions policy uid uid
+                        Tx.statement (workspaceCoordinateText binding.workspace.resource, workspaceIdentityNumber uid, profile) insertProfile
+                        pure (Right (profile, ProfileReserved))
   where
     matches profile = validProcessProfile profile && profile.bindingDigest == workspaceBindingDigest binding && profile.instructionDigest == instructions && processPolicyIdentity profile.policy == processPolicyIdentity policy && profile.userId >= range.firstId && profile.userId <= range.lastId
 
 inspectProcessProfileTx :: WorkspaceRef -> Transaction (Either WorkspaceError (Maybe (ProcessProfile, ProfileState)))
 inspectProcessProfileTx workspace
-  | workspace.provider /= "shikigami.workspace/1" = pure (Right Nothing)
+  | workspace.provider /= workspaceCoordinate "shikigami.workspace/1" = pure (Right Nothing)
   | otherwise = do
-      retained <- Tx.statement workspace.resource selectProfile
+      retained <- Tx.statement (workspaceCoordinateText workspace.resource) selectProfile
       case retained of
         Nothing -> pure (Right Nothing)
         Just (value, state) -> case Aeson.fromJSON value of
@@ -78,7 +83,7 @@ readyProcessProfileTx binding profile
           case retained of
             Left err -> pure (Left err)
             Right (Just (original, _)) | original == profile -> do
-              changed <- Tx.statement (binding.workspace.resource, profile) readyProfile
+              changed <- Tx.statement (workspaceCoordinateText binding.workspace.resource, profile) readyProfile
               pure (if changed then Right () else Left WorkspaceBindingConflict)
             _ -> pure (Left WorkspaceBindingConflict)
 

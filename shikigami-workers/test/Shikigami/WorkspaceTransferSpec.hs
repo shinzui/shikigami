@@ -86,6 +86,7 @@ import Shikigami.Workspace.Transfer
 import Shikigami.Workspace.TransferClient
 import Shikigami.Workspace.TransferStore qualified as Transfers
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import Shikigami.WorkspaceFileProviderSpec qualified as FileFixture
 import Shikigami.WorkspaceRpcSpec (withListener)
 import Shikigami.WorkspaceStoreSpec qualified as Fixture
@@ -100,11 +101,12 @@ tests fixture =
     "workspace concrete transfer owner"
     [ testCase "same-owner follow-up reuses retained bytes and unknown effects prevent a fresh-copy fallback" $ do
         properties <- Systemd.systemdPropertiesIdentity
-        let digest = "sha256:" <> Text.replicate 64 "a"
-            policy = ProcessPolicy ProcessPolicyV1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") properties [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] [""]
+        let digest :: WorkspaceCoordinate scope
+            digest = workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")
+            policy = ProcessPolicy ProcessPolicyV1 (ProcessImage (workspaceLocator "/qualified/root") digest (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")) properties [CommandRule (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)] [(workspaceCoordinate "")] [(workspaceCoordinate "")]
         withWorkspacePolicy False (Just policy) fixture \env binding context _ _ -> do
           original <- (\admission -> admission & #filePolicy .~ Just transferableFilePolicy) <$> (right =<< loadWorkspaceAdmission binding (Selection.assignmentIdFor binding.request.runId.unWorkflowId) 65536)
-          (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest original.instructions) policy (IdentityRange 62000 62001)))
+          (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest original.instructions) policy (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 62000) ((either (error . show) id . parseWorkspaceIdentity) 62001))))
           run env (runTransaction (readyProcessProfileTx binding profile)) >>= (@?= Right ())
           let runtime = FileRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ _ _ -> pure (Right ()))
               input = Aeson.object ["path" .= ("dependency.txt" :: Text)]
@@ -128,16 +130,16 @@ tests fixture =
           let assignment = SkillAssignment child (fixtureAgentName "worker") binding.request.owner memory selection Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host cannot dispatch models")
           catalog <- right (mkWorkspaceCatalog [RepositoryPolicy binding.repository binding.source [binding.base] binding.base binding.policyRevision])
           repository <- right (resolveRepository catalog binding.repository Nothing)
-          host <- right (governedWorkspaceHostWithTransfers runtime [transferredWorkspaceEditAdapter runtime] [] (\_ _ admission -> pure (Right admission)) binding.storageRoot (const (pure (Right repository))) (const (pure (Right ()))))
+          host <- right (governedWorkspaceHostWithTransfers runtime [transferredWorkspaceEditAdapter runtime] [] (\_ _ admission -> pure (Right admission)) (workspaceLocatorPath binding.storageRoot) (const (pure (Right repository))) (const (pure (Right ()))))
           -- This fixture datum stands for retained accepted work; native owned
           -- writes remain qualified separately by the Linux handoff fixture.
-          writeFile (workspaceFiles binding.storageRoot binding </> "dependency.txt") "ACCEPTED_PRIOR_CHANGE\n"
+          writeFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding </> "dependency.txt") "ACCEPTED_PRIOR_CHANGE\n"
           let operation = fixtureOperationId "uncertain-prior-effect"
-              prepared = FileReceipt operation (fixtureAttemptId "prior-actual") (fixtureGeneration 1) digest (workspaceBindingDigest binding) (bundleDigest original.instructions) "dependency.txt" "1:2" Nothing digest EditPrepared
+              prepared = FileReceipt operation (fixtureAttemptId "prior-actual") (fixtureGeneration 1) digest (workspaceBindingDigest binding) (bundleDigest original.instructions) (workspaceCoordinate "dependency.txt") (workspaceCoordinate "1:2") Nothing digest EditPrepared
           _ <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceEffectTx binding binding.request.owner (fixtureRevision 0) operation digest))
           run env (runTransaction (Workspaces.recordWorkspaceReceiptTx binding prepared)) >>= (@?= Right ())
           host.load assignment >>= \case Left _ -> pure (); Right _ -> assertFailure "unknown effect was bypassed"
-          fmap length <$> run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing)) >>= (@?= Right 1)
+          fmap length <$> run env (runTransaction (listWorkspacesTx (workspaceLocatorPath binding.storageRoot) Nothing)) >>= (@?= Right 1)
           run env (runTransaction (Workspaces.recordWorkspaceReceiptTx binding (prepared & #state .~ EditRefused))) >>= (@?= Right ())
           let replaceBinding value = run env (runTransaction (Tx.statement value (preparable "UPDATE shikigami.workspace_bindings SET binding=$1" (E.param (E.nonNullable E.jsonb)) D.noResult)))
           -- A complete binding with a corrupt locator field used to disappear
@@ -145,8 +147,8 @@ tests fixture =
           replaceBinding (Aeson.toJSON (binding & #request . #assignment .~ Nothing))
           host.load assignment >>= \case Left _ -> pure (); Right _ -> assertFailure "corrupt retained origin authorized a replacement workspace"
           replaceBinding (Aeson.toJSON binding)
-          fmap length <$> run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing)) >>= (@?= Right 1)
-          readFile (workspaceFiles binding.storageRoot binding </> "dependency.txt") >>= (@?= "ACCEPTED_PRIOR_CHANGE\n")
+          fmap length <$> run env (runTransaction (listWorkspacesTx (workspaceLocatorPath binding.storageRoot) Nothing)) >>= (@?= Right 1)
+          readFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding </> "dependency.txt") >>= (@?= "ACCEPTED_PRIOR_CHANGE\n")
           forM_ [("worker_session_messages", "input"), ("worker_session_results", "output")] \(table, field) -> do
             originalMetadata <- run env (runTransaction (Tx.statement first.value (preparable ("SELECT state FROM shikigami." <> table <> " WHERE assignment_id=$1") (E.param (E.nonNullable E.text)) (D.singleRow (D.column (D.nonNullable D.jsonb))))))
             let replaceMetadata value = run env (runTransaction (Tx.statement (first.value, value) (preparable ("UPDATE shikigami." <> table <> " SET state=$2 WHERE assignment_id=$1") ((fst >$< E.param (E.nonNullable E.text)) <> (snd >$< E.param (E.nonNullable E.jsonb))) D.noResult)))
@@ -154,7 +156,7 @@ tests fixture =
             replaceMetadata corrupt
             host.load assignment >>= \case Left _ -> pure (); Right _ -> assertFailure "unreadable prior assignment authorized follow-up admission"
             replaceMetadata originalMetadata
-          fmap length <$> run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing)) >>= (@?= Right 1)
+          fmap length <$> run env (runTransaction (listWorkspacesTx (workspaceLocatorPath binding.storageRoot) Nothing)) >>= (@?= Right 1)
           admission <- right =<< host.load assignment
           admission.workspace @?= binding.workspace
           run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Right (Just (binding, Ready)))
@@ -187,24 +189,25 @@ tests fixture =
           run env (runTransaction (inspectProcessProfileTx binding.workspace)) >>= (@?= Right (Just (profile, ProfileReady))),
       testCase "successor host admits the real retained child and exact read adapter without reallocating or provisioning" $ do
         properties <- Systemd.systemdPropertiesIdentity
-        let digest = "sha256:" <> Text.replicate 64 "a"
-            policy = ProcessPolicy ProcessPolicyV1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") properties [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] [""]
+        let digest :: WorkspaceCoordinate scope
+            digest = workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")
+            policy = ProcessPolicy ProcessPolicyV1 (ProcessImage (workspaceLocator "/qualified/root") digest (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")) properties [CommandRule (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)] [(workspaceCoordinate "")] [(workspaceCoordinate "")]
         withTransferPolicy (Just policy) fixture \env binding intent supervisor _ -> do
           original <- right =<< loadWorkspaceAdmission binding (Selection.assignmentIdFor binding.request.runId.unWorkflowId) 65536
-          (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest original.instructions) policy (IdentityRange 62000 62001)))
+          (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest original.instructions) policy (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 62000) ((either (error . show) id . parseWorkspaceIdentity) 62001))))
           run env (runTransaction (readyProcessProfileTx binding profile)) >>= (@?= Right ())
           -- Mutable instruction proposals cannot replace the pinned base.
-          writeFile (workspaceFiles binding.storageRoot binding </> "AGENTS.md") "MUTABLE_POLICY_PROPOSAL"
+          writeFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding </> "AGENTS.md") "MUTABLE_POLICY_PROPOSAL"
           FencedAndSettled proof <- (workspaceTransferProvider supervisor).reconcile intent
           childRun <- establishSuccessor env binding intent proof
           session <- genSessionId
           now <- getCurrentTime
           selection <- right (resolveExecutionSelection (Selection.assignmentIdFor childRun) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just intent.rootId) now)
-          let fileRuntime = FileRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ admission _ kind _ -> pure (if kind == "admit" && map (.text) (bundleFiles admission.instructions) /= ["PINNED_ROOT_POLICY: validate before committing"] then Left "changed instruction identity" else Right ()))
+          let fileRuntime = FileRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ admission _ kind _ -> pure (if kind == (workspaceCoordinate ("admit")) && map (.text) (bundleFiles admission.instructions) /= ["PINNED_ROOT_POLICY: validate before committing"] then Left "changed instruction identity" else Right ()))
               assignment = SkillAssignment (WorkflowId childRun) intent.newWorker intent.newOwner session selection Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host loading cannot call a model")
           catalog <- right (mkWorkspaceCatalog [RepositoryPolicy binding.repository binding.source [binding.base] binding.base binding.policyRevision])
           repository <- right (resolveRepository catalog binding.repository Nothing)
-          let hostFor runtime = right (governedWorkspaceHostWithTransfers runtime [transferredWorkspaceEditAdapter runtime] [workspaceEditAdapter runtime, supervisedWorkspaceEditAdapter runtime] (\_ _ admission -> pure (Right admission)) binding.storageRoot (const (pure (Right repository))) (const (pure (Right ()))))
+          let hostFor runtime = right (governedWorkspaceHostWithTransfers runtime [transferredWorkspaceEditAdapter runtime] [workspaceEditAdapter runtime, supervisedWorkspaceEditAdapter runtime] (\_ _ admission -> pure (Right admission)) (workspaceLocatorPath binding.storageRoot) (const (pure (Right repository))) (const (pure (Right ()))))
           denied <- hostFor (fileRuntime & #authorizer .~ denyAllActionAuthorizer)
           denied.load assignment >>= \case Left _ -> pure (); Right _ -> assertFailure "denied successor admitted"
           run env (runTransaction (Workspaces.checkWorkspaceOwnerTx binding intent.newOwner (fixtureRevision 1))) >>= (@?= Left WorkspaceBindingConflict)
@@ -257,8 +260,8 @@ tests fixture =
           run env (runTransaction (inspectProcessProfileTx binding.workspace)) >>= (@?= Right (Just (profile, ProfileReady)))
           (workspaceTransferProvider supervisor).admitWrite binding.workspace intent.sessionId intent.oldOwner (fixtureRevision 0) (fixtureOperationId "late-original") >>= assertRefused,
       testCase "private peer client recovers one retained fence across service restart and revocation" $ withTransfer fixture \env binding intent runtime _ -> withListener \path listener uid -> do
-        let client = workspaceTransferClient (ProcessClient path uid 3 3)
-            serve selected = serveRpc (RpcPolicy [uid] 2 3) listener (dispatchSupervisorRpc selected)
+        let client = workspaceTransferClient (ProcessClient (workspaceLocator path) ((either (error . show) id . parseRpcPeerUserId) uid) ((either (error . show) id . parseRpcRequestSeconds) 3) ((either (error . show) id . parseRpcWaitSeconds) 3))
+            serve selected = serveRpc (RpcPolicy [(either (error . show) id . parseRpcPeerUserId) uid] ((either (error . show) id . parseRpcConcurrency) 2) ((either (error . show) id . parseRpcRequestSeconds) 3)) listener (dispatchSupervisorRpc selected)
         proof <- withAsync (serve runtime) \_ -> do
           outcome <- client.reconcile intent
           case outcome of
@@ -275,11 +278,11 @@ tests fixture =
         provider.reconcile intent >>= (@?= FenceUnresolved)
         readIORef stopped >>= (@?= 1)
         doesFileExist (processDirectory binding record </> "cancel") >>= (@?= True)
-        readFile (workspaceFiles binding.storageRoot binding </> "dependency.txt") >>= (@?= "old dependency\n")
+        readFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding </> "dependency.txt") >>= (@?= "old dependency\n")
         provider.admitWrite binding.workspace intent.sessionId intent.newOwner (fixtureRevision 1) (fixtureOperationId "premature") >>= assertRefused
         -- Instrumented factual backend evidence, not a real process qualification.
-        let empty = CapturedOutput "stdout" ("sha256:" <> Text.replicate 64 "b") 0 False
-            receipt = ProcessReceipt record.operationId record.attemptId record.generation record.fingerprint record.bindingDigest record.unit boot invocation (Just 143) ProcessCancelled empty (empty & #artifact .~ "stderr") True True
+        let empty = CapturedOutput (workspaceCoordinate "stdout") (workspaceCoordinate ("sha256:" <> Text.replicate 64 "b")) ((either (error . show) id . parseCapturedBytes) 0) (outputTruncation False)
+            receipt = ProcessReceipt record.operationId record.attemptId record.generation record.fingerprint record.bindingDigest record.unit boot invocation (Just ((either (error . show) id . parseProcessExitStatus) 143)) ProcessCancelled empty (empty & #artifact .~ (workspaceCoordinate ("stderr"))) (descendantSettlement True) (outputCompleteness True)
         run env (runTransaction (Processes.recordProcessReceiptTx receipt)) >>= (@?= Right ())
         outcome <- (workspaceTransferProvider (runtime & #authorizer .~ denyAllActionAuthorizer)).reconcile intent
         assertBool "only retained full settlement produces a fence" (case outcome of FencedAndSettled proof -> matchesFence intent proof; _ -> False)
@@ -295,7 +298,7 @@ tests fixture =
         run env (runTransaction (Workspaces.checkWorkspaceOwnerTx binding intent.oldOwner (fixtureRevision 0))) >>= (@?= Right ()),
       testCase "an independently held writer lock cannot be mistaken for successful write or fence admission" $ withTransfer fixture \_ binding intent runtime _ -> do
         withWorkspaceLock
-          (workspaceMetadata binding.storageRoot binding)
+          (workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding)
           ( do
               (workspaceTransferProvider runtime).reconcile intent >>= (@?= FenceUnresolved)
               (workspaceTransferProvider runtime).admitWrite binding.workspace intent.sessionId intent.oldOwner (fixtureRevision 0) (fixtureOperationId "locked-write") >>= assertRefused
@@ -304,9 +307,11 @@ tests fixture =
           >>= (@?= Right ())
     ]
 
-boot, invocation :: Text
-boot = "11111111-1111-4111-8111-111111111111"
-invocation = "22222222-2222-4222-8222-222222222222"
+boot :: WorkspaceCoordinate "boot-id"
+invocation :: WorkspaceCoordinate "invocation-id"
+boot = workspaceCoordinate "11111111-1111-4111-8111-111111111111"
+
+invocation = workspaceCoordinate "22222222-2222-4222-8222-222222222222"
 
 withTransfer :: DatabaseFixture -> (AppEnv -> WorkspaceBinding -> TransferIntent -> SupervisorRuntime -> IORef Int -> IO a) -> IO a
 withTransfer = withTransferPolicy Nothing
@@ -322,7 +327,7 @@ withWorkspacePolicy transferring policy fixture callback = Fixture.withFixture f
       writeFile (source </> "AGENTS.md") "PINNED_ROOT_POLICY: validate before committing"
       original <- Fixture.commitRepository source
       let base = repositoryBase original
-      catalog <- right (mkWorkspaceCatalog [RepositoryPolicy (repositoryIdentity original) source [base] base (processPolicyIdentity selected)])
+      catalog <- right (mkWorkspaceCatalog [RepositoryPolicy (repositoryIdentity original) (workspaceLocator source) [base] base (processPolicyIdentity selected)])
       right (resolveRepository catalog (repositoryIdentity original) Nothing)
   now <- getCurrentTime
   parentSession <- genSessionId
@@ -355,9 +360,10 @@ withWorkspacePolicy transferring policy fixture callback = Fixture.withFixture f
 reserveProcess :: AppEnv -> WorkspaceBinding -> IO ProcessRecord
 reserveProcess env binding = do
   now <- getCurrentTime
-  let digest = "sha256:" <> Text.replicate 64 "a"
+  let digest :: WorkspaceCoordinate scope
+      digest = workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")
       operation = fixtureOperationId "retained-process"
-      command = ProcessCommand "validate" digest "/bin/validate" [] "" Map.empty 30 1024
+      command = ProcessCommand (workspaceCoordinate "validate") digest (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)
       record = ProcessRecord operation (fixtureAttemptId "original-process-actual") (fixtureOwner "actual-owner") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest command (addUTCTime 30 now) (processUnit operation digest) Nothing Nothing ProcessReserved Nothing Nothing
   right =<< run env (runTransaction (Processes.reserveProcessTx binding record))
 

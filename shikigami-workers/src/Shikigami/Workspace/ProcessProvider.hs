@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Client for the independently supervised process owner. Installation is
 -- gated on Linux qualification; description/preparation perform no socket IO.
 module Shikigami.Workspace.ProcessProvider (ProcessClient (..), workspaceExecAdapter, transferredWorkspaceExecAdapter) where
@@ -15,16 +17,17 @@ import Shikigami.Prelude
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), supervisedFilePolicy, transferableFilePolicy)
 import Shikigami.Workspace.Rpc
 import Shikigami.Workspace.Supervisor
+import Shikigami.Workspace.Value
 import Shikumi.Tool (mkDynTool)
 import System.Timeout (timeout)
 
 -- Trusted endpoint, kernel server identity and bounded caller waiting policy.
 -- None of these values is a tool argument or grants command authority.
 data ProcessClient = ProcessClient
-  { socketPath :: !FilePath,
-    serverUser :: !Integer,
-    requestSeconds :: !Int,
-    waitSeconds :: !Int
+  { socketPath :: !(WorkspaceLocator "rpc-socket"),
+    serverUser :: !(RpcPeerUserId),
+    requestSeconds :: !(RpcRequestSeconds),
+    waitSeconds :: !(RpcWaitSeconds)
   }
 
 workspaceExecAdapter :: ProcessClient -> DurableAdapter
@@ -44,7 +47,7 @@ execAdapterFor transferable client = DurableAdapter
             mkDynTool name "Validate one reviewed rule." workspaceExecSchema \(_input :: Aeson.Value) -> unsafeEff_ do
               -- The server reads the accepted arguments from its store. A caller can
               -- supply only the retained actual-attempt coordinates, never argv.
-              unless (name == "validate" && dispatch.operation.executionId == snapshot.executionId && maybe False ((== Just (if transferable then transferableFilePolicy else supervisedFilePolicy)) . (.filePolicy)) snapshot.workspace && (if transferable then transferredWorkspaceExecBinding else workspaceExecBinding) `elem` snapshot.toolBindings && client.waitSeconds >= 1 && client.waitSeconds <= 3600) uncertain
+              unless (name == "validate" && dispatch.operation.executionId == snapshot.executionId && maybe False ((== Just (if transferable then transferableFilePolicy else supervisedFilePolicy)) . (.filePolicy)) snapshot.workspace && (if transferable then transferredWorkspaceExecBinding else workspaceExecBinding) `elem` snapshot.toolBindings && rpcWaitSecondsNumber client.waitSeconds >= 1 && rpcWaitSecondsNumber client.waitSeconds <= 3600) uncertain
               let actual = SupervisorRequest snapshot.executionId dispatch.operation.operationId dispatch.attemptId dispatch.owner dispatch.generation
                   call = callRpc client.socketPath client.serverUser client.requestSeconds
                   consume result = case result of
@@ -55,7 +58,7 @@ execAdapterFor transferable client = DurableAdapter
                           threadDelay 250000
                           consume =<< call (RpcObserve actual.operationId)
                     _ -> uncertain
-              result <- timeout (client.waitSeconds * 1000000) (consume =<< call (RpcLaunch actual))
+              result <- timeout (rpcWaitSecondsNumber client.waitSeconds * 1000000) (consume =<< call (RpcLaunch actual))
               maybe uncertain pure result
   where
     -- A failed connection or a supervisor error is never a no-launch proof.

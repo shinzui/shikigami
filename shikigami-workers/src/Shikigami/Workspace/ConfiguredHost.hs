@@ -7,7 +7,7 @@ import Data.Map.Strict qualified as Map
 import Data.Time (getCurrentTime)
 import Hasql.Pool (Pool)
 import Shikigami.Action.Authorization (ActionAuthorizer)
-import Shikigami.Agent.Name (agentNameText)
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Principal (identityText)
 import Shikigami.App (AppEnv)
 import Shikigami.Attestation.Resolve qualified as Profile
@@ -28,6 +28,7 @@ import Shikigami.Workspace.Provision
 import Shikigami.Workspace.Settings
 import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 
 configuredWorkspaceHost :: AppEnv -> Pool -> DirectoryHandle -> ActionAuthorizer -> WorkspaceSettings -> Either Text WorkspaceHost
 configuredWorkspaceHost = configuredWorkspaceHostFor False
@@ -42,7 +43,7 @@ configuredWorkspaceHostFor transferable appEnv pool directory authorizer setting
   catalog <- validateWorkspaceSettings settings
   let resolve agent identity = do
         principal <- either (const refused) Right (identityText identity)
-        grant <- case filter (\grant -> grant.agent == agentNameText agent && grant.principal == principal) settings.grants of
+        grant <- case filter (\grant -> grant.agent == agent && grant.principal == declarationCoordinate principal) settings.grants of
           [grant] -> Right grant
           _ -> refused
         either (const refused) Right (resolveRepository catalog grant.repository grant.base)
@@ -61,7 +62,7 @@ configuredWorkspaceHostFor transferable appEnv pool directory authorizer setting
         pure (supported >> resolve assignment.agent assignment.identity)
       current assignment = case resolve assignment.agent assignment.identity of Left err -> pure (Left err); Right _ -> authority assignment.identity assignment.sanctionedProfile
   case settings.process of
-    Nothing -> fileWorkspaceHost runtime settings.storageRoot select current
+    Nothing -> fileWorkspaceHost runtime (workspaceLocatorPath settings.storageRoot) select current
     Just process -> do
       let client = ProcessClient process.socketPath process.serverUser process.requestSeconds process.waitSeconds
           prepare assignment binding admission = case Map.lookup binding.repository process.policies of
@@ -78,7 +79,7 @@ configuredWorkspaceHostFor transferable appEnv pool directory authorizer setting
           selected = if transferable then [transferredWorkspaceEditAdapter runtime, transferredWorkspaceExecAdapter client, transferredWorkspaceGitAdapter runtime, workspaceIntegrationAdapter runtime] else [supervisedWorkspaceEditAdapter runtime, workspaceExecAdapter client, workspaceGitAdapter runtime]
           historical = if transferable then [workspaceEditAdapter runtime, supervisedWorkspaceEditAdapter runtime, workspaceExecAdapter client, workspaceGitAdapter runtime] else [workspaceEditAdapter runtime]
           host = if transferable then governedWorkspaceHostWithTransfers else governedWorkspaceHost
-      host runtime selected historical prepare settings.storageRoot select current
+      host runtime selected historical prepare (workspaceLocatorPath settings.storageRoot) select current
   where
     refused = Left "workspace operator policy refused"
     targetPolicy binding admission _scoped kind path = pure do
@@ -91,7 +92,7 @@ configuredWorkspaceHostFor transferable appEnv pool directory authorizer setting
       -- Approval covers the complete scope-labelled bundle, so explicit
       -- conflicts must be resolved by the operator before this digest is listed.
       unless (revision.instructionDigest == bundleDigest admission.instructions) refused
-      case kind of
+      case workspaceCoordinateText kind of
         "admit" -> Right ()
         "read" -> unless (pathAdmitted entry.readPaths path) refused
         "replace" -> unless (pathAdmitted entry.writePaths path) refused

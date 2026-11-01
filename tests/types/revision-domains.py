@@ -57,6 +57,7 @@ import Shikigami.WorkerSession.Capability qualified as AliasCoordinator
 import Shikigami.Workspace.GitTypes qualified as Git
 import Shikigami.Workspace.Process qualified as Process
 import Shikigami.Workspace.ProcessPolicy qualified as ProcessPolicy
+import Shikigami.Workspace.Value qualified as WorkspaceValue
 import Shikigami.Workspace.Types qualified as Workspace
 import Shikigami.Execution.Quantity
 import Shikigami.StateRevision
@@ -430,6 +431,35 @@ unchecked = coerce
     ("unchecked-arithmetic", '''negative :: StateRevision "objective"
 negative = -1
 ''', False),
+    ("workspace-scalar-ports", '''rule :: Process.ProcessCommand -> WorkspaceValue.WorkspaceCoordinate "process-rule"
+rule value = value.rule
+seconds :: Int -> Either Text WorkspaceValue.ProcessSeconds
+seconds = WorkspaceValue.parseProcessSeconds
+locator :: FilePath -> WorkspaceValue.WorkspaceLocator "storage-root"
+locator = WorkspaceValue.workspaceLocator
+''', True),
+    ("workspace-coordinate-scope-coercion", '''wrong :: WorkspaceValue.WorkspaceCoordinate "binding-digest" -> WorkspaceValue.WorkspaceCoordinate "process-fingerprint"
+wrong = coerce
+''', False),
+    ("workspace-locator-scope-coercion", '''wrong :: WorkspaceValue.WorkspaceLocator "storage-root" -> WorkspaceValue.WorkspaceLocator "image-root"
+wrong = coerce
+''', False),
+    ("workspace-seconds-coercion", '''wrong :: Int -> WorkspaceValue.ProcessSeconds
+wrong = coerce
+''', False),
+    ("workspace-seconds-numeric", '''wrong :: WorkspaceValue.ProcessSeconds
+wrong = -1
+''', False),
+    ("workspace-seconds-constructor", "wrong = WorkspaceValue.ProcessSeconds 0\n", False),
+    ("workspace-coordinate-literal", '''wrong :: WorkspaceValue.WorkspaceCoordinate "process-rule"
+wrong = fromString "unreviewed"
+''', False),
+    ("workspace-timeout-unit", '''wrong :: WorkspaceValue.ProcessSeconds -> WorkspaceValue.RpcRequestSeconds
+wrong = id
+''', False),
+    ("workspace-settlement-boolean", '''wrong :: Process.ProcessReceipt -> Bool
+wrong value = value.descendantsEmpty
+''', False),
 ]
 with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as directory:
     for name, body, expected in CASES:
@@ -505,6 +535,16 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
                 'process-policy-format-numeric': ['ProcessPolicyFormat', 'Num'],
                 'process-policy-format-coercion': ['Int', 'ProcessPolicyFormat'],
                 'routing-is-not-policy-format': ["Couldn't match", 'ProcessRoutingFormat', 'ProcessPolicyFormat'],
+            })
+            fragments.update({
+                "workspace-coordinate-scope-coercion": ["binding-digest", "process-fingerprint"],
+                "workspace-locator-scope-coercion": ["storage-root", "image-root"],
+                "workspace-seconds-coercion": ["ProcessSeconds", "Int"],
+                "workspace-seconds-numeric": ["ProcessSeconds", "Num"],
+                "workspace-seconds-constructor": ["ProcessSeconds"],
+                "workspace-coordinate-literal": ["WorkspaceCoordinate", "IsString"],
+                "workspace-timeout-unit": ["ProcessSeconds", "RpcRequestSeconds"],
+                "workspace-settlement-boolean": ["DescendantSettlement", "Bool"],
             })
             if name.endswith("-constructor"):
                 assert any(marker in result.stderr.lower() for marker in ["not in scope", "does not export", "illegal term-level"]), (name, result.stderr)

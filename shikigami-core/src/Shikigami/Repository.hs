@@ -12,7 +12,7 @@ module Shikigami.Repository
   )
 where
 
-import Data.Aeson (Value (String), withText)
+import Data.Aeson (FromJSONKey, ToJSONKey, Value (String), withText)
 import Data.Char (isAsciiLower, isDigit)
 import Data.Text qualified as Text
 import Shikigami.Prelude
@@ -21,7 +21,7 @@ import Shikigami.Prelude
 -- @repo_...@ TypeID or a canonical @mori://@ repository URI.
 newtype RepositoryId = RepositoryId {value :: Text}
   deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
+  deriving newtype (ToJSON, FromJSON, ToJSONKey, FromJSONKey)
 
 -- | A revision accepted by the current Mori content plane: one full lowercase
 -- 40-character Git SHA-1 commit id.

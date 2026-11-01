@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Concrete, serialized read and compare-and-replace effects. Process and Git
 -- mutation adapters are deliberately separate owners.
 module Shikigami.Workspace.FileProvider
@@ -62,6 +64,7 @@ import Shikigami.Workspace.Provider
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.TransferStore qualified as Transfers
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import Shikumi.Tool (ToolError (..), mkDynTool, renderToolError)
 import Shikumi.Tool.Output (textToolOutput)
 
@@ -74,7 +77,7 @@ data FileRuntime = FileRuntime
     replayAuthority :: !(ExecutionSnapshot -> IO (Either Text ())),
     -- Resolve the exact retained policy revision and reject explicit conflicts.
     -- Repository text is input to restrictions and never grants a capability.
-    admitTarget :: !(WorkspaceBinding -> WorkspaceAdmission -> [RepositoryInstruction] -> Text -> Text -> IO (Either Text ()))
+    admitTarget :: !(WorkspaceBinding -> WorkspaceAdmission -> [RepositoryInstruction] -> WorkspaceCoordinate "policy-operation" -> WorkspaceCoordinate "relative-path" -> IO (Either Text ()))
   }
   deriving stock (Generic)
 
@@ -118,7 +121,7 @@ fileRevision FileOnly = "1"
 fileRevision Supervised = "2"
 fileRevision Transferred = "3"
 
-filePolicyFor :: FileMode -> Text
+filePolicyFor :: FileMode -> FilePolicy
 filePolicyFor FileOnly = nativeFilePolicy
 filePolicyFor Supervised = supervisedFilePolicy
 filePolicyFor Transferred = transferableFilePolicy
@@ -202,17 +205,17 @@ withAccess mode runtime snapshot dispatch logical input perform = catch work (\(
                             Left err -> pure (Left err)
                             Right () -> do
                               private <- case mode of
-                                FileOnly -> ensurePrivateDirectory bound.storageRoot
+                                FileOnly -> ensurePrivateDirectory (workspaceLocatorPath bound.storageRoot)
                                 _ -> do
-                                  root <- checkPrivateDirectory bound.storageRoot
-                                  metadata <- checkPrivateDirectory (workspaceMetadata bound.storageRoot bound)
+                                  root <- checkPrivateDirectory (workspaceLocatorPath bound.storageRoot)
+                                  metadata <- checkPrivateDirectory (workspaceMetadata (workspaceLocatorPath bound.storageRoot) bound)
                                   pure (root >> metadata)
                               case private of
                                 Left _ -> pure (Left FileEffectUnavailable)
                                 Right () ->
                                   flattenFile
                                     <$> withWorkspaceLock
-                                      (workspaceMetadata bound.storageRoot bound)
+                                      (workspaceMetadata (workspaceLocatorPath bound.storageRoot) bound)
                                       ( Right <$> do
                                           current <- check
                                           case current of
@@ -276,7 +279,7 @@ readFileFor mode runtime snapshot dispatch input = case parseEither (Aeson.withO
   Right path -> withAccess mode runtime snapshot dispatch "read" input \binding admission profile check _prepare _complete ->
     flattenFile
       <$> withContainedFile
-        (workspaceFiles binding.storageRoot binding)
+        (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding)
         path
         ( \file ->
             Right <$> do
@@ -315,20 +318,20 @@ replaceFileFor mode checkpoint runtime snapshot dispatch input = case parseEithe
   input of
   Left _ -> pure (Left FileEffectRefused)
   Right (replacement :: Replacement)
-    | not (validWorkspacePath replacement.path) -> pure (Left FileEffectRefused)
+    | not (validWorkspacePath (workspaceCoordinateText replacement.path)) -> pure (Left FileEffectRefused)
     | Bytes.length (Encoding.encodeUtf8 replacement.content) > 262144 -> pure (Left FileEffectTooLarge)
     | otherwise -> withAccess mode runtime snapshot dispatch "replace" input \binding admission profile check prepare complete ->
         flattenFile
           <$> withContainedFile
-            (workspaceFiles binding.storageRoot binding)
-            replacement.path
+            (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding)
+            (workspaceCoordinateText replacement.path)
             ( \file ->
                 Right <$> do
                   target <- containedTargetIdentity file
                   case target of
                     Left _ -> pure (Left FileEffectRefused)
                     Right identity -> do
-                      granted <- authorize runtime profile binding admission dispatch "replace" replacement.path identity input check
+                      granted <- authorize runtime profile binding admission dispatch "replace" (workspaceCoordinateText replacement.path) identity input check
                       case granted of
                         Left err -> pure (Left err)
                         Right () -> replace profile binding admission check prepare complete file identity replacement
@@ -339,8 +342,8 @@ replaceFileFor mode checkpoint runtime snapshot dispatch input = case parseEithe
             Nothing -> versionedDigest "shikigami.workspace-replacement/1" (toJSON (workspaceBindingDigest binding, dispatch.operation, input, identity))
             Just retained | mode == Transferred -> versionedDigest "shikigami.workspace-replacement/3" (toJSON (workspaceBindingDigest binding, admission.runId.unWorkflowId, admission.assignmentId, admission.owner, admission.epoch, dispatch.operation, input, identity, retained))
             Just retained -> versionedDigest "shikigami.workspace-replacement/2" (toJSON (workspaceBindingDigest binding, dispatch.operation, input, identity, retained))
-          receipt = FileReceipt dispatch.operation.operationId dispatch.attemptId dispatch.generation fingerprint (workspaceBindingDigest binding) (bundleDigest admission.instructions) replacement.path identity replacement.expected (contentDigest replacement.content) EditPrepared
-          metadata = workspaceMetadata binding.storageRoot binding
+          receipt = FileReceipt dispatch.operation.operationId dispatch.attemptId dispatch.generation (workspaceCoordinate fingerprint) (workspaceBindingDigest binding) (bundleDigest admission.instructions) replacement.path (workspaceCoordinate identity) replacement.expected (contentDigest replacement.content) EditPrepared
+          metadata = workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding
           receiptName = "receipt-" <> Text.drop 7 (versionedDigest "shikigami.workspace-receipt/1" (toJSON dispatch.operation.operationId)) <> ".json"
       existing <- readPrivateReceipt metadata receiptName
       case existing of
@@ -378,12 +381,12 @@ replaceFileFor mode checkpoint runtime snapshot dispatch input = case parseEithe
                     Left err -> pure (Left err)
                     Right () -> do
                       saved <- runTx runtime (Store.recordWorkspaceReceiptTx binding prepared)
-                      gate <- authorize runtime profile binding admission dispatch "replace" replacement.path identity input check
+                      gate <- authorize runtime profile binding admission dispatch "replace" (workspaceCoordinateText replacement.path) identity input check
                       case (saved, gate, mapFile observed) of
                         (Right (Right ()), Right (), Right old) -> do
                           applied <- case profile of
                             Nothing -> replaceContainedFile metadata file old (Encoding.encodeUtf8 replacement.content)
-                            Just retained -> replaceContainedFileOwned retained.userId metadata file old (Encoding.encodeUtf8 replacement.content)
+                            Just retained -> replaceContainedFileOwned (workspaceIdentityNumber retained.userId) metadata file old (Encoding.encodeUtf8 replacement.content)
                           case applied of
                             Left FileContentConflict -> refusePrepared binding metadata receiptName prepared
                             Left _ -> pure (Left FileEffectUnresolved)
@@ -410,9 +413,9 @@ replaceFileFor mode checkpoint runtime snapshot dispatch input = case parseEithe
             _ -> pure (Left FileEffectUnresolved)
 
 authorize :: FileRuntime -> Maybe ProcessProfile -> WorkspaceBinding -> WorkspaceAdmission -> DispatchContext -> Text -> Text -> Text -> Aeson.Value -> IO (Either FileEffectError ()) -> IO (Either FileEffectError ())
-authorize runtime profile binding admission dispatch kind path target input check = case (identityText admission.owner, maybe workspaceFileAction (if admission.filePolicy == Just transferableFilePolicy then workspaceTransferredFileAction else workspaceSupervisedFileAction) profile binding admission dispatch kind path target (versionedDigest "shikigami.workspace-file-input/1" input), instructionsForPath admission.instructions path) of
+authorize runtime profile binding admission dispatch kind path target input check = case (identityText admission.owner, maybe workspaceFileAction (if admission.filePolicy == Just transferableFilePolicy then workspaceTransferredFileAction else workspaceSupervisedFileAction) profile binding admission dispatch kind (workspaceCoordinate path) (workspaceCoordinate target) (workspaceCoordinate (versionedDigest "shikigami.workspace-file-input/1" input)), instructionsForPath admission.instructions (workspaceCoordinate path)) of
   (Right principal, Right action, Right instructions) -> do
-    policy <- runtime.admitTarget binding admission instructions kind path
+    policy <- runtime.admitTarget binding admission instructions (workspaceCoordinate kind) (workspaceCoordinate path)
     case policy of
       Left _ -> pure (Left FileEffectRefused)
       Right () -> do
@@ -485,14 +488,14 @@ reconcileFileEffect env operation = protectRecovery do
   (binding, registration, completed) <- recoveryTx env (Store.inspectRegisteredFileTx operation) >>= either (const (recoveryAbort FileEffectUnresolved)) pure >>= maybe (recoveryAbort FileEffectUnresolved) pure
   let original = registration.receipt
       matches receipt = (receipt & #state .~ EditPrepared) == original
-      validate receipt = unless (original.state == EditPrepared && matches receipt && original.operationId == operation && original.bindingDigest == workspaceBindingDigest binding && original.generation > initialRevision && validWorkspacePath original.path && validProcessRouting registration.routing) (recoveryAbort FileEffectUnresolved)
+      validate receipt = unless (original.state == EditPrepared && matches receipt && original.operationId == operation && original.bindingDigest == workspaceBindingDigest binding && original.generation > initialRevision && validWorkspacePath (workspaceCoordinateText original.path) && validProcessRouting registration.routing) (recoveryAbort FileEffectUnresolved)
   validate original
   case completed of
     Just receipt | receipt.state `elem` [EditApplied, EditRefused] -> validate receipt >> pure receipt
     _ -> do
-      let metadata = workspaceMetadata binding.storageRoot binding
+      let metadata = workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding
           name = "receipt-" <> Text.drop 7 (versionedDigest "shikigami.workspace-receipt/1" (toJSON operation)) <> ".json"
-      forM_ [binding.storageRoot, metadata] \path -> checkPrivateDirectory path >>= either (const (recoveryAbort FileEffectUnavailable)) pure
+      forM_ [workspaceLocatorPath binding.storageRoot, metadata] \path -> checkPrivateDirectory path >>= either (const (recoveryAbort FileEffectUnavailable)) pure
       locked <- withWorkspaceLock metadata do
         -- A worker may have completed while this scanner waited for the lock.
         current <- recoveryTx env (Store.inspectRegisteredFileTx operation)
@@ -503,12 +506,12 @@ reconcileFileEffect env operation = protectRecovery do
             validate private
             receipt <- case private.state of
               EditPrepared -> do
-                observed <- withContainedFile (workspaceFiles binding.storageRoot binding) original.path \file -> do
+                observed <- withContainedFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding) (workspaceCoordinateText original.path) \file -> do
                   target <- containedTargetIdentity file
                   bytes <- readContainedFile 262144 file
                   pure do
                     identity <- target
-                    unless (identity == original.target) (Left FilePathRefused)
+                    unless (identity == (workspaceCoordinateText original.target)) (Left FilePathRefused)
                     actual <- bytes >>= maybe (Left FileContentConflict) Right
                     text <- either (const (Left FilePathRefused)) Right (Encoding.decodeUtf8' actual)
                     unless (contentDigest text == original.result) (Left FileContentConflict)

@@ -20,6 +20,7 @@ import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude
+import Shikigami.Repository (RepositoryId (..))
 import Shikigami.StateRevision (initialRevision)
 import Shikigami.WorkerSession.Types (SessionAdmission (..))
 import Shikigami.WorkerSessionStoreSpec qualified as Fixture
@@ -29,6 +30,7 @@ import Shikigami.Workspace.ProcessProfileStore
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Store qualified as Workspaces
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -45,7 +47,7 @@ tests fixture =
           reserve >>= (@?= Right (profile, ProfileReady))
           run env (inspectProcessProfileTx binding.workspace) >>= (@?= Right (Just (profile, ProfileReady))),
         testCase "missing profiles remain absence" $ Fixture.withFixture fixture \env _ _ ->
-          run env (inspectProcessProfileTx (WorkspaceRef "shikigami.workspace/1" "absent")) >>= (@?= Right Nothing),
+          run env (inspectProcessProfileTx (WorkspaceRef (workspaceCoordinate "shikigami.workspace/1") (workspaceCoordinate "absent"))) >>= (@?= Right Nothing),
         testCase "SQL failure remains a store failure and rolls back" $ withProfile fixture \env binding profile -> do
           failed <-
             runAppIO
@@ -86,7 +88,7 @@ tests fixture =
                  run env (reserveProcessProfileTx binding digest policy range) >>= (@?= Right (profile, ProfileReserved))
            | (label, invalid) <-
                [ ("JSON shape", const Aeson.Null),
-                 ("Unix identity", \profile -> toJSON (profile & #groupId .~ (profile.userId + 1))),
+                 ("Unix identity", \profile -> toJSON (profile & #groupId .~ ((either (error . show) id . parseWorkspaceIdentity) (workspaceIdentityNumber profile.userId + 1)))),
                  ( "policy format",
                    \profile -> case toJSON profile of
                      Aeson.Object fields -> case toJSON profile.policy of
@@ -100,9 +102,9 @@ tests fixture =
 
 withProfile :: DatabaseFixture -> (AppEnv -> WorkspaceBinding -> ProcessProfile -> IO a) -> IO a
 withProfile fixture callback = Fixture.withFixture fixture \env session _ -> do
-  let base = Text.replicate 40 "a"
-  catalog <- right (mkWorkspaceCatalog [RepositoryPolicy "mori://fixture/repository" "/approved/source" [base] base (processPolicyIdentity policy)])
-  repository <- right (resolveRepository catalog "mori://fixture/repository" Nothing)
+  let base = workspaceCoordinate (Text.replicate 40 "a")
+  catalog <- right (mkWorkspaceCatalog [RepositoryPolicy (RepositoryId "mori://fixture/repository") (workspaceLocator "/approved/source") [base] base (processPolicyIdentity policy)])
+  repository <- right (resolveRepository catalog (RepositoryId "mori://fixture/repository") Nothing)
   root <- maybe (fail "missing root") pure session.context.executionRootId
   let request = WorkspaceRequest (WorkflowId "profile-run") Nothing root session.identity session.identity initialRevision
   (binding, _) <- right =<< run env (Workspaces.reserveWorkspaceTx "/private/owned-workspaces" request repository)
@@ -114,13 +116,13 @@ withProfile fixture callback = Fixture.withFixture fixture \env session _ -> do
   callback env binding profile
 
 policy :: ProcessPolicy
-policy = ProcessPolicy ProcessPolicyV1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") digest [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] ["src"]
+policy = ProcessPolicy ProcessPolicyV1 (ProcessImage (workspaceLocator "/qualified/root") digest (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")) digest [CommandRule (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)] [(workspaceCoordinate "")] [(workspaceCoordinate "src")]
 
 range :: IdentityRange
-range = IdentityRange 62000 62001
+range = IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 62000) ((either (error . show) id . parseWorkspaceIdentity) 62001)
 
-digest :: Text
-digest = "sha256:" <> Text.replicate 64 "a"
+digest :: WorkspaceCoordinate scope
+digest = workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")
 
 replaceProfile :: AppEnv -> Aeson.Value -> IO ()
 replaceProfile env value = run env (Tx.statement value (preparable "UPDATE shikigami.workspace_process_profiles SET profile=$1" (E.param (E.nonNullable E.jsonb)) D.noResult))

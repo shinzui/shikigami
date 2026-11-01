@@ -24,8 +24,9 @@ import Shikigami.Workspace.Instructions (validWorkspacePath)
 import Shikigami.Workspace.Process (bounded, digestText)
 import Shikigami.Workspace.ProcessPolicy (ProcessProfile)
 import Shikigami.Workspace.Types (WorkspaceBinding, workspaceBindingDigest)
+import Shikigami.Workspace.Value
 
-data GitCommitRequest = GitCommitRequest {expectedParent :: !Text, message :: !Text}
+data GitCommitRequest = GitCommitRequest {expectedParent :: !(WorkspaceCoordinate "git-object"), message :: !(WorkspaceCoordinate "commit-message")}
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON)
 
@@ -34,7 +35,7 @@ instance Show GitCommitRequest where show _ = "GitCommitRequest <protected>"
 instance FromJSON GitCommitRequest where
   parseJSON = Aeson.genericParseJSON Aeson.defaultOptions {Aeson.rejectUnknownFields = True}
 
-data GitCandidate = GitCandidate {parent :: !Text, tree :: !Text, result :: !Text, paths :: ![Text]}
+data GitCandidate = GitCandidate {parent :: !(WorkspaceCoordinate "git-object"), tree :: !(WorkspaceCoordinate "git-object"), result :: !(WorkspaceCoordinate "git-object"), paths :: !([WorkspaceCoordinate "relative-path"])}
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -70,12 +71,12 @@ data GitRecord = GitRecord
     attemptId :: !AttemptId,
     claimOwner :: !ClaimOwner,
     generation :: !(StateRevision "execution-attempt"),
-    bindingDigest :: !Text,
-    instructionDigest :: !Text,
-    profileDigest :: !Text,
-    target :: !Text,
-    expectedParent :: !Text,
-    fingerprint :: !Text,
+    bindingDigest :: !(WorkspaceCoordinate "binding-digest"),
+    instructionDigest :: !(WorkspaceCoordinate "instructions-digest"),
+    profileDigest :: !(WorkspaceCoordinate "git-profile"),
+    target :: !(WorkspaceCoordinate "file-target"),
+    expectedParent :: !(WorkspaceCoordinate "git-object"),
+    fingerprint :: !(WorkspaceCoordinate "git-fingerprint"),
     createdAt :: !UTCTime,
     routing :: !GitRouting,
     phase :: !GitPhase,
@@ -90,10 +91,10 @@ validGitObject :: Text -> Bool
 validGitObject value = Text.length value `elem` [40, 64] && Text.all (\c -> c >= '0' && c <= '9' || c >= 'a' && c <= 'f') value
 
 validGitCandidate :: GitCandidate -> Bool
-validGitCandidate value = all validGitObject [value.parent, value.tree, value.result] && value.result /= value.parent && not (null value.paths) && length value.paths <= 256 && sort (nub value.paths) == value.paths && all (\path -> validWorkspacePath path && Text.all (< '\DEL') path) value.paths
+validGitCandidate value = all (validGitObject . workspaceCoordinateText) [value.parent, value.tree, value.result] && value.result /= value.parent && not (null value.paths) && length value.paths <= 256 && sort (nub value.paths) == value.paths && all (\path -> validWorkspacePath (workspaceCoordinateText path) && Text.all (< '\DEL') (workspaceCoordinateText path)) value.paths
 
 validGitRecord :: GitRecord -> Bool
-validGitRecord record = bounded operation && bounded execution && bounded attempt && record.operation.idempotencyKey == record.operation.operationId && digestText (executionDigestText record.operation.fingerprint) && digestText (executionDigestText record.operation.scopeDigest) && record.generation > initialRevision && all digestText [record.bindingDigest, record.instructionDigest, record.profileDigest, record.fingerprint] && bounded record.target && Text.length record.target <= 128 && validGitObject record.expectedParent && record.routing.executionId == record.operation.executionId && validRouting && validPhase && Bytes.length (Aeson.encode record) <= 65536
+validGitRecord record = bounded operation && bounded execution && bounded attempt && record.operation.idempotencyKey == record.operation.operationId && digestText (executionDigestText record.operation.fingerprint) && digestText (executionDigestText record.operation.scopeDigest) && record.generation > initialRevision && and [digestText (workspaceCoordinateText record.bindingDigest), digestText (workspaceCoordinateText record.instructionDigest), digestText (workspaceCoordinateText record.profileDigest), digestText (workspaceCoordinateText record.fingerprint)] && bounded (workspaceCoordinateText record.target) && Text.length (workspaceCoordinateText record.target) <= 128 && validGitObject (workspaceCoordinateText record.expectedParent) && record.routing.executionId == record.operation.executionId && validRouting && validPhase && Bytes.length (Aeson.encode record) <= 65536
   where
     operation = operationIdText record.operation.operationId
     execution = record.operation.executionId.value
@@ -110,11 +111,11 @@ validGitRecord record = bounded operation && bounded execution && bounded attemp
 
 -- Actual claims remain independent of logical identity. Duplicate delivery
 -- observes the original record; it never rewrites its attempt or creation time.
-gitFingerprint :: WorkspaceBinding -> GitRecord -> Text
-gitFingerprint binding record = versionedDigest "shikigami.workspace-git-effect/1" (toJSON (workspaceBindingDigest binding, record.instructionDigest, record.profileDigest, record.operation, record.target, record.expectedParent, record.routing))
+gitFingerprint :: WorkspaceBinding -> GitRecord -> WorkspaceCoordinate "git-fingerprint"
+gitFingerprint binding record = workspaceCoordinate (versionedDigest "shikigami.workspace-git-effect/1" (toJSON (workspaceBindingDigest binding, record.instructionDigest, record.profileDigest, record.operation, record.target, record.expectedParent, record.routing)))
 
-gitProfileDigest :: ProcessProfile -> Text
-gitProfileDigest = versionedDigest "shikigami.workspace-git-profile/1" . toJSON
+gitProfileDigest :: ProcessProfile -> WorkspaceCoordinate "git-profile"
+gitProfileDigest = workspaceCoordinate . versionedDigest "shikigami.workspace-git-profile/1" . toJSON
 
 -- Publication's phase transition consumes a grant, without changing the exact
 -- proposed effect. Every other retained coordinate belongs to fresh authority.

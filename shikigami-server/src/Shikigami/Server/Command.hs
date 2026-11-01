@@ -78,6 +78,7 @@ import Shikigami.WorkerSession.Capability (WorkerCommand (..))
 import Shikigami.WorkerSession.Position (MessagePosition, beforeMessages, parseMessagePosition)
 import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
 import Shikigami.WorkerSession.Types (WorkerSessionId, workerSessionId)
+import Shikigami.Workspace.Value (workspaceCoordinate)
 import System.Exit (ExitCode (..), exitWith)
 import System.IO (hPutStrLn, stderr)
 
@@ -195,7 +196,7 @@ workersInfo = info (subparser commands <**> helper) (progDesc "Inspect continuin
     send = (\key op rev owner input -> action (runWorkersSend key op rev owner input)) <$> session <*> operation <*> revision <*> epoch <*> instruction
     interrupt = (\key op rev owner assignment input -> action (runWorkersInterrupt key op rev owner assignment input)) <$> session <*> operation <*> revision <*> epoch <*> strOption (long "assignment" <> metavar "ASSIGNMENT") <*> instruction
     cancel = (\key op rev owner -> action (runWorkersControl op (CancelWorker (workerSessionId key) rev owner))) <$> session <*> operation <*> revision <*> epoch
-    transfer = (\key op rev owner provider resource target -> action (runWorkersControl op (TransferWorker (workerSessionId key) rev owner (WorkspaceRef provider resource) target))) <$> session <*> operation <*> revision <*> epoch <*> strOption (long "workspace-provider" <> metavar "PROVIDER") <*> strOption (long "workspace-resource" <> metavar "RESOURCE") <*> option agentReader (long "target" <> metavar "AGENT")
+    transfer = (\key op rev owner provider resource target -> action (runWorkersControl op (TransferWorker (workerSessionId key) rev owner (WorkspaceRef (workspaceCoordinate provider) (workspaceCoordinate resource)) target))) <$> session <*> operation <*> revision <*> epoch <*> strOption (long "workspace-provider" <> metavar "PROVIDER") <*> strOption (long "workspace-resource" <> metavar "RESOURCE") <*> option agentReader (long "target" <> metavar "AGENT")
     reconcile = (\key op -> action (runWorkersControl op (ReconcileWorker (workerSessionId key)))) <$> session <*> operation
     integrate = (\key op -> action (runWorkersControl op (IntegrateWorkerEvents (workerSessionId key)))) <$> session <*> operation
 

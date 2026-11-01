@@ -14,18 +14,19 @@ import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
 import Shikigami.Workspace.ContainedFile (FileError (FileUnavailable), ensurePrivateDirectory)
 import Shikigami.Workspace.Git (runWorkspaceGit)
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import System.Directory
 import System.Exit (ExitCode (..))
 import System.FilePath (isAbsolute, (</>))
 
 workspaceFiles :: FilePath -> WorkspaceBinding -> FilePath
-workspaceFiles root binding = root </> Text.unpack binding.workspace.resource </> "files"
+workspaceFiles root binding = root </> Text.unpack (workspaceCoordinateText binding.workspace.resource) </> "files"
 
 workspaceMetadata :: FilePath -> WorkspaceBinding -> FilePath
-workspaceMetadata root binding = root </> Text.unpack binding.workspace.resource </> "metadata"
+workspaceMetadata root binding = root </> Text.unpack (workspaceCoordinateText binding.workspace.resource) </> "metadata"
 
 workspaceScratch :: FilePath -> WorkspaceBinding -> FilePath
-workspaceScratch root binding = root </> Text.unpack binding.workspace.resource </> "scratch"
+workspaceScratch root binding = root </> Text.unpack (workspaceCoordinateText binding.workspace.resource) </> "scratch"
 
 -- | Populate a fresh staging directory and atomically publish it. Interrupted
 -- staging directories are never exposed or reused. A duplicate publication
@@ -39,15 +40,15 @@ allocateWorkspace = allocateWorkspaceWithCheckpoint (pure ())
 allocateWorkspaceWithCheckpoint :: IO () -> FilePath -> WorkspaceBinding -> AllocationState -> IO (Either WorkspaceError ())
 allocateWorkspaceWithCheckpoint checkpoint root binding state = catch work (\(_ :: IOException) -> pure (Left WorkspaceAllocationRefused))
   where
-    destination = root </> Text.unpack binding.workspace.resource
+    destination = root </> Text.unpack (workspaceCoordinateText binding.workspace.resource)
     marker = "allocation.json"
     receipt = Aeson.toJSON (versionedDigest "shikigami.workspace-allocation/1" (Aeson.toJSON binding))
     work
-      | root == "/" || binding.source == "/" || root /= binding.storageRoot || not (isAbsolute root) || binding.workspace.provider /= "shikigami.workspace/1" || not (safeResource binding.workspace.resource) = pure (Left WorkspaceAllocationRefused)
+      | root == "/" || (workspaceLocatorPath binding.source) == "/" || root /= (workspaceLocatorPath binding.storageRoot) || not (isAbsolute root) || binding.workspace.provider /= workspaceCoordinate "shikigami.workspace/1" || not (safeResource (workspaceCoordinateText binding.workspace.resource)) = pure (Left WorkspaceAllocationRefused)
       | otherwise = do
           canonical <- canonicalizePath root
-          source <- canonicalizePath binding.source
-          if canonical /= root || source /= binding.source || root == source || Text.pack (source <> "/") `Text.isPrefixOf` Text.pack (root <> "/")
+          source <- canonicalizePath (workspaceLocatorPath binding.source)
+          if canonical /= root || source /= (workspaceLocatorPath binding.source) || root == source || Text.pack (source <> "/") `Text.isPrefixOf` Text.pack (root <> "/")
             then pure (Left WorkspaceAllocationRefused)
             else do
               createDirectoryIfMissing True root
@@ -67,7 +68,7 @@ allocateWorkspaceWithCheckpoint checkpoint root binding state = catch work (\(_ 
           pure (if actual == Just receipt then Right () else Left WorkspaceBindingConflict)
     populate = do
       -- Verify the exact object type before allocating any mutable repository.
-      (status, kind, _) <- git ["-C", binding.source, "cat-file", "-t", Text.unpack binding.base]
+      (status, kind, _) <- git ["-C", (workspaceLocatorPath binding.source), "cat-file", "-t", Text.unpack (workspaceCoordinateText binding.base)]
       if status /= ExitSuccess || kind /= "commit\n"
         then pure (Left WorkspaceAllocationRefused)
         else do
@@ -77,7 +78,7 @@ allocateWorkspaceWithCheckpoint checkpoint root binding state = catch work (\(_ 
               files = staging </> "files"
               scratch = staging </> "scratch"
           createDirectory staging
-          (cloned, _, _) <- git ["clone", "--bare", "--no-hardlinks", "--dissociate", "--", binding.source, metadata]
+          (cloned, _, _) <- git ["clone", "--bare", "--no-hardlinks", "--dissociate", "--", (workspaceLocatorPath binding.source), metadata]
           privateMetadata <- if cloned == ExitSuccess then ensurePrivateDirectory metadata else pure (Left FileUnavailable)
           if cloned /= ExitSuccess || privateMetadata /= Right ()
             then pure (Left WorkspaceAllocationRefused)
@@ -85,7 +86,7 @@ allocateWorkspaceWithCheckpoint checkpoint root binding state = catch work (\(_ 
               createDirectory files
               createDirectory scratch
               scratchPrivate <- ensurePrivateDirectory scratch
-              (checked, _, _) <- git ["--git-dir=" <> metadata, "--work-tree=" <> files, "checkout", "--force", "--detach", Text.unpack binding.base]
+              (checked, _, _) <- git ["--git-dir=" <> metadata, "--work-tree=" <> files, "checkout", "--force", "--detach", Text.unpack (workspaceCoordinateText binding.base)]
               if checked /= ExitSuccess || scratchPrivate /= Right ()
                 then pure (Left WorkspaceAllocationRefused)
                 else do

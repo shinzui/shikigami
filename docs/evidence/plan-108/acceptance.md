@@ -1545,3 +1545,33 @@ Final coherent PostgreSQL and full compiler/classification acceptance remains
 required in M3. No Linux runtime qualification is claimed by prototype compilation.
 The ledger remains at its identified older census; no remaining finding is
 waived and the guide remains deferred.
+
+
+The native gate on declaration commit `6f0260d` against `b57cbd8` passes with
+zero findings, replay-neutral impact, and all 156 conformance controls. Its
+reports are `declaration-keiro-diff.json`, `declaration-keiro-replay-impact.json`,
+and `declaration-keiro-gate.json`.
+
+The workspace scalar batch is bound to `6f0260d` by
+`workspace-values-source.json`. Workspace references, repository/object/path
+roles, content/binding/instruction/process commitments, command arguments and
+environment entries retain nominal types through their owners and callers.
+Private numeric units preserve existing process, RPC, Unix identity, status and
+output bounds. Named settlement/output/provision/file-policy/Git-mode states
+preserve their existing wire spellings. Complete profile, receipt, path and
+binding validation remains at the existing owners; no universal digest grammar,
+identity normalization, workflow step, hash salt or allocation recipe is added.
+
+The formatted full workspace build passes, including the Linux prototype target.
+The core unit executable passes all 626 tests; the PostgreSQL executable passes
+all 472 cases (129.85 seconds), including the final declaration cron claim and
+workspace changes; all 280 serial worker cases pass (184.17 seconds). Worker and
+PostgreSQL tests run from their package directories in the Nix development
+shell. Fifteen focused workspace compiler controls pass, including positive
+ports followed by role/representation coercion, unchecked constructor/arithmetic,
+string-literal, unit substitution and boolean substitution refusals. Nine new
+controls are retained in `tests/types/revision-domains.py`; the focused run also
+includes existing workspace entity controls. Formatter, style and whitespace
+checks pass. Prototype compilation supplies no new Linux runtime qualification.
+The old ledger is still identified as historical; final M3 acceptance requires
+the remaining applicable findings and the combined fresh inventory to close.

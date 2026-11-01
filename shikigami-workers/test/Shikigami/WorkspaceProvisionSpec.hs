@@ -22,6 +22,7 @@ import Shikigami.Workspace.ProcessProfileStore
 import Shikigami.Workspace.Provision
 import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import Shikigami.WorkspaceProcessProfileSpec (withProfiles)
 import System.Directory (doesPathExist)
 import System.FilePath ((</>))
@@ -46,7 +47,7 @@ tests fixture =
         (runtime, _, counts) <- fakeRuntime env
         provisionWorkspaceProfile (runtime & #authorizer .~ denyAllActionAuthorizer) binding admission policy pool >>= (@?= Left ProvisionRefused)
         readIORef counts >>= (@?= (0, 0))
-        doesPathExist (workspaceMetadata binding.storageRoot binding </> "profile-provision.json") >>= (@?= False)
+        doesPathExist (workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding </> "profile-provision.json") >>= (@?= False)
         Right (Just (_, state)) <- run env (inspectProcessProfileTx binding.workspace)
         state @?= ProfileReserved,
       testCase "lost account acknowledgement recovers the original identity rather than creating another" $ withProfiles fixture \env policy create -> do
@@ -100,7 +101,7 @@ tests fixture =
         writeIORef identity IdentityReady
         provisionWorkspaceProfile runtime binding admission policy pool >>= (@?= Left ProvisionRefused)
         readIORef counts >>= (@?= (0, 0))
-        doesPathExist (workspaceMetadata binding.storageRoot binding </> "profile-provision.json") >>= (@?= False),
+        doesPathExist (workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding </> "profile-provision.json") >>= (@?= False),
       testCase "unsupported hosts and revoked lifecycle refuse before identity reservation or native effects" $ withProfiles fixture \env policy create -> do
         (binding, admission) <- create "one"
         enroll env binding
@@ -130,7 +131,7 @@ fakeRuntime env = do
       tree _ apply _ = do
         if apply then modifyIORef' counts (\(created, trees) -> (created, trees + 1)) else pure ()
         pure (Right ())
-      backend = ProvisionBackend (pure (Right "11111111-1111-4111-8111-111111111111")) (const (Right <$> readIORef identity)) create tree (pure ())
+      backend = ProvisionBackend (pure (Right (workspaceCoordinate "11111111-1111-4111-8111-111111111111"))) (const (Right <$> readIORef identity)) create tree (pure ())
   pure (ProvisionRuntime env allowAllActionAuthorizerForTests (pure (Right ())) backend, identity, counts)
 
 enroll :: AppEnv -> WorkspaceBinding -> IO ()
@@ -140,7 +141,7 @@ enroll env binding = do
   run env (Roots.enrollRootTx binding.request.rootId envelope) >>= (@?= Right Resources.Accepted)
 
 pool :: IdentityRange
-pool = IdentityRange 62000 62001
+pool = IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 62000) ((either (error . show) id . parseWorkspaceIdentity) 62001)
 
 run :: AppEnv -> Transaction a -> IO a
 run env action = right =<< runAppIO env (runTransaction action)

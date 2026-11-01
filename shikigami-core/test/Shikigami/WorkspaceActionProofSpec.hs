@@ -38,6 +38,7 @@ import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadR
 import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude ((&), (.~))
+import Shikigami.Repository (RepositoryId (..))
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.StateRevision qualified as Generation
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
@@ -51,6 +52,7 @@ import Shikigami.Workspace.ProcessPolicy
 import Shikigami.Workspace.Provider
 import Shikigami.Workspace.Reference
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -79,19 +81,19 @@ tests =
         otherWorkspaceId <- newWorkspaceId
         let owner = VerifiedIdentity actor
             request = WorkspaceRequest (WorkflowId "run") Nothing (fixtureRootId "root") owner owner (fixtureRevision 0)
-            binding = WorkspaceBinding workspaceId request (WorkspaceRef "shikigami.workspace/1" "resource") "mori://fixture/repo" (Text.replicate 40 "a") "policy-1" "/private/workspaces" "/operator/source"
+            binding = WorkspaceBinding workspaceId request (WorkspaceRef (workspaceCoordinate ("shikigami.workspace/1")) (workspaceCoordinate "resource")) (RepositoryId "mori://fixture/repo") ((workspaceCoordinate (Text.replicate 40 "a"))) (workspaceCoordinate "policy-1") (workspaceLocator "/private/workspaces") (workspaceLocator "/operator/source")
             logical = OperationContext (executionIdentity "execution") (fixtureOperationId "operation") (fixtureOperationId "operation") (ExecutionValue.executionDigest "fingerprint") (ExecutionValue.executionDigest "scope")
             dispatch = DispatchContext logical (fixtureAttemptId "attempt") (fixtureOwner "claim-owner") (fixtureGeneration 1)
             now = read "2026-10-29 12:00:00 UTC"
             expiry = addUTCTime 30 now
             verifier = newActionProofVerifier (singleKey keyId (toPublic secret)) (Set.singleton schema) (const (pure False))
             admissionFor b = do
-              bundle <- right (mkInstructionBundle 65536 b.repository b.base [("AGENTS.md", "fixture policy")])
+              bundle <- right (mkInstructionBundle 65536 b.repository b.base [((workspaceCoordinate ("AGENTS.md")), "fixture policy")])
               pure (WorkspaceAdmission b.workspace (workspaceBindingDigest b) b.request.runId (fixtureAssignment "assignment") b.request.rootId b.request.owner b.request.epoch bundle (Just nativeFilePolicy))
         admission <- admissionFor binding
-        workspaceFileAction binding (admission & #filePolicy .~ Nothing) dispatch "replace" "src/file" "device:parent" "input-hash" @?= Left FileEffectRefused
-        workspaceFileAction binding (admission & #filePolicy .~ Just "unqualified-profile") dispatch "replace" "src/file" "device:parent" "input-hash" @?= Left FileEffectRefused
-        exact <- right (workspaceFileAction binding admission dispatch "replace" "src/file" "device:parent" "input-hash")
+        workspaceFileAction binding (admission & #filePolicy .~ Nothing) dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash") @?= Left FileEffectRefused
+        workspaceFileAction binding (admission & #filePolicy .~ Just TransferFilesV1) dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash") @?= Left FileEffectRefused
+        exact <- right (workspaceFileAction binding admission dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"))
         let actionRequest = Kikan.AuthorizeActionRequest principal exact requestId
             grant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText principal))) (RelationName (Kikan.actionOperation exact)) (ObjectRef (ObjectType (Kikan.actionObjectType exact)) (Kikan.actionObjectId exact)) (En.ConsistencyToken "snapshot-1") (En.SchemaHash "schema-workspace-fixture") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId "workspace-proof")) Nothing
         minted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed grant
@@ -99,24 +101,24 @@ tests =
         checkedAt <- right (Kikan.mkConsistencyToken "snapshot-1")
         let issued = Kikan.IssuedActionProof proof minted.expiresAt [] checkedAt
         _ <- right =<< verifyIssuedAction verifier now actionRequest issued
-        let changedBindings = [binding & #id .~ otherWorkspaceId, binding & #repository .~ "mori://fixture/other", binding & #base .~ Text.replicate 40 "b", binding & #policyRevision .~ "policy-2", binding & #workspace . #resource .~ "other-resource", binding & #request . #rootId .~ fixtureRootId "other-root", binding & #request . #epoch .~ (fixtureRevision 1), binding & #request . #runId .~ WorkflowId "other-run"]
-        bindingActions <- mapM (\b -> admissionFor b >>= \a -> right (workspaceFileAction b a dispatch "replace" "src/file" "device:parent" "input-hash")) changedBindings
-        changedPolicy <- right (mkInstructionBundle 65536 binding.repository binding.base [("AGENTS.md", "changed policy")])
+        let changedBindings = [binding & #id .~ otherWorkspaceId, binding & #repository .~ (RepositoryId "mori://fixture/other"), binding & #base .~ workspaceCoordinate (Text.replicate 40 "b"), binding & #policyRevision .~ (workspaceCoordinate "policy-2"), binding & #workspace . #resource .~ (workspaceCoordinate "other-resource"), binding & #request . #rootId .~ fixtureRootId "other-root", binding & #request . #epoch .~ (fixtureRevision 1), binding & #request . #runId .~ WorkflowId "other-run"]
+        bindingActions <- mapM (\b -> admissionFor b >>= \a -> right (workspaceFileAction b a dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"))) changedBindings
+        changedPolicy <- right (mkInstructionBundle 65536 binding.repository binding.base [((workspaceCoordinate ("AGENTS.md")), "changed policy")])
         coordinateActions <-
           mapM
             right
-            [ workspaceFileAction binding (admission & #instructions .~ changedPolicy) dispatch "replace" "src/file" "device:parent" "input-hash",
-              workspaceFileAction binding (admission & #assignmentId .~ (fixtureAssignment "other-assignment")) dispatch "replace" "src/file" "device:parent" "input-hash",
-              workspaceFileAction binding admission (dispatch & #attemptId .~ fixtureAttemptId "other-attempt") "replace" "src/file" "device:parent" "input-hash",
-              workspaceFileAction binding admission (dispatch & #owner .~ (fixtureOwner "other-claim")) "replace" "src/file" "device:parent" "input-hash",
-              workspaceFileAction binding admission (dispatch & #generation .~ (fixtureGeneration 2)) "replace" "src/file" "device:parent" "input-hash",
-              workspaceFileAction binding admission (dispatch & #operation . #operationId .~ fixtureOperationId "other-operation") "replace" "src/file" "device:parent" "input-hash",
-              workspaceFileAction binding admission (dispatch & #operation . #fingerprint .~ ExecutionValue.executionDigest "other-fingerprint") "replace" "src/file" "device:parent" "input-hash",
-              workspaceFileAction binding admission (dispatch & #operation . #scopeDigest .~ ExecutionValue.executionDigest "other-scope") "replace" "src/file" "device:parent" "input-hash",
-              workspaceFileAction binding admission dispatch "read" "src/file" "device:parent" "input-hash",
-              workspaceFileAction binding admission dispatch "replace" "src/other" "device:parent" "input-hash",
-              workspaceFileAction binding admission dispatch "replace" "src/file" "device:other-parent" "input-hash",
-              workspaceFileAction binding admission dispatch "replace" "src/file" "device:parent" "other-input"
+            [ workspaceFileAction binding (admission & #instructions .~ changedPolicy) dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"),
+              workspaceFileAction binding (admission & #assignmentId .~ (fixtureAssignment "other-assignment")) dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"),
+              workspaceFileAction binding admission (dispatch & #attemptId .~ fixtureAttemptId "other-attempt") "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"),
+              workspaceFileAction binding admission (dispatch & #owner .~ (fixtureOwner "other-claim")) "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"),
+              workspaceFileAction binding admission (dispatch & #generation .~ (fixtureGeneration 2)) "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"),
+              workspaceFileAction binding admission (dispatch & #operation . #operationId .~ fixtureOperationId "other-operation") "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"),
+              workspaceFileAction binding admission (dispatch & #operation . #fingerprint .~ ExecutionValue.executionDigest "other-fingerprint") "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"),
+              workspaceFileAction binding admission (dispatch & #operation . #scopeDigest .~ ExecutionValue.executionDigest "other-scope") "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"),
+              workspaceFileAction binding admission dispatch "read" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"),
+              workspaceFileAction binding admission dispatch "replace" (workspaceCoordinate "src/other") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"),
+              workspaceFileAction binding admission dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:other-parent") (workspaceCoordinate "input-hash"),
+              workspaceFileAction binding admission dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate ("other-input"))
             ]
         mapM_
           ( \action -> do
@@ -128,31 +130,31 @@ tests =
         assertBool "expiry enforced" (case result of Left Kikan.ProofExpired -> True; _ -> False)
         assertBool "proof bytes excluded from public contracts" (not (Kikan.decisionProofText proof `Text.isInfixOf` Text.pack (show (toJSON (binding, admission)))))
         let processAdmission = admission & #filePolicy .~ Just supervisedFilePolicy
-            command = ProcessCommand "validate" ("sha256:" <> Text.replicate 64 "a") "/bin/validate" [] "src" (Map.singleton "HOME" "/scratch") 30 1024
-            boot = "11111111-1111-4111-8111-111111111111"
+            command = ProcessCommand (workspaceCoordinate "validate") (workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")) (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "src") (Map.singleton (workspaceCoordinate "HOME") (workspaceCoordinate "/scratch")) ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)
+            boot = (workspaceCoordinate ("11111111-1111-4111-8111-111111111111"))
             recordFor b a d c =
               let fingerprint = processFingerprint b (bundleDigest a.instructions) d.operation c
                in ProcessRecord d.operation.operationId d.attemptId d.owner d.generation (workspaceBindingDigest b) (bundleDigest a.instructions) fingerprint c expiry (processUnit d.operation.operationId fingerprint) Nothing Nothing ProcessReserved Nothing (Just (ProcessRouting ProcessRoutingV1 d.operation.executionId b.request.owner (fixturePayloadDigest ("sha256:" <> Text.replicate 64 "a")) NeedModel))
             record = recordFor binding processAdmission dispatch command
-        workspaceProcessAction binding admission dispatch record boot "device:parent" @?= Left FileEffectRefused
-        workspaceFileAction binding processAdmission dispatch "replace" "src/file" "device:parent" "input-hash" @?= Left FileEffectRefused
-        processAction <- right (workspaceProcessAction binding processAdmission dispatch record boot "device:parent")
+        workspaceProcessAction binding admission dispatch record boot (workspaceCoordinate "device:parent") @?= Left FileEffectRefused
+        workspaceFileAction binding processAdmission dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash") @?= Left FileEffectRefused
+        processAction <- right (workspaceProcessAction binding processAdmission dispatch record boot (workspaceCoordinate "device:parent"))
         let processRequest = Kikan.AuthorizeActionRequest principal processAction requestId
             processGrant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText principal))) (RelationName (Kikan.actionOperation processAction)) (ObjectRef (ObjectType (Kikan.actionObjectType processAction)) (Kikan.actionObjectId processAction)) (En.ConsistencyToken "snapshot-1") (En.SchemaHash "schema-workspace-fixture") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId "workspace-proof")) Nothing
         processMinted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed processGrant
         processProof <- right (Kikan.mkDecisionProof (decodeUtf8 processMinted.token))
         let processIssued = Kikan.IssuedActionProof processProof processMinted.expiresAt [] checkedAt
         _ <- right =<< verifyIssuedAction verifier now processRequest processIssued
-        workspaceProcessAction binding processAdmission dispatch (record & #phase .~ ProcessLaunchRequested & #bootId .~ Just boot) boot "device:parent" @?= Right processAction
+        workspaceProcessAction binding processAdmission dispatch (record & #phase .~ ProcessLaunchRequested & #bootId .~ Just boot) boot (workspaceCoordinate "device:parent") @?= Right processAction
         let alteredCommands =
-              [ command & #rule .~ "other-rule",
-                command & #profile .~ ("sha256:" <> Text.replicate 64 "b"),
-                command & #executable .~ "/bin/other",
-                command & #arguments .~ ["different"],
-                command & #directory .~ "other",
-                command & #environment .~ Map.singleton "HOME" "/workspace",
-                command & #timeoutSeconds .~ 29,
-                command & #outputBytes .~ 512
+              [ command & #rule .~ (workspaceCoordinate "other-rule"),
+                command & #profile .~ workspaceCoordinate ("sha256:" <> Text.replicate 64 "b"),
+                command & #executable .~ (workspaceCoordinate "/bin/other"),
+                command & #arguments .~ [(workspaceCoordinate "different")],
+                command & #directory .~ (workspaceCoordinate "other"),
+                command & #environment .~ Map.singleton (workspaceCoordinate "HOME") (workspaceCoordinate "/workspace"),
+                command & #timeoutSeconds .~ ((either (error . show) id . parseProcessSeconds) 29),
+                command & #outputBytes .~ ((either (error . show) id . parseProcessOutputBytes) 512)
               ]
             alteredDispatches =
               [ dispatch & #attemptId .~ fixtureAttemptId "other-attempt",
@@ -165,21 +167,21 @@ tests =
         processActions <-
           mapM
             right
-            ( [workspaceProcessAction binding processAdmission dispatch (recordFor binding processAdmission dispatch changed) boot "device:parent" | changed <- alteredCommands]
-                <> [workspaceProcessAction binding processAdmission changed (recordFor binding processAdmission changed command) boot "device:parent" | changed <- alteredDispatches]
-                <> [ workspaceProcessAction binding processAdmission dispatch (record & #deadline .~ addUTCTime 1 expiry) boot "device:parent",
-                     workspaceProcessAction binding processAdmission dispatch record "22222222-2222-4222-8222-222222222222" "device:parent",
-                     workspaceProcessAction binding processAdmission dispatch record boot "device:other-parent",
-                     workspaceProcessAction binding (processAdmission & #assignmentId .~ (fixtureAssignment "other-assignment")) dispatch record boot "device:parent",
-                     workspaceProcessAction binding processAdmission dispatch (record & #routing .~ Just (ProcessRouting ProcessRoutingV1 logical.executionId owner (fixturePayloadDigest ("sha256:" <> Text.replicate 64 "b")) NeedModel)) boot "device:parent",
-                     workspaceProcessAction binding processAdmission dispatch (record & #routing .~ Just (ProcessRouting ProcessRoutingV1 logical.executionId owner (fixturePayloadDigest ("sha256:" <> Text.replicate 64 "a")) (NeedTool (fixturePayloadRef "response" ("sha256:" <> Text.replicate 64 "a") 1) (fixtureToolPosition 1)))) boot "device:parent"
+            ( [workspaceProcessAction binding processAdmission dispatch (recordFor binding processAdmission dispatch changed) boot (workspaceCoordinate "device:parent") | changed <- alteredCommands]
+                <> [workspaceProcessAction binding processAdmission changed (recordFor binding processAdmission changed command) boot (workspaceCoordinate "device:parent") | changed <- alteredDispatches]
+                <> [ workspaceProcessAction binding processAdmission dispatch (record & #deadline .~ addUTCTime 1 expiry) boot (workspaceCoordinate "device:parent"),
+                     workspaceProcessAction binding processAdmission dispatch record (workspaceCoordinate "22222222-2222-4222-8222-222222222222") (workspaceCoordinate "device:parent"),
+                     workspaceProcessAction binding processAdmission dispatch record boot (workspaceCoordinate "device:other-parent"),
+                     workspaceProcessAction binding (processAdmission & #assignmentId .~ (fixtureAssignment "other-assignment")) dispatch record boot (workspaceCoordinate "device:parent"),
+                     workspaceProcessAction binding processAdmission dispatch (record & #routing .~ Just (ProcessRouting ProcessRoutingV1 logical.executionId owner (fixturePayloadDigest ("sha256:" <> Text.replicate 64 "b")) NeedModel)) boot (workspaceCoordinate "device:parent"),
+                     workspaceProcessAction binding processAdmission dispatch (record & #routing .~ Just (ProcessRouting ProcessRoutingV1 logical.executionId owner (fixturePayloadDigest ("sha256:" <> Text.replicate 64 "a")) (NeedTool (fixturePayloadRef "response" ("sha256:" <> Text.replicate 64 "a") 1) (fixtureToolPosition 1)))) boot (workspaceCoordinate "device:parent")
                    ]
             )
         processBindingActions <-
           mapM
             ( \changed -> do
                 changedAdmission <- (\a -> a & #filePolicy .~ Just supervisedFilePolicy) <$> admissionFor changed
-                right (workspaceProcessAction changed changedAdmission dispatch (recordFor changed changedAdmission dispatch command) boot "device:parent")
+                right (workspaceProcessAction changed changedAdmission dispatch (recordFor changed changedAdmission dispatch command) boot (workspaceCoordinate "device:parent"))
             )
             changedBindings
         mapM_
@@ -189,21 +191,21 @@ tests =
           )
           (processBindingActions <> processActions)
         mapM_
-          (\invalid -> workspaceProcessAction binding processAdmission dispatch invalid boot "device:parent" @?= Left FileEffectRefused)
+          (\invalid -> workspaceProcessAction binding processAdmission dispatch invalid boot (workspaceCoordinate "device:parent") @?= Left FileEffectRefused)
           [ record & #attemptId .~ fixtureAttemptId "unmatched-attempt",
             record & #generation .~ (fixtureGeneration 2),
-            record & #fingerprint .~ "mismatched",
+            record & #fingerprint .~ (workspaceCoordinate "mismatched"),
             record & #phase .~ ProcessRunning,
-            record & #bootId .~ Just "22222222-2222-4222-8222-222222222222",
-            record & #invocationId .~ Just boot,
+            record & #bootId .~ Just (workspaceCoordinate "22222222-2222-4222-8222-222222222222"),
+            record & #invocationId .~ Just (workspaceCoordinate (workspaceCoordinateText boot)),
             record & #routing .~ Nothing
           ]
-        let policy = ProcessPolicy ProcessPolicyV1 (ProcessImage "/qualified/root" command.profile "/bin/env" "/bin/deadline" "/qualified/collector") command.profile [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] ["src"]
+        let policy = ProcessPolicy ProcessPolicyV1 (ProcessImage (workspaceLocator "/qualified/root") (workspaceCoordinate (workspaceCoordinateText command.profile)) (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")) (workspaceCoordinate (workspaceCoordinateText command.profile)) [CommandRule (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate ("")) Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)] [(workspaceCoordinate "")] [(workspaceCoordinate "src")]
             provisionBinding = binding & #policyRevision .~ processPolicyIdentity policy
         provisionAdmission <- (\a -> a & #filePolicy .~ Just supervisedFilePolicy) <$> admissionFor provisionBinding
         let profileFor b a selected uid = ProcessProfile (workspaceBindingDigest b) (bundleDigest a.instructions) selected uid uid
-            profile = profileFor provisionBinding provisionAdmission policy 62001
-        fileAction <- right (workspaceSupervisedFileAction profile provisionBinding provisionAdmission dispatch "replace" "src/file" "device:parent" "input-hash")
+            profile = profileFor provisionBinding provisionAdmission policy ((either (error . show) id . parseWorkspaceIdentity) (62001))
+        fileAction <- right (workspaceSupervisedFileAction profile provisionBinding provisionAdmission dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"))
         let fileRequest = Kikan.AuthorizeActionRequest principal fileAction requestId
             fileGrant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText principal))) (RelationName (Kikan.actionOperation fileAction)) (ObjectRef (ObjectType (Kikan.actionObjectType fileAction)) (Kikan.actionObjectId fileAction)) (En.ConsistencyToken "snapshot-1") (En.SchemaHash "schema-workspace-fixture") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId "workspace-proof")) Nothing
         fileMinted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed fileGrant
@@ -213,15 +215,15 @@ tests =
         changedFileActions <-
           mapM
             right
-            [ workspaceSupervisedFileAction (profile & #userId .~ 62002 & #groupId .~ 62002) provisionBinding provisionAdmission dispatch "replace" "src/file" "device:parent" "input-hash",
-              workspaceSupervisedFileAction profile provisionBinding provisionAdmission (dispatch & #attemptId .~ fixtureAttemptId "other-attempt") "replace" "src/file" "device:parent" "input-hash",
-              workspaceSupervisedFileAction profile provisionBinding provisionAdmission dispatch "replace" "src/file" "device:other-parent" "input-hash"
+            [ workspaceSupervisedFileAction (profile & #userId .~ ((either (error . show) id . parseWorkspaceIdentity) 62002) & #groupId .~ ((either (error . show) id . parseWorkspaceIdentity) 62002)) provisionBinding provisionAdmission dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"),
+              workspaceSupervisedFileAction profile provisionBinding provisionAdmission (dispatch & #attemptId .~ fixtureAttemptId "other-attempt") "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"),
+              workspaceSupervisedFileAction profile provisionBinding provisionAdmission dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:other-parent") (workspaceCoordinate "input-hash")
             ]
         mapM_ (\action -> verifyIssuedAction verifier now (fileRequest & #action .~ action) fileIssued >>= \answer -> assertBool "supervised file authority binds reserved identity and actual effect" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) changedFileActions
-        workspaceSupervisedFileAction profile provisionBinding provisionAdmission dispatch "replace" "src-other/file" "device:parent" "input-hash" @?= Left FileEffectRefused
-        workspaceSupervisedFileAction profile provisionBinding (provisionAdmission & #filePolicy .~ Just nativeFilePolicy) dispatch "replace" "src/file" "device:parent" "input-hash" @?= Left FileEffectRefused
-        workspaceSupervisedFileAction (profile & #instructionDigest .~ command.profile) provisionBinding provisionAdmission dispatch "replace" "src/file" "device:parent" "input-hash" @?= Left FileEffectRefused
-        provisionAction <- right (workspaceProvisionAction provisionBinding provisionAdmission profile boot "device:files" "device:scratch")
+        workspaceSupervisedFileAction profile provisionBinding provisionAdmission dispatch "replace" (workspaceCoordinate ("src-other/file")) (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash") @?= Left FileEffectRefused
+        workspaceSupervisedFileAction profile provisionBinding (provisionAdmission & #filePolicy .~ Just nativeFilePolicy) dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash") @?= Left FileEffectRefused
+        workspaceSupervisedFileAction (profile & #instructionDigest .~ workspaceCoordinate (workspaceCoordinateText command.profile)) provisionBinding provisionAdmission dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash") @?= Left FileEffectRefused
+        provisionAction <- right (workspaceProvisionAction provisionBinding provisionAdmission profile boot (workspaceCoordinate "device:files") (workspaceCoordinate "device:scratch"))
         let provisionRequest = Kikan.AuthorizeActionRequest principal provisionAction requestId
             provisionGrant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText principal))) (RelationName (Kikan.actionOperation provisionAction)) (ObjectRef (ObjectType (Kikan.actionObjectType provisionAction)) (Kikan.actionObjectId provisionAction)) (En.ConsistencyToken "snapshot-1") (En.SchemaHash "schema-workspace-fixture") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId "workspace-proof")) Nothing
         provisionMinted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed provisionGrant
@@ -231,25 +233,25 @@ tests =
         changedProvision <-
           mapM
             right
-            [ workspaceProvisionAction provisionBinding provisionAdmission (profile & #userId .~ 62002 & #groupId .~ 62002) boot "device:files" "device:scratch",
-              workspaceProvisionAction provisionBinding (provisionAdmission & #assignmentId .~ (fixtureAssignment "other-assignment")) profile boot "device:files" "device:scratch",
-              workspaceProvisionAction provisionBinding provisionAdmission profile boot "device:other-files" "device:scratch",
-              workspaceProvisionAction provisionBinding provisionAdmission profile boot "device:files" "device:other-scratch",
-              workspaceProvisionAction provisionBinding provisionAdmission profile "22222222-2222-4222-8222-222222222222" "device:files" "device:scratch"
+            [ workspaceProvisionAction provisionBinding provisionAdmission (profile & #userId .~ ((either (error . show) id . parseWorkspaceIdentity) 62002) & #groupId .~ ((either (error . show) id . parseWorkspaceIdentity) 62002)) boot (workspaceCoordinate "device:files") (workspaceCoordinate "device:scratch"),
+              workspaceProvisionAction provisionBinding (provisionAdmission & #assignmentId .~ (fixtureAssignment "other-assignment")) profile boot (workspaceCoordinate "device:files") (workspaceCoordinate "device:scratch"),
+              workspaceProvisionAction provisionBinding provisionAdmission profile boot (workspaceCoordinate "device:other-files") (workspaceCoordinate "device:scratch"),
+              workspaceProvisionAction provisionBinding provisionAdmission profile boot (workspaceCoordinate "device:files") (workspaceCoordinate "device:other-scratch"),
+              workspaceProvisionAction provisionBinding provisionAdmission profile (workspaceCoordinate "22222222-2222-4222-8222-222222222222") (workspaceCoordinate "device:files") (workspaceCoordinate "device:scratch")
             ]
-        let changedProcessPolicy = policy & #image . #rootIdentity .~ ("sha256:" <> Text.replicate 64 "b")
+        let changedProcessPolicy = policy & #image . #rootIdentity .~ workspaceCoordinate ("sha256:" <> Text.replicate 64 "b")
             changedProvisionBinding = provisionBinding & #policyRevision .~ processPolicyIdentity changedProcessPolicy
         changedProvisionAdmission <- (\a -> a & #filePolicy .~ Just supervisedFilePolicy) <$> admissionFor changedProvisionBinding
-        changedPolicyAction <- right (workspaceProvisionAction changedProvisionBinding changedProvisionAdmission (profileFor changedProvisionBinding changedProvisionAdmission changedProcessPolicy 62001) boot "device:files" "device:scratch")
+        changedPolicyAction <- right (workspaceProvisionAction changedProvisionBinding changedProvisionAdmission (profileFor changedProvisionBinding changedProvisionAdmission changedProcessPolicy ((either (error . show) id . parseWorkspaceIdentity) (62001))) boot (workspaceCoordinate "device:files") (workspaceCoordinate "device:scratch"))
         mapM_
           (\action -> verifyIssuedAction verifier now (provisionRequest & #action .~ action) provisionIssued >>= \answer -> assertBool "provisioning proof binds identity, policy, assignment, host and anchored roots" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False))
           (changedPolicyAction : changedProvision)
-        workspaceProvisionAction provisionBinding (provisionAdmission & #filePolicy .~ Just nativeFilePolicy) profile boot "device:files" "device:scratch" @?= Left FileEffectRefused
-        workspaceProvisionAction provisionBinding provisionAdmission (profile & #instructionDigest .~ command.profile) boot "device:files" "device:scratch" @?= Left FileEffectRefused
-        let gitLogical = logical & #fingerprint .~ ExecutionValue.executionDigest command.profile & #scopeDigest .~ ExecutionValue.executionDigest command.profile
+        workspaceProvisionAction provisionBinding (provisionAdmission & #filePolicy .~ Just nativeFilePolicy) profile boot (workspaceCoordinate "device:files") (workspaceCoordinate "device:scratch") @?= Left FileEffectRefused
+        workspaceProvisionAction provisionBinding provisionAdmission (profile & #instructionDigest .~ workspaceCoordinate (workspaceCoordinateText command.profile)) boot (workspaceCoordinate "device:files") (workspaceCoordinate "device:scratch") @?= Left FileEffectRefused
+        let gitLogical = logical & #fingerprint .~ ExecutionValue.executionDigest (workspaceCoordinateText command.profile) & #scopeDigest .~ ExecutionValue.executionDigest (workspaceCoordinateText command.profile)
             gitDispatch = dispatch & #operation .~ gitLogical
-            candidate = Git.GitCandidate provisionBinding.base (Text.replicate 40 "b") (Text.replicate 40 "c") ["src/file"]
-            rawGit = Git.GitRecord Git.GitRecordV1 gitLogical gitDispatch.attemptId gitDispatch.owner gitDispatch.generation (workspaceBindingDigest provisionBinding) (bundleDigest provisionAdmission.instructions) (Git.gitProfileDigest profile) "device:files" provisionBinding.base command.profile now (Git.GitRouting gitLogical.executionId owner (fixturePayloadDigest command.profile) NeedModel) Git.GitPrepared (Just candidate)
+            candidate = Git.GitCandidate provisionBinding.base ((workspaceCoordinate (Text.replicate 40 "b"))) ((workspaceCoordinate (Text.replicate 40 "c"))) [(workspaceCoordinate "src/file")]
+            rawGit = Git.GitRecord Git.GitRecordV1 gitLogical gitDispatch.attemptId gitDispatch.owner gitDispatch.generation (workspaceBindingDigest provisionBinding) (bundleDigest provisionAdmission.instructions) (Git.gitProfileDigest profile) (workspaceCoordinate "device:files") provisionBinding.base (workspaceCoordinate (workspaceCoordinateText command.profile)) now (Git.GitRouting gitLogical.executionId owner (fixturePayloadDigest (workspaceCoordinateText command.profile)) NeedModel) Git.GitPrepared (Just candidate)
             seal value = value & #fingerprint .~ Git.gitFingerprint provisionBinding value
             gitRecord = seal rawGit
             gitAction a d p value = workspaceGitAction provisionBinding a d p (seal value)
@@ -260,17 +262,17 @@ tests =
         commitMinted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed commitGrant
         commitProof <- right (Kikan.mkDecisionProof (decodeUtf8 commitMinted.token))
         let commitIssued = Kikan.IssuedActionProof commitProof commitMinted.expiresAt [] checkedAt
-            changedProfile = profile & #userId .~ 62002 & #groupId .~ 62002
+            changedProfile = profile & #userId .~ ((either (error . show) id . parseWorkspaceIdentity) 62002) & #groupId .~ ((either (error . show) id . parseWorkspaceIdentity) 62002)
         _ <- right =<< verifyIssuedAction verifier now commitRequest commitIssued
         changedGitActions <-
           mapM
             right
-            [ gitAction provisionAdmission gitDispatch profile (gitRecord & #target .~ "device:other-files"),
+            [ gitAction provisionAdmission gitDispatch profile (gitRecord & #target .~ (workspaceCoordinate "device:other-files")),
               gitAction provisionAdmission gitDispatch profile (gitRecord & #createdAt .~ addUTCTime 1 now),
-              gitAction provisionAdmission gitDispatch profile (gitRecord & #candidate .~ Just (candidate & #tree .~ Text.replicate 40 "d")),
-              gitAction provisionAdmission gitDispatch profile (gitRecord & #candidate .~ Just (candidate & #result .~ Text.replicate 40 "d")),
-              gitAction provisionAdmission gitDispatch profile (gitRecord & #candidate .~ Just (candidate & #paths .~ ["src/other"])),
-              gitAction provisionAdmission gitDispatch profile (gitRecord & #expectedParent .~ Text.replicate 40 "d" & #candidate .~ Just (candidate & #parent .~ Text.replicate 40 "d")),
+              gitAction provisionAdmission gitDispatch profile (gitRecord & #candidate .~ Just (candidate & #tree .~ workspaceCoordinate (Text.replicate 40 "d"))),
+              gitAction provisionAdmission gitDispatch profile (gitRecord & #candidate .~ Just (candidate & #result .~ workspaceCoordinate (Text.replicate 40 "d"))),
+              gitAction provisionAdmission gitDispatch profile (gitRecord & #candidate .~ Just (candidate & #paths .~ [(workspaceCoordinate "src/other")])),
+              gitAction provisionAdmission gitDispatch profile (gitRecord & #expectedParent .~ workspaceCoordinate (Text.replicate 40 "d") & #candidate .~ Just (candidate & #parent .~ workspaceCoordinate (Text.replicate 40 "d"))),
               gitAction provisionAdmission gitDispatch profile (gitRecord & #routing . #inputDigest .~ fixturePayloadDigest ("sha256:" <> Text.replicate 64 "b")),
               gitAction (provisionAdmission & #assignmentId .~ (fixtureAssignment "other-assignment")) gitDispatch profile gitRecord,
               gitAction provisionAdmission (gitDispatch & #attemptId .~ fixtureAttemptId "other-attempt") profile (gitRecord & #attemptId .~ fixtureAttemptId "other-attempt"),
@@ -283,9 +285,9 @@ tests =
         workspaceGitAction provisionBinding (provisionAdmission & #filePolicy .~ Just nativeFilePolicy) gitDispatch profile gitRecord @?= Left FileEffectRefused
         workspaceGitAction provisionBinding provisionAdmission gitDispatch profile (gitRecord & #phase .~ Git.GitUnresolved) @?= Left FileEffectRefused
         workspaceGitAction provisionBinding provisionAdmission gitDispatch profile (gitRecord & #attemptId .~ fixtureAttemptId "unmatched") @?= Left FileEffectRefused
-        gitAction provisionAdmission gitDispatch profile (gitRecord & #candidate .~ Just (candidate & #paths .~ ["outside-policy"])) @?= Left FileEffectRefused
+        gitAction provisionAdmission gitDispatch profile (gitRecord & #candidate .~ Just (candidate & #paths .~ [(workspaceCoordinate "outside-policy")])) @?= Left FileEffectRefused
         let observation a d p kind input target = workspaceGitObservationAction provisionBinding a d p kind input target
-        statusAction <- right (observation provisionAdmission gitDispatch profile "status" (fixturePayloadDigest command.profile) "device:files")
+        statusAction <- right (observation provisionAdmission gitDispatch profile "status" (fixturePayloadDigest (workspaceCoordinateText command.profile)) (workspaceCoordinate "device:files"))
         let statusRequest = commitRequest & #action .~ statusAction
             statusGrant = commitGrant & #object .~ ObjectRef (ObjectType (Kikan.actionObjectType statusAction)) (Kikan.actionObjectId statusAction)
         statusMinted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed statusGrant
@@ -295,15 +297,15 @@ tests =
         changedObservations <-
           mapM
             right
-            [ observation provisionAdmission gitDispatch profile "diff" (fixturePayloadDigest command.profile) "device:files",
-              observation provisionAdmission gitDispatch profile "status" (fixturePayloadDigest ("sha256:" <> Text.replicate 64 "b")) "device:files",
-              observation provisionAdmission gitDispatch profile "status" (fixturePayloadDigest command.profile) "device:other-files",
-              observation (provisionAdmission & #assignmentId .~ (fixtureAssignment "other-assignment")) gitDispatch profile "status" (fixturePayloadDigest command.profile) "device:files",
-              observation provisionAdmission (gitDispatch & #generation .~ (fixtureGeneration 2)) profile "status" (fixturePayloadDigest command.profile) "device:files",
-              observation provisionAdmission gitDispatch changedProfile "status" (fixturePayloadDigest command.profile) "device:files"
+            [ observation provisionAdmission gitDispatch profile "diff" (fixturePayloadDigest (workspaceCoordinateText command.profile)) (workspaceCoordinate "device:files"),
+              observation provisionAdmission gitDispatch profile "status" (fixturePayloadDigest ("sha256:" <> Text.replicate 64 "b")) (workspaceCoordinate "device:files"),
+              observation provisionAdmission gitDispatch profile "status" (fixturePayloadDigest (workspaceCoordinateText command.profile)) (workspaceCoordinate "device:other-files"),
+              observation (provisionAdmission & #assignmentId .~ (fixtureAssignment "other-assignment")) gitDispatch profile "status" (fixturePayloadDigest (workspaceCoordinateText command.profile)) (workspaceCoordinate "device:files"),
+              observation provisionAdmission (gitDispatch & #generation .~ (fixtureGeneration 2)) profile "status" (fixturePayloadDigest (workspaceCoordinateText command.profile)) (workspaceCoordinate "device:files"),
+              observation provisionAdmission gitDispatch changedProfile "status" (fixturePayloadDigest (workspaceCoordinateText command.profile)) (workspaceCoordinate "device:files")
             ]
         mapM_ (\action -> verifyIssuedAction verifier now (statusRequest & #action .~ action) statusIssued >>= \answer -> assertBool "Git observation proof binds kind, input, anchor, assignment, actual claim and profile" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) changedObservations
-        observation provisionAdmission gitDispatch profile "commit" (fixturePayloadDigest command.profile) "device:files" @?= Left FileEffectRefused
+        observation provisionAdmission gitDispatch profile "commit" (fixturePayloadDigest (workspaceCoordinateText command.profile)) (workspaceCoordinate "device:files") @?= Left FileEffectRefused
         let workerSession = workerSessionId "retained-session"
             transferBinding = provisionBinding & #request . #assignment .~ Just (workerSession, fixtureAssignmentId "retained-assignment")
             intent = TransferIntent V1 workerSession (ObjectiveRef (WorkerInput.workerCoordinate "checkpoints") (WorkerInput.workerCoordinate "objective")) owner (fixtureOperationId "handoff") (ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) owner WorkerInput.ObjectiveActive transferBinding.request.rootId expiry) owner (CompatibilityIdentity (fixtureAgentName "successor")) (fixtureAgentName "successor") (fixtureRevision 0) (fixtureRevision 1) transferBinding.request.rootId transferBinding.workspace
@@ -331,7 +333,7 @@ tests =
         workspaceTransferAction provisionBinding intent @?= Left FileEffectRefused
         let successorAdmission = provisionAdmission & #bindingDigest .~ workspaceBindingDigest transferBinding & #runId .~ WorkflowId "successor-run" & #assignmentId .~ (fixtureAssignment "successor-assignment") & #owner .~ intent.newOwner & #epoch .~ (fixtureRevision 1) & #filePolicy .~ Just transferableFilePolicy
             retainedProfile = profile & #bindingDigest .~ workspaceBindingDigest transferBinding
-            successorProcess = recordFor transferBinding successorAdmission dispatch command & #routing .~ Just (ProcessRouting ProcessRoutingV1 logical.executionId intent.newOwner (fixturePayloadDigest command.profile) NeedModel)
+            successorProcess = recordFor transferBinding successorAdmission dispatch command & #routing .~ Just (ProcessRouting ProcessRoutingV1 logical.executionId intent.newOwner (fixturePayloadDigest (workspaceCoordinateText command.profile)) NeedModel)
             successorGit raw = let changed = raw & #bindingDigest .~ workspaceBindingDigest transferBinding & #profileDigest .~ Git.gitProfileDigest retainedProfile & #routing . #identity .~ intent.newOwner in changed & #fingerprint .~ Git.gitFingerprint transferBinding changed
             proposedGit = successorGit gitRecord
             verifyTargets exact changed = do
@@ -342,47 +344,47 @@ tests =
               let issued = Kikan.IssuedActionProof proof minted.expiresAt [] checkedAt
               _ <- right =<< verifyIssuedAction verifier now request issued
               mapM_ (\action -> verifyIssuedAction verifier now (request & #action .~ action) issued >>= \answer -> assertBool ("transfer-aware proof binds successor and exact effect: " <> case answer of Left err -> show err; Right _ -> "unexpected acceptance") (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) changed
-        successorFile <- right (workspaceTransferredFileAction retainedProfile transferBinding successorAdmission dispatch "replace" "src/file" "device:parent" "input-hash")
+        successorFile <- right (workspaceTransferredFileAction retainedProfile transferBinding successorAdmission dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"))
         changedSuccessorFiles <-
           mapM
             right
-            [ workspaceTransferredFileAction retainedProfile transferBinding (successorAdmission & #epoch .~ (fixtureRevision 2)) dispatch "replace" "src/file" "device:parent" "input-hash",
-              workspaceTransferredFileAction retainedProfile transferBinding (successorAdmission & #owner .~ CompatibilityIdentity (fixtureAgentName "other-successor")) dispatch "replace" "src/file" "device:parent" "input-hash",
-              workspaceTransferredFileAction retainedProfile transferBinding (successorAdmission & #runId .~ WorkflowId "other-run") dispatch "replace" "src/file" "device:parent" "input-hash",
-              workspaceTransferredFileAction retainedProfile transferBinding successorAdmission dispatch "replace" "src/file" "device:other-parent" "input-hash"
+            [ workspaceTransferredFileAction retainedProfile transferBinding (successorAdmission & #epoch .~ (fixtureRevision 2)) dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"),
+              workspaceTransferredFileAction retainedProfile transferBinding (successorAdmission & #owner .~ CompatibilityIdentity (fixtureAgentName "other-successor")) dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"),
+              workspaceTransferredFileAction retainedProfile transferBinding (successorAdmission & #runId .~ WorkflowId "other-run") dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"),
+              workspaceTransferredFileAction retainedProfile transferBinding successorAdmission dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:other-parent") (workspaceCoordinate "input-hash")
             ]
         verifyTargets successorFile (fileAction : changedSuccessorFiles)
-        successorProcessAction <- right (workspaceTransferredProcessAction transferBinding successorAdmission dispatch successorProcess boot "device:parent")
-        changedSuccessorProcess <- right (workspaceTransferredProcessAction transferBinding (successorAdmission & #epoch .~ (fixtureRevision 2)) dispatch successorProcess boot "device:parent")
+        successorProcessAction <- right (workspaceTransferredProcessAction transferBinding successorAdmission dispatch successorProcess boot (workspaceCoordinate "device:parent"))
+        changedSuccessorProcess <- right (workspaceTransferredProcessAction transferBinding (successorAdmission & #epoch .~ (fixtureRevision 2)) dispatch successorProcess boot (workspaceCoordinate "device:parent"))
         verifyTargets successorProcessAction [processAction, changedSuccessorProcess]
         successorCommit <- right (workspaceTransferredGitAction transferBinding successorAdmission gitDispatch retainedProfile proposedGit)
         changedSuccessorCommit <- right (workspaceTransferredGitAction transferBinding (successorAdmission & #epoch .~ (fixtureRevision 2)) gitDispatch retainedProfile proposedGit)
         verifyTargets successorCommit [commitAction, changedSuccessorCommit]
-        successorStatus <- right (workspaceTransferredGitObservationAction transferBinding successorAdmission gitDispatch retainedProfile "status" (fixturePayloadDigest command.profile) "device:files")
-        changedSuccessorStatus <- right (workspaceTransferredGitObservationAction transferBinding (successorAdmission & #epoch .~ (fixtureRevision 2)) gitDispatch retainedProfile "status" (fixturePayloadDigest command.profile) "device:files")
+        successorStatus <- right (workspaceTransferredGitObservationAction transferBinding successorAdmission gitDispatch retainedProfile "status" (fixturePayloadDigest (workspaceCoordinateText command.profile)) (workspaceCoordinate "device:files"))
+        changedSuccessorStatus <- right (workspaceTransferredGitObservationAction transferBinding (successorAdmission & #epoch .~ (fixtureRevision 2)) gitDispatch retainedProfile "status" (fixturePayloadDigest (workspaceCoordinateText command.profile)) (workspaceCoordinate "device:files"))
         verifyTargets successorStatus [statusAction, changedSuccessorStatus]
         successorAction <- right (workspaceSuccessorAdmissionAction transferBinding successorAdmission retainedProfile)
         changedSuccessorAction <- right (workspaceSuccessorAdmissionAction transferBinding (successorAdmission & #epoch .~ (fixtureRevision 2)) retainedProfile)
         verifyTargets successorAction [fenceAction, changedSuccessorAction]
-        workspaceSupervisedFileAction retainedProfile transferBinding successorAdmission dispatch "replace" "src/file" "device:parent" "input-hash" @?= Left FileEffectRefused
-        workspaceProcessAction transferBinding successorAdmission dispatch successorProcess boot "device:parent" @?= Left FileEffectRefused
+        workspaceSupervisedFileAction retainedProfile transferBinding successorAdmission dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash") @?= Left FileEffectRefused
+        workspaceProcessAction transferBinding successorAdmission dispatch successorProcess boot (workspaceCoordinate "device:parent") @?= Left FileEffectRefused
         workspaceGitAction transferBinding successorAdmission gitDispatch retainedProfile proposedGit @?= Left FileEffectRefused
-        workspaceGitObservationAction transferBinding successorAdmission gitDispatch retainedProfile "status" (fixturePayloadDigest command.profile) "device:files" @?= Left FileEffectRefused
-        workspaceProvisionAction transferBinding successorAdmission retainedProfile boot "device:files" "device:scratch" @?= Left FileEffectRefused
+        workspaceGitObservationAction transferBinding successorAdmission gitDispatch retainedProfile "status" (fixturePayloadDigest (workspaceCoordinateText command.profile)) (workspaceCoordinate "device:files") @?= Left FileEffectRefused
+        workspaceProvisionAction transferBinding successorAdmission retainedProfile boot (workspaceCoordinate "device:files") (workspaceCoordinate "device:scratch") @?= Left FileEffectRefused
         let followup = successorAdmission & #owner .~ transferBinding.request.owner & #epoch .~ transferBinding.request.epoch
         followupAction <- right (workspaceFollowupAdmissionAction transferBinding followup retainedProfile)
         nextFollowupAction <- right (workspaceFollowupAdmissionAction transferBinding (followup & #runId .~ WorkflowId "next-followup" & #assignmentId .~ (fixtureAssignment "next-assignment")) retainedProfile)
         verifyTargets followupAction [successorAction, nextFollowupAction]
         workspaceSuccessorAdmissionAction transferBinding followup retainedProfile @?= Left FileEffectRefused
-        let sourceBinding suffix = provisionBinding & #workspace . #resource .~ Text.replicate 64 suffix & #request . #runId .~ WorkflowId ("artifact-" <> suffix)
+        let sourceBinding suffix = provisionBinding & #workspace . #resource .~ workspaceCoordinate (Text.replicate 64 suffix) & #request . #runId .~ WorkflowId ("artifact-" <> suffix)
             sourceRecord source = let raw = gitRecord & #bindingDigest .~ workspaceBindingDigest source & #phase .~ Git.GitApplied in raw & #fingerprint .~ Git.gitFingerprint source raw
             sourceOne = sourceBinding "d"
             sourceTwo = sourceBinding "e"
             sources = [(sourceOne, sourceRecord sourceOne), (sourceTwo, sourceRecord sourceTwo)]
-            integrationAction admission selected = workspaceIntegrationAction transferBinding admission gitDispatch retainedProfile (fixturePayloadDigest command.profile) "device:files" selected
+            integrationAction admission selected = workspaceIntegrationAction transferBinding admission gitDispatch retainedProfile (fixturePayloadDigest (workspaceCoordinateText command.profile)) (workspaceCoordinate "device:files") selected
         exactIntegration <- right (integrationAction successorAdmission sources)
         changedIntegrationRun <- right (integrationAction (successorAdmission & #runId .~ WorkflowId "other-integration-run") sources)
-        let changedArtifact = (sourceOne, let raw = sourceRecord sourceOne & #candidate .~ Just (candidate & #result .~ Text.replicate 40 "f") in raw & #fingerprint .~ Git.gitFingerprint sourceOne raw)
+        let changedArtifact = (sourceOne, let raw = sourceRecord sourceOne & #candidate .~ Just (candidate & #result .~ workspaceCoordinate (Text.replicate 40 "f")) in raw & #fingerprint .~ Git.gitFingerprint sourceOne raw)
         changedIntegrationSource <- right (integrationAction successorAdmission (changedArtifact : tail sources))
         verifyTargets exactIntegration [successorStatus, changedIntegrationRun, changedIntegrationSource]
         integrationAction successorAdmission [head sources, head sources] @?= Left FileEffectRefused

@@ -27,7 +27,9 @@ import Shikigami.WorkerSession.Input qualified as WorkerInput
 import Shikigami.WorkerSession.Transfer
 import Shikigami.WorkerSession.Types (ObjectiveRef (..), WorkerSessionId, workerSessionId)
 import Shikigami.Workspace.Process
-import Shikigami.Workspace.Rpc
+import Shikigami.Workspace.Rpc hiding (callRpc)
+import Shikigami.Workspace.Rpc qualified as Rpc
+import Shikigami.Workspace.Value
 import System.Directory (createDirectory, getTemporaryDirectory, removeDirectoryRecursive)
 import System.FilePath ((</>))
 import System.Posix.Files (setFileMode)
@@ -43,38 +45,38 @@ tests =
     [ testCase "version 2 fence replies bind the exact request and reject cross-protocol success" $ withListener \path listener uid -> do
         let owner = compatibilityIdentity (fixtureAgentName "old")
             root = fixtureRootId "root"
-            workspace = WorkspaceRef "shikigami.workspace/1" "resource"
+            workspace = WorkspaceRef (workspaceCoordinate "shikigami.workspace/1") (workspaceCoordinate "resource")
             intent = TransferIntent V1 (workerSessionId "session") (ObjectiveRef (WorkerInput.workerCoordinate "provider") (WorkerInput.workerCoordinate "objective")) (compatibilityIdentity (fixtureAgentName "parent")) operation (ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) owner WorkerInput.ObjectiveActive root (read "2026-10-30 20:00:00 UTC")) owner (compatibilityIdentity (fixtureAgentName "new")) (fixtureAgentName "new") (fixtureRevision 0) (fixtureRevision 1) root workspace
             proof = FenceProof V1 workspace operation (transferFingerprint intent) (fixtureRevision 0) (fixtureRevision 1) (fixtureProviderReceipt "retained-fence")
             request = RpcFence intent
         Aeson.eitherDecode (Aeson.encode request) @?= Right request
-        withAsync (serveRpc (RpcPolicy [uid] 1 2) listener (const (pure (RpcFenceResult (FencedAndSettled proof))))) \_ -> callRpc path uid 3 request >>= (@?= Right (RpcFenceResult (FencedAndSettled proof)))
+        withAsync (serveRpc (fixtureRpcPolicy [uid] 1 2) listener (const (pure (RpcFenceResult (FencedAndSettled proof))))) \_ -> callRpc path uid 3 request >>= (@?= Right (RpcFenceResult (FencedAndSettled proof)))
         let wrong = FenceProof V1 workspace (fixtureOperationId "other-operation") (transferFingerprint intent) (fixtureRevision 0) (fixtureRevision 1) (fixtureProviderReceipt "retained-fence")
-        mapM_ (\value -> withAsync (serveRpc (RpcPolicy [uid] 1 2) listener (const (pure value))) \_ -> callRpc path uid 3 request >>= (@?= Left RpcMalformed)) [RpcFenceResult (FencedAndSettled wrong), RpcWriteResult True, reply]
-        withAsync (serveRpc (RpcPolicy [uid] 1 2) listener (const (pure (RpcWriteResult True)))) \_ -> callRpc path uid 3 (RpcAdmitWrite workspace intent.sessionId owner (fixtureRevision 0) operation) >>= (@?= Right (RpcWriteResult True)),
+        mapM_ (\value -> withAsync (serveRpc (fixtureRpcPolicy [uid] 1 2) listener (const (pure value))) \_ -> callRpc path uid 3 request >>= (@?= Left RpcMalformed)) [RpcFenceResult (FencedAndSettled wrong), RpcWriteResult True, reply]
+        withAsync (serveRpc (fixtureRpcPolicy [uid] 1 2) listener (const (pure (RpcWriteResult True)))) \_ -> callRpc path uid 3 (RpcAdmitWrite workspace intent.sessionId owner (fixtureRevision 0) operation) >>= (@?= Right (RpcWriteResult True)),
       testCase "authenticates real Unix peers and returns only retained process metadata" $ withListener \path listener uid -> do
         calls <- newIORef (0 :: Int)
-        withAsync (serveRpc (RpcPolicy [uid] 2 2) listener (counted calls)) \_ -> do
+        withAsync (serveRpc (fixtureRpcPolicy [uid] 2 2) listener (counted calls)) \_ -> do
           callRpc path uid 3 request >>= (@?= Right reply)
           readIORef calls >>= (@?= 1)
           let body = Lazy.toStrict (Aeson.encode reply)
           mapM_ (\field -> assertBool "no command, path or raw output in reply" (not (field `Bytes.isInfixOf` body))) ["executable", "arguments", "environment", "storageRoot", "stdout.pipe"],
       testCase "rejects client credentials before invoking the accepted-operation handler" $ withListener \path listener uid -> do
         calls <- newIORef (0 :: Int)
-        withAsync (serveRpc (RpcPolicy [otherUid uid] 1 2) listener (counted calls)) \_ -> do
+        withAsync (serveRpc (fixtureRpcPolicy [otherUid uid] 1 2) listener (counted calls)) \_ -> do
           result <- callRpc path uid 3 request
           assertBool "denied peer has no reply proof" (isLeft result)
           readIORef calls >>= (@?= 0),
       testCase "client verifies the server UID before disclosing operation coordinates" $ withListener \path listener uid -> do
         calls <- newIORef (0 :: Int)
-        withAsync (serveRpc (RpcPolicy [uid] 1 2) listener (counted calls)) \_ -> do
+        withAsync (serveRpc (fixtureRpcPolicy [uid] 1 2) listener (counted calls)) \_ -> do
           callRpc path (otherUid uid) 3 request >>= (@?= Left RpcPeerDenied)
           -- A subsequent valid request proves the denied connection was drained.
           callRpc path uid 3 request >>= (@?= Right reply)
           readIORef calls >>= (@?= 1),
       testCase "oversized, truncated, unknown-field and unsupported-version frames cause no handler call" $ withListener \path listener uid -> do
         calls <- newIORef (0 :: Int)
-        withAsync (serveRpc (RpcPolicy [uid] 1 2) listener (counted calls)) \_ -> do
+        withAsync (serveRpc (fixtureRpcPolicy [uid] 1 2) listener (counted calls)) \_ -> do
           mapM_
             (rawRefused path)
             [ Bytes.pack [0, 0, 16, 1],
@@ -87,14 +89,14 @@ tests =
           readIORef calls >>= (@?= 1),
       testCase "bounded workers recover from slow partial frames" $ withListener \path listener uid -> do
         calls <- newIORef (0 :: Int)
-        withAsync (serveRpc (RpcPolicy [uid] 1 1) listener (counted calls)) \_ ->
+        withAsync (serveRpc (fixtureRpcPolicy [uid] 1 1) listener (counted calls)) \_ ->
           withConnection path \slow -> do
             SocketBytes.sendAll slow (Bytes.pack [0, 0])
             callRpc path uid 4 request >>= (@?= Right reply)
             readIORef calls >>= (@?= 1),
       testCase "cancelling the server leaves the manager-owned listener reusable" $ withListener \path listener uid -> do
         calls <- newIORef (0 :: Int)
-        let serve = serveRpc (RpcPolicy [uid] 2 2) listener (counted calls)
+        let serve = serveRpc (fixtureRpcPolicy [uid] 2 2) listener (counted calls)
         withAsync serve \_ -> callRpc path uid 3 request >>= (@?= Right reply)
         withAsync serve \_ -> callRpc path uid 3 request >>= (@?= Right reply)
         readIORef calls >>= (@?= 2),
@@ -107,24 +109,24 @@ tests =
               -- Reset on cancellation too; each timed-out request relinquishes its slot.
               bracket (pure ()) (const (atomicModifyIORef' counts (\(total, n) -> ((total, n - 1), ())))) (const (threadDelay 5000000))
               pure reply
-        withAsync (serveRpc (RpcPolicy [uid] 2 1) listener handler) \_ -> do
+        withAsync (serveRpc (fixtureRpcPolicy [uid] 2 1) listener handler) \_ -> do
           results <- mapConcurrently (const (callRpc path uid 4 request)) [1 .. 4 :: Int]
           assertBool "timed-out handlers provide no completion proof" (all isLeft results)
           readIORef counts >>= (@?= (4, 0)),
       testCase "client refuses unrelated operation and invalid settled evidence" $ withListener \path listener uid -> do
         let wrong = RpcView (ProcessView (fixtureOperationId "other") (fixtureAttemptId "actual") (fixtureGeneration 1) digest ProcessReserved Nothing)
             incomplete = RpcView (ProcessView operation (fixtureAttemptId "actual") (fixtureGeneration 1) digest ProcessSettled Nothing)
-        mapM_ (\value -> withAsync (serveRpc (RpcPolicy [uid] 1 2) listener (const (pure value))) \_ -> callRpc path uid 3 request >>= (@?= Left RpcMalformed)) [wrong, incomplete],
+        mapM_ (\value -> withAsync (serveRpc (fixtureRpcPolicy [uid] 1 2) listener (const (pure value))) \_ -> callRpc path uid 3 request >>= (@?= Left RpcMalformed)) [wrong, incomplete],
       testCase "TCP listeners cannot enter peer-credential transport" $
         bracket (Socket.socket Socket.AF_INET Socket.Stream Socket.defaultProtocol) Socket.close \listener -> do
           Socket.bind listener (Socket.SockAddrInet 0 (Socket.tupleToHostAddress (127, 0, 0, 1)))
           Socket.listen listener 1
-          serveRpc (RpcPolicy [0] 1 1) listener (const (pure reply)) >>= (@?= Left RpcRefused),
+          serveRpc (fixtureRpcPolicy [0] 1 1) listener (const (pure reply)) >>= (@?= Left RpcRefused),
       testCase "invalid endpoints and unbounded policy refuse before dispatch" $ withListener \path listener uid -> do
         callRpc "relative" uid 1 request >>= (@?= Left RpcRefused)
-        callRpc path uid 0 request >>= (@?= Left RpcRefused)
-        serveRpc (RpcPolicy [] 1 1) listener (const (pure reply)) >>= (@?= Left RpcRefused)
-        serveRpc (RpcPolicy [uid] 17 1) listener (const (pure reply)) >>= (@?= Left RpcRefused)
+        assertBool "zero request deadline refuses at admission" (isLeft (parseRpcRequestSeconds 0))
+        serveRpc (fixtureRpcPolicy [] 1 1) listener (const (pure reply)) >>= (@?= Left RpcRefused)
+        assertBool "unbounded concurrency refuses at admission" (isLeft (parseRpcConcurrency 17))
     ]
 
 withListener :: (FilePath -> Socket.Socket -> Integer -> IO a) -> IO a
@@ -172,8 +174,8 @@ request = RpcObserve operation
 reply :: RpcReply
 reply = RpcView (ProcessView operation (fixtureAttemptId "actual") (fixtureGeneration 1) digest ProcessReserved Nothing)
 
-digest :: Text.Text
-digest = "sha256:" <> Text.replicate 64 "a"
+digest :: WorkspaceCoordinate scope
+digest = workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")
 
 otherUid :: Integer -> Integer
 otherUid uid = (uid + 1) `mod` 4294967296
@@ -193,3 +195,12 @@ fixtureAgentName = either (error . show) id . mkAgentName
 
 fixtureProviderReceipt :: Text -> WorkerInput.ProviderReceipt
 fixtureProviderReceipt = either (error . show) id . WorkerInput.parseProviderReceipt
+
+callRpc :: FilePath -> Integer -> Int -> RpcRequest -> IO (Either RpcError RpcReply)
+callRpc path uid seconds = Rpc.callRpc (workspaceLocator path) (checked (parseRpcPeerUserId uid)) (checked (parseRpcRequestSeconds seconds))
+
+fixtureRpcPolicy :: [Integer] -> Int -> Int -> RpcPolicy
+fixtureRpcPolicy users workers seconds = RpcPolicy (map (checked . parseRpcPeerUserId) users) (checked (parseRpcConcurrency workers)) (checked (parseRpcRequestSeconds seconds))
+
+checked :: Either Text value -> value
+checked = either (error . show) id

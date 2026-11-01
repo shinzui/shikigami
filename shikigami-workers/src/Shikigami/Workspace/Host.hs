@@ -33,6 +33,7 @@ import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.TransferStore (SessionChild (..))
 import Shikigami.Workspace.TransferStore qualified as Transfers
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 
 -- | The selector and admission callback are trusted process configuration.
 -- The selector must resolve a canonical operator catalog entry. The callback
@@ -79,7 +80,7 @@ workspaceHostFor transferable runtime selected historical prepare storageRoot se
           _ -> pure refused
       _ -> pure refused
     reuse followup assignment root policy principal repository child binding
-      | binding.repository /= repositoryIdentity repository || binding.base /= repositoryBase repository || binding.policyRevision /= repositoryPolicyRevision repository || binding.source /= repositorySource repository || binding.storageRoot /= storageRoot = pure refused
+      | binding.repository /= repositoryIdentity repository || binding.base /= repositoryBase repository || binding.policyRevision /= repositoryPolicyRevision repository || binding.source /= repositorySource repository || workspaceLocatorPath binding.storageRoot /= storageRoot = pure refused
       | otherwise = do
           authority <- case workspaceAllocationAction binding assignment.selection.assignmentId of
             Left _ -> pure (Left "workspace admission refused")
@@ -92,7 +93,7 @@ workspaceHostFor transferable runtime selected historical prepare storageRoot se
                 Left _ -> pure refused
                 Right original -> do
                   let admission = original & #runId .~ assignment.runId & #owner .~ child.owner & #epoch .~ child.epoch & #filePolicy .~ Just transferableFilePolicy
-                  reviewed <- runtime.admitTarget binding admission (bundleFiles admission.instructions) "admit" ""
+                  reviewed <- runtime.admitTarget binding admission (bundleFiles admission.instructions) (workspaceCoordinate ("admit")) (workspaceCoordinate (""))
                   case reviewed of
                     Left _ -> pure refused
                     Right () -> do
@@ -124,7 +125,7 @@ workspaceHostFor transferable runtime selected historical prepare storageRoot se
                           Left _ -> pure refused
                           Right original -> do
                             let admission = if transferable then original & #filePolicy .~ Just transferableFilePolicy else original
-                            reviewed <- runtime.admitTarget binding admission (bundleFiles admission.instructions) "admit" ""
+                            reviewed <- runtime.admitTarget binding admission (bundleFiles admission.instructions) (workspaceCoordinate "admit") (workspaceCoordinate "")
                             case reviewed of
                               Left _ -> pure refused
                               Right () -> either (const refused) Right <$> prepare assignment binding admission
@@ -151,8 +152,8 @@ workspaceHostFor transferable runtime selected historical prepare storageRoot se
             Right (Right child) | maybe True (\value -> value.owner == assignment.identity && Just value.rootId == assignment.selection.rootId) child -> Right child
             _ -> Left "workspace session admission refused"
     admitExisting followup assignment binding admission = do
-      let metadata = workspaceMetadata binding.storageRoot binding
-      rootPrivate <- checkPrivateDirectory binding.storageRoot
+      let metadata = workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding
+      rootPrivate <- checkPrivateDirectory (workspaceLocatorPath binding.storageRoot)
       metadataPrivate <- checkPrivateDirectory metadata
       case rootPrivate >> metadataPrivate of
         Left _ -> pure refused

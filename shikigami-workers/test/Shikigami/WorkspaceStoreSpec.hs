@@ -28,6 +28,7 @@ import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude ((&), (.~))
+import Shikigami.Repository (RepositoryId (..))
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
 import Shikigami.WorkerSession.Types (AssignmentId, WorkerSessionId, assignmentIdForDigest, workerSessionId)
@@ -38,6 +39,7 @@ import Shikigami.Workspace.Instructions (InstructionError (..), RepositoryInstru
 import Shikigami.Workspace.Instructions qualified as Instructions
 import Shikigami.Workspace.Store
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import System.Directory
 import System.Exit (ExitCode (..))
 import System.FilePath (takeDirectory, (</>))
@@ -56,7 +58,7 @@ tests fixture =
         let binding = fst first
             key = versionedDigest "shikigami.workspace-assignment/1" (toJSON request.assignment)
             oldResource = Text.drop 7 (versionedDigest "shikigami.workspace-resource/1" (toJSON key))
-        binding.workspace @?= WorkspaceRef "shikigami.workspace/1" oldResource
+        binding.workspace @?= WorkspaceRef (workspaceCoordinate "shikigami.workspace/1") (workspaceCoordinate (oldResource))
         duplicates <- mapConcurrently (\_ -> run env (reserveWorkspaceTx root request repo)) [1 .. 8 :: Int]
         mapM_ (@?= Right first) duplicates
         parseWorkspaceId (workspaceIdText binding.id) @?= Right binding.id
@@ -78,11 +80,11 @@ tests fixture =
         mapM_
           (\changed -> run env (reserveWorkspaceTx root changed repo) >>= (@?= Left WorkspaceBindingConflict))
           [request & #runId .~ WorkflowId "different", request & #owner .~ CompatibilityIdentity (fixtureAgentName "other"), request & #epoch .~ (fixtureRevision 1), request & #rootId .~ fixtureRootId "other"]
-        changed <- resolved (repositorySource repo) (repositoryBase repo) "policy-2"
+        changed <- resolved (workspaceLocatorPath (repositorySource repo)) (workspaceCoordinateText (repositoryBase repo)) "policy-2"
         run env (reserveWorkspaceTx root request changed) >>= (@?= Left WorkspaceBindingConflict)
-        changedSource <- resolved (repositorySource repo <> "-other") (repositoryBase repo) "policy-1"
+        changedSource <- resolved (workspaceLocatorPath (repositorySource repo) <> "-other") (workspaceCoordinateText (repositoryBase repo)) "policy-1"
         run env (reserveWorkspaceTx root request changedSource) >>= (@?= Left WorkspaceBindingConflict)
-        changedBase <- resolved (repositorySource repo) (Text.replicate 40 "a") "policy-1"
+        changedBase <- resolved (workspaceLocatorPath (repositorySource repo)) (Text.replicate 40 "a") "policy-1"
         run env (reserveWorkspaceTx root request changedBase) >>= (@?= Left WorkspaceBindingConflict)
         run env (reserveWorkspaceTx (root <> "-other") request repo) >>= (@?= Left WorkspaceBindingConflict)
         run env (reserveWorkspaceTx root request repo) >>= (@?= Right (original, Reserved)),
@@ -118,13 +120,13 @@ tests fixture =
         (binding, _) <- right =<< run env (reserveWorkspaceTx root request repo)
         allocateWorkspace root binding Reserved >>= (@?= Right ())
         bundle <- right =<< loadRepositoryInstructions binding 65536
-        map (.path) (bundleFiles bundle) @?= ["AGENTS.md", "src/AGENTS.md"]
+        map (workspaceCoordinateText . (.path)) (bundleFiles bundle) @?= ["AGENTS.md", "src/AGENTS.md"]
         admission <- right =<< loadWorkspaceAdmission binding (fixtureAssignment "execution-assignment") 65536
         admission.bindingDigest @?= workspaceBindingDigest binding
         admission.owner @?= binding.request.owner
         admission.instructions @?= bundle
         admission.filePolicy @?= Just Instructions.nativeFilePolicy
-        fmap (map (.text)) (instructionsForPath bundle "src/new.hs") @?= Right ["PRIVATE_ROOT: validate first\n", "PRIVATE_NESTED: use scoped checks\n"]
+        fmap (map (.text)) (instructionsForPath bundle (workspaceCoordinate "src/new.hs")) @?= Right ["PRIVATE_ROOT: validate first\n", "PRIVATE_NESTED: use scoped checks\n"]
         writeFile (workspaceFiles root binding </> "AGENTS.md") "changed policy must not take effect"
         loadRepositoryInstructions binding 65536 >>= (@?= Right bundle)
         loadRepositoryInstructions binding 4 >>= (@?= Left InstructionBudgetExceeded)
@@ -136,7 +138,7 @@ tests fixture =
         allocateWorkspace root nextBinding Reserved >>= (@?= Right ())
         nextBundle <- right =<< loadRepositoryInstructions nextBinding 65536
         assertBool "new assignment admits next instruction identity" (bundleDigest nextBundle /= bundleDigest bundle)
-        fmap (map (.text)) (instructionsForPath nextBundle "test/new.hs") @?= Right ["PRIVATE_NEW_ROOT_POLICY"]
+        fmap (map (.text)) (instructionsForPath nextBundle (workspaceCoordinate "test/new.hs")) @?= Right ["PRIVATE_NEW_ROOT_POLICY"]
         loadRepositoryInstructions binding 65536 >>= (@?= Right bundle),
       testCase "case-colliding base paths refuse instruction admission on every host" $ withFixture fixture \env source root repo -> do
         blob <- Text.strip . Text.pack <$> git ["-C", source, "rev-parse", "HEAD:dependency.txt"]
@@ -148,7 +150,7 @@ tests fixture =
         createDirectoryIfMissing True (takeDirectoryOfFiles root binding)
         _ <- git ["clone", "--bare", "--no-hardlinks", "--", source, workspaceMetadata root binding]
         loadRepositoryInstructions binding 65536 >>= (@?= Left InstructionSourceRefused)
-        repositoryIdentity repo @?= "mori://fixture/repo",
+        repositoryIdentity repo @?= (RepositoryId ("mori://fixture/repo")),
       testCase "symlink instruction files fail admission without following their targets" $ withFixture fixture \env source root _ -> do
         createFileLink "dependency.txt" (source </> "AGENTS.md")
         repo <- commitRepository source
@@ -167,12 +169,12 @@ tests fixture =
       testCase "borrowed source objects are copied into the private repository" $ withFixture fixture \env source root original -> do
         let borrowed = source <> "-borrowed"
         _ <- git ["clone", "--shared", "--", source, borrowed]
-        repo <- resolved borrowed (repositoryBase original) "policy-1"
+        repo <- resolved borrowed (workspaceCoordinateText (repositoryBase original)) "policy-1"
         (binding, _) <- right =<< run env (reserveWorkspaceTx root request repo)
         allocateWorkspace root binding Reserved >>= (@?= Right ())
         doesFileExist (workspaceMetadata root binding </> "objects" </> "info" </> "alternates") >>= (@?= False)
         renameDirectory source (source <> "-unavailable")
-        git ["--git-dir=" <> workspaceMetadata root binding, "cat-file", "-t", Text.unpack (repositoryBase original)] >>= (@?= "commit\n"),
+        git ["--git-dir=" <> workspaceMetadata root binding, "cat-file", "-t", Text.unpack (workspaceCoordinateText (repositoryBase original))] >>= (@?= "commit\n"),
       testCase "interrupted staging cannot become a published workspace" $ withFixture fixture \env _ root repo -> do
         (binding, _) <- right =<< run env (reserveWorkspaceTx root request repo)
         reached <- newEmptyMVar
@@ -208,8 +210,8 @@ request = WorkspaceRequest (WorkflowId "run") (Just (workerSessionId "session", 
 
 resolved :: FilePath -> Text.Text -> Text.Text -> IO ResolvedRepository
 resolved source base policy = do
-  catalog <- right (mkWorkspaceCatalog [RepositoryPolicy "mori://fixture/repo" source [base] base policy])
-  right (resolveRepository catalog "mori://fixture/repo" Nothing)
+  catalog <- right (mkWorkspaceCatalog [RepositoryPolicy (RepositoryId "mori://fixture/repo") (workspaceLocator source) [(workspaceCoordinate (base))] (workspaceCoordinate (base)) (workspaceCoordinate (policy))])
+  right (resolveRepository catalog (RepositoryId "mori://fixture/repo") Nothing)
 
 withFixture :: DatabaseFixture -> (AppEnv -> FilePath -> FilePath -> ResolvedRepository -> IO a) -> IO a
 withFixture fixture use = withShikigamiFreshDatabase fixture \connection -> bracket temporary removeDirectoryRecursive \dir -> do

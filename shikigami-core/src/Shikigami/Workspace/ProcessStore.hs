@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ViewPatterns #-}
 
 -- | Launch intent precedes systemd IO. A duplicate never receives another
@@ -35,6 +36,7 @@ import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.TransferStore qualified as Transfers
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 
 reserveProcessTx :: WorkspaceBinding -> ProcessRecord -> Transaction (Either WorkspaceError ProcessRecord)
 reserveProcessTx binding = reserveProcessFor (Store.checkWorkspaceOwnerTx binding binding.request.owner binding.request.epoch) (Store.checkWorkspaceOperationTx binding binding.request.owner binding.request.epoch) binding
@@ -60,28 +62,28 @@ reserveProcessFor checkOwner checkOperation binding proposed
               fileOperation <- Tx.statement key hasFileOperation
               case available of
                 Right () | not fileOperation -> do
-                  Tx.statement (key, binding.workspace.resource, proposed.fingerprint, proposed) insertProcess
+                  Tx.statement (key, workspaceCoordinateText binding.workspace.resource, workspaceCoordinateText proposed.fingerprint, proposed) insertProcess
                   retained <- inspectProcessTx proposed.operationId
                   pure (retained >>= maybe (Left WorkspaceBindingConflict) (\actual -> if sameReservation actual proposed then Right actual else Left WorkspaceBindingConflict))
                 _ -> pure (Left WorkspaceBindingConflict)
   where
     key = operationIdText proposed.operationId
-    valid = proposed.bindingDigest == workspaceBindingDigest binding && digestText proposed.instructionDigest && digestText proposed.fingerprint && bounded key && proposed.generation > initialRevision && validProcessCommand proposed.command && maybe True validProcessRouting proposed.routing && proposed.unit == processUnit proposed.operationId proposed.fingerprint && proposed.phase == ProcessReserved && isNothing proposed.bootId && isNothing proposed.invocationId && isNothing proposed.receipt
+    valid = proposed.bindingDigest == workspaceBindingDigest binding && digestText (workspaceCoordinateText proposed.instructionDigest) && digestText (workspaceCoordinateText proposed.fingerprint) && bounded key && proposed.generation > initialRevision && validProcessCommand proposed.command && maybe True validProcessRouting proposed.routing && proposed.unit == processUnit proposed.operationId proposed.fingerprint && proposed.phase == ProcessReserved && isNothing proposed.bootId && isNothing proposed.invocationId && isNothing proposed.receipt
     sameReservation actual candidate = actual.operationId == candidate.operationId && actual.bindingDigest == candidate.bindingDigest && actual.instructionDigest == candidate.instructionDigest && actual.fingerprint == candidate.fingerprint && actual.command == candidate.command && actual.unit == candidate.unit && actual.routing == candidate.routing
 
 -- True is the single committed transition that may issue the launch request.
 -- Losing its acknowledgement intentionally does not permit a second launch.
 -- It is not authority: the supervisor must independently recheck the actual
 -- attempt claim, lifecycle, deadline and fresh exact action before protected IO.
-requestProcessLaunchTx :: WorkspaceBinding -> ProcessRecord -> Text -> Transaction (Either WorkspaceError Bool)
+requestProcessLaunchTx :: WorkspaceBinding -> ProcessRecord -> WorkspaceCoordinate "boot-id" -> Transaction (Either WorkspaceError Bool)
 requestProcessLaunchTx binding = requestProcessLaunchFor (Store.checkWorkspaceOwnerTx binding binding.request.owner binding.request.epoch) binding
 
-requestAdmittedProcessLaunchTx :: WorkspaceBinding -> WorkspaceAdmission -> ProcessRecord -> Text -> Transaction (Either WorkspaceError Bool)
+requestAdmittedProcessLaunchTx :: WorkspaceBinding -> WorkspaceAdmission -> ProcessRecord -> WorkspaceCoordinate "boot-id" -> Transaction (Either WorkspaceError Bool)
 requestAdmittedProcessLaunchTx binding admission = requestProcessLaunchFor (Transfers.checkWorkspaceAdmissionOwnerTx binding admission) binding
 
-requestProcessLaunchFor :: Transaction (Either WorkspaceError ()) -> WorkspaceBinding -> ProcessRecord -> Text -> Transaction (Either WorkspaceError Bool)
+requestProcessLaunchFor :: Transaction (Either WorkspaceError ()) -> WorkspaceBinding -> ProcessRecord -> WorkspaceCoordinate "boot-id" -> Transaction (Either WorkspaceError Bool)
 requestProcessLaunchFor checkOwner binding expected boot
-  | expected.bindingDigest /= workspaceBindingDigest binding || not (hostIdentity boot) = pure (Left WorkspaceBindingConflict)
+  | expected.bindingDigest /= workspaceBindingDigest binding || not (hostIdentity (workspaceCoordinateText boot)) = pure (Left WorkspaceBindingConflict)
   | otherwise = do
       owner <- checkOwner
       if isLeft owner
@@ -97,9 +99,9 @@ requestProcessLaunchFor checkOwner binding expected boot
   where
     isLeft (Left _) = True; isLeft _ = False
 
-observeProcessInvocationTx :: ProcessRecord -> Text -> Text -> Transaction (Either WorkspaceError ())
+observeProcessInvocationTx :: ProcessRecord -> WorkspaceCoordinate "boot-id" -> WorkspaceCoordinate "invocation-id" -> Transaction (Either WorkspaceError ())
 observeProcessInvocationTx expected boot invocation
-  | not (hostIdentity boot && hostIdentity invocation) = pure (Left WorkspaceBindingConflict)
+  | not (hostIdentity (workspaceCoordinateText boot) && hostIdentity (workspaceCoordinateText invocation)) = pure (Left WorkspaceBindingConflict)
   | otherwise = do
       current <- inspectProcessTx expected.operationId
       case current of

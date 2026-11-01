@@ -50,6 +50,7 @@ import Shikigami.Workspace.Provider (Replacement (..), contentDigest)
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.TransferClient
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import System.Directory (doesDirectoryExist)
 import System.FilePath ((</>))
 
@@ -74,8 +75,8 @@ continuingCase config prefix stage = withQualification config prefix \q -> case 
   "inspect" -> withCase q \item -> do
     process <- right =<< run q.env (runTransaction (Processes.inspectProcessTx item.prepared.reference.operationId))
     actual <- right =<< run q.env (Execution.inspectExecutionAttempt item.prepared.reference.attemptId)
-    let capture record = "shikigami-capture-" <> Text.drop (Text.length ("shikigami-workspace-" :: Text.Text)) record.unit
-    Lazy.writeFile (prefix </> "continuing-status.json") (Aeson.encode (Aeson.object ["process" Aeson..= process, "actual" Aeson..= actual, "capture" Aeson..= (capture <$> process), "files" Aeson..= workspaceFiles item.binding.storageRoot item.binding]))
+    let capture record = "shikigami-capture-" <> Text.drop (Text.length ("shikigami-workspace-" :: Text.Text)) (workspaceCoordinateText record.unit)
+    Lazy.writeFile (prefix </> "continuing-status.json") (Aeson.encode (Aeson.object ["process" Aeson..= process, "actual" Aeson..= actual, "capture" Aeson..= (capture <$> process), "files" Aeson..= workspaceFiles (workspaceLocatorPath item.binding.storageRoot) item.binding]))
   "freeze" -> withCase q \item -> do
     access <- sessionAccess q item
     Just (state, _) <- right =<< run q.env (Sessions.inspectSession item.session)
@@ -97,12 +98,12 @@ continuingCase config prefix stage = withQualification config prefix \q -> case 
     unless (again == outcome) (fail "duplicate fence differs")
     Just process <- right =<< run q.env (runTransaction (Processes.inspectProcessTx item.prepared.reference.operationId))
     receipt <- maybe (fail "native settlement receipt absent") pure process.receipt
-    unless (process.phase == ProcessSettled && receipt.descendantsEmpty && receipt.outputComplete) (fail "descendant settlement is not factual")
+    unless (process.phase == ProcessSettled && descendantsSettled receipt.descendantsEmpty && outputCollected receipt.outputComplete) (fail "descendant settlement is not factual")
     Just actual <- right =<< run q.env (Execution.inspectExecutionAttempt item.prepared.reference.attemptId)
     unless (process.attemptId == actual.request.attemptId && process.generation == actual.generation && (actual.phase == Attempt.AttemptCommitted || maybe False (const True) actual.lateReceipt)) (fail "original actual was not recovered")
-    launchCount <- Bytes.readFile (workspaceFiles item.binding.storageRoot item.binding </> "src/launch-count")
+    launchCount <- Bytes.readFile (workspaceFiles (workspaceLocatorPath item.binding.storageRoot) item.binding </> "src/launch-count")
     unless (launchCount == "1") (fail "handoff relaunched command")
-    original <- Bytes.readFile (workspaceFiles item.binding.storageRoot item.binding </> "src/dependency.txt")
+    original <- Bytes.readFile (workspaceFiles (workspaceLocatorPath item.binding.storageRoot) item.binding </> "src/dependency.txt")
     unless (original == "new dependency\n") (fail "accepted files were lost")
     Lazy.writeFile (prefix </> "continuing-evidence.json") (Aeson.encode (Aeson.object ["fence" Aeson..= proof, "receipt" Aeson..= receipt]))
     putStrLn "PASS provider restart recovers the original actual and exact settled fence after authority denial"
@@ -118,7 +119,7 @@ continuingCase config prefix stage = withQualification config prefix \q -> case 
     result <- maybe (fail "late old-owner outcome absent") pure operation.outcome
     outcome <- right =<< run q.env (Execution.readReplayPayload @OperationOutcome access "operation-outcome" result)
     unless (case outcome of ToolReturned _ ToolFailed -> True; RichToolReturned output -> toolFailed output.failed; _ -> False) (fail "late old-owner accepted edit succeeded")
-    retained <- Bytes.readFile (workspaceFiles item.binding.storageRoot item.binding </> "src/dependency.txt")
+    retained <- Bytes.readFile (workspaceFiles (workspaceLocatorPath item.binding.storageRoot) item.binding </> "src/dependency.txt")
     unless (retained == "new dependency\n") (fail "late old-owner edit changed accepted bytes")
     putStrLn "PASS a real accepted late old-owner edit and unestablished successor admission both refuse under fresh authority"
   _ -> fail "unsupported continuing fixture stage"
@@ -160,8 +161,8 @@ followup q = do
   void (right =<< run q.env (Sessions.closeSession access finished.revision (fixtureRevision 0) (fixtureOperationId "followup-close") AssignmentFailed))
   right =<< cleanupWorkspace maintenance actor binding.workspace
   right =<< cleanupWorkspace maintenance actor binding.workspace
-  files <- doesDirectoryExist (workspaceFiles binding.storageRoot binding)
-  metadata <- doesDirectoryExist (workspaceMetadata binding.storageRoot binding)
+  files <- doesDirectoryExist (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding)
+  metadata <- doesDirectoryExist (workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding)
   unless (not files && metadata) (fail "terminal cleanup did not preserve metadata")
   putStrLn "PASS configured followup writes retain files, frozen instructions and Unix identity; idle retention and terminal cleanup converge"
 
@@ -194,7 +195,7 @@ sessionAccess :: Qualification -> Continuing -> IO Sessions.SessionAccess
 sessionAccess q item = right =<< run q.env (Sessions.authorizeSession item.session item.actor (q.lifecycle item.actor))
 
 edit :: Text.Text -> Text.Text -> Text.Text -> (Text.Text, Aeson.Value)
-edit path before after = ("overlay__workspace-edit__replace", Aeson.toJSON (Replacement path (Just (contentDigest before)) after))
+edit path before after = ("overlay__workspace-edit__replace", Aeson.toJSON (Replacement (workspaceCoordinate path) (Just (contentDigest before)) after))
 
 validate :: (Text.Text, Aeson.Value)
 validate = ("overlay__workspace-exec__validate", Aeson.object ["rule" Aeson..= ("validate" :: Text.Text)])

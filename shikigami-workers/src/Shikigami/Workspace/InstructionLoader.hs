@@ -13,6 +13,7 @@ import Shikigami.Workspace.Allocation (workspaceMetadata)
 import Shikigami.Workspace.Git (runWorkspaceGit)
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import Text.Read (readMaybe)
 
 loadRepositoryInstructions :: WorkspaceBinding -> Int -> IO (Either InstructionError InstructionBundle)
@@ -20,7 +21,7 @@ loadRepositoryInstructions = loadInstructions False
 
 loadInstructions :: Bool -> WorkspaceBinding -> Int -> IO (Either InstructionError InstructionBundle)
 loadInstructions qualifyFiles binding budget = do
-  listing <- git 1048576 ["ls-tree", "-r", "-l", "-z", Text.unpack binding.base]
+  listing <- git 1048576 ["ls-tree", "-r", "-l", "-z", Text.unpack (workspaceCoordinateText binding.base)]
   case listing >>= parseListing of
     Left err -> pure (Left err)
     Right entries
@@ -29,16 +30,16 @@ loadInstructions qualifyFiles binding budget = do
           bodies <- traverse load entries
           pure (sequence bodies >>= mkInstructionBundle budget binding.repository binding.base)
   where
-    git limit args = either (const (Left InstructionSourceRefused)) Right <$> runWorkspaceGit binding.storageRoot limit (["--git-dir=" <> workspaceMetadata binding.storageRoot binding] <> args)
+    git limit args = either (const (Left InstructionSourceRefused)) Right <$> runWorkspaceGit (workspaceLocatorPath binding.storageRoot) limit (["--git-dir=" <> workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding] <> args)
     load (path, size) = do
-      body <- git (fromInteger size) ["cat-file", "blob", Text.unpack binding.base <> ":" <> Text.unpack path]
+      body <- git (fromInteger size) ["cat-file", "blob", Text.unpack (workspaceCoordinateText binding.base) <> ":" <> Text.unpack path]
       pure do
         bytes <- body
         if toInteger (Bytes.length bytes) /= size
           then Left InstructionSourceRefused
           else do
             text <- either (const (Left InstructionSourceRefused)) Right (Encoding.decodeUtf8' bytes)
-            pure (path, text)
+            pure (workspaceCoordinate path, text)
     parseListing bytes = do
       let records = filter (not . Bytes.null) (Bytes.split 0 bytes)
       paths <- traverse listingPath records

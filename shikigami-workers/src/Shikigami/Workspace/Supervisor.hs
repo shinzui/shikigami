@@ -70,6 +70,7 @@ import Shikigami.Workspace.Store qualified as Workspaces
 import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.TransferStore qualified as Transfers
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import Shikumi.Tool (ToolError (ToolRunFailed), renderToolError)
 import Shikumi.Tool.Output (ToolOutput, textToolOutput)
 import System.Directory (createDirectory, doesPathExist)
@@ -107,7 +108,7 @@ data SupervisorRuntime = SupervisorRuntime
     authorizer :: !ActionAuthorizer,
     replayAuthority :: !(AgentIdentity -> IO (Either Text ())),
     lifecycle :: !(ExecutionSnapshot -> IO (Either Text ())),
-    selectRule :: !(WorkspaceBinding -> WorkspaceAdmission -> Text -> IO (Either Text (ProcessCommand, Systemd.SystemdProfile))),
+    selectRule :: !(WorkspaceBinding -> WorkspaceAdmission -> WorkspaceCoordinate "process-rule" -> IO (Either Text (ProcessCommand, Systemd.SystemdProfile))),
     backend :: !SupervisorBackend
   }
   deriving stock (Generic)
@@ -115,7 +116,7 @@ data SupervisorRuntime = SupervisorRuntime
 -- Test interpreters establish admission/registration evidence only. Production
 -- installation uses the qualified systemd interpreter, with no local fallback.
 data SupervisorBackend = SupervisorBackend
-  { bootIdentity :: !(IO (Either Systemd.SystemdError Text)),
+  { bootIdentity :: !(IO (Either Systemd.SystemdError (WorkspaceCoordinate "boot-id"))),
     capture :: !(Systemd.SystemdProfile -> FilePath -> ProcessRecord -> IO (Either Systemd.SystemdError ())),
     launch :: !(Systemd.SystemdProfile -> FilePath -> FilePath -> FilePath -> ProcessRecord -> IO (Either Systemd.SystemdError ())),
     collectorActive :: !(ProcessRecord -> IO (Either Systemd.SystemdError Bool)),
@@ -169,8 +170,8 @@ superviseProcess runtime request = protect do
   unless (validRequest request) (abort SupervisorRefused)
   accepted <- loadAccepted runtime request
   let binding = accepted.binding
-      metadata = workspaceMetadata binding.storageRoot binding
-  needFile =<< checkPrivateDirectory binding.storageRoot
+      metadata = workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding
+  needFile =<< checkPrivateDirectory (workspaceLocatorPath binding.storageRoot)
   needFile =<< checkPrivateDirectory metadata
   locked <- withWorkspaceLock metadata $ Right <$> lockedProcess runtime accepted
   either (const (abort SupervisorUnresolved)) pure locked
@@ -180,8 +181,8 @@ superviseProcess runtime request = protect do
 reconcileProcess :: SupervisorRuntime -> OperationId -> IO (Either SupervisorError ProcessRecord)
 reconcileProcess runtime operation = protect do
   (binding, _) <- readRegisteredProcess runtime operation >>= maybe (abort SupervisorRefused) pure
-  let metadata = workspaceMetadata binding.storageRoot binding
-  needFile =<< checkPrivateDirectory binding.storageRoot
+  let metadata = workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding
+  needFile =<< checkPrivateDirectory (workspaceLocatorPath binding.storageRoot)
   needFile =<< checkPrivateDirectory metadata
   locked <-
     withWorkspaceLock metadata $
@@ -218,9 +219,9 @@ loadAccepted runtime request = do
   unless (bounded rule) (abort SupervisorRefused)
   (binding, state) <- transact runtime (Workspaces.inspectWorkspaceTx admission.workspace) >>= either (const (abort SupervisorRefused)) pure >>= maybe (abort SupervisorRefused) pure
   unless (state == Ready && matchesWorkspaceAdmission binding admission && admission.runId == snapshot.runId && admission.assignmentId == snapshot.selection.assignmentId && Just admission.rootId == snapshot.selection.rootId && admission.rootId == binding.request.rootId && admission.owner == snapshot.identity && bundleRepository admission.instructions == binding.repository && bundleBase admission.instructions == binding.base) (abort SupervisorRefused)
-  (command, profile) <- runtime.selectRule binding admission rule >>= either (const (abort SupervisorRefused)) pure
+  (command, profile) <- runtime.selectRule binding admission (workspaceCoordinate rule) >>= either (const (abort SupervisorRefused)) pure
   profileIdentity <- Systemd.systemdProfileIdentity profile
-  unless (validProcessCommand command && command.rule == rule && command.profile == profileIdentity) (abort SupervisorRefused)
+  unless (validProcessCommand command && (workspaceCoordinateText command.rule) == rule && command.profile == profileIdentity) (abort SupervisorRefused)
   let key = request.operationId
       context = OperationContext snapshot.executionId request.operationId key operation.fingerprint operation.specification.scopeDigest
       dispatch = DispatchContext context request.attemptId request.owner request.generation
@@ -248,16 +249,16 @@ lockedProcess runtime accepted = do
       root <- runAppIO runtime.appEnv (Roots.inspectRoot binding.request.rootId) >>= either (const (abort SupervisorUnavailable)) (either (const (abort SupervisorRefused)) pure)
       now <- getCurrentTime
       either (const (abort SupervisorRefused)) pure (Resources.checkRoot now root.revision root)
-      let deadline = min root.envelope.cutoff (addUTCTime (fromIntegral command.timeoutSeconds) now)
+      let deadline = min root.envelope.cutoff (addUTCTime (fromIntegral (processSecondsNumber command.timeoutSeconds)) now)
           fingerprint = processFingerprint binding (bundleDigest accepted.admission.instructions) dispatch.operation command
           proposed = ProcessRecord dispatch.operation.operationId dispatch.attemptId dispatch.owner dispatch.generation (workspaceBindingDigest binding) (bundleDigest accepted.admission.instructions) fingerprint command deadline (processUnit dispatch.operation.operationId fingerprint) Nothing Nothing ProcessReserved Nothing (Just accepted.routing)
       record <- transact runtime ((if accepted.admission.filePolicy == Just transferableFilePolicy then Processes.reserveAdmittedProcessTx binding accepted.admission else Processes.reserveProcessTx binding) proposed) >>= either (const (abort SupervisorRefused)) pure
       unless (record == proposed) (abort SupervisorUnresolved)
       let candidate = record & #bootId .~ Just boot & #phase .~ ProcessLaunchRequested
           directory = processDirectory binding record
-          files = workspaceFiles binding.storageRoot binding
-          scratch = workspaceScratch binding.storageRoot binding
-          path = (if Text.null command.directory then "" else command.directory <> "/") <> ".shikigami-process-target"
+          files = workspaceFiles (workspaceLocatorPath binding.storageRoot) binding
+          scratch = workspaceScratch (workspaceLocatorPath binding.storageRoot) binding
+          path = (if Text.null (workspaceCoordinateText command.directory) then "" else workspaceCoordinateText command.directory <> "/") <> ".shikigami-process-target"
       -- Validate all serialization constraints before consuming the transition.
       _ <- Systemd.processArguments now accepted.profile files scratch directory candidate >>= either (abort . backendError) pure
       let refuseUnlaunched = void (transact runtime (Processes.refuseReservedProcessTx record))
@@ -304,10 +305,10 @@ current runtime accepted record = do
   transact runtime (if accepted.admission.filePolicy == Just transferableFilePolicy then Transfers.checkWorkspaceAdmissionOwnerTx accepted.binding accepted.admission else Workspaces.checkWorkspaceOwnerTx accepted.binding accepted.admission.owner accepted.admission.epoch) >>= either (const (abort SupervisorRefused)) pure
   forM_ record \retained -> getCurrentTime >>= \now -> when (now >= retained.deadline) (abort SupervisorRefused)
 
-authorize :: SupervisorRuntime -> AcceptedProcess -> ProcessRecord -> Text -> Text -> IO ()
+authorize :: SupervisorRuntime -> AcceptedProcess -> ProcessRecord -> WorkspaceCoordinate "boot-id" -> Text -> IO ()
 authorize runtime accepted record boot target = do
   principal <- either (const (abort SupervisorRefused)) pure (identityText accepted.admission.owner)
-  action <- either (const (abort SupervisorRefused)) pure ((if accepted.admission.filePolicy == Just transferableFilePolicy then workspaceTransferredProcessAction else workspaceProcessAction) accepted.binding accepted.admission accepted.dispatch record boot target)
+  action <- either (const (abort SupervisorRefused)) pure ((if accepted.admission.filePolicy == Just transferableFilePolicy then workspaceTransferredProcessAction else workspaceProcessAction) accepted.binding accepted.admission accepted.dispatch record boot (workspaceCoordinate target))
   runtime.authorizer.authorize principal action >>= either (const (abort SupervisorRefused)) (const (pure ()))
   current runtime accepted (Just record)
 
@@ -430,7 +431,7 @@ publishProcessReceipt runtime operationId = protect do
         _ -> abort SupervisorUnresolved
 
 processDirectory :: WorkspaceBinding -> ProcessRecord -> FilePath
-processDirectory binding record = workspaceMetadata binding.storageRoot binding </> Text.unpack ("process-" <> Text.drop 7 (versionedDigest "shikigami.workspace-process-directory/1" (toJSON (record.operationId, record.fingerprint))))
+processDirectory binding record = workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding </> Text.unpack ("process-" <> Text.drop 7 (versionedDigest "shikigami.workspace-process-directory/1" (toJSON (record.operationId, record.fingerprint))))
 
 waitReady :: FilePath -> Int -> IO ()
 waitReady directory remaining = do

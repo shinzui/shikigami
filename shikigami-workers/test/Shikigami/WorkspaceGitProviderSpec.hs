@@ -69,6 +69,7 @@ import Shikigami.Workspace.Service (GitScan (..), scanGitReceipts)
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import Shikigami.WorkspaceFileProviderSpec qualified as Fixture
 import System.FilePath ((</>))
 import Test.Tasty (TestTree, testGroup)
@@ -81,20 +82,20 @@ tests fixture =
     [ testCase "malformed retained Git intent refuses factual recovery without another publication" $ withGitVersion True fixture "commit" \env binding snapshot _ reference runtime profile backend -> do
         profileReady env binding profile
         publications <- newIORef (0 :: Int)
-        Bytes.writeFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") "new dependency\n"
+        Bytes.writeFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding </> "src/dependency.txt") "new dependency\n"
         let interrupted = backend & #afterPublication .~ (modifyIORef' publications (+ 1) >> throwIO (userError "lost Git acknowledgement"))
             executor = Fixture.executorForAdapter (transferredWorkspaceGitAdapterWithBackend interrupted) runtime
         execute executor snapshot reference
         readIORef publications >>= (@?= 1)
         Just retained <- right =<< run env (runTransaction (Git.inspectGitTx reference.operationId))
         retained.phase @?= GitPublishRequested
-        headBefore <- Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= right
+        headBefore <- Objects.readHead (workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding) >>= right
         run env (runTransaction (Tx.sql "UPDATE shikigami.workspace_effects SET receipt='{}'::jsonb WHERE kind='git'"))
         reconcileGitEffect env reference.operationId >>= (@?= Left FileEffectUnresolved)
         publishGitReceipt env reference.operationId >>= (@?= Left FileEffectUnresolved)
         execute executor snapshot reference
         readIORef publications >>= (@?= 1)
-        Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= (@?= Right headBefore)
+        Objects.readHead (workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding) >>= (@?= Right headBefore)
         run env (runTransaction (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "successor"))) >>= (@?= Left WorkspaceBindingConflict)
         run env (runTransaction (Tx.sql "ALTER TABLE shikigami.workspace_effects RENAME TO fixture_unavailable_git_effects"))
         (reconcileGitEffect env reference.operationId >>= (@?= Left FileEffectUnavailable))
@@ -107,29 +108,29 @@ tests fixture =
           field "paths" value @?= Just (Aeson.toJSON ["src/AGENTS.md", "src/dependency.txt" :: Text.Text])
           assertBool "combined tree retained" (isJustValue (field "tree" value))
           replacements <- case field "replacements" value of Just body -> right (Aeson.fromJSON body `asEither` ()); _ -> fail "missing replacements"
-          map (\(replacement :: Replacement) -> replacement.path) replacements @?= ["src/AGENTS.md", "src/dependency.txt"]
-          readFile (workspaceFiles target.storageRoot target </> "src/dependency.txt") >>= (@?= "old dependency\n")
-          Objects.readHead (workspaceMetadata target.storageRoot target) >>= (@?= Right target.base),
+          map (\(replacement :: Replacement) -> workspaceCoordinateText replacement.path) replacements @?= ["src/AGENTS.md", "src/dependency.txt"]
+          readFile (workspaceFiles (workspaceLocatorPath target.storageRoot) target </> "src/dependency.txt") >>= (@?= "old dependency\n")
+          Objects.readHead (workspaceMetadata (workspaceLocatorPath target.storageRoot) target) >>= (@?= Right target.base),
       testCase "unequal overlapping worker changes return conflicts without changing files or HEAD" $ withIntegration fixture True \env target admission runtime backend artifacts ->
         withIntegrationTool env admission runtime backend (Aeson.toJSON (Integration.Request target.base artifacts)) \output -> do
           value <- outputValue output
           field "conflicts" value @?= Just (Aeson.toJSON ["src/dependency.txt" :: Text.Text])
           field "replacements" value @?= Just (Aeson.toJSON ([] :: [Replacement]))
-          Objects.readHead (workspaceMetadata target.storageRoot target) >>= (@?= Right target.base),
+          Objects.readHead (workspaceMetadata (workspaceLocatorPath target.storageRoot) target) >>= (@?= Right target.base),
       testCase "forged artifact coordinates refuse before capture" $ withIntegration fixture False \env target admission runtime backend artifacts -> do
-        let forged = head artifacts & #revision .~ Text.replicate 40 "0"
+        let forged = head artifacts & #revision .~ workspaceCoordinate (Text.replicate 40 "0")
         withIntegrationTool env admission runtime backend (Aeson.toJSON (Integration.Request target.base (forged : tail artifacts))) assertRefused,
       testCase "denied integration authority refuses without changing HEAD" $ withIntegration fixture False \env target admission runtime backend artifacts -> do
         withIntegrationTool env admission (runtime & #authorizer .~ denyAllActionAuthorizer) backend (Aeson.toJSON (Integration.Request target.base artifacts)) assertRefused
-        Objects.readHead (workspaceMetadata target.storageRoot target) >>= (@?= Right target.base),
+        Objects.readHead (workspaceMetadata (workspaceLocatorPath target.storageRoot) target) >>= (@?= Right target.base),
       testCase "dirty integration target refuses rather than overwriting prior work" $ withIntegration fixture False \env target admission runtime backend artifacts -> do
-        writeFile (workspaceFiles target.storageRoot target </> "src/dependency.txt") "uncommitted integrator change\n"
+        writeFile (workspaceFiles (workspaceLocatorPath target.storageRoot) target </> "src/dependency.txt") "uncommitted integrator change\n"
         withIntegrationTool env admission runtime backend (Aeson.toJSON (Integration.Request target.base artifacts)) assertRefused
-        readFile (workspaceFiles target.storageRoot target </> "src/dependency.txt") >>= (@?= "uncommitted integrator change\n"),
+        readFile (workspaceFiles (workspaceLocatorPath target.storageRoot) target </> "src/dependency.txt") >>= (@?= "uncommitted integrator change\n"),
       testCase "transfer-aware Git revision recovers its original exact commit after freeze" $ withGitVersion True fixture "commit" \env binding snapshot _ reference runtime profile backend -> do
         profileReady env binding profile
         publications <- newIORef (0 :: Int)
-        Bytes.writeFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") "new dependency\n"
+        Bytes.writeFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding </> "src/dependency.txt") "new dependency\n"
         let interrupted = backend & #afterPublication .~ (modifyIORef' publications (+ 1) >> throwIO (userError "lost transferred Git acknowledgement"))
         execute (Fixture.executorForAdapter (transferredWorkspaceGitAdapterWithBackend interrupted) runtime) snapshot reference
         readIORef publications >>= (@?= 1)
@@ -146,28 +147,28 @@ tests fixture =
         writes <- newIORef (0 :: Int)
         let counted = backend & #afterPublication .~ modifyIORef' writes (+ 1)
             executor = Fixture.executorForAdapter (workspaceGitAdapterWithBackend counted) runtime
-        current <- Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= right
+        current <- Objects.readHead (workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding) >>= right
         current @?= binding.base
-        Bytes.writeFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") "new dependency\n"
+        Bytes.writeFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding </> "src/dependency.txt") "new dependency\n"
         execute executor snapshot reference
         readIORef writes >>= (@?= 1)
         Just record <- right =<< run env (runTransaction (Git.inspectGitTx reference.operationId))
         record.phase @?= GitApplied
         record.attemptId @?= reference.attemptId
         Just candidate <- pure record.candidate
-        candidate.paths @?= ["src/dependency.txt"]
-        Objects.verifyPublishedCommit (workspaceMetadata binding.storageRoot binding) candidate >>= (@?= Right True)
+        map workspaceCoordinateText candidate.paths @?= ["src/dependency.txt"]
+        Objects.verifyPublishedCommit (workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding) candidate >>= (@?= Right True)
         execute executor snapshot reference
         readIORef writes >>= (@?= 1)
         (_, state) <- right =<< run env (Execution.loadExecution access)
         state.cursor @?= (fixtureRevision 2)
-        source <- right =<< runWorkspaceGit binding.storageRoot 4096 ["-C", binding.source, "status", "--porcelain"]
+        source <- right =<< runWorkspaceGit (workspaceLocatorPath binding.storageRoot) 4096 ["-C", workspaceLocatorPath binding.source, "status", "--porcelain"]
         source @?= ""
         metadata <- right =<< run env (Execution.inspectExecution snapshot.executionId)
         assertBool "commit message remains outside public metadata" (not ("PRIVATE_COMMIT_MESSAGE" `Text.isInfixOf` Text.pack (show (Aeson.encode metadata)))),
       testCase "lost publication acknowledgement settles its original actual after authority and ownership freeze" $ withGit fixture "commit" \env binding snapshot access reference runtime profile backend -> do
         profileReady env binding profile
-        Bytes.writeFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") "new dependency\n"
+        Bytes.writeFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding </> "src/dependency.txt") "new dependency\n"
         reached <- newIORef False
         let interrupted = backend & #afterPublication .~ (writeIORef reached True >> throwIO (userError "fixture lost Git acknowledgement"))
         execute (Fixture.executorForAdapter (workspaceGitAdapterWithBackend interrupted) runtime) snapshot reference
@@ -188,7 +189,7 @@ tests fixture =
         root.unknown @?= (fixtureCount 1),
       testCase "replacement observation never republishes and independently closes the superseded original" $ withGit fixture "commit" \env binding snapshot access reference runtime profile backend -> do
         profileReady env binding profile
-        Bytes.writeFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") "new dependency\n"
+        Bytes.writeFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding </> "src/dependency.txt") "new dependency\n"
         writes <- newIORef (0 :: Int)
         let interrupted = backend & #afterPublication .~ (modifyIORef' writes (+ 1) >> throwIO (userError "fixture lost Git acknowledgement"))
             executor = Fixture.executorForAdapter (workspaceGitAdapterWithBackend interrupted) runtime
@@ -213,9 +214,9 @@ tests fixture =
         mapM_
           ( \name -> withGit fixture name \env binding snapshot access reference runtime profile backend -> do
               profileReady env binding profile
-              Bytes.writeFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") "new dependency\n"
+              Bytes.writeFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding </> "src/dependency.txt") "new dependency\n"
               execute (Fixture.executorForAdapter (workspaceGitAdapterWithBackend backend) runtime) snapshot reference
-              Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= (@?= Right binding.base)
+              Objects.readHead (workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding) >>= (@?= Right binding.base)
               run env (runTransaction (Git.inspectGitTx reference.operationId)) >>= (@?= Right Nothing)
               Just operation <- right =<< run env (Execution.inspectOperation reference.operationId)
               result <- maybe (fail "missing observation result") pure operation.outcome
@@ -227,21 +228,21 @@ tests fixture =
           ["status", "diff"],
       testCase "fresh denial before publication leaves HEAD unchanged and retains a proven refusal" $ withGit fixture "commit" \env binding snapshot _ reference runtime profile backend -> do
         profileReady env binding profile
-        Bytes.writeFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") "new dependency\n"
+        Bytes.writeFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding </> "src/dependency.txt") "new dependency\n"
         let denied = runtime & #authorizer .~ denyAllActionAuthorizer
         execute (Fixture.executorForAdapter (workspaceGitAdapterWithBackend backend) denied) snapshot reference
-        Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= (@?= Right binding.base)
+        Objects.readHead (workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding) >>= (@?= Right binding.base)
         Just record <- right =<< run env (runTransaction (Git.inspectGitTx reference.operationId))
         record.phase @?= GitRefused,
       testCase "loss after publication admission cannot authorize a replacement HEAD update" $ withGit fixture "commit" \env binding snapshot access reference runtime profile backend -> do
         profileReady env binding profile
-        Bytes.writeFile (workspaceFiles binding.storageRoot binding </> "src/dependency.txt") "new dependency\n"
+        Bytes.writeFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding </> "src/dependency.txt") "new dependency\n"
         let stopAfterGrant _ = do
               record <- right =<< run env (runTransaction (Git.inspectGitTx reference.operationId))
               if maybe False ((== GitPublishRequested) . (.phase)) record then pure (Left "fixture revoked") else pure (Right ())
             interrupted = runtime & #lifecycle .~ stopAfterGrant
         execute (Fixture.executorForAdapter (workspaceGitAdapterWithBackend backend) interrupted) snapshot reference
-        Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= (@?= Right binding.base)
+        Objects.readHead (workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding) >>= (@?= Right binding.base)
         publishGitReceipt env reference.operationId >>= (@?= Right AwaitingGitReceipt)
         Just record <- right =<< run env (runTransaction (Git.inspectGitTx reference.operationId))
         record.phase @?= GitUnresolved
@@ -254,7 +255,8 @@ tests fixture =
               profileReady env binding profile
               now <- getCurrentTime
               let operation = fixtureOperationId "pending-validation"
-                  digest = profile.instructionDigest
+                  digest :: WorkspaceCoordinate scope
+                  digest = workspaceCoordinate (workspaceCoordinateText profile.instructionDigest)
                   command = commandFor digest (head profile.policy.rules)
                   record = ProcessRecord operation (fixtureAttemptId "pending-attempt") (fixtureOwner "pending-owner") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest command (addUTCTime 30 now) (processUnit operation digest) Nothing Nothing ProcessReserved Nothing Nothing
               _ <- right =<< run env (runTransaction (Processes.reserveProcessTx binding record))
@@ -263,14 +265,14 @@ tests fixture =
               execute (Fixture.executorForAdapter (workspaceGitAdapterWithBackend counting) runtime) snapshot reference
               readIORef captured >>= (@?= 0)
               run env (runTransaction (Git.inspectGitTx reference.operationId)) >>= (@?= Right Nothing)
-              Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= (@?= Right binding.base)
+              Objects.readHead (workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding) >>= (@?= Right binding.base)
           )
           ["status", "diff", "commit"],
       testCase "a changed path outside frozen write scope refuses publication" $ withGit fixture "commit" \env binding snapshot _ reference runtime profile backend -> do
         profileReady env binding profile
-        Bytes.writeFile (workspaceFiles binding.storageRoot binding </> "AGENTS.md") "changed root instructions\n"
+        Bytes.writeFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding </> "AGENTS.md") "changed root instructions\n"
         execute (Fixture.executorForAdapter (workspaceGitAdapterWithBackend backend) runtime) snapshot reference
-        Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= (@?= Right binding.base)
+        Objects.readHead (workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding) >>= (@?= Right binding.base)
         Just record <- right =<< run env (runTransaction (Git.inspectGitTx reference.operationId))
         record.phase @?= GitRefused
         record.candidate @?= Nothing,
@@ -280,7 +282,7 @@ tests fixture =
         execute (Fixture.executorForAdapter (workspaceGitAdapterWithBackend counting) runtime) snapshot reference
         readIORef captured >>= (@?= 0)
         run env (runTransaction (Git.inspectGitTx reference.operationId)) >>= (@?= Right Nothing)
-        Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= (@?= Right binding.base),
+        Objects.readHead (workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding) >>= (@?= Right binding.base),
       testCase "stale actual generation refuses before capture or publication" $ withGit fixture "commit" \env binding snapshot _ reference runtime profile backend -> do
         profileReady env binding profile
         captured <- newIORef (0 :: Int)
@@ -289,7 +291,7 @@ tests fixture =
         execute (Fixture.executorForAdapter broken runtime) snapshot reference
         readIORef captured >>= (@?= 0)
         run env (runTransaction (Git.inspectGitTx reference.operationId)) >>= (@?= Right Nothing)
-        Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= (@?= Right binding.base)
+        Objects.readHead (workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding) >>= (@?= Right binding.base)
     ]
 
 withGit :: DatabaseFixture -> Text.Text -> (AppEnv -> WorkspaceBinding -> ExecutionSnapshot -> Execution.ReplayAccess -> Attempt.JobReference -> FileRuntime -> ProcessProfile -> GitBackend -> IO a) -> IO a
@@ -298,27 +300,27 @@ withGit = withGitVersion False
 withGitVersion :: Bool -> DatabaseFixture -> Text.Text -> (AppEnv -> WorkspaceBinding -> ExecutionSnapshot -> Execution.ReplayAccess -> Attempt.JobReference -> FileRuntime -> ProcessProfile -> GitBackend -> IO a) -> IO a
 withGitVersion transferred fixture name use = do
   properties <- Systemd.systemdPropertiesIdentity
-  let digest = "sha256:" <> Text.replicate 64 "a"
-      policy = ProcessPolicy ProcessPolicyV1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") properties [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] ["src"]
-      backend = GitBackend (pure (Right "11111111-1111-4111-8111-111111111111")) fixtureCapture (pure ())
-      input binding = Just (if name == "commit" then Aeson.toJSON (GitCommitRequest binding.base "chore(deps): PRIVATE_COMMIT_MESSAGE") else Aeson.object [])
+  let digest = workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")
+      policy = ProcessPolicy ProcessPolicyV1 (ProcessImage (workspaceLocator "/qualified/root") digest (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")) properties [CommandRule (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)] [(workspaceCoordinate "")] [(workspaceCoordinate "src")]
+      backend = GitBackend (pure (Right (workspaceCoordinate "11111111-1111-4111-8111-111111111111"))) fixtureCapture (pure ())
+      input binding = Just (if name == "commit" then Aeson.toJSON (GitCommitRequest binding.base (workspaceCoordinate "chore(deps): PRIVATE_COMMIT_MESSAGE")) else Aeson.object [])
   Fixture.withEffectAdapterPolicyInput (Just policy) 1 (\admission -> admission & #filePolicy .~ Just (if transferred then transferableFilePolicy else supervisedFilePolicy)) ((if transferred then transferredWorkspaceGitAdapterWithBackend else workspaceGitAdapterWithBackend) backend) ("overlay__workspace-git__" <> name) name input fixture \env binding snapshot access reference runtime _ -> do
     admission <- maybe (fail "missing Git admission") pure snapshot.workspace
-    (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest admission.instructions) policy (IdentityRange 62000 62001)))
+    (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest admission.instructions) policy (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 62000) ((either (error . show) id . parseWorkspaceIdentity) 62001))))
     use env binding snapshot access reference runtime profile backend
 
-fixtureCapture :: WorkspaceBinding -> ProcessProfile -> Text.Text -> (Text.Text -> IO (Either WorkspaceError ())) -> IO (Either WorkspaceError CapturedTree)
+fixtureCapture :: WorkspaceBinding -> ProcessProfile -> WorkspaceCoordinate "file-target" -> (WorkspaceCoordinate "relative-path" -> IO (Either WorkspaceError ())) -> IO (Either WorkspaceError CapturedTree)
 fixtureCapture binding _ target admit = do
-  let paths = ["AGENTS.md", "src/AGENTS.md", "src/dependency.txt"]
-      metadata = workspaceMetadata binding.storageRoot binding
+  let paths = map workspaceCoordinate ["AGENTS.md", "src/AGENTS.md", "src/dependency.txt"]
+      metadata = workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding
   entries <-
     mapM
       ( \path -> do
           _ <- right =<< admit path
-          result <- withContainedFile (workspaceFiles binding.storageRoot binding) path (readContainedFile 262144)
+          result <- withContainedFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding) (workspaceCoordinateText path) (readContainedFile 262144)
           bytes <- maybe (fail "fixture file missing") pure =<< right result
           blob <- right =<< Objects.storeBlob metadata bytes
-          pure (Objects.GitEntry path "100644" blob)
+          pure (Objects.GitEntry path GitRegular blob)
       )
       paths
   tree <- Objects.storeFlatTree metadata entries
@@ -342,14 +344,14 @@ right = either (\err -> assertFailure (show err) >> fail "unreachable") pure
 withIntegration :: DatabaseFixture -> Bool -> (AppEnv -> WorkspaceBinding -> WorkspaceAdmission -> FileRuntime -> GitBackend -> [Integration.Artifact] -> IO a) -> IO a
 withIntegration fixture conflicting use = withGitVersion True fixture "commit" \env first snapshot _ reference runtime profile backend -> do
   profileReady env first profile
-  Bytes.writeFile (workspaceFiles first.storageRoot first </> "src/dependency.txt") "worker one\n"
+  Bytes.writeFile (workspaceFiles (workspaceLocatorPath first.storageRoot) first </> "src/dependency.txt") "worker one\n"
   execute (Fixture.executorForAdapter (transferredWorkspaceGitAdapterWithBackend backend) runtime) snapshot reference
   firstArtifact <- artifact env reference
   (second, secondAdmission) <- sibling env first profile "worker-two"
   let secondPath = if conflicting then "src/dependency.txt" else "src/AGENTS.md"
-  Bytes.writeFile (workspaceFiles second.storageRoot second </> Text.unpack secondPath) "worker two\n"
+  Bytes.writeFile (workspaceFiles (workspaceLocatorPath second.storageRoot) second </> Text.unpack secondPath) "worker two\n"
   token <- UUID.nextRandom
-  Fixture.withAcceptedWorkspaceTool 1 (transferredWorkspaceGitAdapterWithBackend backend) (fixtureAgentName "worker") "overlay__workspace-git__commit" token env secondAdmission runtime (Aeson.toJSON (GitCommitRequest second.base "Worker two")) \secondSnapshot _ secondReference -> do
+  Fixture.withAcceptedWorkspaceTool 1 (transferredWorkspaceGitAdapterWithBackend backend) (fixtureAgentName "worker") "overlay__workspace-git__commit" token env secondAdmission runtime (Aeson.toJSON (GitCommitRequest second.base (workspaceCoordinate "Worker two"))) \secondSnapshot _ secondReference -> do
     execute (Fixture.executorForAdapter (transferredWorkspaceGitAdapterWithBackend backend) runtime) secondSnapshot secondReference
     secondArtifact <- artifact env secondReference
     (target, admission) <- sibling env first profile "integrator"
@@ -366,11 +368,11 @@ sibling env original profile runId = do
   catalog <- right (mkWorkspaceCatalog [RepositoryPolicy original.repository original.source [original.base] original.base original.policyRevision])
   repository <- right (resolveRepository catalog original.repository Nothing)
   let request = original.request & #runId .~ WorkflowId runId
-  (binding, state) <- right =<< run env (runTransaction (Store.reserveWorkspaceTx original.storageRoot request repository))
-  allocateWorkspace original.storageRoot binding state >>= (@?= Right ())
+  (binding, state) <- right =<< run env (runTransaction (Store.reserveWorkspaceTx (workspaceLocatorPath original.storageRoot) request repository))
+  allocateWorkspace (workspaceLocatorPath original.storageRoot) binding state >>= (@?= Right ())
   run env (runTransaction (Store.markWorkspaceReadyTx binding)) >>= (@?= Right ())
   admission <- right =<< loadWorkspaceAdmission binding (fixtureAssignment (runId <> "-assignment")) 65536
-  (retained, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest admission.instructions) profile.policy (IdentityRange 62002 62020)))
+  (retained, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest admission.instructions) profile.policy (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 62002) ((either (error . show) id . parseWorkspaceIdentity) 62020))))
   profileReady env binding retained
   pure (binding, admission & #filePolicy .~ Just transferableFilePolicy)
 

@@ -23,6 +23,7 @@ import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.Supervisor
 import Shikigami.Workspace.TransferStore qualified as Transfers
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 
 newtype TransferAbort = TransferAbort FenceOutcome deriving stock (Show)
 
@@ -88,8 +89,8 @@ workspaceTransferProvider runtime = WorkspaceProvider reconcile admit
 
 locked :: WorkspaceBinding -> IO a -> IO a
 locked binding action = do
-  let metadata = workspaceMetadata binding.storageRoot binding
-  forM_ [binding.storageRoot, metadata] \directory -> checkPrivateDirectory directory >>= either (const (abort FenceUnavailable)) pure
+  let metadata = workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding
+  forM_ [workspaceLocatorPath binding.storageRoot, metadata] \directory -> checkPrivateDirectory directory >>= either (const (abort FenceUnavailable)) pure
   result <- withWorkspaceLock metadata (Right <$> action)
   either (const (abort FenceUnresolved)) pure result
 

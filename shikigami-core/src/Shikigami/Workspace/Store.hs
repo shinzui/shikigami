@@ -30,6 +30,7 @@ import Shikigami.Workspace.Instructions (validWorkspacePath)
 import Shikigami.Workspace.Process (ProcessPhase (..), ProcessRecord (..), ProcessRouting (..), digestText, processUnit, validProcessCommand, validProcessReceipt, validProcessRouting)
 import Shikigami.Workspace.Provider (FileReceipt (..), FileRegistration (..), ReceiptState (..))
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import System.FilePath (isAbsolute, normalise, splitDirectories)
 
 reserveWorkspaceTx :: FilePath -> WorkspaceRequest -> ResolvedRepository -> Transaction (Either WorkspaceError (WorkspaceBinding, AllocationState))
@@ -55,8 +56,8 @@ reserveWorkspaceTx storageRoot request repository = do
     valid = validWorkspaceRequest storageRoot request
     key = workspaceOriginKey (maybe (toJSON request.runId.unWorkflowId) toJSON request.assignment)
     -- This is the provider address of the natural origin, not its entity ID.
-    resource = (workspaceRefForKey key).resource
-    bindingFor identifier = WorkspaceBinding identifier request (workspaceRefForKey key) (repositoryIdentity repository) (repositoryBase repository) (repositoryPolicyRevision repository) storageRoot (repositorySource repository)
+    resource = workspaceCoordinateText (workspaceRefForKey key).resource
+    bindingFor identifier = WorkspaceBinding identifier request (workspaceRefForKey key) (repositoryIdentity repository) (repositoryBase repository) (repositoryPolicyRevision repository) (workspaceLocator storageRoot) (repositorySource repository)
 
 validWorkspaceRequest :: FilePath -> WorkspaceRequest -> Bool
 validWorkspaceRequest storageRoot request =
@@ -75,7 +76,7 @@ workspaceOriginKey :: Aeson.Value -> Text
 workspaceOriginKey = versionedDigest "shikigami.workspace-assignment/1"
 
 workspaceRefForKey :: Text -> WorkspaceRef
-workspaceRefForKey key = WorkspaceRef "shikigami.workspace/1" (Text.drop 7 (versionedDigest "shikigami.workspace-resource/1" (toJSON key)))
+workspaceRefForKey key = WorkspaceRef (workspaceCoordinate "shikigami.workspace/1") (workspaceCoordinate (Text.drop 7 (versionedDigest "shikigami.workspace-resource/1" (toJSON key))))
 
 -- PostgreSQL 18 owns UUIDv7 allocation. Only the committed logical-origin
 -- winner escapes; concurrent/transaction retries return its retained identity.
@@ -84,14 +85,14 @@ allocateWorkspaceId = preparable "SELECT pg_catalog.uuidv7()" E.noParams (D.sing
 
 inspectWorkspaceTx :: WorkspaceRef -> Transaction (Either WorkspaceError (Maybe (WorkspaceBinding, AllocationState)))
 inspectWorkspaceTx ref
-  | ref.provider /= "shikigami.workspace/1" = pure (Right Nothing)
+  | ref.provider /= workspaceCoordinate "shikigami.workspace/1" = pure (Right Nothing)
   | otherwise = do
-      retained <- Tx.statement ref.resource selectBinding
+      retained <- Tx.statement (workspaceCoordinateText ref.resource) selectBinding
       checkedRead (traverse (>>= checkedBinding ref) retained)
 
 checkedBinding :: WorkspaceRef -> (WorkspaceBinding, AllocationState) -> Either Text (WorkspaceBinding, AllocationState)
 checkedBinding ref pair@(binding, _)
-  | binding.workspace == ref && workspaceRefForKey (workspaceOriginKey (maybe (toJSON binding.request.runId.unWorkflowId) toJSON binding.request.assignment)) == ref && validWorkspaceRequest binding.storageRoot binding.request = Right pair
+  | binding.workspace == ref && workspaceRefForKey (workspaceOriginKey (maybe (toJSON binding.request.runId.unWorkflowId) toJSON binding.request.assignment)) == ref && validWorkspaceRequest (workspaceLocatorPath binding.storageRoot) binding.request = Right pair
   | otherwise = Left "workspace address or request mismatch"
 
 -- | Keep the original bounded page while decoding attribution before filtering
@@ -103,15 +104,15 @@ inspectWorkspaceBindingsTx storageRoot cursor = Tx.statement cursor statement >>
     row = (,) <$> D.column (D.nonNullable D.text) <*> bindingRow
     collect prior (resource, parsed) = do
       page <- prior
-      (binding, _) <- parsed >>= checkedBinding (WorkspaceRef "shikigami.workspace/1" resource)
-      let next = if binding.storageRoot == storageRoot && length page < 20 then page <> [binding] else page
+      (binding, _) <- parsed >>= checkedBinding (WorkspaceRef (workspaceCoordinate "shikigami.workspace/1") (workspaceCoordinate resource))
+      let next = if workspaceLocatorPath binding.storageRoot == storageRoot && length page < 20 then page <> [binding] else page
       length next `seq` pure next
 
 -- | Only the allocator calls this after atomic publication of a complete copy.
 -- Comparing the full immutable binding also protects against stale callbacks.
 markWorkspaceReadyTx :: WorkspaceBinding -> Transaction (Either WorkspaceError ())
 markWorkspaceReadyTx binding = do
-  changed <- Tx.statement (binding.workspace.resource, binding) readyBinding
+  changed <- Tx.statement ((workspaceCoordinateText binding.workspace.resource), binding) readyBinding
   pure (if changed then Right () else Left WorkspaceBindingConflict)
 
 textParam :: E.Value Text
@@ -167,7 +168,7 @@ inspectEffectTx key = do
   where
     checked (resource, fingerprint, parsed) = do
       receipt <- parsed
-      forM_ receipt \value -> unless (operationIdText value.operationId == key && value.fingerprint == fingerprint && value.generation > initialRevision && validWorkspacePath value.path) (Left "inconsistent retained file receipt")
+      forM_ receipt \value -> unless (operationIdText value.operationId == key && (workspaceCoordinateText value.fingerprint) == fingerprint && value.generation > initialRevision && validWorkspacePath (workspaceCoordinateText value.path)) (Left "inconsistent retained file receipt")
       pure (resource, fingerprint, receipt)
 
 -- The concrete provider holds the independent workspace lock throughout these
@@ -175,7 +176,7 @@ inspectEffectTx key = do
 checkWorkspaceOwnerTx :: WorkspaceBinding -> AgentIdentity -> StateRevision "worker-owner" -> Transaction (Either WorkspaceError ())
 checkWorkspaceOwnerTx binding owner epoch = do
   retained <- inspectWorkspaceTx binding.workspace
-  control <- Tx.statement binding.workspace.resource lockControl >>= checkedRead . sequence
+  control <- Tx.statement (workspaceCoordinateText binding.workspace.resource) lockControl >>= checkedRead . sequence
   pure case (retained, control) of
     (Right (Just (actual, Ready)), Right (Just current)) | actual == binding && current.owner == owner && current.epoch == epoch && current.frozen == AdmissionOpen -> Right ()
     _ -> Left WorkspaceBindingConflict
@@ -188,30 +189,30 @@ checkWorkspaceOperationTx binding owner epoch (operationIdText -> operation) = d
   case current of
     Left err -> pure (Left err)
     Right () -> do
-      pending <- Tx.statement (binding.workspace.resource, operation) pendingOtherEffect
-      processes <- Tx.statement binding.workspace.resource pendingProcess
+      pending <- Tx.statement ((workspaceCoordinateText binding.workspace.resource), operation) pendingOtherEffect
+      processes <- Tx.statement (workspaceCoordinateText binding.workspace.resource) pendingProcess
       pure (if pending || processes then Left WorkspaceBindingConflict else Right ())
 
-reserveWorkspaceEffectTx :: WorkspaceBinding -> AgentIdentity -> StateRevision "worker-owner" -> OperationId -> Text -> Transaction (Either WorkspaceError (Maybe FileReceipt))
-reserveWorkspaceEffectTx binding owner epoch identifier@(operationIdText -> operation) fingerprint = do
+reserveWorkspaceEffectTx :: WorkspaceBinding -> AgentIdentity -> StateRevision "worker-owner" -> OperationId -> WorkspaceCoordinate "file-fingerprint" -> Transaction (Either WorkspaceError (Maybe FileReceipt))
+reserveWorkspaceEffectTx binding owner epoch identifier@(operationIdText -> operation) (workspaceCoordinateText -> fingerprint) = do
   checked <- checkWorkspaceOperationTx binding owner epoch identifier
   case checked of
     Left err -> pure (Left err)
     Right () -> do
       existing <- inspectEffectTx operation
       case existing of
-        Right (Just (resource, previous, receipt)) | resource == binding.workspace.resource && previous == fingerprint -> pure (Right receipt)
+        Right (Just (resource, previous, receipt)) | resource == (workspaceCoordinateText binding.workspace.resource) && previous == fingerprint -> pure (Right receipt)
         Right (Just _) -> pure (Left WorkspaceBindingConflict)
         Left err -> pure (Left err)
         Right Nothing -> do
-          pending <- Tx.statement binding.workspace.resource hasPendingEffect
+          pending <- Tx.statement (workspaceCoordinateText binding.workspace.resource) hasPendingEffect
           if pending
             then pure (Left WorkspaceBindingConflict)
             else do
-              Tx.statement (operation, binding.workspace.resource, fingerprint) insertEffect
+              Tx.statement (operation, (workspaceCoordinateText binding.workspace.resource), fingerprint) insertEffect
               actual <- inspectEffectTx operation
               pure case actual of
-                Right (Just (resource, previous, receipt)) | resource == binding.workspace.resource && previous == fingerprint -> Right receipt
+                Right (Just (resource, previous, receipt)) | resource == (workspaceCoordinateText binding.workspace.resource) && previous == fingerprint -> Right receipt
                 _ -> Left WorkspaceBindingConflict
 
 -- Factual receipt acceptance survives authority revocation. It cannot create a
@@ -225,7 +226,7 @@ recordWorkspaceReceiptTx binding receipt
       case retained of
         Left err -> pure (Left err)
         Right _ -> do
-          changed <- Tx.statement (operation, binding.workspace.resource, receipt.fingerprint, receipt) saveReceipt
+          changed <- Tx.statement (operation, (workspaceCoordinateText binding.workspace.resource), (workspaceCoordinateText receipt.fingerprint), receipt) saveReceipt
           pure (if changed then Right () else Left WorkspaceBindingConflict)
 
 -- Called in the reservation transaction before writing any private intent or
@@ -239,7 +240,7 @@ registerFileForOwnerTx binding owner epoch registration = do
   let receipt = registration.receipt
       key = operationIdText receipt.operationId
   existing <- inspectEffectTx key
-  if current == Right () && validProcessRouting registration.routing && registration.routing.identity == owner && registration.routing.executionId == registration.operation.executionId && registration.operation.operationId == receipt.operationId && receipt.bindingDigest == workspaceBindingDigest binding && receipt.generation > initialRevision && receipt.state == EditPrepared && maybe False (\(resource, fingerprint, _) -> resource == binding.workspace.resource && fingerprint == receipt.fingerprint) (either (const Nothing) id existing)
+  if current == Right () && validProcessRouting registration.routing && registration.routing.identity == owner && registration.routing.executionId == registration.operation.executionId && registration.operation.operationId == receipt.operationId && receipt.bindingDigest == workspaceBindingDigest binding && receipt.generation > initialRevision && receipt.state == EditPrepared && maybe False (\(resource, fingerprint, _) -> resource == (workspaceCoordinateText binding.workspace.resource) && fingerprint == (workspaceCoordinateText receipt.fingerprint)) (either (const Nothing) id existing)
     then do
       Tx.statement (key, registration) insertFileRegistration
       retained <- inspectRegisteredFileTx receipt.operationId
@@ -257,7 +258,7 @@ freezeWorkspaceTx binding owner epoch = do
   checked <- checkWorkspaceOwnerTx binding owner epoch
   case checked of
     Left err -> pure (Left err)
-    Right () -> Tx.statement binding.workspace.resource freezeControl >> pure (Right ())
+    Right () -> Tx.statement (workspaceCoordinateText binding.workspace.resource) freezeControl >> pure (Right ())
 
 -- | Admission is permanently closed by cleanup or transfer. This state does
 -- not suppress factual inspection/recovery of already accepted effects.
@@ -284,7 +285,7 @@ inspectWorkspaceControlTx binding = do
   actual <- inspectWorkspaceTx binding.workspace
   case actual of
     Left err -> pure (Left err)
-    Right (Just (retained, Ready)) | retained == binding -> Tx.statement binding.workspace.resource lockControl >>= checkedRead . sequence
+    Right (Just (retained, Ready)) | retained == binding -> Tx.statement (workspaceCoordinateText binding.workspace.resource) lockControl >>= checkedRead . sequence
     _ -> pure (Right Nothing)
 
 insertControl :: Statement (Text, AgentIdentity, Integer) ()
@@ -332,7 +333,7 @@ selectRegisteredFile = preparable "SELECT b.binding,r.registration,e.receipt,e.f
       registration <- registered
       receipt <- completed
       let original = registration.receipt
-      unless (kind == Just "file" && state == Just "ready" && fingerprint == Just original.fingerprint && original.bindingDigest == workspaceBindingDigest binding && operationIdText original.operationId == operation && original.state == EditPrepared && original.generation > initialRevision && validWorkspacePath original.path && validProcessRouting registration.routing && registration.routing.executionId == registration.operation.executionId && registration.operation.operationId == original.operationId && maybe True (\value -> (value & #state .~ EditPrepared) == original) receipt) (Left "inconsistent file registration")
+      unless (kind == Just "file" && state == Just "ready" && fingerprint == Just (workspaceCoordinateText original.fingerprint) && original.bindingDigest == workspaceBindingDigest binding && operationIdText original.operationId == operation && original.state == EditPrepared && original.generation > initialRevision && validWorkspacePath (workspaceCoordinateText original.path) && validProcessRouting registration.routing && registration.routing.executionId == registration.operation.executionId && registration.operation.operationId == original.operationId && maybe True (\value -> (value & #state .~ EditPrepared) == original) receipt) (Left "inconsistent file registration")
       pure (binding, registration, receipt)
 
 selectFilePage :: Statement Text [Either Text OperationId]
@@ -342,8 +343,8 @@ selectFilePage = preparable "SELECT operation_id FROM shikigami.workspace_file_r
 -- unreadable JSON as zero pending work or trusting a denormalized Boolean alone.
 workspaceEffectsSettledTx :: WorkspaceBinding -> Transaction (Either WorkspaceError Bool)
 workspaceEffectsSettledTx binding = do
-  effects <- Tx.statement binding.workspace.resource selectEffectSettlement
-  processes <- Tx.statement binding.workspace.resource selectProcessSettlement
+  effects <- Tx.statement (workspaceCoordinateText binding.workspace.resource) selectEffectSettlement
+  processes <- Tx.statement (workspaceCoordinateText binding.workspace.resource) selectProcessSettlement
   checkedRead ((&&) <$> effects <*> processes)
   where
     selectEffectSettlement = preparable "SELECT operation_id,fingerprint,kind,receipt,settled FROM shikigami.workspace_effects WHERE resource=$1" (E.param (E.nonNullable E.text)) (D.foldlRows effect (Right True) effectRow)
@@ -360,11 +361,11 @@ workspaceEffectsSettledTx binding = do
           case receipt of
             Nothing -> Right False
             Just value -> do
-              unless (operationIdText value.operationId == operation && value.fingerprint == fingerprint && value.bindingDigest == workspaceBindingDigest binding && value.generation > initialRevision && validWorkspacePath value.path) (Left "inconsistent file settlement")
+              unless (operationIdText value.operationId == operation && (workspaceCoordinateText value.fingerprint) == fingerprint && value.bindingDigest == workspaceBindingDigest binding && value.generation > initialRevision && validWorkspacePath (workspaceCoordinateText value.path)) (Left "inconsistent file settlement")
               pure (value.state `elem` [EditApplied, EditRefused])
         "git" -> do
           value <- (maybe (Left "missing Git settlement") decodeJSON raw :: Either Text Git.GitRecord)
-          unless (Git.validGitRecord value && operationIdText value.operation.operationId == operation && value.fingerprint == fingerprint && value.bindingDigest == workspaceBindingDigest binding) (Left "inconsistent Git settlement")
+          unless (Git.validGitRecord value && operationIdText value.operation.operationId == operation && (workspaceCoordinateText value.fingerprint) == fingerprint && value.bindingDigest == workspaceBindingDigest binding) (Left "inconsistent Git settlement")
           pure (value.phase `elem` [Git.GitApplied, Git.GitRefused])
         _ -> Left "unknown workspace effect kind"
       unless (terminal == settled) (Left "inconsistent effect settlement flag")
@@ -373,7 +374,7 @@ workspaceEffectsSettledTx binding = do
     process prior (operation, fingerprint, raw, settled) = do
       previous <- prior
       value <- (decodeJSON raw :: Either Text ProcessRecord)
-      unless (operationIdText value.operationId == operation && value.fingerprint == fingerprint && value.bindingDigest == workspaceBindingDigest binding && digestText value.instructionDigest && value.generation > initialRevision && validProcessCommand value.command && maybe True validProcessRouting value.routing && value.unit == processUnit value.operationId value.fingerprint) (Left "inconsistent process settlement")
+      unless (operationIdText value.operationId == operation && (workspaceCoordinateText value.fingerprint) == fingerprint && value.bindingDigest == workspaceBindingDigest binding && digestText (workspaceCoordinateText value.instructionDigest) && value.generation > initialRevision && validProcessCommand value.command && maybe True validProcessRouting value.routing && value.unit == processUnit value.operationId value.fingerprint) (Left "inconsistent process settlement")
       terminal <- case value.phase of
         ProcessSettled -> case value.receipt of
           Just receipt | validProcessReceipt value receipt -> Right True

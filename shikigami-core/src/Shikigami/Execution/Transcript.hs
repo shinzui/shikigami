@@ -50,6 +50,7 @@ import Shikigami.Prelude hiding (Options, (.=))
 import Shikigami.StateRevision
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), instructionPrompt)
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
+import Shikigami.Workspace.Value (workspaceCoordinate, workspaceCoordinateText)
 import Shikumi.Tool.Output qualified as Tool
 
 executionIdFor :: AssignmentKey -> ExecutionId
@@ -282,7 +283,7 @@ instance FromJSON ExecutionSnapshot where
       Aeson.Error _ -> fail "execution tool menu is unsupported"
     forM_ snapshot.workspace \admission -> do
       unless (admission.runId == snapshot.runId && admission.assignmentId == snapshot.selection.assignmentId && Just admission.rootId == snapshot.selection.rootId && admission.owner == snapshot.identity) (fail "workspace differs from its accepted execution")
-      unless (admission.workspace.provider == "shikigami.workspace/1" && not (Text.null admission.workspace.resource) && Text.length admission.workspace.resource <= 128 && Text.length admission.bindingDigest == 71 && "sha256:" `Text.isPrefixOf` admission.bindingDigest) (fail "unsupported workspace binding")
+      unless (admission.workspace.provider == workspaceCoordinate "shikigami.workspace/1" && not (Text.null (workspaceCoordinateText admission.workspace.resource)) && Text.length (workspaceCoordinateText admission.workspace.resource) <= 128 && Text.length (workspaceCoordinateText admission.bindingDigest) == 71 && "sha256:" `Text.isPrefixOf` workspaceCoordinateText admission.bindingDigest) (fail "unsupported workspace binding")
       unless (maybe False (instructionPrompt admission.instructions `Text.isSuffixOf`) snapshot.initialContext.systemPrompt) (fail "workspace instructions are absent from fixed context")
     pure snapshot
     where

@@ -8,13 +8,17 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
+import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Prelude ((&), (.~))
+import Shikigami.Repository (RepositoryId (..))
 import Shikigami.Workspace.Catalog (repositoryPolicyRevision, resolveRepository)
 import Shikigami.Workspace.Process
 import Shikigami.Workspace.ProcessPolicy
 import Shikigami.Workspace.Settings qualified as Settings
 import Shikigami.Workspace.Store qualified as Store
+import Shikigami.Workspace.Value
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -32,12 +36,12 @@ tests =
         Aeson.toJSON policy @?= legacyPolicy
         Aeson.encode policy @?= Aeson.encode legacyPolicy
         Aeson.eitherDecode @ProcessPolicy (Aeson.encode legacyPolicy) @?= Right policy
-        let profile = ProcessProfile digest digest policy 62000 62000
+        let profile = ProcessProfile (workspaceCoordinate (digest)) (workspaceCoordinate (digest)) policy ((either (error . show) id . parseWorkspaceIdentity) (62000)) ((either (error . show) id . parseWorkspaceIdentity) (62000))
             legacyProfile = Aeson.object ["bindingDigest" .= digest, "instructionDigest" .= digest, "policy" .= legacyPolicy, "userId" .= (62000 :: Int), "groupId" .= (62000 :: Int)]
         assertBool "complete valid profile" (validProcessProfile profile)
         Aeson.encode profile @?= Aeson.encode legacyProfile
         Aeson.eitherDecode @ProcessProfile (Aeson.encode legacyProfile) @?= Right profile
-        processPolicyIdentity policy @?= "policy2-" <> Text.drop 7 (versionedDigest "shikigami.workspace-supervised-policy/1" (Aeson.toJSON ((1 :: Int), policy.image, policy.propertiesDigest, [rule], ["" :: Text.Text], ["src" :: Text.Text])))
+        workspaceCoordinateText (processPolicyIdentity policy) @?= "policy2-" <> (Text.drop 7 (versionedDigest "shikigami.workspace-supervised-policy/1" (Aeson.toJSON ((1 :: Int), policy.image, policy.propertiesDigest, [rule], ["" :: Text.Text], ["src" :: Text.Text]))))
         case legacyPolicy of
           Aeson.Object fields ->
             mapM_
@@ -54,23 +58,28 @@ tests =
         assertBool "fixture policy valid" (validProcessPolicy policy)
         mapM_
           (\changed -> assertBool "changed reviewed policy has another identity" (processPolicyIdentity changed /= processPolicyIdentity policy))
-          [policy & #image . #rootIdentity .~ other, policy & #image . #deadlineExecutable .~ "/bin/other", policy & #propertiesDigest .~ other, policy & #rules .~ [rule & #arguments .~ ["other"]], policy & #writePaths .~ ["lib"], policy & #readPaths .~ ["src"]],
+          [policy & #image . #rootIdentity .~ workspaceCoordinate other, policy & #image . #deadlineExecutable .~ (workspaceLocator ("/bin/other")), policy & #propertiesDigest .~ workspaceCoordinate other, policy & #rules .~ [rule & #arguments .~ [(workspaceCoordinate ("other"))]], policy & #writePaths .~ [(workspaceCoordinate ("lib"))], policy & #readPaths .~ [(workspaceCoordinate ("src"))]],
       testCase "irrelevant order converges without changing the retained policy" $ do
-        let otherRule = rule & #rule .~ "other"
-            one = policy & #rules .~ [rule, otherRule] & #writePaths .~ ["src", "lib"]
-            two = one & #rules .~ [otherRule, rule] & #writePaths .~ ["lib", "src"]
+        let otherRule = rule & #rule .~ (workspaceCoordinate ("other"))
+            one = policy & #rules .~ [rule, otherRule] & #writePaths .~ [(workspaceCoordinate ("src")), (workspaceCoordinate ("lib"))]
+            two = one & #rules .~ [otherRule, rule] & #writePaths .~ [(workspaceCoordinate ("lib")), (workspaceCoordinate ("src"))]
         processPolicyIdentity one @?= processPolicyIdentity two,
       testCase "only a selected reviewed rule acquires the exact derived Unix profile" $ do
-        processPolicyCommand policy digest "validate" @?= Just (ProcessCommand "validate" digest "/bin/validate" ["$HOME", "%n"] "" (Map.singleton "HOME" "/scratch") 30 1024)
-        processPolicyCommand policy digest "shell" @?= Nothing
-        processPolicyCommand policy "unqualified" "validate" @?= Nothing,
+        processPolicyCommand policy (workspaceCoordinate (digest)) (workspaceCoordinate ("validate")) @?= Just (ProcessCommand (workspaceCoordinate ("validate")) (workspaceCoordinate (digest)) (workspaceCoordinate ("/bin/validate")) [(workspaceCoordinate ("$HOME")), (workspaceCoordinate ("%n"))] (workspaceCoordinate ("")) (Map.singleton (workspaceCoordinate ("HOME")) (workspaceCoordinate ("/scratch"))) ((either (error . show) id . parseProcessSeconds) (30)) ((either (error . show) id . parseProcessOutputBytes) (1024)))
+        processPolicyCommand policy (workspaceCoordinate (digest)) (workspaceCoordinate ("shell")) @?= Nothing
+        processPolicyCommand policy (workspaceCoordinate ("unqualified")) (workspaceCoordinate ("validate")) @?= Nothing,
       testCase "invalid, duplicate and over-budget operator policies refuse" $
         mapM_
           (\invalid -> assertBool "invalid policy" (not (validProcessPolicy invalid)))
-          [policy & #rules .~ [], policy & #rules .~ [rule, rule], policy & #rules .~ [rule & #executable .~ "/bin/../sh"], policy & #rules .~ [rule & #timeoutSeconds .~ 0], policy & #rules .~ [rule & #environment .~ Map.singleton "LD_PRELOAD" "/workspace/lib.so"], policy & #rules .~ [rule & #arguments .~ [Text.replicate 262144 "x"]], policy & #image . #rootDirectory .~ "/unsafe/%n", policy & #image . #deadlineExecutable .~ "/workspace/guard", policy & #image . #environmentExecutable .~ "/scratch/env", policy & #writePaths .~ ["../outside"]],
+          [policy & #rules .~ [], policy & #rules .~ [rule, rule], policy & #rules .~ [rule & #executable .~ (workspaceCoordinate ("/bin/../sh"))], policy & #rules .~ [rule & #environment .~ Map.singleton (workspaceCoordinate ("LD_PRELOAD")) (workspaceCoordinate ("/workspace/lib.so"))], policy & #rules .~ [rule & #arguments .~ [workspaceCoordinate (Text.replicate 262144 "x")]], policy & #image . #rootDirectory .~ (workspaceLocator ("/unsafe/%n")), policy & #image . #deadlineExecutable .~ (workspaceLocator ("/workspace/guard")), policy & #image . #environmentExecutable .~ (workspaceLocator ("/scratch/env")), policy & #writePaths .~ [(workspaceCoordinate "../outside")]],
       testCase "identity pools are bounded and stored decoders reject caller extensions" $ do
-        mapM_ (\range -> assertBool "invalid pool" (not (validIdentityRange range))) [IdentityRange 0 10, IdentityRange 1000 999, IdentityRange 1000 66536]
-        assertBool "reserved pool valid" (validIdentityRange (IdentityRange 62000 62999))
+        mapM_ (assertDecodeRefused @WorkspaceIdentity . Aeson.toJSON) [0, 999, 2147483648 :: Integer]
+        mapM_ (assertDecodeRefused @ProcessSeconds . Aeson.toJSON) [0, 3601 :: Integer]
+        assertDecodeRefused @RpcPeerUserId (Aeson.Number (-1))
+        assertDecodeRefused @RpcRequestSeconds (Aeson.Number 0)
+        assertDecodeRefused @RpcWaitSeconds (Aeson.Number 3601)
+        mapM_ (\range -> assertBool "invalid pool" (not (validIdentityRange range))) [IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 1001) ((either (error . show) id . parseWorkspaceIdentity) 1000), IdentityRange ((either (error . show) id . parseWorkspaceIdentity) (1000)) ((either (error . show) id . parseWorkspaceIdentity) (66536))]
+        assertBool "reserved pool valid" (validIdentityRange (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) (62000)) ((either (error . show) id . parseWorkspaceIdentity) 62999)))
         case Aeson.toJSON policy of
           Aeson.Object fields -> case Aeson.fromJSON @ProcessPolicy (Aeson.Object (KeyMap.insert "hostPath" (Aeson.String "/host") fields)) of
             Aeson.Error _ -> pure ()
@@ -78,21 +87,21 @@ tests =
           _ -> assertFailure "policy must be an object",
       testCase "configured process hosts bind complete policies and refuse inconsistent or unbounded configuration" $ do
         let base = Text.replicate 40 "a"
-            repository = Settings.WorkspaceRepository "mori://fixture/repo" "/operator/repo" [Settings.WorkspaceRevision base digest] base "reviewed" [""] ["src"]
-            process = Settings.WorkspaceProcessSettings "/run/workspace/supervisor.sock" 0 5 60 (IdentityRange 64000 64031) (Map.singleton repository.identity policy)
-            settings = Settings.WorkspaceSettings "/private/workspaces" [repository] [Settings.WorkspaceGrant "worker" "agent_fixture" repository.identity Nothing] (Just process)
+            repository = Settings.WorkspaceRepository (RepositoryId ("mori://fixture/repo")) (workspaceLocator ("/operator/repo")) [Settings.WorkspaceRevision (workspaceCoordinate (base)) (workspaceCoordinate (digest))] (workspaceCoordinate (base)) (workspaceCoordinate ("reviewed")) [(workspaceCoordinate (""))] [(workspaceCoordinate ("src"))]
+            process = Settings.WorkspaceProcessSettings (workspaceLocator ("/run/workspace/supervisor.sock")) ((either (error . show) id . parseRpcPeerUserId) (0)) ((either (error . show) id . parseRpcRequestSeconds) (5)) ((either (error . show) id . parseRpcWaitSeconds) (60)) (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) (64000)) ((either (error . show) id . parseWorkspaceIdentity) (64031))) (Map.singleton repository.identity policy)
+            settings = Settings.WorkspaceSettings (workspaceLocator ("/private/workspaces")) [repository] [Settings.WorkspaceGrant ((either (error . show) id . mkAgentName) ("worker")) (declarationCoordinate ("agent_fixture")) repository.identity Nothing] (Just process)
             invalid changed = case Settings.validateWorkspaceSettings (settings & #process .~ Just changed) of Left _ -> pure (); Right _ -> assertFailure "invalid process configuration admitted"
         case Settings.validateWorkspaceSettings settings >>= (either (const (Left "resolution refused")) Right . (\catalog -> resolveRepository catalog repository.identity Nothing)) of
           Right selected -> repositoryPolicyRevision selected @?= processPolicyIdentity policy
           Left err -> assertFailure (Text.unpack err)
-        mapM_ invalid [process & #socketPath .~ "relative", process & #serverUser .~ (-1), process & #requestSeconds .~ 0, process & #waitSeconds .~ 3601, process & #identities .~ IdentityRange 0 10, process & #policies .~ Map.empty, process & #policies .~ Map.singleton "mori://fixture/other" policy, process & #policies .~ Map.singleton repository.identity (policy & #writePaths .~ [""])]
-        let changed = settings & #process .~ Just (process & #policies .~ Map.singleton repository.identity (policy & #rules .~ [rule & #arguments .~ ["new"]]))
+        mapM_ invalid [process & #socketPath .~ (workspaceLocator ("relative")), process & #policies .~ Map.empty, process & #policies .~ Map.singleton (RepositoryId ("mori://fixture/other")) policy, process & #policies .~ Map.singleton repository.identity (policy & #writePaths .~ [(workspaceCoordinate "")])]
+        let changed = settings & #process .~ Just (process & #policies .~ Map.singleton repository.identity (policy & #rules .~ [rule & #arguments .~ [(workspaceCoordinate ("new"))]]))
         assertBool "same human label cannot change retained command policy" (Settings.configuredPolicyIdentity changed repository /= Settings.configuredPolicyIdentity settings repository),
       testCase "file restrictions use exact path segments and independent read and write scopes" $ do
-        mapM_ (\path -> assertBool "approved write scope" (processFileAllowed policy "replace" path)) ["src", "src/file", "src/nested/file"]
-        mapM_ (\path -> assertBool "outside write scope" (not (processFileAllowed policy "replace" path))) ["src-other/file", "lib/file", "../src/file", "src/../lib"]
-        assertBool "read policy independent" (processFileAllowed policy "read" "lib/file")
-        assertBool "unknown operation refuses" (not (processFileAllowed policy "chmod" "src/file"))
+        mapM_ (\path -> assertBool "approved write scope" (processFileAllowed policy "replace" path)) [(workspaceCoordinate ("src")), (workspaceCoordinate ("src/file")), (workspaceCoordinate ("src/nested/file"))]
+        mapM_ (\path -> assertBool "outside write scope" (not (processFileAllowed policy "replace" path))) (map workspaceCoordinate ["src-other/file", "lib/file", "../src/file", "src/../lib"])
+        assertBool "read policy independent" (processFileAllowed policy "read" (workspaceCoordinate "lib/file"))
+        assertBool "unknown operation refuses" (not (processFileAllowed policy "chmod" (workspaceCoordinate "src/file")))
     ]
 
 assertDecodeRefused :: forall a. (Aeson.FromJSON a) => Aeson.Value -> IO ()
@@ -104,10 +113,10 @@ legacyPolicy :: Aeson.Value
 legacyPolicy = Aeson.object ["format" .= (1 :: Int), "image" .= policy.image, "propertiesDigest" .= digest, "rules" .= [rule], "readPaths" .= ["" :: Text.Text], "writePaths" .= ["src" :: Text.Text]]
 
 policy :: ProcessPolicy
-policy = ProcessPolicy ProcessPolicyV1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") digest [rule] [""] ["src"]
+policy = ProcessPolicy ProcessPolicyV1 (ProcessImage (workspaceLocator ("/qualified/root")) (workspaceCoordinate (digest)) (workspaceLocator ("/bin/env")) (workspaceLocator ("/bin/deadline")) (workspaceLocator ("/qualified/collector"))) (workspaceCoordinate (digest)) [rule] [(workspaceCoordinate "")] [(workspaceCoordinate "src")]
 
 rule :: CommandRule
-rule = CommandRule "validate" "/bin/validate" ["$HOME", "%n"] "" (Map.singleton "HOME" "/scratch") 30 1024
+rule = CommandRule (workspaceCoordinate "validate") (workspaceCoordinate ("/bin/validate")) [(workspaceCoordinate "$HOME"), (workspaceCoordinate "%n")] (workspaceCoordinate "") (Map.singleton (workspaceCoordinate ("HOME")) (workspaceCoordinate ("/scratch"))) ((either (error . show) id . parseProcessSeconds) (30)) ((either (error . show) id . parseProcessOutputBytes) (1024))
 
 digest, other :: Text.Text
 digest = "sha256:" <> Text.replicate 64 "a"

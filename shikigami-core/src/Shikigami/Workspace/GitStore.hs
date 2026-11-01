@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ViewPatterns #-}
 
 -- | Commit intent and the single conditional publication transition. Factual
@@ -38,6 +39,7 @@ import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.TransferStore qualified as Transfers
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 
 reserveGitTx :: WorkspaceBinding -> GitRecord -> Transaction (Either WorkspaceError GitRecord)
 reserveGitTx binding = reserveGitFor binding.request.owner (Store.checkWorkspaceOperationTx binding binding.request.owner binding.request.epoch) binding
@@ -64,7 +66,7 @@ reserveGitFor owner checkOperation binding proposed
                 Left err -> pure (Left err)
                 Right (Just _) -> pure (Left WorkspaceBindingConflict)
                 Right Nothing -> do
-                  Tx.statement (key, binding.workspace.resource, proposed.fingerprint, proposed) insertGit
+                  Tx.statement (key, workspaceCoordinateText binding.workspace.resource, workspaceCoordinateText proposed.fingerprint, proposed) insertGit
                   retained <- inspectGitTx proposed.operation.operationId
                   pure (retained >>= maybe (Left WorkspaceBindingConflict) (\actual -> if sameReservation actual proposed then Right actual else Left WorkspaceBindingConflict))
   where

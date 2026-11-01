@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Exact accepted Git tools. Model arguments never select a host path, Git
 -- executable, environment, branch or helper. Commit recovery only observes the
 -- retained original result after publication admission has been consumed.
@@ -71,12 +73,13 @@ import Shikigami.Workspace.Store qualified as Workspaces
 import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.TransferStore qualified as Transfers
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import Shikumi.Tool (ToolError (..), mkDynTool, renderToolError)
 import Shikumi.Tool.Output (ToolOutput, textToolOutput)
 
 data GitBackend = GitBackend
-  { host :: !(IO (Either Systemd.SystemdError Text)),
-    capture :: !(WorkspaceBinding -> ProcessProfile -> Text -> (Text -> IO (Either WorkspaceError ())) -> IO (Either WorkspaceError CapturedTree)),
+  { host :: !(IO (Either Systemd.SystemdError (WorkspaceCoordinate "boot-id"))),
+    capture :: !(WorkspaceBinding -> ProcessProfile -> WorkspaceCoordinate "file-target" -> (WorkspaceCoordinate "relative-path" -> IO (Either WorkspaceError ())) -> IO (Either WorkspaceError CapturedTree)),
     afterPublication :: !(IO ())
   }
   deriving stock (Generic)
@@ -171,17 +174,17 @@ runGitToolFor transferable backend runtime snapshot dispatch name input = protec
   requested <- if name == "commit" then Just <$> parseCommit input else emptyInput input >> pure Nothing
   accepted <- loadAccepted transferable runtime snapshot dispatch name input
   _ <- backend.host >>= either (const (abort FileEffectRefused)) pure
-  let binding = accepted.binding; metadata = workspaceMetadata binding.storageRoot binding
-  needFile =<< checkPrivateDirectory binding.storageRoot
+  let binding = accepted.binding; metadata = workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding
+  needFile =<< checkPrivateDirectory (workspaceLocatorPath binding.storageRoot)
   needFile =<< checkPrivateDirectory metadata
   locked <-
     withWorkspaceLock metadata $
       Right <$> do
         current runtime accepted
         profile <- retainedFileProfile runtime.appEnv binding accepted.admission >>= either (const (abort FileEffectRefused)) pure
-        anchored <- withContainedFile (workspaceFiles binding.storageRoot binding) ".shikigami-git-target" \target ->
+        anchored <- withContainedFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding) ".shikigami-git-target" \target ->
           Right <$> do
-            identity <- containedTargetIdentity target >>= either (const (abort FileEffectRefused)) pure
+            identity <- containedTargetIdentity target >>= either (const (abort FileEffectRefused)) (pure . workspaceCoordinate)
             case requested of
               Just request -> commit backend runtime accepted profile identity request
               Nothing -> observe backend runtime accepted profile identity name
@@ -191,7 +194,7 @@ runGitToolFor transferable backend runtime snapshot dispatch name input = protec
 parseCommit :: Aeson.Value -> IO GitCommitRequest
 parseCommit value = do
   request <- either (const (abort FileEffectRefused)) pure (parseEither Aeson.parseJSON value)
-  unless (validGitObject request.expectedParent && not (Text.null (Text.strip request.message)) && Bytes.length (Encoding.encodeUtf8 request.message) <= 4096 && not (Text.any (== '\0') request.message)) (abort FileEffectRefused)
+  unless (validGitObject (workspaceCoordinateText request.expectedParent) && not (Text.null (Text.strip (workspaceCoordinateText request.message))) && Bytes.length (Encoding.encodeUtf8 (workspaceCoordinateText request.message)) <= 4096 && not (Text.any (== '\0') (workspaceCoordinateText request.message))) (abort FileEffectRefused)
   pure request
 
 emptyInput :: Aeson.Value -> IO ()
@@ -227,13 +230,13 @@ current runtime accepted = do
   execute runtime.appEnv (Execution.checkStartedExecutionAttempt accepted.access claim)
   transact runtime.appEnv (if accepted.admission.filePolicy == Just transferableFilePolicy then Transfers.checkWorkspaceAdmissionTx accepted.binding accepted.admission dispatch.operation.operationId else Workspaces.checkWorkspaceOperationTx accepted.binding accepted.admission.owner accepted.admission.epoch dispatch.operation.operationId) >>= either (const (abort FileEffectRefused)) pure
 
-admitPath :: FileRuntime -> AcceptedGit -> ProcessProfile -> Text -> Text -> IO ()
+admitPath :: FileRuntime -> AcceptedGit -> ProcessProfile -> Text -> WorkspaceCoordinate "relative-path" -> IO ()
 admitPath runtime accepted profile kind path = do
   unless (processFileAllowed profile.policy kind path) (abort FileEffectRefused)
   instructions <- either (const (abort FileEffectRefused)) pure (instructionsForPath accepted.admission.instructions path)
-  runtime.admitTarget accepted.binding accepted.admission instructions kind path >>= either (const (abort FileEffectRefused)) pure
+  runtime.admitTarget accepted.binding accepted.admission instructions (workspaceCoordinate kind) path >>= either (const (abort FileEffectRefused)) pure
 
-capture :: GitBackend -> FileRuntime -> AcceptedGit -> ProcessProfile -> Text -> IO CapturedTree
+capture :: GitBackend -> FileRuntime -> AcceptedGit -> ProcessProfile -> WorkspaceCoordinate "file-target" -> IO CapturedTree
 capture backend runtime accepted profile target = do
   let allowed path = (protect (admitPath runtime accepted profile "read" path)) <&> either (const (Left WorkspaceAllocationRefused)) Right
   backend.capture accepted.binding profile target allowed >>= either (const (abort FileEffectRefused)) pure
@@ -244,7 +247,7 @@ grant runtime accepted action = do
   selected <- either abort pure action
   runtime.authorizer.authorize principal selected >>= either (const (abort FileEffectRefused)) (const (current runtime accepted))
 
-observe :: GitBackend -> FileRuntime -> AcceptedGit -> ProcessProfile -> Text -> Text -> IO Aeson.Value
+observe :: GitBackend -> FileRuntime -> AcceptedGit -> ProcessProfile -> WorkspaceCoordinate "file-target" -> Text -> IO Aeson.Value
 observe backend runtime accepted profile target name = do
   grant runtime accepted ((if accepted.admission.filePolicy == Just transferableFilePolicy then workspaceTransferredGitObservationAction else workspaceGitObservationAction) accepted.binding accepted.admission accepted.dispatch profile name accepted.routing.inputDigest target)
   headId <- Objects.readHead metadata >>= either (const (abort FileEffectRefused)) pure
@@ -262,14 +265,14 @@ observe backend runtime accepted profile target name = do
         pure (Aeson.object (common <> ["patch" .= patch]))
   bounded value
   where
-    metadata = workspaceMetadata accepted.binding.storageRoot accepted.binding
+    metadata = workspaceMetadata (workspaceLocatorPath accepted.binding.storageRoot) accepted.binding
 
-commit :: GitBackend -> FileRuntime -> AcceptedGit -> ProcessProfile -> Text -> GitCommitRequest -> IO Aeson.Value
+commit :: GitBackend -> FileRuntime -> AcceptedGit -> ProcessProfile -> WorkspaceCoordinate "file-target" -> GitCommitRequest -> IO Aeson.Value
 commit backend runtime accepted profile target request = do
   now <- getCurrentTime
   let binding = accepted.binding
       dispatch = accepted.dispatch
-      raw = GitRecord GitRecordV1 dispatch.operation dispatch.attemptId dispatch.owner dispatch.generation (workspaceBindingDigest binding) (bundleDigest accepted.admission.instructions) (gitProfileDigest profile) target request.expectedParent "" now accepted.routing GitReserved Nothing
+      raw = GitRecord GitRecordV1 dispatch.operation dispatch.attemptId dispatch.owner dispatch.generation (workspaceBindingDigest binding) (bundleDigest accepted.admission.instructions) (gitProfileDigest profile) target request.expectedParent (workspaceCoordinate "") now accepted.routing GitReserved Nothing
       proposed = raw & #fingerprint .~ gitFingerprint binding raw
   existing <- readGit runtime.appEnv dispatch.operation.operationId
   case existing of
@@ -289,7 +292,7 @@ commit backend runtime accepted profile target request = do
         unless (not (null paths)) (abort FileEffectRefused)
         mapM_ (admitPath runtime accepted profile "replace") paths
         current runtime accepted
-        object <- Objects.storeCommit metadata headId captured.tree (Objects.GitAuthor "Shikigami Agent" "shikigami@example.invalid") original.createdAt original.operation.operationId request.message >>= either (const (abort FileEffectUnresolved)) pure
+        object <- Objects.storeCommit metadata headId captured.tree (Objects.GitAuthor (workspaceCoordinate "Shikigami Agent") (workspaceCoordinate "shikigami@example.invalid")) original.createdAt original.operation.operationId request.message >>= either (const (abort FileEffectUnresolved)) pure
         let candidate = GitCandidate headId captured.tree object paths
         unless (validGitCandidate candidate) (abort FileEffectTooLarge)
         prepared <- transact runtime.appEnv ((if accepted.admission.filePolicy == Just transferableFilePolicy then Git.prepareAdmittedGitTx binding accepted.admission else Git.prepareGitTx binding) original candidate) >>= either (const (abort FileEffectUnresolved)) pure
@@ -313,7 +316,7 @@ commit backend runtime accepted profile target request = do
               abort err
             else abort FileEffectUnresolved
   where
-    metadata = workspaceMetadata accepted.binding.storageRoot accepted.binding
+    metadata = workspaceMetadata (workspaceLocatorPath accepted.binding.storageRoot) accepted.binding
 
 samePlanInput :: GitRecord -> GitRecord -> Bool
 samePlanInput a b = a.operation == b.operation && a.fingerprint == b.fingerprint && a.bindingDigest == b.bindingDigest && a.instructionDigest == b.instructionDigest && a.profileDigest == b.profileDigest && a.target == b.target && a.expectedParent == b.expectedParent && a.routing == b.routing
@@ -336,8 +339,8 @@ reconcileGitEffect env operation = protect do
   if record.phase `elem` [GitApplied, GitRefused]
     then validateRecord binding record >> pure record
     else do
-      let metadata = workspaceMetadata binding.storageRoot binding
-      needFile =<< checkPrivateDirectory binding.storageRoot
+      let metadata = workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding
+      needFile =<< checkPrivateDirectory (workspaceLocatorPath binding.storageRoot)
       needFile =<< checkPrivateDirectory metadata
       locked <- withWorkspaceLock metadata (Right <$> reconcileLocked env binding record)
       either (const (abort FileEffectUnresolved)) pure locked
@@ -364,7 +367,7 @@ reconcileLocked env binding original = do
               transact env (Git.recordGitAppliedTx record) >>= either (const (abort FileEffectUnresolved)) pure
             else transact env (Git.markGitUnresolvedTx record) >>= either (const (abort FileEffectUnresolved)) pure
   where
-    metadata = workspaceMetadata binding.storageRoot binding
+    metadata = workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding
     refuse record saved = do
       when (maybe False ((== GitApplied) . (.phase)) saved) (abort FileEffectUnresolved)
       transact env (Git.refuseGitBeforePublicationTx record) >>= either (const (abort FileEffectUnresolved)) pure
@@ -499,8 +502,8 @@ integration backend runtime snapshot dispatch name input = do
     (source, record) <- readRegisteredGit runtime.appEnv artifact.operationId >>= maybe (abort FileEffectRefused) pure
     unless (workspaceBindingDigest source == artifact.bindingDigest && source.base == artifact.base && maybe False ((== artifact.revision) . (.result)) record.candidate) (abort FileEffectRefused)
     pure (source, record)
-  let binding = accepted.binding; metadata = workspaceMetadata binding.storageRoot binding
-  needFile =<< checkPrivateDirectory binding.storageRoot
+  let binding = accepted.binding; metadata = workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding
+  needFile =<< checkPrivateDirectory (workspaceLocatorPath binding.storageRoot)
   needFile =<< checkPrivateDirectory metadata
   locked <-
     withWorkspaceLock
@@ -510,11 +513,11 @@ integration backend runtime snapshot dispatch name input = do
           profile <- retainedFileProfile runtime.appEnv binding accepted.admission >>= either (const (abort FileEffectRefused)) pure
           anchored <-
             withContainedFile
-              (workspaceFiles binding.storageRoot binding)
+              (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding)
               ".shikigami-git-target"
               ( \anchor ->
                   Right <$> do
-                    target <- containedTargetIdentity anchor >>= either (const (abort FileEffectRefused)) pure
+                    target <- containedTargetIdentity anchor >>= either (const (abort FileEffectRefused)) (pure . workspaceCoordinate)
                     grant runtime accepted (workspaceIntegrationAction binding accepted.admission dispatch profile accepted.routing.inputDigest target sources)
                     headId <- Objects.readHead metadata >>= either (const (abort FileEffectRefused)) pure
                     unless (headId == request.expectedParent) (abort FileEffectConflict)

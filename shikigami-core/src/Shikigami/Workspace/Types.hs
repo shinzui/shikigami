@@ -27,10 +27,12 @@ import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Prelude hiding ((.=))
+import Shikigami.Repository (RepositoryId (..))
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Transfer (WorkspaceRef)
 import Shikigami.WorkerSession.Types (AssignmentId, WorkerSessionId)
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), bundleBase, bundleRepository, transferableFilePolicy)
+import Shikigami.Workspace.Value
 
 -- | The allocated workspace outlives its initial run/assignment and can retain
 -- its physical locator through handoff. Its entity identity is separate.
@@ -89,11 +91,11 @@ data WorkspaceBinding = WorkspaceBinding
   { id :: !WorkspaceId,
     request :: !WorkspaceRequest,
     workspace :: !WorkspaceRef,
-    repository :: !Text,
-    base :: !Text,
-    policyRevision :: !Text,
-    storageRoot :: !FilePath,
-    source :: !FilePath
+    repository :: !(RepositoryId),
+    base :: !(WorkspaceCoordinate "git-object"),
+    policyRevision :: !(WorkspaceCoordinate "policy-identity"),
+    storageRoot :: !(WorkspaceLocator "storage-root"),
+    source :: !(WorkspaceLocator "repository-source")
   }
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -109,8 +111,8 @@ data WorkspaceError = InvalidWorkspaceRequest | WorkspaceBindingConflict | Works
   deriving anyclass (ToJSON, FromJSON)
 
 -- | Protected snapshot correlation, distinct from an allocation completion marker.
-workspaceBindingDigest :: WorkspaceBinding -> Text
-workspaceBindingDigest = versionedDigest "shikigami.workspace-binding/1" . toJSON
+workspaceBindingDigest :: WorkspaceBinding -> WorkspaceCoordinate "binding-digest"
+workspaceBindingDigest = workspaceCoordinate . versionedDigest "shikigami.workspace-binding/1" . toJSON
 
 -- Pure shape only. Successor authority additionally requires its exact retained
 -- admission and current session/owner checks in TransferStore at the IO boundary.

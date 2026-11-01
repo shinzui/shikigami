@@ -44,6 +44,7 @@ import Shikigami.Workspace.Process
 import Shikigami.Workspace.ProcessStore
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import Shikigami.WorkspaceStoreSpec qualified as Fixture
 import System.Directory (createDirectory, removeFile)
 import System.FilePath ((</>))
@@ -100,7 +101,7 @@ tests fixture =
         (one, two) <- concurrently (run env (reserveProcessTx binding proposed)) (run env (reserveProcessTx binding proposed))
         one @?= Right proposed
         two @?= Right proposed
-        let changed = proposed & #command . #arguments .~ ["different"]
+        let changed = proposed & #command . #arguments .~ [(workspaceCoordinate "different")]
         run env (reserveProcessTx binding changed) >>= (@?= Left WorkspaceBindingConflict)
         let otherId = fixtureOperationId "other-operation"
             other = proposed & #operationId .~ otherId & #unit .~ processUnit otherId proposed.fingerprint
@@ -137,7 +138,7 @@ tests fixture =
         run env (observeProcessInvocationTx proposed otherBoot invocation) >>= (@?= Left WorkspaceBindingConflict)
         run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "later")) >>= (@?= Left WorkspaceBindingConflict)
         run env (observeProcessInvocationTx proposed boot invocation) >>= (@?= Right ())
-        run env (observeProcessInvocationTx proposed boot otherBoot) >>= (@?= Left WorkspaceBindingConflict)
+        run env (observeProcessInvocationTx proposed boot (workspaceCoordinate (workspaceCoordinateText otherBoot))) >>= (@?= Left WorkspaceBindingConflict)
         run env (recordProcessReceiptTx (receiptFor proposed)) >>= (@?= Right ())
         run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "later")) >>= (@?= Right ()),
       testCase "factual receipts settle after freeze but cannot replace invocation, output or descendant evidence" $ withProcess fixture \env binding proposed -> do
@@ -149,16 +150,16 @@ tests fixture =
         mapM_
           (\invalid -> run env (recordProcessReceiptTx invalid) >>= (@?= Left WorkspaceBindingConflict))
           [ receipt & #bootId .~ otherBoot,
-            receipt & #invocationId .~ otherBoot,
+            receipt & #invocationId .~ workspaceCoordinate (workspaceCoordinateText otherBoot),
             receipt & #generation .~ (fixtureGeneration 2),
-            receipt & #descendantsEmpty .~ False,
-            receipt & #outputComplete .~ False,
+            receipt & #descendantsEmpty .~ DescendantsRemain,
+            receipt & #outputComplete .~ OutputIncomplete,
             receipt & #exitCode .~ Nothing,
-            receipt & #stdout . #bytes .~ 100000
+            receipt & #stdout . #bytes .~ ((either (error . show) id . parseCapturedBytes) 100000)
           ]
         run env (recordProcessReceiptTx receipt) >>= (@?= Right ())
         run env (recordProcessReceiptTx receipt) >>= (@?= Right ())
-        run env (recordProcessReceiptTx (receipt & #exitCode .~ Just 1)) >>= (@?= Left WorkspaceBindingConflict)
+        run env (recordProcessReceiptTx (receipt & #exitCode .~ Just ((either (error . show) id . parseProcessExitStatus) 1))) >>= (@?= Left WorkspaceBindingConflict)
         run env (Store.checkWorkspaceOwnerTx binding binding.request.owner (fixtureRevision 0)) >>= (@?= Left WorkspaceBindingConflict)
         Just retained <- right =<< run env (inspectProcessTx proposed.operationId)
         retained.phase @?= ProcessSettled,
@@ -170,8 +171,8 @@ tests fixture =
         Just receipt <- right =<< reconcileCollector env directory record
         receipt.attemptId @?= proposed.attemptId
         receipt.generation @?= proposed.generation
-        receipt.stdout.bytes @?= 7
-        receipt.stdout.truncated @?= True
+        receipt.stdout.bytes @?= ((either (error . show) id . parseCapturedBytes) (7))
+        outputTruncated receipt.stdout.truncated @?= True
         reconcileCollector env directory record >>= (@?= Right (Just receipt))
         Just actual <- right =<< run env (inspectProcessTx proposed.operationId)
         actual.phase @?= ProcessSettled
@@ -225,7 +226,7 @@ tests fixture =
         receipt.exitCode @?= Nothing
         receipt.termination @?= ProcessTimedOut
         assertBool "missing status is never validation success" (not (processSucceeded receipt))
-        assertBool "timeout remains failure even with a zero exit status" (not (processSucceeded (receipt & #exitCode .~ Just 0)))
+        assertBool "timeout remains failure even with a zero exit status" (not (processSucceeded (receipt & #exitCode .~ Just ((either (error . show) id . parseProcessExitStatus) 0))))
         run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "later")) >>= (@?= Right ())
     ]
 
@@ -239,7 +240,7 @@ launchRecord env binding proposed = do
 
 collectorDirectory :: WorkspaceBinding -> IO FilePath
 collectorDirectory binding = do
-  let directory = workspaceMetadata binding.storageRoot binding </> "collector-test"
+  let directory = workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding </> "collector-test"
   createDirectory directory
   ensurePrivateDirectory directory >>= (@?= Right ())
   pure directory
@@ -276,7 +277,7 @@ withProcess fixture use = Fixture.withFixture fixture \env _ root repository -> 
   allocateWorkspace root binding Reserved >>= (@?= Right ())
   run env (Store.markWorkspaceReadyTx binding) >>= (@?= Right ())
   now <- getCurrentTime
-  let command = ProcessCommand "validate" digest "/bin/validate" [] "" (Map.fromList [("HOME", "/scratch"), ("TMPDIR", "/scratch")]) 30 1024
+  let command = ProcessCommand (workspaceCoordinate "validate") digest (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") (Map.fromList [((workspaceCoordinate "HOME"), (workspaceCoordinate "/scratch")), ((workspaceCoordinate "TMPDIR"), (workspaceCoordinate "/scratch"))]) ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)
       operation = fixtureOperationId "process-operation"
       logical = OperationContext (executionIdentity "process-execution") operation (fixtureOperationId "process-operation") (ExecutionValue.executionDigest "input-fingerprint") (ExecutionValue.executionDigest "scope")
       fingerprint = processFingerprint binding digest logical command
@@ -284,15 +285,17 @@ withProcess fixture use = Fixture.withFixture fixture \env _ root repository -> 
   use env binding record
 
 receiptFor :: ProcessRecord -> ProcessReceipt
-receiptFor record = ProcessReceipt record.operationId record.attemptId record.generation record.fingerprint record.bindingDigest record.unit boot invocation (Just 0) ProcessExited (CapturedOutput "stdout" digest 0 False) (CapturedOutput "stderr" digest 0 False) True True
+receiptFor record = ProcessReceipt record.operationId record.attemptId record.generation record.fingerprint record.bindingDigest record.unit boot invocation (Just ((either (error . show) id . parseProcessExitStatus) 0)) ProcessExited (CapturedOutput (workspaceCoordinate "stdout") digest ((either (error . show) id . parseCapturedBytes) 0) (outputTruncation False)) (CapturedOutput (workspaceCoordinate "stderr") digest ((either (error . show) id . parseCapturedBytes) 0) (outputTruncation False)) (descendantSettlement True) (outputCompleteness True)
 
-digest :: Text.Text
-digest = "sha256:" <> Text.replicate 64 "a"
+digest :: WorkspaceCoordinate scope
+digest = workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")
 
-boot, otherBoot, invocation :: Text.Text
-boot = "11111111-1111-4111-8111-111111111111"
-otherBoot = "22222222-2222-4222-8222-222222222222"
-invocation = "33333333-3333-4333-8333-333333333333"
+boot, otherBoot :: WorkspaceCoordinate "boot-id"
+invocation :: WorkspaceCoordinate "invocation-id"
+boot = workspaceCoordinate "11111111-1111-4111-8111-111111111111"
+otherBoot = workspaceCoordinate "22222222-2222-4222-8222-222222222222"
+
+invocation = workspaceCoordinate "33333333-3333-4333-8333-333333333333"
 
 run :: AppEnv -> Transaction a -> IO a
 run env action = runAppIO env (runTransaction action) >>= right
@@ -314,7 +317,7 @@ fixtureAgentName = either (error . show) id . mkAgentName
 
 malformedProcessMetadata :: DatabaseFixture -> Transaction () -> IO ()
 malformedProcessMetadata fixture corrupt = withProcess fixture \env binding original -> do
-  let inputDigest = either (error . show) id (parsePayloadDigest original.fingerprint)
+  let inputDigest = either (error . show) id (parsePayloadDigest (workspaceCoordinateText original.fingerprint))
       routing = ProcessRouting ProcessRoutingV1 (executionIdentity "process-routing") binding.request.owner inputDigest NeedModel
       proposed = original & #routing .~ Just routing
   run env (reserveProcessTx binding proposed) >>= (@?= Right proposed)

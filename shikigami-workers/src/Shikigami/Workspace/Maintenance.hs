@@ -17,6 +17,7 @@ import Shikigami.Prelude hiding ((.=))
 import Shikigami.Workspace.Cleanup
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Settings (WorkspaceSettings (..))
+import Shikigami.Workspace.Value
 import System.Exit (exitFailure)
 
 data WorkspaceMaintenance = ListWorkspaces !(Maybe Text) | CleanupWorkspace !Text
@@ -38,5 +39,5 @@ runWorkspaceMaintenance actor operation config = do
       runtime = MaintenanceRuntime appEnv settings.storageRoot authorizer (identityLifecycleAdmission directory.handle) (pure ())
   output <- case operation of
     ListWorkspaces cursor -> listWorkspaces runtime principal cursor
-    CleanupWorkspace resource -> fmap (const (Aeson.object ["workspace" .= WorkspaceRef "shikigami.workspace/1" resource, "cleanup" .= ("complete" :: Text)])) <$> cleanupWorkspace runtime principal (WorkspaceRef "shikigami.workspace/1" resource)
+    CleanupWorkspace resource -> fmap (const (Aeson.object ["workspace" .= WorkspaceRef (workspaceCoordinate "shikigami.workspace/1") (workspaceCoordinate (resource)), "cleanup" .= ("complete" :: Text)])) <$> cleanupWorkspace runtime principal (WorkspaceRef (workspaceCoordinate "shikigami.workspace/1") (workspaceCoordinate (resource)))
   either (const refuse) (\value -> Bytes.putStr (Aeson.encode value <> "\n")) output

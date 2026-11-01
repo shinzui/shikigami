@@ -120,6 +120,7 @@ import Shikigami.Log qualified as Log
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude ((&), (.~))
+import Shikigami.Repository (RepositoryId (..))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.StateRevision qualified as Generation
@@ -127,6 +128,7 @@ import Shikigami.Trigger.Enqueue (addressedRunJob, enqueueRunJobTx, ensureRunQue
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
+import Shikigami.Workspace.Value
 import Shikumi.Tool (mkDynTool)
 import Shikumi.Tool.Output qualified as ToolOutput
 import Test.Tasty (TestTree, testGroup)
@@ -169,9 +171,9 @@ tests fixture =
       testCase "workspace admission freezes scoped policy across restart and the actual model request" $
         withConfiguredResourceFixture fixture id (Map.insert R.Tokens R.ExplicitlyUnbounded) \env original _ -> do
           (executor, observed, _) <- driverRuntime env False
-          bundle <- expectRight (mkInstructionBundle 65536 "mori://fixture/repo" (Text.replicate 40 "a") [("AGENTS.md", "PRIVATE_ROOT_POLICY"), ("src/AGENTS.md", "PRIVATE_NESTED_POLICY")])
+          bundle <- expectRight (mkInstructionBundle 65536 (RepositoryId "mori://fixture/repo") (workspaceCoordinate (Text.replicate 40 "a")) [(workspaceCoordinate "AGENTS.md", "PRIVATE_ROOT_POLICY"), (workspaceCoordinate "src/AGENTS.md", "PRIVATE_NESTED_POLICY")])
           let snapshot = anotherSnapshot original "workspace-instructions"
-              admission = WorkspaceAdmission (WorkspaceRef "shikigami.workspace/1" "fixture") ("sha256:" <> Text.replicate 64 "a") snapshot.runId snapshot.selection.assignmentId rootId snapshot.identity (fixtureRevision 0) bundle Nothing
+              admission = WorkspaceAdmission (WorkspaceRef (workspaceCoordinate "shikigami.workspace/1") (workspaceCoordinate "fixture")) (workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")) snapshot.runId snapshot.selection.assignmentId rootId snapshot.identity (fixtureRevision 0) bundle Nothing
               assignment = Start.SkillAssignment snapshot.runId snapshot.agent snapshot.identity snapshot.sessionId snapshot.selection snapshot.sanctionedProfile snapshot.capabilities (Right snapshot.policy) (SkillDir "test/fixtures/durable-skill") (pure (Right (Start.SkillInput (triggerOnly (object [])) [])))
               describe _ = pure (Right (Tools.ExecutionToolMenu (toJSON ([] :: [Value])) []))
           accepted <- expectRight =<< Start.admitWorkspaceSkillExecution (pure (Right admission)) executor describe assignment
@@ -193,9 +195,9 @@ tests fixture =
       testCase "workspace fixed policy must fit before the model or menu is acquired" $
         withConfiguredResourceFixture fixture id (Map.insert R.Tokens R.ExplicitlyUnbounded) \env original _ -> do
           (executor, observed, _) <- driverRuntime env False
-          bundle <- expectRight (mkInstructionBundle 65536 "mori://fixture/repo" (Text.replicate 40 "a") [("AGENTS.md", Text.replicate 2000 "x")])
+          bundle <- expectRight (mkInstructionBundle 65536 (RepositoryId "mori://fixture/repo") (workspaceCoordinate (Text.replicate 40 "a")) [(workspaceCoordinate "AGENTS.md", Text.replicate 2000 "x")])
           let snapshot = anotherSnapshot original "workspace-budget"
-              admission = WorkspaceAdmission (WorkspaceRef "shikigami.workspace/1" "fixture") ("sha256:" <> Text.replicate 64 "a") snapshot.runId snapshot.selection.assignmentId rootId snapshot.identity (fixtureRevision 0) bundle Nothing
+              admission = WorkspaceAdmission (WorkspaceRef (workspaceCoordinate "shikigami.workspace/1") (workspaceCoordinate "fixture")) (workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")) snapshot.runId snapshot.selection.assignmentId rootId snapshot.identity (fixtureRevision 0) bundle Nothing
               assignment = Start.SkillAssignment snapshot.runId snapshot.agent snapshot.identity snapshot.sessionId snapshot.selection Nothing snapshot.capabilities (Right (snapshot.policy & #contextBytes .~ (fixturePolicy 1024))) (SkillDir "test/fixtures/durable-skill") (pure (Right (Start.SkillInput (triggerOnly (object [])) [])))
           result <- Start.admitWorkspaceSkillExecution (pure (Right admission)) executor (\_ -> assertFailure "over-budget policy reached the menu" >> pure (Left UnsupportedReplay)) assignment
           result @?= Left (ExecutionPolicyRefused "required context exceeds the configured byte ceiling")
@@ -203,10 +205,10 @@ tests fixture =
       testCase "workspace exact adapters describe without preparation and require trusted dispatch coordinates" $
         withFixture fixture \env original _ -> do
           prepared <- newIORef (0 :: Int)
-          bundle <- expectRight (mkInstructionBundle 65536 "mori://fixture/repo" (Text.replicate 40 "a") [])
+          bundle <- expectRight (mkInstructionBundle 65536 (RepositoryId "mori://fixture/repo") (workspaceCoordinate (Text.replicate 40 "a")) [])
           capability <- expectRight (Overlay.mkCapabilityId "workspace.edit")
           revision <- expectRight (Overlay.mkCapabilityRevision "1")
-          let admission = WorkspaceAdmission (WorkspaceRef "shikigami.workspace/1" "fixture") ("sha256:" <> Text.replicate 64 "a") original.runId original.selection.assignmentId rootId original.identity (fixtureRevision 0) bundle Nothing
+          let admission = WorkspaceAdmission (WorkspaceRef (workspaceCoordinate "shikigami.workspace/1") (workspaceCoordinate "fixture")) (workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")) original.runId original.selection.assignmentId rootId original.identity (fixtureRevision 0) bundle Nothing
               snapshot = original & #workspace .~ Just admission & #initialContext . #systemPrompt .~ Just (instructionPrompt bundle) & #capabilities .~ Overlay.mkResolvedCapabilitySet [descriptor]
               descriptor = Overlay.CapabilityDescriptor capability revision [Overlay.CapabilityToolDescriptor "edit" Overlay.IdempotentMutation]
               contract = Capability.DurableToolContract (executionCoordinate "edit") "Edit fixture." (object []) IdempotentEffect NoInvoiceCost

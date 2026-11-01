@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Coupled pre-model provisioning. Reservations and prepared receipts survive
 -- interruption; neither expiry nor a failed acknowledgement allocates a new uid.
 module Shikigami.Workspace.Provision
@@ -27,6 +29,7 @@ import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId, operationIdFromNonEmpty)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.ContainedFile
@@ -38,6 +41,7 @@ import Shikigami.Workspace.Provider (workspaceProvisionAction)
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import System.Exit (ExitCode (..))
 import System.IO (IOMode (WriteMode), withFile)
 import System.Process (CreateProcess (..), StdStream (..), proc, waitForProcess, withCreateProcess)
@@ -58,7 +62,7 @@ data ProvisionRuntime = ProvisionRuntime
   deriving stock (Generic)
 
 data ProvisionBackend = ProvisionBackend
-  { bootIdentity :: !(IO (Either Systemd.SystemdError Text)),
+  { bootIdentity :: !(IO (Either Systemd.SystemdError (WorkspaceCoordinate "boot-id"))),
     inspectIdentity :: !(ProcessProfile -> IO (Either ProvisionError ManagedIdentity)),
     createIdentity :: !(IO (Either ProvisionError ()) -> ProcessProfile -> IO (Either ProvisionError ())),
     tree :: !(Int -> Bool -> ContainedFile -> IO (Either FileError ())),
@@ -67,11 +71,11 @@ data ProvisionBackend = ProvisionBackend
   deriving stock (Generic)
 
 data ProvisionMarker = ProvisionMarker
-  { format :: !Int,
-    fingerprint :: !Text,
-    filesTarget :: !Text,
-    scratchTarget :: !Text,
-    ready :: !Bool
+  { format :: !(FormatVersion "workspace-provision"),
+    fingerprint :: !(WorkspaceCoordinate "provision-fingerprint"),
+    filesTarget :: !(WorkspaceCoordinate "file-target"),
+    scratchTarget :: !(WorkspaceCoordinate "file-target"),
+    ready :: !(ProvisionReadiness)
   }
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON)
@@ -93,8 +97,8 @@ provisionWorkspaceProfile runtime binding admission policy pool = protect do
   (profile, state) <- transact runtime (reserveProcessProfileTx binding (bundleDigest admission.instructions) policy pool) >>= either (const (abort ProvisionRefused)) pure
   _ <- retainedSystemdProfile profile >>= either (const (abort ProvisionUnsupported)) pure
   unless (profileStorageSafe binding profile) (abort ProvisionRefused)
-  needFile =<< checkPrivateDirectory binding.storageRoot
-  let metadata = workspaceMetadata binding.storageRoot binding
+  needFile =<< checkPrivateDirectory (workspaceLocatorPath binding.storageRoot)
+  let metadata = workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding
   needFile =<< checkPrivateDirectory metadata
   locked <-
     withWorkspaceLock metadata $
@@ -102,18 +106,18 @@ provisionWorkspaceProfile runtime binding admission policy pool = protect do
         checkCurrent runtime binding
         available <- transact runtime (Store.checkWorkspaceOperationTx binding admission.owner admission.epoch (operationIdFromNonEmpty ('w' :| "orkspace-profile-admission")))
         either (const (abort ProvisionRefused)) pure available
-        files <- withContainedFile (workspaceFiles binding.storageRoot binding) ".shikigami-profile-target" \filesRoot ->
+        files <- withContainedFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding) ".shikigami-profile-target" \filesRoot ->
           Right <$> do
-            scratch <- withContainedFile (workspaceScratch binding.storageRoot binding) ".shikigami-profile-target" \scratchRoot ->
+            scratch <- withContainedFile (workspaceScratch (workspaceLocatorPath binding.storageRoot) binding) ".shikigami-profile-target" \scratchRoot ->
               Right <$> provisionRoots runtime binding admission profile state boot metadata filesRoot scratchRoot
             either (const (abort ProvisionUnresolved)) pure scratch
         either (const (abort ProvisionUnresolved)) pure files
   either (const (abort ProvisionUnresolved)) pure locked
 
-provisionRoots :: ProvisionRuntime -> WorkspaceBinding -> WorkspaceAdmission -> ProcessProfile -> ProfileState -> Text -> FilePath -> ContainedFile -> ContainedFile -> IO ProcessProfile
+provisionRoots :: ProvisionRuntime -> WorkspaceBinding -> WorkspaceAdmission -> ProcessProfile -> ProfileState -> WorkspaceCoordinate "boot-id" -> FilePath -> ContainedFile -> ContainedFile -> IO ProcessProfile
 provisionRoots runtime binding admission profile state boot metadata files scratch = do
-  filesTarget <- containedTargetIdentity files >>= either (const (abort ProvisionRefused)) pure
-  scratchTarget <- containedTargetIdentity scratch >>= either (const (abort ProvisionRefused)) pure
+  filesTarget <- containedTargetIdentity files >>= either (const (abort ProvisionRefused)) (pure . workspaceCoordinate)
+  scratchTarget <- containedTargetIdentity scratch >>= either (const (abort ProvisionRefused)) (pure . workspaceCoordinate)
   action <- either (const (abort ProvisionRefused)) pure (workspaceProvisionAction binding admission profile boot filesTarget scratchTarget)
   principal <- either (const (abort ProvisionRefused)) pure (identityText admission.owner)
   let authorize = protect do
@@ -121,30 +125,30 @@ provisionRoots runtime binding admission profile state boot metadata files scrat
         runtime.authorizer.authorize principal action >>= either (const (abort ProvisionRefused)) (const (pure ()))
         checkCurrent runtime binding
       fresh = authorize >>= either abort pure
-      expected = ProvisionMarker 1 (versionedDigest "shikigami.workspace-provision/1" (toJSON profile)) filesTarget scratchTarget False
+      expected = ProvisionMarker V1 (workspaceCoordinate (versionedDigest "shikigami.workspace-provision/1" (toJSON profile))) filesTarget scratchTarget ProvisionPending
   fresh
   marker <- readMarker metadata
-  forM_ marker \old -> unless (old == expected || old == (expected & #ready .~ True)) (abort ProvisionUnresolved)
+  forM_ marker \old -> unless (old == expected || old == (expected & #ready .~ ProvisionReady)) (abort ProvisionUnresolved)
   identity <- runtime.backend.inspectIdentity profile >>= either abort pure
   case (state, marker) of
-    (ProfileReady, Just old) | old.ready && identity == IdentityReady -> pure profile
+    (ProfileReady, Just old) | (provisionReady old.ready) && identity == IdentityReady -> pure profile
     (ProfileReady, _) -> abort ProvisionUnresolved
-    (ProfileReserved, Just old) | old.ready && identity == IdentityReady -> do
+    (ProfileReserved, Just old) | provisionReady old.ready && identity == IdentityReady -> do
       fresh
       transact runtime (readyProcessProfileTx binding profile) >>= either (const (abort ProvisionUnresolved)) pure
       pure profile
     (ProfileReserved, _) -> do
       when (isNothing marker && identity /= IdentityMissing) (abort ProvisionRefused)
-      runtime.backend.tree profile.userId False files >>= either (const (abort ProvisionRefused)) pure
-      runtime.backend.tree profile.userId False scratch >>= either (const (abort ProvisionRefused)) pure
+      runtime.backend.tree (workspaceIdentityNumber profile.userId) False files >>= either (const (abort ProvisionRefused)) pure
+      runtime.backend.tree (workspaceIdentityNumber profile.userId) False scratch >>= either (const (abort ProvisionRefused)) pure
       when (isNothing marker) (fresh >> writeMarker metadata expected)
       runtime.backend.createIdentity authorize profile >>= either abort pure
       fresh
-      runtime.backend.tree profile.userId True files >>= either (const (abort ProvisionUnresolved)) pure
+      runtime.backend.tree (workspaceIdentityNumber profile.userId) True files >>= either (const (abort ProvisionUnresolved)) pure
       fresh
-      runtime.backend.tree profile.userId True scratch >>= either (const (abort ProvisionUnresolved)) pure
+      runtime.backend.tree (workspaceIdentityNumber profile.userId) True scratch >>= either (const (abort ProvisionUnresolved)) pure
       fresh
-      writeMarker metadata (expected & #ready .~ True)
+      writeMarker metadata (expected & #ready .~ ProvisionReady)
       runtime.backend.afterReady
       transact runtime (readyProcessProfileTx binding profile) >>= either (const (abort ProvisionUnresolved)) pure
       pure profile

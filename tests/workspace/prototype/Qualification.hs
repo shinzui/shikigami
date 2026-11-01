@@ -68,6 +68,7 @@ import Shikigami.Workspace.Provider (Replacement (..), contentDigest)
 import Shikigami.Workspace.Settings
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 import System.Process (readProcess)
@@ -99,10 +100,10 @@ withQualification configFile prefix use = do
   socket <- maybe (fail "qualification socket absent") (pure . (.socketPath)) config.workspaceSupervisorSettings
   principal <- right (identityText initial.binding.request.owner)
   withStore env.connectionSettings \store -> do
-    let repository = WorkspaceRepository initial.binding.repository initial.binding.source [WorkspaceRevision initial.binding.base (bundleDigest initial.admission.instructions)] initial.binding.base "qualification-reviewed" initial.profile.policy.readPaths initial.profile.policy.writePaths
-        process = WorkspaceProcessSettings socket 0 5 60 (IdentityRange 64000 64031) (Map.singleton repository.identity initial.profile.policy)
-        settings = WorkspaceSettings initial.binding.storageRoot [repository] [WorkspaceGrant "fixture" principal repository.identity Nothing] (Just process)
-        client = ProcessClient socket 0 5 60
+    let repository = WorkspaceRepository initial.binding.repository initial.binding.source [WorkspaceRevision initial.binding.base (bundleDigest initial.admission.instructions)] initial.binding.base (workspaceCoordinate "qualification-reviewed") initial.profile.policy.readPaths initial.profile.policy.writePaths
+        process = WorkspaceProcessSettings socket ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60) (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031)) (Map.singleton repository.identity initial.profile.policy)
+        settings = WorkspaceSettings initial.binding.storageRoot [repository] [WorkspaceGrant ((either (error . show) id . mkAgentName) "fixture") (declarationCoordinate principal) repository.identity Nothing] (Just process)
+        client = ProcessClient socket ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60)
         current = identityLifecycleAdmission directory.handle . (.identity)
     host <- right (configuredWorkspaceHostWithTransfers env store.pool directory.handle authorizer settings)
     use (Qualification env authorizer current (identityLifecycleAdmission directory.handle) client host initial prefix)
@@ -150,13 +151,13 @@ integrationCase :: FilePath -> FilePath -> IO ()
 integrationCase config prefix = withQualification config prefix \q -> do
   let root = fixtureRootId "integration-qualification-root"
       owner = q.initial.binding.request.owner
-      edit path before after = ("overlay__workspace-edit__replace", Aeson.toJSON (Replacement path (Just (contentDigest before)) after))
+      edit path before after = ("overlay__workspace-edit__replace", Aeson.toJSON (Replacement (workspaceCoordinate path) (Just (contentDigest before)) after))
       validate = ("overlay__workspace-exec__validate", Aeson.object ["rule" Aeson..= ("validate" :: Text.Text)])
   now <- getCurrentTime
   void (right =<< run q.env (Roots.enrollRoot root (Resources.Envelope (Map.fromList [(dimension, Resources.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now))))
   artifacts <- forM [("one", "a", "1\n"), ("two", "b", "1\n"), ("three", "a", "2\n"), ("four", "c", "1\n")] \(name, path, value) -> do
     admission <- loadAssignment q root ("integration-worker-" <> name) owner
-    prepared <- prepareTools q.env q.authorizer q.current q.client admission [edit "src/dependency.txt" "old dependency\n" "new dependency\n", edit ("src/integration-" <> path) "0\n" value, validate, ("overlay__workspace-git__commit", Aeson.toJSON (GitCommitRequest q.initial.binding.base ("Worker " <> name)))]
+    prepared <- prepareTools q.env q.authorizer q.current q.client admission [edit "src/dependency.txt" "old dependency\n" "new dependency\n", edit ("src/integration-" <> path) "0\n" value, validate, ("overlay__workspace-git__commit", Aeson.toJSON (GitCommitRequest q.initial.binding.base (workspaceCoordinate ("Worker " <> name))))]
     (lastTool, outputs) <- runTools q prepared
     receipt <- right (Aeson.fromJSON (outputs !! 2) `asEither` ())
     unless (successful receipt) (fail "worker-local validation failed")
@@ -170,13 +171,13 @@ integrationCase config prefix = withQualification config prefix \q -> do
         prepared <- prepareTools q.env q.authorizer q.current q.client admission [("overlay__workspace-integrate__plan", Aeson.toJSON (Integration.Request q.initial.binding.base selected))]
         (lastTool, outputs) <- runTools q prepared
         Just (binding, _) <- right =<< run q.env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
-        Objects.readHead (workspaceMetadata binding.storageRoot binding) >>= \value -> unless (value == Right binding.base) (fail "planning changed HEAD")
+        Objects.readHead (workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding) >>= \value -> unless (value == Right binding.base) (fail "planning changed HEAD")
         output <- case outputs of [value] -> pure value; _ -> fail "expected one integration proposal"
         pure (binding, lastTool, output)
   (target, proposed, proposal) <- plan "success" (pair [0, 3])
   field "conflicts" proposal >>= \value -> unless (value == Aeson.toJSON ([] :: [Text.Text])) (fail "unexpected integration conflict")
   replacements <- right . (`asEither` ()) . Aeson.fromJSON =<< field "replacements" proposal
-  apply <- continueTools q.env q.current proposed (map (\replacement -> ("overlay__workspace-edit__replace", Aeson.toJSON (replacement :: Replacement))) replacements <> [validate, ("overlay__workspace-git__commit", Aeson.toJSON (GitCommitRequest target.base "Integrate exact worker artifacts"))])
+  apply <- continueTools q.env q.current proposed (map (\replacement -> ("overlay__workspace-edit__replace", Aeson.toJSON (replacement :: Replacement))) replacements <> [validate, ("overlay__workspace-git__commit", Aeson.toJSON (GitCommitRequest target.base (workspaceCoordinate "Integrate exact worker artifacts")))])
   (committed, results) <- runTools q apply
   receipt <- right (Aeson.fromJSON (results !! length replacements) `asEither` ())
   unless (successful receipt) (fail "combined validation failed")
@@ -192,14 +193,14 @@ integrationCase config prefix = withQualification config prefix \q -> do
   failedApply <- continueTools q.env q.current failurePlan (map (\replacement -> ("overlay__workspace-edit__replace", Aeson.toJSON (replacement :: Replacement))) failureReplacements <> [validate])
   (_, failures) <- runTools q failedApply
   failedReceipt <- right (Aeson.fromJSON @ProcessReceipt (last failures) `asEither` ())
-  unless (failedReceipt.termination == ProcessExited && failedReceipt.exitCode == Just 77 && failedReceipt.descendantsEmpty && failedReceipt.outputComplete) (fail "combined-only failure not retained")
-  Objects.readHead (workspaceMetadata failedTarget.storageRoot failedTarget) >>= \value -> unless (value == Right failedTarget.base) (fail "failed integration published a commit")
+  unless (failedReceipt.termination == ProcessExited && maybe False ((== 77) . processExitStatusNumber) failedReceipt.exitCode && descendantsSettled failedReceipt.descendantsEmpty && outputCollected failedReceipt.outputComplete) (fail "combined-only failure not retained")
+  Objects.readHead (workspaceMetadata (workspaceLocatorPath failedTarget.storageRoot) failedTarget) >>= \value -> unless (value == Right failedTarget.base) (fail "failed integration published a commit")
   putStrLn "PASS successful worker-local validations do not conceal a failing exact combined tree"
   let evidence = Aeson.object ["artifacts" Aeson..= artifacts, "combined" Aeson..= candidate, "validation" Aeson..= receipt, "combinedFailure" Aeson..= failedReceipt]
   Lazy.writeFile (prefix </> "integration-evidence.json") (Aeson.encode evidence)
 
 successful :: ProcessReceipt -> Bool
-successful receipt = receipt.termination == ProcessExited && receipt.exitCode == Just 0 && receipt.descendantsEmpty && receipt.outputComplete
+successful receipt = receipt.termination == ProcessExited && maybe False ((== 0) . processExitStatusNumber) receipt.exitCode && descendantsSettled receipt.descendantsEmpty && outputCollected receipt.outputComplete
 
 field :: Aeson.Key -> Aeson.Value -> IO Aeson.Value
 field name (Aeson.Object fields) = maybe (fail "qualification evidence field missing") pure (KeyMap.lookup name fields)

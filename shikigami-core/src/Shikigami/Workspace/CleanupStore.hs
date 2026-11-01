@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Conditional terminal cleanup, separate from allocation and effect receipts.
 -- A pending cleanup freezes admission permanently; no lease or idle session
 -- supplies terminal evidence. The IO owner must hold the workspace OS lock.
@@ -32,12 +34,13 @@ import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.TransferStore (currentWorkspaceRequestTx)
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 
 data CleanupPlan = CleanupPlan
-  { bindingDigest :: !Text,
-    filesTarget :: !Text,
-    scratchTarget :: !Text,
-    userId :: !Int,
+  { bindingDigest :: !(WorkspaceCoordinate "binding-digest"),
+    filesTarget :: !(WorkspaceCoordinate "file-target"),
+    scratchTarget :: !(WorkspaceCoordinate "file-target"),
+    userId :: !(CleanupIdentity),
     ownership :: !(Maybe WorkspaceRequest)
   }
   deriving stock (Eq, Generic)
@@ -50,7 +53,7 @@ instance Show CleanupPlan where show _ = "CleanupPlan <protected>"
 
 inspectCleanupTx :: WorkspaceBinding -> Transaction (Either WorkspaceError (Maybe (CleanupPlan, Bool)))
 inspectCleanupTx binding = do
-  retained <- Tx.statement binding.workspace.resource inspectPlan
+  retained <- Tx.statement (workspaceCoordinateText binding.workspace.resource) inspectPlan
   decodeRetained (traverse checked retained)
   where
     checked (value, done) = do
@@ -76,15 +79,17 @@ prepareCleanupTx binding plan
               case frozen of
                 Left err -> pure (Left err)
                 Right () -> do
-                  Tx.statement (binding.workspace.resource, plan) insertPlan
+                  Tx.statement ((workspaceCoordinateText binding.workspace.resource), plan) insertPlan
                   saved <- inspectCleanupTx binding
                   pure (if saved == Right (Just (plan, False)) then Right False else Left WorkspaceBindingConflict)
             _ -> pure (Left WorkspaceBindingConflict)
 
 validPlan :: WorkspaceBinding -> CleanupPlan -> Bool
-validPlan binding plan = plan.bindingDigest == workspaceBindingDigest binding && plan.userId >= 0 && plan.userId <= 2147483647 && all target [plan.filesTarget, plan.scratchTarget]
+validPlan binding plan = plan.bindingDigest == workspaceBindingDigest binding && cleanupIdentityNumber plan.userId >= 0 && cleanupIdentityNumber plan.userId <= 2147483647 && all target [plan.filesTarget, plan.scratchTarget]
   where
-    target value = not (Text.null value) && Text.length value <= 128 && Text.all (\c -> c >= '0' && c <= '9' || c == ':') value
+    target claim =
+      let value = workspaceCoordinateText claim
+       in not (Text.null value) && Text.length value <= 128 && Text.all (\c -> c >= '0' && c <= '9' || c == ':') value
 
 completeCleanupTx :: WorkspaceBinding -> CleanupPlan -> Transaction (Either WorkspaceError ())
 completeCleanupTx binding plan = do
@@ -92,7 +97,7 @@ completeCleanupTx binding plan = do
   case retained of
     Left err -> pure (Left err)
     Right (Just (original, _)) | original == plan -> do
-      changed <- Tx.statement (binding.workspace.resource, plan) completePlan
+      changed <- Tx.statement ((workspaceCoordinateText binding.workspace.resource), plan) completePlan
       pure (if changed then Right () else Left WorkspaceBindingConflict)
     _ -> pure (Left WorkspaceBindingConflict)
 

@@ -36,6 +36,7 @@ import Shikigami.Workspace.GitTypes
 import Shikigami.Workspace.Provider (FileReceipt (..), ReceiptState (EditRefused))
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 import Shikigami.WorkspaceStoreSpec qualified as Fixture
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
@@ -66,7 +67,7 @@ tests fixture =
         b @?= a
         let duplicate = proposed & #createdAt .~ addUTCTime 1 proposed.createdAt & #attemptId .~ fixtureAttemptId "replacement" & #generation .~ (fixtureGeneration 2) & #claimOwner .~ (fixtureOwner "new-claim")
         run env (reserveGitTx binding duplicate) >>= (@?= Right proposed)
-        let changed = proposed & #target .~ "other-target"
+        let changed = proposed & #target .~ (workspaceCoordinate "other-target")
         run env (reserveGitTx binding (changed & #fingerprint .~ gitFingerprint binding changed)) >>= (@?= Left WorkspaceBindingConflict)
         run env (inspectRegisteredGitTx proposed.operation.operationId) >>= (@?= Right (Just (binding, proposed))),
       testCase "publication consumes one transition and factual recovery survives owner freeze" $ withGit fixture \env binding proposed -> do
@@ -107,7 +108,7 @@ tests fixture =
         let operation = proposed.operation.operationId
         run env (Store.reserveWorkspaceEffectTx binding binding.request.owner (fixtureRevision 0) operation digest) >>= (@?= Right Nothing)
         run env (reserveGitTx binding proposed) >>= (@?= Left WorkspaceBindingConflict)
-        let receipt = FileReceipt operation (fixtureAttemptId "file-attempt") (fixtureGeneration 1) digest (workspaceBindingDigest binding) digest "dependency.txt" "device:parent" Nothing digest EditRefused
+        let receipt = FileReceipt operation (fixtureAttemptId "file-attempt") (fixtureGeneration 1) digest (workspaceBindingDigest binding) digest (workspaceCoordinate "dependency.txt") (workspaceCoordinate "device:parent") Nothing digest EditRefused
         run env (Store.recordWorkspaceReceiptTx binding receipt) >>= (@?= Right ())
         run env (Store.reserveWorkspaceEffectTx binding binding.request.owner (fixtureRevision 0) operation digest) >>= (@?= Right (Just receipt))
         run env (inspectGitTx operation) >>= (@?= Right Nothing)
@@ -132,9 +133,9 @@ tests fixture =
       testCase "malformed records and changed candidate evidence refuse without replacing intent" $ withGit fixture \env binding proposed -> do
         run env (reserveGitTx binding (proposed & #generation .~ (fixtureGeneration 0))) >>= (@?= Left InvalidWorkspaceRequest)
         _ <- right =<< run env (reserveGitTx binding proposed)
-        run env (prepareGitTx binding proposed (candidate & #paths .~ ["../escape"])) >>= (@?= Left WorkspaceBindingConflict)
+        run env (prepareGitTx binding proposed (candidate & #paths .~ [(workspaceCoordinate "../escape")])) >>= (@?= Left WorkspaceBindingConflict)
         prepared <- right =<< run env (prepareGitTx binding proposed candidate)
-        run env (prepareGitTx binding proposed (candidate & #result .~ Text.replicate 40 "d")) >>= (@?= Left WorkspaceBindingConflict)
+        run env (prepareGitTx binding proposed (candidate & #result .~ workspaceCoordinate (Text.replicate 40 "d"))) >>= (@?= Left WorkspaceBindingConflict)
         run env (recordGitAppliedTx (prepared & #generation .~ (fixtureGeneration 2))) >>= (@?= Left WorkspaceBindingConflict)
         Aeson.eitherDecode @GitRecord (Aeson.encode prepared) @?= Right prepared
     ]
@@ -147,15 +148,15 @@ withGit fixture use = Fixture.withFixture fixture \env _ root repository -> do
   allocateWorkspace root binding Reserved >>= (@?= Right ())
   run env (Store.markWorkspaceReadyTx binding) >>= (@?= Right ())
   now <- getCurrentTime
-  let logical = OperationContext (executionIdentity "git-execution") (fixtureOperationId "git-operation") (fixtureOperationId "git-operation") (ExecutionValue.executionDigest digest) (ExecutionValue.executionDigest digest)
-      record = GitRecord GitRecordV1 logical (fixtureAttemptId "original-attempt") (fixtureOwner "original-claim") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest "device:parent" candidate.parent digest now (GitRouting logical.executionId owner (fixturePayloadDigest digest) NeedModel) GitReserved Nothing
+  let logical = OperationContext (executionIdentity "git-execution") (fixtureOperationId "git-operation") (fixtureOperationId "git-operation") (ExecutionValue.executionDigest (workspaceCoordinateText digest)) (ExecutionValue.executionDigest (workspaceCoordinateText digest))
+      record = GitRecord GitRecordV1 logical (fixtureAttemptId "original-attempt") (fixtureOwner "original-claim") (fixtureGeneration 1) (workspaceBindingDigest binding) digest digest (workspaceCoordinate "device:parent") candidate.parent digest now (GitRouting logical.executionId owner (fixturePayloadDigest (workspaceCoordinateText digest)) NeedModel) GitReserved Nothing
   use env binding (record & #fingerprint .~ gitFingerprint binding record)
 
 candidate :: GitCandidate
-candidate = GitCandidate (Text.replicate 40 "a") (Text.replicate 40 "b") (Text.replicate 40 "c") ["dependency.txt"]
+candidate = GitCandidate ((workspaceCoordinate (Text.replicate 40 "a"))) ((workspaceCoordinate (Text.replicate 40 "b"))) ((workspaceCoordinate (Text.replicate 40 "c"))) [(workspaceCoordinate "dependency.txt")]
 
-digest :: Text.Text
-digest = "sha256:" <> Text.replicate 64 "a"
+digest :: WorkspaceCoordinate scope
+digest = workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")
 
 assertBlocked :: AppEnv -> WorkspaceBinding -> Assertion
 assertBlocked env binding = run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "successor")) >>= (@?= Left WorkspaceBindingConflict)

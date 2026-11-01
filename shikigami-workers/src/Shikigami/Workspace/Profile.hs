@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Resolve only the rules retained before assignment admission. Current
 -- operator defaults cannot reinterpret an accepted rule after restart.
 module Shikigami.Workspace.Profile (retainedProcessRule, retainedFileProfile, retainedSystemdProfile, profileStorageSafe) where
@@ -12,6 +14,7 @@ import Shikigami.Workspace.ProcessPolicy
 import Shikigami.Workspace.ProcessProfileStore
 import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Types
+import Shikigami.Workspace.Value
 
 retainedSystemdProfile :: ProcessProfile -> IO (Either Text Systemd.SystemdProfile)
 retainedSystemdProfile profile = do
@@ -21,7 +24,7 @@ retainedSystemdProfile profile = do
     unless (validProcessProfile profile && profile.policy.propertiesDigest == properties) (Left "workspace process profile is unavailable")
     pure (Systemd.SystemdProfile image.rootDirectory image.rootIdentity image.environmentExecutable image.deadlineExecutable image.collectorExecutable profile.userId profile.groupId)
 
-retainedProcessRule :: AppEnv -> WorkspaceBinding -> WorkspaceAdmission -> Text -> IO (Either Text (ProcessCommand, Systemd.SystemdProfile))
+retainedProcessRule :: AppEnv -> WorkspaceBinding -> WorkspaceAdmission -> WorkspaceCoordinate "process-rule" -> IO (Either Text (ProcessCommand, Systemd.SystemdProfile))
 retainedProcessRule appEnv binding admission rule = do
   retained <- retainedFileProfile appEnv binding admission
   case retained of
@@ -53,4 +56,4 @@ outsideStorage root path = value /= parent && not ((parent <> "/") `Text.isPrefi
     value = Text.pack path
 
 profileStorageSafe :: WorkspaceBinding -> ProcessProfile -> Bool
-profileStorageSafe binding profile = all (outsideStorage binding.storageRoot) [profile.policy.image.rootDirectory, profile.policy.image.collectorExecutable]
+profileStorageSafe binding profile = all (outsideStorage (workspaceLocatorPath binding.storageRoot)) [workspaceLocatorPath profile.policy.image.rootDirectory, workspaceLocatorPath profile.policy.image.collectorExecutable]

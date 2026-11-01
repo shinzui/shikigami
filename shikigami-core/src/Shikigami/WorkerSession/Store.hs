@@ -101,6 +101,7 @@ import Shikigami.WorkerSession.Types
 import Shikigami.WorkerSessionLifecycle.Generated.Domain qualified as Generated
 import Shikigami.WorkerSessionLifecycle.Generated.EventStream (workerSessionLifecycleCategory, workerSessionLifecycleEventStream)
 import Shikigami.WorkerSessionLookup.Generated.ReadModel (workerSessionLookupReadModel)
+import Shikigami.Workspace.Value (workspaceCoordinateText)
 
 type SessionReadEffects es = (IOE :> es, Store :> es, Error StoreError :> es)
 
@@ -638,7 +639,7 @@ requestTransfer access expected epoch operation version workspace target success
     (\session revision -> Generated.RequestSessionTransfer (Generated.RequestSessionTransferData session revision (revision + 1)))
     \state binding admission -> do
       unless (isNothing state.checkpointIntent && maybe True ((== TransferEstablished) . (.stage)) state.handoff) (abort AssignmentConflict)
-      unless (objectiveIsActive version.active && version.owner == state.owner && version.ownerEpoch == epoch && version.rootId == binding.rootId && successor /= state.owner && successor /= binding.parentIdentity && all (\value -> not (Text.null value) && Text.length value <= 256) [workspace.provider, workspace.resource]) (abort SessionBindingConflict)
+      unless (objectiveIsActive version.active && version.owner == state.owner && version.ownerEpoch == epoch && version.rootId == binding.rootId && successor /= state.owner && successor /= binding.parentIdentity && all (\value -> not (Text.null value) && Text.length value <= 256) [workspaceCoordinateText workspace.provider, workspaceCoordinateText workspace.resource]) (abort SessionBindingConflict)
       void (require (either (const (Left SessionOwnerRefused)) Right (identityText successor)))
       require (either (const (Left SessionOwnerRefused)) Right (assertMayDelegate admission.delegator target))
       require (either (const (Left SessionOwnerRefused)) Right (checkCycle admission.context target))

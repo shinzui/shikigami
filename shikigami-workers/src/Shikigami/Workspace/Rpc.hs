@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- | Bounded, credential-checked Unix transport. The manager owns the listener
 -- through daemon restart; repository services never receive this descriptor.
@@ -40,6 +41,7 @@ import Shikigami.WorkerSession.Types (WorkerSessionId)
 import Shikigami.Workspace.Process
 import Shikigami.Workspace.Supervisor
 import Shikigami.Workspace.Transfer (workspaceTransferProvider)
+import Shikigami.Workspace.Value
 import Shikumi.Tool (ToolError)
 import Shikumi.Tool.Output (ToolOutput)
 import System.FilePath (isAbsolute, normalise)
@@ -58,7 +60,7 @@ data ProcessView = ProcessView
   { operationId :: !OperationId,
     attemptId :: !AttemptId,
     generation :: !(StateRevision "execution-attempt"),
-    bindingDigest :: !Text,
+    bindingDigest :: !(WorkspaceCoordinate "binding-digest"),
     phase :: !ProcessPhase,
     receipt :: !(Maybe ProcessReceipt)
   }
@@ -73,7 +75,7 @@ data RpcReply = RpcFailure !SupervisorError | RpcView !ProcessView | RpcFenceRes
 
 instance Show RpcReply where show _ = "RpcReply <protected>"
 
-data RpcPolicy = RpcPolicy {users :: ![Integer], workers :: !Int, timeoutSeconds :: !Int}
+data RpcPolicy = RpcPolicy {users :: !([RpcPeerUserId]), workers :: !(RpcConcurrency), timeoutSeconds :: !(RpcRequestSeconds)}
   deriving stock (Eq, Show)
 
 instance ToJSON RpcRequest where
@@ -122,8 +124,8 @@ foreign import ccall unsafe "shikigami_workspace_systemd_socket" adoptSocket :: 
 
 -- Call once before application threads which may mutate environment. Close the
 -- returned socket without shutdown(2): the manager retains the same listener.
-getSystemdListener :: FilePath -> IO (Either RpcError Socket.Socket)
-getSystemdListener path
+getSystemdListener :: WorkspaceLocator "rpc-socket" -> IO (Either RpcError Socket.Socket)
+getSystemdListener (workspaceLocatorPath -> path)
   | not (validPath path) = pure (Left RpcRefused)
   | otherwise = protect $ mask_ $ Bytes.useAsCString (Encoding.encodeUtf8 (Text.pack path)) \name -> do
       fd <- adoptSocket name
@@ -136,20 +138,20 @@ getSystemdListener path
 
 serveRpc :: RpcPolicy -> Socket.Socket -> (RpcRequest -> IO RpcReply) -> IO (Either RpcError ())
 serveRpc policy listener dispatch
-  | null policy.users || length policy.users > 32 || any (\uid -> uid < 0 || uid > 4294967295) policy.users || policy.workers < 1 || policy.workers > 16 || policy.timeoutSeconds < 1 || policy.timeoutSeconds > 120 = pure (Left RpcRefused)
+  | null (map rpcPeerUserIdNumber policy.users) || length (map rpcPeerUserIdNumber policy.users) > 32 || any (\uid -> uid < 0 || uid > 4294967295) (map rpcPeerUserIdNumber policy.users) || (rpcConcurrencyNumber policy.workers) < 1 || (rpcConcurrencyNumber policy.workers) > 16 || (rpcRequestSecondsNumber policy.timeoutSeconds) < 1 || (rpcRequestSecondsNumber policy.timeoutSeconds) > 120 = pure (Left RpcRefused)
   | otherwise = protect do
       address <- Socket.getSocketName listener
       kind <- Socket.getSocketType listener
       case address of
         Socket.SockAddrUnix path | validPath path && kind == Socket.Stream -> do
-          replicateConcurrently_ policy.workers $
+          replicateConcurrently_ (rpcConcurrencyNumber policy.workers) $
             forever $
               bracket (fst <$> Socket.accept listener) Socket.close \connection -> do
                 -- Authenticate before reading frames or invoking a handler.
                 (_, user, _) <- Socket.getPeerCredential connection
                 case user of
-                  Just uid | toInteger uid `elem` policy.users -> do
-                    _ <- timeout (policy.timeoutSeconds * 1000000) $ protect do
+                  Just uid | toInteger uid `elem` (map rpcPeerUserIdNumber policy.users) -> do
+                    _ <- timeout ((rpcRequestSecondsNumber policy.timeoutSeconds) * 1000000) $ protect do
                       received <- receiveFrame 4096 connection
                       case received >>= either (const (Left RpcMalformed)) Right . Aeson.eitherDecodeStrict @RpcRequest of
                         Left _ -> pure (Left RpcMalformed)
@@ -161,8 +163,8 @@ serveRpc policy listener dispatch
           pure (Right ())
         _ -> pure (Left RpcRefused)
 
-callRpc :: FilePath -> Integer -> Int -> RpcRequest -> IO (Either RpcError RpcReply)
-callRpc path serverUser seconds request
+callRpc :: WorkspaceLocator "rpc-socket" -> RpcPeerUserId -> RpcRequestSeconds -> RpcRequest -> IO (Either RpcError RpcReply)
+callRpc (workspaceLocatorPath -> path) (rpcPeerUserIdNumber -> serverUser) (rpcRequestSecondsNumber -> seconds) request
   | not (validPath path) || serverUser < 0 || serverUser > 4294967295 || seconds < 1 || seconds > 120 = pure (Left RpcRefused)
   | otherwise = do
       result <- timeout (seconds * 1000000) $
@@ -218,13 +220,13 @@ processViewResult value
 
 validView :: ProcessView -> Bool
 validView value =
-  bounded operation && bounded attempt && value.generation > initialRevision && revisionNumber value.generation < 9223372036854775808 && digestText value.bindingDigest && case value.receipt of
+  bounded operation && bounded attempt && value.generation > initialRevision && revisionNumber value.generation < 9223372036854775808 && digestText (workspaceCoordinateText value.bindingDigest) && case value.receipt of
     Nothing -> value.phase /= ProcessSettled
-    Just receipt -> value.phase == ProcessSettled && receipt.operationId == value.operationId && receipt.attemptId == value.attemptId && receipt.generation == value.generation && receipt.bindingDigest == value.bindingDigest && digestText receipt.fingerprint && receipt.unit == processUnit value.operationId receipt.fingerprint && hostIdentity receipt.bootId && hostIdentity receipt.invocationId && receipt.descendantsEmpty && receipt.outputComplete && maybe (receipt.termination /= ProcessExited) (\code -> code >= 0 && code <= 255) receipt.exitCode && all validOutput [receipt.stdout, receipt.stderr] && receipt.stdout.bytes + receipt.stderr.bytes <= 1048576
+    Just receipt -> value.phase == ProcessSettled && receipt.operationId == value.operationId && receipt.attemptId == value.attemptId && receipt.generation == value.generation && receipt.bindingDigest == value.bindingDigest && digestText (workspaceCoordinateText receipt.fingerprint) && receipt.unit == processUnit value.operationId receipt.fingerprint && hostIdentity (workspaceCoordinateText receipt.bootId) && hostIdentity (workspaceCoordinateText receipt.invocationId) && descendantsSettled receipt.descendantsEmpty && outputCollected receipt.outputComplete && maybe (receipt.termination /= ProcessExited) (\code -> processExitStatusNumber code >= 0 && processExitStatusNumber code <= 255) receipt.exitCode && all validOutput [receipt.stdout, receipt.stderr] && capturedBytesNumber receipt.stdout.bytes + capturedBytesNumber receipt.stderr.bytes <= 1048576
   where
     operation = operationIdText value.operationId
     attempt = attemptIdText value.attemptId
-    validOutput output = bounded output.artifact && output.artifact `notElem` [".", ".."] && Text.all (\c -> (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c `elem` ("._-" :: String)) output.artifact && digestText output.digest && output.bytes >= 0
+    validOutput output = bounded (workspaceCoordinateText output.artifact) && workspaceCoordinateText output.artifact `notElem` [".", ".."] && Text.all (\c -> (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c `elem` ("._-" :: String)) (workspaceCoordinateText output.artifact) && digestText (workspaceCoordinateText output.digest) && capturedBytesNumber output.bytes >= 0
 
 validPath :: FilePath -> Bool
 validPath path = isAbsolute path && path /= "/" && normalise path == path && not ('\0' `elem` path) && not (".." `elem` Text.splitOn "/" (Text.pack path)) && Bytes.length (Encoding.encodeUtf8 (Text.pack path)) <= 100
