@@ -1114,3 +1114,15 @@ keys across 151 source modules after validating all existing source/build/tool
 hashes and evidence paths. The executable candidate/census remains `abb2cf0`;
 this pass changes documentation only and does not repeat a full Cabal build or
 claim new runtime qualification. M1b, M2, M3 and the guide deferral remain open.
+
+
+The subsequent inventory-only review completes worker coverage and adds core
+workspace and agent contracts. The classification now covers 1,681/4,053 keys
+(41%): 1,379 compliant, 89 excluded and 213 findings. The checker accepts entry
+schemas, evidence paths and unchanged source/build/tool hashes before refusing
+2,372 missing keys across 113 modules. This is inventory progress, not M1
+acceptance or a runtime qualification claim. Kernel boot/inode anchors, reviewed
+rule selection, retained provisioning phases, repository/path/commitment domains,
+activity routing/deduplication and raw turn references remain explicit findings.
+Exact payload content, native handles, refusal diagnostics and real outgoing status
+reports are classified according to their actual consumers.

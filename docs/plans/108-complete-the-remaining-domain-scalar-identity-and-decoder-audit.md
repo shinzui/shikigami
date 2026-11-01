@@ -58,7 +58,7 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 
 
 - [x] M1a: Deliver the schema-2 census and independent coverage/freshness checker; all 24 positive/mutation tests pass, and the checker detects the current incomplete classification.
-- [ ] M1b: Complete semantic classification of every declaration/member. Current coherent snapshot: 1,056 of 4,053 keys reviewed; 2,997 keys across 151 source modules remain. Every entry needs authority, rationale and disposition; known violations remain explicit.
+- [ ] M1b: Complete semantic classification of every declaration/member. Current coherent snapshot: 1,681 of 4,053 keys reviewed (41% inventory coverage); 2,372 keys across 113 source modules remain. Every entry needs authority, rationale and disposition; known violations remain explicit.
 - [ ] M2: Resolve applicable scalar/identity/decoder findings in cohesive concept batches and verify actual refusal, rollback and recovery behavior.
 - [ ] M3: Accept the refreshed classification with zero unresolved violations, passing final behavioral evidence, and an updated guide disposition.
 
@@ -79,11 +79,17 @@ All 24 coverage-infrastructure tests pass again. Both coverage modes still
 correctly refuse 2,997 missing keys; no runtime source, interface or census rebuild
 is needed for this documentation-only review pass.
 
+The next inventory-only batches complete the worker package and review core
+workspace and agent contracts: 625 additional keys. Current inventory coverage is
+41% (1,681/4,053), distinct from acceptance of M1, M2 or M3. The new findings
+remain explicit; source/interface/tool hashes and evidence paths validate before
+the checker refuses the remaining 2,372 missing keys. No runtime sources change.
+
 Implementation is under way. The schema-2 census and coverage/freshness checker
 pass 24 positive/mutation tests against a successful full GHC 9.12.4 macOS build.
 The current census has 4,053 declaration/member keys. Semantic classification
-covers 1,056 keys: 949 compliant entries, 47 exclusions and 60 explicit violations;
-2,997 keys remain unreviewed, and both coverage modes correctly refuse completion.
+covers 1,681 keys: 1,379 compliant entries, 89 exclusions and 213 explicit violations;
+2,372 keys remain unreviewed, and both coverage modes correctly refuse completion.
 
 Process-profile, Objective, cleanup/listing, directory, sink, HTTP acceptance and
 workspace binding/file/transfer read boundaries now have owning transactional
