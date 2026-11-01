@@ -564,8 +564,8 @@ atomicAttentionTests databaseFixture =
                       )
             resultVars <- traverse (const newEmptyMVar) [firstVerdict, secondVerdict]
             let actions =
-                  [ runAttention "one" "run-one" firstVerdict,
-                    runAttention "two" "run-two" secondVerdict
+                  [ runAttention "one" "kioku_session_01kvxa7d2cezhs874g3n8dfgme" firstVerdict,
+                    runAttention "two" "kioku_session_01kvxa7d2cezhs874g3n8dfgmf" secondVerdict
                   ]
             sequence_
               [ forkIO (try @SomeException action >>= putMVar resultVar)
@@ -587,9 +587,9 @@ atomicAttentionTests databaseFixture =
 attentionEnv :: AttentionRecipientMap -> Text -> PracticeReviewAttentionEnv
 attentionEnv recipients runIdentifier =
   PracticeReviewAttentionEnv
-    { agent = reviewerAgent,
+    { agent = fixtureAgentName reviewerAgent,
       identity = compatibilityIdentity (fixtureAgentName reviewerAgent),
-      runId = runIdentifier,
+      runId = either (error . show) id (NominalId.parseId runIdentifier),
       occurredAt = Nothing,
       activity = Just reviewActivity,
       grants = StaticGrants (Map.singleton reviewerAgent (Set.fromList [SKawaDigest, SKizashiSignal])),
@@ -849,8 +849,8 @@ executionContextFixture =
 sinkEnvFixture :: SessionId -> SinkEnv
 sinkEnvFixture session =
   SinkEnv
-    { agent = reviewerAgent,
-      runId = idText session,
+    { agent = fixtureAgentName reviewerAgent,
+      runId = session,
       occurredAt = Nothing,
       danwaTarget = Nothing,
       activity = Just reviewActivity,

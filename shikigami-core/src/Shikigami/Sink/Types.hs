@@ -11,12 +11,14 @@ module Shikigami.Sink.Types
 where
 
 import Data.Text qualified as Text
+import Kioku.Id (SessionId, idText)
 import Network.HTTP.Types.Header (Header)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Log (Logger)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (DanwaConfig, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig)
+import Shikigami.Sink.Coordinate (SinkOrdinal, sinkOrdinalInt)
 import Shikigami.Sink.GrantStore (GrantSource)
 import Shikigami.Sink.Http (SinkHttp)
 import Shikigami.Sink.Permission (SinkKind)
@@ -44,8 +46,8 @@ data DeliveryGuard = DeliveryGuard
 data SinkContext = SinkContext
   { identity :: !AgentIdentity,
     directory :: !DirectoryHandle,
-    runId :: !Text,
-    ordinal :: !Int,
+    runId :: !SessionId,
+    ordinal :: !SinkOrdinal,
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
     danwa :: !DanwaConfig,
@@ -125,6 +127,6 @@ data SinkResult = SinkResult
 -- of the same run re-POSTs the same key, so the doorway dedups it.
 mkSourceEventId :: SinkContext -> Text
 mkSourceEventId ctx =
-  identityLabel ((.identity) ctx) <> ":" <> (.runId) ctx <> ":" <> Text.pack (show ((.ordinal) ctx))
+  identityLabel ((.identity) ctx) <> ":" <> idText ((.runId) ctx) <> ":" <> Text.pack (show (sinkOrdinalInt ((.ordinal) ctx)))
   where
     identityLabel = either (const "unresolved-legacy") id . identityText

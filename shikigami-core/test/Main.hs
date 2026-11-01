@@ -11,6 +11,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
+import Kioku.Id qualified as SinkSession
 import Network.HTTP.Types (hContentType, status200, status204, status400, status404)
 import Network.HTTP.Types.Header (Header)
 import Network.Wai (Application, Request, Response, ResponseReceived, pathInfo, requestHeaders, requestMethod, responseLBS, strictRequestBody)
@@ -73,6 +74,7 @@ import Shikigami.Sink
     defaultGrantTable,
   )
 import Shikigami.Sink qualified as Sink
+import Shikigami.Sink.Coordinate (parseSinkSession, zeroSinkOrdinal)
 import Shikigami.Sink.KawaClient (buildEnvelope)
 import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
 import Shikigami.SinkAuthSpec qualified as SinkAuthSpec
@@ -271,8 +273,8 @@ ctxFor ident kz kw =
   SinkContext
     { identity = ident,
       directory = disabledDirectoryHandle,
-      runId = "run-1",
-      ordinal = 0,
+      runId = sinkSessionFixture,
+      ordinal = zeroSinkOrdinal,
       kizashi = kz,
       kawa = kw,
       danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
@@ -574,3 +576,6 @@ testBaseUrl port = "http://localhost:" <> Text.pack (show port)
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+sinkSessionFixture :: SinkSession.SessionId
+sinkSessionFixture = either (error . show) id (parseSinkSession "kioku_session_01kvxa7d2cezhs874g3n8dfgme")

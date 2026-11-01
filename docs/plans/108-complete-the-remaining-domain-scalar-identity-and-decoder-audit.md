@@ -175,6 +175,18 @@ These are new reviewed findings, not regressions in the four remediated fields.
 Both classification modes correctly refuse the remaining 3,207 missing keys;
 coverage and remediation milestones remain open.
 
+The sink session/ordinal source candidate passes 77 unit, 47 core PostgreSQL
+and 130 public compiler controls. Native AgentName/SessionId and a private
+zero-based int4 ordinal survive intent preparation, dispatch and receipt SQL.
+The native UUIDv7 check is explicit, separate from parsing and current-clock
+admission. An old compiled valid-session encoder supplies the exact wire golden;
+synthetic run labels are now negative data. Owning receipt queries bind all five
+intent coordinates, refusing both malformed and well-formed foreign rows with
+composed rollback, no extra HTTP and exact repair. See
+`docs/evidence/plan-108/sink-coordinates-source.json`. The required native
+workflow gate and coherent build/census reconciliation follow this source
+checkpoint; scalar detail and external-reference findings remain open.
+
 The native workflow gate passes on `400cdc0` against `af76f1b`, with no findings
 and a replay-neutral native verdict. Exact reports accompany the current evidence.
 The full build, fresh census and focused checks are checkpoints, not milestone
@@ -254,6 +266,14 @@ before the final Cabal gates/build and refresh the census afterwards; make the
 evidence-only commit last to avoid unnecessary extra cycles. Earlier build and
 compiler timing friction remains separate. This does not weaken freshness or
 semantic review requirements.
+
+Native session parsing does not perform the library's independent UUID version/
+variant check. Sink admission now calls the native check after strict prefix
+parsing and compares the canonical renderer. The clock-dependent variant is not
+used for historical data. Invalid v4 and non-RFC native values are explicit unit
+counterexamples, and the existing native library is exposed to that test
+component without changing runtime dependencies or pins. ADR-22 retains this
+constraint and the valid-session byte evidence.
 
 ## Decision Log
 

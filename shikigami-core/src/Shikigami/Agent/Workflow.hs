@@ -166,6 +166,7 @@ import Shikigami.Sink.Intent
   ( PreparedSinkIntent,
     SinkIntent (..),
     decodeSinkIntentEvent,
+    deliveryContextFor,
     deliveryReceiptFor,
     deliveryReceiptForKey,
     enqueuePreparedSinkIntentTx,
@@ -715,7 +716,7 @@ finishSuccessfulRun deps selectedModelId approvalPolicyForRun recordedIdentity j
           enqueueSinkIntents
             (depsDirectory deps)
             (depsGrants deps)
-            ((agentNameText ((.agentName) job)))
+            ((.agentName) job)
             ((.identity) job)
             (runJobOccurredAt job)
             (activityFromJob job)
@@ -1092,8 +1093,8 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
         }
     sinkEnv =
       FlowCapability.SinkEnv
-        { FlowCapability.agent = (agentNameText ((.agentName) job)),
-          FlowCapability.runId = idText sid,
+        { FlowCapability.agent = (.agentName) job,
+          FlowCapability.runId = sid,
           FlowCapability.occurredAt = Just (runJobOccurredAt job),
           FlowCapability.danwaTarget = Nothing,
           FlowCapability.activity = Just (activityFromJob job),
@@ -1118,9 +1119,9 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
         }
     practiceReviewAttentionEnv =
       PracticeReviewAttention.PracticeReviewAttentionEnv
-        { PracticeReviewAttention.agent = (agentNameText ((.agentName) job)),
+        { PracticeReviewAttention.agent = (.agentName) job,
           PracticeReviewAttention.identity = (.identity) job,
-          PracticeReviewAttention.runId = idText sid,
+          PracticeReviewAttention.runId = sid,
           PracticeReviewAttention.occurredAt = Just (runJobOccurredAt job),
           PracticeReviewAttention.activity = Just (activityFromJob job),
           PracticeReviewAttention.grants = depsGrants deps,
@@ -1265,9 +1266,7 @@ publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa
                   currentTraceContext <- traceContextFromCurrentSpan
                   admittedIdentity <- case recordedIdentity of
                     UnresolvedLegacyIdentity ->
-                      case mkAgentName agent of
-                        Left problem -> pure (Left problem)
-                        Right name -> Directory.identityAdmission intentDirectory Nothing name
+                      Directory.identityAdmission intentDirectory Nothing agent
                     _ -> pure (Right recordedIdentity)
                   let sinkContext =
                         SinkContext
@@ -1327,7 +1326,7 @@ permanentPublishOutcome detail =
 
 publishTracked :: Log.Logger -> Pool -> Text -> SinkKind -> SinkIntent -> IO SinkResult -> IO PublishOutcome
 publishTracked logger pool messageId kind intent send = do
-  existing <- Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey messageId)
+  existing <- Delivery.lookupDeliveryFor pool (deliveryContextFor messageId kind intent) (Delivery.deliveryReceiptKey messageId)
   case existing of
     Left err -> do
       logReceiptError logger "sink.delivery.lookup_failed" messageId kind err
@@ -1421,7 +1420,7 @@ deliveryGuard :: Pool -> Text -> SinkKind -> SinkIntent -> DeliveryGuard
 deliveryGuard pool messageId kind intent =
   DeliveryGuard
     { lookupReceipt = \substep -> do
-        lookedUp <- Delivery.lookupDelivery pool (Delivery.subReceiptKey messageId substep)
+        lookedUp <- Delivery.lookupDeliveryFor pool (deliveryContextFor messageId kind intent) (Delivery.subReceiptKey messageId substep)
         case lookedUp of
           Left err -> receiptIoError "lookup" err
           Right (Just Delivery.DeliveryReceipt {Delivery.status = Delivery.ConversationStarted, Delivery.detail = Just recorded}) -> pure (Just recorded)
@@ -1465,7 +1464,7 @@ reconcilePublishedSinkIntent AgentRunDeps {deliveryPool = Just pool, logger} row
         ]
     Right intent@SinkIntent {sink} -> do
       let kind = sinkKindOf sink
-      Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey messageId) >>= \case
+      Delivery.lookupDeliveryFor pool (deliveryContextFor messageId kind intent) (Delivery.deliveryReceiptKey messageId) >>= \case
         Left err -> logReceiptError logger "sink.delivery.reconciliation_lookup_failed" messageId kind err
         Right (Just Delivery.DeliveryReceipt {Delivery.status = receiptStatus})
           | receiptStatus `elem` [Delivery.Delivered, Delivery.Dead, Delivery.Unknown] -> pure ()

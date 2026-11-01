@@ -5,6 +5,7 @@ import Control.Lens ((&), (.~))
 import Control.Monad (filterM, void)
 import Data.Aeson (Result (..), eitherDecode, encode, fromJSON, object, (.=))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy.Char8 qualified as LBS8
 import Data.Foldable (for_)
 import Data.Generics.Labels ()
@@ -26,6 +27,7 @@ import Keiro.Integration.Event qualified as Integration
 import Keiro.Outbox qualified as Outbox
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
 import Kikan.En.Action (AgentAction, actionResource, canonicalResourceText)
+import Kioku.Id qualified as SinkSession
 import Kioku.Session (SessionRow (..))
 import Kioku.Session qualified as Session
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
@@ -848,32 +850,71 @@ corruptDelivery fixture = do
       original <- lookupReceipt pool row
       original.status @?= Delivery.Delivered
       readIORef posts >>= (@?= 1)
-      sql "ALTER TABLE shikigami.sink_deliveries DROP CONSTRAINT sink_deliveries_status_check"
-      for_ [("UPDATE shikigami.sink_deliveries SET status='broken'", "UPDATE shikigami.sink_deliveries SET status='delivered'"), ("UPDATE shikigami.sink_deliveries SET sink_kind='OtherSink'", "UPDATE shikigami.sink_deliveries SET sink_kind='KawaDigest'")] \(corrupt, repair) -> do
-        sql corrupt
-        Delivery.lookupDelivery pool original.receiptKey >>= (@?= Left "corrupt retained sink delivery receipt")
-        ignored <-
-          expectRight "transaction"
-            =<< Pool.use
-              pool
-              ( Transactions.transaction Transactions.ReadCommitted Transactions.Write do
-                  Delivery.recordDeliveryTx (original & #receiptKey .~ Delivery.deliveryReceiptKey "must-rollback")
-                  result <- Delivery.lookupDeliveryTx original.receiptKey
-                  Delivery.recordDeliveryTx (original & #receiptKey .~ Delivery.deliveryReceiptKey "also-rollback")
-                  pure result
-              )
-        ignored @?= Left "corrupt retained sink delivery receipt"
-        Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey "must-rollback") >>= (@?= Right Nothing)
-        Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey "also-rollback") >>= (@?= Right Nothing)
-        outcome <- runEff (AgentWorkflow.publishSinkIntent deps row)
-        case outcome of
-          Outbox.PublishFailed err -> assertBool "owning refusal" ("corrupt retained sink delivery receipt" `Text.isInfixOf` err)
-          other -> assertFailure ("corrupt receipt authorized publication: " <> show other)
+      fields <- case Aeson.eitherDecodeStrict @Aeson.Value (Integration.payloadBytes (rowEvent row)) of
+        Right (Aeson.Object value) -> pure value
+        other -> assertFailure ("expected a complete queued intent: " <> show other) >> fail "queued intent"
+      for_ [("agent", Aeson.String ""), ("runId", Aeson.String "kioku_memory_01kvxa7d2cezhs874g3n8dfgme"), ("ordinal", Aeson.Number (-1)), ("ordinal", Aeson.Number 2147483648)] \(key, invalid) -> do
+        let badEvent = (rowEvent row) {Integration.payloadBytes = LBS8.toStrict (encode (Aeson.Object (KeyMap.insert key invalid fields)))}
+            badRow = row & #event .~ badEvent
+        runEff (AgentWorkflow.publishSinkIntent deps badRow) >>= \case
+          Outbox.PublishFailed _ -> pure ()
+          other -> assertFailure ("malformed complete intent authorized publication: " <> show other)
         readIORef posts >>= (@?= 1)
-        sql repair
         Delivery.lookupDelivery pool original.receiptKey >>= (@?= Right (Just original))
-        assertEqual "repair recovers retained delivery" Outbox.PublishSucceeded =<< runEff (AgentWorkflow.publishSinkIntent deps row)
-        readIORef posts >>= (@?= 1)
+      guarded <- Pool.use pool (Session.statement () (preparable "UPDATE shikigami.sink_deliveries SET ordinal=-1" Encoders.noParams Decoders.noResult))
+      case guarded of
+        Left _ -> pure ()
+        Right _ -> assertFailure "normal SQL guard admitted a negative ordinal"
+      Delivery.lookupDelivery pool original.receiptKey >>= (@?= Right (Just original))
+      sql "ALTER TABLE shikigami.sink_deliveries DROP CONSTRAINT sink_deliveries_status_check"
+      sql "ALTER TABLE shikigami.sink_deliveries DROP CONSTRAINT sink_deliveries_ordinal_check"
+      let expected = Delivery.ReceiptContext original.outboxMessageId original.runId original.agent original.ordinal original.sinkKind
+          malformedCases =
+            [ ("UPDATE shikigami.sink_deliveries SET status='broken'", "UPDATE shikigami.sink_deliveries SET status='delivered'"),
+              ("UPDATE shikigami.sink_deliveries SET sink_kind='OtherSink'", "UPDATE shikigami.sink_deliveries SET sink_kind='KawaDigest'"),
+              ("UPDATE shikigami.sink_deliveries SET agent=''", "UPDATE shikigami.sink_deliveries SET agent='heartbeat'"),
+              ("UPDATE shikigami.sink_deliveries SET run_id='kioku_memory_01kvxa7d2cezhs874g3n8dfgme'", "UPDATE shikigami.sink_deliveries SET run_id='" <> SinkSession.idText original.runId <> "'"),
+              ("UPDATE shikigami.sink_deliveries SET ordinal=-1", "UPDATE shikigami.sink_deliveries SET ordinal=0")
+            ]
+          foreignCases =
+            [ ("UPDATE shikigami.sink_deliveries SET outbox_message_id='other-message'", "UPDATE shikigami.sink_deliveries SET outbox_message_id='" <> Delivery.sinkMessageIdText original.outboxMessageId <> "'"),
+              ("UPDATE shikigami.sink_deliveries SET agent='foreign-agent'", "UPDATE shikigami.sink_deliveries SET agent='heartbeat'"),
+              ("UPDATE shikigami.sink_deliveries SET run_id='kioku_session_01kvxa7d2cezhs874g3n8dfgme'", "UPDATE shikigami.sink_deliveries SET run_id='" <> SinkSession.idText original.runId <> "'"),
+              ("UPDATE shikigami.sink_deliveries SET ordinal=1", "UPDATE shikigami.sink_deliveries SET ordinal=0"),
+              ("UPDATE shikigami.sink_deliveries SET sink_kind='KizashiSignal'", "UPDATE shikigami.sink_deliveries SET sink_kind='KawaDigest'")
+            ]
+      for_ [(True, malformedCases), (False, foreignCases)] \(malformed, cases) ->
+        for_ cases \(corrupt, repair) -> do
+          sql corrupt
+          let refusal = if malformed then "corrupt retained sink delivery receipt" else "inconsistent retained sink delivery receipt"
+          if malformed
+            then Delivery.lookupDelivery pool original.receiptKey >>= (@?= Left refusal)
+            else do
+              foreignReceipt <- expectRight "typed foreign receipt" =<< Delivery.lookupDelivery pool original.receiptKey
+              assertBool "well-formed foreign receipt is retained as a fact" (maybe False (/= original) foreignReceipt)
+          Delivery.lookupDeliveryFor pool expected original.receiptKey >>= (@?= Left refusal)
+          ignored <-
+            expectRight "transaction"
+              =<< Pool.use
+                pool
+                ( Transactions.transaction Transactions.ReadCommitted Transactions.Write do
+                    Delivery.recordDeliveryTx (original & #receiptKey .~ Delivery.deliveryReceiptKey "must-rollback")
+                    result <- Delivery.lookupDeliveryForTx expected original.receiptKey
+                    Delivery.recordDeliveryTx (original & #receiptKey .~ Delivery.deliveryReceiptKey "also-rollback")
+                    pure result
+                )
+          ignored @?= Left refusal
+          Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey "must-rollback") >>= (@?= Right Nothing)
+          Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey "also-rollback") >>= (@?= Right Nothing)
+          outcome <- runEff (AgentWorkflow.publishSinkIntent deps row)
+          case outcome of
+            Outbox.PublishFailed err -> assertBool "owning refusal" (refusal `Text.isInfixOf` err)
+            other -> assertFailure ("corrupt receipt authorized publication: " <> show other)
+          readIORef posts >>= (@?= 1)
+          sql repair
+          Delivery.lookupDelivery pool original.receiptKey >>= (@?= Right (Just original))
+          assertEqual "repair recovers retained delivery" Outbox.PublishSucceeded =<< runEff (AgentWorkflow.publishSinkIntent deps row)
+          readIORef posts >>= (@?= 1)
       sql "ALTER TABLE shikigami.sink_deliveries RENAME TO sink_deliveries_unavailable"
       unavailable <- Delivery.lookupDelivery pool original.receiptKey
       case unavailable of

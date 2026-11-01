@@ -46,7 +46,7 @@ import Kiroku.Store.Effect (Store)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl (..), MemoryPolicy (..))
 import Shikigami.Agent.Decl qualified as Agent
-import Shikigami.Agent.Name (agentNameText)
+import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity, ResolvedAgentIdentity)
 import Shikigami.Agent.Run (behaviorKindText, recallAgentLearnings, renderLearning)
 import Shikigami.App (AppEnv, runAppIO)
@@ -69,8 +69,8 @@ data MemoryEnv = MemoryEnv
   }
 
 data SinkEnv = SinkEnv
-  { agent :: !Text,
-    runId :: !Text,
+  { agent :: !AgentName,
+    runId :: !SessionId,
     occurredAt :: !(Maybe UTCTime),
     danwaTarget :: !(Maybe DanwaTarget),
     -- | The activity that triggered the flow, carried so a @KizashiSignal@

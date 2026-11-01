@@ -16,6 +16,7 @@ import Data.Text (Text)
 import Data.Text qualified as AliasText
 import Data.Time (UTCTime (..), fromGregorian)
 import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
+import Kioku.Id qualified as SinkSession
 import Shibuya.Core.Types (Attempt (..), Envelope (..), mkEnvelope)
 import Shikigami.Agent.Decl
   ( Priority (High),
@@ -43,6 +44,7 @@ import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Execution.Request (ExecutionRequest (..))
 import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
 import Shikigami.RunJobs qualified as RunJobs
+import Shikigami.Sink.Coordinate (parseSinkSession, zeroSinkOrdinal)
 import Shikigami.Sink.Intent (SinkIntent (..))
 import Shikigami.Sink.Permission (SinkKind (SKizashiSignal, SReiAction))
 import Shikigami.Sink.Types
@@ -263,10 +265,10 @@ outboxTests =
 sampleSinkIntent :: SinkIntent
 sampleSinkIntent =
   SinkIntent
-    { agent = "at-risk-watch",
+    { agent = fixtureAgentName "at-risk-watch",
       identity = UnresolvedLegacyIdentity,
-      runId = "run_1",
-      ordinal = 0,
+      runId = sinkSessionFixture,
+      ordinal = zeroSinkOrdinal,
       occurredAt = Just sampleTime,
       danwaTarget = Just DanwaTarget {conversationId = "conv_1", parentMessageId = Nothing},
       -- Absent, and therefore absent from the bytes below: this field was added
@@ -297,7 +299,7 @@ outputValue = either error id (eitherDecodeStrict "{\"summary\":\"x\"}")
 
 preUpgradeSinkIntent :: ByteString
 preUpgradeSinkIntent =
-  "{\"agent\":\"at-risk-watch\",\"danwaTarget\":{\"conversationId\":\"conv_1\",\"parentMessageId\":null},\"occurredAt\":\"2026-07-15T12:00:00Z\",\"ordinal\":0,\"output\":{\"summary\":\"x\"},\"runId\":\"run_1\",\"sink\":{\"defaultRecipient\":\"ops\",\"extraContextTags\":[\"a\"],\"importance\":7,\"intentTemplate\":\"escalate\",\"priority\":\"High\",\"recipientFrom\":\"SubjectOwner\",\"signalType\":\"Alert\",\"source\":\"shikigami\",\"tag\":\"KizashiSignal\"}}"
+  "{\"agent\":\"at-risk-watch\",\"danwaTarget\":{\"conversationId\":\"conv_1\",\"parentMessageId\":null},\"occurredAt\":\"2026-07-15T12:00:00Z\",\"ordinal\":0,\"output\":{\"summary\":\"x\"},\"runId\":\"kioku_session_01kvxa7d2cezhs874g3n8dfgme\",\"sink\":{\"defaultRecipient\":\"ops\",\"extraContextTags\":[\"a\"],\"importance\":7,\"intentTemplate\":\"escalate\",\"priority\":\"High\",\"recipientFrom\":\"SubjectOwner\",\"signalType\":\"Alert\",\"source\":\"shikigami\",\"tag\":\"KizashiSignal\"}}"
 
 preUpgradeDelivered :: ByteString
 preUpgradeDelivered =
@@ -417,3 +419,6 @@ fixtureRunKey = either (error . show) id . parseRunKey
 
 fixtureModelAlias :: AliasText.Text -> Alias.ModelAlias
 fixtureModelAlias = either (error . show) id . Alias.parseModelAlias
+
+sinkSessionFixture :: SinkSession.SessionId
+sinkSessionFixture = either (error . show) id (parseSinkSession "kioku_session_01kvxa7d2cezhs874g3n8dfgme")

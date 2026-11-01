@@ -1410,8 +1410,8 @@ prepareConversationReplySinkIntent directoryHandle grantSource recordedIdentity 
     (resolvedIdentity recordedIdentity)
     (conversationWorkflowId 0 msg)
     (replySinkStepName msgMessageId)
-    (agentNameText ((.name) decl))
-    (idText sid)
+    ((.name) decl)
+    sid
     0
     Nothing
     ( Just

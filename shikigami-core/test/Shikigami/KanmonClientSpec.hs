@@ -7,6 +7,7 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Kioku.Id qualified as SinkSession
 import Network.HTTP.Types (Header, Status, hAuthorization, hContentType, mkStatus, status200)
 import Network.Wai (Application, pathInfo, requestHeaders, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
@@ -23,6 +24,7 @@ import Shikigami.Log qualified as Log
 import Shikigami.Sink (SinkOutcome (..), SinkResult (..), dispatch)
 import Shikigami.Sink.Auth (CredentialFailure (..), CredentialFailureReason (CredentialBackendUnavailable), TokenSource (..))
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
+import Shikigami.Sink.Coordinate (parseSinkSession, zeroSinkOrdinal)
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Http (HttpEnv (..), HttpFailure (..), HttpFailureReason (..), SinkCredentials (..), SinkHttp (..), credentialsFromConfig, newSinkManager)
 import Shikigami.Sink.KanmonClient
@@ -38,7 +40,7 @@ tests =
     "Kanmon client"
     [ testCase "request and response JSON match the Kanmon snake-case contract" do
         encode request
-          @?= "{\"content\":\"reply text\",\"conversation_key\":\"conv_55012\",\"idempotency_key\":\"shikigami.agent.v2.57c8f321-a02c-5978-aee9-ed2efc3fbfe6:run-1:0\",\"triggering_activity_id\":\"act_1\"}"
+          @?= "{\"content\":\"reply text\",\"conversation_key\":\"conv_55012\",\"idempotency_key\":\"shikigami.agent.v2.57c8f321-a02c-5978-aee9-ed2efc3fbfe6:kioku_session_01kvxa7d2cezhs874g3n8dfgme:0\",\"triggering_activity_id\":\"act_1\"}"
         eitherDecode "{\"activity_id\":\"act_reply_1\",\"verb\":\"conversation.reply_sent\"}"
           @?= Right (EgressActionResponse "act_reply_1" "conversation.reply_sent"),
       testCase "conversation resolution follows declaration, output, then activity precedence" do
@@ -110,7 +112,7 @@ request =
   EgressActionRequest
     { conversationKey = "conv_55012",
       content = "reply text",
-      idempotencyKey = Just "shikigami.agent.v2.57c8f321-a02c-5978-aee9-ed2efc3fbfe6:run-1:0",
+      idempotencyKey = Just "shikigami.agent.v2.57c8f321-a02c-5978-aee9-ed2efc3fbfe6:kioku_session_01kvxa7d2cezhs874g3n8dfgme:0",
       triggeringActivityId = Just "act_1"
     }
 
@@ -142,8 +144,8 @@ sampleContextWith conversationKey kanmon http =
   SinkContext
     { identity = compatibilityIdentity (fixtureAgentName "channel-reply"),
       directory = disabledDirectoryHandle,
-      runId = "run-1",
-      ordinal = 0,
+      runId = sinkSessionFixture,
+      ordinal = zeroSinkOrdinal,
       kizashi = KizashiConfig {baseUrl = unreachable, defaultRecipient = "recipient"},
       kawa = KawaConfig {baseUrl = unreachable, sourceSegment = "shinzui/shikigami"},
       danwa = DanwaConfig {baseUrl = unreachable, agentParticipant = "part_agent_test"},
@@ -236,3 +238,6 @@ unreachable = "http://localhost:1"
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+sinkSessionFixture :: SinkSession.SessionId
+sinkSessionFixture = either (error . show) id (parseSinkSession "kioku_session_01kvxa7d2cezhs874g3n8dfgme")

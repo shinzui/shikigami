@@ -14,6 +14,7 @@ module Shikigami.Sink.Intent
     decodeSinkIntentEvent,
     sinkIntentEvent,
     deliveryReceiptFor,
+    deliveryContextFor,
     deliveryReceiptForKey,
     sinkMessageId,
     deterministicOutboxId,
@@ -56,6 +57,7 @@ import Shikigami.Action.Authorization (ActionAuthorizationFailure (..), authoriz
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Decl (Sink (..))
+import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
@@ -69,6 +71,7 @@ import Shikigami.Sink
     sinkKindOf,
   )
 import Shikigami.Sink.Authorization (authorizeSinkAction)
+import Shikigami.Sink.Coordinate (SinkOrdinal, parseSinkOrdinal, parseSinkSession)
 import Shikigami.Sink.Delivery qualified as Delivery
 import Shikigami.Sink.GrantStore (actionAuthorizerFor)
 import Shikigami.Sink.KanmonClient (resolveConversationKey)
@@ -82,10 +85,10 @@ import Shikigami.Sink.Recipient (resolveSinkRecipient)
 -- workflow has committed. Optional fields are omitted so rows written before
 -- an additive field existed keep their original bytes.
 data SinkIntent = SinkIntent
-  { agent :: !Text,
+  { agent :: !AgentName,
     identity :: !AgentIdentity,
-    runId :: !Text,
-    ordinal :: !Int,
+    runId :: !SessionId,
+    ordinal :: !SinkOrdinal,
     occurredAt :: !(Maybe UTCTime),
     danwaTarget :: !(Maybe DanwaTarget),
     resolvedRecipient :: !(Maybe Text),
@@ -100,7 +103,7 @@ instance ToJSON SinkIntent where
   toJSON SinkIntent {agent, identity, runId, ordinal, occurredAt, danwaTarget, resolvedRecipient, conversationKey, triggeringActivityId, sink, output} =
     Aeson.object
       ( [ "agent" .= agent,
-          "runId" .= runId,
+          "runId" .= idText runId,
           "ordinal" .= ordinal,
           "sink" .= sink,
           "output" .= output
@@ -128,7 +131,7 @@ instance FromJSON SinkIntent where
     SinkIntent
       <$> object .: "agent"
       <*> pure identity
-      <*> object .: "runId"
+      <*> (object .: "runId" >>= either (fail . Text.unpack) pure . parseSinkSession)
       <*> object .: "ordinal"
       <*> object .:? "occurredAt"
       <*> object .:? "danwaTarget"
@@ -151,7 +154,7 @@ enqueueSinkIntents ::
   (Workflow :> es, Store :> es, IOE :> es) =>
   DirectoryHandle ->
   GrantSource ->
-  Text ->
+  AgentName ->
   AgentIdentity ->
   UTCTime ->
   ActivityEnvelope ->
@@ -191,6 +194,7 @@ enqueueSinkIntents directoryHandle grantSource agentName identity jobOccurredAt 
     runIdText = idText sessionId
 
     buildSinkIntent capturedTraceContext workflowId now (ordinal, sink) = do
+      position <- admitSinkOrdinal ordinal
       let kind = sinkKindOf sink
       Directory.identityLifecycleAdmission directoryHandle identity >>= \case
         Left reason -> pure (SinkResult kind (SkippedLifecycle reason), Nothing)
@@ -204,8 +208,8 @@ enqueueSinkIntents directoryHandle grantSource agentName identity jobOccurredAt 
                     SinkIntent
                       { agent = agentName,
                         identity,
-                        runId = runIdText,
-                        ordinal,
+                        runId = sessionId,
+                        ordinal = position,
                         occurredAt = Just jobOccurredAt,
                         danwaTarget = Nothing,
                         resolvedRecipient = resolveSinkRecipient sink (Just activity),
@@ -232,8 +236,8 @@ enqueueSinkIntentStep ::
   GrantSource ->
   AgentIdentity ->
   StepName ->
-  Text ->
-  Text ->
+  AgentName ->
+  SessionId ->
   Int ->
   Maybe UTCTime ->
   Maybe DanwaTarget ->
@@ -271,8 +275,8 @@ prepareSinkIntent ::
   AgentIdentity ->
   WorkflowId ->
   StepName ->
-  Text ->
-  Text ->
+  AgentName ->
+  SessionId ->
   Int ->
   Maybe UTCTime ->
   Maybe DanwaTarget ->
@@ -309,8 +313,8 @@ prepareSinkIntentForRecipient ::
   AgentIdentity ->
   WorkflowId ->
   StepName ->
-  Text ->
-  Text ->
+  AgentName ->
+  SessionId ->
   Int ->
   Maybe UTCTime ->
   Maybe DanwaTarget ->
@@ -331,8 +335,8 @@ prepareSinkIntentForRecipientWithMessageId ::
   AgentIdentity ->
   WorkflowId ->
   StepName ->
-  Text ->
-  Text ->
+  AgentName ->
+  SessionId ->
   Int ->
   Maybe UTCTime ->
   Maybe DanwaTarget ->
@@ -352,8 +356,8 @@ prepareSinkIntentWithRecipient ::
   AgentIdentity ->
   WorkflowId ->
   StepName ->
-  Text ->
-  Text ->
+  AgentName ->
+  SessionId ->
   Int ->
   Maybe UTCTime ->
   Maybe DanwaTarget ->
@@ -364,7 +368,9 @@ prepareSinkIntentWithRecipient ::
   Value ->
   UTCTime ->
   IO PreparedSinkIntent
-prepareSinkIntentWithRecipient directoryHandle grantSource identity workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity explicitMessageId explicitRecipient sink output now = do
+prepareSinkIntentWithRecipient directoryHandle grantSource identity workflowId stepName agentName runId ordinal occurredAt danwaTarget activity explicitMessageId explicitRecipient sink output now = do
+  position <- admitSinkOrdinal ordinal
+  let runIdText = idText runId
   capturedTraceContext <- traceContextFromCurrentSpan
   let kind = sinkKindOf sink
       messageId = fromMaybe (unWorkflowId workflowId <> ":" <> unStepName stepName) explicitMessageId
@@ -394,8 +400,8 @@ prepareSinkIntentWithRecipient directoryHandle grantSource identity workflowId s
                 SinkIntent
                   { agent = agentName,
                     identity,
-                    runId = runIdText,
-                    ordinal,
+                    runId,
+                    ordinal = position,
                     occurredAt,
                     danwaTarget,
                     resolvedRecipient = explicitRecipient,
@@ -441,6 +447,10 @@ enqueuePreparedSinkIntentTx :: PreparedSinkIntent -> Tx.Transaction ()
 enqueuePreparedSinkIntentTx PreparedSinkIntent {outboxMessage, deliveryReceipt} = do
   traverse_ enqueueOutboxTx outboxMessage
   traverse_ Delivery.recordDeliveryTx deliveryReceipt
+
+deliveryContextFor :: Text -> SinkKind -> SinkIntent -> Delivery.ReceiptContext
+deliveryContextFor messageId kind SinkIntent {agent, runId, ordinal} =
+  Delivery.ReceiptContext (Delivery.sinkMessageId messageId) runId agent ordinal kind
 
 deliveryReceiptFor :: Text -> SinkKind -> Delivery.DeliveryStatus -> Maybe Text -> UTCTime -> SinkIntent -> Delivery.DeliveryReceipt
 deliveryReceiptFor messageId kind = deliveryReceiptForKey (Delivery.deliveryReceiptKey messageId) messageId kind
@@ -501,3 +511,7 @@ deterministicOutboxIdForMessage messageId =
   OutboxId $
     UUID.V5.generateNamed UUID.V5.namespaceURL $
       nameBytes ("shikigami:sink:" <> messageId)
+
+-- Producer indices are incidental Int counters until this construction boundary.
+admitSinkOrdinal :: Int -> IO SinkOrdinal
+admitSinkOrdinal = either (ioError . userError . Text.unpack) pure . parseSinkOrdinal . toInteger

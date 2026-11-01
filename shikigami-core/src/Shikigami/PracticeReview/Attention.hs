@@ -43,10 +43,12 @@ import Keiro.Workflow
     prepareJournalAppend,
     step,
   )
+import Kioku.Id (SessionId)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl qualified as Agent
+import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.PracticeReview
@@ -83,9 +85,9 @@ newtype AttentionKey = AttentionKey {value :: Text}
   deriving newtype (ToJSON, FromJSON)
 
 data PracticeReviewAttentionEnv = PracticeReviewAttentionEnv
-  { agent :: !Text,
+  { agent :: !AgentName,
     identity :: !AgentIdentity,
-    runId :: !Text,
+    runId :: !SessionId,
     occurredAt :: !(Maybe UTCTime),
     activity :: !(Maybe ActivityEnvelope),
     grants :: !GrantSource,

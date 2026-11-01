@@ -999,3 +999,73 @@ The source-bound classification totals 838 keys: 751 compliant, 35 excluded and
 only at 3,207 missing keys after source/build/tool/entry validation. The frozen
 124-source/93-item inventory and 21 mutation controls pass; the unchanged-tool
 24-case result remains applicable. M1/M2/M3 and the guide deferral remain open.
+
+## Native sink sessions, checked ordinals and receipt ownership
+
+`sink-coordinates-source.json` binds the arm64 macOS/GHC 9.12.4 source candidate
+to `82cf413`. Enqueue APIs, flow/attention environments, SinkIntent, SinkContext
+and receipts now retain the existing AgentName and Kioku SessionId. The actual
+agent, conversation, flow and practice-review producers pass their admitted
+native values. There is no new allocation, TypeID prefix, identity derivation,
+clock admission or legacy inference. SinkOrdinal is private/non-Generic with
+number JSON and the exact existing 0..2147483647 receipt int4 range. Incidental
+producer Int indices refine once before intent construction. SQL cannot silently
+narrow an oversized value.
+
+Kioku parsing, native KindID UUIDv7 version/variant validation and canonical
+rendering are separate checks. Prefix confusion, malformed labels, UUIDv4,
+wrong variant, negative/overflow/fractional ordinals and empty agent names refuse
+at complete queued decode or retained row decode. The native library's
+clock-dependent check is not applied to historical identity. The test component
+explicitly exposes the existing mmzk-typeid dependency to construct invalid
+native UUID witnesses; no runtime version, pin or bound changes.
+
+`sink-session-wire-before.json` was captured from the pre-change compiled
+producer on source `21379a2` (the executable source is unchanged on parent
+`82cf413`). Its exact encoder bytes, excluding the output newline, hash to
+`1f80c8357889bce0c377aaaabbf19bb66b286709c214c4a1c3054d3383575c5b`.
+The current complete intent golden matches them exactly. Earlier fixture-only
+`run_1`/`run-1` labels were not native sessions and are now negative decoder data;
+the golden uses the already admitted native session fixture. Source-event
+idempotency keys and outbox recipes retain their original valid native bytes.
+This is not a first-release identity reset or an opaque-history compatibility
+claim for malformed coordinates.
+
+Publication, conversation substep adoption and terminal reconciliation use
+lookupDeliveryFor/Tx with a ReceiptContext from the fully decoded queued intent.
+All five coordinates must match: message id, session, agent, ordinal and kind.
+Malformed rows retain the existing corruption refusal. Well-formed foreign
+rows remain queryable as facts but cannot supply delivery proof for this intent;
+the owning query refuses and condemns its composed transaction. No row is
+replaced or transformed into absence. C11/C13, lifecycle and current authority
+retain their separate responsibilities.
+
+The owning PostgreSQL control injects five malformed and five well-formed
+foreign coordinate cases, with the original row retained. It proves rollback of
+earlier/later writes despite an ignored refusal, no extra actual HTTP send and
+recovery of the same send guard after exact repair. The normal ordinal SQL
+constraint first rejects a negative update and preserves the row; only the
+cloned fixture then removes its ordinal/status guards for corruption injection.
+Production migrations/constraints are unchanged. Complete bad queued JSON is
+also passed to the actual publisher as an altered fixture event: it refuses
+before HTTP and preserves the original receipt, without editing Keiro tables.
+
+The existing selected groups were listed first. The final source passes 77 core
+unit and 47 core PostgreSQL cases, including the new UUID-domain case, wire
+compatibility, honest dispatch, Kanmon, FlowLifecycle, practice-review attention
+and all 20 SinkDelivery cases. All 130 compiler controls pass (their public API
+is unchanged by the final native UUID validation body). Public native factories
+compile before raw numeric/Generic/constructor/substitution bypasses refuse.
+Style and whitespace checks pass.
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-test shikigami-core-postgres-test -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/SinkIntent/||/wire compatibility/||/sink honesty/||/Kanmon client/||/SinkDelivery/||/FlowLifecycle/||/practice review orchestration/||/agent conversation/'
+nix develop --no-write-lock-file -c python3 tests/types/opaque-values.py
+python3 tools/style/check_haskell.py
+git diff --check
+```
+
+ADR-22 records the native coordinate and owning-read constraints. No workflow
+step/label/order, valid journal result, identity recipe or migration changes. The
+required native gate, full build and fresh census/classification reconciliation
+follow the source commit. All milestones and the guide deferral remain open.

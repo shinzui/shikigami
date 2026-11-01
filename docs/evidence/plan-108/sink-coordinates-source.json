@@ -1,0 +1,31 @@
+{
+  "sourceParent": "82cf413",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "files": {
+    "shikigami-core/shikigami-core.cabal": "702c7748c3a51dd73af32f75099757037562ddb3e1006dafe43998610aaeea60",
+    "shikigami-core/src/Shikigami/Agent/Conversation.hs": "6ed8afe207a11b322622406e901bd89d15f2ca63d230b164f16eb81984b0bcab",
+    "shikigami-core/src/Shikigami/Agent/Workflow.hs": "e4695f8714c317e924361ae6b7230f6f035c03ad9c77dc39717b50d9a5f27de8",
+    "shikigami-core/src/Shikigami/Flow/Capability.hs": "c78688ce4ee332e1297052207c2a280bea36db7226bb23969ed6f1ccc3731013",
+    "shikigami-core/src/Shikigami/PracticeReview/Attention.hs": "e503d2ec39607159d70cd08cb9dafd7f7209d22ce1ab36fb6ee4004f7296a52d",
+    "shikigami-core/src/Shikigami/Sink/Coordinate.hs": "74dd4a111ac8ffcbbe9e18919c8e91fa56a47d8f4520809a1454cf8748907c6b",
+    "shikigami-core/src/Shikigami/Sink/Delivery.hs": "e3f5f6dabcc53d37529301a29ed32914557fc1d1dc1f01ef95af4f341291cc6b",
+    "shikigami-core/src/Shikigami/Sink/Intent.hs": "c22cedafaf77ea0d6107076dcbf09045850e43d3ae7716229b7491a81c6f0031",
+    "shikigami-core/src/Shikigami/Sink/Types.hs": "aa601c44dde770eb9e95341f35cbf510dd6f86ab3301d1a0db8181ba602b0be6",
+    "shikigami-core/test-postgres/Shikigami/FlowLifecycleSpec.hs": "836280819558791d1d52ddac09ebc85412541866766aa0fbbd55871565970072",
+    "shikigami-core/test-postgres/Shikigami/PracticeReviewOrchestrationSpec.hs": "a5927cf2537ce15917fc7e3cd0b088bc818d7e62f8a368557bfa3474639c6206",
+    "shikigami-core/test-postgres/Shikigami/SinkDeliverySpec.hs": "e2b1986dfa8e99e9bf944763ea7b1f9470cc13fc675db8c9c13d2c46d2dcc09a",
+    "shikigami-core/test/Main.hs": "d21dbff0ee7397ed704f68e69b6bf4f9a9ffa65e0dfdd539094609bda5bc2534",
+    "shikigami-core/test/Shikigami/KanmonClientSpec.hs": "87cb24b49044f05a5fb68d8c30839f162aa81d3139c9ea09baee2be146f16b63",
+    "shikigami-core/test/Shikigami/SinkHonestySpec.hs": "dd9a7b6f9f513fbebdf2374b3bf5e1017edf26b0d183b51020fa8f39d4ff4032",
+    "shikigami-core/test/Shikigami/SinkIntentSpec.hs": "f8c1aaf2108f34fbf5f335c5bd4e2cd508929a67f2e4198159d4c1f0f1eda2c1",
+    "shikigami-core/test/Shikigami/WireCompatSpec.hs": "086663f7f9054911dd30306125775e74f8b8fff2921bd2f230b9d87f285fefc8",
+    "tests/types/opaque-values.py": "4985c134e6395ff03c6ca2dff5c61fbc16a0e489c4b6e601a46c4dcdf89681ae"
+  },
+  "wireGolden": {
+    "path": "docs/evidence/plan-108/sink-session-wire-before.json",
+    "sha256": "eb9fe0476c30b61b30b24d3747341956d2df5a2aaf9c1c4dba66af6f76c80124",
+    "compiledSource": "21379a2",
+    "note": "Captured from the pre-change compiled SinkIntent encoder; executable source is unchanged on the documentation-only parent 82cf413."
+  }
+}

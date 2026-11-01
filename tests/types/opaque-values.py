@@ -23,6 +23,7 @@ import Data.Text (Text)
 import Data.Int (Int64)
 import Data.UUID (UUID)
 import Pgmq (MessageId)
+import Kioku.Id (SessionId)
 import Numeric.Natural (Natural)
 import GHC.Generics qualified as Generic
 import Keiro.Workflow.Types (WorkflowId)
@@ -42,6 +43,8 @@ import Shikigami.Capability.Overlay qualified as Overlay
 import Shikigami.AgentRun.Ledger qualified as Ledger
 import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Sink.Delivery qualified as Delivery
+import Shikigami.Sink.Intent qualified as SinkIntent
+import Shikigami.Sink.Coordinate qualified as SinkCoordinate
 import Shikigami.AgentRun.RequestKey qualified as Request
 import Shikigami.Agent.Run.Key qualified as FullKey
 import Shikigami.Trigger.RequestKey qualified as Addressed
@@ -69,7 +72,15 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''openWorkspace :: WorkspaceStore.FreezeState
+POSITIVE = '''sinkPosition :: Integer -> Either Text SinkCoordinate.SinkOrdinal
+sinkPosition = SinkCoordinate.parseSinkOrdinal
+sinkSession :: SinkIntent.SinkIntent -> SessionId
+sinkSession value = value.runId
+receiptSession :: Delivery.DeliveryReceipt -> SessionId
+receiptSession value = value.runId
+sinkAgent :: SinkIntent.SinkIntent -> Name.AgentName
+sinkAgent value = value.agent
+openWorkspace :: WorkspaceStore.FreezeState
 openWorkspace = WorkspaceStore.AdmissionOpen
 sinkMessage :: Text -> Delivery.SinkMessageId
 sinkMessage = Delivery.sinkMessageId
@@ -231,6 +242,7 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('SinkCoordinate.SinkOrdinal', 'generic'),
     ('Delivery.SinkMessageId', 'generic'),
     ('Delivery.ReceiptKey', 'generic'),
     ('DirectoryStore.ReportedPrincipalClaim', 'generic'),
@@ -325,6 +337,9 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         assert result.returncode != 0 and 'RunDisposition' in result.stderr, (source_kind, result.stderr)
         print('opaque boundary: run disposition ' + source_kind + ' substitution refused: passed', flush=True)
     for label, signature, expression in [
+        ('sink ordinal raw coercion', 'Int -> SinkCoordinate.SinkOrdinal', 'coerce'),
+        ('sink ordinal raw substitution', 'Int -> SinkCoordinate.SinkOrdinal', 'id'),
+        ('sink session/workflow substitution', 'SessionId -> WorkflowId', 'id'),
         ('freeze boolean substitution', 'Bool -> WorkspaceStore.FreezeState', 'id'),
         ('freeze boolean coercion', 'Bool -> WorkspaceStore.FreezeState', 'coerce'),
         ('sink message raw coercion', 'Text -> Delivery.SinkMessageId', 'coerce'),
@@ -357,6 +372,7 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         assert result.returncode != 0 and 'Not in scope' not in result.stderr, (label, result.stderr)
         print('opaque boundary: ' + label + ' substitution refused: passed', flush=True)
     for kind, representation in [
+        ('SinkCoordinate.SinkOrdinal', 'Int'),
         ('DirectoryStore.ReportedPrincipalClaim', 'Text'),
         ('Ledger.PayloadFingerprint', 'Text'),
         ('Ledger.CallerAttribution', 'Text'),

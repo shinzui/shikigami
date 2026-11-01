@@ -204,6 +204,7 @@ library
     Shikigami.Sink.Auth
     Shikigami.Sink.Authorization
     Shikigami.Sink.Config
+    Shikigami.Sink.Coordinate
     Shikigami.Sink.Danwa
     Shikigami.Sink.Delivery
     Shikigami.Sink.GrantStore
@@ -531,6 +532,7 @@ test-suite shikigami-core-test
     kioku-core,
     kiroku-store,
     lens,
+    mmzk-typeid,
     pgmq-hasql,
     process,
     servant-client,

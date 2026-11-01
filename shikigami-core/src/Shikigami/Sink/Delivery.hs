@@ -10,6 +10,9 @@
 module Shikigami.Sink.Delivery
   ( DeliveryStatus (..),
     DeliveryReceipt (..),
+    ReceiptContext (..),
+    lookupDeliveryFor,
+    lookupDeliveryForTx,
     ReceiptKey,
     receiptKeyText,
     SinkMessageId,
@@ -36,7 +39,10 @@ import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Tx
 import Hasql.Transaction.Sessions qualified as Transactions
+import Kioku.Id (SessionId, idText)
+import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Prelude
+import Shikigami.Sink.Coordinate (SinkOrdinal, parseSinkOrdinal, parseSinkSession, sinkOrdinalInt)
 import Shikigami.Sink.Permission (SinkKind, parseSinkKind, sinkKindText)
 
 -- | The observable lifecycle of one downstream delivery.
@@ -77,15 +83,41 @@ sinkMessageIdText (SinkMessageId value) = value
 data DeliveryReceipt = DeliveryReceipt
   { receiptKey :: !ReceiptKey,
     outboxMessageId :: !SinkMessageId,
-    runId :: !Text,
-    agent :: !Text,
-    ordinal :: !Int,
+    runId :: !SessionId,
+    agent :: !AgentName,
+    ordinal :: !SinkOrdinal,
     sinkKind :: !SinkKind,
     status :: !DeliveryStatus,
     detail :: !(Maybe Text),
     updatedAt :: !UTCTime
   }
   deriving stock (Eq, Show, Generic)
+
+-- | Coordinates supplied by the owning queued intent. A well-formed foreign
+-- receipt cannot prove publication of that intent.
+data ReceiptContext = ReceiptContext
+  { outboxMessageId :: !SinkMessageId,
+    runId :: !SessionId,
+    agent :: !AgentName,
+    ordinal :: !SinkOrdinal,
+    sinkKind :: !SinkKind
+  }
+  deriving stock (Eq, Show)
+
+lookupDeliveryFor :: Pool -> ReceiptContext -> ReceiptKey -> IO (Either Text (Maybe DeliveryReceipt))
+lookupDeliveryFor pool expected key = do
+  result <- Pool.use pool (Transactions.transaction Transactions.ReadCommitted Transactions.Write (lookupDeliveryForTx expected key))
+  pure (renderUsage result >>= id)
+
+lookupDeliveryForTx :: ReceiptContext -> ReceiptKey -> Tx.Transaction (Either Text (Maybe DeliveryReceipt))
+lookupDeliveryForTx expected key = do
+  retained <- lookupDeliveryTx key
+  case retained of
+    Right (Just receipt) | contextFor receipt /= expected -> Tx.condemn >> pure (Left "inconsistent retained sink delivery receipt")
+    _ -> pure retained
+
+contextFor :: DeliveryReceipt -> ReceiptContext
+contextFor DeliveryReceipt {outboxMessageId, runId, agent, ordinal, sinkKind} = ReceiptContext {outboxMessageId, runId, agent, ordinal, sinkKind}
 
 -- | The receipt that governs whether the whole sink intent may be sent.
 deliveryReceiptKey :: Text -> ReceiptKey
@@ -153,9 +185,9 @@ recordStatement =
     """
     ( (receiptKeyText . (.receiptKey) >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> (sinkMessageIdText . (.outboxMessageId) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((.runId) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((.agent) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> (fromIntegral . (.ordinal) >$< Encoders.param (Encoders.nonNullable Encoders.int4))
+        <> (idText . (.runId) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> (agentNameText . (.agent) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> (fromIntegral . sinkOrdinalInt . (.ordinal) >$< Encoders.param (Encoders.nonNullable Encoders.int4))
         <> (sinkKindText . (.sinkKind) >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> (renderDeliveryStatus . (.status) >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> ((.detail) >$< Encoders.param (Encoders.nullable Encoders.text))
@@ -180,7 +212,10 @@ deliveryReceiptRow =
       do
         parsedStatus <- parseDeliveryStatus status
         parsedKind <- maybe (Left ("unknown sink kind: " <> kind)) Right (parseSinkKind kind)
-        pure (DeliveryReceipt (ReceiptKey key) (SinkMessageId message) run agent ordinal parsedKind parsedStatus detail updated)
+        parsedRun <- parseSinkSession run
+        parsedAgent <- mkAgentName agent
+        parsedOrdinal <- parseSinkOrdinal ordinal
+        pure (DeliveryReceipt (ReceiptKey key) (SinkMessageId message) parsedRun parsedAgent parsedOrdinal parsedKind parsedStatus detail updated)
 
 renderDeliveryStatus :: DeliveryStatus -> Text
 renderDeliveryStatus = \case

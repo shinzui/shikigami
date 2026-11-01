@@ -30,6 +30,8 @@ import Shikigami.Agent.Name (AgentName, mkAgentName)
 
 -- Qualified: @Actor@ names both an activity's actor and the routing strategy
 -- that reads it.
+
+import Kioku.Id qualified as SinkSession
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Decl
   ( AgentDecl (..),
@@ -58,6 +60,7 @@ import Shikigami.Sink
     defaultGrantTable,
     dispatch,
   )
+import Shikigami.Sink.Coordinate (parseSinkSession, zeroSinkOrdinal)
 import Shikigami.Sink.KizashiClient (buildSignalReq)
 import Shikigami.Sink.Permission (SinkKind (SReiAction))
 import Shikigami.Sink.Recipient (resolveSinkRecipient, unresolvableRecipientWarning)
@@ -310,7 +313,7 @@ reiActionTests =
               -- The deterministic dedup key: an outbox retry or a workflow
               -- replay re-POSTs this exact value, so a future rei can dedup the
               -- way kawa's doorway already does.
-              sourceEventId @?= "shikigami.agent.v2.d17d72cd-aca1-5113-a70d-6c739e2164f5:run-1:0"
+              sourceEventId @?= "shikigami.agent.v2.d17d72cd-aca1-5113-a70d-6c739e2164f5:kioku_session_01kvxa7d2cezhs874g3n8dfgme:0"
             other -> assertFailure ("expected exactly one recorded action, got " <> show (length other)),
       -- A reachable endpoint that refuses is a different failure from no
       -- endpoint at all, and both must be failures.
@@ -385,8 +388,8 @@ ctxWithIdentity agentIdentity rei =
   SinkContext
     { identity = agentIdentity,
       directory = disabledDirectoryHandle,
-      runId = "run-1",
-      ordinal = 0,
+      runId = sinkSessionFixture,
+      ordinal = zeroSinkOrdinal,
       kizashi = KizashiConfig {baseUrl = unreachable, defaultRecipient = "recipient_default"},
       kawa = KawaConfig {baseUrl = unreachable, sourceSegment = "shinzui/shikigami"},
       danwa = DanwaConfig {baseUrl = unreachable, agentParticipant = "part_agent_test"},
@@ -444,3 +447,6 @@ kindOf SinkResult {kind} = kind
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+sinkSessionFixture :: SinkSession.SessionId
+sinkSessionFixture = either (error . show) id (parseSinkSession "kioku_session_01kvxa7d2cezhs874g3n8dfgme")

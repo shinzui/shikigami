@@ -154,3 +154,35 @@ session id rendered by idText, rather than the native Keiro WorkflowId. The
 existing primitive and historical wire-admission obligations remain explicit in
 Plan 108 until independently resolved. A nominal receipt locator does not certify
 that independent field or the overloaded downstream-id/diagnostic detail.
+
+## Native session coordinates and owning receipt reads
+
+Current agent, conversation, flow and practice-review attention producers retain
+the Kioku SessionId and AgentName through sink preparation. They render these
+only in JSON, SQL and outbound client adapters. The field still named runId is
+that native session coordinate, independently of the workflow-owned integration
+message identity. No session is allocated or inferred during decoding. The
+strict Kioku prefix/parser, the native KindID UUIDv7 version/variant check and
+exact renderer reject another identity domain, wrong UUID domain or noncanonical
+spelling. The parser and UUID check are distinct library operations; the
+clock-dependent check is deliberately not applied to historical identities. The earlier synthetic `run_1`/`run-1` test labels are now
+negative decoder controls, not aliases accepted as sessions. A valid-session
+fixture was captured from the pre-change compiled encoder; valid JSON and source
+idempotency recipes keep their bytes. This representation change uses no new
+first-release exception or legacy identity inference.
+
+SinkOrdinal is private and non-Generic, with no numeric or string instance. Its
+zero-based range is exactly the existing receipt SQL int4 range, 0 through
+2147483647. Transient producer Int indices refine once when building an intent;
+retained JSON and SQL reads refine before use. The SQL adapter cannot silently
+narrow an oversized ordinal. Its JSON remains a number.
+
+Publication, intermediate conversation adoption and terminal reconciliation use
+an owning receipt read bound to the queued intent's message id, session, agent,
+ordinal and SinkKind. A well-formed foreign row remains readable as a fact by
+the generic query, but it cannot prove delivery of this queued intent. The owning
+query refuses and condemns its transaction, even when a caller ignores the value.
+Malformed metadata refuses at the shared decoder. Both refusals preserve the
+retained row and prevent a downstream send or overwrite; exact repair recovers
+the original guard. These checks bind attribution, not current authentication:
+C11/C13 and lifecycle policy retain their independent effect boundaries.

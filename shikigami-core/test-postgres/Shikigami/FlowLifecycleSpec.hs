@@ -608,8 +608,8 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
         }
     sinkEnv =
       SinkEnv
-        { agent = flowAgent,
-          runId = "flow-test-run",
+        { agent = fixtureAgentName flowAgent,
+          runId = nominalSessionFixture,
           occurredAt = Just flowOccurredAt,
           danwaTarget = Nothing,
           -- The same activity the flow's own capability sees, so a signal

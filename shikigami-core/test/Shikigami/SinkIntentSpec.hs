@@ -1,19 +1,26 @@
 module Shikigami.SinkIntentSpec (tests) where
 
 import Data.Aeson (Value, eitherDecodeStrict, encode)
+import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Char8 qualified as ByteString
 import Data.ByteString.Lazy qualified as LazyByteString
 import Data.ByteString.Lazy.Char8 qualified as LazyChar8
 import Data.Foldable (traverse_)
+import Data.KindID.V7 qualified as KindID
 import Data.Time (UTCTime (..), fromGregorian)
+import Data.UUID qualified as UUID
 import Keiro.Integration.Event (IntegrationEvent (..))
+import Kioku.Id qualified as SinkSession
 import Shikigami.Agent.Decl
   ( Priority (High),
     RecipientFrom (SubjectOwner),
     SignalType (Alert),
     Sink (..),
   )
+import Shikigami.Agent.Name qualified as Name
 import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity, VerifiedIdentity), mkAgentPrincipal)
+import Shikigami.Sink.Coordinate (parseSinkOrdinal, parseSinkSession, sinkOrdinalInt, zeroSinkOrdinal)
 import Shikigami.Sink.Delivery qualified as Delivery
 import Shikigami.Sink.Intent
   ( SinkIntent (..),
@@ -28,7 +35,31 @@ tests :: TestTree
 tests =
   testGroup
     "SinkIntent"
-    [ testCase "receipt coordinates retain legacy opaque bytes and substep spelling" do
+    [ testCase "native session parsing checks UUID version and variant without clock admission" do
+        traverse_
+          ( \uuid ->
+              let raw = KindID.toText (KindID.decorateKindID uuid :: SinkSession.SessionId)
+               in case parseSinkSession raw of
+                    Left _ -> pure ()
+                    Right _ -> assertFailure "invalid native UUID domain admitted"
+          )
+          [UUID.fromWords 0 0x4000 0x80000000 1, UUID.fromWords 0 0x7000 0 1],
+      testCase "sink ordinals retain the exact SQL range without numeric coercion" do
+        fmap sinkOrdinalInt (parseSinkOrdinal 0) @?= Right 0
+        fmap sinkOrdinalInt (parseSinkOrdinal 2147483647) @?= Right 2147483647
+        traverse_ (\value -> case parseSinkOrdinal value of Left _ -> pure (); Right _ -> assertFailure "invalid ordinal admitted") [-1, 2147483648, toInteger (maxBound :: Int) + 1],
+      testCase "complete queued intents reject malformed admitted coordinates" do
+        case Aeson.toJSON (intentFor canonicalSink) of
+          Aeson.Object fields ->
+            traverse_
+              ( \(key, invalid) ->
+                  case Aeson.fromJSON @SinkIntent (Aeson.Object (KeyMap.insert key invalid fields)) of
+                    Aeson.Error _ -> pure ()
+                    Aeson.Success _ -> assertFailure "malformed sink coordinate admitted"
+              )
+              [("agent", Aeson.String ""), ("runId", Aeson.String ""), ("runId", Aeson.String "run_1"), ("runId", Aeson.String "kioku_memory_01kvxa7d2cezhs874g3n8dfgme"), ("ordinal", Aeson.Number (-1)), ("ordinal", Aeson.Number 2147483648), ("ordinal", Aeson.Number 0.5)]
+          _ -> assertFailure "intent must encode as an object",
+      testCase "receipt coordinates retain legacy opaque bytes and substep spelling" do
         traverse_
           ( \raw -> do
               Delivery.sinkMessageIdText (Delivery.sinkMessageId raw) @?= raw
@@ -66,10 +97,10 @@ eventFor = sinkIntentEvent "sink-intent-spec:message" "run_1" sampleTime Nothing
 intentFor :: Sink -> SinkIntent
 intentFor sink =
   SinkIntent
-    { agent = "at-risk-watch",
+    { agent = either (error . show) id (Name.mkAgentName "at-risk-watch"),
       identity = UnresolvedLegacyIdentity,
-      runId = "run_1",
-      ordinal = 0,
+      runId = sinkSessionFixture,
+      ordinal = zeroSinkOrdinal,
       occurredAt = Just sampleTime,
       danwaTarget = Just DanwaTarget {conversationId = "conv_1", parentMessageId = Nothing},
       resolvedRecipient = Nothing,
@@ -82,10 +113,10 @@ intentFor sink =
 egressIntent :: SinkIntent
 egressIntent =
   SinkIntent
-    { agent = "channel-reply",
+    { agent = either (error . show) id (Name.mkAgentName "channel-reply"),
       identity = VerifiedIdentity (either (error . show) id (mkAgentPrincipal "agent_channel_reply")),
-      runId = "run_egress_1",
-      ordinal = 0,
+      runId = sinkSessionFixture,
+      ordinal = zeroSinkOrdinal,
       occurredAt = Just sampleTime,
       danwaTarget = Nothing,
       resolvedRecipient = Nothing,
@@ -126,4 +157,7 @@ sampleTime = UTCTime (fromGregorian 2026 7 15) 43200
 canonicalWireBytes :: LazyByteString.ByteString
 canonicalWireBytes =
   LazyChar8.pack
-    "{\"agent\":\"at-risk-watch\",\"danwaTarget\":{\"conversationId\":\"conv_1\",\"parentMessageId\":null},\"occurredAt\":\"2026-07-15T12:00:00Z\",\"ordinal\":0,\"output\":{\"summary\":\"x\"},\"runId\":\"run_1\",\"sink\":{\"defaultRecipient\":\"ops\",\"extraContextTags\":[\"a\"],\"importance\":7,\"intentTemplate\":\"escalate\",\"priority\":\"High\",\"recipientFrom\":\"SubjectOwner\",\"signalType\":\"Alert\",\"source\":\"shikigami\",\"tag\":\"KizashiSignal\"}}"
+    "{\"agent\":\"at-risk-watch\",\"danwaTarget\":{\"conversationId\":\"conv_1\",\"parentMessageId\":null},\"occurredAt\":\"2026-07-15T12:00:00Z\",\"ordinal\":0,\"output\":{\"summary\":\"x\"},\"runId\":\"kioku_session_01kvxa7d2cezhs874g3n8dfgme\",\"sink\":{\"defaultRecipient\":\"ops\",\"extraContextTags\":[\"a\"],\"importance\":7,\"intentTemplate\":\"escalate\",\"priority\":\"High\",\"recipientFrom\":\"SubjectOwner\",\"signalType\":\"Alert\",\"source\":\"shikigami\",\"tag\":\"KizashiSignal\"}}"
+
+sinkSessionFixture :: SinkSession.SessionId
+sinkSessionFixture = either (error . show) id (parseSinkSession "kioku_session_01kvxa7d2cezhs874g3n8dfgme")
