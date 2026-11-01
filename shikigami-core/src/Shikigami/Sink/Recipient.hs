@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Who a @KizashiSignal@ is actually addressed to.
 --
 -- A declaration says @recipientFrom = Actor@ or @SubjectOwner@ or @AreaOwner@ —
@@ -32,6 +34,7 @@ module Shikigami.Sink.Recipient
 where
 
 import Data.Text qualified as Text
+import Shikigami.Agent.DeclarationValue
 
 -- Qualified: @Actor@ is both an activity's actor record and the name of the
 -- routing strategy that reads it.
@@ -44,18 +47,18 @@ import Shikigami.Prelude
 -- 'Nothing' means \"this strategy cannot be answered\", which is a different
 -- thing from \"no recipient\": the caller still falls back to the declaration's
 -- own default.
-resolveRecipient :: RecipientFrom -> Maybe Activity.ActivityEnvelope -> Maybe Text
+resolveRecipient :: RecipientFrom -> Maybe Activity.ActivityEnvelope -> Maybe (DeclarationCoordinate "recipient")
 resolveRecipient strategy activity =
   case strategy of
     Actor -> fmap actorIdOf activity
     SubjectOwner -> Nothing
     AreaOwner -> Nothing
   where
-    actorIdOf Activity.ActivityEnvelope {Activity.actor = Activity.Actor {Activity.id = actorId}} = Activity.activityCoordinateText actorId
+    actorIdOf Activity.ActivityEnvelope {Activity.actor = Activity.Actor {Activity.id = actorId}} = declarationCoordinate (Activity.activityCoordinateText actorId)
 
 -- | 'resolveRecipient' for a whole sink: a non-signal sink has no recipient to
 -- resolve, so it contributes nothing to the intent.
-resolveSinkRecipient :: Sink -> Maybe Activity.ActivityEnvelope -> Maybe Text
+resolveSinkRecipient :: Sink -> Maybe Activity.ActivityEnvelope -> Maybe (DeclarationCoordinate "recipient")
 resolveSinkRecipient sink activity =
   case sink of
     KizashiSignal {recipientFrom} -> resolveRecipient recipientFrom activity
@@ -69,12 +72,12 @@ resolveSinkRecipient sink activity =
 -- knows nothing about either.
 recipientFor ::
   -- | The deployment-wide fallback, from @sinks.kizashi.default_recipient@.
-  Text ->
+  DeclarationCoordinate "recipient" ->
   -- | What the strategy resolved to, if anything.
-  Maybe Text ->
+  Maybe (DeclarationCoordinate "recipient") ->
   -- | The declaration's own @defaultRecipient@.
-  Maybe Text ->
-  Text
+  Maybe (DeclarationCoordinate "recipient") ->
+  DeclarationCoordinate "recipient"
 recipientFor fallback resolved declared =
   fromMaybe fallback (resolved <|> declared)
 
@@ -84,7 +87,7 @@ recipientFor fallback resolved declared =
 -- quietly reaching the wrong person. Validation already refuses the case where
 -- there is nothing to fall back to; this covers the case where the fallback is
 -- legitimate but the operator should still know the strategy did nothing.
-unresolvableRecipientWarning :: Sink -> Maybe Text -> Maybe Text
+unresolvableRecipientWarning :: Sink -> Maybe (DeclarationCoordinate "recipient") -> Maybe Text
 unresolvableRecipientWarning sink resolved =
   case sink of
     KizashiSignal {recipientFrom}

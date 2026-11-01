@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Real @DanwaConversation@ sink handler. It posts the rendered behavior output into
 -- an existing danwa conversation when a target is present, or starts a fresh thread for
 -- ordinary one-shot runs.
@@ -23,6 +25,7 @@ import Data.Text.Lazy qualified as TL
 import Network.HTTP.Types.Header (Header)
 import Servant.Client (ClientEnv)
 import Shikigami.Agent.Decl (Sink (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (DanwaConfig (..))
@@ -53,19 +56,21 @@ renderDanwaError = \case
 -- has real declarative value — a human opening the thread sees what it is about
 -- — and because rejecting it would invalidate manifests that are otherwise
 -- correct. What was not an option was continuing to accept it and do nothing.
-runDanwa :: ClientEnv -> DanwaConfig -> AgentIdentity -> Maybe DeliveryGuard -> Maybe DanwaTarget -> Sink -> Value -> IO (Either DanwaError Text)
+runDanwa :: ClientEnv -> DanwaConfig -> AgentIdentity -> Maybe DeliveryGuard -> Maybe DanwaTarget -> Sink -> Value -> IO (Either DanwaError (DeclarationCoordinate "danwa-message"))
 runDanwa clientEnv = runDanwaWithHeaders clientEnv []
 
 -- | 'runDanwa' with dispatch-scoped propagation headers.
-runDanwaWithHeaders :: ClientEnv -> [Header] -> DanwaConfig -> AgentIdentity -> Maybe DeliveryGuard -> Maybe DanwaTarget -> Sink -> Value -> IO (Either DanwaError Text)
+runDanwaWithHeaders :: ClientEnv -> [Header] -> DanwaConfig -> AgentIdentity -> Maybe DeliveryGuard -> Maybe DanwaTarget -> Sink -> Value -> IO (Either DanwaError (DeclarationCoordinate "danwa-message"))
 runDanwaWithHeaders clientEnv headers cfg identity receipts target sink output =
   case sink of
     DanwaConversation {topic} ->
       case identityText identity of
         Left problem -> pure (Left (DanwaUsageError problem))
-        Right author -> case target of
-          Just t -> postReplyWithHeaders clientEnv headers cfg author t (renderDanwaContent output)
-          Nothing -> postToFreshConversation clientEnv headers cfg author receipts sink (withTopicLine topic (renderDanwaContent output))
+        Right rawAuthor ->
+          let author = declarationCoordinate rawAuthor
+           in case target of
+                Just t -> postReplyWithHeaders clientEnv headers cfg author t (renderDanwaContent output)
+                Nothing -> postToFreshConversation clientEnv headers cfg author receipts sink (withTopicLine topic (renderDanwaContent output))
     _ -> pure (Left (DanwaUsageError "runDanwa: not a DanwaConversation sink"))
 
 -- | Prefix the opening message with the declared topic, if there is one.
@@ -77,13 +82,13 @@ withTopicLine topic content
   | Text.null (Text.strip topic) = content
   | otherwise = "[" <> Text.strip topic <> "]\n" <> content
 
-postReply :: ClientEnv -> DanwaConfig -> DanwaTarget -> Text -> IO (Either DanwaError Text)
+postReply :: ClientEnv -> DanwaConfig -> DanwaTarget -> Text -> IO (Either DanwaError (DeclarationCoordinate "danwa-message"))
 postReply clientEnv cfg = postReplyWithHeaders clientEnv [] cfg ((.agentParticipant) cfg)
 
 -- | Open a fresh thread, join the configured agent participant, and post one
 -- text message. Unlike the sink path this helper owns no outbox receipt: its
 -- caller supplies its own durable idempotency identity in the message body.
-postText :: ClientEnv -> DanwaConfig -> Text -> IO (Either DanwaError Text)
+postText :: ClientEnv -> DanwaConfig -> Text -> IO (Either DanwaError (DeclarationCoordinate "danwa-message"))
 postText clientEnv cfg content = do
   startJoinedConversation clientEnv [] cfg >>= \case
     Left err -> pure (Left err)
@@ -96,33 +101,33 @@ postText clientEnv cfg content = do
         DanwaTarget {conversationId = cid, parentMessageId = Nothing}
         content
 
-postReplyWithHeaders :: ClientEnv -> [Header] -> DanwaConfig -> Text -> DanwaTarget -> Text -> IO (Either DanwaError Text)
+postReplyWithHeaders :: ClientEnv -> [Header] -> DanwaConfig -> DeclarationCoordinate "danwa-participant" -> DanwaTarget -> Text -> IO (Either DanwaError (DeclarationCoordinate "danwa-message"))
 postReplyWithHeaders clientEnv headers _cfg author (DanwaTarget {conversationId = cid, parentMessageId = parent}) content = do
   result <-
     runDanwaClientWithHeaders headers clientEnv $
       case parent of
         Nothing ->
           Danwa.postMessage
-            cid
+            (declarationCoordinateText cid)
             Msg.PostMessageRequest
-              { Msg.author = author,
+              { Msg.author = declarationCoordinateText author,
                 Msg.content = content
               }
         Just parentMessageId ->
           Danwa.replyToMessage
-            cid
-            parentMessageId
+            (declarationCoordinateText cid)
+            (declarationCoordinateText parentMessageId)
             Msg.PostMessageRequest
-              { Msg.author = author,
+              { Msg.author = declarationCoordinateText author,
                 Msg.content = content
               }
   pure $ case result of
     Left failure -> Left (DanwaHttpError failure)
     Right response ->
       let Msg.MessageResponse {Msg.messageId = mid} = response
-       in Right mid
+       in Right (declarationCoordinate mid)
 
-postToFreshConversation :: ClientEnv -> [Header] -> DanwaConfig -> Text -> Maybe DeliveryGuard -> Sink -> Text -> IO (Either DanwaError Text)
+postToFreshConversation :: ClientEnv -> [Header] -> DanwaConfig -> DeclarationCoordinate "danwa-participant" -> Maybe DeliveryGuard -> Sink -> Text -> IO (Either DanwaError (DeclarationCoordinate "danwa-message"))
 postToFreshConversation clientEnv headers cfg author receipts sink content =
   case sink of
     DanwaConversation {} -> do
@@ -134,7 +139,7 @@ postToFreshConversation clientEnv headers cfg author receipts sink content =
     guardedConversation = case receipts of
       Nothing -> startJoinAndRemember Nothing
       Just deliveryGuard -> do
-        lookedUp <- tryIO ((.lookupReceipt) deliveryGuard "conv")
+        lookedUp <- tryIO ((.lookupReceipt) deliveryGuard (declarationCoordinate "conv"))
         case lookedUp of
           Left _ -> pure (Left (DanwaReceiptFailure "danwa conversation receipt lookup failed"))
           Right (Just cid) -> pure (Right cid)
@@ -147,20 +152,20 @@ postToFreshConversation clientEnv headers cfg author receipts sink content =
 
     rememberConversation Nothing cid = pure (Right cid)
     rememberConversation (Just deliveryGuard) cid =
-      tryIO ((.recordReceipt) deliveryGuard "conv" cid) <&> \case
+      tryIO ((.recordReceipt) deliveryGuard (declarationCoordinate "conv") cid) <&> \case
         Left _ -> Left (DanwaReceiptFailure "danwa conversation receipt write failed")
         Right () -> Right cid
 
 tryIO :: IO a -> IO (Either IOException a)
 tryIO = try
 
-startJoinedConversation :: ClientEnv -> [Header] -> DanwaConfig -> IO (Either DanwaError Text)
+startJoinedConversation :: ClientEnv -> [Header] -> DanwaConfig -> IO (Either DanwaError (DeclarationCoordinate "danwa-conversation"))
 startJoinedConversation clientEnv headers cfg = do
   started <-
     runDanwaClientWithHeaders headers clientEnv $
       Danwa.startConversation
         Conv.StartConversationRequest
-          { Conv.startedBy = (.agentParticipant) cfg,
+          { Conv.startedBy = declarationCoordinateText ((.agentParticipant) cfg),
             Conv.kind = "thread",
             Conv.parentConversationId = Nothing
           }
@@ -172,12 +177,12 @@ startJoinedConversation clientEnv headers cfg = do
           Danwa.joinConversation
             cid
             Conv.JoinConversationRequest
-              { Conv.participantId = (.agentParticipant) cfg,
+              { Conv.participantId = declarationCoordinateText ((.agentParticipant) cfg),
                 Conv.participantType = "agent"
               }
       pure case joined of
         Left failure -> Left (DanwaHttpError failure)
-        Right _ -> Right cid
+        Right _ -> Right (declarationCoordinate cid)
 
 renderDanwaContent :: Value -> Text
 renderDanwaContent v = case v of

@@ -16,6 +16,7 @@ import Shikigami.Delegation.BudgetStore
     BudgetReservationError (..),
     ReservationResult (..),
     delegationBudgetIdFor,
+    reservationCount,
     reserveDelegationSlot,
     reserveDelegationSlots,
   )
@@ -69,11 +70,11 @@ batchReplayIsIdempotent databaseFixture =
     second <- reserveBatch appEnv budgetId Nothing children
     assertEqual
       "the first batch consumes both slots together"
-      (Right (DelegationBatchReserved 2 0))
+      (Right (DelegationBatchReserved (reservationCount 2) (reservationCount 0)))
       first
     assertEqual
       "the replay recognizes both reservations without spending"
-      (Right (DelegationBatchReserved 0 2))
+      (Right (DelegationBatchReserved (reservationCount 0) (reservationCount 2)))
       second
 
 concurrentLimit :: DatabaseFixture -> IO ()

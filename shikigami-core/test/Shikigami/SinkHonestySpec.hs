@@ -148,7 +148,7 @@ recipientTests =
   testGroup
     "recipientFrom is honored or reported, never ignored"
     [ testCase "Actor resolves to the triggering activity's actor" $
-        resolveSinkRecipient (signalWith Actor (Just "ops")) (Just triggerActivity) @?= Just "person:mai",
+        resolveSinkRecipient (signalWith Actor (Just "ops")) (Just triggerActivity) @?= Just (declarationCoordinate ("person:mai")),
       testCase "Actor with no triggering activity resolves to nothing" $
         resolveSinkRecipient (signalWith Actor (Just "ops")) Nothing @?= Nothing,
       testCase "the strategies needing an ownership directory resolve to nothing" $
@@ -168,7 +168,7 @@ recipientTests =
         request <-
           either (assertFailure . Text.unpack) pure $
             buildSignalReq
-              KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient_default"}
+              KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient_default")}
               Nothing
               (signalWith Actor (Just "ops"))
               (VerifiedIdentity principal)
@@ -184,7 +184,7 @@ recipientTests =
             assertBool ("the warning should say what it fell back to:\n" <> Text.unpack warning) ("defaultRecipient" `Text.isInfixOf` warning)
           Nothing -> assertFailure "an unresolvable strategy must warn",
       testCase "a strategy that was honored produces no warning" $
-        unresolvableRecipientWarning (signalWith Actor Nothing) (Just "person:mai") @?= Nothing,
+        unresolvableRecipientWarning (signalWith Actor Nothing) (Just (declarationCoordinate ("person:mai"))) @?= Nothing,
       testCase "a non-signal sink produces no warning" $
         unresolvableRecipientWarning sampleReiSink Nothing @?= Nothing,
       testCase "the resolved recipient reaches the signal the client builds" do
@@ -192,8 +192,8 @@ recipientTests =
         testWithApplication (pure (stubKizashiApp recorded)) \port -> do
           let ctx =
                 (ctxWith (ReiConfig {baseUrl = Nothing}))
-                  { kizashi = KizashiConfig {baseUrl = localBaseUrl port, defaultRecipient = "recipient_default"},
-                    recipientOverride = Just "person_mai"
+                  { kizashi = KizashiConfig {baseUrl = localBaseUrl port, defaultRecipient = (declarationCoordinate "recipient_default")},
+                    recipientOverride = Just (declarationCoordinate "person_mai")
                   }
           _ <- dispatch ctx (signalWith Actor (Just "ops")) sampleOutput
           posted <- readIORef recorded
@@ -208,8 +208,8 @@ recipientOf :: Maybe Text -> Maybe Text -> Either Text Text
 recipientOf resolved declared =
   fmap (\CreateSignalReq {recipient} -> recipient) $
     buildSignalReq
-      KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient_default"}
-      resolved
+      KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient_default")}
+      (declarationCoordinate <$> resolved)
       (signalWith Actor declared)
       (compatibilityIdentity (fixtureAgentName "triage-note"))
       sampleOutput
@@ -305,7 +305,7 @@ reiActionTests =
         testWithApplication (pure (stubReiApp recorded)) \port -> do
           result <- dispatch (ctxWith (ReiConfig {baseUrl = Just (localBaseUrl port)})) sampleReiSink sampleOutput
           case (.outcome) result of
-            Delivered detail -> assertBool ("the detail should name the intention: " <> Text.unpack detail) ("int_42" `Text.isInfixOf` detail)
+            Delivered detail -> assertBool ("the detail should name the intention: " <> Text.unpack (declarationCoordinateText detail)) ("int_42" `Text.isInfixOf` declarationCoordinateText detail)
             other -> assertFailure ("a configured rei sink should deliver, got " <> show other)
           posted <- readIORef recorded
           case posted of
@@ -355,7 +355,7 @@ outcomeMappingTests =
       testCase "a permanent failure terminally rejects the row" $
         publicationDisposition (PermanentFailure "downstream refused this resource") @?= Rejected,
       testCase "a delivered outcome acknowledges the row" $
-        publicationDisposition (Delivered "rei-action recorded for intention int_42") @?= Acknowledged,
+        publicationDisposition (Delivered (declarationCoordinate "rei-action recorded for intention int_42")) @?= Acknowledged,
       -- The historical hazard, stated as a fact rather than as a warning: had
       -- ReiAction kept returning Stubbed, this is what the outbox would have
       -- done with it.
@@ -393,9 +393,9 @@ ctxWithIdentity agentIdentity rei =
       directory = disabledDirectoryHandle,
       runId = sinkSessionFixture,
       ordinal = zeroSinkOrdinal,
-      kizashi = KizashiConfig {baseUrl = unreachable, defaultRecipient = "recipient_default"},
-      kawa = KawaConfig {baseUrl = unreachable, sourceSegment = "shinzui/shikigami"},
-      danwa = DanwaConfig {baseUrl = unreachable, agentParticipant = "part_agent_test"},
+      kizashi = KizashiConfig {baseUrl = unreachable, defaultRecipient = (declarationCoordinate "recipient_default")},
+      kawa = KawaConfig {baseUrl = unreachable, sourceSegment = (activityCoordinate "shinzui/shikigami")},
+      danwa = DanwaConfig {baseUrl = unreachable, agentParticipant = (declarationCoordinate "part_agent_test")},
       kanmon = KanmonConfig {baseUrl = unreachable},
       rei,
       http = testSinkHttp,

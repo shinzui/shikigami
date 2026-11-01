@@ -244,8 +244,8 @@ reserveAttention PracticeReviewAttentionEnv {agent, identity, runId, occurredAt,
           occurredAt
           Nothing
           activity
-          messageId
-          (attentionRecipientText projection.recipient)
+          (sinkMessageId messageId)
+          (Agent.declarationCoordinate (attentionRecipientText projection.recipient))
           sink
           output
           now

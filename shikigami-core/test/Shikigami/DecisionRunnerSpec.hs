@@ -21,10 +21,12 @@ import Data.Aeson (FromJSON, ToJSON, Value (Null, String), toJSON)
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as LBS
 import Data.Either (isLeft)
+import Data.Foldable (for_)
 import Data.Generics.Labels ()
 import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict qualified as Map
+import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import Data.Text qualified as AliasText
 import Data.Text.Encoding qualified as TE
@@ -44,12 +46,14 @@ import Shikigami.Decision.ModelCatalog
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.Program.Decision
+import Shikigami.Program.Decision.Examples qualified as Examples
 import Shikigami.Program.DecisionRunner
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.LLM (defaultLLMConfig)
 import Shikumi.LLM qualified as LLM
 import Shikumi.Program (Params (..), Program (..), emptyParams)
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
+import Shikumi.Schema qualified as Schema
 import Shikumi.Signature (mkSignature)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -136,15 +140,30 @@ environment registered handler hooks = do
         profile = Nothing,
         hooks,
         providers = [handler],
-        timeoutMicros = 2_000_000,
-        callLimit = 10
+        timeoutMicros = mustRight (parseDecisionTimeout 2_000_000),
+        callLimit = (either (error . show) id (PV.mkCeiling 10))
       }
 
 tests :: TestTree
 tests =
   testGroup
     "governed decision runner"
-    [ testCase "two real Predict nodes use selected model, schema, credential and individual hooks" do
+    [ testCase "confidence keeps numeric JSON/schema and refuses invalid model leaves" do
+        let accepted = mustRight (Examples.parseModelConfidence 0.25)
+        Aeson.encode accepted @?= "0.25"
+        Aeson.eitherDecode (Aeson.encode accepted) @?= Right accepted
+        Schema.toSchema (Proxy @Examples.ModelConfidence) @?= Schema.toSchema (Proxy @Double)
+        for_ [-1, 2, 0 / 0, 1 / 0] \bad ->
+          assertBool "invalid confidence admission" (isLeft (Examples.parseModelConfidence bad))
+        for_ ["-1", "2", "1e10000"] \raw ->
+          assertBool "invalid retained confidence" (isLeft (Aeson.eitherDecode @Examples.ModelConfidence raw))
+        for_ [-1, 2 :: Double] \bad ->
+          assertBool "model decoder keeps admission" (isLeft (Schema.fromModel @Examples.ModelConfidence (Aeson.toJSON bad))),
+      testCase "decision timeout checks positivity and native narrowing" do
+        decisionTimeoutMicros (mustRight (parseDecisionTimeout 1)) @?= 1
+        for_ [0, -1, toInteger (maxBound :: Int) + 1] \bad ->
+          assertBool "invalid native timeout" (isLeft (parseDecisionTimeout bad)),
+      testCase "two real Predict nodes use selected model, schema, credential and individual hooks" do
         (hooks, inspect) <- newMemoryCallHooks
         (handler, observed) <- fixture 0 (\_ model options -> success model options input)
         env <- environment twoNodes handler hooks
@@ -230,7 +249,7 @@ tests =
         (hooks, inspect) <- newMemoryCallHooks
         (handler, observed) <- fixture 0 (\_ model options -> success model options input)
         env <- environment twoNodes handler hooks
-        result <- runDecisionProgram ((env & #callLimit .~ (1))) (preparedFor twoNodes bindingA) (programRef twoNodes) input
+        result <- runDecisionProgram ((env & #callLimit .~ (either (error . show) id (PV.mkCeiling 1)))) (preparedFor twoNodes bindingA) (programRef twoNodes) input
         either (Right . failureCode) (const (Left ())) result @?= Right CallLimitExceeded
         observed >>= (\requests -> length requests @?= 1)
         inspect >>= (\calls -> Map.size calls @?= 1),
@@ -319,7 +338,7 @@ tests =
         (hooks, inspect) <- newMemoryCallHooks
         (handler, _) <- fixture 100_000 (\_ model options -> success model options input)
         env <- environment twoNodes handler hooks
-        result <- try @TransientBehaviorFailure (runDecisionProgram ((env & #timeoutMicros .~ (20_000))) (preparedFor twoNodes bindingA) (programRef twoNodes) input)
+        result <- try @TransientBehaviorFailure (runDecisionProgram ((env & #timeoutMicros .~ (either (error . show) id (parseDecisionTimeout 20_000)))) (preparedFor twoNodes bindingA) (programRef twoNodes) input)
         assertBool "timeout remains retryable" (isLeft result)
         calls <- inspect
         Map.size calls @?= 1

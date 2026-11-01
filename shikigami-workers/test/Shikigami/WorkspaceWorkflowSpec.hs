@@ -266,8 +266,8 @@ tests fixture =
           principal <- right (identityText job.identity)
           let digest :: WorkspaceCoordinate scope
               digest = workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")
-              policy = ProcessPolicy ProcessPolicyV1 (ProcessImage (workspaceLocator "/qualified/root") digest (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")) digest [CommandRule (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)] [(workspaceCoordinate "")] [(workspaceCoordinate "dependency.txt")]
-              process = WorkspaceProcessSettings (workspaceLocator "/run/shikigami/supervisor.sock") ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60) (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031)) (Map.singleton binding.repository policy)
+              policy = ((either (error . show) id . mkProcessPolicy) (ProcessPolicyInput ProcessPolicyV1 (((either (error . show) id . mkProcessImage) (ProcessImageInput (workspaceLocator "/qualified/root") digest (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")))) digest [((either (error . show) id . mkCommandRule) (CommandRuleInput (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)))] [(workspaceCoordinate "")] [(workspaceCoordinate "dependency.txt")]))
+              process = WorkspaceProcessSettings (workspaceLocator "/run/shikigami/supervisor.sock") ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60) (((either (error . show) id . mkIdentityRange) (IdentityRangeInput ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031)))) (Map.singleton binding.repository policy)
               settings = WorkspaceSettings (workspaceLocator root) [WorkspaceRepository binding.repository binding.source [WorkspaceRevision binding.base (bundleDigest admission.instructions)] binding.base (workspaceCoordinate "policy-1") [(workspaceCoordinate "")] [(workspaceCoordinate "dependency.txt")]] [WorkspaceGrant ((either (error . show) id . mkAgentName) "workspace-worker") (declarationCoordinate principal) binding.repository Nothing] (Just process)
           host <- right (configuredWorkspaceHost env store.pool disabledDirectoryHandle allowAllActionAuthorizerForTests settings)
           let resumed = (deps & #capabilities .~ (host.capabilities) & #workspace .~ (Just ((host & #load .~ (\_ -> assertFailure "old file assignment attempted process provisioning" >> fail "unreachable")))))
@@ -318,7 +318,7 @@ tests fixture =
           length <$> readIORef observed >>= (@?= 2)
     ]
   where
-    supervised settings = settings & #process .~ Just (WorkspaceProcessSettings (workspaceLocator "/run/shikigami/supervisor.sock") ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60) (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031)) (Map.fromList [(entry.identity, ProcessPolicy ProcessPolicyV1 (ProcessImage (workspaceLocator "/qualified/root") (workspaceCoordinate (digest)) (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")) (workspaceCoordinate (digest)) [CommandRule (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)] entry.readPaths entry.writePaths) | entry <- settings.repositories]))
+    supervised settings = settings & #process .~ Just (WorkspaceProcessSettings (workspaceLocator "/run/shikigami/supervisor.sock") ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60) (((either (error . show) id . mkIdentityRange) (IdentityRangeInput ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031)))) (Map.fromList [(entry.identity, ((either (error . show) id . mkProcessPolicy) (ProcessPolicyInput ProcessPolicyV1 (((either (error . show) id . mkProcessImage) (ProcessImageInput (workspaceLocator "/qualified/root") (workspaceCoordinate (digest)) (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")))) (workspaceCoordinate (digest)) [((either (error . show) id . mkCommandRule) (CommandRuleInput (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)))] entry.readPaths entry.writePaths))) | entry <- settings.repositories]))
     digest = "sha256:" <> Text.replicate 64 "a"
 
 withWorkflow :: DatabaseFixture -> (AppEnv -> FilePath -> RunJob -> WorkspaceHost -> Agent.AgentRunDeps -> IORef [Context.Context] -> IO a) -> IO a
@@ -336,7 +336,7 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
   now <- getCurrentTime
   observed <- newIORef []
   base <- newBehaviorEnv
-  http <- right =<< newSinkHttp (HttpLimits defaultAppConfig.httpRequestMaxBytes defaultAppConfig.httpResponseMaxBytes) (credentialsFromConfig defaultAppConfig) (DanwaConfig "http://localhost:1" "fixture")
+  http <- right =<< newSinkHttp (HttpLimits defaultAppConfig.httpRequestMaxBytes defaultAppConfig.httpResponseMaxBytes) (credentialsFromConfig defaultAppConfig) (DanwaConfig "http://localhost:1" (declarationCoordinate "fixture"))
   let complete model context options = do
         ordinal <- atomicModifyIORef' observed (\values -> (values <> [context], length values))
         response <- Provider.complete stubApiProvider model context options
@@ -361,10 +361,10 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
             workspace = Just host,
             coordination = Nothing,
             agents = [declaration],
-            kizashi = KizashiConfig "http://localhost:1" "recipient",
-            kawa = KawaConfig "http://localhost:1" "fixture",
+            kizashi = KizashiConfig "http://localhost:1" (declarationCoordinate "recipient"),
+            kawa = KawaConfig "http://localhost:1" (activityCoordinate "fixture"),
             kanmon = KanmonConfig "http://localhost:1",
-            danwa = DanwaConfig "http://localhost:1" "fixture",
+            danwa = DanwaConfig "http://localhost:1" (declarationCoordinate "fixture"),
             rei = ReiConfig Nothing,
             http,
             hooks = Agent.defaultAgentRunHooks,

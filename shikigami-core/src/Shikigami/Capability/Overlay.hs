@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 
@@ -30,6 +31,7 @@ import Data.List (sortOn)
 import Data.Text qualified as Text
 import Dhall (Decoder (..), FromDhall (..))
 import Dhall qualified
+import Shikigami.Execution.Coordinate (ExecutionCoordinate, executionCoordinateText)
 import Shikigami.Prelude hiding ((.=))
 
 newtype CapabilityId = CapabilityId Text
@@ -141,7 +143,7 @@ instance FromJSON CapabilityOperationClass where
     value -> fail ("unknown capability operation class: " <> Text.unpack value)
 
 data CapabilityToolDescriptor = CapabilityToolDescriptor
-  { name :: !Text,
+  { name :: !(ExecutionCoordinate "tool-name"),
     operationClass :: !CapabilityOperationClass
   }
   deriving stock (Eq, Ord, Show, Generic)

@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Invocation-local Handan adapter. The wrapper sits below Shikumi retries:
 -- every transport attempt is admitted and durably accounted for independently.
 module Shikigami.Program.DecisionRunner
@@ -63,8 +65,8 @@ data DecisionRuntime = DecisionRuntime
     profile :: !(Maybe ResolvedProfile),
     hooks :: !DecisionCallHooks,
     providers :: ![ApiProvider],
-    timeoutMicros :: !Int,
-    callLimit :: !Natural
+    timeoutMicros :: !DecisionTimeout,
+    callLimit :: !(Ceiling "decision-calls" Natural)
   }
   deriving stock (Generic)
 
@@ -104,7 +106,7 @@ runDecisionProgram env prepared ref input =
             effective <- finalOptions env binding model context nodeOptions
             unless (null (evidenceRefusals handler model effective)) (abort ForbiddenModel "provider cannot uphold required decision evidence")
             ordinal <- atomicModifyIORef' count (\n -> (n + 1, n + 1))
-            let localLimit = maybe env.callLimit (min env.callLimit . fromIntegral . ceilingValue) (env.profile >>= (\p -> (resolvedProfileView p).profile.limits.maxCalls))
+            let localLimit = maybe (ceilingValue env.callLimit) (min (ceilingValue env.callLimit) . fromIntegral . ceilingValue) (env.profile >>= (\p -> (resolvedProfileView p).profile.limits.maxCalls))
             when (ordinal > localLimit) (abort CallLimitExceeded "decision provider call limit exceeded")
             token <- callback (env.hooks.beginCall (DecisionCallContext prepared prepared.model))
             let correlation = callCorrelationId prepared.runId (decisionCallIdText (attemptId token)) 0
@@ -169,7 +171,7 @@ runDecisionProgram env prepared ref input =
               { runtimeDefaultModel = selected,
                 runtimeConfig = config {LLM.registry = privateRegistry, LLM.retryPolicy = retry {LLM.maxAttempts = max 1 maxAttempts}}
               }
-      result <- timeout env.timeoutMicros (runProgramWith invocation (executable registered) checked)
+      result <- timeout (decisionTimeoutMicros env.timeoutMicros) (runProgramWith invocation (executable registered) checked)
       case result of
         Nothing -> throwIO (TransientBehaviorFailure "decision provider attempt timed out")
         Just (Right output) -> pure (validateResult registered output)
@@ -217,7 +219,7 @@ finalOptions env binding actual context node = do
             & #apiKey .~ (ApiKeyLiteral . revealCredential <$> bindingCredential binding)
             & #thinking .~ (base.thinking)
             & #maxTokens .~ (minCap [node.maxTokens, base.maxTokens, profileTokens])
-            & #timeoutMs .~ (minCap [node.timeoutMs, base.timeoutMs, Just (max 1 (env.timeoutMicros `div` 1000))])
+            & #timeoutMs .~ (minCap [node.timeoutMs, base.timeoutMs, Just (max 1 (decisionTimeoutMicros env.timeoutMicros `div` 1000))])
             & #temperature .~ (node.temperature <|> base.temperature)
             & #topP .~ (node.topP <|> base.topP)
             & #stopSequences .~ (if null node.stopSequences then base.stopSequences else node.stopSequences)

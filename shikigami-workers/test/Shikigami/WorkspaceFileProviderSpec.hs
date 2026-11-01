@@ -67,7 +67,7 @@ import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
-import Shikigami.Prelude ((&), (.~))
+import Shikigami.Prelude (Lens', lens, (&), (.~))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.StateRevision qualified as Generation
@@ -184,7 +184,7 @@ tests fixture =
         Just operation <- right =<< run env (Execution.inspectOperation reference.operationId)
         output <- retainedOutput env snapshot operation
         assertBool "refusal excludes protected contents" (case output of ToolReturned _ ToolFailed -> True; _ -> False),
-      testCase "revision 2 enforces retained path restrictions before requesting authority" $ withSupervisedEffect fixture (\policy -> policy & #readPaths .~ [(workspaceCoordinate "lib")]) "read" \env binding snapshot reference runtime profile -> do
+      testCase "revision 2 enforces retained path restrictions before requesting authority" $ withSupervisedEffect fixture (\policy -> policy & processPolicyFields . #readPaths .~ [(workspaceCoordinate "lib")]) "read" \env binding snapshot reference runtime profile -> do
         run env (runTransaction (readyProcessProfileTx binding profile)) >>= (@?= Right ())
         calls <- newIORef (0 :: Int)
         let checking = runtime & #authorizer .~ (runtime.authorizer) {Action.authorize = \principal action -> modifyIORef' calls (+ 1) >> allowAllActionAuthorizerForTests.authorize principal action}
@@ -488,10 +488,10 @@ withSupervisedEffect :: DatabaseFixture -> (ProcessPolicy -> ProcessPolicy) -> T
 withSupervisedEffect fixture change logical use = do
   properties <- Systemd.systemdPropertiesIdentity
   let digest = "sha256:" <> Text.replicate 64 "a"
-      policy = change (ProcessPolicy ProcessPolicyV1 (ProcessImage (workspaceLocator "/qualified/root") (workspaceCoordinate (digest)) (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")) properties [CommandRule (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)] [(workspaceCoordinate "")] [(workspaceCoordinate "src")])
+      policy = change (((either (error . show) id . mkProcessPolicy) (ProcessPolicyInput ProcessPolicyV1 (((either (error . show) id . mkProcessImage) (ProcessImageInput (workspaceLocator "/qualified/root") (workspaceCoordinate (digest)) (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")))) properties [((either (error . show) id . mkCommandRule) (CommandRuleInput (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)))] [(workspaceCoordinate "")] [(workspaceCoordinate "src")])))
   withEffectAdapterPolicy (Just policy) 1 (\admission -> admission & #filePolicy .~ Just supervisedFilePolicy) supervisedWorkspaceEditAdapter ("overlay__workspace-edit__" <> logical) logical Nothing fixture \env binding snapshot _ reference runtime _ -> do
     admission <- maybe (fail "workspace admission missing") pure snapshot.workspace
-    (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest admission.instructions) policy (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 62000) ((either (error . show) id . parseWorkspaceIdentity) 62001))))
+    (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest admission.instructions) policy (((either (error . show) id . mkIdentityRange) (IdentityRangeInput ((either (error . show) id . parseWorkspaceIdentity) 62000) ((either (error . show) id . parseWorkspaceIdentity) 62001))))))
     use env binding snapshot reference runtime profile
 
 retainedOutput :: AppEnv -> ExecutionSnapshot -> Operation -> IO OperationOutcome
@@ -563,3 +563,6 @@ corruptRegisteredFile fixture = withEffect fixture \env binding snapshot access 
   publishFileReceipt env reference.operationId >>= (@?= Right FileReceiptAcknowledged)
   getModificationTime file >>= (@?= published)
   readFile file >>= (@?= "PRIVATE_REPLACEMENT\n")
+
+processPolicyFields :: Lens' ProcessPolicy ProcessPolicyInput
+processPolicyFields = lens processPolicyInput (\_ input -> either (error . show) id (mkProcessPolicy input))

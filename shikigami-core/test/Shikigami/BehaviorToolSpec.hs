@@ -33,16 +33,18 @@ import Keiro.Workflow.Types (WorkflowId (..))
 import Kikan.En.Action (AgentAction (InvokeCapabilityTool))
 import Shikigami.Action.Authorization (ActionAuthorizationFailure (ActionPolicyDenied), ActionAuthorizer (..), allowAllActionAuthorizerForTests)
 import Shikigami.Activity.Coordinate
+import Shikigami.Activity.Coordinate (activityCoordinate)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (Event), defaultMemoryPolicy)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
-import Shikigami.Behavior.Error (FailureClass (Permanent), RunError (..), classifyRunError)
+import Shikigami.Behavior.Error (FailureClass (..), RunError (..), classifyRunError)
 import Shikigami.Behavior.Input (triggerOnly)
 import Shikigami.Behavior.Run (BehaviorEnv (..), defaultToolTurnLimit, newBehaviorEnv, runBehavior, withCapabilityTools)
-import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
+import Shikigami.Behavior.Skill (SkillDir (..), ToolTurnLimit, parseToolTurnLimit, runSkillWith, toolTurnLimitNumber)
 import Shikigami.Capability.Catalog (ExecutionMode (Durable))
 import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider
+import Shikigami.Execution.Coordinate (executionCoordinate)
 import Shikigami.Execution.Coordinate qualified as ExecutionValue
 import Shikigami.Execution.Ephemeral (EphemeralResult (..), runEphemeralBehavior)
 import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
@@ -227,8 +229,8 @@ toolLoopTests =
           runSkillFixture namespacedRegistry defaultToolTurnLimit \_model _ctx _options -> do
             index <- next calls
             pure (toolResponse (call ("call-" <> tshow index) namespacedRead (object ["value" .= ("loop" :: Text)])))
-        result @?= Left (SkillToolTurnLimitExceeded defaultToolTurnLimit)
-        readIORef calls >>= (@?= defaultToolTurnLimit),
+        result @?= Left (SkillToolTurnLimitExceeded (toolTurnLimitNumber defaultToolTurnLimit))
+        readIORef calls >>= (@?= toolTurnLimitNumber defaultToolTurnLimit),
       testCase "budget exhaustion in a tool remains a permanent infrastructure failure" do
         let budgetRegistry =
               mkRegistry
@@ -241,8 +243,8 @@ toolLoopTests =
         result <-
           runSkillFixture budgetRegistry defaultToolTurnLimit \_model _ctx _options ->
             pure (toolResponse (call "call-budget" namespacedRead (object ["value" .= ("ignored" :: Text)])))
-        result @?= Left (SkillToolInfrastructureFailed False "budget exceeded: test budget spent")
-        classifyRunError (SkillToolInfrastructureFailed False "budget exceeded") @?= Permanent
+        result @?= Left (SkillToolInfrastructureFailed Permanent "budget exceeded: test budget spent")
+        classifyRunError (SkillToolInfrastructureFailed Permanent "budget exceeded") @?= Permanent
     ]
 
 overlayEnvironmentTests :: TestTree
@@ -356,7 +358,7 @@ toolInvocationAuthorizationCase dynamic =
                 case action of
                   InvokeCapabilityTool {} -> pure (Left (ActionPolicyDenied "tool fixture denial"))
                   _ -> allowFixture principal action,
-              kawaSource = "fixture"
+              kawaSource = (activityCoordinate "fixture")
             }
         guardedTool =
           if dynamic
@@ -419,7 +421,7 @@ toolInvocationAuthorizationCase dynamic =
 
 runSkillFixture ::
   ToolRegistry ->
-  Int ->
+  ToolTurnLimit ->
   (Model -> Context -> Options -> IO Response) ->
   IO (Either RunError Value)
 runSkillFixture registry turnLimit complete = do
@@ -493,7 +495,7 @@ readDescriptor =
   CapabilityDescriptor
     { capability = workspaceReadId,
       revision = revisionOne,
-      tools = [CapabilityToolDescriptor {name = "read", operationClass = Observation}]
+      tools = [CapabilityToolDescriptor {name = (executionCoordinate "read"), operationClass = Observation}]
     }
 
 resolvedRead :: ResolvedCapabilitySet

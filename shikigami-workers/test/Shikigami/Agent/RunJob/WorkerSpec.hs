@@ -346,14 +346,14 @@ showRoute = \case
 sampleAddressed :: AddressedMessage
 sampleAddressed =
   AddressedMessage
-    { conversationId = "conv_1",
-      messageId = "msg_1",
+    { conversationId = (declarationCoordinate "conv_1"),
+      messageId = (declarationCoordinate "msg_1"),
       parentMessageId = Nothing,
-      author = "person_1",
+      author = (declarationCoordinate "person_1"),
       content = "how are the numbers?",
-      agentParticipantId = "participant_1",
-      embellishmentId = "emb_1",
-      mentionedBy = "person_1",
+      agentParticipantId = (declarationCoordinate "participant_1"),
+      embellishmentId = (declarationCoordinate "emb_1"),
+      mentionedBy = (declarationCoordinate "person_1"),
       occurredAt = UTCTime (fromGregorian 2026 8 19) 0
     }
 

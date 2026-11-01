@@ -88,7 +88,7 @@ tests fixture =
                  run env (reserveProcessProfileTx binding digest policy range) >>= (@?= Right (profile, ProfileReserved))
            | (label, invalid) <-
                [ ("JSON shape", const Aeson.Null),
-                 ("Unix identity", \profile -> toJSON (profile & #groupId .~ ((either (error . show) id . parseWorkspaceIdentity) (workspaceIdentityNumber profile.userId + 1)))),
+                 ("Unix identity", \profile -> toJSON (processProfileInput profile & #groupId .~ ((either (error . show) id . parseWorkspaceIdentity) (workspaceIdentityNumber profile.userId + 1)))),
                  ( "policy format",
                    \profile -> case toJSON profile of
                      Aeson.Object fields -> case toJSON profile.policy of
@@ -116,10 +116,10 @@ withProfile fixture callback = Fixture.withFixture fixture \env session _ -> do
   callback env binding profile
 
 policy :: ProcessPolicy
-policy = ProcessPolicy ProcessPolicyV1 (ProcessImage (workspaceLocator "/qualified/root") digest (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")) digest [CommandRule (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)] [(workspaceCoordinate "")] [(workspaceCoordinate "src")]
+policy = ((either (error . show) id . mkProcessPolicy) (ProcessPolicyInput ProcessPolicyV1 (((either (error . show) id . mkProcessImage) (ProcessImageInput (workspaceLocator "/qualified/root") digest (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")))) digest [((either (error . show) id . mkCommandRule) (CommandRuleInput (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)))] [(workspaceCoordinate "")] [(workspaceCoordinate "src")]))
 
 range :: IdentityRange
-range = IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 62000) ((either (error . show) id . parseWorkspaceIdentity) 62001)
+range = ((either (error . show) id . mkIdentityRange) (IdentityRangeInput ((either (error . show) id . parseWorkspaceIdentity) 62000) ((either (error . show) id . parseWorkspaceIdentity) 62001)))
 
 digest :: WorkspaceCoordinate scope
 digest = workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")

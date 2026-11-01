@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE MultilineStrings #-}
 
 -- | Durable truth about asynchronous sink publication.
@@ -10,6 +11,9 @@
 module Shikigami.Sink.Delivery
   ( DeliveryStatus (..),
     DeliveryReceipt (..),
+    DeliveryDetail (..),
+    deliveryDetailFor,
+    deliveryDetailText,
     ReceiptContext (..),
     lookupDeliveryFor,
     lookupDeliveryForTx,
@@ -41,6 +45,7 @@ import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Tx
 import Hasql.Transaction.Sessions qualified as Transactions
 import Kioku.Id (SessionId, idText)
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Prelude
 import Shikigami.Sink.Coordinate (SinkOrdinal, parseSinkOrdinal, parseSinkSession, sinkOrdinalInt)
@@ -81,6 +86,25 @@ sinkMessageIdText (SinkMessageId value) = value
 -- @detail@ is the downstream id for successful deliveries and a bounded
 -- diagnostic for failures. A Danwa fresh-conversation sub-receipt stores its
 -- conversation id there with status 'ConversationStarted'.
+data DeliveryDetail
+  = DownstreamReference !(DeclarationCoordinate "downstream-effect")
+  | DeliveryDiagnostic !Text
+  deriving stock (Eq, Show)
+
+deliveryDetailFor :: DeliveryStatus -> Text -> DeliveryDetail
+deliveryDetailFor status raw = case status of
+  Delivered -> DownstreamReference (declarationCoordinate raw)
+  ConversationStarted -> DownstreamReference (declarationCoordinate raw)
+  _ -> DeliveryDiagnostic raw
+
+deliveryDetailText :: DeliveryDetail -> Text
+deliveryDetailText (DownstreamReference value) = declarationCoordinateText value
+deliveryDetailText (DeliveryDiagnostic value) = value
+
+instance ToJSON DeliveryDetail where
+  toJSON = toJSON . deliveryDetailText
+  toEncoding = toEncoding . deliveryDetailText
+
 data DeliveryReceipt = DeliveryReceipt
   { receiptKey :: !ReceiptKey,
     outboxMessageId :: !SinkMessageId,
@@ -89,7 +113,7 @@ data DeliveryReceipt = DeliveryReceipt
     ordinal :: !SinkOrdinal,
     sinkKind :: !SinkKind,
     status :: !DeliveryStatus,
-    detail :: !(Maybe Text),
+    detail :: !(Maybe DeliveryDetail),
     updatedAt :: !UTCTime
   }
   deriving stock (Eq, Show, Generic)
@@ -191,7 +215,7 @@ recordStatement =
         <> (fromIntegral . sinkOrdinalInt . (.ordinal) >$< Encoders.param (Encoders.nonNullable Encoders.int4))
         <> (sinkKindText . (.sinkKind) >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> (renderDeliveryStatus . (.status) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((.detail) >$< Encoders.param (Encoders.nullable Encoders.text))
+        <> ((fmap deliveryDetailText . (.detail)) >$< Encoders.param (Encoders.nullable Encoders.text))
         <> ((.updatedAt) >$< Encoders.param (Encoders.nonNullable Encoders.timestamptz))
     )
     Decoders.noResult
@@ -212,11 +236,12 @@ deliveryReceiptRow =
     assemble key message run agent ordinal kind status detail updated =
       do
         parsedStatus <- parseDeliveryStatus status
+        when (parsedStatus == ConversationStarted && isNothing detail) (Left "missing retained conversation locator")
         parsedKind <- maybe (Left ("unknown sink kind: " <> kind)) Right (parseSinkKind kind)
         parsedRun <- parseSinkSession run
         parsedAgent <- mkAgentName agent
         parsedOrdinal <- parseSinkOrdinal ordinal
-        pure (DeliveryReceipt (ReceiptKey key) (SinkMessageId message) parsedRun parsedAgent parsedOrdinal parsedKind parsedStatus detail updated)
+        pure (DeliveryReceipt (ReceiptKey key) (SinkMessageId message) parsedRun parsedAgent parsedOrdinal parsedKind parsedStatus (deliveryDetailFor parsedStatus <$> detail) updated)
 
 renderDeliveryStatus :: DeliveryStatus -> Text
 renderDeliveryStatus = \case

@@ -52,6 +52,7 @@ import Shikigami.Delegation.BudgetStore
     BudgetReservationError (..),
     ReservationResult (..),
     delegationBudgetIdFor,
+    reservationCountNumber,
     reserveDelegationSlot,
     reserveDelegationSlots,
     reserveEnrolledDelegationSlots,
@@ -202,7 +203,7 @@ delegateWith expectedIdentity executionRequest declarations directory decl ctx d
   pure (Delegated handle)
   where
     toSingle DelegationBatchExhausted = DelegationSlotsExhausted
-    toSingle (DelegationBatchReserved 1 _) = DelegationSlotReserved
+    toSingle (DelegationBatchReserved added _) | reservationCountNumber added == 1 = DelegationSlotReserved
     toSingle (DelegationBatchReserved _ _) = DelegationSlotAlreadyReserved
 
 -- | Validate and identify every child without touching durable state.

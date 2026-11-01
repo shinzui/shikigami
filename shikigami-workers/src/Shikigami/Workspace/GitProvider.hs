@@ -41,6 +41,7 @@ import Hasql.Transaction (Transaction)
 import Kikan.En.Action (AgentAction)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizer (..))
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Principal (identityText)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Capability.Overlay
@@ -48,6 +49,7 @@ import Shikigami.Capability.Provider (DurableAdapter (..), DurableToolContract (
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Coordinate
+import Shikigami.Execution.Coordinate (executionCoordinate)
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
@@ -107,7 +109,7 @@ transferredWorkspaceGitDescriptor :: CapabilityDescriptor
 transferredWorkspaceGitDescriptor = gitDescriptorFor True
 
 gitDescriptorFor :: Bool -> CapabilityDescriptor
-gitDescriptorFor transferable = CapabilityDescriptor (must (mkCapabilityId "workspace.git")) (must (mkCapabilityRevision (if transferable then "2" else "1"))) [CapabilityToolDescriptor "status" Observation, CapabilityToolDescriptor "diff" Observation, CapabilityToolDescriptor "commit" IdempotentMutation]
+gitDescriptorFor transferable = CapabilityDescriptor (must (mkCapabilityId "workspace.git")) (must (mkCapabilityRevision (if transferable then "2" else "1"))) [CapabilityToolDescriptor (executionCoordinate "status") Observation, CapabilityToolDescriptor (executionCoordinate "diff") Observation, CapabilityToolDescriptor (executionCoordinate "commit") IdempotentMutation]
   where
     must :: (Show e) => Either e a -> a; must = either (error . show) id
 
@@ -245,7 +247,7 @@ grant :: FileRuntime -> AcceptedGit -> Either FileEffectError AgentAction -> IO 
 grant runtime accepted action = do
   principal <- either (const (abort FileEffectRefused)) pure (identityText accepted.admission.owner)
   selected <- either abort pure action
-  runtime.authorizer.authorize principal selected >>= either (const (abort FileEffectRefused)) (const (current runtime accepted))
+  runtime.authorizer.authorize (declarationCoordinate principal) selected >>= either (const (abort FileEffectRefused)) (const (current runtime accepted))
 
 observe :: GitBackend -> FileRuntime -> AcceptedGit -> ProcessProfile -> WorkspaceCoordinate "file-target" -> Text -> IO Aeson.Value
 observe backend runtime accepted profile target name = do
@@ -463,7 +465,7 @@ protect action = catch (catch (Right <$> action) (\(GitAbort err) -> pure (Left 
 
 -- A separate exact revision avoids changing the accepted Git tool menu.
 workspaceIntegrationDescriptor :: CapabilityDescriptor
-workspaceIntegrationDescriptor = CapabilityDescriptor (must (mkCapabilityId "workspace.integrate")) (must (mkCapabilityRevision "1")) [CapabilityToolDescriptor "plan" Observation]
+workspaceIntegrationDescriptor = CapabilityDescriptor (must (mkCapabilityId "workspace.integrate")) (must (mkCapabilityRevision "1")) [CapabilityToolDescriptor (executionCoordinate "plan") Observation]
   where
     must :: (Show e) => Either e a -> a; must = either (error . show) id
 

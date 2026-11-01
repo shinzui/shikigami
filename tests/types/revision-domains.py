@@ -21,6 +21,9 @@ import Data.KindID.V7 qualified as KindID
 import Data.String (fromString)
 import Data.Text (Text)
 import Numeric.Natural (Natural)
+import GHC.Generics (Generic, to)
+import Shikigami.Program.Decision.Examples qualified as Example
+import Shikigami.Sink.Permission qualified as Grants
 import Shikigami.Duration qualified as Duration
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Router.Catalog qualified as Catalog
@@ -78,6 +81,25 @@ import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ('checked-ProcessImage-constructor', 'value = ProcessPolicy.ProcessImage\n', False),
+    ('checked-ProcessImage-coercion', 'value :: ProcessPolicy.ProcessImageInput -> ProcessPolicy.ProcessImage\nvalue = coerce\n', False),
+    ('checked-ProcessImage-generic', 'value :: ProcessPolicy.ProcessImage\nvalue = to undefined\n', False),
+    ('checked-CommandRule-constructor', 'value = ProcessPolicy.CommandRule\n', False),
+    ('checked-CommandRule-coercion', 'value :: ProcessPolicy.CommandRuleInput -> ProcessPolicy.CommandRule\nvalue = coerce\n', False),
+    ('checked-CommandRule-generic', 'value :: ProcessPolicy.CommandRule\nvalue = to undefined\n', False),
+    ('checked-ProcessPolicy-constructor', 'value = ProcessPolicy.ProcessPolicy\n', False),
+    ('checked-ProcessPolicy-coercion', 'value :: ProcessPolicy.ProcessPolicyInput -> ProcessPolicy.ProcessPolicy\nvalue = coerce\n', False),
+    ('checked-ProcessPolicy-generic', 'value :: ProcessPolicy.ProcessPolicy\nvalue = to undefined\n', False),
+    ('checked-ProcessProfile-constructor', 'value = ProcessPolicy.ProcessProfile\n', False),
+    ('checked-ProcessProfile-coercion', 'value :: ProcessPolicy.ProcessProfileInput -> ProcessPolicy.ProcessProfile\nvalue = coerce\n', False),
+    ('checked-ProcessProfile-generic', 'value :: ProcessPolicy.ProcessProfile\nvalue = to undefined\n', False),
+    ('checked-IdentityRange-constructor', 'value = ProcessPolicy.IdentityRange\n', False),
+    ('checked-IdentityRange-coercion', 'value :: ProcessPolicy.IdentityRangeInput -> ProcessPolicy.IdentityRange\nvalue = coerce\n', False),
+    ('checked-IdentityRange-generic', 'value :: ProcessPolicy.IdentityRange\nvalue = to undefined\n', False),
+    ('confidence-constructor', 'value = Example.ModelConfidence\n', False),
+    ('confidence-coercion', 'value :: Double -> Example.ModelConfidence\nvalue = coerce\n', False),
+    ('decision-timeout-constructor', 'value = Decision.DecisionTimeout\n', False),
+    ('decision-timeout-coercion', 'value :: Int -> Decision.DecisionTimeout\nvalue = coerce\n', False),
     ('duration-admission', 'value :: Either Text (Duration.Duration "approval")\nvalue = Duration.parseDuration 1\n', True),
     ('duration-constructor', 'value = Duration.Duration\n', False),
     ('duration-scope-coercion', 'value :: Duration.Duration "approval" -> Duration.Duration "agent-run"\nvalue = coerce\n', False),
@@ -575,6 +597,16 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
                 "repository-id-constructor": ["RepositoryId"],
                 "repository-id-coercion": ["RepositoryId", "Text"],
             })
+            fragments.update({
+                "confidence-constructor": ["ModelConfidence"],
+                "confidence-coercion": ["ModelConfidence", "Double"],
+                "decision-timeout-constructor": ["DecisionTimeout"],
+                "decision-timeout-coercion": ["DecisionTimeout", "Int"],
+            })
+            for policy_type in ["ProcessImage", "CommandRule", "ProcessPolicy", "ProcessProfile", "IdentityRange"]:
+                fragments["checked-" + policy_type + "-constructor"] = [policy_type]
+                fragments["checked-" + policy_type + "-coercion"] = [policy_type]
+                fragments["checked-" + policy_type + "-generic"] = [policy_type, "Generic"]
             if name.endswith("-constructor"):
                 assert any(marker in result.stderr.lower() for marker in ["not in scope", "does not export", "illegal term-level"]), (name, result.stderr)
             assert all(fragment in result.stderr for fragment in fragments[name]), (name, result.stderr)

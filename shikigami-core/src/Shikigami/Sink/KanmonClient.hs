@@ -38,18 +38,19 @@ data KanmonError
 
 -- | Resolve the destination once, before durable enqueue. Non-empty static
 -- declarations win, then output metadata, then the triggering subject id.
-resolveConversationKey :: Sink -> Maybe Activity.ActivityEnvelope -> Value -> Maybe Text
+resolveConversationKey :: Sink -> Maybe Activity.ActivityEnvelope -> Value -> Maybe (DeclarationCoordinate "conversation")
 resolveConversationKey sink activity output =
-  firstNonEmpty
-    [ declaredKey sink,
-      objectText "conversation_key" output,
-      activitySubjectId activity
-    ]
+  declarationCoordinate
+    <$> firstNonEmpty
+      [ declaredKey sink,
+        objectText "conversation_key" output,
+        activitySubjectId activity
+      ]
 
 -- | Build the exact Kanmon request from durable, already-resolved metadata.
 buildEgressRequest :: SinkContext -> Value -> Either Text EgressActionRequest
 buildEgressRequest ctx@SinkContext {conversationKey = resolvedConversationKey, triggeringActivityId = resolvedTriggeringActivityId} output =
-  case nonEmpty resolvedConversationKey of
+  case nonEmpty (declarationCoordinateText <$> resolvedConversationKey) of
     Nothing -> Left "ChannelEgress requires a resolved conversation key"
     Just resolvedKey ->
       Right
@@ -57,7 +58,7 @@ buildEgressRequest ctx@SinkContext {conversationKey = resolvedConversationKey, t
           { conversationKey = resolvedKey,
             content = contentFrom output,
             idempotencyKey = Just (mkSourceEventId ctx),
-            triggeringActivityId = nonEmpty resolvedTriggeringActivityId
+            triggeringActivityId = nonEmpty (Activity.activityCoordinateText <$> resolvedTriggeringActivityId)
           }
 
 postEgress :: HttpEnv -> KanmonConfig -> DeclarationCoordinate "channel" -> DeclarationCoordinate "channel-action" -> EgressActionRequest -> IO (Either KanmonError EgressActionResponse)

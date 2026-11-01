@@ -43,6 +43,7 @@ import Settei.Env (envSnapshot, environmentSource)
 import Shikigami.Action.Authorization (ActionAuthorizationFailure (..), ActionAuthorizer (..), allowAllActionAuthorizerForTests)
 import Shikigami.Activity qualified as Activity
 import Shikigami.Activity.Coordinate
+import Shikigami.Activity.Coordinate (activityCoordinate)
 import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl
@@ -275,7 +276,7 @@ journalTruth databaseFixture =
     encoded <- maybe (assertFailure "dispatch-sinks was not journaled") pure (Map.lookup "dispatch-sinks" index)
     case fromJSON encoded :: Result [SinkResult] of
       Success [SinkResult {outcome = Enqueued detail}] ->
-        assertBool ("enqueue detail should name the outbox row: " <> Text.unpack detail) ("outbox:" `Text.isPrefixOf` detail)
+        assertBool ("enqueue detail should name the outbox row: " <> Text.unpack (declarationCoordinateText detail)) ("outbox:" `Text.isPrefixOf` declarationCoordinateText detail)
       other -> assertFailure ("expected one Enqueued result, got " <> show other)
 
 egressIntentMetadata :: DatabaseFixture -> IO ()
@@ -285,8 +286,8 @@ egressIntentMetadata databaseFixture =
     [row] <- runWorkflowAndRows deps appEnv ((runJob & #triggerPayload .~ (Aeson.toJSON triggeringActivity)))
     case Integration.decodeJsonIntegrationEvent (rowEvent row) of
       Right AgentWorkflow.SinkIntent {AgentWorkflow.conversationKey, AgentWorkflow.triggeringActivityId} -> do
-        assertEqual "activity subject becomes the durable conversation key" (Just "conv_55012") conversationKey
-        assertEqual "activity id is retained without the envelope" (Just "act_channel_1") triggeringActivityId
+        assertEqual "activity subject becomes the durable conversation key" (Just (declarationCoordinate ("conv_55012"))) conversationKey
+        assertEqual "activity id is retained without the envelope" (Just (activityCoordinate "act_channel_1")) triggeringActivityId
       other -> assertFailure ("ChannelEgress intent should decode, got " <> show other)
 
 triggeringActivity :: Activity.ActivityEnvelope
@@ -325,7 +326,7 @@ egressReceiptRecording databaseFixture = do
       assertEqual "delivered receipt suppresses the second HTTP request" Outbox.PublishSucceeded second
       receipt <- lookupReceipt pool row
       assertEqual "receipt is delivered" Delivery.Delivered ((.status) receipt)
-      assertEqual "Kanmon activity id is retained" (Just "act_reply_1") ((.detail) receipt)
+      assertEqual "Kanmon activity id is retained" (Just "act_reply_1") (Delivery.deliveryDetailText <$> ((.detail) receipt))
       observed <- readIORef requests
       assertEqual "Kanmon receives one request" 1 (length observed)
       case observed of
@@ -416,12 +417,12 @@ actionRevokedBeforePublish databaseFixture = do
           authorizer =
             ActionAuthorizer
               { authorize = \principal action -> do
-                  modifyIORef' decisions (<> [(principal, action)])
+                  modifyIORef' decisions (<> [(declarationCoordinateText principal, action)])
                   denied <- readIORef deny
                   if denied
                     then pure (Left (ActionPolicyDenied "relationship revoked"))
                     else allowFixture principal action,
-                kawaSource = "fixture"
+                kawaSource = (activityCoordinate "fixture")
               }
           gatedDeps = (deps & #actionAuthorizer .~ (authorizer) & #directory .~ (directory))
       [row] <- runWorkflowAndRows gatedDeps appEnv ((runJob & #identity .~ (verifiedHeartbeatAgentIdentity)))
@@ -437,9 +438,9 @@ rejectingAuthorizer :: IORef [(Text, AgentAction)] -> ActionAuthorizationFailure
 rejectingAuthorizer requests failure =
   ActionAuthorizer
     { authorize = \principal action -> do
-        modifyIORef' requests (<> [(principal, action)])
+        modifyIORef' requests (<> [(declarationCoordinateText principal, action)])
         pure (Left failure),
-      kawaSource = "fixture"
+      kawaSource = (activityCoordinate "fixture")
     }
 
 receiptRecording :: DatabaseFixture -> IO ()
@@ -454,7 +455,7 @@ receiptRecording databaseFixture = do
       assertEqual "transport succeeds" Outbox.PublishSucceeded published
       receipt <- lookupReceipt pool row
       assertEqual "receipt is delivered" Delivery.Delivered ((.status) receipt)
-      assertEqual "downstream signal id is retained" (Just "sig_stub") ((.detail) receipt)
+      assertEqual "downstream signal id is retained" (Just "sig_stub") (Delivery.deliveryDetailText <$> ((.detail) receipt))
       assertEqual "one downstream request" 1 . length =<< readIORef requests
 
 sendGuard :: DatabaseFixture -> IO ()
@@ -479,7 +480,7 @@ terminalReconciliation databaseFixture =
     assertEqual
       "unknown explains why proof is missing"
       (Just "outbox published without a terminal delivery receipt")
-      ((.detail) receipt)
+      (Delivery.deliveryDetailText <$> ((.detail) receipt))
 
 danwaReuse :: DatabaseFixture -> IO ()
 danwaReuse databaseFixture = do
@@ -500,8 +501,17 @@ danwaReuse databaseFixture = do
         expectRight "lookup conversation receipt"
           =<< Delivery.lookupDelivery pool (Delivery.subReceiptKey (Integration.messageId (rowEvent row)) "conv")
       case subReceipt of
-        Just Delivery.DeliveryReceipt {Delivery.status = Delivery.ConversationStarted, Delivery.detail = Just "conv_stub"} -> pure ()
+        Just Delivery.DeliveryReceipt {Delivery.status = Delivery.ConversationStarted, Delivery.detail = Just (Delivery.DownstreamReference recorded)} -> declarationCoordinateText recorded @?= "conv_stub"
         other -> assertFailure ("expected the started conversation receipt after " <> Text.unpack firstError <> ", got " <> show other)
+      let sql query = expectRight "conversation receipt SQL" =<< Pool.use pool (Session.statement () (preparable query Encoders.noParams Decoders.noResult))
+      sql "UPDATE shikigami.sink_deliveries SET detail=NULL WHERE status='conversation-started'"
+      runEff (AgentWorkflow.publishSinkIntent deps row) >>= \case
+        Outbox.PublishFailed _ -> pure ()
+        other -> assertFailure ("missing conversation locator authorized another effect: " <> show other)
+      assertEqual "unreadable receipt cannot create a replacement conversation" 1 =<< readIORef starts
+      assertEqual "unreadable receipt cannot post another message" 1 =<< readIORef posts
+      sql "UPDATE shikigami.sink_deliveries SET detail='conv_stub' WHERE status='conversation-started'"
+      Delivery.lookupDelivery pool (Delivery.subReceiptKey (Integration.messageId (rowEvent row)) "conv") >>= (@?= Right subReceipt)
       secondOutcome <- runEff (AgentWorkflow.publishSinkIntent deps row)
       assertEqual "retry posts successfully" Outbox.PublishSucceeded secondOutcome
       assertEqual "retry reuses the first conversation" 1 =<< readIORef starts
@@ -557,7 +567,7 @@ withFixtureUsingTracer databaseFixture tracer label sinks kizashi danwa use =
                 AgentWorkflow.workspace = Nothing,
                 AgentWorkflow.agents = [declaration],
                 AgentWorkflow.kizashi = kizashi,
-                AgentWorkflow.kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},
+                AgentWorkflow.kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = (activityCoordinate "shinzui/shikigami")},
                 AgentWorkflow.kanmon = KanmonConfig {baseUrl = "http://localhost:1"},
                 AgentWorkflow.danwa = danwa,
                 AgentWorkflow.rei = ReiConfig {baseUrl = Nothing},
@@ -782,16 +792,16 @@ flakyDanwaApp starts posts request respond =
     _ -> respond (responseLBS status404 [] "not found")
 
 kizashiAt :: Int -> KizashiConfig
-kizashiAt port = KizashiConfig {baseUrl = localBaseUrl port, defaultRecipient = "recipient"}
+kizashiAt port = KizashiConfig {baseUrl = localBaseUrl port, defaultRecipient = (declarationCoordinate "recipient")}
 
 danwaAt :: Int -> DanwaConfig
-danwaAt port = DanwaConfig {baseUrl = localBaseUrl port, agentParticipant = "part_agent_test"}
+danwaAt port = DanwaConfig {baseUrl = localBaseUrl port, agentParticipant = (declarationCoordinate "part_agent_test")}
 
 unreachableKizashi :: KizashiConfig
-unreachableKizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient"}
+unreachableKizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient")}
 
 unreachableDanwa :: DanwaConfig
-unreachableDanwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"}
+unreachableDanwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = (declarationCoordinate "part_agent_test")}
 
 localBaseUrl :: Int -> Text
 localBaseUrl port = "http://localhost:" <> Text.pack (show port)
@@ -813,7 +823,7 @@ receiptCommitGap databaseFixture = do
   posts <- newIORef (0 :: Int)
   testWithApplication (pure (\request respond -> modifyIORef' posts (+ 1) >> kawaDoorwayApplication remote request respond)) \port ->
     withFixture databaseFixture "receipt-gap" [KawaDigest {subjectType = activityCoordinate ("agent"), verb = activityCoordinate ("completed")}] unreachableKizashi unreachableDanwa \base appEnv pool runJob -> do
-      let deps = (base & #kawa .~ (KawaConfig {baseUrl = "http://127.0.0.1:" <> Text.pack (show port), sourceSegment = "shinzui/shikigami"}))
+      let deps = (base & #kawa .~ (KawaConfig {baseUrl = "http://127.0.0.1:" <> Text.pack (show port), sourceSegment = (activityCoordinate "shinzui/shikigami")}))
       [row] <- runWorkflowAndRows deps appEnv runJob
       expectRight "inject receipt commit failure" =<< Pool.use pool (Session.statement () (preparable "ALTER TABLE shikigami.sink_deliveries ADD CONSTRAINT receipt_gap CHECK (status <> 'delivered') NOT VALID" Encoders.noParams Decoders.noResult))
       assertEqual "acknowledged downstream acceptance is terminal" Outbox.PublishSucceeded =<< runEff (AgentWorkflow.publishSinkIntent deps row)
@@ -844,7 +854,7 @@ corruptDelivery fixture = do
   remote <- newIORef Map.empty
   testWithApplication (pure (\request respond -> modifyIORef' posts (+ 1) >> kawaDoorwayApplication remote request respond)) \port ->
     withFixture fixture "corrupt-delivery" [KawaDigest {subjectType = activityCoordinate ("agent"), verb = activityCoordinate ("completed")}] unreachableKizashi unreachableDanwa \base env pool job -> do
-      let deps = base & #kawa .~ (KawaConfig {baseUrl = localBaseUrl port, sourceSegment = "shinzui/shikigami"})
+      let deps = base & #kawa .~ (KawaConfig {baseUrl = localBaseUrl port, sourceSegment = (activityCoordinate "shinzui/shikigami")})
           sql query = expectRight "SQL" =<< Pool.use pool (Session.statement () (preparable query Encoders.noParams Decoders.noResult))
       Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey "absent-receipt") >>= (@?= Right Nothing)
       [row] <- runWorkflowAndRows deps env job
@@ -875,6 +885,7 @@ corruptDelivery fixture = do
       let expected = Delivery.ReceiptContext original.outboxMessageId original.runId original.agent original.ordinal original.sinkKind
           malformedCases =
             [ ("UPDATE shikigami.sink_deliveries SET status='broken'", "UPDATE shikigami.sink_deliveries SET status='delivered'"),
+              ("UPDATE shikigami.sink_deliveries SET status='conversation-started', detail=NULL", "UPDATE shikigami.sink_deliveries SET status='delivered', detail=" <> maybe "NULL" (\value -> "'" <> Text.replace "'" "''" (Delivery.deliveryDetailText value) <> "'") original.detail),
               ("UPDATE shikigami.sink_deliveries SET sink_kind='OtherSink'", "UPDATE shikigami.sink_deliveries SET sink_kind='KawaDigest'"),
               ("UPDATE shikigami.sink_deliveries SET agent=''", "UPDATE shikigami.sink_deliveries SET agent='heartbeat'"),
               ("UPDATE shikigami.sink_deliveries SET run_id='kioku_memory_01kvxa7d2cezhs874g3n8dfgme'", "UPDATE shikigami.sink_deliveries SET run_id='" <> SinkSession.idText original.runId <> "'"),

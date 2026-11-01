@@ -34,6 +34,7 @@ import Data.UUID (UUID)
 import Pgmq (MessageId)
 import Kioku.Id (SessionId)
 import Numeric.Natural (Natural)
+import Shikigami.Workspace.Value qualified as WorkspaceValue
 import GHC.Generics qualified as Generic
 import Keiro.Workflow.Types (WorkflowId, WorkflowName, StepName)
 import Shikigami.Agent.Delegate.Depth qualified as Depth
@@ -344,9 +345,9 @@ position :: Integer -> Either Text Position.ToolPosition
 position = Position.parseToolPosition
 run :: Text -> Correlation.RunCorrelationId
 run = Correlation.runCorrelationId
-call :: Correlation.RunCorrelationId -> Text -> Int -> Correlation.CallCorrelationId
+call :: Correlation.RunCorrelationId -> Text -> Natural -> Correlation.CallCorrelationId
 call = Correlation.callCorrelationId
-bundle :: Int -> Text -> Text -> [(Text, Text)] -> Either Instructions.InstructionError Instructions.InstructionBundle
+bundle :: Int -> Repository.RepositoryId -> WorkspaceValue.WorkspaceCoordinate "git-object" -> [(WorkspaceValue.WorkspaceCoordinate "relative-path", Text)] -> Either Instructions.InstructionError Instructions.InstructionBundle
 bundle = Instructions.mkInstructionBundle
 router :: AgentDecl -> Either [Declaration.RouterDeclarationError] Declaration.ValidatedRouterDeclaration
 router = Declaration.validateRouterDeclaration

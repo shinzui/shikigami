@@ -19,12 +19,13 @@ import Hasql.Pool (Pool)
 import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
-import Shikigami.Agent.Principal (AgentPrincipal, principalText)
+import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
+import Shikigami.Agent.Principal (AgentPrincipal, mkAgentPrincipal, principalText)
 import Shikigami.Prelude
 
 data AgentScopeAlias = AgentScopeAlias
-  { principalId :: !Text,
-    legacyAgentName :: !Text,
+  { principalId :: !AgentPrincipal,
+    legacyAgentName :: !AgentName,
     createdAt :: !UTCTime,
     updatedAt :: !UTCTime
   }
@@ -40,11 +41,11 @@ data AliasReconciliation
       }
   deriving stock (Eq, Show, Generic)
 
-aliasesForPrincipal :: Pool -> AgentPrincipal -> IO (Either Text [Text])
+aliasesForPrincipal :: Pool -> AgentPrincipal -> IO (Either Text [AgentName])
 aliasesForPrincipal pool principal =
   renderUsage <$> Pool.use pool (Session.statement (principalText principal) aliasesStatement)
 
-aliasesStatement :: Statement Text [Text]
+aliasesStatement :: Statement Text [AgentName]
 aliasesStatement =
   preparable
     """
@@ -54,7 +55,7 @@ aliasesStatement =
      ORDER BY legacy_agent_name
     """
     (Encoders.param (Encoders.nonNullable Encoders.text))
-    (Decoders.rowList (Decoders.column (Decoders.nonNullable Decoders.text)))
+    (Decoders.rowList (Decoders.column (Decoders.nonNullable (Decoders.refine mkAgentName Decoders.text))))
 
 -- | Insert one alias idempotently. A name already owned by another principal
 -- is returned as a conflict and is never reassigned.
@@ -67,14 +68,14 @@ reconcileAlias pool principal rawLegacyName
       case existing of
         Left err -> pure (Left err)
         Right (Just row)
-          | (.principalId) row == expected -> pure (Right (AliasAlreadyPresent row))
+          | principalText ((.principalId) row) == expected -> pure (Right (AliasAlreadyPresent row))
           | otherwise ->
               pure
                 ( Right
                     AliasConflict
                       { legacyAgentName = legacyName,
                         expectedPrincipalId = expected,
-                        existingPrincipalId = (.principalId) row
+                        existingPrincipalId = principalText ((.principalId) row)
                       }
                 )
         Right Nothing -> do
@@ -82,13 +83,13 @@ reconcileAlias pool principal rawLegacyName
           pure do
             (row, inserted) <- renderUsage insertedResult
             pure
-              if (.principalId) row == expected
+              if principalText ((.principalId) row) == expected
                 then if inserted then AliasInserted row else AliasAlreadyPresent row
                 else
                   AliasConflict
                     { legacyAgentName = legacyName,
                       expectedPrincipalId = expected,
-                      existingPrincipalId = (.principalId) row
+                      existingPrincipalId = principalText ((.principalId) row)
                     }
   where
     legacyName = Text.strip rawLegacyName
@@ -125,8 +126,8 @@ insertStatement =
 aliasRow :: Decoders.Row AgentScopeAlias
 aliasRow =
   AgentScopeAlias
-    <$> Decoders.column (Decoders.nonNullable Decoders.text)
-    <*> Decoders.column (Decoders.nonNullable Decoders.text)
+    <$> Decoders.column (Decoders.nonNullable (Decoders.refine mkAgentPrincipal Decoders.text))
+    <*> Decoders.column (Decoders.nonNullable (Decoders.refine mkAgentName Decoders.text))
     <*> Decoders.column (Decoders.nonNullable Decoders.timestamptz)
     <*> Decoders.column (Decoders.nonNullable Decoders.timestamptz)
 

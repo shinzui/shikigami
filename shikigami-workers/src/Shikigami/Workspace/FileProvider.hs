@@ -38,6 +38,7 @@ import Hasql.Transaction (Transaction)
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizer (..))
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Principal (identityText)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Capability.Overlay
@@ -45,6 +46,7 @@ import Shikigami.Capability.Provider (DurableAdapter (..), DurableToolContract (
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Coordinate
+import Shikigami.Execution.Coordinate (executionCoordinate)
 import Shikigami.Execution.Identity (OperationId, operationIdText)
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
@@ -93,7 +95,7 @@ transferredWorkspaceEditDescriptor = fileDescriptor Transferred
 data FileMode = FileOnly | Supervised | Transferred deriving stock (Eq)
 
 fileDescriptor :: FileMode -> CapabilityDescriptor
-fileDescriptor mode = CapabilityDescriptor (must (mkCapabilityId "workspace.edit")) (must (mkCapabilityRevision (fileRevision mode))) [CapabilityToolDescriptor "read" Observation, CapabilityToolDescriptor "replace" IdempotentMutation]
+fileDescriptor mode = CapabilityDescriptor (must (mkCapabilityId "workspace.edit")) (must (mkCapabilityRevision (fileRevision mode))) [CapabilityToolDescriptor (executionCoordinate "read") Observation, CapabilityToolDescriptor (executionCoordinate "replace") IdempotentMutation]
   where
     must :: (Show e) => Either e a -> a
     must = either (error . show) id
@@ -419,7 +421,7 @@ authorize runtime profile binding admission dispatch kind path target input chec
     case policy of
       Left _ -> pure (Left FileEffectRefused)
       Right () -> do
-        granted <- runtime.authorizer.authorize principal action
+        granted <- runtime.authorizer.authorize (declarationCoordinate principal) action
         case granted of Left _ -> pure (Left FileEffectRefused); Right _ -> check
   _ -> pure (Left FileEffectRefused)
 

@@ -27,6 +27,7 @@ import Shikigami.Agent.Approval.Workflow
     ApprovalNotifier (..),
   )
 import Shikigami.Agent.Decl (Priority (High), SignalType (AgentRequest))
+import Shikigami.Agent.DeclarationValue (declarationCoordinateText)
 import Shikigami.Duration
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude hiding ((.=))
@@ -61,7 +62,7 @@ approvalNotifier logger SinkHttp {danwa = danwaClient, kizashi = kizashiHttp} da
                 kizashiConfig
                 CreateSignalReq
                   { actor = "shikigami",
-                    recipient = (.defaultRecipient) kizashiConfig,
+                    recipient = declarationCoordinateText ((.defaultRecipient) kizashiConfig),
                     source = "shinzui/shikigami",
                     signalType = AgentRequest,
                     intent = message,

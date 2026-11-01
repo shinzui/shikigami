@@ -502,7 +502,7 @@ tests databaseFixture =
                   deps =
                     (testDeps appEnv behaviorEnv defaultAgentRunHooks)
                       { grants = DbGrants pool',
-                        kawa = KawaConfig {baseUrl = "http://localhost:" <> Text.pack (show port), sourceSegment = "shinzui/shikigami"}
+                        kawa = KawaConfig {baseUrl = "http://localhost:" <> Text.pack (show port), sourceSegment = (activityCoordinate "shinzui/shikigami")}
                       }
 
               -- heartbeat/KawaDigest is seeded granted, so the run enqueues.
@@ -855,8 +855,8 @@ tests databaseFixture =
                 case (firstTurn, secondTurn) of
                   (Right firstResult, Right secondResult) -> do
                     assertEqual "second human turn reuses the first kioku session" ((.sessionId) firstResult) ((.sessionId) secondResult)
-                    assertBool "first reply is represented by a durable outbox message" ("outbox:danwa-conversation:conv_thread_1:danwa-reply:msg_human_1" `Text.isPrefixOf` (.replyMessageId) firstResult)
-                    assertBool "second reply is represented by a durable outbox message" ("outbox:danwa-conversation:conv_thread_1:danwa-reply:msg_human_2" `Text.isPrefixOf` (.replyMessageId) secondResult)
+                    assertBool "first reply is represented by a durable outbox message" ("outbox:danwa-conversation:conv_thread_1:danwa-reply:msg_human_1" `Text.isPrefixOf` declarationCoordinateText ((.replyMessageId) firstResult))
+                    assertBool "second reply is represented by a durable outbox message" ("outbox:danwa-conversation:conv_thread_1:danwa-reply:msg_human_2" `Text.isPrefixOf` declarationCoordinateText ((.replyMessageId) secondResult))
 
                     turns <- runAppIO appEnv (Session.getTurns shikigamiMemorySpace ((.sessionId) firstResult))
                     case turns of
@@ -1625,8 +1625,8 @@ tests databaseFixture =
                 behaviorEnv <- newBehaviorEnv
                 testWithApplication (pure (\request respond -> if take 2 (pathInfo request) == ["v1", "sources"] then kawaDoorwayApplication remote request respond else approvalDanwaApplication asks request respond)) \port -> do
                   let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                      danwaConfig = DanwaConfig {baseUrl = localApprovalBaseUrl port, agentParticipant = "part_agent_test"}
-                      kizashiConfig = KizashiConfig {baseUrl = "http://127.0.0.1:1", defaultRecipient = "recipient:test"}
+                      danwaConfig = DanwaConfig {baseUrl = localApprovalBaseUrl port, agentParticipant = (declarationCoordinate "part_agent_test")}
+                      kizashiConfig = KizashiConfig {baseUrl = "http://127.0.0.1:1", defaultRecipient = (declarationCoordinate "recipient:test")}
                   sinkHttp <- testSinkHttpFor danwaConfig
                   let notifier = ApprovalNotification.approvalNotifier Log.silentLogger sinkHttp danwaConfig kizashiConfig
                       deps =
@@ -1641,7 +1641,7 @@ tests databaseFixture =
                             danwa = danwaConfig,
                             http = sinkHttp,
                             deliveryPool = Just kirokuStore.pool,
-                            kawa = KawaConfig {baseUrl = localApprovalBaseUrl port, sourceSegment = "shinzui/shikigami"}
+                            kawa = KawaConfig {baseUrl = localApprovalBaseUrl port, sourceSegment = (activityCoordinate "shinzui/shikigami")}
                           }
 
                   let consume dependencies expected = Job.withJobRuntime connStr Nothing \runtime -> do
@@ -2001,10 +2001,10 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       coordination = Nothing,
       workspace = Nothing,
       agents = agentDecls,
-      kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient"},
-      kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},
+      kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient")},
+      kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = (activityCoordinate "shinzui/shikigami")},
       kanmon = KanmonConfig {baseUrl = "http://localhost:1"},
-      danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
+      danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = (declarationCoordinate "part_agent_test")},
       rei = ReiConfig {baseUrl = Nothing},
       http = testSinkHttp,
       hooks,
@@ -2037,10 +2037,10 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       coordination = Nothing,
       workspace = Nothing,
       agents = [decl],
-      kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "recipient"},
-      kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = "shinzui/shikigami"},
+      kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient")},
+      kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = (activityCoordinate "shinzui/shikigami")},
       kanmon = KanmonConfig {baseUrl = "http://localhost:1"},
-      danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
+      danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = (declarationCoordinate "part_agent_test")},
       rei = ReiConfig {baseUrl = Nothing},
       http = testSinkHttp,
       hooks,
@@ -2197,7 +2197,7 @@ testConversationEnvIdle idleWindow appEnv behaviorEnv conversationAgents =
       Conversation.runTimeout = (either (error . show) id (parseDuration (secondsToNominalDiffTime 300))),
       Conversation.harness = Harness.defaultHarnessPolicy,
       Conversation.idleTimeout = either (error . show) id (parseDuration idleWindow),
-      Conversation.danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
+      Conversation.danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = (declarationCoordinate "part_agent_test")},
       Conversation.agents = conversationAgents,
       Conversation.grants = StaticGrants defaultGrantTable,
       Conversation.directory = disabledDirectoryHandle
@@ -2503,7 +2503,7 @@ capabilityTestTool toolName =
 descriptorToolName :: CapabilityOverlay.CapabilityDescriptor -> Text
 descriptorToolName CapabilityOverlay.CapabilityDescriptor {CapabilityOverlay.tools} =
   case tools of
-    CapabilityOverlay.CapabilityToolDescriptor {CapabilityOverlay.name} : _ -> name
+    CapabilityOverlay.CapabilityToolDescriptor {CapabilityOverlay.name} : _ -> Replay.executionCoordinateText name
     [] -> error "test capability descriptor must declare one tool"
 
 recordCapabilityEvent :: IORef [Text] -> Text -> IO ()
@@ -2535,7 +2535,7 @@ capabilityDescriptor capabilityName revisionName operationClass =
       CapabilityOverlay.revision = expectCapabilityRight (CapabilityOverlay.mkCapabilityRevision revisionName),
       CapabilityOverlay.tools =
         [ CapabilityOverlay.CapabilityToolDescriptor
-            { CapabilityOverlay.name = "read",
+            { CapabilityOverlay.name = Replay.executionCoordinate "read",
               CapabilityOverlay.operationClass = operationClass
             }
         ]
@@ -2807,28 +2807,28 @@ withRecordPolicy recordPolicy = #memory . #recordPolicy .~ recordPolicy
 firstAddressedMessage :: AddressedMessage
 firstAddressedMessage =
   AddressedMessage
-    { conversationId = "conv_thread_1",
-      messageId = "msg_human_1",
+    { conversationId = (declarationCoordinate "conv_thread_1"),
+      messageId = (declarationCoordinate "msg_human_1"),
       parentMessageId = Nothing,
-      author = "part_human_test",
+      author = (declarationCoordinate "part_human_test"),
       content = "first question",
-      agentParticipantId = "part_agent_test",
-      embellishmentId = "emb_human_1",
-      mentionedBy = "part_human_test",
+      agentParticipantId = (declarationCoordinate "part_agent_test"),
+      embellishmentId = (declarationCoordinate "emb_human_1"),
+      mentionedBy = (declarationCoordinate "part_human_test"),
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0
     }
 
 secondAddressedMessage :: AddressedMessage
 secondAddressedMessage =
   AddressedMessage
-    { conversationId = "conv_thread_1",
-      messageId = "msg_human_2",
-      parentMessageId = Just "msg_human_1",
-      author = "part_human_test",
+    { conversationId = (declarationCoordinate "conv_thread_1"),
+      messageId = (declarationCoordinate "msg_human_2"),
+      parentMessageId = Just (declarationCoordinate "msg_human_1"),
+      author = (declarationCoordinate "part_human_test"),
       content = "follow up",
-      agentParticipantId = "part_agent_test",
-      embellishmentId = "emb_human_2",
-      mentionedBy = "part_human_test",
+      agentParticipantId = (declarationCoordinate "part_agent_test"),
+      embellishmentId = (declarationCoordinate "emb_human_2"),
+      mentionedBy = (declarationCoordinate "part_human_test"),
       occurredAt = UTCTime (fromGregorian 2026 6 27) 1
     }
 
@@ -2836,14 +2836,14 @@ secondAddressedMessage =
 conversationMessageNumbered :: Int -> AddressedMessage
 conversationMessageNumbered n =
   AddressedMessage
-    { conversationId = "conv_rotation",
-      messageId = "msg_rotation_" <> Text.pack (show n),
-      parentMessageId = if n == 1 then Nothing else Just ("msg_rotation_" <> Text.pack (show (n - 1))),
-      author = "part_human_test",
+    { conversationId = (declarationCoordinate "conv_rotation"),
+      messageId = declarationCoordinate ("msg_rotation_" <> Text.pack (show n)),
+      parentMessageId = if n == 1 then Nothing else Just (declarationCoordinate ("msg_rotation_" <> Text.pack (show (n - 1)))),
+      author = (declarationCoordinate "part_human_test"),
       content = "question " <> Text.pack (show n),
-      agentParticipantId = "part_agent_test",
-      embellishmentId = "emb_rotation_" <> Text.pack (show n),
-      mentionedBy = "part_human_test",
+      agentParticipantId = (declarationCoordinate "part_agent_test"),
+      embellishmentId = declarationCoordinate ("emb_rotation_" <> Text.pack (show n)),
+      mentionedBy = (declarationCoordinate "part_human_test"),
       occurredAt = UTCTime (fromGregorian 2026 6 27) (fromIntegral n)
     }
 
@@ -2851,28 +2851,28 @@ conversationMessageNumbered n =
 thirdAddressedMessage :: AddressedMessage
 thirdAddressedMessage =
   AddressedMessage
-    { conversationId = "conv_thread_1",
-      messageId = "msg_human_3",
-      parentMessageId = Just "msg_human_2",
-      author = "part_human_test",
+    { conversationId = (declarationCoordinate "conv_thread_1"),
+      messageId = (declarationCoordinate "msg_human_3"),
+      parentMessageId = Just (declarationCoordinate "msg_human_2"),
+      author = (declarationCoordinate "part_human_test"),
       content = "third question",
-      agentParticipantId = "part_agent_test",
-      embellishmentId = "emb_human_3",
-      mentionedBy = "part_human_test",
+      agentParticipantId = (declarationCoordinate "part_agent_test"),
+      embellishmentId = (declarationCoordinate "emb_human_3"),
+      mentionedBy = (declarationCoordinate "part_human_test"),
       occurredAt = UTCTime (fromGregorian 2026 6 27) 2
     }
 
 permanentConversationMessage :: AddressedMessage
 permanentConversationMessage =
   AddressedMessage
-    { conversationId = "conv_permanent",
-      messageId = "msg_permanent",
+    { conversationId = (declarationCoordinate "conv_permanent"),
+      messageId = (declarationCoordinate "msg_permanent"),
       parentMessageId = Nothing,
-      author = "part_human_test",
+      author = (declarationCoordinate "part_human_test"),
       content = "exercise permanent failure",
-      agentParticipantId = "part_agent_test",
-      embellishmentId = "emb_permanent",
-      mentionedBy = "part_human_test",
+      agentParticipantId = (declarationCoordinate "part_agent_test"),
+      embellishmentId = (declarationCoordinate "emb_permanent"),
+      mentionedBy = (declarationCoordinate "part_human_test"),
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0
     }
 

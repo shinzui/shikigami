@@ -33,6 +33,7 @@ import GHC.Generics (Generic)
 import Handan.Runtime (Runtime)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), currentRunGeneration, currentWorkflow, step)
 import Shikigami.Agent.Decl (AgentDecl)
+import Shikigami.Attestation.PolicyValue (mkCeiling)
 import Shikigami.Attestation.Resolve (ResolvedProfile)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.Evidence
@@ -87,7 +88,7 @@ data DecisionEnv = DecisionEnv
     profile :: !(Maybe ResolvedProfile),
     evidence :: !DecisionEvidenceStore,
     routing :: !RoutingRuntime,
-    timeoutMicros :: !Int,
+    timeoutMicros :: !DecisionTimeout,
     beforeStep :: !(StepName -> IO ()),
     afterStep :: !(StepName -> IO ())
   }
@@ -182,7 +183,7 @@ runDecision env action = do
                           hooks = decisionCallHooks env.evidence env.profile,
                           providers = env.services.providers,
                           timeoutMicros = env.timeoutMicros,
-                          callLimit = 64
+                          callLimit = either (error . show) id (mkCeiling 64)
                         }
                       prepared
                       ref

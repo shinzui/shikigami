@@ -93,10 +93,34 @@ are preserved. The complete workspace build, 629 core, 472 PostgreSQL (140.57 se
 cases pass, together with domain conformance and six diagram controls. Public
 compiler controls exposed two stale generation expectations from an earlier
 source batch; those probes are corrected without changing production types.
-Native workflow compatibility remains pending for the committed source.
+The native gate on `4ac29de` against `ad22a18` passes: zero findings,
+replay-neutral impact and all 156 conformance controls.
 The inventory remains the
 historical snapshot above until combined reconciliation; this note does not
 certify unresolved findings or complete M2/M3.
+
+Final remaining-field batch (2026-11-01, in progress): all eight final raw
+conversation/stub fields are now wrapped, together with sink destinations and
+outcomes, authorization claims, native alias/grant identities, model confidence,
+proposal bytes, microsecond budgets and reservation counts. SDK and SQL adapters
+explicitly lower values; configured/foreign claims retain their exact bytes.
+The five composite process-policy values and the integration request now use private
+newtype wrappers around explicit input records, reusing their existing validators.
+Public constructors and Generic cannot bypass admission. The remaining work is
+compiler propagation, final behavioral/compiler acceptance
+and combined source-bound classification/guide reconciliation. No current
+violation count is inferred from the stale historical ledger.
+
+Final source acceptance checkpoint (2026-11-01): the full workspace build passes.
+All 253 current revision compiler controls pass. The seven behavioral suites
+exercise the final production source: 95 server, 37 agent, 31 API, nine client,
+631/632 core, 471/472 PostgreSQL and 279/280 serial worker cases. The three fixture
+failures were corrected and built together; their actual original tests now pass,
+with no production change or exclusion. Domain and six diagram controls pass.
+The combined census candidate has 4,253 keys and its resolved-only checker passes
+with zero findings. Final compatibility, remaining compiler controls and durable
+evidence/guide reconciliation remain before M2/M3 are marked complete. Exact
+source hashes are in `docs/evidence/plan-108/final-values-source.json`.
 
 Execution order correction (2026-10-31): finish M1b's remaining inventory before
 starting another M2 source refactor. Earlier small remediation batches produced

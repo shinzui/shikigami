@@ -26,10 +26,12 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
+import Data.Text qualified as Text
 import Shikigami.Agent.Decl (Behavior (..))
 import Shikigami.Agent.DeclarationValue (DeclarationCoordinate)
 import Shikigami.Attestation.Resolve (ResolvedProfile)
 import Shikigami.Capability.Overlay
+import Shikigami.Execution.Coordinate (ExecutionCoordinate, executionCoordinateText)
 import Shikigami.Prelude hiding ((.=))
 
 newtype CapabilityCatalog = CapabilityCatalog (Map CapabilityId CapabilityDescriptor)
@@ -39,7 +41,7 @@ data CapabilityCatalogError
   = DuplicateCapability {capability :: !CapabilityId}
   | EmptyCapabilityToolSet {capability :: !CapabilityId}
   | EmptyCapabilityToolName {capability :: !CapabilityId}
-  | DuplicateCapabilityToolName {capability :: !CapabilityId, name :: !Text}
+  | DuplicateCapabilityToolName {capability :: !CapabilityId, name :: !(ExecutionCoordinate "tool-name")}
   deriving stock (Eq, Show, Generic)
 
 mkCapabilityCatalog :: [CapabilityDescriptor] -> Either CapabilityCatalogError CapabilityCatalog
@@ -63,10 +65,10 @@ validateDescriptor CapabilityDescriptor {capability, tools}
 validateToolNames :: CapabilityId -> [CapabilityToolDescriptor] -> Either CapabilityCatalogError ()
 validateToolNames capability = go Set.empty
   where
-    go :: Set Text -> [CapabilityToolDescriptor] -> Either CapabilityCatalogError ()
+    go :: Set (ExecutionCoordinate "tool-name") -> [CapabilityToolDescriptor] -> Either CapabilityCatalogError ()
     go _ [] = Right ()
     go seen (CapabilityToolDescriptor {name} : rest)
-      | name == "" = Left EmptyCapabilityToolName {capability}
+      | Text.null (executionCoordinateText name) = Left EmptyCapabilityToolName {capability}
       | name `Set.member` seen = Left DuplicateCapabilityToolName {capability, name}
       | otherwise = go (Set.insert name seen) rest
 
@@ -101,7 +103,7 @@ data CapabilityResolutionError
   | CapabilityBehaviorUnsupported {behaviorKind :: !Text}
   | DurableCapabilityOperationNotAllowed
       { capability :: !CapabilityId,
-        name :: !Text,
+        name :: !(ExecutionCoordinate "tool-name"),
         operationClass :: !CapabilityOperationClass
       }
   deriving stock (Eq, Show, Generic)

@@ -26,6 +26,7 @@ import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.App (AppEffects, runAppIO)
 import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Execution.Coordinate (ExecutionDigest)
 import Shikigami.Execution.Identity (OperationId, operationIdWithPrefix)
 import Shikigami.Prelude
 import Shikigami.StateRevision (StateRevision)
@@ -53,11 +54,11 @@ commandWithKey label key input = send (WorkerCommand label (Just key) input)
 awaitEvents :: (Workers :> es) => DeclarationCoordinate "worker-label" -> WorkerSessionId -> StateRevision "worker-event" -> EventPageSize -> Eff es (Either SessionError [EventReceipt])
 awaitEvents label session after limit = send (AwaitEvents label session after limit)
 
-resolveCoordinationPolicy :: Maybe CoordinationHost -> ActionAuthorizer -> CoordinatorRun -> IO (Either SessionError (Maybe Text))
+resolveCoordinationPolicy :: Maybe CoordinationHost -> ActionAuthorizer -> CoordinatorRun -> IO (Either SessionError (Maybe (ExecutionDigest "coordination-scope")))
 resolveCoordinationPolicy Nothing _ _ = pure (Right Nothing)
 resolveCoordinationPolicy (Just host) authorizer run = owned host (fmap (fmap grantFingerprint) <$> resolveGrant host authorizer run Nothing)
 
-runWorkers :: (Workflow :> es, Store :> es, IOE :> es) => Maybe CoordinationHost -> ActionAuthorizer -> CoordinatorRun -> Either SessionError (Maybe Text) -> Eff (Workers : es) a -> Eff es a
+runWorkers :: (Workflow :> es, Store :> es, IOE :> es) => Maybe CoordinationHost -> ActionAuthorizer -> CoordinatorRun -> Either SessionError (Maybe (ExecutionDigest "coordination-scope")) -> Eff (Workers : es) a -> Eff es a
 runWorkers configured authorizer run policy = interpret \_ -> \case
   WorkerCommand label key input -> invoke label key input
   AwaitEvents label session after limit -> do

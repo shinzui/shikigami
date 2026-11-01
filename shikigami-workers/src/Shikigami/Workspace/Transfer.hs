@@ -8,6 +8,7 @@ import Effectful (Eff)
 import Hasql.Transaction (Transaction)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizer (..))
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Execution.Resources qualified as Resources
@@ -50,7 +51,7 @@ workspaceTransferProvider runtime = WorkspaceProvider reconcile admit
                   authority intent.actor binding
                   action <- either (const (abort FenceConflict)) pure (workspaceTransferAction binding intent)
                   principal <- either (const (abort FenceConflict)) pure (identityText intent.actor)
-                  runtime.authorizer.authorize principal action >>= either (const (abort FenceUnavailable)) (const (pure ()))
+                  runtime.authorizer.authorize (declarationCoordinate principal) action >>= either (const (abort FenceUnavailable)) (const (pure ()))
                   authority intent.actor binding
                 _ -> pure ()
               transaction env (Transfers.beginTransferTx binding intent) >>= either (const (abort FenceConflict)) pure
@@ -72,7 +73,7 @@ workspaceTransferProvider runtime = WorkspaceProvider reconcile admit
           authority owner binding
           action <- either (const (abort FenceConflict)) pure (workspaceWriteAdmissionAction binding workspace session owner epoch operation)
           principal <- either (const (abort FenceConflict)) pure (identityText owner)
-          runtime.authorizer.authorize principal action >>= either (const (abort FenceUnavailable)) (const (pure ()))
+          runtime.authorizer.authorize (declarationCoordinate principal) action >>= either (const (abort FenceUnavailable)) (const (pure ()))
           authority owner binding
           transaction env (Transfers.checkSessionWriteTx binding session owner epoch operation) >>= either (const (abort FenceConflict)) pure
       pure (either (const (Left "workspace write admission refused")) Right result)

@@ -135,7 +135,7 @@ postEnvelope http = postEnvelopeWithHeaders http []
 postEnvelopeWithHeaders :: HttpEnv -> [Header] -> KawaConfig -> ActivityEnvelope -> IO (Either KawaError Text)
 postEnvelopeWithHeaders http headers KawaConfig {baseUrl = cfgBaseUrl, sourceSegment = cfgSourceSegment} env = do
   let req = projectIngest env
-      url = cfgBaseUrl <> "/v1/sources/" <> Text.replace "/" "%2F" cfgSourceSegment <> "/events"
+      url = cfgBaseUrl <> "/v1/sources/" <> Text.replace "/" "%2F" (activityCoordinateText cfgSourceSegment) <> "/events"
   respE <- postJSONWithHeaders http headers url req
   pure $ case respE of
     Left e -> Left (KawaHttpError e)

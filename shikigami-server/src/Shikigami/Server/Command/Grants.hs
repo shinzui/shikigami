@@ -25,7 +25,7 @@ import Data.Text.IO qualified as TextIO
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Hasql.Pool (Pool)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
-import Shikigami.Agent.Name (AgentName, agentNameText)
+import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.App.Config (AppConfig (directorySettings), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
@@ -67,7 +67,7 @@ runGrantsList mlimit mafter config = do
         case next of
           Nothing -> pure ()
           Just GrantCursor {agentName = a, sinkKind = k} ->
-            putStrLn ("-- more: --after " <> Text.unpack a <> ":" <> Text.unpack k)
+            putStrLn ("-- more: --after " <> Text.unpack (agentNameText a) <> ":" <> Text.unpack (sinkKindText k))
 
 -- | @grants grant <agent> <kind> [--by WHO]@.
 runGrantsGrant :: AgentName -> String -> Maybe String -> AppConfig -> IO ()
@@ -130,7 +130,10 @@ parseCursor raw =
       let k = Text.drop 1 rest
        in if Text.null a || Text.null k
             then Left ("--after must be AGENT:KIND (got '" <> Text.pack raw <> "')")
-            else Right GrantCursor {agentName = a, sinkKind = k}
+            else do
+              agentName <- mkAgentName a
+              sinkKind <- maybe (Left "unknown sink kind in --after") Right (parseSinkKind k)
+              Right GrantCursor {agentName, sinkKind}
 
 -- | Reject an unknown sink kind by naming the five that exist, because the
 -- strings are exact and an operator guessing "kawa" deserves the list.

@@ -371,13 +371,13 @@ toolsOf CapabilityLease {tools} = tools
 descriptorToolNames :: CapabilityDescriptor -> [Text]
 descriptorToolNames CapabilityDescriptor {tools} = logicalName <$> tools
   where
-    logicalName CapabilityToolDescriptor {name} = name
+    logicalName CapabilityToolDescriptor {name} = executionCoordinateText name
 
 authorizeProvider :: ActionAuthorizer -> CapabilityScope -> CapabilityDescriptor -> IO (Either ActionAuthorizationFailure ())
 authorizeProvider ActionAuthorizer {authorize} CapabilityScope {principal} CapabilityDescriptor {capability, revision} =
   case mkCapabilityTarget (capabilityIdText capability) (capabilityRevisionText revision) of
     Left problem -> pure (Left (ActionCoordinatesInvalid (actionValueErrorText problem)))
-    Right target -> fmap (const ()) <$> authorize (declarationCoordinateText principal) (ConnectCapability target)
+    Right target -> fmap (const ()) <$> authorize principal (ConnectCapability target)
 
 guardCapabilityTool :: ActionAuthorizer -> CapabilityScope -> CapabilityDescriptor -> SomeTool -> SomeTool
 guardCapabilityTool ActionAuthorizer {authorize} CapabilityScope {principal} CapabilityDescriptor {capability, revision} (SomeTool Tool {name, description, run}) =
@@ -390,7 +390,7 @@ guardCapabilityTool ActionAuthorizer {authorize} CapabilityScope {principal} Cap
             unsafeEff_
               case mkCapabilityToolTarget (capabilityIdText capability) (capabilityRevisionText revision) name of
                 Left problem -> pure (Left (ActionCoordinatesInvalid (actionValueErrorText problem)))
-                Right target -> authorize (declarationCoordinateText principal) (InvokeCapabilityTool target)
+                Right target -> authorize principal (InvokeCapabilityTool target)
           case authorization of
             Right _ -> run input
             Left failure@ActionPolicyDenied {} -> throwError (ValidationFailure (authorizationFailureDetail failure))
@@ -402,7 +402,7 @@ guardCapabilityTool ActionAuthorizer {authorize} CapabilityScope {principal} Cap
       unsafeEff_
         case mkCapabilityToolTarget (capabilityIdText capability) (capabilityRevisionText revision) name of
           Left problem -> pure (Left (ActionCoordinatesInvalid (actionValueErrorText problem)))
-          Right target -> authorize (declarationCoordinateText principal) (InvokeCapabilityTool target)
+          Right target -> authorize principal (InvokeCapabilityTool target)
     case authorization of
       Right _ -> run input
       Left failure@ActionPolicyDenied {} -> throwError (ValidationFailure (authorizationFailureDetail failure))
@@ -497,13 +497,13 @@ installDurableAdapters adapters (CapabilityProviderRegistry generic existing) = 
         else case mkCapabilityCatalog [descriptor] of
           Left _ -> invalid
           Right _
-            | sort (map (\contract -> executionCoordinateText contract.name) adapter.contracts) /= sort (map (\tool -> tool.name) descriptor.tools) -> invalid
+            | sort (map (\contract -> contract.name) adapter.contracts) /= sort (map (\tool -> tool.name) descriptor.tools) -> invalid
             | length (nub (map (\contract -> contract.name) adapter.contracts)) /= length adapter.contracts -> invalid
             | not (all (\contract -> Text.length contract.description <= 1024 && Lazy.length (Aeson.encode contract.schema) <= 65536 && objectSchema contract.schema && recoveryMatches descriptor contract) adapter.contracts) -> invalid
             | otherwise -> Right (Map.insert (capability, revision, descriptorDigest descriptor) adapter registry)
     objectSchema (Aeson.Object _) = True
     objectSchema _ = False
-    recoveryMatches descriptor contract = case [tool.operationClass | tool <- descriptor.tools, tool.name == executionCoordinateText contract.name] of
+    recoveryMatches descriptor contract = case [tool.operationClass | tool <- descriptor.tools, tool.name == contract.name] of
       [Observation] -> contract.recovery == RepeatableObservation
       [IdempotentMutation] -> contract.recovery `elem` [IdempotentEffect, UncertainEffect]
       [IrreversibleEmission] -> contract.recovery == UncertainEffect

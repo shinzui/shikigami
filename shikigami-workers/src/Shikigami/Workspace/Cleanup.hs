@@ -20,6 +20,7 @@ import Hasql.Transaction (Transaction)
 import Kikan.En.Action (AgentAction (InvokeCapabilityTool), mkCapabilityToolTarget)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizer (..))
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Decision.Contract (versionedDigest)
@@ -109,7 +110,7 @@ grant runtime actor kind value = do
   principal <- either (const (abort CleanupRefused)) pure (identityText actor)
   let digest = Text.replace ":" "-" (versionedDigest "shikigami.workspace-maintenance/1" value)
   target <- either (const (abort CleanupRefused)) pure (mkCapabilityToolTarget "shikigami.workspace" "maintenance-1" (kind <> "-" <> digest))
-  runtime.authorizer.authorize principal (InvokeCapabilityTool target) >>= either (const (abort CleanupRefused)) (const (pure ()))
+  runtime.authorizer.authorize (declarationCoordinate principal) (InvokeCapabilityTool target) >>= either (const (abort CleanupRefused)) (const (pure ()))
   runtime.current actor >>= either (const (abort CleanupRefused)) pure
 
 validResource :: Text -> Bool

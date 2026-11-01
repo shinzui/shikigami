@@ -50,6 +50,7 @@ import Shikigami.Capability.Provider
     CapabilityLease (..),
     CapabilityProvider (..),
   )
+import Shikigami.Execution.Coordinate (executionCoordinate)
 import Shikumi.Error (ShikumiError (ProviderFailure, ValidationFailure))
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Tool (SomeTool (..), mkTool)
@@ -225,9 +226,9 @@ workspaceReadDescriptor =
           Left err -> error (show err)
           Right value -> value,
       tools =
-        [ CapabilityToolDescriptor {name = "read", operationClass = Observation},
-          CapabilityToolDescriptor {name = "grep", operationClass = Observation},
-          CapabilityToolDescriptor {name = "glob", operationClass = Observation}
+        [ CapabilityToolDescriptor {name = executionCoordinate "read", operationClass = Observation},
+          CapabilityToolDescriptor {name = executionCoordinate "grep", operationClass = Observation},
+          CapabilityToolDescriptor {name = executionCoordinate "glob", operationClass = Observation}
         ]
     }
 

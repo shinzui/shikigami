@@ -11,6 +11,7 @@ import Shikigami.Agent.Decl (Behavior (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Capability.Catalog
 import Shikigami.Capability.Overlay
+import Shikigami.Execution.Coordinate (executionCoordinate, executionCoordinateText)
 import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -49,18 +50,18 @@ tests =
           @?= Left DuplicateCapability {capability = workspaceReadId}
         mkCapabilityCatalog [(workspaceReadDescriptor & #tools .~ ([]))]
           @?= Left EmptyCapabilityToolSet {capability = workspaceReadId}
-        mkCapabilityCatalog [(workspaceReadDescriptor & #tools .~ ([CapabilityToolDescriptor {name = "", operationClass = Observation}]))]
+        mkCapabilityCatalog [(workspaceReadDescriptor & #tools .~ ([CapabilityToolDescriptor {name = (executionCoordinate ""), operationClass = Observation}]))]
           @?= Left EmptyCapabilityToolName {capability = workspaceReadId}
         mkCapabilityCatalog
           [ ( workspaceReadDescriptor
                 & #tools
-                  .~ ( [ CapabilityToolDescriptor {name = "same", operationClass = Observation},
-                         CapabilityToolDescriptor {name = "same", operationClass = Observation}
+                  .~ ( [ CapabilityToolDescriptor {name = (executionCoordinate "same"), operationClass = Observation},
+                         CapabilityToolDescriptor {name = (executionCoordinate "same"), operationClass = Observation}
                        ]
                      )
             )
           ]
-          @?= Left DuplicateCapabilityToolName {capability = workspaceReadId, name = "same"},
+          @?= Left DuplicateCapabilityToolName {capability = workspaceReadId, name = executionCoordinate "same"},
       testCase "lists catalog entries deterministically and looks them up by id" do
         let catalog = expectRight (mkCapabilityCatalog [workspaceReadDescriptor, repositorySearchDescriptor])
         lookupCapability catalog workspaceReadId @?= Just workspaceReadDescriptor
@@ -101,14 +102,14 @@ tests =
           @?= Left
             DurableCapabilityOperationNotAllowed
               { capability = mutationId,
-                name = "workspace.write.tool",
+                name = (executionCoordinate "workspace.write.tool"),
                 operationClass = IdempotentMutation
               }
         resolveCapabilityOverlays catalog allow durableSkillSubject [emissionId]
           @?= Left
             DurableCapabilityOperationNotAllowed
               { capability = emissionId,
-                name = "workspace.publish.tool",
+                name = (executionCoordinate "workspace.publish.tool"),
                 operationClass = IrreversibleEmission
               },
       testCase "one-off resolution may retain an authorized mutation" do
@@ -159,7 +160,7 @@ workspaceReadDescriptor =
   CapabilityDescriptor
     { capability = workspaceReadId,
       revision = revisionOne,
-      tools = [CapabilityToolDescriptor {name = "workspace.read_file", operationClass = Observation}]
+      tools = [CapabilityToolDescriptor {name = (executionCoordinate "workspace.read_file"), operationClass = Observation}]
     }
 
 repositorySearchDescriptor :: CapabilityDescriptor
@@ -167,7 +168,7 @@ repositorySearchDescriptor =
   CapabilityDescriptor
     { capability = repositorySearchId,
       revision = revisionOne,
-      tools = [CapabilityToolDescriptor {name = "repository.search", operationClass = Observation}]
+      tools = [CapabilityToolDescriptor {name = (executionCoordinate "repository.search"), operationClass = Observation}]
     }
 
 durableSkillSubject :: ResolutionSubject
@@ -189,7 +190,7 @@ descriptorWithClass capabilityName operationClass =
       revision = revisionOne,
       tools =
         [ CapabilityToolDescriptor
-            { name = capabilityName <> ".tool",
+            { name = executionCoordinate (capabilityName <> ".tool"),
               operationClass
             }
         ]

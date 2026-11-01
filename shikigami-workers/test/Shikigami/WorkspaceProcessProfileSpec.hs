@@ -19,7 +19,7 @@ import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
-import Shikigami.Prelude ((&), (.~))
+import Shikigami.Prelude (Lens', lens, (&), (.~))
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
@@ -72,9 +72,9 @@ tests fixture =
         let instructions = bundleDigest admission.instructions
         (profile, _) <- right =<< run env (reserveProcessProfileTx binding instructions policy pool)
         run env (reserveProcessProfileTx binding other policy pool) >>= (@?= Left WorkspaceBindingConflict)
-        run env (reserveProcessProfileTx binding instructions (policy & #rules .~ []) pool) >>= (@?= Left InvalidWorkspaceRequest)
-        run env (readyProcessProfileTx binding (profile & #userId .~ ((either (error . show) id . parseWorkspaceIdentity) 62001) & #groupId .~ ((either (error . show) id . parseWorkspaceIdentity) 62001))) >>= (@?= Left WorkspaceBindingConflict)
-        run env (readyProcessProfileTx binding (profile & #bindingDigest .~ other)) >>= (@?= Left WorkspaceBindingConflict)
+        assertBool "empty policy refuses construction before reservation" (case mkProcessPolicy (processPolicyInput policy & #rules .~ []) of Left _ -> True; _ -> False)
+        run env (readyProcessProfileTx binding ((either (error . show) id . mkProcessProfile) (processProfileInput profile & #userId .~ ((either (error . show) id . parseWorkspaceIdentity) 62001) & #groupId .~ ((either (error . show) id . parseWorkspaceIdentity) 62001)))) >>= (@?= Left WorkspaceBindingConflict)
+        run env (readyProcessProfileTx binding (profile & processProfileFields . #bindingDigest .~ other)) >>= (@?= Left WorkspaceBindingConflict)
         run env (inspectProcessProfileTx binding.workspace) >>= (@?= Right (Just (profile, ProfileReserved))),
       testCase "supervisor resolves only ready retained rules with matching instructions and compiled containment properties" $ withProfiles fixture \env policy create -> do
         (binding, admission) <- create "one"
@@ -89,7 +89,7 @@ tests fixture =
         assertLeft =<< retainedProcessRule env binding admission (workspaceCoordinate ("unreviewed"))
         assertLeft =<< retainedProcessRule env binding (admission & #filePolicy .~ Just nativeFilePolicy) (workspaceCoordinate "validate")
         assertLeft =<< retainedProcessRule env binding (admission & #bindingDigest .~ other) (workspaceCoordinate "validate")
-        assertLeft =<< retainedSystemdProfile (profile & #policy . #propertiesDigest .~ other),
+        assertLeft =<< retainedSystemdProfile (profile & processProfileFields . #policy . processPolicyFields . #propertiesDigest .~ other),
       testCase "invalid pools and a frozen owner refuse before allocating or publishing identity readiness" $ withProfiles fixture \env policy create -> do
         (binding, admission) <- create "one"
         let reserve range = run env (reserveProcessProfileTx binding (bundleDigest admission.instructions) policy range)
@@ -104,9 +104,9 @@ tests fixture =
 withProfiles :: DatabaseFixture -> (AppEnv -> ProcessPolicy -> (Text.Text -> IO (WorkspaceBinding, WorkspaceAdmission)) -> IO a) -> IO a
 withProfiles fixture use = Fixture.withFixture fixture \env source root repository -> do
   properties <- Systemd.systemdPropertiesIdentity
-  let image = ProcessImage (workspaceLocator "/qualified/root") digest (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")
-      rule = CommandRule (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [(workspaceCoordinate "$HOME"), (workspaceCoordinate "%n")] (workspaceCoordinate "") (Map.singleton (workspaceCoordinate "HOME") (workspaceCoordinate "/scratch")) ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)
-      policy = ProcessPolicy ProcessPolicyV1 image properties [rule] [(workspaceCoordinate "")] [(workspaceCoordinate "src")]
+  let image = ((either (error . show) id . mkProcessImage) (ProcessImageInput (workspaceLocator "/qualified/root") digest (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")))
+      rule = ((either (error . show) id . mkCommandRule) (CommandRuleInput (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [(workspaceCoordinate "$HOME"), (workspaceCoordinate "%n")] (workspaceCoordinate "") (Map.singleton (workspaceCoordinate "HOME") (workspaceCoordinate "/scratch")) ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)))
+      policy = ((either (error . show) id . mkProcessPolicy) (ProcessPolicyInput ProcessPolicyV1 image properties [rule] [(workspaceCoordinate "")] [(workspaceCoordinate "src")]))
       base = repositoryBase repository
   catalog <- right (mkWorkspaceCatalog [RepositoryPolicy (repositoryIdentity repository) (workspaceLocator source) [base] base (processPolicyIdentity policy)])
   selected <- right (resolveRepository catalog (repositoryIdentity repository) Nothing)
@@ -121,7 +121,7 @@ withProfiles fixture use = Fixture.withFixture fixture \env source root reposito
   use env policy create
 
 pool :: IdentityRange
-pool = IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 62000) ((either (error . show) id . parseWorkspaceIdentity) 62001)
+pool = ((either (error . show) id . mkIdentityRange) (IdentityRangeInput ((either (error . show) id . parseWorkspaceIdentity) 62000) ((either (error . show) id . parseWorkspaceIdentity) 62001)))
 
 digest, other :: WorkspaceCoordinate scope
 digest = workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")
@@ -145,3 +145,9 @@ fixtureAssignment = either (error . show) id . parseAssignmentKey
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
+
+processPolicyFields :: Lens' ProcessPolicy ProcessPolicyInput
+processPolicyFields = lens processPolicyInput (\_ input -> either (error . show) id (mkProcessPolicy input))
+
+processProfileFields :: Lens' ProcessProfile ProcessProfileInput
+processProfileFields = lens processProfileInput (\_ input -> either (error . show) id (mkProcessProfile input))

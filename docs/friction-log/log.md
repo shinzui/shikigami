@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-11-01
+* **Update**: FRIC-38 accepted: Accepted serial worker qualification as the reproducible existing fixture execution profile, without widening runtime deadlines.
+* **Update**: FRIC-37 accepted: Accepted the existing Git metadata rebuild cost with a single final source boundary; changing version embedding is outside this type migration.
+* **Update**: FRIC-36 accepted: Accepted the bounded existing compiler gate without expanding this domain migration into a compiler-harness rewrite.
 * **Addition**: FRIC-38 records detour tooling friction with mori://shinzui/shikigami: Parallel worker acceptance exceeds Git fixture deadlines
 * **Addition**: FRIC-37 records slowdown tooling friction with mori://shinzui/shikigami: Embedded Git metadata rebuilds the runtime closure at audit checkpoints
 

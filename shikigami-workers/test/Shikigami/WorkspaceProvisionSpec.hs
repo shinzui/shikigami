@@ -141,7 +141,7 @@ enroll env binding = do
   run env (Roots.enrollRootTx binding.request.rootId envelope) >>= (@?= Right Resources.Accepted)
 
 pool :: IdentityRange
-pool = IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 62000) ((either (error . show) id . parseWorkspaceIdentity) 62001)
+pool = ((either (error . show) id . mkIdentityRange) (IdentityRangeInput ((either (error . show) id . parseWorkspaceIdentity) 62000) ((either (error . show) id . parseWorkspaceIdentity) 62001)))
 
 run :: AppEnv -> Transaction a -> IO a
 run env action = right =<< runAppIO env (runTransaction action)

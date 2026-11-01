@@ -23,6 +23,7 @@ import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent))
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Delegation.BudgetStore
+import Shikigami.Delegation.BudgetStore (reservationCount)
 import Shikigami.Execution.Coordinate (executionCoordinate)
 import Shikigami.Execution.Counter (AttemptCount, noAttempts, parseAttemptCount)
 import Shikigami.Execution.Identity
@@ -306,7 +307,7 @@ tests fixture =
         run env (reserveEnrolledDelegationSlots rid budgetId (Just (workflow, cap)) children now) >>= (@?= Right DelegationBatchExhausted)
         snapshot <- root env
         snapshot.usage @?= emptyUsage
-        run env (reserveEnrolledDelegationSlots rid budgetId (Just (workflow, cap)) (WorkflowId "first" :| []) now) >>= (@?= Right (DelegationBatchReserved 1 0)),
+        run env (reserveEnrolledDelegationSlots rid budgetId (Just (workflow, cap)) (WorkflowId "first" :| []) now) >>= (@?= Right (DelegationBatchReserved (reservationCount 1) (reservationCount 0))),
       testCase "resource refusal leaves historical descendant allowance untouched" $ withFixture fixture \env -> do
         seed env [(LifetimeDescendants, (fixtureAmount 1))]
         let workflow = WorkflowId "delegating-root"
@@ -314,29 +315,29 @@ tests fixture =
             cap = either (error . show) id (mkDelegationBudget 2)
             children = WorkflowId "first" :| [WorkflowId "second"]
         run env (reserveEnrolledDelegationSlots rid budgetId (Just (workflow, cap)) children now) >>= (@?= Left (DelegationResourceRefused (ResourceExhausted LifetimeDescendants)))
-        run env (reserveDelegationSlots budgetId (Just (workflow, cap)) children now) >>= (@?= Right (DelegationBatchReserved 2 0)),
+        run env (reserveDelegationSlots budgetId (Just (workflow, cap)) children now) >>= (@?= Right (DelegationBatchReserved (reservationCount 2) (reservationCount 0))),
       testCase "descendant cannot replace its bound root to regain allowance" $ withFixture fixture \env -> do
         seed env []
         let workflow = WorkflowId "delegating-root"
             budgetId = delegationBudgetIdFor workflow
             cap = either (error . show) id (mkDelegationBudget 2)
             other = fixtureRootId "replacement-root"
-        run env (reserveEnrolledDelegationSlots rid budgetId (Just (workflow, cap)) (WorkflowId "first" :| []) now) >>= (@?= Right (DelegationBatchReserved 1 0))
+        run env (reserveEnrolledDelegationSlots rid budgetId (Just (workflow, cap)) (WorkflowId "first" :| []) now) >>= (@?= Right (DelegationBatchReserved (reservationCount 1) (reservationCount 0)))
         run env (reserveDelegationSlots budgetId Nothing (WorkflowId "second" :| []) now) >>= (@?= Left (DelegationResourceRefused IdentityConflict))
         run env (enrollRoot other (envelope [])) >>= (@?= Right Accepted)
         run env (reserveEnrolledDelegationSlots other budgetId Nothing (WorkflowId "second" :| []) now) >>= (@?= Left (DelegationResourceRefused IdentityConflict))
         run env (inspectRoot other) >>= \result -> case result of
           Right snapshot -> snapshot.usage @?= emptyUsage
           Left err -> assertFailure (show err)
-        run env (reserveEnrolledDelegationSlots rid budgetId Nothing (WorkflowId "second" :| []) now) >>= (@?= Right (DelegationBatchReserved 1 0)),
+        run env (reserveEnrolledDelegationSlots rid budgetId Nothing (WorkflowId "second" :| []) now) >>= (@?= Right (DelegationBatchReserved (reservationCount 1) (reservationCount 0))),
       testCase "duplicate delegated children spend once across both ledgers" $ withFixture fixture \env -> do
         seed env []
         let workflow = WorkflowId "delegating-root"
             budgetId = delegationBudgetIdFor workflow
             cap = either (error . show) id (mkDelegationBudget 1)
             children = WorkflowId "same" :| [WorkflowId "same"]
-        run env (reserveEnrolledDelegationSlots rid budgetId (Just (workflow, cap)) children now) >>= (@?= Right (DelegationBatchReserved 1 0))
-        run env (reserveEnrolledDelegationSlots rid budgetId Nothing children now) >>= (@?= Right (DelegationBatchReserved 0 1))
+        run env (reserveEnrolledDelegationSlots rid budgetId (Just (workflow, cap)) children now) >>= (@?= Right (DelegationBatchReserved (reservationCount 1) (reservationCount 0)))
+        run env (reserveEnrolledDelegationSlots rid budgetId Nothing children now) >>= (@?= Right (DelegationBatchReserved (reservationCount 0) (reservationCount 1)))
         snapshot <- root env
         Map.lookup LifetimeDescendants snapshot.usage.settled @?= Just (fixtureAmount 1),
       testCase "terminal transport releases active work while unknown cost remains held" $ withFixture fixture \env -> do

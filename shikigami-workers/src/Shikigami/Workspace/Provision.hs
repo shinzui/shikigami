@@ -23,6 +23,7 @@ import Data.Text.Encoding qualified as Encoding
 import Hasql.Transaction (Transaction)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizer (..))
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Principal (identityText)
 import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Decision.Contract (versionedDigest)
@@ -122,7 +123,7 @@ provisionRoots runtime binding admission profile state boot metadata files scrat
   principal <- either (const (abort ProvisionRefused)) pure (identityText admission.owner)
   let authorize = protect do
         checkCurrent runtime binding
-        runtime.authorizer.authorize principal action >>= either (const (abort ProvisionRefused)) (const (pure ()))
+        runtime.authorizer.authorize (declarationCoordinate principal) action >>= either (const (abort ProvisionRefused)) (const (pure ()))
         checkCurrent runtime binding
       fresh = authorize >>= either abort pure
       expected = ProvisionMarker V1 (workspaceCoordinate (versionedDigest "shikigami.workspace-provision/1" (toJSON profile))) filesTarget scratchTarget ProvisionPending

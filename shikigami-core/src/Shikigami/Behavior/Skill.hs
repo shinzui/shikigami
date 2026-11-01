@@ -8,6 +8,9 @@
 module Shikigami.Behavior.Skill
   ( SkillDir (..),
     SkillManifest (..),
+    ToolTurnLimit,
+    parseToolTurnLimit,
+    toolTurnLimitNumber,
     loadSkillManifest,
     runSkill,
     runSkillWith,
@@ -41,7 +44,7 @@ import Effectful.Error.Static (runErrorNoCallStack)
 import GHC.Generics (Generic)
 import Kioku.Api.Types (MemoryRecord (..))
 import Shikigami.Behavior.Compatibility
-import Shikigami.Behavior.Error (RunError (..), boundedBehaviorDetail)
+import Shikigami.Behavior.Error (FailureClass (..), RunError (..), boundedBehaviorDetail, failureClass)
 import Shikigami.Behavior.Input (BehaviorInput (..))
 import Shikigami.Execution.Coordinate (ExecutionCoordinate, executionCoordinate)
 import Shikumi.Error (ShikumiError (..), isTransient)
@@ -56,6 +59,17 @@ newtype SkillDir = SkillDir FilePath
 
 -- | The parsed @SKILL.md@: required name + description from the YAML frontmatter, plus
 -- the Markdown instruction body and any declared allowed-tools.
+-- Zero exhausts the existing turn path immediately.
+newtype ToolTurnLimit = ToolTurnLimit Int deriving stock (Eq, Ord, Show)
+
+parseToolTurnLimit :: Int -> Either Text ToolTurnLimit
+parseToolTurnLimit value
+  | value >= 0 = Right (ToolTurnLimit value)
+  | otherwise = Left "tool turn limit must be nonnegative"
+
+toolTurnLimitNumber :: ToolTurnLimit -> Int
+toolTurnLimitNumber (ToolTurnLimit value) = value
+
 data SkillManifest = SkillManifest
   { name :: !(ExecutionCoordinate "skill-name"),
     description :: !Text,
@@ -112,7 +126,7 @@ parseManifest t =
 -- process resolved (see 'Shikigami.Behavior.Run.BehaviorEnv'), so a run's key
 -- source is whatever configuration said and never what a provider handler found
 -- in the environment.
-runSkill :: Model -> Options -> ToolRegistry -> Int -> SkillDir -> BehaviorInput -> IO (Either RunError Value)
+runSkill :: Model -> Options -> ToolRegistry -> ToolTurnLimit -> SkillDir -> BehaviorInput -> IO (Either RunError Value)
 runSkill model options registry turnLimit dir input =
   runSkillWith model options registry turnLimit dir input completeRequest
 
@@ -125,12 +139,13 @@ runSkillWith ::
   Model ->
   Options ->
   ToolRegistry ->
-  Int ->
+  ToolTurnLimit ->
   SkillDir ->
   BehaviorInput ->
   (Model -> Context -> Options -> IO Response) ->
   IO (Either RunError Value)
-runSkillWith model options registry turnLimit dir input complete = do
+runSkillWith model options registry admittedLimit dir input complete = do
+  let turnLimit = toolTurnLimitNumber admittedLimit
   manifestE <- loadSkillManifest dir
   case manifestE of
     Left e -> pure (Left e)
@@ -146,7 +161,7 @@ runSkillWith model options registry turnLimit dir input complete = do
         then do
           -- This is deliberately the original one-completion request path.
           case validateResponseRequest model options ctx of
-            Left refusal -> pure (Left (ProviderFailed False (renderResponseCompatibilityError refusal)))
+            Left refusal -> pure (Left (ProviderFailed Permanent (renderResponseCompatibilityError refusal)))
             Right () -> renderResponse <$> complete model ctx options
         else
           if turnLimit < 1
@@ -177,12 +192,12 @@ runToolPath ::
 runToolPath complete model options registry turnLimit = go turnLimit
   where
     go remaining ctx = case validateResponseRequest model options ctx of
-      Left refusal -> pure (Left (ProviderFailed False (renderResponseCompatibilityError refusal)))
+      Left refusal -> pure (Left (ProviderFailed Permanent (renderResponseCompatibilityError refusal)))
       Right () -> dispatch remaining ctx
     dispatch remaining ctx = do
       resp <- complete model ctx options
       case responseError resp of
-        Just err -> pure (Left (ProviderFailed (isRetryable err) (renderProviderError err)))
+        Just err -> pure (Left (ProviderFailed (failureClass (isRetryable err)) (renderProviderError err)))
         Nothing
           | responseStopReason resp == ToolUse,
             not (null (responseToolCalls resp)) ->
@@ -197,7 +212,7 @@ runToolPath complete model options registry turnLimit = go turnLimit
                       pure
                         ( Left
                             ( SkillToolInfrastructureFailed
-                                (isTransient infraError)
+                                (failureClass (isTransient infraError))
                                 (renderShikumiError infraError)
                             )
                         )
@@ -269,7 +284,7 @@ renderResponse resp =
   -- no assistant text, so reading the reply alone would turn an outage into a
   -- successful empty answer.
   case responseError resp of
-    Just err -> Left (ProviderFailed (isRetryable err) (renderProviderError err))
+    Just err -> Left (ProviderFailed (failureClass (isRetryable err)) (renderProviderError err))
     Nothing -> Right (object ["reply" .= renderReply resp])
 
 -- | A loggable one-line rendering of an in-band provider failure: its category,

@@ -102,9 +102,9 @@ withBoundTools logger authorizer providers snapshot context requested tools use 
     selected = filter needed (resolvedCapabilities snapshot.capabilities)
     governed = filter (durableAdapterInstalled providers) selected
     generic = filter (not . durableAdapterInstalled providers) selected
-    needed descriptor = maybe True (\name -> any (\tool -> executionCoordinate (overlayToolName descriptor.capability tool.name) == name) descriptor.tools) requested
+    needed descriptor = maybe True (\name -> any (\tool -> executionCoordinate (overlayToolName descriptor.capability (executionCoordinateText tool.name)) == name) descriptor.tools) requested
     validNative tools = length tools <= 128 && length (nub (map (\bound -> bound.binding.name) tools)) == length tools && all (\bound -> executionCoordinateText bound.binding.name == someToolName bound.tool && bound.binding.schemaDigest == executionDigestFor "shikigami.tool-schema/1" (someToolSchema bound.tool) && not (Text.null (executionCoordinateText bound.binding.revision))) tools
-    overlayBinding tool = case [(descriptor, entry) | descriptor <- selected, entry <- descriptor.tools, overlayToolName descriptor.capability entry.name == someToolName tool] of
+    overlayBinding tool = case [(descriptor, entry) | descriptor <- selected, entry <- descriptor.tools, overlayToolName descriptor.capability (executionCoordinateText entry.name) == someToolName tool] of
       [(descriptor, entry)] -> Right (ToolBinding (executionCoordinate (someToolName tool)) (executionCoordinate (capabilityIdText descriptor.capability <> ":" <> capabilityRevisionText descriptor.revision)) (executionDigestFor "shikigami.tool-schema/1" (someToolSchema tool)) (recoveryFor entry.operationClass) UnreportedInvoiceCost)
       _ -> Left (ExecutionPolicyRefused "leased tool is outside the admitted descriptor")
     recoveryFor Observation = RepeatableObservation

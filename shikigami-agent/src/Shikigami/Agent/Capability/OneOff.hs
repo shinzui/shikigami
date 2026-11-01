@@ -51,6 +51,7 @@ import Shikigami.Capability.Provider
     mkCapabilityProviderRegistry,
     withCapabilityOverlays,
   )
+import Shikigami.Execution.Coordinate (executionCoordinateText)
 import Shikigami.Log qualified as Log
 
 data OneOffCapabilityError
@@ -190,4 +191,4 @@ renderResolutionError = \case
   CapabilityBehaviorUnsupported {behaviorKind} ->
     "capability overlays are not supported for " <> behaviorKind <> " behaviors"
   DurableCapabilityOperationNotAllowed {capability, name} ->
-    "capability " <> capabilityIdText capability <> " tool " <> name <> " is not allowed in this execution mode"
+    "capability " <> capabilityIdText capability <> " tool " <> executionCoordinateText name <> " is not allowed in this execution mode"

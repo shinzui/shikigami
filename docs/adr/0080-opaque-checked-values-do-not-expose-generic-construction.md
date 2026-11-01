@@ -87,6 +87,17 @@ synthetic trigger references under their original run keys, so typing them must
 not allocate replacement activity IDs. Capability leases distinguish native
 workflow references from process-local one-off run references explicitly.
 
+Composite workspace process images, rules, policies, profiles and identity ranges
+follow the same construction rule. Their explicit `Input` records retain the
+existing fields for configuration and fixture editing; `mkProcessImage`,
+`mkCommandRule`, `mkProcessPolicy`, `mkProcessProfile` and `mkIdentityRange` apply
+the original predicates before returning private positional newtypes. Strict JSON
+decoders use these factories, while read-only `HasField` instances preserve field
+reads. The integration `Request` likewise admits its existing bounded, distinct
+artifact collection through `mkRequest`. Input records are proposals, not admitted
+policies or requests. Re-admission preserves the previous scalar JSON and policy
+identity formulas without introducing another validation framework.
+
 ## References
 
 [ADR-74](0074-domain-state-revisions-keep-their-scope-at-application-boundaries.md),

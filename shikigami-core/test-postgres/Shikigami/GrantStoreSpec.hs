@@ -16,7 +16,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Hasql.Pool (Pool)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
-import Shikigami.Agent.Name (AgentName, mkAgentName)
+import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), AgentPrincipal, compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.Memory.AliasStore
   ( AliasReconciliation (..),
@@ -41,7 +41,7 @@ import Shikigami.Sink.GrantStore
     revokeGrant,
     upsertGrant,
   )
-import Shikigami.Sink.Permission (Denied (..), SinkKind (..))
+import Shikigami.Sink.Permission (Denied (..), SinkKind (..), sinkKindText)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
@@ -246,7 +246,7 @@ aliasTests databaseFixture =
         _ <- reconcileAlias pool principal "a-heartbeat" >>= expectRight "insert sorted alias"
         aliasesForPrincipal pool principal
           >>= expectRight "list aliases"
-          >>= assertEqual "aliases are stable" ["a-heartbeat", "old-heartbeat"],
+          >>= assertEqual "aliases are stable" (map (either (error . show) id . mkAgentName) ["a-heartbeat", "old-heartbeat"]),
     testCase "an alias already owned by another principal is never reassigned" do
       (withPool databaseFixture) \pool -> do
         let firstPrincipal = agentPrincipal "agent_first"
@@ -260,7 +260,7 @@ aliasTests databaseFixture =
           other -> assertFailure ("expected alias conflict, got " <> show other)
         aliasesForPrincipal pool firstPrincipal
           >>= expectRight "original owner"
-          >>= assertEqual "the original owner remains" ["legacy-name"]
+          >>= assertEqual "the original owner remains" [either (error . show) id (mkAgentName "legacy-name")]
         aliasesForPrincipal pool secondPrincipal
           >>= expectRight "rejected owner"
           >>= assertEqual "the rejected owner gets nothing" []
@@ -310,7 +310,7 @@ rowKey :: GrantRow -> (Text, Text)
 rowKey GrantRow {agentName, sinkKind} = (agentName, sinkKind)
 
 cursorKey :: GrantCursor -> (Text, Text)
-cursorKey GrantCursor {agentName, sinkKind} = (agentName, sinkKind)
+cursorKey GrantCursor {agentName, sinkKind} = (agentNameText agentName, sinkKindText sinkKind)
 
 -- | The one row for an agent, failing the test if the table does not have
 -- exactly one.

@@ -28,10 +28,10 @@ tests =
         assertBool "no adapter" (isLeft (resolveGovernedCapabilityOverlays (durableAdapterInstalled emptyCapabilityProviderRegistry) catalog allow subject [capability]))
         registry <- right (installDurableAdapters [adapter] emptyCapabilityProviderRegistry)
         changed <- right (mkCapabilityRevision "2")
-        let other = CapabilityDescriptor capability changed [CapabilityToolDescriptor "edit" IdempotentMutation]
+        let other = CapabilityDescriptor capability changed [CapabilityToolDescriptor (ExecutionValue.executionCoordinate "edit") IdempotentMutation]
         changedCatalog <- right (mkCapabilityCatalog [other])
         assertBool "revision mismatch" (isLeft (resolveGovernedCapabilityOverlays (durableAdapterInstalled registry) changedCatalog allow subject [capability]))
-        durableAdapterInstalled registry (CapabilityDescriptor capability revision [CapabilityToolDescriptor "other" IdempotentMutation]) @?= False,
+        durableAdapterInstalled registry (CapabilityDescriptor capability revision [CapabilityToolDescriptor (ExecutionValue.executionCoordinate "other") IdempotentMutation]) @?= False,
       testCase "duplicate revisions and incomplete recovery contracts fail installation" $ do
         assertBool "duplicate exact adapter" (isLeft (installDurableAdapters [adapter, adapter] emptyCapabilityProviderRegistry))
         assertBool "missing tool contract" (isLeft (installDurableAdapters [DurableAdapter descriptor [] unavailable] emptyCapabilityProviderRegistry))
@@ -46,7 +46,7 @@ tests =
   where
     capability = either (error . show) id (mkCapabilityId "workspace.edit")
     revision = either (error . show) id (mkCapabilityRevision "1")
-    descriptor = CapabilityDescriptor capability revision [CapabilityToolDescriptor "edit" IdempotentMutation]
+    descriptor = CapabilityDescriptor capability revision [CapabilityToolDescriptor (ExecutionValue.executionCoordinate "edit") IdempotentMutation]
     adapter = DurableAdapter descriptor [DurableToolContract (ExecutionValue.executionCoordinate "edit") "Edit." (object []) IdempotentEffect NoInvoiceCost] unavailable
     unavailable _ _ _ = assertFailure "admission invoked an adapter callback" >> fail "unreachable"
     subject = ResolutionSubject (fmap declarationCoordinate ((Just "worker"))) Durable (Skill (declarationCoordinate ("fixture"))) Nothing

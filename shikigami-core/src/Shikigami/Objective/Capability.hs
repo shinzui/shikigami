@@ -21,6 +21,7 @@ import Data.Time (addUTCTime)
 import Effectful (Eff)
 import Kikan.En.Action (AgentAction (InvokeCapabilityTool), mkCapabilityToolTarget)
 import Shikigami.Action.Authorization (ActionAuthorizer (..))
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Principal (identityText)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId)
@@ -51,7 +52,7 @@ admit host label semantic = do
       Right actor | host.settings.enabled == ObjectivesEnabled && validPrincipal actor -> do
         exact <- case actor of
           RecordedAgent identity -> case (identityText identity, mkCapabilityToolTarget "shikigami.objectives" "1" (label <> "-" <> Text.replace ":" "-" (versionedDigest "shikigami.objective-action/1" semantic))) of
-            (Right principal, Right target) -> host.actions.authorize principal (InvokeCapabilityTool target) <&> either (const (Left ObjectiveDenied)) (const (Right ()))
+            (Right principal, Right target) -> host.actions.authorize (declarationCoordinate principal) (InvokeCapabilityTool target) <&> either (const (Left ObjectiveDenied)) (const (Right ()))
             _ -> pure (Left ObjectiveDenied)
           LocalOperator identity -> pure (if host.settings.operator == Just identity then Right () else Left ObjectiveDenied)
           VerifiedCaller _ -> pure (Right ())

@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | The single durable contract between sink producers and the asynchronous
 -- publisher. Agent runs, conversations, and flows all prepare and enqueue this
 -- record through this module; the publisher decodes the same type here.
@@ -56,7 +58,9 @@ import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizationFailure (..), authorizationFailureDetail)
 import Shikigami.Activity (ActivityEnvelope, activityCoordinateText)
 import Shikigami.Activity qualified as Activity
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (Sink (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
 import Shikigami.Directory (DirectoryHandle)
@@ -91,9 +95,9 @@ data SinkIntent = SinkIntent
     ordinal :: !SinkOrdinal,
     occurredAt :: !(Maybe UTCTime),
     danwaTarget :: !(Maybe DanwaTarget),
-    resolvedRecipient :: !(Maybe Text),
-    conversationKey :: !(Maybe Text),
-    triggeringActivityId :: !(Maybe Text),
+    resolvedRecipient :: !(Maybe (DeclarationCoordinate "recipient")),
+    conversationKey :: !(Maybe (DeclarationCoordinate "conversation")),
+    triggeringActivityId :: !(Maybe (ActivityCoordinate "activity-id")),
     sink :: !Sink,
     output :: !Value
   }
@@ -225,7 +229,7 @@ enqueueSinkIntents directoryHandle grantSource agentName identity jobOccurredAt 
                   receipt = pendingDeliveryReceipt messageId kind now intent
               authorizeSinkAction (actionAuthorizerFor grantSource) identity sink Nothing ((.resolvedRecipient) intent) resolvedConversationKey now >>= \case
                 Left failure -> pure (SinkResult kind (authorizationOutcome failure), Nothing)
-                Right _ -> pure (SinkResult kind (Enqueued ("outbox:" <> messageId)), Just (OutboxMessage outboxId event, receipt))
+                Right _ -> pure (SinkResult kind (Enqueued (declarationCoordinate ("outbox:" <> messageId))), Just (OutboxMessage outboxId event, receipt))
 
 -- | Journal and enqueue one step-shaped sink intent. Flows and conversation
 -- replies retain their shared per-run ordering key because their outputs are
@@ -319,7 +323,7 @@ prepareSinkIntentForRecipient ::
   Maybe UTCTime ->
   Maybe DanwaTarget ->
   Maybe ActivityEnvelope ->
-  Text ->
+  DeclarationCoordinate "recipient" ->
   Sink ->
   Value ->
   UTCTime ->
@@ -341,8 +345,8 @@ prepareSinkIntentForRecipientWithMessageId ::
   Maybe UTCTime ->
   Maybe DanwaTarget ->
   Maybe ActivityEnvelope ->
-  Text ->
-  Text ->
+  Delivery.SinkMessageId ->
+  DeclarationCoordinate "recipient" ->
   Sink ->
   Value ->
   UTCTime ->
@@ -362,8 +366,8 @@ prepareSinkIntentWithRecipient ::
   Maybe UTCTime ->
   Maybe DanwaTarget ->
   Maybe ActivityEnvelope ->
-  Maybe Text ->
-  Maybe Text ->
+  Maybe Delivery.SinkMessageId ->
+  Maybe (DeclarationCoordinate "recipient") ->
   Sink ->
   Value ->
   UTCTime ->
@@ -373,10 +377,10 @@ prepareSinkIntentWithRecipient directoryHandle grantSource identity workflowId s
   let runIdText = idText runId
   capturedTraceContext <- traceContextFromCurrentSpan
   let kind = sinkKindOf sink
-      messageId = fromMaybe (unWorkflowId workflowId <> ":" <> unStepName stepName) explicitMessageId
+      messageId = maybe (unWorkflowId workflowId <> ":" <> unStepName stepName) Delivery.sinkMessageIdText explicitMessageId
       outboxId = deterministicOutboxIdForMessage messageId
       deniedResult reason = SinkResult kind (DeniedOutcome reason)
-      enqueuedResult = SinkResult kind (Enqueued ("outbox:" <> messageId))
+      enqueuedResult = SinkResult kind (Enqueued (declarationCoordinate ("outbox:" <> messageId)))
   Directory.identityLifecycleAdmission directoryHandle identity >>= \case
     Left reason ->
       pure
@@ -432,11 +436,11 @@ authorizationOutcome :: ActionAuthorizationFailure -> SinkOutcome
 authorizationOutcome failure@ActionPolicyDenied {} = DeniedOutcome (authorizationFailureDetail failure)
 authorizationOutcome failure = AuthorizationFailed (authorizationFailureDetail failure)
 
-egressMetadata :: Sink -> Maybe ActivityEnvelope -> Value -> (Maybe Text, Maybe Text)
+egressMetadata :: Sink -> Maybe ActivityEnvelope -> Value -> (Maybe (DeclarationCoordinate "conversation"), Maybe (ActivityCoordinate "activity-id"))
 egressMetadata sink activity output = case sink of
   ChannelEgress {} ->
     ( resolveConversationKey sink activity output,
-      (activityCoordinateText . (.activityId)) <$> activity
+      (.activityId) <$> activity
     )
   _ -> (Nothing, Nothing)
 
@@ -465,7 +469,7 @@ deliveryReceiptForKey key messageId kind receiptStatus receiptDetail now SinkInt
       Delivery.ordinal = ordinal,
       Delivery.sinkKind = kind,
       Delivery.status = receiptStatus,
-      Delivery.detail = receiptDetail,
+      Delivery.detail = Delivery.deliveryDetailFor receiptStatus <$> receiptDetail,
       Delivery.updatedAt = now
     }
 

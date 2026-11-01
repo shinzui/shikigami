@@ -6,13 +6,18 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-11-01T14:04:40Z"
 frictionId: FRIC-38
-status: logged
+status: "accepted"
 impact: detour
 kind: tooling
 origin: "mori://shinzui/shikigami"
 affects: "mori://shinzui/shikigami"
 plan: "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
 workaround: "Run the full worker suite with --num-threads=1 while retaining production and fixture deadlines."
+resolution: "Use --num-threads=1 for the real worker fixture suite so unrelated Git fixtures do not contend against native deadlines; retain the production timeout and containment contracts."
+amended:
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-11-01T22:55:07Z"
+    change: "Accepted serial worker qualification as the reproducible existing fixture execution profile, without widening runtime deadlines."
 ---
 # Parallel worker acceptance exceeds Git fixture deadlines
 

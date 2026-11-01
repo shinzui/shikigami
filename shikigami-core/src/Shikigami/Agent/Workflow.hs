@@ -1021,10 +1021,13 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
       (_, childWorkflowId) <- currentWorkflow
       let coordinator = WorkerCapability.CoordinatorRun childWorkflowId job.identity sid job.executionRootId job.executionPermissions
       coordinationPolicy <- step (StepName "worker-coordination-policy") (liftIO (FlowWorkers.resolveCoordinationPolicy deps.coordination deps.actionAuthorizer coordinator))
-      let attentionInterpreter = PracticeReviewAttention.runPracticeReviewAttentionAtomic practiceReviewAttentionEnv
+      let decisionTimeout = DecisionContract.parseDecisionTimeout (floor (durationTime (depsRunTimeout deps) * 1000000))
+          attentionInterpreter = PracticeReviewAttention.runPracticeReviewAttentionAtomic practiceReviewAttentionEnv
           decisionInterpreter action
             | null flow.decisionSlots = FlowDecision.runDecisionDisabled action
-            | Just pool <- (.deliveryPool) deps =
+            | Left refusal <- decisionTimeout = EffException.throwIO (DecisionAbort (DecisionContract.decisionFailure DecisionContract.InvalidSlot refusal))
+            | Just pool <- (.deliveryPool) deps,
+              Right timeout <- decisionTimeout =
                 FlowDecision.runDecision
                   FlowDecision.DecisionEnv
                     { agent = decl,
@@ -1034,7 +1037,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
                       profile = resolvedProfile,
                       evidence = DecisionEvidence.postgresDecisionEvidenceStore pool,
                       routing = depsRouting deps,
-                      timeoutMicros = floor (realToFrac (durationTime (depsRunTimeout deps)) * (1000000 :: Double)),
+                      timeoutMicros = timeout,
                       beforeStep = ((.hooks) deps).beforeStepBody,
                       afterStep = ((.hooks) deps).afterStepBody
                     }
@@ -1317,7 +1320,7 @@ publishUntracked result = case (.outcome) result of
   Failed err -> PublishFailed err
   AuthorizationFailed err -> PublishFailed err
   PermanentFailure err -> either PublishFailed id (permanentPublishOutcome err)
-  Enqueued detail -> PublishFailed ("dispatcher returned enqueue-only outcome during publish: " <> detail)
+  Enqueued detail -> PublishFailed ("dispatcher returned enqueue-only outcome during publish: " <> declarationCoordinateText detail)
   _ -> PublishSucceeded
 
 -- | Build the terminal Keiro verdict for a transport-classified permanent
@@ -1361,7 +1364,7 @@ publishTracked logger pool messageId kind intent send = do
 
     finish result = case (.outcome) result of
       Delivered downstreamId -> do
-        recordReceipt Delivery.Delivered (Just downstreamId) >>= \case
+        recordReceipt Delivery.Delivered (Just (declarationCoordinateText downstreamId)) >>= \case
           Right () -> pure PublishSucceeded
           Left err -> do
             unknownResult <- recordReceipt Delivery.Unknown (Just ("downstream acknowledged, receipt commit failed: " <> err))
@@ -1390,7 +1393,7 @@ publishTracked logger pool messageId kind intent send = do
                 logReceiptError logger "sink.delivery.dead_write_failed" messageId kind receiptError
                 pure (PublishFailed ("terminal delivery receipt write failed: " <> receiptError))
               Right () -> pure rejected
-      Enqueued detail -> recordRetryableFailure ("dispatcher returned enqueue-only outcome during publish: " <> detail)
+      Enqueued detail -> recordRetryableFailure ("dispatcher returned enqueue-only outcome during publish: " <> declarationCoordinateText detail)
       DeniedOutcome reason -> recordTerminalNonSend ("permission denied at publish: " <> reason)
       SkippedLifecycle reason -> recordTerminalNonSend ("lifecycle skipped at publish: " <> reason)
       Stubbed -> recordTerminalNonSend "deprecated stubbed sink outcome"
@@ -1425,20 +1428,21 @@ deliveryGuard :: Pool -> Text -> SinkKind -> SinkIntent -> DeliveryGuard
 deliveryGuard pool messageId kind intent =
   DeliveryGuard
     { lookupReceipt = \substep -> do
-        lookedUp <- Delivery.lookupDeliveryFor pool (deliveryContextFor messageId kind intent) (Delivery.subReceiptKey messageId substep)
+        lookedUp <- Delivery.lookupDeliveryFor pool (deliveryContextFor messageId kind intent) (Delivery.subReceiptKey messageId (declarationCoordinateText substep))
         case lookedUp of
           Left err -> receiptIoError "lookup" err
-          Right (Just Delivery.DeliveryReceipt {Delivery.status = Delivery.ConversationStarted, Delivery.detail = Just recorded}) -> pure (Just recorded)
-          Right _ -> pure Nothing,
+          Right (Just Delivery.DeliveryReceipt {Delivery.status = Delivery.ConversationStarted, Delivery.detail = Just (Delivery.DownstreamReference recorded)}) -> pure (Just (declarationCoordinate (declarationCoordinateText recorded)))
+          Right Nothing -> pure Nothing
+          Right (Just _) -> receiptIoError "lookup" "inconsistent retained conversation receipt",
       recordReceipt = \substep recorded -> do
         now <- getCurrentTime
         let receipt =
               deliveryReceiptForKey
-                (Delivery.subReceiptKey messageId substep)
+                (Delivery.subReceiptKey messageId (declarationCoordinateText substep))
                 messageId
                 kind
                 Delivery.ConversationStarted
-                (Just recorded)
+                (Just (declarationCoordinateText recorded))
                 now
                 intent
         Delivery.recordDelivery pool receipt >>= \case

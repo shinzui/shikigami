@@ -6,6 +6,8 @@ import Control.Exception (SomeException, try)
 import Data.Aeson (eitherDecode, encode)
 import Data.Either (isLeft)
 import Data.Foldable (for_)
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Dhall qualified
 import Keiro.Workflow (WorkflowId (..), WorkflowName (..))
@@ -19,6 +21,7 @@ import Shikigami.Agent.Principal
 import Shikigami.Duration
 import Shikigami.Router.Catalog (CatalogVersion)
 import Shikigami.Router.SelectionLimit (SelectionLimit, parseSelectionLimit, selectionLimitNatural)
+import Shikigami.Sink.Permission (SinkKind (SKizashiSignal), checkGrantStatic)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -26,7 +29,13 @@ tests :: TestTree
 tests =
   testGroup
     "agent values"
-    [ testCase "retained deterministic identities reject malformed and wrong UUID domains" do
+    [ testCase "static grants preserve verified and compatibility identity namespaces" do
+        principal <- right (mkAgentPrincipal "agent_verified")
+        compatibility <- right (mkAgentName (principalText principal))
+        let grants = Map.singleton (VerifiedIdentity principal) (Set.singleton SKizashiSignal)
+        checkGrantStatic grants (VerifiedIdentity principal) SKizashiSignal @?= Right ()
+        assertBool "same text is a different identity" (isLeft (checkGrantStatic grants (CompatibilityIdentity compatibility) SKizashiSignal)),
+      testCase "retained deterministic identities reject malformed and wrong UUID domains" do
         let review = reviewRequestIdFor (WorkflowName "agent") (WorkflowId "original-run") 0 "ask"
             budget = delegationBudgetIdFor (WorkflowId "original-run")
         eitherDecode (encode review) @?= Right review

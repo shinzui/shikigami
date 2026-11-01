@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Public Danwa integration-event payloads consumed by Shikigami.
 module Shikigami.Integration.Danwa
   ( AddressedMessage (..),
@@ -7,6 +9,7 @@ where
 
 import Data.Aeson (withObject, (.:), (.=))
 import Data.Aeson qualified as Aeson
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Prelude hiding ((.=))
 
 -- | Danwa's public message-addressed payload.
@@ -15,14 +18,14 @@ import Shikigami.Prelude hiding ((.=))
 -- deliberately does not expose or depend on Danwa's private event store, read
 -- models, outbox table, or database schema.
 data AddressedMessage = AddressedMessage
-  { conversationId :: !Text,
-    messageId :: !Text,
-    parentMessageId :: !(Maybe Text),
-    author :: !Text,
+  { conversationId :: !(DeclarationCoordinate "danwa-conversation"),
+    messageId :: !(DeclarationCoordinate "danwa-message"),
+    parentMessageId :: !(Maybe (DeclarationCoordinate "danwa-message")),
+    author :: !(DeclarationCoordinate "danwa-participant"),
     content :: !Text,
-    agentParticipantId :: !Text,
-    embellishmentId :: !Text,
-    mentionedBy :: !Text,
+    agentParticipantId :: !(DeclarationCoordinate "danwa-participant"),
+    embellishmentId :: !(DeclarationCoordinate "danwa-embellishment"),
+    mentionedBy :: !(DeclarationCoordinate "danwa-participant"),
     occurredAt :: !UTCTime
   }
   deriving stock (Eq, Show)

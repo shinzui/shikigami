@@ -1,0 +1,9 @@
+{
+  "sourceRevision": "4ac29de",
+  "sinceRevision": "ad22a18",
+  "command": "nix develop --no-write-lock-file -c just keiro-gate ad22a18",
+  "exitCode": 0,
+  "findings": 0,
+  "replayImpact": "replay-neutral",
+  "conformancePassed": 156
+}

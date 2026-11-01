@@ -52,6 +52,7 @@ import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.DeclarationValue
+import Shikigami.Agent.DeclarationValue (declarationCoordinate, declarationCoordinateText)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult)
@@ -413,19 +414,19 @@ tests fixture =
                     runTimeout = (either (error . show) id (parseDuration (30))),
                     harness = Harness.defaultHarnessPolicy,
                     idleTimeout = (either (error . show) id (parseDuration (1800))),
-                    danwa = DanwaConfig "http://localhost:1" "participant",
+                    danwa = DanwaConfig "http://localhost:1" (declarationCoordinate "participant"),
                     agents = [declaration],
-                    grants = StaticGrants (Map.singleton "router" (Set.singleton SDanwaConversation)),
+                    grants = StaticGrants (Map.singleton (compatibilityIdentity (either (error . show) id (mkAgentName "router"))) (Set.singleton SDanwaConversation)),
                     directory = dependencies.directory
                   }
               context = ExecutionContext (Just root) (Just (ExecutionRequest (Just (fixtureModelAlias "worker-a")) Nothing Nothing)) (Just (map fixtureModelAlias ["worker-a"]))
-              message n = AddressedMessage "conv_selection" ("message" <> Text.pack (show n)) Nothing "human" ("request-" <> Text.pack (show n)) "participant" ("emb" <> Text.pack (show n)) "human" now
+              message n = AddressedMessage (declarationCoordinate "conv_selection") (declarationCoordinate ("message" <> Text.pack (show n))) Nothing (declarationCoordinate "human") ("request-" <> Text.pack (show n)) (declarationCoordinate "participant") (declarationCoordinate ("emb" <> Text.pack (show n))) (declarationCoordinate "human") now
           _ <- expectRight =<< run app Catalog.registerProjectionCatalog
           ensureRunQueue store.pool >>= expectRight
           let firstMessage = message (1 :: Int)
               secondMessage = message (2 :: Int)
               workflowId = Conversation.conversationWorkflowId 0 firstMessage
-              execution msg = Replay.executionIdFor (conversationAssignmentIdFor workflowId.unWorkflowId msg.messageId)
+              execution msg = Replay.executionIdFor (conversationAssignmentIdFor workflowId.unWorkflowId (declarationCoordinateText msg.messageId))
           Conversation.submitConversationTurnWithExecution env declaration (compatibilityIdentity (fixtureAgentName "router")) (Just context) firstMessage >>= (@?= Right Conversation.ConversationAccepted)
           -- Repeated delivery observes its accepted turn and leaves the
           -- successor's input promise pending, without another model attempt.

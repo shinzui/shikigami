@@ -36,7 +36,7 @@ import Kikan.En.Action (AgentAction (InvokeCapabilityTool), mkCapabilityToolTarg
 import Kioku.Id (SessionId)
 import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill), IdentityDecl (..))
-import Shikigami.Agent.DeclarationValue (agentEnabled)
+import Shikigami.Agent.DeclarationValue (agentEnabled, declarationCoordinate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), assertMayDelegate)
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
@@ -44,6 +44,7 @@ import Shikigami.App (AppEffects)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Decision.ModelAlias (ModelAlias)
 import Shikigami.Directory qualified as Directory
+import Shikigami.Execution.Coordinate (ExecutionDigest, executionDigestFor, executionDigestText)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Execution.Payload (payloadDigestText)
 import Shikigami.Execution.Request (ExecutionRequest)
@@ -111,7 +112,7 @@ instance Show CoordinationScope where show _ = "CoordinationScope <protected>"
 -- run/session records; prompt text and caller-supplied context are not grants.
 data CoordinationAuthority = CoordinationAuthority
   { admit :: !(CoordinatorRun -> IO (Either Text (Maybe CoordinationScope))),
-    reacquire :: !(CoordinatorRun -> Text -> IO (Either Text CoordinationScope))
+    reacquire :: !(CoordinatorRun -> ExecutionDigest "coordination-scope" -> IO (Either Text CoordinationScope))
   }
 
 data CoordinationHost = CoordinationHost
@@ -182,10 +183,10 @@ data WorkerReply
 
 instance Show WorkerReply where show _ = "WorkerReply <protected>"
 
-scopeFingerprint :: CoordinationScope -> Text
-scopeFingerprint scope = versionedDigest "shikigami.worker-coordination-scope/1" (toJSON scope)
+scopeFingerprint :: CoordinationScope -> ExecutionDigest "coordination-scope"
+scopeFingerprint scope = executionDigestFor "shikigami.worker-coordination-scope/1" (toJSON scope)
 
-grantFingerprint :: CoordinationGrant -> Text
+grantFingerprint :: CoordinationGrant -> ExecutionDigest "coordination-scope"
 grantFingerprint (CoordinationGrant scope) = scopeFingerprint scope
 
 grantSupportsSkill :: CoordinationGrant -> Bool
@@ -193,7 +194,7 @@ grantSupportsSkill (CoordinationGrant scope) = case scope.agent.behavior of
   CoordinatingSkill {} -> True
   _ -> False
 
-resolveGrant :: CoordinationHost -> ActionAuthorizer -> CoordinatorRun -> Maybe Text -> Eff AppEffects (Either SessionError (Maybe CoordinationGrant))
+resolveGrant :: CoordinationHost -> ActionAuthorizer -> CoordinatorRun -> Maybe (ExecutionDigest "coordination-scope") -> Eff AppEffects (Either SessionError (Maybe CoordinationGrant))
 resolveGrant host authorizer run pinned = do
   supplied <- trySync (liftIO (case pinned of Nothing -> host.authority.admit run; Just ref -> fmap Just <$> host.authority.reacquire run ref))
   case supplied of
@@ -328,10 +329,10 @@ authorizeExact authorizer scope label input = case identityText scope.run.identi
   Left _ -> pure (Left SessionOwnerRefused)
   Right principal -> do
     let digest = Text.replace ":" "-" (versionedDigest "shikigami.worker-command-action/1" input)
-        revision = "1-" <> Text.replace ":" "-" (scopeFingerprint scope)
+        revision = "1-" <> Text.replace ":" "-" (executionDigestText (scopeFingerprint scope))
     case mkCapabilityToolTarget "shikigami.worker-sessions" revision (label <> "-" <> digest) of
       Left _ -> pure (Left SessionOwnerRefused)
-      Right target -> liftIO (authorizer.authorize principal (InvokeCapabilityTool target)) <&> either (const (Left SessionOwnerRefused)) (const (Right ()))
+      Right target -> liftIO (authorizer.authorize (declarationCoordinate principal) (InvokeCapabilityTool target)) <&> either (const (Left SessionOwnerRefused)) (const (Right ()))
 
 -- | Bootstrap an operator's scope from protected accepted admission, using only
 -- public binding coordinates until both lifecycle and exact C13 checks pass.
@@ -340,7 +341,7 @@ authorizeAdmissionRead authorizer lifecycle session binding = do
   current <- lifecycle binding.parentIdentity
   case (current, identityText binding.parentIdentity, mkCapabilityToolTarget "shikigami.worker-sessions" ("admission-1-" <> Text.replace ":" "-" (payloadDigestText binding.admission.digest)) ("read-admission-" <> session.value)) of
     (Right (), Right principal, Right target) ->
-      authorizer.authorize principal (InvokeCapabilityTool target) >>= \case
+      authorizer.authorize (declarationCoordinate principal) (InvokeCapabilityTool target) >>= \case
         Right _ -> pure (Right ())
         Left _ -> pure (Left "fresh protected admission read refused")
     _ -> pure (Left "parent admission read refused")

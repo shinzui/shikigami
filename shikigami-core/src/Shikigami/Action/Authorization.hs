@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Fail-closed authorization for one concrete external agent action.
 --
 -- The function seam is intentionally smaller than either Kikan-En or Shomei.
@@ -45,6 +47,8 @@ import Kikan.En.Action
   )
 import Kikan.En.Client (KikanEnClient, authorizeAgentAction)
 import Servant.Client (ClientEnv)
+import Shikigami.Activity.Coordinate
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Behavior.Error (boundedBehaviorDetail)
 import Shikigami.Log qualified as Log
 import Shomei.Client qualified as Shomei
@@ -71,8 +75,8 @@ data ActionAuthorizationDecision = ActionAuthorizationDecision
   deriving stock (Eq, Show)
 
 data ActionAuthorizer = ActionAuthorizer
-  { authorize :: !(Text -> AgentAction -> IO (Either ActionAuthorizationFailure ActionAuthorizationDecision)),
-    kawaSource :: !Text
+  { authorize :: !(DeclarationCoordinate "principal" -> AgentAction -> IO (Either ActionAuthorizationFailure ActionAuthorizationDecision)),
+    kawaSource :: !(ActivityCoordinate "source")
   }
 
 -- | Compatibility value for composition roots that have not supplied the C13
@@ -81,7 +85,7 @@ denyAllActionAuthorizer :: ActionAuthorizer
 denyAllActionAuthorizer =
   ActionAuthorizer
     { authorize = \_ _ -> pure (Left (ActionServiceUnavailable "per-action authorization is not configured")),
-      kawaSource = "unconfigured"
+      kawaSource = activityCoordinate "unconfigured"
     }
 
 -- | In-memory fixture for existing focused tests. Production composition roots
@@ -101,7 +105,7 @@ allowAllActionAuthorizerForTests =
                   expiresAt = "test"
                 }
           ),
-      kawaSource = "shinzui/shikigami"
+      kawaSource = activityCoordinate "shinzui/shikigami"
     }
 
 -- | Production interpreter. The token source is normally
@@ -110,7 +114,7 @@ allowAllActionAuthorizerForTests =
 newKikanActionAuthorizer ::
   Log.Logger ->
   Text ->
-  Text ->
+  ActivityCoordinate "source" ->
   KikanEnClient ->
   IO (Either Text ShomeiAccessToken) ->
   ActionAuthorizer
@@ -118,7 +122,7 @@ newKikanActionAuthorizer logger callerId configuredKawaSource client tokenSource
   ActionAuthorizer
     { kawaSource = configuredKawaSource,
       authorize = \principalText requestedAction -> do
-        case mkAgentPrincipal principalText of
+        case mkAgentPrincipal (declarationCoordinateText principalText) of
           Left problem -> finish (Left (ActionCoordinatesInvalid (actionValueErrorText problem))) Nothing
           Right principal -> do
             requestUuid <- UUID.V4.nextRandom
@@ -185,9 +189,9 @@ authorizationFailureDetail = \case
 -- | Fetch exactly the machine scope used by Kikan's action endpoint. The
 -- client secret is consumed only by Shomei's Basic-auth encoder and is never
 -- placed in an error or log value.
-shomeiClientCredentialsToken :: ClientEnv -> Text -> Text -> IO (Either Text ShomeiAccessToken)
+shomeiClientCredentialsToken :: ClientEnv -> DeclarationCoordinate "oauth-client" -> Text -> IO (Either Text ShomeiAccessToken)
 shomeiClientCredentialsToken env clientId clientSecret =
-  Shomei.oauthToken env clientId clientSecret ["kikan-en:authorize-agent-action"] >>= \case
+  Shomei.oauthToken env (declarationCoordinateText clientId) clientSecret ["kikan-en:authorize-agent-action"] >>= \case
     Left _ -> pure (Left "Shomei token transport failed")
     Right (OAuthSuccess TokenSuccess {tokenBody = TokenResponse {accessToken}}) ->
       pure (either (Left . actionValueErrorText) Right (mkShomeiAccessToken accessToken))

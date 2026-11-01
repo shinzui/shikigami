@@ -31,6 +31,7 @@ import Network.Wai.Handler.Warp (testWithApplication)
 import Servant.Client (ClientEnv)
 import Settei (answer, defaultResolveOptions, resolve)
 import Settei.Env (envSnapshot, environmentSource)
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.App.Config (AppConfig (..), ByteLimit, CredentialRef (..), appConfig, byteLimitBytes, environmentBindings, mkByteLimit)
 import Shikigami.Sink.Auth
   ( BearerToken,
@@ -249,7 +250,7 @@ testEnv source httpLimits = do
 
 danwaClientEnv :: Int -> HttpLimits -> Maybe TokenSource -> IO ClientEnv
 danwaClientEnv port httpLimits source = do
-  let config = DanwaConfig {baseUrl = localBaseUrl port, agentParticipant = "part_agent_test"}
+  let config = DanwaConfig {baseUrl = localBaseUrl port, agentParticipant = (declarationCoordinate "part_agent_test")}
       credentials = SinkCredentials {kawa = Nothing, kizashi = Nothing, kanmon = Nothing, danwa = source}
   newSinkHttp httpLimits credentials config >>= \case
     Left failure -> assertFailure ("failed to build danwa client: " <> show failure)

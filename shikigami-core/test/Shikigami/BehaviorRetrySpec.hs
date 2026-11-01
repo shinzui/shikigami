@@ -33,14 +33,14 @@ tests =
           (\err -> assertEqual (show err) Transient (classifyRunError err))
           [ ProgramRuntimeFailed "runtime",
             SkillRunFailed "skill",
-            ProviderFailed True "provider"
+            ProviderFailed Transient "provider"
           ]
         traverse_
           (\err -> assertEqual (show err) Permanent (classifyRunError err))
           [ UnknownTask "missing",
             ProgramInputFailed "bad input",
             SkillLoadFailed "missing SKILL.md",
-            ProviderFailed False "provider",
+            ProviderFailed Permanent "provider",
             UnsupportedBehavior "deterministic"
           ],
       testCase "bounds and redacts durable failure detail" do
@@ -72,7 +72,7 @@ tests =
           try @TransientBehaviorFailure $
             runBehaviorAttemptWith
               (secondsToNominalDiffTime 1)
-              (pure (Left (ProviderFailed True "temporary")))
+              (pure (Left (ProviderFailed Transient "temporary")))
         assertBool "retryable provider error throws" (either (const True) (const False) retryable),
       testCase "asynchronous cancellation is not converted" do
         cancelled <-

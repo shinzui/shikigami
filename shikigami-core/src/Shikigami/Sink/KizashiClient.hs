@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | The @KizashiSignal@ sink handler: build a @CreateSignalReq@ from the sink config
 -- and the behavior output, and POST it to a kizashi base URL (the C4 contract). Built
 -- against a stub kizashi server; swapping the real kizashi base URL needs no code change.
@@ -39,7 +41,7 @@ renderKizashiError = \case
 -- to, decided upstream where the trigger activity is available; see
 -- "Shikigami.Sink.Recipient" for why resolution does not happen here and for the
 -- precedence 'recipientFor' applies.
-buildSignalReq :: KizashiConfig -> Maybe Text -> Sink -> AgentIdentity -> Value -> Either Text CreateSignalReq
+buildSignalReq :: KizashiConfig -> Maybe (DeclarationCoordinate "recipient") -> Sink -> AgentIdentity -> Value -> Either Text CreateSignalReq
 buildSignalReq KizashiConfig {defaultRecipient = fallbackRecipient} resolvedRecipient sink identity output = do
   nm <- identityText identity
   case sink of
@@ -55,7 +57,7 @@ buildSignalReq KizashiConfig {defaultRecipient = fallbackRecipient} resolvedReci
         Right
           CreateSignalReq
             { actor = nm,
-              recipient = recipientFor fallbackRecipient resolvedRecipient (declarationCoordinateText <$> mrec),
+              recipient = declarationCoordinateText (recipientFor fallbackRecipient resolvedRecipient mrec),
               source = activityCoordinateText src,
               signalType = st,
               intent = tmpl,

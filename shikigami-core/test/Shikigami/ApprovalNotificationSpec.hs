@@ -16,6 +16,7 @@ import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalRequest (..), Rev
 import Shikigami.Agent.Approval.Notification (approvalNotifier, renderApprovalMessage)
 import Shikigami.Agent.Approval.Workflow (ApprovalNotificationError (..), ApprovalNotifier (..))
 import Shikigami.Agent.Decl (Priority (High), SignalType (AgentRequest))
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Duration (parseDuration)
 import Shikigami.Fixture.SinkHttp (testSinkHttpFor)
 import Shikigami.Log qualified as Log
@@ -48,8 +49,8 @@ tests =
       testCase "Danwa notifier opens a thread and posts the human-visible ask" do
         messages <- newIORef []
         testWithApplication (pure (danwaApplication messages)) \port -> do
-          let danwaConfig = DanwaConfig {baseUrl = localBaseUrl port, agentParticipant = "part_agent_test"}
-              kizashiConfig = KizashiConfig {baseUrl = "http://127.0.0.1:1", defaultRecipient = "recipient:test"}
+          let danwaConfig = DanwaConfig {baseUrl = localBaseUrl port, agentParticipant = (declarationCoordinate "part_agent_test")}
+              kizashiConfig = KizashiConfig {baseUrl = "http://127.0.0.1:1", defaultRecipient = (declarationCoordinate "recipient:test")}
           sinkHttp <- testSinkHttpFor danwaConfig
           let notifier = approvalNotifier Log.silentLogger sinkHttp danwaConfig kizashiConfig
           outcome <- (.postAsk) notifier reviewId awakeableId (either (error . show) id (parseDuration 60)) request
@@ -117,15 +118,15 @@ request =
 
 notifierForKizashi :: Int -> IO ApprovalNotifier
 notifierForKizashi port = do
-  let danwaConfig = DanwaConfig {baseUrl = "http://127.0.0.1:1", agentParticipant = "part_agent_test"}
-      kizashiConfig = KizashiConfig {baseUrl = localBaseUrl port, defaultRecipient = "recipient:test"}
+  let danwaConfig = DanwaConfig {baseUrl = "http://127.0.0.1:1", agentParticipant = (declarationCoordinate "part_agent_test")}
+      kizashiConfig = KizashiConfig {baseUrl = localBaseUrl port, defaultRecipient = (declarationCoordinate "recipient:test")}
   sinkHttp <- testSinkHttpFor danwaConfig
   pure (approvalNotifier Log.silentLogger sinkHttp danwaConfig kizashiConfig)
 
 notifierForDanwa :: Int -> IO ApprovalNotifier
 notifierForDanwa port = do
-  let danwaConfig = DanwaConfig {baseUrl = localBaseUrl port, agentParticipant = "part_agent_test"}
-      kizashiConfig = KizashiConfig {baseUrl = "http://127.0.0.1:1", defaultRecipient = "recipient:test"}
+  let danwaConfig = DanwaConfig {baseUrl = localBaseUrl port, agentParticipant = (declarationCoordinate "part_agent_test")}
+      kizashiConfig = KizashiConfig {baseUrl = "http://127.0.0.1:1", defaultRecipient = (declarationCoordinate "recipient:test")}
   sinkHttp <- testSinkHttpFor danwaConfig
   pure (approvalNotifier Log.silentLogger sinkHttp danwaConfig kizashiConfig)
 

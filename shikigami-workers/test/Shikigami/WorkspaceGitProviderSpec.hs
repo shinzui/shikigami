@@ -101,7 +101,7 @@ tests fixture =
         (reconcileGitEffect env reference.operationId >>= (@?= Left FileEffectUnavailable))
           `finally` run env (runTransaction (Tx.sql "ALTER TABLE shikigami.fixture_unavailable_git_effects RENAME TO workspace_effects")),
       testCase "accepted integration combines two retained worker artifacts in a third clean workspace" $ withIntegration fixture False \env target admission runtime backend artifacts -> do
-        let input = Aeson.toJSON (Integration.Request target.base artifacts)
+        let input = Aeson.toJSON (Integration.RequestInput target.base artifacts)
         withIntegrationTool env admission runtime backend input \output -> do
           value <- outputValue output
           field "conflicts" value @?= Just (Aeson.toJSON ([] :: [Text.Text]))
@@ -112,20 +112,27 @@ tests fixture =
           readFile (workspaceFiles (workspaceLocatorPath target.storageRoot) target </> "src/dependency.txt") >>= (@?= "old dependency\n")
           Objects.readHead (workspaceMetadata (workspaceLocatorPath target.storageRoot) target) >>= (@?= Right target.base),
       testCase "unequal overlapping worker changes return conflicts without changing files or HEAD" $ withIntegration fixture True \env target admission runtime backend artifacts ->
-        withIntegrationTool env admission runtime backend (Aeson.toJSON (Integration.Request target.base artifacts)) \output -> do
+        withIntegrationTool env admission runtime backend (Aeson.toJSON (Integration.RequestInput target.base artifacts)) \output -> do
           value <- outputValue output
           field "conflicts" value @?= Just (Aeson.toJSON ["src/dependency.txt" :: Text.Text])
           field "replacements" value @?= Just (Aeson.toJSON ([] :: [Replacement]))
           Objects.readHead (workspaceMetadata (workspaceLocatorPath target.storageRoot) target) >>= (@?= Right target.base),
       testCase "forged artifact coordinates refuse before capture" $ withIntegration fixture False \env target admission runtime backend artifacts -> do
+        mapM_
+          ( \invalid -> do
+              let input = Integration.RequestInput target.base invalid
+              assertBool "unbounded or duplicate request refuses construction" (case Integration.mkRequest input of Left _ -> True; Right _ -> False)
+              assertBool "retained request decoder enforces the same bounds" (case Aeson.fromJSON @Integration.Request (Aeson.toJSON input) of Aeson.Error _ -> True; Aeson.Success _ -> False)
+          )
+          [[], take 1 artifacts, take 9 (cycle artifacts), take 2 (cycle (take 1 artifacts))]
         let forged = head artifacts & #revision .~ workspaceCoordinate (Text.replicate 40 "0")
-        withIntegrationTool env admission runtime backend (Aeson.toJSON (Integration.Request target.base (forged : tail artifacts))) assertRefused,
+        withIntegrationTool env admission runtime backend (Aeson.toJSON (Integration.RequestInput target.base (forged : tail artifacts))) assertRefused,
       testCase "denied integration authority refuses without changing HEAD" $ withIntegration fixture False \env target admission runtime backend artifacts -> do
-        withIntegrationTool env admission (runtime & #authorizer .~ denyAllActionAuthorizer) backend (Aeson.toJSON (Integration.Request target.base artifacts)) assertRefused
+        withIntegrationTool env admission (runtime & #authorizer .~ denyAllActionAuthorizer) backend (Aeson.toJSON (Integration.RequestInput target.base artifacts)) assertRefused
         Objects.readHead (workspaceMetadata (workspaceLocatorPath target.storageRoot) target) >>= (@?= Right target.base),
       testCase "dirty integration target refuses rather than overwriting prior work" $ withIntegration fixture False \env target admission runtime backend artifacts -> do
         writeFile (workspaceFiles (workspaceLocatorPath target.storageRoot) target </> "src/dependency.txt") "uncommitted integrator change\n"
-        withIntegrationTool env admission runtime backend (Aeson.toJSON (Integration.Request target.base artifacts)) assertRefused
+        withIntegrationTool env admission runtime backend (Aeson.toJSON (Integration.RequestInput target.base artifacts)) assertRefused
         readFile (workspaceFiles (workspaceLocatorPath target.storageRoot) target </> "src/dependency.txt") >>= (@?= "uncommitted integrator change\n"),
       testCase "transfer-aware Git revision recovers its original exact commit after freeze" $ withGitVersion True fixture "commit" \env binding snapshot _ reference runtime profile backend -> do
         profileReady env binding profile
@@ -301,12 +308,12 @@ withGitVersion :: Bool -> DatabaseFixture -> Text.Text -> (AppEnv -> WorkspaceBi
 withGitVersion transferred fixture name use = do
   properties <- Systemd.systemdPropertiesIdentity
   let digest = workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")
-      policy = ProcessPolicy ProcessPolicyV1 (ProcessImage (workspaceLocator "/qualified/root") digest (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")) properties [CommandRule (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)] [(workspaceCoordinate "")] [(workspaceCoordinate "src")]
+      policy = ((either (error . show) id . mkProcessPolicy) (ProcessPolicyInput ProcessPolicyV1 (((either (error . show) id . mkProcessImage) (ProcessImageInput (workspaceLocator "/qualified/root") digest (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")))) properties [((either (error . show) id . mkCommandRule) (CommandRuleInput (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)))] [(workspaceCoordinate "")] [(workspaceCoordinate "src")]))
       backend = GitBackend (pure (Right (workspaceCoordinate "11111111-1111-4111-8111-111111111111"))) fixtureCapture (pure ())
       input binding = Just (if name == "commit" then Aeson.toJSON (GitCommitRequest binding.base (workspaceCoordinate "chore(deps): PRIVATE_COMMIT_MESSAGE")) else Aeson.object [])
   Fixture.withEffectAdapterPolicyInput (Just policy) 1 (\admission -> admission & #filePolicy .~ Just (if transferred then transferableFilePolicy else supervisedFilePolicy)) ((if transferred then transferredWorkspaceGitAdapterWithBackend else workspaceGitAdapterWithBackend) backend) ("overlay__workspace-git__" <> name) name input fixture \env binding snapshot access reference runtime _ -> do
     admission <- maybe (fail "missing Git admission") pure snapshot.workspace
-    (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest admission.instructions) policy (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 62000) ((either (error . show) id . parseWorkspaceIdentity) 62001))))
+    (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest admission.instructions) policy (((either (error . show) id . mkIdentityRange) (IdentityRangeInput ((either (error . show) id . parseWorkspaceIdentity) 62000) ((either (error . show) id . parseWorkspaceIdentity) 62001))))))
     use env binding snapshot access reference runtime profile backend
 
 fixtureCapture :: WorkspaceBinding -> ProcessProfile -> WorkspaceCoordinate "file-target" -> (WorkspaceCoordinate "relative-path" -> IO (Either WorkspaceError ())) -> IO (Either WorkspaceError CapturedTree)
@@ -372,7 +379,7 @@ sibling env original profile runId = do
   allocateWorkspace (workspaceLocatorPath original.storageRoot) binding state >>= (@?= Right ())
   run env (runTransaction (Store.markWorkspaceReadyTx binding)) >>= (@?= Right ())
   admission <- right =<< loadWorkspaceAdmission binding (fixtureAssignment (runId <> "-assignment")) 65536
-  (retained, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest admission.instructions) profile.policy (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 62002) ((either (error . show) id . parseWorkspaceIdentity) 62020))))
+  (retained, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest admission.instructions) profile.policy (((either (error . show) id . mkIdentityRange) (IdentityRangeInput ((either (error . show) id . parseWorkspaceIdentity) 62002) ((either (error . show) id . parseWorkspaceIdentity) 62020))))))
   profileReady env binding retained
   pure (binding, admission & #filePolicy .~ Just transferableFilePolicy)
 

@@ -13,6 +13,7 @@ module Shikigami.Fixture.SinkHttp
   )
 where
 
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.App.Config (mkByteLimit)
 import Shikigami.Sink.Config (DanwaConfig (..))
 import Shikigami.Sink.Http
@@ -49,7 +50,7 @@ testSinkHttp =
     ( testSinkHttpFor
         DanwaConfig
           { baseUrl = "http://localhost:1",
-            agentParticipant = "part_agent_test"
+            agentParticipant = (declarationCoordinate "part_agent_test")
           }
     )
 {-# NOINLINE testSinkHttp #-}

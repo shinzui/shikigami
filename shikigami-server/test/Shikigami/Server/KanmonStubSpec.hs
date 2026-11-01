@@ -14,6 +14,8 @@ import Network.HTTP.Types (hAuthorization, hContentType, statusCode)
 import Network.Wai.Handler.Warp (testWithApplication)
 import Settei (answer, defaultResolveOptions, resolve)
 import Settei.Env (envSnapshot, environmentSource)
+import Shikigami.Activity.Coordinate (activityCoordinate)
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Api.Problem (ProblemDetails (..))
 import Shikigami.App.Config (AppConfig (..), appConfig, environmentBindings)
 import Shikigami.Sink.Auth (BearerToken, credentialToken)
@@ -28,7 +30,7 @@ tests =
     "stub-kanmon"
     [ testCase "accepts the exact authenticated route and response shape" do
         state <- newStubKanmonState
-        testWithApplication (pure (stubKanmonApplication state (Just expectedToken) allowed)) \port -> do
+        testWithApplication (pure (stubKanmonApplication state (Just expectedToken) (Set.map declarationCoordinate allowed))) \port -> do
           response <- postAction port route (Just expectedAuthorization) (encode actionRequest)
           statusCode (Http.responseStatus response) @?= 200
           let EgressActionResponse {activityId, verb} = decodeResponse response
@@ -37,7 +39,7 @@ tests =
           (.acceptedEffects) <$> readIORef state >>= (@?= 1),
       testCase "authenticates before attempting to parse a body" do
         state <- newStubKanmonState
-        testWithApplication (pure (stubKanmonApplication state (Just expectedToken) allowed)) \port -> do
+        testWithApplication (pure (stubKanmonApplication state (Just expectedToken) (Set.map declarationCoordinate allowed))) \port -> do
           missing <- postAction port route Nothing "not-json"
           wrong <- postAction port route (Just "Bearer wrong-token") "not-json"
           assertUnauthorized missing
@@ -45,7 +47,7 @@ tests =
           (.acceptedEffects) <$> readIORef state >>= (@?= 0),
       testCase "rejects malformed JSON, forbidden destinations, and unknown routes" do
         state <- newStubKanmonState
-        testWithApplication (pure (stubKanmonApplication state (Just expectedToken) allowed)) \port -> do
+        testWithApplication (pure (stubKanmonApplication state (Just expectedToken) (Set.map declarationCoordinate allowed))) \port -> do
           malformed <- postAction port route (Just expectedAuthorization) "not-json"
           forbidden <- postAction port route (Just expectedAuthorization) (encode ((actionRequest & #conversationKey .~ ("conv_forbidden"))))
           missing <- postAction port "/channels/zendesk/actions/reply_to_conversation" (Just expectedAuthorization) (encode actionRequest)
@@ -55,7 +57,7 @@ tests =
           (.acceptedEffects) <$> readIORef state >>= (@?= 0),
       testCase "same idempotency key returns one id and records one accepted effect" do
         state <- newStubKanmonState
-        testWithApplication (pure (stubKanmonApplication state (Just expectedToken) allowed)) \port -> do
+        testWithApplication (pure (stubKanmonApplication state (Just expectedToken) (Set.map declarationCoordinate allowed))) \port -> do
           first <- postAction port route (Just expectedAuthorization) (encode actionRequest)
           second <- postAction port route (Just expectedAuthorization) (encode actionRequest)
           decodeResponse first @?= decodeResponse second
@@ -64,7 +66,7 @@ tests =
           length ((.idempotency) snapshot) @?= 1,
       testCase "requests without idempotency keys remain fresh effects" do
         state <- newStubKanmonState
-        testWithApplication (pure (stubKanmonApplication state (Just expectedToken) allowed)) \port -> do
+        testWithApplication (pure (stubKanmonApplication state (Just expectedToken) (Set.map declarationCoordinate allowed))) \port -> do
           first <- postAction port route (Just expectedAuthorization) (encode ((actionRequest & #idempotencyKey .~ (Nothing))))
           second <- postAction port route (Just expectedAuthorization) (encode ((actionRequest & #idempotencyKey .~ (Nothing))))
           assertBool "fresh requests receive different ids" ((.activityId) (decodeResponse first) /= (.activityId) (decodeResponse second))

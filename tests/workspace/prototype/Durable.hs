@@ -48,6 +48,7 @@ import Shikigami.Behavior.StubProvider (stubApiProvider)
 import Shikigami.Capability.Overlay (CapabilityDescriptor (..))
 import Shikigami.Directory (DirectoryRuntime (..), startDirectory)
 import Shikigami.Duration
+import Shikigami.Execution.Coordinate (executionCoordinate)
 import Shikigami.Execution.Driver (ExecutionStart (..))
 import Shikigami.Execution.Foreground (driveExecutionForeground)
 import Shikigami.Execution.Identity
@@ -79,6 +80,7 @@ import Shikigami.Workspace.GitProvider (workspaceGitDescriptor)
 import Shikigami.Workspace.GitTypes (GitCandidate (..), GitCommitRequest (..))
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Process
+import Shikigami.Workspace.ProcessPolicy (IdentityRangeInput (..), mkIdentityRange)
 import Shikigami.Workspace.ProcessPolicy hiding (strictOptions)
 import Shikigami.Workspace.Provider (Replacement (..), contentDigest)
 import Shikigami.Workspace.Settings
@@ -106,7 +108,7 @@ workflowCase configFile prefix stage = do
     principal <- right (identityText initial.binding.request.owner)
     socket <- maybe (fail "fixture socket missing") (pure . (.socketPath)) config.workspaceSupervisorSettings
     let repository = WorkspaceRepository initial.binding.repository initial.binding.source [WorkspaceRevision initial.binding.base (bundleDigest initial.admission.instructions)] initial.binding.base (workspaceCoordinate "workflow-reviewed") initial.profile.policy.readPaths initial.profile.policy.writePaths
-        process = WorkspaceProcessSettings socket ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60) (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031)) (Map.singleton repository.identity initial.profile.policy)
+        process = WorkspaceProcessSettings socket ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60) (((either (error . show) id . mkIdentityRange) (IdentityRangeInput ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031)))) (Map.singleton repository.identity initial.profile.policy)
         settings = WorkspaceSettings initial.binding.storageRoot [repository] [WorkspaceGrant ((either (error . show) id . mkAgentName) "workspace-upgrade") (declarationCoordinate principal) repository.identity Nothing] (Just process)
         code = "/var/lib/shikigami-workspace-fixture-code"
         skill = code </> "agents/skills/triage-note"
@@ -144,7 +146,7 @@ workflowCase configFile prefix stage = do
         provider = stubApiProvider {Provider.complete = complete, Provider.stream = liftCompleteToStream complete}
     providers <- Provider.newProviderRegistryFrom [provider]
     now <- getCurrentTime
-    http <- right =<< newSinkHttp (HttpLimits config.httpRequestMaxBytes config.httpResponseMaxBytes) (credentialsFromConfig config) (DanwaConfig "http://localhost:1" "fixture")
+    http <- right =<< newSinkHttp (HttpLimits config.httpRequestMaxBytes config.httpResponseMaxBytes) (credentialsFromConfig config) (DanwaConfig "http://localhost:1" (declarationCoordinate "fixture"))
     let declaration = original & #name .~ fixtureAgentName "workspace-upgrade" & #behavior .~ Skill (declarationCoordinate ((Text.pack skill))) & #identity .~ Just (IdentityDecl (declarationCoordinate principal)) & #capabilityOverlays .~ map (.capability) [supervisedWorkspaceEditDescriptor, workspaceExecDescriptor, workspaceGitDescriptor] & #sinks .~ []
         rootId = fixtureRootId "workflow-upgrade-root"
         job = RunJob (fixtureAgentName "workspace-upgrade") initial.binding.request.owner TriggeredBySchedule now Aeson.Null (fixtureRunKey "workspace-durable-upgrade") Nothing Nothing Nothing [] Nothing Nothing (Just rootId) Nothing AgentWorkflowRoute
@@ -158,10 +160,10 @@ workflowCase configFile prefix stage = do
               workspace = Just host,
               coordination = Nothing,
               agents = [declaration],
-              kizashi = KizashiConfig "http://localhost:1" "recipient",
-              kawa = KawaConfig "http://localhost:1" "fixture",
+              kizashi = KizashiConfig "http://localhost:1" (declarationCoordinate "recipient"),
+              kawa = KawaConfig "http://localhost:1" (activityCoordinate "fixture"),
               kanmon = KanmonConfig "http://localhost:1",
-              danwa = DanwaConfig "http://localhost:1" "fixture",
+              danwa = DanwaConfig "http://localhost:1" (declarationCoordinate "fixture"),
               rei = ReiConfig Nothing,
               http,
               hooks = Agent.defaultAgentRunHooks,

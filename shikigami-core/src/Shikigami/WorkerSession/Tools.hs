@@ -43,7 +43,7 @@ coordinationTools (Just host) authorizer =
           then pure (Right [])
           else case filter ((== executionCoordinate name) . (.name)) snapshot.toolBindings of
             [] -> pure (Right [])
-            [binding] -> case Text.stripPrefix prefix (executionCoordinateText binding.revision) of
+            [binding] -> case executionDigest <$> Text.stripPrefix prefix (executionCoordinateText binding.revision) of
               Nothing -> pure (Left (ExecutionPolicyRefused "unsupported coordination binding"))
               Just pinned -> do
                 granted <- owned (resolveGrant host authorizer (coordinatorRunFor snapshot) (Just pinned))
@@ -65,7 +65,7 @@ coordinationTools (Just host) authorizer =
         _ -> Left (ExecutionPolicyRefused "admitted coordination authority unavailable")
     bound grant context =
       BoundTool
-        (ToolBinding (executionCoordinate name) (executionCoordinate (prefix <> grantFingerprint grant)) (executionDigestFor "shikigami.tool-schema/1" schema) IdempotentEffect NoInvoiceCost)
+        (ToolBinding (executionCoordinate name) (executionCoordinate (prefix <> executionDigestText (grantFingerprint grant))) (executionDigestFor "shikigami.tool-schema/1" schema) IdempotentEffect NoInvoiceCost)
         ( DynTool name "Control only the continuing workers admitted for this assignment. Stable operation identity is supplied by the durable harness. Results contain bounded metadata and accepted findings." schema \arguments ->
             case (context, Aeson.fromJSON arguments) of
               (Nothing, _) -> pure (Left (ToolRunFailed name "description does not authorize execution"))

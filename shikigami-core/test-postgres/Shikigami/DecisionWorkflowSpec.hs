@@ -36,6 +36,7 @@ import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate (delegatedWorkflowIdV2)
 import Shikigami.Agent.ExpertiseKey (ExpertiseKey, parseExpertiseKey)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
+import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as Agent
@@ -62,6 +63,7 @@ import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshData
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.Program.Decision
 import Shikigami.Program.Decision.Examples
+import Shikigami.Program.Decision.Examples (parseModelConfidence, proposedRouteJson)
 import Shikigami.Program.DecisionRunner (DecisionRuntime (..), runDecisionProgram)
 import Shikigami.Router.Catalog (CandidateCatalog (..))
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
@@ -97,13 +99,13 @@ scriptedProvider triageAction investigation = do
   let complete model context options = do
         atomicModifyIORef' seen (\xs -> (xs <> [Model.modelId model], ()))
         response <- decisionStubProvider.complete model context options
-        let reply = if Model.modelId model == "stub-triage" then toJSON (TriageResult triageAction "original triage facts" 0.82) else toJSON investigation
+        let reply = if Model.modelId model == "stub-triage" then toJSON (TriageResult triageAction "original triage facts" ((either (error . show) id . parseModelConfidence) 0.82)) else toJSON investigation
             evidence = (\ev -> (ev & #responseCommitment .~ (B.Observed (B.commitmentDigest reply)))) <$> response.evidence
         pure (response & #message . #content .~ V.singleton (AssistantText (TextContent (TE.decodeUtf8 (LBS.toStrict (encode reply))))) & #evidence .~ evidence)
   pure ((decisionStubProvider & #complete .~ (complete) & #stream .~ (liftCompleteToStream complete)), readIORef seen)
 
 returned :: InvestigationResult
-returned = InvestigationResult ReturnResult "original investigation" "" 0.91
+returned = InvestigationResult ReturnResult "original investigation" (proposedRouteJson "") ((either (error . show) id . parseModelConfidence) 0.91)
 
 withRuntime :: DatabaseFixture -> (AppEnv -> KirokuStore -> BehaviorEnv -> IO a) -> IO a
 withRuntime fixture use = withShikigamiFreshDatabase fixture \connection ->
@@ -191,7 +193,7 @@ tests fixture =
           (handler, observed) <- scriptedProvider Investigate returned
           hooks <- crashAt False "record"
           let withSink = (declaration & #sinks .~ ([KizashiSignal (activityCoordinate ("shinzui/shikigami")) Reminder Normal (either (error . show) id (parseSignalImportance (50))) SubjectOwner (fmap declarationCoordinate ((Just "recipient"))) "decision complete" []]))
-              runtime = (deps app store behavior handler (Decision.defaultDecisionServices catalog)) {Agent.hooks = hooks, Agent.agents = [withSink, Fixture.successSpecialist "first"], Agent.grants = StaticGrants (Map.singleton "router" (Set.singleton SKizashiSignal))}
+              runtime = (deps app store behavior handler (Decision.defaultDecisionServices catalog)) {Agent.hooks = hooks, Agent.agents = [withSink, Fixture.successSpecialist "first"], Agent.grants = StaticGrants (Map.singleton (compatibilityIdentity (either (error . show) id (mkAgentName "router"))) (Set.singleton SKizashiSignal))}
               request = job "decision-completed-replay"
           first <- try @SomeException (Agent.runAgentRunWorkflow runtime request)
           assertBool "crashed after decision commits" (either (const True) (const False) first)
@@ -266,7 +268,7 @@ tests fixture =
             Aeson.Success value -> pure value
             Aeson.Error _ -> assertFailure "invalid complete prepared input"
           _ <- expectRight =<< Pool.use store.pool (Session.script "CREATE TABLE shikigami.audit_provider_invocations AS SELECT * FROM shikigami.decision_invocations; UPDATE shikigami.decision_invocations SET binding=binding-'inputDigest'")
-          let pending = DecisionRuntime behavior.runtime services.programs catalog Nothing (decisionCallHooks evidenceStore Nothing) [handler] 2_000_000 64
+          let pending = DecisionRuntime behavior.runtime services.programs catalog Nothing (decisionCallHooks evidenceStore Nothing) [handler] (either (error . show) id (parseDecisionTimeout 2_000_000)) (either (error . show) id (PV.mkCeiling 64))
           refused <- runDecisionProgram pending prepared (programRef investigationProgram) input
           either (Right . failureCode) (const (Left ())) refused @?= Right UnsupportedVersion
           observed >>= (@?= ["stub-triage"])
@@ -325,7 +327,7 @@ tests fixture =
           (base, observed) <- scriptedProvider Investigate returned
           let complete model context options = do
                 response <- base.complete model context options
-                let invalid = toJSON (TriageResult Investigate "invalid confidence" 2.0)
+                let invalid = object ["action" .= Investigate, "summary" .= ("invalid confidence" :: Text), "confidence" .= (2.0 :: Double)]
                 pure (response & #message . #content .~ V.singleton (AssistantText (TextContent (TE.decodeUtf8 (LBS.toStrict (encode invalid))))))
               handler = (base & #complete .~ (complete) & #stream .~ (liftCompleteToStream complete))
               runtime = deps app store behavior handler (Decision.defaultDecisionServices catalog)
@@ -371,11 +373,11 @@ tests fixture =
               input = InvestigationInput "Investigate the architecture practice" "original triage facts" (TE.decodeUtf8 (LBS.toStrict (encode Fixture.catalog)))
               prepare registered = PreparedDecision (decisionPreparationId (Aeson.String "compare")) (runCorrelationId "compare") (WorkflowId "compare") initialDecisionGeneration investigationDecisionSlot (descriptor (programRef registered)) (toJSON input) (modelDescriptor b) Nothing
           (callHooks, _) <- newMemoryCallHooks
-          let runner = DecisionRuntime behavior.runtime programs catalog Nothing callHooks [captured] 2_000_000 64
+          let runner = DecisionRuntime behavior.runtime programs catalog Nothing callHooks [captured] (either (error . show) id (parseDecisionTimeout 2_000_000)) (either (error . show) id (PV.mkCeiling 64))
           old <- runDecisionProgram runner (prepare investigationProgram) (programRef investigationProgram) input
           new <- runDecisionProgram runner (prepare derivedInvestigation) (programRef derivedInvestigation) input
           old @?= Right returned
-          new @?= Right (returned & #summary .~ "new local derivation" & #confidence .~ 0.11)
+          new @?= Right (returned & #summary .~ "new local derivation" & #confidence .~ (either (error . show) id (parseModelConfidence 0.11)))
           sent <- readIORef contexts
           take 2 sent @?= drop 2 sent,
       testCase "removing the pinned local derivation refuses a pending invocation" $
@@ -409,7 +411,7 @@ tests fixture =
       testCase "no-match, ambiguous and invalid proposals create no children" $
         mapM_
           ( \(key, route, succeeds) -> withRuntime fixture \app store behavior -> do
-              let investigation = InvestigationResult ProposeRoute "route proposal" (TE.decodeUtf8 (LBS.toStrict (encode route))) 0.9
+              let investigation = InvestigationResult ProposeRoute "route proposal" (proposedRouteJson (TE.decodeUtf8 (LBS.toStrict (encode route)))) ((either (error . show) id . parseModelConfidence) 0.9)
               (handler, observed) <- scriptedProvider Investigate investigation
               let request = job key
               outcome <- Agent.runAgentRunWorkflow (deps app store behavior handler (Decision.defaultDecisionServices catalog)) request
@@ -427,7 +429,7 @@ tests fixture =
       testCase "a valid investigation route crosses governed delegation once" $
         withRuntime fixture \app store behavior -> do
           let route = RouteDecision V1 Fixture.catalog.version (Matched (RouteSelection (fixtureAgentName "first") [(fixtureExpertiseKey "observability")] RoutingHigh "specialist" :| []))
-              investigation = InvestigationResult ProposeRoute "delegate safely" (TE.decodeUtf8 (LBS.toStrict (encode route))) 0.9
+              investigation = InvestigationResult ProposeRoute "delegate safely" (proposedRouteJson (TE.decodeUtf8 (LBS.toStrict (encode route)))) ((either (error . show) id . parseModelConfidence) 0.9)
           (handler, observed) <- scriptedProvider Investigate investigation
           let runtime = deps app store behavior handler (Decision.defaultDecisionServices catalog)
               request = job "decision-delegate"
@@ -479,7 +481,7 @@ derivedInvestigation =
         "investigation-validator/1"
         "investigation-derivation/2"
         (object ["threshold" .= (0.95 :: Double)])
-        (FMap (\result -> result & #summary .~ "new local derivation" & #confidence .~ 0.11) (executable investigationProgram))
+        (FMap (\result -> result & #summary .~ "new local derivation" & #confidence .~ (either (error . show) id (parseModelConfidence 0.11))) (executable investigationProgram))
         jsonResultCodec
         Right
         Right

@@ -132,7 +132,7 @@ tests databaseFixture =
         (outcome, count) <- (runFlowWorkflowWithAgent databaseFixture) "at-risk-customer" sinkFlow (WorkflowId "flow-sink-spike")
         assertEqual
           "allowed sink returns a delivered outbox result"
-          (Right (Completed (toJSON (SinkResult SKizashiSignal (Enqueued "outbox:flow-sink-spike:emit-signal:alert")))))
+          (Right (Completed (toJSON (SinkResult SKizashiSignal (Enqueued (declarationCoordinate "outbox:flow-sink-spike:emit-signal:alert"))))))
           outcome
         assertEqual "allowed sink enqueues one outbox message" (Right 1) count,
       testCase "emitSignal records denied sinks without enqueueing" do

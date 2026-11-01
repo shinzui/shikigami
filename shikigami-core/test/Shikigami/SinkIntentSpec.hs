@@ -13,6 +13,7 @@ import Data.UUID qualified as UUID
 import Keiro.Integration.Event (IntegrationEvent (..))
 import Kioku.Id qualified as SinkSession
 import Shikigami.Activity.Coordinate
+import Shikigami.Activity.Coordinate (activityCoordinate)
 import Shikigami.Agent.Decl
   ( Priority (High),
     RecipientFrom (SubjectOwner),
@@ -105,7 +106,7 @@ intentFor sink =
       runId = sinkSessionFixture,
       ordinal = zeroSinkOrdinal,
       occurredAt = Just sampleTime,
-      danwaTarget = Just DanwaTarget {conversationId = "conv_1", parentMessageId = Nothing},
+      danwaTarget = Just DanwaTarget {conversationId = (declarationCoordinate "conv_1"), parentMessageId = Nothing},
       resolvedRecipient = Nothing,
       conversationKey = Nothing,
       triggeringActivityId = Nothing,
@@ -123,8 +124,8 @@ egressIntent =
       occurredAt = Just sampleTime,
       danwaTarget = Nothing,
       resolvedRecipient = Nothing,
-      conversationKey = Just "conv_55012",
-      triggeringActivityId = Just "act_1",
+      conversationKey = Just (declarationCoordinate ("conv_55012")),
+      triggeringActivityId = Just (activityCoordinate "act_1"),
       sink = ChannelEgress {channel = declarationCoordinate ("intercom"), action = declarationCoordinate ("reply_to_conversation"), conversationKey = fmap declarationCoordinate (Nothing)},
       output = outputValue
     }

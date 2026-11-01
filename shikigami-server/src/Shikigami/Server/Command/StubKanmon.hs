@@ -5,6 +5,7 @@ where
 
 import Data.Set qualified as Set
 import Data.Text qualified as Text
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.Sink.Auth (credentialToken)
@@ -21,5 +22,5 @@ runStubKanmonCmd listenPort requestedConversations config =
         requireToken = credentialToken <$> (.kanmonToken) config,
         allowedConversations =
           Set.fromList
-            (Text.pack <$> if null requestedConversations then ["conv_55012"] else requestedConversations)
+            ((declarationCoordinate . Text.pack) <$> if null requestedConversations then ["conv_55012"] else requestedConversations)
       }

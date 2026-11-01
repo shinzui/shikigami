@@ -39,6 +39,7 @@ import Effectful (Eff)
 import Hasql.Transaction (Transaction)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizer (..))
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Capability.Overlay
@@ -46,6 +47,7 @@ import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Claim
 import Shikigami.Execution.Coordinate
+import Shikigami.Execution.Coordinate (executionCoordinate)
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Policy.Types (RecoveryClass (..), ToolInvoiceCost (..))
 import Shikigami.Execution.Resources qualified as Resources
@@ -149,7 +151,7 @@ transferredWorkspaceExecDescriptor :: CapabilityDescriptor
 transferredWorkspaceExecDescriptor = execDescriptorFor True
 
 execDescriptorFor :: Bool -> CapabilityDescriptor
-execDescriptorFor transferable = CapabilityDescriptor (must (mkCapabilityId "workspace.exec")) (must (mkCapabilityRevision (if transferable then "2" else "1"))) [CapabilityToolDescriptor "validate" IdempotentMutation]
+execDescriptorFor transferable = CapabilityDescriptor (must (mkCapabilityId "workspace.exec")) (must (mkCapabilityRevision (if transferable then "2" else "1"))) [CapabilityToolDescriptor (executionCoordinate "validate") IdempotentMutation]
   where
     must :: (Show e) => Either e a -> a; must = either (error . show) id
 
@@ -309,7 +311,7 @@ authorize :: SupervisorRuntime -> AcceptedProcess -> ProcessRecord -> WorkspaceC
 authorize runtime accepted record boot target = do
   principal <- either (const (abort SupervisorRefused)) pure (identityText accepted.admission.owner)
   action <- either (const (abort SupervisorRefused)) pure ((if accepted.admission.filePolicy == Just transferableFilePolicy then workspaceTransferredProcessAction else workspaceProcessAction) accepted.binding accepted.admission accepted.dispatch record boot (workspaceCoordinate target))
-  runtime.authorizer.authorize principal action >>= either (const (abort SupervisorRefused)) (const (pure ()))
+  runtime.authorizer.authorize (declarationCoordinate principal) action >>= either (const (abort SupervisorRefused)) (const (pure ()))
   current runtime accepted (Just record)
 
 observe :: SupervisorRuntime -> WorkspaceBinding -> ProcessRecord -> IO ProcessRecord

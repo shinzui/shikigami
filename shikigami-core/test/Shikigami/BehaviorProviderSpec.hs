@@ -91,7 +91,7 @@ import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileFor, resolvedProfileView)
 import Shikigami.Behavior.Compatibility
-import Shikigami.Behavior.Error (RunError (..))
+import Shikigami.Behavior.Error (FailureClass (..), RunError (..))
 import Shikigami.Behavior.Provider (ProfileViolation (..), ProviderCall (ProviderCall), constrainBehaviorEnv, describeProviderSelection, newBehaviorEnvFor, providerCall, renderProfileViolation)
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Behavior.Run (BehaviorEnv (..), defaultToolTurnLimit, newBehaviorEnv, triggerOnly)
@@ -385,14 +385,14 @@ failureTests =
         result <- runWith (const (pure (failureResponse (rateLimited (Just 30) "slow down"))))
         case result of
           Left (ProviderFailed retryable detail) -> do
-            retryable @?= True
+            retryable @?= Transient
             detail @?= "RateLimited (HTTP 429): slow down"
           other -> assertFailure ("expected a retryable provider failure, got " <> show other),
       testCase "an auth failure is a terminal failure, not an empty reply" do
         result <- runWith (const (pure (failureResponse (authError "no credential"))))
         case result of
           Left (ProviderFailed retryable detail) -> do
-            retryable @?= False
+            retryable @?= Permanent
             detail @?= "AuthError: no credential"
           other -> assertFailure ("expected a terminal provider failure, got " <> show other)
     ]

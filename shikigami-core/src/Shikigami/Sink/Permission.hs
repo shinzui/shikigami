@@ -23,7 +23,7 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import GHC.Generics (Generic)
-import Shikigami.Agent.Name (agentNameText)
+import Shikigami.Agent.Name (agentNameText, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), principalText)
 import Shikigami.Prelude (FromJSON, ToJSON)
 
@@ -69,22 +69,25 @@ sinkKindText = \case
 -- This is no longer the gate: it is the seed data the @sink-grants@ migration
 -- inserts, and the fixture the dispatch tests inject. Changing it changes
 -- neither a running deployment nor a fresh database.
-defaultGrantTable :: Map Text (Set SinkKind)
+defaultGrantTable :: Map AgentIdentity (Set SinkKind)
 defaultGrantTable =
   Map.fromList
-    [ ("heartbeat", Set.fromList [SKawaDigest, SKizashiSignal, SReiAction, SDanwaConversation]),
-      ("danwa-heartbeat", Set.fromList [SDanwaConversation]),
-      ("triage-note", Set.fromList [SKizashiSignal, SReiAction]),
-      ("stalled-intention", Set.fromList [SKizashiSignal]),
-      ("at-risk-customer", Set.fromList [SKizashiSignal])
+    [ (compatibilityName "heartbeat", Set.fromList [SKawaDigest, SKizashiSignal, SReiAction, SDanwaConversation]),
+      (compatibilityName "danwa-heartbeat", Set.fromList [SDanwaConversation]),
+      (compatibilityName "triage-note", Set.fromList [SKizashiSignal, SReiAction]),
+      (compatibilityName "stalled-intention", Set.fromList [SKizashiSignal]),
+      (compatibilityName "at-risk-customer", Set.fromList [SKizashiSignal])
     ]
+
+compatibilityName :: Text -> AgentIdentity
+compatibilityName = either (error . show) CompatibilityIdentity . mkAgentName
 
 -- | The pure decision over a compiled-in table. Kept separate from 'checkGrant'
 -- so the static arm stays testable without any IO, exactly as the original stub
 -- was.
-checkGrantStatic :: Map Text (Set SinkKind) -> AgentIdentity -> SinkKind -> Either Denied ()
+checkGrantStatic :: Map AgentIdentity (Set SinkKind) -> AgentIdentity -> SinkKind -> Either Denied ()
 checkGrantStatic table identity kind =
-  case Map.lookup nm table of
+  case Map.lookup identity table of
     Just kinds
       | Set.member kind kinds -> Right ()
       | otherwise -> Left (Denied ("agent '" <> nm <> "' is not granted " <> sinkKindText kind))

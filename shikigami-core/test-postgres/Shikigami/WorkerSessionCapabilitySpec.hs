@@ -303,7 +303,7 @@ withCapabilityFixture fixture callback = withFixture fixture \env admission _ ->
   revoked <- newIORef False
   let authority = CoordinationAuthority (\requested -> readIORef current <&> \value -> if requested == run then Right value else Left "foreign run") (\requested pinned -> pure (if requested == run && pinned == scopeFingerprint scope then Right scope else Left "retained scope unavailable"))
       host = CoordinationHost (TransferServices sessions Nothing Nothing) authority
-      authorizer = ActionAuthorizer (\principal action -> do denied <- readIORef revoked; if denied then pure (Left (ActionPolicyDenied "revoked")) else allowAllActionAuthorizerForTests.authorize principal action) "fixture"
+      authorizer = ActionAuthorizer (\principal action -> do denied <- readIORef revoked; if denied then pure (Left (ActionPolicyDenied "revoked")) else allowAllActionAuthorizerForTests.authorize principal action) (activityCoordinate "fixture")
   callback env admission host scope authorizer revoked current
 
 listenerToken :: AppEnv -> CoordinationScope -> IO AwakeableId

@@ -285,15 +285,15 @@ surfaceTests =
         (.kafkaIncludeAgentActors) defaultAppConfig @?= ExcludeAgentActors
         queueNameToText ((.kafkaDeadLetterQueue) defaultAppConfig) @?= "shikigami_stream_dead_letters"
         (.kawaBaseUrl) defaultAppConfig @?= "http://localhost:8088"
-        (.kawaSourceSegment) defaultAppConfig @?= "shinzui/shikigami"
+        (.kawaSourceSegment) defaultAppConfig @?= activityCoordinate "shinzui/shikigami"
         assertBool "kawa has no default credential" (isNothing ((.kawaToken) defaultAppConfig))
         (.kizashiBaseUrl) defaultAppConfig @?= "http://localhost:8089"
-        (.kizashiDefaultRecipient) defaultAppConfig @?= "recipient_default"
+        (.kizashiDefaultRecipient) defaultAppConfig @?= (declarationCoordinate ("recipient_default"))
         assertBool "kizashi has no default credential" (isNothing ((.kizashiToken) defaultAppConfig))
         (.kanmonBaseUrl) defaultAppConfig @?= "http://localhost:8090"
         assertBool "Kanmon has no default credential" (isNothing ((.kanmonToken) defaultAppConfig))
         (.danwaBaseUrl) defaultAppConfig @?= "http://localhost:8080"
-        (.danwaAgentParticipant) defaultAppConfig @?= "part_shikigami"
+        (.danwaAgentParticipant) defaultAppConfig @?= (declarationCoordinate ("part_shikigami"))
         assertBool "danwa has no default credential" (isNothing ((.danwaToken) defaultAppConfig))
         assertBool "workspace authority is opt-in" (isNothing defaultAppConfig.workspaceSettings)
         case (.actionAuthorization) defaultAppConfig of
@@ -588,7 +588,7 @@ strictnessTests =
           KikanActionAuthorization {kikanBaseUrl, shomeiBaseUrl, shomeiClientId, acceptedSchemaHashes, callerId} -> do
             kikanBaseUrl @?= "https://kikan.example.test"
             shomeiBaseUrl @?= "https://shomei.example.test"
-            shomeiClientId @?= "shikigami-worker"
+            shomeiClientId @?= (declarationCoordinate ("shikigami-worker"))
             Set.size acceptedSchemaHashes @?= 1
             callerId @?= "shikigami-worker",
       testCase "partial Kikan action authorization is rejected at resolution" do
@@ -971,7 +971,7 @@ httpAuthTests =
             options = optionsWith [] [cliOverride httpAuthModeKey "bearer"]
         config <- resolveOrFail options [] [("SHIKIGAMI_API_TOKEN", secret)]
         case config.httpAuth of
-          AuthBearer {caller} -> caller @?= "api-caller"
+          AuthBearer {caller} -> caller @?= (declarationCoordinate ("api-caller"))
           _ -> assertFailure "bearer mode missing"
         let result = runWith ((optionsWith [] [cliOverride httpAuthModeKey "bearer"]) {diagnosticMode = ExplainText}) [] [("SHIKIGAMI_API_TOKEN", secret)]
         assertBool "secret absent from explanation" (not (secret `Text.isInfixOf` (result.standardError <> result.standardOutput)))

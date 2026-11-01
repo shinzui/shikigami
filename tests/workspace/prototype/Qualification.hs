@@ -101,7 +101,7 @@ withQualification configFile prefix use = do
   principal <- right (identityText initial.binding.request.owner)
   withStore env.connectionSettings \store -> do
     let repository = WorkspaceRepository initial.binding.repository initial.binding.source [WorkspaceRevision initial.binding.base (bundleDigest initial.admission.instructions)] initial.binding.base (workspaceCoordinate "qualification-reviewed") initial.profile.policy.readPaths initial.profile.policy.writePaths
-        process = WorkspaceProcessSettings socket ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60) (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031)) (Map.singleton repository.identity initial.profile.policy)
+        process = WorkspaceProcessSettings socket ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60) (((either (error . show) id . mkIdentityRange) (IdentityRangeInput ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031)))) (Map.singleton repository.identity initial.profile.policy)
         settings = WorkspaceSettings initial.binding.storageRoot [repository] [WorkspaceGrant ((either (error . show) id . mkAgentName) "fixture") (declarationCoordinate principal) repository.identity Nothing] (Just process)
         client = ProcessClient socket ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60)
         current = identityLifecycleAdmission directory.handle . (.identity)
@@ -168,7 +168,7 @@ integrationCase config prefix = withQualification config prefix \q -> do
   let pair indexes = [artifacts !! index | index <- indexes]
       plan name selected = do
         admission <- loadAssignment q root ("integration-target-" <> name) owner
-        prepared <- prepareTools q.env q.authorizer q.current q.client admission [("overlay__workspace-integrate__plan", Aeson.toJSON (Integration.Request q.initial.binding.base selected))]
+        prepared <- prepareTools q.env q.authorizer q.current q.client admission [("overlay__workspace-integrate__plan", Aeson.toJSON (Integration.RequestInput q.initial.binding.base selected))]
         (lastTool, outputs) <- runTools q prepared
         Just (binding, _) <- right =<< run q.env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
         Objects.readHead (workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding) >>= \value -> unless (value == Right binding.base) (fail "planning changed HEAD")

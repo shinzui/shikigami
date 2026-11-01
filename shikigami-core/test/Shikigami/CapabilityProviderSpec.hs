@@ -15,11 +15,13 @@ import Keiro.Workflow.Types (WorkflowId (..))
 import Kikan.En.Action (AgentAction (ConnectCapability), actionResource, canonicalResourceText)
 import Shikigami.Action.Authorization (ActionAuthorizationFailure (ActionPolicyDenied), ActionAuthorizer (..), allowAllActionAuthorizerForTests)
 import Shikigami.Activity.Coordinate
+import Shikigami.Activity.Coordinate (activityCoordinate)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Capability.Catalog (ExecutionMode (Durable))
 import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider
 import Shikigami.Capability.Tools
+import Shikigami.Execution.Coordinate (executionCoordinate, executionCoordinateText)
 import Shikigami.Log qualified as Log
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
@@ -113,7 +115,7 @@ authorizationTests =
                 { authorize = \principal action -> do
                     modifyIORef' requests (<> [(principal, action)])
                     pure (Left (ActionPolicyDenied "fixture denial")),
-                  kawaSource = "fixture"
+                  kawaSource = (activityCoordinate "fixture")
                 }
             registry = expectRegistry [successfulProvider events "A" alphaDescriptor (Right ())]
         result <-
@@ -135,7 +137,7 @@ authorizationTests =
         observed <- readIORef requests
         case observed of
           [(principal, action@ConnectCapability {})] -> do
-            principal @?= "principal-test"
+            principal @?= (declarationCoordinate ("principal-test"))
             canonicalResourceText (actionResource action) @?= "capability_provider:alpha@v1"
           _ -> assertFailure ("expected one exact connect authorization, got " <> show observed)
     ]
@@ -310,14 +312,14 @@ namedTool name =
 descriptorToolNames :: CapabilityDescriptor -> [Text]
 descriptorToolNames CapabilityDescriptor {tools} = nameOf <$> tools
   where
-    nameOf CapabilityToolDescriptor {name} = name
+    nameOf CapabilityToolDescriptor {name} = executionCoordinateText name
 
 mkDescriptor :: CapabilityId -> CapabilityRevision -> Text -> CapabilityDescriptor
 mkDescriptor capability revision name =
   CapabilityDescriptor
     { capability,
       revision,
-      tools = [CapabilityToolDescriptor {name, operationClass = Observation}]
+      tools = [CapabilityToolDescriptor {name = executionCoordinate name, operationClass = Observation}]
     }
 
 alphaDescriptor :: CapabilityDescriptor

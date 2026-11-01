@@ -42,6 +42,7 @@ import Shikigami.Capability.Overlay
     mkResolvedCapabilitySet,
   )
 import Shikigami.Decision.ModelAlias qualified as Alias
+import Shikigami.Execution.Coordinate (executionCoordinate)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Execution.Request (ExecutionRequest (..))
 import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
@@ -124,7 +125,7 @@ sampleCapabilityResolution =
     [ CapabilityDescriptor
         { capability = either (error . show) id (mkCapabilityId "workspace.read"),
           revision = either (error . show) id (mkCapabilityRevision "v1"),
-          tools = [CapabilityToolDescriptor {name = "read", operationClass = Observation}]
+          tools = [CapabilityToolDescriptor {name = (executionCoordinate "read"), operationClass = Observation}]
         }
     ]
 
@@ -237,7 +238,7 @@ outboxTests =
         assertSameJson "sink intent" preUpgradeSinkIntent (encode sampleSinkIntent),
       testCase "a delivered sink result decodes" do
         decoded <- decodeOrFail @SinkResult preUpgradeDelivered
-        toJSON decoded @?= toJSON (SinkResult {kind = SKizashiSignal, outcome = Delivered "sig_1"}),
+        toJSON decoded @?= toJSON (SinkResult {kind = SKizashiSignal, outcome = Delivered (declarationCoordinate "sig_1")}),
       testCase "the deprecated Stubbed outcome still decodes" do
         decoded <- decodeOrFail @SinkResult preUpgradeStubbed
         toJSON decoded @?= toJSON (SinkResult {kind = SReiAction, outcome = Stubbed}),
@@ -256,7 +257,7 @@ outboxTests =
         conversationKey @?= Nothing
         triggeringActivityId @?= Nothing,
       testCase "an intent that resolved a recipient says so" do
-        let resolved = (sampleSinkIntent & #resolvedRecipient .~ (Just "person:nadeem"))
+        let resolved = (sampleSinkIntent & #resolvedRecipient .~ (Just (declarationCoordinate ("person:nadeem"))))
         decoded <- decodeOrFail @SinkIntent (LazyByteString.toStrict (encode resolved))
         toJSON decoded @?= toJSON resolved,
       testCase "the lifecycle skip outcome round-trips without changing old outcomes" do
@@ -273,7 +274,7 @@ sampleSinkIntent =
       runId = sinkSessionFixture,
       ordinal = zeroSinkOrdinal,
       occurredAt = Just sampleTime,
-      danwaTarget = Just DanwaTarget {conversationId = "conv_1", parentMessageId = Nothing},
+      danwaTarget = Just DanwaTarget {conversationId = (declarationCoordinate "conv_1"), parentMessageId = Nothing},
       -- Absent, and therefore absent from the bytes below: this field was added
       -- after those rows were written, and @omitNothingFields@ is what keeps an
       -- intent that does not use it byte-identical to one that predates it.

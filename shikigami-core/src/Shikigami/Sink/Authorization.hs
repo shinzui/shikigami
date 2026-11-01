@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Exact C13 target derivation for fully-resolved sink dispatches.
 module Shikigami.Sink.Authorization
   ( authorizeSinkAction,
@@ -23,6 +25,7 @@ import Shikigami.Action.Authorization
     ActionAuthorizationFailure (..),
     ActionAuthorizer (..),
   )
+import Shikigami.Activity.Coordinate (activityCoordinateText)
 import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
@@ -33,8 +36,8 @@ authorizeSinkAction ::
   AgentIdentity ->
   Sink ->
   Maybe Sink.DanwaTarget ->
-  Maybe Text ->
-  Maybe Text ->
+  Maybe (DeclarationCoordinate "recipient") ->
+  Maybe (DeclarationCoordinate "conversation") ->
   UTCTime ->
   IO (Either ActionAuthorizationFailure ActionAuthorizationDecision)
 authorizeSinkAction authorizer@ActionAuthorizer {authorize} identity sink danwaTarget resolvedRecipient resolvedConversation now =
@@ -43,31 +46,31 @@ authorizeSinkAction authorizer@ActionAuthorizer {authorize} identity sink danwaT
     Right principal ->
       case sinkAction authorizer sink danwaTarget resolvedRecipient resolvedConversation now of
         Left problem -> pure (Left (ActionCoordinatesInvalid problem))
-        Right action -> authorize principal action
+        Right action -> authorize (declarationCoordinate principal) action
 
 sinkAction ::
   ActionAuthorizer ->
   Sink ->
   Maybe Sink.DanwaTarget ->
-  Maybe Text ->
-  Maybe Text ->
+  Maybe (DeclarationCoordinate "recipient") ->
+  Maybe (DeclarationCoordinate "conversation") ->
   UTCTime ->
   Either Text AgentAction
 sinkAction ActionAuthorizer {kawaSource} sink danwaTarget resolvedRecipient resolvedConversation now =
   case sink of
-    KawaDigest {} -> DispatchKawa <$> firstValue (mkKawaTarget kawaSource)
+    KawaDigest {} -> DispatchKawa <$> firstValue (mkKawaTarget (activityCoordinateText kawaSource))
     KizashiSignal {defaultRecipient} -> do
-      recipient <- maybe (Left "Kizashi recipient was not resolved before authorization") Right (resolvedRecipient <|> (declarationCoordinateText <$> defaultRecipient))
-      DispatchKizashi <$> firstValue (mkKizashiTarget recipient)
+      recipient <- maybe (Left "Kizashi recipient was not resolved before authorization") Right (resolvedRecipient <|> defaultRecipient)
+      DispatchKizashi <$> firstValue (mkKizashiTarget (declarationCoordinateText recipient))
     ReiAction {intentionId} ->
       ActOnIntention
         <$> firstValue (mkIntentionTarget (declarationCoordinateText intentionId))
         <*> pure (mkAutonomyContext ActAutonomy now)
     DanwaConversation {topic} ->
-      let targetText = maybe topic (\Sink.DanwaTarget {conversationId} -> conversationId) danwaTarget
+      let targetText = maybe topic (\Sink.DanwaTarget {conversationId} -> declarationCoordinateText conversationId) danwaTarget
        in AttachDanwa <$> firstValue (mkDanwaTarget targetText)
     ChannelEgress {channel} -> do
       conversation <- maybe (Left "channel conversation was not resolved before authorization") Right resolvedConversation
-      DispatchChannel <$> firstValue (mkChannelTarget (declarationCoordinateText channel) conversation)
+      DispatchChannel <$> firstValue (mkChannelTarget (declarationCoordinateText channel) (declarationCoordinateText conversation))
   where
     firstValue = either (Left . actionValueErrorText) Right

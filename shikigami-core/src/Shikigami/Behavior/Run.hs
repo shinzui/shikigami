@@ -63,7 +63,7 @@ import Shikigami.Behavior.Error
     renderRunError,
   )
 import Shikigami.Behavior.Input (BehaviorInput (..), memoryContentText, triggerOnly)
-import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
+import Shikigami.Behavior.Skill (SkillDir (..), ToolTurnLimit, parseToolTurnLimit, runSkillWith)
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
 import Shikigami.Capability.Overlay (CapabilityId, ResolvedCapabilitySet, resolvedCapabilities)
 import Shikigami.Capability.Overlay qualified as Overlay
@@ -90,13 +90,13 @@ data BehaviorEnv = BehaviorEnv
     providerRegistry :: !(Maybe ProviderRegistry),
     tools :: !ToolRegistry,
     activeOverlays :: !(Set CapabilityId),
-    toolTurnLimit :: !Int
+    toolTurnLimit :: !ToolTurnLimit
   }
   deriving stock (Generic)
 
 -- | Hard model-turn ceiling for a tool-using Skill behavior.
-defaultToolTurnLimit :: Int
-defaultToolTurnLimit = 8
+defaultToolTurnLimit :: ToolTurnLimit
+defaultToolTurnLimit = either (error . show) id (parseToolTurnLimit 8)
 
 -- | The upstream id of the model this environment dispatches with — @stub-v1@
 -- under the stub, @claude-haiku-4-5@ and the like under a real provider.

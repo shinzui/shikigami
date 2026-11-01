@@ -15,6 +15,7 @@ import Settei (answer, defaultResolveOptions, resolve)
 import Settei.Env (envSnapshot, environmentSource)
 import Shikigami.Activity qualified as Activity
 import Shikigami.Activity.Coordinate
+import Shikigami.Activity.Coordinate (activityCoordinate)
 import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
@@ -49,9 +50,9 @@ tests =
       testCase "conversation resolution follows declaration, output, then activity precedence" do
         let activity = Just triggerActivity
             output = object ["conversation_key" .= ("conv_output" :: Text)]
-        resolveConversationKey (egress (Just "conv_static")) activity output @?= Just "conv_static"
-        resolveConversationKey (egress Nothing) activity output @?= Just "conv_output"
-        resolveConversationKey (egress Nothing) activity (object []) @?= Just "conv_activity"
+        resolveConversationKey (egress (Just "conv_static")) activity output @?= Just (declarationCoordinate "conv_static")
+        resolveConversationKey (egress Nothing) activity output @?= Just (declarationCoordinate "conv_output")
+        resolveConversationKey (egress Nothing) activity (object []) @?= Just (declarationCoordinate "conv_activity")
         resolveConversationKey (egress (Just "  ")) Nothing (object ["conversation_key" .= ("" :: Text)]) @?= Nothing,
       testCase "request construction chooses reply content and stable sink identity" do
         buildEgressRequest sampleContext (object ["reply" .= ("reply text" :: Text), "summary" .= ("ignored" :: Text)])
@@ -96,7 +97,7 @@ tests =
         testWithApplication (pure (acceptingKanmon seen)) \port -> do
           env <- configuredKanmonEnv
           dispatch (dispatchContext port env (Just "conv_55012")) (egress Nothing) (object ["reply" .= ("reply text" :: Text)])
-            >>= (@?= SinkResult SChannelEgress (Delivered "act_reply_1")),
+            >>= (@?= SinkResult SChannelEgress (Delivered (declarationCoordinate "act_reply_1"))),
       testCase "dispatcher preserves the shared permanent and transient classifications" do
         env <- configuredKanmonEnv
         traverse_ (assertStatus env Failed "transient HTTP failure: ") [408, 425, 429, 500, 503]
@@ -149,20 +150,20 @@ sampleContextWith conversationKey kanmon http =
       directory = disabledDirectoryHandle,
       runId = sinkSessionFixture,
       ordinal = zeroSinkOrdinal,
-      kizashi = KizashiConfig {baseUrl = unreachable, defaultRecipient = "recipient"},
-      kawa = KawaConfig {baseUrl = unreachable, sourceSegment = "shinzui/shikigami"},
-      danwa = DanwaConfig {baseUrl = unreachable, agentParticipant = "part_agent_test"},
+      kizashi = KizashiConfig {baseUrl = unreachable, defaultRecipient = (declarationCoordinate "recipient")},
+      kawa = KawaConfig {baseUrl = unreachable, sourceSegment = (activityCoordinate "shinzui/shikigami")},
+      danwa = DanwaConfig {baseUrl = unreachable, agentParticipant = (declarationCoordinate "part_agent_test")},
       kanmon,
       rei = ReiConfig {baseUrl = Nothing},
       http,
       traceHeaders = [],
       danwaTarget = Nothing,
       recipientOverride = Nothing,
-      conversationKey,
-      triggeringActivityId = Just "act_1",
+      conversationKey = declarationCoordinate <$> conversationKey,
+      triggeringActivityId = Just (activityCoordinate "act_1"),
       occurredAt = Nothing,
       receipts = Nothing,
-      grants = StaticGrants egressGrants,
+      grants = StaticGrants (Map.mapKeys (compatibilityIdentity . fixtureAgentName) egressGrants),
       logger = Log.silentLogger
     }
 

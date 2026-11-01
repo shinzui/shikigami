@@ -5,7 +5,10 @@
 -- | Shikigami-owned wire contracts. Executables, prompts and credentials never
 -- belong in these descriptors; preparation alone contains the validated input.
 module Shikigami.Decision.Contract
-  ( ModelAlias,
+  ( DecisionTimeout,
+    parseDecisionTimeout,
+    decisionTimeoutMicros,
+    ModelAlias,
     parseModelAlias,
     modelAliasFromNonEmpty,
     modelAliasText,
@@ -96,6 +99,17 @@ import Shikigami.Log.Correlation (RunCorrelationId)
 -- nominal scope; opaque versions and implementation labels are not assumed to
 -- use a particular versioning scheme or digest algorithm.
 type role ProgramIdentity nominal
+
+-- Positive native microsecond budget, narrowed only after checking Int bounds.
+newtype DecisionTimeout = DecisionTimeout Int deriving stock (Eq, Ord, Show)
+
+parseDecisionTimeout :: Integer -> Either Text DecisionTimeout
+parseDecisionTimeout value
+  | value >= 1 && value <= toInteger (maxBound :: Int) = Right (DecisionTimeout (fromInteger value))
+  | otherwise = Left "decision timeout must be a positive native microsecond budget"
+
+decisionTimeoutMicros :: DecisionTimeout -> Int
+decisionTimeoutMicros (DecisionTimeout value) = value
 
 newtype ProgramIdentity (scope :: Symbol) = ProgramIdentity Text
   deriving stock (Eq, Ord, Show)

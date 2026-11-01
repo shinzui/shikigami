@@ -1,10 +1,12 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 -- | Conservative three-way integration of exact immutable artifacts. The
 -- accepted provider owns authority and locks; this primitive never edits a
 -- worktree, index or HEAD. Unsupported deltas refuse rather than invoke Git
 -- merge drivers, filters, hooks, transport or repository code.
-module Shikigami.Workspace.Integration (Artifact (..), Request (..), schema, validRequest, mergeManifests, planIntegration) where
+module Shikigami.Workspace.Integration (Artifact (..), Request, RequestInput (..), mkRequest, requestInput, schema, validRequest, mergeManifests, planIntegration) where
 
 import Control.Exception (Exception, catch, throwIO)
 import Data.Aeson ((.=))
@@ -16,6 +18,7 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
+import GHC.Records (HasField (..))
 import Shikigami.Execution.Identity (OperationId, operationIdText)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Workspace.Allocation (workspaceMetadata)
@@ -33,13 +36,33 @@ instance Show Artifact where show _ = "Artifact <protected>"
 
 instance FromJSON Artifact where parseJSON = Aeson.genericParseJSON Aeson.defaultOptions {Aeson.rejectUnknownFields = True}
 
-data Request = Request {expectedParent :: !(WorkspaceCoordinate "git-object"), artifacts :: ![Artifact]}
+data RequestInput = RequestInput {expectedParent :: !(WorkspaceCoordinate "git-object"), artifacts :: ![Artifact]}
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON)
 
 instance Show Request where show _ = "IntegrationRequest <protected>"
 
-instance FromJSON Request where parseJSON = Aeson.genericParseJSON Aeson.defaultOptions {Aeson.rejectUnknownFields = True}
+newtype Request = Request RequestInput
+  deriving newtype (Eq)
+
+requestInput :: Request -> RequestInput
+requestInput (Request input) = input
+
+mkRequest :: RequestInput -> Either Text Request
+mkRequest input = let request = Request input in if validRequest request then Right request else Left "invalid workspace integration request"
+
+instance HasField "expectedParent" Request (WorkspaceCoordinate "git-object") where
+  getField (Request input) = input.expectedParent
+
+instance HasField "artifacts" Request [Artifact] where
+  getField (Request input) = input.artifacts
+
+instance ToJSON Request where
+  toJSON = toJSON . requestInput
+  toEncoding = toEncoding . requestInput
+
+instance FromJSON Request where
+  parseJSON value = Aeson.genericParseJSON Aeson.defaultOptions {Aeson.rejectUnknownFields = True} value >>= either (fail . Text.unpack) pure . mkRequest
 
 schema :: Aeson.Value
 schema = Aeson.object ["type" .= ("object" :: Text), "properties" .= Aeson.object ["expectedParent" .= objectId, "artifacts" .= Aeson.object ["type" .= ("array" :: Text), "minItems" .= (2 :: Int), "maxItems" .= (8 :: Int), "items" .= Aeson.object ["type" .= ("object" :: Text), "properties" .= Aeson.object ["operationId" .= string, "bindingDigest" .= string, "base" .= objectId, "revision" .= objectId], "required" .= ["operationId", "bindingDigest", "base", "revision" :: Text], "additionalProperties" .= False]]], "required" .= ["expectedParent", "artifacts" :: Text], "additionalProperties" .= False]

@@ -1,4 +1,7 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultilineStrings #-}
+{-# LANGUAGE RoleAnnotations #-}
 
 -- | Durable, root-run-wide delegation accounting.
 --
@@ -9,6 +12,9 @@
 module Shikigami.Delegation.BudgetStore
   ( ReservationResult (..),
     BatchReservationResult (..),
+    ReservationCount,
+    reservationCount,
+    reservationCountNumber,
     BudgetReservationError (..),
     delegationBudgetIdFor,
     reserveDelegationSlot,
@@ -27,6 +33,7 @@ import Data.Text qualified as Text
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, (:>))
+import GHC.TypeLits (Symbol)
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
 import Hasql.Statement (Statement, preparable)
@@ -53,8 +60,20 @@ data ReservationResult
 -- | Result of reserving one complete idempotent batch.  Exhaustion inserts no
 -- child reservation and consumes no slot; an accepted replay reports every id
 -- as existing and consumes nothing further.
+type role ReservationCount nominal
+
+newtype ReservationCount (scope :: Symbol) = ReservationCount Natural
+  deriving stock (Eq, Ord)
+  deriving newtype (Show)
+
+reservationCount :: Natural -> ReservationCount scope
+reservationCount = ReservationCount
+
+reservationCountNumber :: ReservationCount scope -> Natural
+reservationCountNumber (ReservationCount value) = value
+
 data BatchReservationResult
-  = DelegationBatchReserved !Natural !Natural
+  = DelegationBatchReserved !(ReservationCount "new") !(ReservationCount "existing")
   | DelegationBatchExhausted
   deriving stock (Eq, Show)
 
@@ -84,7 +103,7 @@ reserveDelegationSlot budgetId seed childWorkflowId now =
   reserveDelegationSlots budgetId seed (childWorkflowId :| []) now <&> fmap toSingleResult
   where
     toSingleResult = \case
-      DelegationBatchReserved 1 _ -> DelegationSlotReserved
+      DelegationBatchReserved added _ | reservationCountNumber added == 1 -> DelegationSlotReserved
       DelegationBatchReserved _ _ -> DelegationSlotAlreadyReserved
       DelegationBatchExhausted -> DelegationSlotsExhausted
 
@@ -129,7 +148,7 @@ reserveDelegationSlotsTx enrolled budgetId seed childWorkflowIds now = do
             Tx.statement (budgetId, newCount, now) incrementBudgetStatement
           pure
             ( Right
-                (DelegationBatchReserved (fromIntegral newCount) (fromIntegral existingCount))
+                (DelegationBatchReserved (reservationCount (fromIntegral newCount)) (reservationCount (fromIntegral existingCount)))
             )
   where
     uniqueChildWorkflowIds = NonEmpty.toList (NonEmpty.nub childWorkflowIds)

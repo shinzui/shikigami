@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | The dispatcher's shared value types (split out so the per-sink client modules can
 -- reference @SinkContext@ without importing the dispatcher — avoids an import cycle).
 module Shikigami.Sink.Types
@@ -13,6 +15,8 @@ where
 import Data.Text qualified as Text
 import Kioku.Id (SessionId, idText)
 import Network.HTTP.Types.Header (Header)
+import Shikigami.Activity.Coordinate
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Log (Logger)
@@ -26,8 +30,8 @@ import Shikigami.Sink.Permission (SinkKind)
 -- | A concrete danwa thread target. A parent message id means "reply under that message";
 -- absent parent means "post a top-level message in the conversation".
 data DanwaTarget = DanwaTarget
-  { conversationId :: !Text,
-    parentMessageId :: !(Maybe Text)
+  { conversationId :: !(DeclarationCoordinate "danwa-conversation"),
+    parentMessageId :: !(Maybe (DeclarationCoordinate "danwa-message"))
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -36,8 +40,8 @@ data DanwaTarget = DanwaTarget
 -- downstream effect. The publisher closes these functions over its database
 -- pool and outbox message id; direct dispatch tests use 'Nothing'.
 data DeliveryGuard = DeliveryGuard
-  { lookupReceipt :: !(Text -> IO (Maybe Text)),
-    recordReceipt :: !(Text -> Text -> IO ())
+  { lookupReceipt :: !(DeclarationCoordinate "receipt-step" -> IO (Maybe (DeclarationCoordinate "danwa-conversation"))),
+    recordReceipt :: !(DeclarationCoordinate "receipt-step" -> DeclarationCoordinate "danwa-conversation" -> IO ())
   }
 
 -- | Everything one sink dispatch needs: the agent identity, the run id and the sink's
@@ -64,11 +68,11 @@ data SinkContext = SinkContext
     -- decided upstream where the trigger activity is in scope and carried here
     -- on the sink intent. 'Nothing' means either that the sink is not a signal
     -- or that the strategy could not be answered; see "Shikigami.Sink.Recipient".
-    recipientOverride :: !(Maybe Text),
+    recipientOverride :: !(Maybe (DeclarationCoordinate "recipient")),
     -- | Minimal egress destination metadata resolved before durable enqueue,
     -- while the triggering activity and behavior output are still in scope.
-    conversationKey :: !(Maybe Text),
-    triggeringActivityId :: !(Maybe Text),
+    conversationKey :: !(Maybe (DeclarationCoordinate "conversation")),
+    triggeringActivityId :: !(Maybe (ActivityCoordinate "activity-id")),
     occurredAt :: !(Maybe UTCTime),
     -- | Durable intermediate effects within this delivery, when publication is
     -- running under the receipt-aware outbox transport.
@@ -88,11 +92,11 @@ data SinkContext = SinkContext
 -- | The outcome of one sink dispatch. @DeniedOutcome@ is distinct from the permission
 -- gate's @Denied@ newtype.
 data SinkOutcome
-  = Delivered !Text -- a detail string (e.g. the returned id)
+  = Delivered !(DeclarationCoordinate "downstream-effect") -- a detail string (e.g. the returned id)
   | -- | The sink intent was durably written to Keiro's outbox. This says only
     -- that asynchronous delivery may now happen; it is deliberately distinct
     -- from 'Delivered', which is reserved for a downstream acknowledgement.
-    Enqueued !Text
+    Enqueued !(DeclarationCoordinate "outbox-receipt")
   | -- | __Deprecated: never produced.__ A stub handler ran and the dispatch was
     -- counted as a success, which is the lie
     -- @docs\/plans\/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md@

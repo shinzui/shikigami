@@ -6,13 +6,18 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-11-01T01:11:53Z"
 frictionId: FRIC-37
-status: logged
+status: "accepted"
 impact: slowdown
 kind: tooling
 origin: "mori://shinzui/shikigami"
 affects: "mori://shinzui/shikigami"
 plan: "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
 workaround: "Commit source before the last required Cabal build, refresh the census after all Cabal gates, and keep the evidence-only commit last; this avoids redundant cycles but still incurs one closure build per source checkpoint."
+resolution: "Keep embedded Git provenance within this bounded migration; commit the complete production source before the last compatibility/build/census sequence and keep the evidence-only commit last."
+amended:
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-11-01T22:55:02Z"
+    change: "Accepted the existing Git metadata rebuild cost with a single final source boundary; changing version embedding is outside this type migration."
 ---
 # Embedded Git metadata rebuilds the runtime closure at audit checkpoints
 

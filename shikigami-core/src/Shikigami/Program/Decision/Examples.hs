@@ -1,6 +1,12 @@
 module Shikigami.Program.Decision.Examples
   ( Request (..),
     TriageAction (..),
+    ModelConfidence,
+    parseModelConfidence,
+    modelConfidenceNumber,
+    ProposedRouteJson,
+    proposedRouteJson,
+    proposedRouteJsonText,
     TriageResult (..),
     InvestigationInput (..),
     InvestigationAction (..),
@@ -12,16 +18,55 @@ module Shikigami.Program.Decision.Examples
   )
 where
 
-import Data.Aeson (FromJSON, ToJSON, Value (Null))
+import Data.Aeson (FromJSON (..), ToJSON, Value (Null))
+import Data.Bifunctor (first)
+import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import GHC.Generics (Generic)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Program.Decision
 import Shikumi.Adapter (ToPrompt)
+import Shikumi.Error (ShikumiError (ValidationFailure))
 import Shikumi.Program (Program (..), emptyParams)
-import Shikumi.Schema (FromModel, ToSchema, Validatable)
+import Shikumi.Schema (FromModel (..), ToSchema (..), Validatable)
 import Shikumi.Signature (mkSignature)
+
+newtype ModelConfidence = ModelConfidence Double
+  deriving stock (Eq, Show)
+  deriving newtype (ToJSON)
+
+parseModelConfidence :: Double -> Either Text ModelConfidence
+parseModelConfidence value
+  | isNaN value || isInfinite value || value < 0 || value > 1 = Left "invalid confidence"
+  | otherwise = Right (ModelConfidence value)
+
+modelConfidenceNumber :: ModelConfidence -> Double
+modelConfidenceNumber (ModelConfidence value) = value
+
+instance FromJSON ModelConfidence where
+  parseJSON value = parseJSON value >>= either (fail . Text.unpack) pure . parseModelConfidence
+
+instance ToSchema ModelConfidence where toSchema _ = toSchema (Proxy @Double)
+
+instance FromModel ModelConfidence where
+  fromModelP path value = fromModelP @Double path value >>= first ValidationFailure . parseModelConfidence
+
+-- Exact model proposal bytes; admission remains the separate route validator.
+newtype ProposedRouteJson = ProposedRouteJson Text
+  deriving stock (Eq, Show)
+  deriving newtype (ToJSON, FromJSON)
+
+proposedRouteJson :: Text -> ProposedRouteJson
+proposedRouteJson = ProposedRouteJson
+
+proposedRouteJsonText :: ProposedRouteJson -> Text
+proposedRouteJsonText (ProposedRouteJson value) = value
+
+instance ToSchema ProposedRouteJson where toSchema _ = toSchema (Proxy @Text)
+
+instance FromModel ProposedRouteJson where
+  fromModelP path value = ProposedRouteJson <$> fromModelP @Text path value
 
 data Request = Request {request :: !Text}
   deriving stock (Eq, Show, Generic)
@@ -31,7 +76,7 @@ data TriageAction = ReturnNow | Investigate
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromJSON, ToJSON, FromModel, ToSchema)
 
-data TriageResult = TriageResult {action :: !TriageAction, summary :: !Text, confidence :: !Double}
+data TriageResult = TriageResult {action :: !TriageAction, summary :: !Text, confidence :: !ModelConfidence}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromJSON, ToJSON, FromModel, ToSchema, Validatable, ToPrompt)
 
@@ -43,7 +88,7 @@ data InvestigationAction = ReturnResult | ProposeRoute
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromJSON, ToJSON, FromModel, ToSchema)
 
-data InvestigationResult = InvestigationResult {action :: !InvestigationAction, summary :: !Text, routeJson :: !Text, confidence :: !Double}
+data InvestigationResult = InvestigationResult {action :: !InvestigationAction, summary :: !Text, routeJson :: !ProposedRouteJson, confidence :: !ModelConfidence}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromJSON, ToJSON, FromModel, ToSchema, Validatable, ToPrompt)
 
@@ -62,7 +107,7 @@ triageProgram =
       (Predict (mkSignature "Triage the request. ReturnNow if it can be answered immediately; otherwise Investigate. Return a bounded summary and confidence between zero and one.") emptyParams)
       jsonResultCodec
       (\input -> input <$ bounded 4096 input.request)
-      (\result -> result <$ (bounded 2048 result.summary >> confidenceValid result.confidence))
+      (\result -> result <$ (bounded 2048 result.summary >> confidenceValid (modelConfidenceNumber result.confidence)))
 
 investigationProgram :: RegisteredProgram InvestigationInput InvestigationResult
 investigationProgram =
@@ -84,9 +129,9 @@ investigationProgram =
       (\input -> input <$ (bounded 4096 input.request >> bounded 2048 input.triageSummary >> bounded 65536 input.candidateCatalog))
       ( \result ->
           result
-            <$ ( bounded 2048 result.summary >> confidenceValid result.confidence >> case result.action of
-                   ReturnResult -> if Text.null result.routeJson then Right () else Left "return result must not carry a route"
-                   ProposeRoute -> bounded 16384 result.routeJson
+            <$ ( bounded 2048 result.summary >> confidenceValid (modelConfidenceNumber result.confidence) >> case result.action of
+                   ReturnResult -> if Text.null (proposedRouteJsonText result.routeJson) then Right () else Left "return result must not carry a route"
+                   ProposeRoute -> bounded 16384 (proposedRouteJsonText result.routeJson)
                )
       )
 

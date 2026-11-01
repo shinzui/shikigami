@@ -74,13 +74,14 @@ import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Transaction
 import Hasql.Transaction.Sessions qualified as Transaction.Sessions
 import Shikigami.Action.Authorization (ActionAuthorizer, allowAllActionAuthorizerForTests, denyAllActionAuthorizer)
-import Shikigami.Agent.Name (agentNameText)
-import Shikigami.Agent.Principal (AgentIdentity (..), principalText)
+import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
+import Shikigami.Agent.Principal (AgentIdentity (..), AgentPrincipal, mkAgentPrincipal, principalText)
 import Shikigami.Prelude
 import Shikigami.Sink.Permission
   ( Denied (..),
     SinkKind,
     checkGrantStatic,
+    parseSinkKind,
     sinkKindText,
   )
 
@@ -93,7 +94,7 @@ import Shikigami.Sink.Permission
 data GrantSource
   = -- | The compiled-in table from "Shikigami.Sink.Permission". Test and seed
     -- data now — no production process builds this.
-    StaticGrants !(Map Text (Set SinkKind))
+    StaticGrants !(Map AgentIdentity (Set SinkKind))
   | -- | The @shikigami.sink_grants@ table, over the event-store pool.
     DbGrants !Pool
   | -- | C11 plus the process-local C13 interpreter. This wrapper is live
@@ -164,8 +165,8 @@ data GrantRow = GrantRow
 -- | Distinct presentation-name/principal pairs retained by the grant table.
 -- Sync uses these rows as migration evidence without depending on sink kinds.
 data GrantIdentityEvidence = GrantIdentityEvidence
-  { agentName :: !Text,
-    principalId :: !(Maybe Text)
+  { agentName :: !AgentName,
+    principalId :: !(Maybe AgentPrincipal)
   }
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -213,8 +214,8 @@ defaultPageSize = PageSize 50
 -- | Where the previous page stopped. Ordering is @(agent_name, sink_kind)@, so
 -- the cursor is exactly that pair — the last row the caller has already seen.
 data GrantCursor = GrantCursor
-  { agentName :: !Text,
-    sinkKind :: !Text
+  { agentName :: !AgentName,
+    sinkKind :: !SinkKind
   }
   deriving stock (Eq, Show, Generic)
 
@@ -293,8 +294,8 @@ grantIdentityEvidenceStatement =
     Encoders.noParams
     ( Decoders.rowList
         ( GrantIdentityEvidence
-            <$> Decoders.column (Decoders.nonNullable Decoders.text)
-            <*> Decoders.column (Decoders.nullable Decoders.text)
+            <$> Decoders.column (Decoders.nonNullable (Decoders.refine mkAgentName Decoders.text))
+            <*> Decoders.column (Decoders.nullable (Decoders.refine mkAgentPrincipal Decoders.text))
         )
     )
 
@@ -307,18 +308,17 @@ listGrants pool GrantPageRequest {size, after} = do
   let limitPlusOne = unPageSize size + 1
       params = case after of
         Nothing -> ("", "", False, limitPlusOne)
-        Just GrantCursor {agentName = a, sinkKind = k} -> (a, k, True, limitPlusOne)
+        Just GrantCursor {agentName = a, sinkKind = k} -> (agentNameText a, sinkKindText k, True, limitPlusOne)
   result <- Pool.use pool (Session.statement params listStatement)
-  pure (paginate <$> renderUsage result)
+  pure (renderUsage result >>= paginate)
   where
-    paginate rows =
+    paginate rows = do
       let kept = take (fromIntegral (unPageSize size)) rows
           more = length rows > fromIntegral (unPageSize size)
-          cursorOf GrantRow {agentName = a, sinkKind = k} = GrantCursor {agentName = a, sinkKind = k}
-       in GrantPage
-            { items = kept,
-              next = if more then cursorOf <$> lastMay kept else Nothing
-            }
+      next <- if more then traverse cursorOf (lastMay kept) else Right Nothing
+      pure GrantPage {items = kept, next}
+    cursorOf GrantRow {agentName = a, sinkKind = k} =
+      GrantCursor <$> mkAgentName a <*> maybe (Left ("unknown sink kind: " <> k)) Right (parseSinkKind k)
     lastMay [] = Nothing
     lastMay xs = Just (last xs)
 

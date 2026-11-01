@@ -47,10 +47,11 @@ reserveProcessProfileTx binding instructions policy range
                     Nothing -> pure (Left WorkspaceAllocationRefused)
                     Just raw -> case parseWorkspaceIdentity raw of
                       Left _ -> Tx.condemn >> pure (Left WorkspaceBindingConflict)
-                      Right uid -> do
-                        let profile = ProcessProfile (workspaceBindingDigest binding) instructions policy uid uid
-                        Tx.statement (workspaceCoordinateText binding.workspace.resource, workspaceIdentityNumber uid, profile) insertProfile
-                        pure (Right (profile, ProfileReserved))
+                      Right uid -> case mkProcessProfile (ProcessProfileInput (workspaceBindingDigest binding) instructions policy uid uid) of
+                        Left _ -> Tx.condemn >> pure (Left WorkspaceBindingConflict)
+                        Right profile -> do
+                          Tx.statement (workspaceCoordinateText binding.workspace.resource, workspaceIdentityNumber uid, profile) insertProfile
+                          pure (Right (profile, ProfileReserved))
   where
     matches profile = validProcessProfile profile && profile.bindingDigest == workspaceBindingDigest binding && profile.instructionDigest == instructions && processPolicyIdentity profile.policy == processPolicyIdentity policy && profile.userId >= range.firstId && profile.userId <= range.lastId
 

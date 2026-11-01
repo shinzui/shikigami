@@ -10,6 +10,7 @@ import Data.Aeson qualified as Aeson
 import Network.Wai (Request, requestHeaders)
 import Servant.Server (ServerError (..))
 import Servant.Server.Experimental.Auth
+import Shikigami.Agent.DeclarationValue (declarationCoordinateText)
 import Shikigami.Api.Problem (ProblemCode (Unauthorized))
 import Shikigami.App.Config (HttpAuthSettings (..))
 import Shikigami.Caller.Api
@@ -26,7 +27,7 @@ newCallerVerifier logger settings = mkAuthHandler \request -> case settings of
   AuthBearer {token, caller} ->
     let headers = [value | (name, value) <- requestHeaders request, name == "Authorization"]
      in case headers of
-          [value] | matchesBearerHeader (credentialToken token) value -> pure (ApiCaller caller)
+          [value] | matchesBearerHeader (credentialToken token) value -> pure (ApiCaller (declarationCoordinateText caller))
           _ -> do
             liftIO (Log.logInfo logger "server.auth.rejected" ["reason" .= (if null headers then "missing" else "invalid" :: Text)])
             let refusal = problemServerError Unauthorized "A valid bearer token is required."

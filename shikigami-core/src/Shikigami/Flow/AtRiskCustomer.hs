@@ -1,11 +1,14 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.Flow.AtRiskCustomer
   ( RiskVerdict (..),
+    RiskLevel (..),
     atRiskCustomerFlow,
     classifyRisk,
   )
 where
 
-import Data.Aeson (FromJSON, ToJSON, Value (..), object, toJSON, (.=))
+import Data.Aeson (FromJSON (..), ToJSON (..), Value (..), object, toJSON, withText, (.=))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Foldable (toList)
@@ -25,10 +28,22 @@ import Shikigami.Flow.Acknowledgement (Ack (..), Acknowledgement, awaitAck)
 import Shikigami.Flow.Capability (Activity, Memory, MemoryQuery (..), currentActivity, emitSignal, recall, remember)
 import Shikigami.Flow.Capability qualified as Capability
 
+data RiskLevel = HighRisk | LowRisk deriving stock (Eq, Show)
+
+instance ToJSON RiskLevel where
+  toJSON HighRisk = String "high"
+  toJSON LowRisk = String "low"
+
+instance FromJSON RiskLevel where
+  parseJSON = withText "risk level" \case
+    "high" -> pure HighRisk
+    "low" -> pure LowRisk
+    _ -> fail "unknown risk level"
+
 data RiskVerdict = RiskVerdict
-  { level :: !Text,
+  { level :: !RiskLevel,
     rationale :: !Text,
-    ticketId :: !Text
+    ticketId :: !(ActivityCoordinate "subject-id")
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -47,7 +62,7 @@ atRiskCustomerFlow payload = do
   activity <- currentActivity
   prior <- recall (declarationCoordinate "risk-history") (riskQuery activity)
   verdict <- step (StepName "classify") (pure (classifyRisk activity prior payload))
-  if (.level) verdict /= "high"
+  if (.level) verdict /= HighRisk
     then pure (toJSON verdict)
     else do
       _ <- emitSignal (declarationCoordinate "alert") (alertFor verdict activity) (toJSON verdict)
@@ -88,7 +103,7 @@ classifyRisk activity prior input =
       highByText = any (`Text.isInfixOf` textBlob) ["cancel", "churn", "leaving", "lawsuit"]
       highByMemory = any (mentionsPriorEscalation ticket) prior
    in RiskVerdict
-        { level = if highByMemory || highByEnrichment || highByText then "high" else "low",
+        { level = if highByMemory || highByEnrichment || highByText then HighRisk else LowRisk,
           rationale =
             if highByMemory
               then "prior escalation on this subject: customer relationship at risk"
@@ -96,7 +111,7 @@ classifyRisk activity prior input =
                 if highByEnrichment || highByText
                   then "customer relationship at risk"
                   else "no high-risk signal detected",
-          ticketId = ticket
+          ticketId = (.subjectId) ((.subject) activity)
         }
 
 -- | Whether a recalled memory says this subject has been escalated before.
@@ -118,7 +133,7 @@ alertFor verdict activity =
     [ "verb:relationship.at_risk",
       "subject:" <> activitySubjectType activity,
       "activity:" <> activityCoordinateText ((.activityId) activity),
-      "ticket:" <> (.ticketId) verdict
+      "ticket:" <> activityCoordinateText ((.ticketId) verdict)
     ]
 
 escalationFor :: RiskVerdict -> ActivityEnvelope -> Sink
@@ -130,7 +145,7 @@ escalationFor verdict activity =
     [ "verb:relationship.escalation_required",
       "subject:" <> activitySubjectType activity,
       "activity:" <> activityCoordinateText ((.activityId) activity),
-      "ticket:" <> (.ticketId) verdict
+      "ticket:" <> activityCoordinateText ((.ticketId) verdict)
     ]
 
 riskSignal :: Text -> Priority -> SignalImportance -> [Text] -> Sink

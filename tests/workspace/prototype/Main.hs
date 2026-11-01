@@ -198,7 +198,7 @@ nativeProvision configFile specFile = do
   void (git ["-C", source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "fixture base"])
   base <- Text.strip . Encoding.decodeUtf8 <$> git ["-C", source, "rev-parse", "HEAD"]
   properties <- Systemd.systemdPropertiesIdentity
-  let policy = ProcessPolicy ProcessPolicyV1 spec.image properties [CommandRule (workspaceCoordinate "validate") (workspaceCoordinate "/bin/probe") [(workspaceCoordinate "validate")] (workspaceCoordinate "") (Map.singleton (workspaceCoordinate "HOME") (workspaceCoordinate "/scratch")) ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)] [(workspaceCoordinate "")] [(workspaceCoordinate "src")]
+  let policy = ((either (error . show) id . mkProcessPolicy) (ProcessPolicyInput ProcessPolicyV1 spec.image properties [((either (error . show) id . mkCommandRule) (CommandRuleInput (workspaceCoordinate "validate") (workspaceCoordinate "/bin/probe") [(workspaceCoordinate "validate")] (workspaceCoordinate "") (Map.singleton (workspaceCoordinate "HOME") (workspaceCoordinate "/scratch")) ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)))] [(workspaceCoordinate "")] [(workspaceCoordinate "src")]))
       request = WorkspaceRequest (WorkflowId "native-fixture") Nothing (fixtureRootId "native-fixture-root") principal principal (fixtureRevision 0)
   catalog <- requireRight (mkWorkspaceCatalog [RepositoryPolicy (repositoryId "mori://fixture/repo") (workspaceLocator source) [workspaceCoordinate base] (workspaceCoordinate base) (processPolicyIdentity policy)])
   repository <- requireRight (resolveRepository catalog (repositoryId "mori://fixture/repo") Nothing)
@@ -212,7 +212,7 @@ nativeProvision configFile specFile = do
   let current = identityLifecycleAdmission directory.handle principal
       interrupted = ProvisionRuntime env authorizer current (nativeProvisionBackend & #afterReady .~ (writeIORef reachedReady True >> throwIO (userError "fixture lost ready acknowledgement")))
       runtime = ProvisionRuntime env authorizer current nativeProvisionBackend
-      pool = IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031)
+      pool = ((either (error . show) id . mkIdentityRange) (IdentityRangeInput ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031)))
   first <- provisionWorkspaceProfile interrupted binding admission policy pool
   injected <- readIORef reachedReady
   unless (injected && first == Left ProvisionUnresolved) (fail ("missing injected ready acknowledgement loss: " <> either show (const "unexpected ready result") first))
@@ -307,7 +307,7 @@ prepareCase config prefix name mode = do
     now <- getCurrentTime
     void (requireRight =<< transact env (Roots.enrollRootTx request.rootId (Resources.Envelope (Map.fromList [(dimension, Resources.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now))))
     -- This fresh boundary uses the same configured C13 verifier as the daemon.
-    profile <- requireRight =<< provisionWorkspaceProfile (ProvisionRuntime env authorizer (currentIdentity owner) nativeProvisionBackend) binding admission policy (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031))
+    profile <- requireRight =<< provisionWorkspaceProfile (ProvisionRuntime env authorizer (currentIdentity owner) nativeProvisionBackend) binding admission policy (((either (error . show) id . mkIdentityRange) (IdentityRangeInput ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031))))
     prepared <- if mode == "upgrade" then prepareUpgrade env authorizer current client binding admission else prepareAccepted env authorizer current client binding admission mode
     let path = workspaceFiles (workspaceLocatorPath binding.storageRoot) binding </> "src/mode"
     actual <- readProcess "/usr/bin/stat" ["-c", "%u", path] ""

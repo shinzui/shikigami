@@ -45,7 +45,7 @@ import Shikigami.Agent.Run (recallQuery)
 import Shikigami.Behavior.Input (BehaviorInput (..), triggerOnly)
 import Shikigami.Behavior.Run (defaultToolTurnLimit, newBehaviorEnv, programArgs, runBehavior, runProgramTask)
 import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
-import Shikigami.Flow.AtRiskCustomer (RiskVerdict (..), classifyRisk)
+import Shikigami.Flow.AtRiskCustomer (RiskLevel (..), RiskVerdict (..), classifyRisk)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Trigger.Schedule (cronExpressionClaim, parseCron)
 import Shikumi.Tool (mkRegistry)
@@ -76,20 +76,20 @@ classificationTests =
     "a recalled escalation changes the at-risk verdict"
     [ testCase "a calm message about a previously escalated subject is high risk" do
         let verdict = classifyRisk (activityFor "tkt_42") [escalationMemory "tkt_42"] calmPayload
-        (.level) verdict @?= "high"
+        (.level) verdict @?= HighRisk
         (.rationale) verdict @?= "prior escalation on this subject: customer relationship at risk",
       testCase "the same message with nothing recalled is unchanged" do
         let verdict = classifyRisk (activityFor "tkt_42") [] calmPayload
-        (.level) verdict @?= "low"
+        (.level) verdict @?= LowRisk
         (.rationale) verdict @?= "no high-risk signal detected",
       -- Memory about a different customer is not evidence about this one.
       testCase "an escalation on another subject does not carry over" do
         let verdict = classifyRisk (activityFor "tkt_42") [escalationMemory "tkt_99"] calmPayload
-        (.level) verdict @?= "low",
+        (.level) verdict @?= LowRisk,
       testCase "a memory that merely mentions the subject is not an escalation" do
         let remembered = memoryWith "tkt_42 asked about invoicing"
             verdict = classifyRisk (activityFor "tkt_42") [remembered] calmPayload
-        (.level) verdict @?= "low"
+        (.level) verdict @?= LowRisk
     ]
 
 calmPayload :: Value

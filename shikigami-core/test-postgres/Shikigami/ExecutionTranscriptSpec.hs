@@ -211,7 +211,7 @@ tests fixture =
           revision <- expectRight (Overlay.mkCapabilityRevision "1")
           let admission = WorkspaceAdmission (WorkspaceRef (workspaceCoordinate "shikigami.workspace/1") (workspaceCoordinate "fixture")) (workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")) original.runId original.selection.assignmentId rootId original.identity (fixtureRevision 0) bundle Nothing
               snapshot = original & #workspace .~ Just admission & #initialContext . #systemPrompt .~ Just (instructionPrompt bundle) & #capabilities .~ Overlay.mkResolvedCapabilitySet [descriptor]
-              descriptor = Overlay.CapabilityDescriptor capability revision [Overlay.CapabilityToolDescriptor "edit" Overlay.IdempotentMutation]
+              descriptor = Overlay.CapabilityDescriptor capability revision [Overlay.CapabilityToolDescriptor (executionCoordinate "edit") Overlay.IdempotentMutation]
               contract = Capability.DurableToolContract (executionCoordinate "edit") "Edit fixture." (object []) IdempotentEffect NoInvoiceCost
               adapter =
                 Capability.DurableAdapter

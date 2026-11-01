@@ -30,6 +30,7 @@ import Data.Generics.Labels ()
 import Data.Time (getCurrentTime)
 import Shikigami.Action.Authorization (ActionAuthorizationFailure (..), authorizationFailureDetail)
 import Shikigami.Agent.Decl (Sink (..))
+import Shikigami.Agent.DeclarationValue (declarationCoordinate, declarationCoordinateText)
 import Shikigami.Agent.Principal (identityText)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Log qualified as Log
@@ -111,7 +112,7 @@ runSink ctx sink output = case sink of
       Left err -> pure (kawaFailure err)
       Right env -> do
         r <- postEnvelopeWithHeaders ((.http) ctx ^. #kawa) ((.traceHeaders) ctx) ((.kawa) ctx) env
-        pure (either kawaFailure Delivered r)
+        pure (either kawaFailure (Delivered . declarationCoordinate) r)
   KizashiSignal {} -> do
     -- A strategy that was declared and could not be honored is said out loud;
     -- the alternative is a signal quietly reaching whoever the fallback names.
@@ -131,19 +132,19 @@ runSink ctx sink output = case sink of
       Left e -> pure (Failed e)
       Right req -> do
         r <- postSignalWithHeaders ((.http) ctx ^. #kizashi) ((.traceHeaders) ctx) ((.kizashi) ctx) req
-        pure (either kizashiFailure (Delivered . (.signalId)) r)
+        pure (either kizashiFailure (Delivered . declarationCoordinate . (.signalId)) r)
   ReiAction {} -> do
     r <- runReiAction (Http.unauthenticatedHttpEnv ((.http) ctx ^. #kawa)) ((.rei) ctx) ctx sink output
-    pure (either Failed Delivered r)
+    pure (either Failed (Delivered . declarationCoordinate) r)
   DanwaConversation {} -> do
     r <- runDanwaWithHeaders ((.http) ctx ^. #danwa) ((.traceHeaders) ctx) ((.danwa) ctx) ((.identity) ctx) ((.receipts) ctx) ((.danwaTarget) ctx) sink output
-    pure (either danwaFailure Delivered r)
+    pure (either danwaFailure (Delivered . declarationCoordinate . declarationCoordinateText) r)
   ChannelEgress {channel, action} ->
     case buildEgressRequest ctx output of
       Left failure -> pure (PermanentFailure failure)
       Right request -> do
         result <- postEgressWithHeaders ((.http) ctx ^. #kanmon) ((.traceHeaders) ctx) ((.kanmon) ctx) channel action request
-        pure (either kanmonFailure (Delivered . (.activityId)) result)
+        pure (either kanmonFailure (Delivered . declarationCoordinate . (.activityId)) result)
 
 sinkIdentityText :: SinkContext -> Text
 sinkIdentityText ctx = either (const "unresolved-legacy") (\value -> value) (identityText ((.identity) ctx))

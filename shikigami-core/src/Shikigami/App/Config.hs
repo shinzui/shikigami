@@ -181,6 +181,7 @@ import Kikan.En.Action (ActionSchemaHash, actionSchemaHashText, mkActionSchemaHa
 import Pgmq (QueueName, parseQueueName, queueNameToText)
 import Settei
 import Settei.Env
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval
   ( ApprovalChannel (ViaDanwa),
     parseApprovalChannel,
@@ -194,6 +195,7 @@ import Shikigami.Agent.Decl
     delegationBudgetNatural,
     mkDelegationBudget,
   )
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Decision.Contract (DecisionFailure, ModelAlias, modelAliasText)
 import Shikigami.Decision.ModelCatalog qualified as Decision
@@ -335,7 +337,7 @@ data ActionAuthorizationConfig
   | KikanActionAuthorization
       { kikanBaseUrl :: !Text,
         shomeiBaseUrl :: !Text,
-        shomeiClientId :: !Text,
+        shomeiClientId :: !(DeclarationCoordinate "oauth-client"),
         shomeiClientSecret :: !SecretText,
         issuerPublicKeys :: !IssuerKeySet,
         acceptedSchemaHashes :: !(Set ActionSchemaHash),
@@ -464,13 +466,13 @@ data AppConfig = AppConfig
     -- | Base URL of the kawa ingest doorway.
     kawaBaseUrl :: !Text,
     -- | Source segment kawa attributes ingested activity to.
-    kawaSourceSegment :: !Text,
+    kawaSourceSegment :: !(ActivityCoordinate "source"),
     -- | Bearer token sent to kawa, when that sink requires authentication.
     kawaToken :: !(Maybe SecretText),
     -- | Base URL of the kizashi signal service.
     kizashiBaseUrl :: !Text,
     -- | Recipient used when a declared signal names none.
-    kizashiDefaultRecipient :: !Text,
+    kizashiDefaultRecipient :: !(DeclarationCoordinate "recipient"),
     -- | Bearer token sent to kizashi, when that sink requires authentication.
     kizashiToken :: !(Maybe SecretText),
     -- | Base URL of the Kanmon guarded channel-action service.
@@ -481,7 +483,7 @@ data AppConfig = AppConfig
     -- | Base URL of the danwa conversation server.
     danwaBaseUrl :: !Text,
     -- | danwa participant id Shikigami authors messages as.
-    danwaAgentParticipant :: !Text,
+    danwaAgentParticipant :: !(DeclarationCoordinate "danwa-participant"),
     -- | Bearer token sent to danwa, when that sink requires authentication.
     danwaToken :: !(Maybe SecretText),
     -- | Base URL of a rei ingestion endpoint, if one exists.
@@ -547,15 +549,15 @@ appConfig =
     <*> withDefault conversationIdleTimeoutSecondsSetting (constant "conversation-idle-timeout" "End a conversation epoch after half an hour of silence" (knownDuration (secondsToNominalDiffTime 1800)))
     <*> withDefault practiceReviewAttentionRecipientsSetting (constant "practice-review-attention-unmapped" "Require operators to map every actionable review owner explicitly" emptyAttentionRecipientMap)
     <*> withDefault sinksKawaBaseUrlSetting (constant "local-kawa" "The local kawa (or stub-kawa) doorway" "http://localhost:8088")
-    <*> withDefault sinksKawaSourceSegmentSetting (constant "kawa-source" "This repository's ingest source segment" "shinzui/shikigami")
+    <*> withDefault sinksKawaSourceSegmentSetting (constant "kawa-source" "This repository's ingest source segment" (activityCoordinate "shinzui/shikigami"))
     <*> optional kawaTokenSetting
     <*> withDefault sinksKizashiBaseUrlSetting (constant "local-kizashi" "The local kizashi service" "http://localhost:8089")
-    <*> withDefault sinksKizashiDefaultRecipientSetting (constant "kizashi-recipient" "Recipient used when a signal declares none" "recipient_default")
+    <*> withDefault sinksKizashiDefaultRecipientSetting (constant "kizashi-recipient" "Recipient used when a signal declares none" (declarationCoordinate "recipient_default"))
     <*> optional kizashiTokenSetting
     <*> withDefault sinksKanmonBaseUrlSetting (constant "local-kanmon" "The local Kanmon channel-action service" "http://localhost:8090")
     <*> optional kanmonTokenSetting
     <*> withDefault sinksDanwaBaseUrlSetting (constant "local-danwa" "The local danwa server" "http://localhost:8080")
-    <*> withDefault sinksDanwaAgentParticipantSetting (constant "danwa-agent" "Participant id Shikigami authors messages as" "part_shikigami")
+    <*> withDefault sinksDanwaAgentParticipantSetting (constant "danwa-agent" "Participant id Shikigami authors messages as" (declarationCoordinate "part_shikigami"))
     <*> optional danwaTokenSetting
     <*> optional sinksReiBaseUrlSetting
     <*> behaviorProviderConfig
@@ -1150,8 +1152,8 @@ renderDurationSeconds duration =
 sinksKawaBaseUrlSetting :: Setting Text
 sinksKawaBaseUrlSetting = publicSettingWithRenderer sinksKawaBaseUrlKey "Base URL of the kawa ingest doorway" textDecoder id
 
-sinksKawaSourceSegmentSetting :: Setting Text
-sinksKawaSourceSegmentSetting = publicSettingWithRenderer sinksKawaSourceSegmentKey "Source segment kawa attributes ingested activity to" textDecoder id
+sinksKawaSourceSegmentSetting :: Setting (ActivityCoordinate "source")
+sinksKawaSourceSegmentSetting = publicSettingWithRenderer sinksKawaSourceSegmentKey "Source segment kawa attributes ingested activity to" (activityCoordinate <$> textDecoder) activityCoordinateText
 
 kawaTokenSetting :: Setting SecretText
 kawaTokenSetting =
@@ -1163,8 +1165,8 @@ kawaTokenSetting =
 sinksKizashiBaseUrlSetting :: Setting Text
 sinksKizashiBaseUrlSetting = publicSettingWithRenderer sinksKizashiBaseUrlKey "Base URL of the kizashi signal service" textDecoder id
 
-sinksKizashiDefaultRecipientSetting :: Setting Text
-sinksKizashiDefaultRecipientSetting = publicSettingWithRenderer sinksKizashiDefaultRecipientKey "Recipient used when a signal declares none" textDecoder id
+sinksKizashiDefaultRecipientSetting :: Setting (DeclarationCoordinate "recipient")
+sinksKizashiDefaultRecipientSetting = publicSettingWithRenderer sinksKizashiDefaultRecipientKey "Recipient used when a signal declares none" (declarationCoordinate <$> textDecoder) declarationCoordinateText
 
 kizashiTokenSetting :: Setting SecretText
 kizashiTokenSetting =
@@ -1186,8 +1188,8 @@ kanmonTokenSetting =
 sinksDanwaBaseUrlSetting :: Setting Text
 sinksDanwaBaseUrlSetting = publicSettingWithRenderer sinksDanwaBaseUrlKey "Base URL of the danwa conversation server" textDecoder id
 
-sinksDanwaAgentParticipantSetting :: Setting Text
-sinksDanwaAgentParticipantSetting = publicSettingWithRenderer sinksDanwaAgentParticipantKey "danwa participant id Shikigami authors messages as" textDecoder id
+sinksDanwaAgentParticipantSetting :: Setting (DeclarationCoordinate "danwa-participant")
+sinksDanwaAgentParticipantSetting = publicSettingWithRenderer sinksDanwaAgentParticipantKey "danwa participant id Shikigami authors messages as" (declarationCoordinate <$> textDecoder) declarationCoordinateText
 
 danwaTokenSetting :: Setting SecretText
 danwaTokenSetting =
@@ -1250,10 +1252,13 @@ actionAuthorizationModeSetting =
     (enumDecoder [("disabled", DisableActionAuthorization), ("kikan", UseKikanActionAuthorization)])
     renderActionAuthorizationChoice
 
-actionKikanBaseUrlSetting, actionShomeiBaseUrlSetting, actionShomeiClientIdSetting, actionCallerIdSetting :: Setting Text
+actionKikanBaseUrlSetting, actionShomeiBaseUrlSetting, actionCallerIdSetting :: Setting Text
+actionShomeiClientIdSetting :: Setting (DeclarationCoordinate "oauth-client")
 actionKikanBaseUrlSetting = publicSettingWithRenderer actionKikanBaseUrlKey "Base URL of Kikan-En's action authorization service" textDecoder id
 actionShomeiBaseUrlSetting = publicSettingWithRenderer actionShomeiBaseUrlKey "Base URL of the Shomei OAuth2 service" textDecoder id
-actionShomeiClientIdSetting = publicSettingWithRenderer actionShomeiClientIdKey "Shomei service-account client id used for Kikan authorization" textDecoder id
+
+actionShomeiClientIdSetting = publicSettingWithRenderer actionShomeiClientIdKey "Shomei service-account client id used for Kikan authorization" (declarationCoordinate <$> textDecoder) declarationCoordinateText
+
 actionCallerIdSetting = publicSettingWithRenderer actionCallerIdKey "Bounded public caller identity written to action authorization audit logs" textDecoder id
 
 actionShomeiClientSecretSetting :: Setting SecretText
@@ -1674,7 +1679,7 @@ missingRequirements role config =
       | otherwise = True
 
 -- | Inbound authentication; credentials retain SecretText's opaque rendering.
-data HttpAuthSettings = AuthDisabled | AuthBearer {token :: !SecretText, caller :: !Text}
+data HttpAuthSettings = AuthDisabled | AuthBearer {token :: !SecretText, caller :: !(DeclarationCoordinate "api-caller")}
   deriving stock (Generic, Eq)
 
 httpAuthConfig :: Config HttpAuthSettings
@@ -1683,7 +1688,7 @@ httpAuthConfig =
     <$> whenEq
       (withDefault httpAuthModeSetting (constant "http-auth-disabled" "Local development requires no credential" False))
       True
-      ((,) <$> required httpAuthTokenSetting <*> withDefault httpAuthCallerSetting (constant "http-api-caller" "Label the configured API credential" "api-caller"))
+      ((,) <$> required httpAuthTokenSetting <*> withDefault httpAuthCallerSetting (constant "http-api-caller" "Label the configured API credential" (declarationCoordinate "api-caller")))
 
 httpAuthModeKey, httpAuthTokenKey, httpAuthCallerKey :: Key
 httpAuthModeKey = stableKey "http.auth.mode"
@@ -1701,8 +1706,8 @@ httpAuthModeSetting =
     (enumDecoder [("disabled", False), ("bearer", True)])
     (\enabled -> if enabled then "bearer" else "disabled")
 
-httpAuthCallerSetting :: Setting Text
-httpAuthCallerSetting = publicSettingWithRenderer httpAuthCallerKey "Principal label for the configured API credential" textDecoder id
+httpAuthCallerSetting :: Setting (DeclarationCoordinate "api-caller")
+httpAuthCallerSetting = publicSettingWithRenderer httpAuthCallerKey "Principal label for the configured API credential" (declarationCoordinate <$> textDecoder) declarationCoordinateText
 
 httpAuthTokenSetting :: Setting SecretText
 httpAuthTokenSetting = secretSetting httpAuthTokenKey "Inbound API bearer token (at least sixteen characters)" $

@@ -161,7 +161,7 @@ buildCandidateCatalog report snapshot validated =
 data LifecycleIndex
   = LocalEnabled
   | ConfiguredUnavailable
-  | ConfiguredPrincipals !(Map (DeclarationCoordinate "principal") PrincipalRecord) !(Map Text PrincipalRecord)
+  | ConfiguredPrincipals !(Map (DeclarationCoordinate "principal") PrincipalRecord) !(Map (DeclarationCoordinate "normalized-handle") PrincipalRecord)
 
 indexSnapshot :: DirectorySnapshot -> LifecycleIndex
 indexSnapshot DirectoryDisabledSnapshot {} = LocalEnabled
@@ -292,8 +292,8 @@ renderExclusionReason = \case
   UnknownPrincipal -> "unknown-principal"
   LifecycleUnavailable -> "lifecycle-unavailable"
 
-normalizeHandle :: Text -> Text
-normalizeHandle = Text.toCaseFold . Text.strip
+normalizeHandle :: Text -> DeclarationCoordinate "normalized-handle"
+normalizeHandle = declarationCoordinate . Text.toCaseFold . Text.strip
 
 tshow :: (Show a) => a -> Text
 tshow = Text.pack . show

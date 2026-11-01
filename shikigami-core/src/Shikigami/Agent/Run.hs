@@ -160,7 +160,7 @@ recallAgentLearnings appEnv aliasPool limit identity query = do
   aliases <- case (identity, aliasPool) of
     (VerifiedAgent principal, Just pool) -> either (const []) id <$> AliasStore.aliasesForPrincipal pool principal
     _ -> pure []
-  recalled <- traverse (\scope' -> recallPriorLearnings appEnv limit scope' query) (agentScope identity : (legacyAgentScope <$> aliases))
+  recalled <- traverse (\scope' -> recallPriorLearnings appEnv limit scope' query) (agentScope identity : ((legacyAgentScope . agentNameText) <$> aliases))
   pure (take (recallLimitInt limit) (deduplicate (concat recalled)))
   where
     deduplicate = go Set.empty

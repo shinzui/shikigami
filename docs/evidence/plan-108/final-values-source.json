@@ -1,0 +1,438 @@
+{
+  "sourceParent": "4ac29de",
+  "scope": "final existing domain findings: sink/authorization claims, native aliases/grants, decision scalars, conversation coordinates, checked process policies and integration request",
+  "platform": "aarch64-darwin",
+  "compiler": "GHC 9.12.4",
+  "revisionCompilerControlsPassed": 253,
+  "behavioralEvidence": "Broad suites exercise the identical production candidate. Three invalid fixture constructions were corrected together and their original tests pass against the rebuilt fixtures; see acceptance.md for exact runs.",
+  "files": [
+    {
+      "path": "shikigami-agent/src/Shikigami/Agent/Capability/OneOff.hs",
+      "sha256": "f917577ea81bd7070925e04bee90b495db1762d953c178e4a081399fd446a6bc"
+    },
+    {
+      "path": "shikigami-agent/src/Shikigami/Agent/Capability/Workspace.hs",
+      "sha256": "cb75d9ddab07a96fb38028d9cfee94863869273fdf92e82aa7009a4b4d164397"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Action/Authorization.hs",
+      "sha256": "8dd478d2105021c08a36babdeaac538adb058b984bd9351633cda2ccdb106cb8"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Agent/Approval/Notification.hs",
+      "sha256": "55918b5562110d3788ae97d925c183254c795001da5920bbeddb96798858e26e"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Agent/Conversation.hs",
+      "sha256": "c83eb5d7aec520321855bc2c6d86ccff9d71f1bf05fb3e0e3384c7a1209a251f"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Agent/Delegate.hs",
+      "sha256": "7d63e6428299148594d4a3802b9f75ffabbe75d86f65332a1787425de1712c47"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Agent/Run.hs",
+      "sha256": "38efecf0b588f908939c1206f2cbb164420632a5d007140bbccd29c0ab8dcfc4"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Agent/Workflow.hs",
+      "sha256": "33982df47aa0fb7d6d0bdc2d12f9010c81cb5f61e6490689a805f00f35bf44de"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/App/Config.hs",
+      "sha256": "cf8e33b9e9534b82a553d41748b0585c8a685dcfbc56d670da4610ddd6aa8397"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Behavior/Error.hs",
+      "sha256": "dd55872dc1858267c9cf7ac36ca92cf33f4f6ad32cdaf24051c545e18a219b3e"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Behavior/Run.hs",
+      "sha256": "8fbca0b0394b2342067b461afb4add624867b0879f8347897358a18d84a8f7b1"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Behavior/Skill.hs",
+      "sha256": "90783f97649b028c9c3ef4da5e24003b22bac4877bde60de1f61ff9ca6077d41"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Capability/Catalog.hs",
+      "sha256": "dc9721dd05d02c988a34e76dc6956483751a886f2ae6a2977590eb3f79aecd5b"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Capability/Overlay.hs",
+      "sha256": "b3d16f738d667006ace609242c91b6c54e89083d41a86f4bb39c263a78a77d1e"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Capability/Provider.hs",
+      "sha256": "91026473f7bd8fe675db7da29787c41bffb9ed7cefa197569faf1f9eabdad60f"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Decision/Contract.hs",
+      "sha256": "9d6cf2000886743b6396670578cd3ee843354767aa4aadcb95585b12165cc3a5"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Delegation/BudgetStore.hs",
+      "sha256": "03602f11612f2484a762660b8ffbce1b274bd2b873102ae087de574447fec02c"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Execution/Ephemeral.hs",
+      "sha256": "01bc08b9c2b5e780fe10df270a82f48a744f52fb89702e978a478cefdcb7f325"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Execution/Tools.hs",
+      "sha256": "2f58c8bcc77e93f390cd151c8d6d4c6f3a10dfb3429e84291cbe21c9c71c732d"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Flow/AtRiskCustomer.hs",
+      "sha256": "4a8286c504c83490a65213ceab64d84f4d0a2bcc0dcc3972a9f35c42268b7d46"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Flow/Decision.hs",
+      "sha256": "9ea6f64ceced67375f0b2c7ef3eccf3c8b2c26601d947d0ebee32b1382385154"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Flow/ShikumiDecisionExample.hs",
+      "sha256": "66dec44bec33227ee58410483aa30aca910438c5a014590167e99314b688dd6f"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Flow/Workers.hs",
+      "sha256": "34da694b132461ebedc32b30806c24e87c3d99d96435ad4e2e04aed3ecf07dc1"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Integration/Danwa.hs",
+      "sha256": "7a819d131c12f3c6953898ebf5ffb8ac244ea4ac8329e2f433e7f2fe7c1aab12"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Memory/AliasStore.hs",
+      "sha256": "5fbb0f4f8ab0abe7af96f417fc799dc8f43cb9cc91c6f146089d59b38175b36b"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Objective/Capability.hs",
+      "sha256": "05e7b35d899a01f39b376c527f164abe5976ae2a72634ecbd5a92f442f64bebb"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/PracticeReview/Attention.hs",
+      "sha256": "46a6db4460649486a4ee6afa65a590413e1f23a35e9781e17fc6b2ac6f8419db"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Program/Decision/Examples.hs",
+      "sha256": "e816f37fb5e19a69befbd8ae3039a8f270a5b056ac23605251744b3f2bd78a72"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Program/DecisionRunner.hs",
+      "sha256": "21ae7ecc94d4de96d1322baecf98148884692330f1608105357db64ed0e05826"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Router/Catalog.hs",
+      "sha256": "d5372367988fcc7ad05c5a47b0cd7eab85777e2ebcb564e4f1189222c75c1086"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Sink.hs",
+      "sha256": "a69473e8948489059164584913ecdab1f1df1974c577fd1423daa2a6a33ac4af"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Sink/Authorization.hs",
+      "sha256": "7551da5d9b356759517d36263d6f7485d71b3cf17513f7848cdff003ae068618"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Sink/Config.hs",
+      "sha256": "7058d27bb6e8bae0a869b038772e51dfbf09cc2884c7548eeef6f776682286fd"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Sink/Danwa.hs",
+      "sha256": "0530ed279a8777db41ebd462611a5acf0687f2ed79eef8cfc366cca26e95eaf3"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Sink/Delivery.hs",
+      "sha256": "56296c85397163f78acc5ad67865a8433518114d413e68c18df975391db97010"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Sink/GrantStore.hs",
+      "sha256": "9fb86fb6c4ad324c95562dea6d8b0c7c789eeb8717542a6768f8c0f7c3cf221b"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Sink/Intent.hs",
+      "sha256": "10118caaa0f9c0a1bba57a0fa1c2e9d34b61317e7da7a99f90cc630a4d4e54bd"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Sink/KanmonClient.hs",
+      "sha256": "2826a3583976037bd97381b711fa8f552c1b2a25f4d1c9df86887fc53d3b1361"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Sink/KawaClient.hs",
+      "sha256": "d40c5590f08b4f8c4a6a960b51271525125dab33f18d14e179b3223f3687e6e2"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Sink/KizashiClient.hs",
+      "sha256": "c739c4c23853f5997aa298bb97f3c3b33659cdc1d84c346ff3fcbb2df3f839ee"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Sink/Permission.hs",
+      "sha256": "d5336faca434c3e2ad31580eb0bac9793cf756d6b4332a1fe853534b91ad8dd2"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Sink/Recipient.hs",
+      "sha256": "6fa2008d75a287e8958a21ead2d69218cae880fef77e429f77b90630cabc0f5d"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Sink/Types.hs",
+      "sha256": "a23a6cb755b5fc43887160084ed02d75e7d9a9b593e8f4030e143902a299c493"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/WorkerSession/Capability.hs",
+      "sha256": "289530bbac711fb38c84725254c0684ea944e0a145131254bd28b1c87ceb79d5"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/WorkerSession/Tools.hs",
+      "sha256": "cd52e092390e59d4f2c910016d1ecfd4a90ccbe5fa2002ce0013bd38daee7032"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "sha256": "83858ed6788b86f07609a96dcab8c535a8505e9ad71a16bc7acc29b2b6b1f308"
+    },
+    {
+      "path": "shikigami-core/src/Shikigami/Workspace/ProcessProfileStore.hs",
+      "sha256": "05c30d51c1dc3d164303827771adbba2119857264435fda0ebcd75a6bd4ef6fc"
+    },
+    {
+      "path": "shikigami-core/test-postgres/Shikigami/AgentWorkflowSpec.hs",
+      "sha256": "ee80921ecf5b8477a2fd4170058c373c55504173f2581bdbc3db4b511226232d"
+    },
+    {
+      "path": "shikigami-core/test-postgres/Shikigami/DecisionWorkflowSpec.hs",
+      "sha256": "c95dae15ab6e15a4c5051b3527250dd83e6a7025e5449df362774390f1fbb19a"
+    },
+    {
+      "path": "shikigami-core/test-postgres/Shikigami/DelegationBudgetSpec.hs",
+      "sha256": "00470854de38e2c70907b65a53594b53d9d3b35ff28258bc939ba37afa7ef85f"
+    },
+    {
+      "path": "shikigami-core/test-postgres/Shikigami/ExecutionResourcesSpec.hs",
+      "sha256": "c2bf3a1b40d3bb419793b12e57de86aa8755f646456f5d6b2dc58fb187bdd559"
+    },
+    {
+      "path": "shikigami-core/test-postgres/Shikigami/ExecutionSelectionWorkflowSpec.hs",
+      "sha256": "fe46a82e6386fe5acb1994a51100470244d61149d7f3927c518158a118ec3ace"
+    },
+    {
+      "path": "shikigami-core/test-postgres/Shikigami/ExecutionTranscriptSpec.hs",
+      "sha256": "18b9d77c9d718679449bfeb537f6db43c2ea7970eb27a705ae4ce265e5384d0e"
+    },
+    {
+      "path": "shikigami-core/test-postgres/Shikigami/FlowLifecycleSpec.hs",
+      "sha256": "2b37ab12c5320ef9c20b84e2f0dfebd3f8d1463fbadfc2151c268659ec4fc284"
+    },
+    {
+      "path": "shikigami-core/test-postgres/Shikigami/GrantStoreSpec.hs",
+      "sha256": "8a008459803275a0ad23906b83cb62a9e23df23489e3ffdb2a05134bfd96e071"
+    },
+    {
+      "path": "shikigami-core/test-postgres/Shikigami/PracticeReviewOrchestrationSpec.hs",
+      "sha256": "088e1cadefe0525903c15f5ea656395682980f6d401864821beeff4358975acf"
+    },
+    {
+      "path": "shikigami-core/test-postgres/Shikigami/RouterWorkflowSpec.hs",
+      "sha256": "71bb536ec597c41c0789f615d2534a2fc9f7a51aaa595245f19b4fea6c2ac049"
+    },
+    {
+      "path": "shikigami-core/test-postgres/Shikigami/SinkDeliverySpec.hs",
+      "sha256": "97db659ca7a64096b906c65f574e9b3c6f80618f651839d16381684420b86ab1"
+    },
+    {
+      "path": "shikigami-core/test-postgres/Shikigami/WorkerSessionCapabilitySpec.hs",
+      "sha256": "3028327ff2d082300a9a1f15cccbcd0209e49f7f08200a924a865165b57aa558"
+    },
+    {
+      "path": "shikigami-core/test-postgres/Shikigami/WorkspaceProcessProfileStoreSpec.hs",
+      "sha256": "3725cf3be3d93cd91d16d6e7c4945139faa2991f9e758f30c335e6e84b6bafa9"
+    },
+    {
+      "path": "shikigami-core/test/Main.hs",
+      "sha256": "4e0a9b78e702156f1d1a5b366e035580147d804ea2a3bfd6b76d2699bcdf5918"
+    },
+    {
+      "path": "shikigami-core/test/Shikigami/AgentValueSpec.hs",
+      "sha256": "9464ad990998ed8fc07e3c0cba1dd07af4712e6c24858c8401bf3892aee20162"
+    },
+    {
+      "path": "shikigami-core/test/Shikigami/AppConfigSpec.hs",
+      "sha256": "2d0ac45d48cbdf0ba61fe46647cfd408faa939cdfb1baec386ea12c767d1cd4d"
+    },
+    {
+      "path": "shikigami-core/test/Shikigami/ApprovalNotificationSpec.hs",
+      "sha256": "7ad5ac218cf3eb63714c842baf2d84348b792da66418303984aea5f25d4e1ad1"
+    },
+    {
+      "path": "shikigami-core/test/Shikigami/BehaviorInputSpec.hs",
+      "sha256": "9a513c5aa859464cbae4068a327ec4d6669769a4a092f3143c29055ae3d695e3"
+    },
+    {
+      "path": "shikigami-core/test/Shikigami/BehaviorProviderSpec.hs",
+      "sha256": "760ceb766ca703bc719d9ec5598141e9252bd443c0e632204cbef88782d22e20"
+    },
+    {
+      "path": "shikigami-core/test/Shikigami/BehaviorRetrySpec.hs",
+      "sha256": "7e3a0b786f2bb0238d3ebc73cf9eaf1e7bdda29965dc1e81e895b1db0b82c4f4"
+    },
+    {
+      "path": "shikigami-core/test/Shikigami/BehaviorToolSpec.hs",
+      "sha256": "a88e6408425a92a35210d6fae56172d8d1ef1aa8a7c1a928b1598cf9d1851a48"
+    },
+    {
+      "path": "shikigami-core/test/Shikigami/CapabilityOverlaySpec.hs",
+      "sha256": "56aa7d4b8fc75a1bc04515faf2bef1d6b902ddadf25e3dd23a1327f43cdddbc0"
+    },
+    {
+      "path": "shikigami-core/test/Shikigami/CapabilityProviderSpec.hs",
+      "sha256": "3bd1433c6fec57906c5ded08bc0cd238bb45ae34197e847a8714d9b422f9532f"
+    },
+    {
+      "path": "shikigami-core/test/Shikigami/DecisionRunnerSpec.hs",
+      "sha256": "42cfe778a63af2faf4542cd8fd007afb987be295a2056246801ce27872cd6ae0"
+    },
+    {
+      "path": "shikigami-core/test/Shikigami/Fixture/SinkHttp.hs",
+      "sha256": "aa09721730a6d32a1f7457c392764ad345df3ad10a4facfb7d7c10d61330f779"
+    },
+    {
+      "path": "shikigami-core/test/Shikigami/KanmonClientSpec.hs",
+      "sha256": "81a2cff1984346722d1f6fa6cd3ee02fa6eb1efd600114fff3aa32c7be993883"
+    },
+    {
+      "path": "shikigami-core/test/Shikigami/SinkAuthSpec.hs",
+      "sha256": "0473c8a9bdac1bac336ed63815389ff4cd87047bd332b86d56ec506c88c047f0"
+    },
+    {
+      "path": "shikigami-core/test/Shikigami/SinkHonestySpec.hs",
+      "sha256": "ea6be18034fda596ad5c60dc1827febcaf165d9dcb8ac5b636459ced4e0261c2"
+    },
+    {
+      "path": "shikigami-core/test/Shikigami/SinkIntentSpec.hs",
+      "sha256": "100898a1d5fef05a8a354dbfc115a129bab34477926487607c200c8e0c68be52"
+    },
+    {
+      "path": "shikigami-core/test/Shikigami/WireCompatSpec.hs",
+      "sha256": "f4e82fcfbd65965a4f75c40eceaca69eb140e78c8de253e1d9bca78c54911ba7"
+    },
+    {
+      "path": "shikigami-core/test/Shikigami/WorkspaceActionProofSpec.hs",
+      "sha256": "22a71fcb7980f394e3a8d5526a7762ed9eb5aac6729cdda876b0fbf016ed5e10"
+    },
+    {
+      "path": "shikigami-core/test/Shikigami/WorkspaceAdapterSpec.hs",
+      "sha256": "51d67ce03c37240a4d9ce47aa83029a36e29f19df404aa0fdc9790b6343af7c2"
+    },
+    {
+      "path": "shikigami-core/test/Shikigami/WorkspaceProcessPolicySpec.hs",
+      "sha256": "3b000d71991d6c2ae493617dd495f8df13b14909f5ba5784f6cccd1d3cf25f98"
+    },
+    {
+      "path": "shikigami-server/src/Shikigami/Caller/Verifier.hs",
+      "sha256": "8ba1207c55b50b884c5b09293e5374dff8a732bb9c95e80c5037896ab45129b7"
+    },
+    {
+      "path": "shikigami-server/src/Shikigami/Server/Command/Agents.hs",
+      "sha256": "5aad9ed3ce707e1f9ef170e03d5dd010f57ded030fcace13c0e7c7c888e98365"
+    },
+    {
+      "path": "shikigami-server/src/Shikigami/Server/Command/Grants.hs",
+      "sha256": "d1fe06b5583dbed88b48d87b602a4760f276d607311d6f50e44c2b1c33770210"
+    },
+    {
+      "path": "shikigami-server/src/Shikigami/Server/Command/StubKanmon.hs",
+      "sha256": "5fb0b8372566f3e835d6fea144ed064c9c338e8a2985fd61ff84fe7594e0ab40"
+    },
+    {
+      "path": "shikigami-server/src/Shikigami/Sink/KanmonStub.hs",
+      "sha256": "e76ed1ea01a1edb745be2af81546a2ddbcb833f8d955ec21c1b405d389774d24"
+    },
+    {
+      "path": "shikigami-server/test/Shikigami/Server/KanmonStubSpec.hs",
+      "sha256": "833e311c4353ef739200f8dfc3ca169844ca8c209b1bb10d03adfc72c9f91c8e"
+    },
+    {
+      "path": "shikigami-workers/src/Shikigami/Workspace/Cleanup.hs",
+      "sha256": "372f92170333f955b3a40b254b7cd348e4a5873afc8cbc8765f2696fffc7a317"
+    },
+    {
+      "path": "shikigami-workers/src/Shikigami/Workspace/FileProvider.hs",
+      "sha256": "5cc1b20be17c3eb4b1fe66e32cca8e30a83e9f06bc782d761838ed99cbbcae2c"
+    },
+    {
+      "path": "shikigami-workers/src/Shikigami/Workspace/GitProvider.hs",
+      "sha256": "baddd5d810b77c4255a207d78a4c3d07812087ecd235f7410245c9fa4c1c0269"
+    },
+    {
+      "path": "shikigami-workers/src/Shikigami/Workspace/Host.hs",
+      "sha256": "33eb7f7e34a88eb5587e02e41edc5448ffebf02576d4f07c076d0773513d1e94"
+    },
+    {
+      "path": "shikigami-workers/src/Shikigami/Workspace/Integration.hs",
+      "sha256": "be17ad12a9e9c97b50a18ca776078775421ee5d41594713e0b28b06aacd98ea3"
+    },
+    {
+      "path": "shikigami-workers/src/Shikigami/Workspace/Provision.hs",
+      "sha256": "66aaf0d331728e9aa6212e75f8aaf9c97fc79188a1cc9b28a24eb99b79012993"
+    },
+    {
+      "path": "shikigami-workers/src/Shikigami/Workspace/Supervisor.hs",
+      "sha256": "e9a9dfbbf70ec515c346887249fe7d0fc089d63aebbc59e1f32a28394611f6af"
+    },
+    {
+      "path": "shikigami-workers/src/Shikigami/Workspace/Transfer.hs",
+      "sha256": "014373a91ade460e40a2e697473400a34a63d4b5c33f18077a4fee59aa1795d3"
+    },
+    {
+      "path": "shikigami-workers/test/Shikigami/Agent/RunJob/WorkerSpec.hs",
+      "sha256": "8121412f1c904496aa7915e7525779a8bdda385ba13b2d2e9a41c59b0a2210e1"
+    },
+    {
+      "path": "shikigami-workers/test/Shikigami/Workers/CommandSpec.hs",
+      "sha256": "0a92e67548d9a0fa16da82caba5b70e59c3f33dfafc36f31f5e416212129ac6e"
+    },
+    {
+      "path": "shikigami-workers/test/Shikigami/WorkspaceFileProviderSpec.hs",
+      "sha256": "72217c3935c36ed3cd964d23966c044c42b548c4ad042a9d315823bcb4c39c0c"
+    },
+    {
+      "path": "shikigami-workers/test/Shikigami/WorkspaceGitProviderSpec.hs",
+      "sha256": "d0420ffad34be13c98a420217f15cd0d3b1248b5e8dab7a7cd75dee421dcc449"
+    },
+    {
+      "path": "shikigami-workers/test/Shikigami/WorkspaceProcessProfileSpec.hs",
+      "sha256": "5c636f34e3b9560f7a337da1cc834c4389fea26cfd65e989b7793daa06fd7c4a"
+    },
+    {
+      "path": "shikigami-workers/test/Shikigami/WorkspaceProvisionSpec.hs",
+      "sha256": "22bcaf78a4a7bc6f22bcee7df39ea00584834720305748babe73b7cf54d144b4"
+    },
+    {
+      "path": "shikigami-workers/test/Shikigami/WorkspaceTransferSpec.hs",
+      "sha256": "1816e54ff81f36b6094824dc46e1a26d87b1bda8e4cad302c94de3f865e0011f"
+    },
+    {
+      "path": "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs",
+      "sha256": "dd547f8295917e4bba210648796bddd18db3660f4a0b4cbd8bab06e303e11e7b"
+    },
+    {
+      "path": "tests/types/opaque-values.py",
+      "sha256": "c1bc4f3c99664075c481ec8cb1ce656f2a6a1c709e0e19a2ae4ab2036a180f49"
+    },
+    {
+      "path": "tests/types/revision-domains.py",
+      "sha256": "3c8b295c84cb5e1277d048f7dfd65e2144648a163d787411e252f256a87492c2"
+    },
+    {
+      "path": "tests/workspace/prototype/Durable.hs",
+      "sha256": "9ab878bd3018a2bd604ed3a07ecf4a34a41de5d4f927315ff1624fb9c34f16a0"
+    },
+    {
+      "path": "tests/workspace/prototype/Main.hs",
+      "sha256": "d8688734d49ca0a6e74bcd577c9ffad1bcbd19cbffb3752668f888d310bf1584"
+    },
+    {
+      "path": "tests/workspace/prototype/Qualification.hs",
+      "sha256": "2f07a3a838af68239c98c74810fba7edef93e1674a261bc802aa07afc7836850"
+    }
+  ]
+}

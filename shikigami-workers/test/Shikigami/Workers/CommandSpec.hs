@@ -23,6 +23,7 @@ import Data.List (isInfixOf)
 import Data.Text qualified as Text
 import Options.Applicative
 import Settei.Env (envSnapshot, environmentSource)
+import Shikigami.Agent.DeclarationValue
 import Shikigami.App.Config
 import Shikigami.App.Config.Load (ConfigRun (..), appConfigRun)
 import Shikigami.Trigger.Stream (IncludeAgentActors (..))
@@ -170,7 +171,7 @@ resolutionTests =
         (.kizashiBaseUrl) config @?= "http://kizashi.internal"
         (.kanmonBaseUrl) config @?= "http://kanmon.internal"
         (.danwaBaseUrl) config @?= "http://danwa.internal"
-        (.danwaAgentParticipant) config @?= "part_from_flag",
+        (.danwaAgentParticipant) config @?= (declarationCoordinate ("part_from_flag")),
       testCase "the stream consumer's flags land on the activity-stream settings" do
         config <-
           resolveArgs

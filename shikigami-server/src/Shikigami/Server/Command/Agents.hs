@@ -306,7 +306,7 @@ reconcileAgentAliases pool legacyScopes grantEvidence inventory rawExplicitMappi
         | Left (Just legacy, detail) <- parsedExplicit
         ]
 
-    grantNames = Set.fromList [agentName | GrantIdentityEvidence {agentName} <- grantEvidence]
+    grantNames = Set.fromList [agentNameText agentName | GrantIdentityEvidence {agentName} <- grantEvidence]
     explicitNames = Set.fromList (map fst explicitMappings)
     candidates = legacyScopes <> grantNames <> explicitNames <> Map.keysSet invalidExplicitClaims
 
@@ -327,9 +327,8 @@ reconcileAgentAliases pool legacyScopes grantEvidence inventory rawExplicitMappi
     grantClaims =
       Map.fromListWith
         Set.union
-        [ (agentName, Set.singleton principal)
-        | GrantIdentityEvidence {agentName, principalId = Just rawPrincipal} <- grantEvidence,
-          Right principal <- [mkAgentPrincipal rawPrincipal],
+        [ (agentNameText agentName, Set.singleton principal)
+        | GrantIdentityEvidence {agentName, principalId = Just principal} <- grantEvidence,
           principal `Set.member` currentPrincipals
         ]
     allClaims = Map.unionsWith Set.union [baseClaims, explicitClaims, grantClaims]
@@ -341,37 +340,25 @@ reconcileAgentAliases pool legacyScopes grantEvidence inventory rawExplicitMappi
           | (legacy, principal) <- explicitMappings,
             principal `Set.notMember` currentPrincipals
           ]
-            <> [ (agentName, Set.singleton rawPrincipal)
-               | GrantIdentityEvidence {agentName, principalId = Just rawPrincipal} <- grantEvidence,
-                 case mkAgentPrincipal rawPrincipal of
-                   Left _ -> False
-                   Right principal -> principal `Set.notMember` currentPrincipals
+            <> [ (agentNameText agentName, Set.singleton (principalText principal))
+               | GrantIdentityEvidence {agentName, principalId = Just principal} <- grantEvidence,
+                 principal `Set.notMember` currentPrincipals
                ]
         )
-    invalidGrantClaims =
-      Map.fromListWith
-        (<>)
-        [ (agentName, ["grant carries invalid principal '" <> rawPrincipal <> "': " <> detail])
-        | GrantIdentityEvidence {agentName, principalId = Just rawPrincipal} <- grantEvidence,
-          Left detail <- [mkAgentPrincipal rawPrincipal]
-        ]
 
     reconcileCandidate legacy =
       case Map.lookup legacy invalidExplicitClaims of
         Just details -> pure (Right (issue (AliasInvalidMapping (Text.intercalate "; " details))))
         Nothing ->
-          case Map.lookup legacy invalidGrantClaims of
-            Just details -> pure (Right (issue (AliasInvalidMapping (Text.intercalate "; " details))))
-            Nothing ->
-              case Set.toAscList (Map.findWithDefault Set.empty legacy missingPrincipalClaims) of
-                missing@(_ : _) -> pure (Right (issue (AliasPrincipalMissing missing)))
-                [] ->
-                  case Set.toAscList (Map.findWithDefault Set.empty legacy allClaims) of
-                    [] -> pure (Right (issue AliasMissingMapping))
-                    principals@(_ : _ : _) ->
-                      pure (Right (issue (AliasMultiplyClaimed (map principalText principals))))
-                    [principal] ->
-                      AliasStore.reconcileAlias pool principal legacy <&> fmap (reconciled principal)
+          case Set.toAscList (Map.findWithDefault Set.empty legacy missingPrincipalClaims) of
+            missing@(_ : _) -> pure (Right (issue (AliasPrincipalMissing missing)))
+            [] ->
+              case Set.toAscList (Map.findWithDefault Set.empty legacy allClaims) of
+                [] -> pure (Right (issue AliasMissingMapping))
+                principals@(_ : _ : _) ->
+                  pure (Right (issue (AliasMultiplyClaimed (map principalText principals))))
+                [principal] ->
+                  AliasStore.reconcileAlias pool principal legacy <&> fmap (reconciled principal)
       where
         issue aliasOutcome =
           AliasSyncEntry

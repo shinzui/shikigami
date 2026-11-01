@@ -1608,7 +1608,49 @@ execution, rollback and repair evidence. The source snapshot is
 `runtime-values-source.json`. The 234-case compiler collection passes 232 controls and exposes two stale
 generation expectations from the earlier execution batch; both corrected
 controls pass separately. Final M3 will run the current complete script.
-Style and whitespace checks pass. The native gate will be recorded against
-the actual source commit before the next core edit.
+Style and whitespace checks pass. The native gate on `4ac29de` against
+`ad22a18` passes with zero findings, replay-neutral impact and all 156
+conformance controls; the exact reports are retained as
+`runtime-values-keiro-{diff,replay-impact,gate}.json`.
 The current classification remains the historical `1e7f619` snapshot and this
 batch does not mark M2/M3 complete or certify unresolved findings.
+
+
+## Final domain implementation and batched acceptance (2026-11-01)
+
+The final source batch keeps sink/authentication/conversation claims nominal,
+retains native grant and alias identities, checks model confidence in both JSON
+and native model decoding, and wraps existing process-policy and integration
+validators behind private newtypes. Explicit Input records are unadmitted
+proposals; admitted values expose read-only fields and no Generic construction.
+No identifier is reallocated and no workflow step, identity recipe, valid wire
+encoding or dependency bound changes.
+
+The complete workspace build passes, including the Linux prototype (compilation
+only). The production candidate passes all 95 server, 37 agent, 31 API and nine
+client tests, domain conformance, and six diagram checks. The broad core,
+PostgreSQL and serial worker runs pass 631/632, 471/472 and 279/280 respectively.
+Their three failures were invalid *fixture constructions*: two attempted to admit
+an intermediate profile with unequal user/group identities; the other attempted
+to construct an admitted confidence of 2.0 rather than send malformed model JSON.
+All three fixtures were corrected in one batch, rebuilt together, and each
+original failing test passes (0.07, 0.39 and 0.67 seconds). The production source
+is identical across the broad and corrected-fixture runs; no failed case is
+excluded or treated as compliant without its actual passing rerun.
+
+All 253 current revision compiler controls pass, including 15 new private-policy
+constructor/coercion/Generic controls. Style, whitespace and all 24 independent
+classification controls pass. The compiled census candidate has 331 modules,
+1,049 declarations, 14 role entrypoints and 4,253 keys. Semantic reconciliation
+resolves 385 surviving findings, independently reviews 175 added keys and 41
+removed/moved keys (36 former findings); resolved-only checking passes with zero
+violations. Source and interface hashes are fresh. The final persisted census,
+workflow compatibility reports, remaining compiler controls and guide disposition
+are recorded below when accepted; this paragraph alone does not complete M3.
+
+
+The remaining public compiler gates also pass: 269 opaque-value controls, five
+workspace-scope controls and four resume-policy controls. The two stale positive
+signatures in the opaque-value fixture now reflect the already admitted Natural
+call ordinal and native/scoped instruction-bundle inputs. No production API was
+weakened to satisfy these controls. Total current compiler controls: 531.

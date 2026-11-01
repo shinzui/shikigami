@@ -1,5 +1,6 @@
 module Shikigami.Behavior.Error
   ( FailureClass (..),
+    failureClass,
     RunError (..),
     TransientBehaviorFailure (..),
     boundedBehaviorDetail,
@@ -20,6 +21,9 @@ import Shikigami.Capability.Overlay (CapabilityId, capabilityIdText)
 data FailureClass = Transient | Permanent
   deriving stock (Eq, Show, Generic)
 
+failureClass :: Bool -> FailureClass
+failureClass retryable = if retryable then Transient else Permanent
+
 -- | Why a behavior run failed. Shared by the program arm (Shikigami.Behavior.Run),
 -- the skill arm (Shikigami.Behavior.Skill), and the run-with-memory seam.
 data RunError
@@ -35,7 +39,7 @@ data RunError
     SkillRunFailed !Text
   | -- | A tool body hit an infrastructure boundary. The flag follows
     -- Shikumi's retry classification.
-    SkillToolInfrastructureFailed !Bool !Text
+    SkillToolInfrastructureFailed !FailureClass !Text
   | -- | A tool-using skill consumed every permitted model turn without a
     -- final response.
     SkillToolTurnLimitExceeded !Int
@@ -48,7 +52,7 @@ data RunError
     -- dead-lettering, honouring @retry_after@) is owned by
     -- @docs\/plans\/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md@;
     -- this constructor's job is to stop the failure from looking like an answer.
-    ProviderFailed !Bool !Text
+    ProviderFailed !FailureClass !Text
   | -- | The declaration's requested overlays and the run-local environment's
     -- active overlays disagree, or the declaration repeats an id.
     CapabilityOverlayMismatch ![CapabilityId] ![CapabilityId]
@@ -73,9 +77,9 @@ classifyRunError = \case
   ProgramRuntimeFailed {} -> Transient
   SkillLoadFailed {} -> Permanent
   SkillRunFailed {} -> Transient
-  SkillToolInfrastructureFailed retryable _ -> if retryable then Transient else Permanent
+  SkillToolInfrastructureFailed classification _ -> classification
   SkillToolTurnLimitExceeded {} -> Permanent
-  ProviderFailed retryable _ -> if retryable then Transient else Permanent
+  ProviderFailed classification _ -> classification
   CapabilityOverlayMismatch {} -> Permanent
   UnsupportedBehavior {} -> Permanent
   HarnessPolicyRefused {} -> Permanent

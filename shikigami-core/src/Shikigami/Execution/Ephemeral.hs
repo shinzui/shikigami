@@ -20,7 +20,7 @@ import Effectful.Error.Static (runErrorNoCallStack)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Behavior.Compatibility (renderResponseCompatibilityError, validateResponseRequest)
-import Shikigami.Behavior.Error (RunError (..), boundedBehaviorDetail)
+import Shikigami.Behavior.Error (FailureClass (..), RunError (..), boundedBehaviorDetail, failureClass)
 import Shikigami.Behavior.Run (BehaviorEnv (..), BehaviorInput, completeBehaviorRequest, runBehavior)
 import Shikigami.Behavior.Skill (SkillDir (..), SkillManifest (..), loadSkillManifest, skillRequestText)
 import Shikigami.Decision.Contract (versionedDigest)
@@ -78,13 +78,13 @@ runEphemeralBehavior duration base env decl input = case narrowHarnessPolicy bas
             (Right context, Right options) -> do
               let request = context & #tools .~ if actualKind == ModelSummary then Vector.empty else registryBaikai env.tools
               case validateResponseRequest env.model options request of
-                Left err -> pure (Left (ProviderFailed False (renderResponseCompatibilityError err)))
+                Left err -> pure (Left (ProviderFailed Permanent (renderResponseCompatibilityError err)))
                 Right () -> do
                   completed <- bounded (completeBehaviorRequest env env.model request options)
                   case completed of
                     Left err -> pure (Left err)
                     Right response -> case responseError response of
-                      Just err -> pure (Left (ProviderFailed (isRetryable err) "ephemeral model call failed"))
+                      Just err -> pure (Left (ProviderFailed (failureClass (isRetryable err)) "ephemeral model call failed"))
                       Nothing -> do
                         let assistant = captureAssistant response
                             calls' = calls + 1

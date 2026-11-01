@@ -15,6 +15,7 @@ import Shikigami.Flow.Delegate (Delegate)
 import Shikigami.Flow.Delegate qualified as Delegate
 import Shikigami.Program.Decision (programRef)
 import Shikigami.Program.Decision.Examples
+import Shikigami.Program.Decision.Examples (proposedRouteJsonText)
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
 
 triageStep :: DecisionStep Request TriageResult
@@ -44,7 +45,7 @@ shikumiDecisionExample payload = do
       case investigation.action of
         ReturnResult -> pure (object ["triage" .= triage, "investigation" .= investigation, "results" .= ([] :: [Value])])
         ProposeRoute -> do
-          proposal <- case eitherDecodeStrict (TE.encodeUtf8 investigation.routeJson) of
+          proposal <- case eitherDecodeStrict (TE.encodeUtf8 (proposedRouteJsonText investigation.routeJson)) of
             Left _ -> refuseDecision (decisionFailure OutputDecodeFailure "investigation route proposal cannot be decoded")
             Right value -> validateInvestigationRoute catalog value
           results <- case proposal.outcome of
