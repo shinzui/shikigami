@@ -28,7 +28,7 @@ import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude ((&), (.~))
-import Shikigami.Repository (RepositoryId (..))
+import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
 import Shikigami.WorkerSession.Types (AssignmentId, WorkerSessionId, assignmentIdForDigest, workerSessionId)
@@ -150,7 +150,7 @@ tests fixture =
         createDirectoryIfMissing True (takeDirectoryOfFiles root binding)
         _ <- git ["clone", "--bare", "--no-hardlinks", "--", source, workspaceMetadata root binding]
         loadRepositoryInstructions binding 65536 >>= (@?= Left InstructionSourceRefused)
-        repositoryIdentity repo @?= (RepositoryId ("mori://fixture/repo")),
+        repositoryIdentity repo @?= (repositoryId ("mori://fixture/repo")),
       testCase "symlink instruction files fail admission without following their targets" $ withFixture fixture \env source root _ -> do
         createFileLink "dependency.txt" (source </> "AGENTS.md")
         repo <- commitRepository source
@@ -210,8 +210,8 @@ request = WorkspaceRequest (WorkflowId "run") (Just (workerSessionId "session", 
 
 resolved :: FilePath -> Text.Text -> Text.Text -> IO ResolvedRepository
 resolved source base policy = do
-  catalog <- right (mkWorkspaceCatalog [RepositoryPolicy (RepositoryId "mori://fixture/repo") (workspaceLocator source) [(workspaceCoordinate (base))] (workspaceCoordinate (base)) (workspaceCoordinate (policy))])
-  right (resolveRepository catalog (RepositoryId "mori://fixture/repo") Nothing)
+  catalog <- right (mkWorkspaceCatalog [RepositoryPolicy (repositoryId "mori://fixture/repo") (workspaceLocator source) [(workspaceCoordinate (base))] (workspaceCoordinate (base)) (workspaceCoordinate (policy))])
+  right (resolveRepository catalog (repositoryId "mori://fixture/repo") Nothing)
 
 withFixture :: DatabaseFixture -> (AppEnv -> FilePath -> FilePath -> ResolvedRepository -> IO a) -> IO a
 withFixture fixture use = withShikigamiFreshDatabase fixture \connection -> bracket temporary removeDirectoryRecursive \dir -> do

@@ -84,11 +84,13 @@ import Shikigami.PracticeReview.Evidence
 import Shikigami.Repository
   ( RelativePath,
     RepoRef (..),
-    RepositoryId (..),
+    RepositoryId,
     Revision,
     mkRelativePath,
     mkRevision,
     relativePathText,
+    repositoryId,
+    repositoryIdText,
     revisionText,
   )
 import System.Directory (doesFileExist)
@@ -448,10 +450,10 @@ practiceReference2 =
     }
 
 practiceProject :: ProjectRef
-practiceProject = ProjectRef {name = "practice", repository = RepositoryId "repo_practice"}
+practiceProject = ProjectRef {name = "practice", repository = repositoryId "repo_practice"}
 
 upstreamProject :: ProjectRef
-upstreamProject = ProjectRef {name = "libfoo", repository = RepositoryId "repo_upstream"}
+upstreamProject = ProjectRef {name = "libfoo", repository = repositoryId "repo_upstream"}
 
 practiceRef1 :: RepoRef
 practiceRef1 = RepoRef {repository = practiceProject ^. #repository, revision = parseRevision practiceSha1}
@@ -589,17 +591,17 @@ fixtureResolveRef repository mutableRef
 
 fixtureReadBlob :: RepoRef -> RelativePath -> IO (Either EvidenceReadError PinnedContent)
 fixtureReadBlob reference path =
-  case (reference ^. #repository, revisionText (reference ^. #revision), relativePathText path) of
-    (RepositoryId "repo_target", revision, "docs/adr/0001.md")
+  case (repositoryIdText (reference ^. #repository), revisionText (reference ^. #revision), relativePathText path) of
+    ("repo_target", revision, "docs/adr/0001.md")
       | revision == headSha -> fromSnapshot "target/T2/docs/adr/0001.md" targetDecisionBlob2
-    (RepositoryId "repo_target", revision, "cabal.project")
+    ("repo_target", revision, "cabal.project")
       | revision == headSha -> fromSnapshot "target/T2/cabal.project" targetManifestBlob2
-    (RepositoryId "repo_practice", revision, "docs/practices/PRACTICE-1.md")
+    ("repo_practice", revision, "docs/practices/PRACTICE-1.md")
       | revision == practiceSha1 -> fromSnapshot "practice/P1/docs/practices/PRACTICE-1.md" practiceBlob1
       | revision == practiceSha2 -> fromSnapshot "practice/P2/docs/practices/PRACTICE-1.md" "246dfb7fa84bb8eeeee051efccd7b240b83f5dc0"
-    (RepositoryId "repo_upstream", revision, "src/Foo.hs")
+    ("repo_upstream", revision, "src/Foo.hs")
       | revision == upstreamSha2 -> fromSnapshot "upstream/U2/src/Foo.hs" upstreamBlob2
-    (repository, revision, rawPath) -> pure (Left (ContentNotFound repository revision rawPath))
+    (repository, revision, rawPath) -> pure (Left (ContentNotFound (repositoryId repository) revision rawPath))
   where
     fromSnapshot relativeFixturePath hash = do
       bytes <- readContentPlaneSnapshot relativeFixturePath
@@ -725,7 +727,7 @@ targetProject :: ProjectRef
 targetProject = ProjectRef {name = "target", repository = targetRepository}
 
 targetRepository :: RepositoryId
-targetRepository = RepositoryId "repo_target"
+targetRepository = repositoryId "repo_target"
 
 targetRef :: RepoRef
 targetRef = RepoRef {repository = targetRepository, revision = headCommit}
@@ -762,7 +764,7 @@ blob repository revision path contentHash declaredSize bytes =
   PinnedContent
     { provenance =
         PinnedProvenance
-          { repository = RepositoryId repository,
+          { repository = repositoryId repository,
             revision,
             mirrorObservedAt = observedAt
           },

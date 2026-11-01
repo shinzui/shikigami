@@ -1,12 +1,15 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.Agent.Approval
   ( ApprovalRequest (..),
     ApprovalChannel (..),
     ApprovalDecision (..),
     ApprovalRequirement (..),
-    ReviewRequestId (..),
+    ReviewRequestId,
+    parseReviewRequestId,
+    reviewRequestIdText,
     ApprovalPolicySnapshot (..),
     reviewRequestIdFor,
-    reviewRequestIdText,
     approvalWorkflowId,
     requiresApprovalFor,
     withApprovalChannel,
@@ -32,6 +35,7 @@ where
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseMaybe)
+import Data.Bits ((.&.))
 import Data.Foldable (traverse_)
 import Data.Set (Set)
 import Data.Set qualified as Set
@@ -40,6 +44,7 @@ import Data.Time (NominalDiffTime, addUTCTime)
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
+import GHC.Records (HasField (..))
 import Keiro.Timer (TimerId (..), TimerRequest (..), TimerRow (..), scheduleTimerOnceTx)
 import Keiro.Workflow
   ( StepName (..),
@@ -62,6 +67,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId)
 import Shikigami.Agent.Workflow.Input (awaitInput, deliverInput)
 import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
+import Shikigami.Duration
 import Shikigami.Prelude
 import Shikigami.Sink.Permission (AgentIdentity, SinkKind (..), sinkKindText)
 
@@ -94,9 +100,24 @@ data ApprovalRequirement
 -- | Stable public identity for one human review. This value is safe to retain
 -- in logs and attestations; it is deliberately distinct from the random,
 -- one-shot 'AwakeableId' that authorizes a decision.
-newtype ReviewRequestId = ReviewRequestId {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
+newtype ReviewRequestId = ReviewRequestId Text
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON)
+
+parseReviewRequestId :: Text -> Either Text ReviewRequestId
+parseReviewRequestId raw = case UUID.fromText (Text.drop 7 raw) of
+  Just value
+    | let (_, version, variant, _) = UUID.toWords value,
+      raw == "review_" <> UUID.toText value,
+      version .&. 0xf000 == 0x5000,
+      variant .&. 0xc0000000 == 0x80000000 ->
+        Right (ReviewRequestId raw)
+  _ -> Left "ReviewRequestId requires its canonical UUIDv5 commitment"
+
+instance HasField "value" ReviewRequestId Text where getField = reviewRequestIdText
+
+instance FromJSON ReviewRequestId where
+  parseJSON = Aeson.withText "review request identity" (either (fail . Text.unpack) pure . parseReviewRequestId)
 
 -- | The approval policy recorded once in an agent-run journal. Replaying a run
 -- consults this value instead of whichever process configuration happens to be
@@ -104,7 +125,7 @@ newtype ReviewRequestId = ReviewRequestId {value :: Text}
 data ApprovalPolicySnapshot = ApprovalPolicySnapshot
   { requireFor :: !(Set SinkKind),
     channel :: !ApprovalChannel,
-    deadline :: !NominalDiffTime
+    deadline :: !(Duration "approval")
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -149,10 +170,10 @@ withApprovalChannel selected ApprovalRequest {prompt, context} =
 approvalPolicyChannel :: ApprovalPolicySnapshot -> ApprovalChannel
 approvalPolicyChannel ApprovalPolicySnapshot {channel} = channel
 
-approvalPolicyDeadline :: ApprovalPolicySnapshot -> NominalDiffTime
+approvalPolicyDeadline :: ApprovalPolicySnapshot -> Duration "approval"
 approvalPolicyDeadline ApprovalPolicySnapshot {deadline} = deadline
 
-autoApprovePolicy :: NominalDiffTime -> ApprovalPolicySnapshot
+autoApprovePolicy :: Duration "approval" -> ApprovalPolicySnapshot
 autoApprovePolicy deadline =
   ApprovalPolicySnapshot
     { requireFor = Set.empty,
@@ -232,7 +253,7 @@ awaitApproval ::
   ApprovalEnv ->
   StepName ->
   ApprovalRequest ->
-  Maybe NominalDiffTime ->
+  Maybe (Duration "approval") ->
   Eff es ApprovalDecision
 awaitApproval env stepName req deadline = do
   (aid, awaitAnswer) <- awakeableNamed stepName
@@ -285,7 +306,7 @@ armApprovalDeadline ::
   (Workflow :> es, Store :> es, IOE :> es) =>
   StepName ->
   AwakeableId ->
-  NominalDiffTime ->
+  Duration "approval" ->
   Eff es ()
 armApprovalDeadline stepName aid deadline = do
   (workflowName, workflowId) <- currentWorkflow
@@ -296,7 +317,7 @@ armApprovalDeadline stepName aid deadline = do
           { timerId = approvalTimeoutTimerId workflowName workflowId generation stepName,
             processManagerName = unWorkflowName workflowName,
             correlationId = unWorkflowId workflowId,
-            fireAt = addUTCTime deadline now,
+            fireAt = addUTCTime (durationTime deadline) now,
             payload = Aeson.toJSON (approvalTimeoutPayload aid)
           }
   -- Keiro 0.4 reports whether this arm won the first-arm-wins insert. Arming an

@@ -23,6 +23,7 @@ import Shikigami.Attestation.Resolve (ResolvedProfile)
 import Shikigami.Behavior.Input (BehaviorInput)
 import Shikigami.Behavior.Skill (SkillDir, SkillManifest (..), loadSkillManifest, skillRequestText)
 import Shikigami.Capability.Overlay (ResolvedCapabilitySet)
+import Shikigami.Duration (durationTime)
 import Shikigami.Execution.Driver (ExecutionDriverResult (..), ExecutionStart (..))
 import Shikigami.Execution.Executor (ExecutionRuntime (..), runExecutionStore)
 import Shikigami.Execution.Policy (selectContextView)
@@ -119,7 +120,7 @@ admitSkillExecutionWithWorkspace loadWorkspace runtime describe assignment = do
                         case authority of
                           Left _ -> pure (Left (ExecutionPolicyRefused "fresh assignment authority refused"))
                           Right () -> do
-                            described <- timeout (max 1 (min 30 runtime.timeoutSeconds) * 1000000) (describe initial)
+                            described <- timeout (max 1 (min 30 (floor (durationTime runtime.timeoutSeconds))) * 1000000) (describe initial)
                             let menu = fromMaybe (Left (ExecutionPolicyRefused "tool menu description exceeded its admission deadline")) described
                             case menu of
                               Left err -> pure (Left err)

@@ -33,6 +33,7 @@ import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.RunJobs qualified as RunJobs
+import Shikigami.RuntimePolicy (ManifestStrictness (..))
 import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..), CronSchedule, cronExpressionClaim, nextDue, parseCron)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, parseSchedulePayload, runSchedulerTimerWorker, scheduleFireAction, scheduleTimerId, scheduleTimerPayload, shikigamiTimerFallback)
@@ -259,7 +260,7 @@ tests databaseFixture =
       -- timer loop's map, so it loaded fine, logged nothing, and never fired.
       testCase "an unparseable cron is reported, not dropped" do
         (logger, captured) <- capturingLogger
-        schedules <- schedulerSchedules logger False [scheduledAgent "good-agent" "* * * * *", scheduledAgent "bad-agent" "not a cron"]
+        schedules <- schedulerSchedules logger LenientManifests [scheduledAgent "good-agent" "* * * * *", scheduledAgent "bad-agent" "not a cron"]
         assertEqual "only the parseable agent is scheduled" [fixtureAgentName "good-agent"] (Map.keys schedules)
         lines' <- readIORef captured
         assertBool
@@ -270,7 +271,7 @@ tests databaseFixture =
           (any (ByteString.Char8.isInfixOf "\"agent\":\"bad-agent\"") lines'),
       testCase "strict mode refuses to start on an unparseable cron" do
         (logger, captured) <- capturingLogger
-        outcome <- try @ExitCode (schedulerSchedules logger True [scheduledAgent "bad-agent" "not a cron"])
+        outcome <- try @ExitCode (schedulerSchedules logger StrictManifests [scheduledAgent "bad-agent" "not a cron"])
         case outcome of
           Left code -> assertEqual "refusal exit code" (ExitFailure 1) code
           Right _ -> assertFailure "strict mode must refuse to start on an unparseable cron"
@@ -280,7 +281,7 @@ tests databaseFixture =
           (any (ByteString.Char8.isInfixOf "\"event\":\"scheduler.cron.invalid\"") lines'),
       testCase "a parseable cron under strict mode still starts" do
         (logger, _captured) <- capturingLogger
-        schedules <- schedulerSchedules logger True [scheduledAgent "good-agent" "*/5 * * * *"]
+        schedules <- schedulerSchedules logger StrictManifests [scheduledAgent "good-agent" "*/5 * * * *"]
         assertEqual "the agent is scheduled" [fixtureAgentName "good-agent"] (Map.keys schedules),
       testCase "an approval-timeout payload still reaches the approval action" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->

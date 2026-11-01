@@ -37,6 +37,7 @@ import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Decision.ModelCatalog (modelCatalog)
+import Shikigami.Duration
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Coordinate qualified as ExecutionValue
 import Shikigami.Execution.Executor qualified as Executor
@@ -160,7 +161,7 @@ executeGitWithBackend :: GitBackend -> AppEnv -> ActionAuthorizer -> (ExecutionS
 executeGitWithBackend backend env authorizer current client prepared = do
   let file = fileRuntime env authorizer current
       providers = must (installDurableAdapters [supervisedWorkspaceEditAdapter file, workspaceExecAdapter client, workspaceGitAdapterWithBackend backend file, transferredWorkspaceEditAdapter file, transferredWorkspaceExecAdapter client, transferredWorkspaceGitAdapterWithBackend backend file, workspaceIntegrationAdapterWithBackend backend file] emptyCapabilityProviderRegistry)
-      runtime = Executor.ExecutionRuntime env (\_ -> current prepared.snapshot) current (\_ -> error "fixture does not dispatch a model") (Tools.withExecutionTools Log.silentLogger authorizer providers native) 5
+      runtime = Executor.ExecutionRuntime env (\_ -> current prepared.snapshot) current (\_ -> error "fixture does not dispatch a model") (Tools.withExecutionTools Log.silentLogger authorizer providers native) (either (error . show) id (parseDuration 5))
   result <- Executor.executeAcceptedAttempt runtime prepared.snapshot.identity prepared.reference
   unless (result == Right Executor.ExecutorDone) (fail "fixture execution did not finish its delivery")
 
@@ -251,7 +252,7 @@ nextTool env access snapshot response position invocation = case filter ((== inv
 
 executeWithProviders :: CapabilityProviderRegistry -> AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> Prepared -> IO ()
 executeWithProviders providers env authorizer current prepared = do
-  let runtime = Executor.ExecutionRuntime env (\_ -> current prepared.snapshot) current (\_ -> error "fixture does not dispatch a model") (Tools.withExecutionTools Log.silentLogger authorizer providers native) 5
+  let runtime = Executor.ExecutionRuntime env (\_ -> current prepared.snapshot) current (\_ -> error "fixture does not dispatch a model") (Tools.withExecutionTools Log.silentLogger authorizer providers native) (either (error . show) id (parseDuration 5))
   result <- Executor.executeAcceptedAttempt runtime prepared.snapshot.identity prepared.reference
   unless (result == Right Executor.ExecutorDone) (fail "configured fixture delivery did not finish")
 

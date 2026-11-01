@@ -1,7 +1,11 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Repository identities and immutable content-plane addresses shared across
 -- review, evidence acquisition, and attestation.
 module Shikigami.Repository
-  ( RepositoryId (..),
+  ( RepositoryId,
+    repositoryId,
+    repositoryIdText,
     Revision,
     mkRevision,
     revisionText,
@@ -15,13 +19,22 @@ where
 import Data.Aeson (FromJSONKey, ToJSONKey, Value (String), withText)
 import Data.Char (isAsciiLower, isDigit)
 import Data.Text qualified as Text
+import GHC.Records (HasField (..))
 import Shikigami.Prelude
 
 -- | Mori's stable repository identity. Current producers use either a
 -- @repo_...@ TypeID or a canonical @mori://@ repository URI.
-newtype RepositoryId = RepositoryId {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
+newtype RepositoryId = RepositoryId Text
+  deriving stock (Eq, Ord, Show)
   deriving newtype (ToJSON, FromJSON, ToJSONKey, FromJSONKey)
+
+repositoryId :: Text -> RepositoryId
+repositoryId = RepositoryId
+
+repositoryIdText :: RepositoryId -> Text
+repositoryIdText (RepositoryId raw) = raw
+
+instance HasField "value" RepositoryId Text where getField = repositoryIdText
 
 -- | A revision accepted by the current Mori content plane: one full lowercase
 -- 40-character Git SHA-1 commit id.

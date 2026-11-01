@@ -12,7 +12,7 @@ import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Prelude ((&), (.~))
-import Shikigami.Repository (RepositoryId (..))
+import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.Workspace.Catalog (repositoryPolicyRevision, resolveRepository)
 import Shikigami.Workspace.Process
 import Shikigami.Workspace.ProcessPolicy
@@ -87,14 +87,14 @@ tests =
           _ -> assertFailure "policy must be an object",
       testCase "configured process hosts bind complete policies and refuse inconsistent or unbounded configuration" $ do
         let base = Text.replicate 40 "a"
-            repository = Settings.WorkspaceRepository (RepositoryId ("mori://fixture/repo")) (workspaceLocator ("/operator/repo")) [Settings.WorkspaceRevision (workspaceCoordinate (base)) (workspaceCoordinate (digest))] (workspaceCoordinate (base)) (workspaceCoordinate ("reviewed")) [(workspaceCoordinate (""))] [(workspaceCoordinate ("src"))]
+            repository = Settings.WorkspaceRepository (repositoryId ("mori://fixture/repo")) (workspaceLocator ("/operator/repo")) [Settings.WorkspaceRevision (workspaceCoordinate (base)) (workspaceCoordinate (digest))] (workspaceCoordinate (base)) (workspaceCoordinate ("reviewed")) [(workspaceCoordinate (""))] [(workspaceCoordinate ("src"))]
             process = Settings.WorkspaceProcessSettings (workspaceLocator ("/run/workspace/supervisor.sock")) ((either (error . show) id . parseRpcPeerUserId) (0)) ((either (error . show) id . parseRpcRequestSeconds) (5)) ((either (error . show) id . parseRpcWaitSeconds) (60)) (IdentityRange ((either (error . show) id . parseWorkspaceIdentity) (64000)) ((either (error . show) id . parseWorkspaceIdentity) (64031))) (Map.singleton repository.identity policy)
             settings = Settings.WorkspaceSettings (workspaceLocator ("/private/workspaces")) [repository] [Settings.WorkspaceGrant ((either (error . show) id . mkAgentName) ("worker")) (declarationCoordinate ("agent_fixture")) repository.identity Nothing] (Just process)
             invalid changed = case Settings.validateWorkspaceSettings (settings & #process .~ Just changed) of Left _ -> pure (); Right _ -> assertFailure "invalid process configuration admitted"
         case Settings.validateWorkspaceSettings settings >>= (either (const (Left "resolution refused")) Right . (\catalog -> resolveRepository catalog repository.identity Nothing)) of
           Right selected -> repositoryPolicyRevision selected @?= processPolicyIdentity policy
           Left err -> assertFailure (Text.unpack err)
-        mapM_ invalid [process & #socketPath .~ (workspaceLocator ("relative")), process & #policies .~ Map.empty, process & #policies .~ Map.singleton (RepositoryId ("mori://fixture/other")) policy, process & #policies .~ Map.singleton repository.identity (policy & #writePaths .~ [(workspaceCoordinate "")])]
+        mapM_ invalid [process & #socketPath .~ (workspaceLocator ("relative")), process & #policies .~ Map.empty, process & #policies .~ Map.singleton (repositoryId ("mori://fixture/other")) policy, process & #policies .~ Map.singleton repository.identity (policy & #writePaths .~ [(workspaceCoordinate "")])]
         let changed = settings & #process .~ Just (process & #policies .~ Map.singleton repository.identity (policy & #rules .~ [rule & #arguments .~ [(workspaceCoordinate ("new"))]]))
         assertBool "same human label cannot change retained command policy" (Settings.configuredPolicyIdentity changed repository /= Settings.configuredPolicyIdentity settings repository),
       testCase "file restrictions use exact path segments and independent read and write scopes" $ do

@@ -60,14 +60,17 @@ import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Principal (principalText)
 import Shikigami.App.Config
 import Shikigami.App.Config.Load
+import Shikigami.Duration (parseDuration)
 import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Inspection.Settings qualified as Inspection
 import Shikigami.Objective.Types (ObjectiveService (..), ObjectiveSettings (..), defaultObjectiveSettings, parseOperatorId)
 import Shikigami.PracticeReview.Capability (renderAttentionRecipientMap)
+import Shikigami.RuntimePolicy (ManifestStrictness (..))
 import Shikigami.Sink.Auth (TokenSource (..), credentialToken, matchesBearerHeader, staticTokenSource)
 import Shikigami.Sink.Permission (SinkKind (..))
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..), parseCron)
+import Shikigami.Trigger.Stream (IncludeAgentActors (..))
 import Shikigami.Workspace.Settings (WorkspaceSettings (..), WorkspaceSupervisorSettings (..))
 import Shikigami.Workspace.Value
 import Test.Tasty (TestTree, testGroup)
@@ -262,24 +265,24 @@ surfaceTests =
         (.schedulerCatchUp) defaultAppConfig @?= SkipMissed
         -- Lenient by default: upgrading must not turn a tolerated broken
         -- manifest into a failed deploy without an explicit configuration change.
-        (.agentsStrict) defaultAppConfig @?= False
+        (.agentsStrict) defaultAppConfig @?= LenientManifests
         (.directorySettings) defaultAppConfig @?= DirectoryDisabled
         delegationBudgetNatural ((.delegationBudget) defaultAppConfig) @?= 16
         portNumber ((.httpPort) defaultAppConfig) @?= 8080
         (.httpHost) defaultAppConfig @?= "127.0.0.1"
         byteLimitBytes ((.httpRequestMaxBytes) defaultAppConfig) @?= 8_388_608
         byteLimitBytes ((.httpResponseMaxBytes) defaultAppConfig) @?= 8_388_608
-        (.runTimeout) defaultAppConfig @?= secondsToNominalDiffTime 300
+        (.runTimeout) defaultAppConfig @?= (either (error . show) id (parseDuration (secondsToNominalDiffTime 300)))
         (.approvalRequiredSinks) defaultAppConfig @?= Set.empty
         (.approvalChannel) defaultAppConfig @?= ViaDanwa
-        (.approvalDeadline) defaultAppConfig @?= secondsToNominalDiffTime 900
+        (.approvalDeadline) defaultAppConfig @?= (either (error . show) id (parseDuration (secondsToNominalDiffTime 900)))
         renderAttentionRecipientMap ((.practiceReviewAttentionRecipients) defaultAppConfig) @?= ""
         (.kafkaBroker) defaultAppConfig @?= "127.0.0.1:9092"
         (.kafkaActivityTopic) defaultAppConfig @?= "activity.v1"
         (.kafkaEventsTopic) defaultAppConfig @?= "danwa.message-addressed.v1"
         (.kafkaStreamGroup) defaultAppConfig @?= "shikigami-stream"
         (.kafkaEventsGroup) defaultAppConfig @?= "shikigami-events"
-        (.kafkaIncludeAgentActors) defaultAppConfig @?= False
+        (.kafkaIncludeAgentActors) defaultAppConfig @?= ExcludeAgentActors
         queueNameToText ((.kafkaDeadLetterQueue) defaultAppConfig) @?= "shikigami_stream_dead_letters"
         (.kawaBaseUrl) defaultAppConfig @?= "http://localhost:8088"
         (.kawaSourceSegment) defaultAppConfig @?= "shinzui/shikigami"
@@ -428,8 +431,8 @@ precedenceTests =
             [ ("SHIKIGAMI_RUN_TIMEOUT_SECONDS", "180"),
               ("SHIKIGAMI_APPROVAL_DEADLINE_SECONDS", "720")
             ]
-        (.runTimeout) config @?= secondsToNominalDiffTime 240
-        (.approvalDeadline) config @?= secondsToNominalDiffTime 840,
+        (.runTimeout) config @?= (either (error . show) id (parseDuration (secondsToNominalDiffTime 240)))
+        (.approvalDeadline) config @?= (either (error . show) id (parseDuration (secondsToNominalDiffTime 840))),
       testCase "approval policy resolves in YAML, environment, then CLI precedence" do
         config <-
           resolveOrFail
@@ -462,7 +465,7 @@ precedenceTests =
         (.directorySettings) config
           @?= DirectoryFile
             { path = "/etc/shikigami/principals.json",
-              refreshInterval = secondsToNominalDiffTime 7
+              refreshInterval = (either (error . show) id (parseDuration (secondsToNominalDiffTime 7)))
             }
     ]
 
@@ -506,8 +509,8 @@ strictnessTests =
       testCase "duration budget boundaries are accepted" do
         low <- resolveOrFail (optionsWith [] [cliOverride workerRunTimeoutSecondsKey "1"]) [] []
         high <- resolveOrFail (optionsWith [] [cliOverride approvalDeadlineSecondsKey "86400"]) [] []
-        (.runTimeout) low @?= secondsToNominalDiffTime 1
-        (.approvalDeadline) high @?= secondsToNominalDiffTime 86_400,
+        (.runTimeout) low @?= (either (error . show) id (parseDuration (secondsToNominalDiffTime 1)))
+        (.approvalDeadline) high @?= (either (error . show) id (parseDuration (secondsToNominalDiffTime 86_400))),
       testCase "approval policy rejects duplicates, unknown sink kinds, and unknown channels" do
         mapM_
           (\bad -> (.exitCode) (runWith (optionsWith [] [cliOverride approvalRequireKey bad]) [] []) @?= resolutionExitCode)
@@ -577,7 +580,7 @@ strictnessTests =
         (.standardError) run @?= "config.yaml: does not exist",
       testCase "a textual boolean from the environment decodes" do
         config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_KAFKA_INCLUDE_AGENT_ACTORS", "true")]
-        (.kafkaIncludeAgentActors) config @?= True,
+        (.kafkaIncludeAgentActors) config @?= IncludeAgentActors,
       testCase "Kikan action authorization resolves only as one complete trust configuration" do
         config <- resolveOrFail (optionsWith [] []) [] completeActionAuthorizationEnvironment
         case (.actionAuthorization) config of

@@ -40,6 +40,7 @@ import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Capability.Overlay (capabilityIdText)
 import Shikigami.Log qualified as Log
 import Shikigami.Router.SelectionLimit (selectionLimitInt)
+import Shikigami.RuntimePolicy (ManifestStrictness (..))
 import Shikigami.Trigger.Schedule (parseCron)
 import System.Directory (doesDirectoryExist, listDirectory)
 import System.Exit (ExitCode (ExitFailure))
@@ -178,7 +179,7 @@ tests =
       -- @agents/detectors/schema.dhall@ is never opened.
       testCase "loadAgentsLoud reports the broken manifest through the logger" do
         (logger, captured) <- capturingLogger
-        report@AgentLoadReport {entries} <- loadAgentsLoud logger "../agents" False (const (pure ()))
+        report@AgentLoadReport {entries} <- loadAgentsLoud logger "../agents" LenientManifests (const (pure ()))
         lines' <- readIORef captured
         assertBool
           ("expected agents.manifest.load_failed in " <> show lines')
@@ -198,7 +199,7 @@ tests =
       testCase "strict mode refuses to start when a manifest fails" do
         (logger, captured) <- capturingLogger
         persisted <- newIORef False
-        outcome <- try @ExitCode (loadAgentsLoud logger "../agents" True (const (writeIORef persisted True)))
+        outcome <- try @ExitCode (loadAgentsLoud logger "../agents" StrictManifests (const (writeIORef persisted True)))
         case outcome of
           Left code -> code @?= ExitFailure 1
           Right _ -> assertFailure "strict mode must refuse to start when a manifest fails"
@@ -212,7 +213,7 @@ tests =
           (any (ByteString.Char8.isInfixOf "\"event\":\"agents.manifest.strict_refused\"") lines'),
       testCase "strict mode starts when every manifest loads" do
         (logger, _captured) <- capturingLogger
-        AgentLoadReport {entries} <- loadAgentsLoud logger "../agents/proof" True (const (pure ()))
+        AgentLoadReport {entries} <- loadAgentsLoud logger "../agents/proof" StrictManifests (const (pure ()))
         assertBool "the proof directory has no failing manifest" (not (any isFailure entries))
     ]
 

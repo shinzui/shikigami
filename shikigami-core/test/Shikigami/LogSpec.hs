@@ -16,10 +16,13 @@ import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as BS8
 import Data.ByteString.Lazy qualified as LBS
+import Data.Either (isLeft)
+import Data.Foldable (for_)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Shikigami.Log
+import Shikigami.Log.Correlation (CallCorrelationId)
 import System.Directory (getTemporaryDirectory, removeFile)
 import System.IO (hClose, openTempFile)
 import Test.Tasty (TestTree, testGroup)
@@ -182,6 +185,9 @@ correlationTests =
       Aeson.encode call @?= "\"heartbeat:1/run-behavior/0\""
       Aeson.decode (Aeson.encode run) @?= Just run
       Aeson.decode (Aeson.encode call) @?= Just call,
+    testCase "retained call ids reject missing components and invalid ordinals" do
+      for_ ["\"missing\"", "\"run/0\"", "\"run/call/-1\"", "\"run/call/01\"", "\"run/call/1x\""] \raw ->
+        assertBool "invalid correlation" (isLeft (Aeson.eitherDecode @CallCorrelationId raw)),
     testCase "the field keys are the ones the vocabulary documents" do
       runIdKey @?= "run_id"
       callIdKey @?= "call_id"

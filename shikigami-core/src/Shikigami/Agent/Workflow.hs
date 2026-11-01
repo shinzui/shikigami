@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# OPTIONS_GHC -O0 #-}
 
 -- GHC 9.12.4 at -O1 crashes in GC after the expanded Flow interpreter suspends,
@@ -129,6 +130,7 @@ import Shikigami.Decision.Evidence qualified as DecisionEvidence
 import Shikigami.Decision.ModelCatalog qualified as ModelCatalog
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
+import Shikigami.Duration
 import Shikigami.Execution.Driver qualified as ExecutionDriver
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Policy.Types qualified as Harness
@@ -160,6 +162,7 @@ import Shikigami.PracticeReview.Capability qualified as PracticeReview
 import Shikigami.PracticeReview.Memory qualified as PracticeReviewMemory
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Program.DecisionRunner (DecisionAbort (..))
+import Shikigami.RuntimePolicy (defaultModelRequired)
 import Shikigami.Sink (DanwaConfig, DeliveryGuard (..), GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), dispatch, sinkKindOf)
 import Shikigami.Sink.Delivery qualified as Delivery
 import Shikigami.Sink.GrantStore (withActionAuthorizer)
@@ -214,7 +217,7 @@ data AgentRunDeps = AgentRunDeps
     -- | Process resources for the approval child registered alongside this
     -- agent-run workflow. The value itself never crosses a journal boundary.
     approvalWorkflow :: !ApprovalWorkflow.ApprovalWorkflowEnv,
-    runTimeout :: !NominalDiffTime,
+    runTimeout :: !(Duration "agent-run"),
     harness :: !Harness.HarnessPolicy,
     -- | Root-run descendant limit used when an agent declaration leaves its
     -- own delegation budget absent.
@@ -284,7 +287,7 @@ depsDirectory AgentRunDeps {directory = value} = value
 depsRouting :: AgentRunDeps -> RoutingRuntime
 depsRouting AgentRunDeps {routing = value} = value
 
-depsRunTimeout :: AgentRunDeps -> NominalDiffTime
+depsRunTimeout :: AgentRunDeps -> Duration "agent-run"
 depsRunTimeout AgentRunDeps {runTimeout = timeout} = timeout
 
 depsDelegationBudget :: AgentRunDeps -> DelegationBudget
@@ -456,7 +459,7 @@ usesDefaultModel :: AgentDecl -> Bool
 usesDefaultModel decl = case decl.behavior of
   Skill {} -> null decl.delegates || isJust decl.routing
   CoordinatingSkill {} -> True
-  Flow {name} -> maybe True (.requiresDefaultModel) (Flow.lookupFlow name)
+  Flow {name} -> maybe True (defaultModelRequired . (.requiresDefaultModel)) (Flow.lookupFlow name)
   _ -> isJust decl.routing
 
 inheritedPermissions :: AgentDecl -> RunJob -> Maybe [DecisionContract.ModelAlias]
@@ -505,7 +508,7 @@ executionRuntime deps =
             transact = SelectionRuntime.selectionTransaction deps.appEnv deps.deliveryPool
           },
       withTools = ExecutionTools.withExecutionTools deps.logger deps.actionAuthorizer deps.capabilities.providers (executionTools deps),
-      timeoutSeconds = fromInteger (max 1 (min 3500 (floor deps.runTimeout)))
+      timeoutSeconds = deps.runTimeout
     }
   where
     authority (snapshot :: Execution.ExecutionSnapshot) = SelectionRuntime.currentExecutionAuthority (Directory.identityLifecycleAdmission (depsDirectory deps) snapshot.identity) snapshot.sanctionedProfile deps.resolveRunProfile
@@ -542,7 +545,7 @@ behaviorEnvForProfile AgentDecl {behavior = CoordinatingSkill {}} (Just resolved
   constrainBehaviorEnv resolvedProfile
 behaviorEnvForProfile AgentDecl {behavior = Flow {name}} (Just resolvedProfile) =
   case Flow.lookupFlow name of
-    Just flow | not flow.requiresDefaultModel -> Right
+    Just flow | not (defaultModelRequired flow.requiresDefaultModel) -> Right
     _ -> constrainBehaviorEnv resolvedProfile
 behaviorEnvForProfile AgentDecl {routing = Just _} (Just resolvedProfile) =
   constrainBehaviorEnv resolvedProfile
@@ -613,7 +616,7 @@ runSessionedAgent deps activeBehaviorEnv durableSelection resolvedProfile resolv
                   (StepName "run-behavior-v2")
                   ( liftIO
                       ( runBehaviorAttemptWith
-                          (depsRunTimeout deps)
+                          (durationTime (depsRunTimeout deps))
                           do
                             acquired <-
                               runBehaviorWithCapabilities
@@ -1031,7 +1034,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
                       profile = resolvedProfile,
                       evidence = DecisionEvidence.postgresDecisionEvidenceStore pool,
                       routing = depsRouting deps,
-                      timeoutMicros = floor (realToFrac (depsRunTimeout deps) * (1000000 :: Double)),
+                      timeoutMicros = floor (realToFrac (durationTime (depsRunTimeout deps)) * (1000000 :: Double)),
                       beforeStep = ((.hooks) deps).beforeStepBody,
                       afterStep = ((.hooks) deps).afterStepBody
                     }
@@ -1089,7 +1092,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
     routingEnv =
       FlowRouting.RoutingEnv
         { FlowRouting.agent = decl,
-          FlowRouting.sessionId = idText sid,
+          FlowRouting.sessionId = sid,
           FlowRouting.behaviorEnv = activeBehaviorEnv,
           FlowRouting.runtime = depsRouting deps
         }
@@ -1160,7 +1163,7 @@ runDeclaredSupervisor ::
   Eff es Value
 runDeclaredSupervisor deps decl@AgentDecl {delegates = delegateTargets} currentSession job@RunJob {triggerPayload} = do
   let ctx = delegateContext deps decl currentSession job
-      delegationKey ordinal = "delegate-" <> Text.pack (show ordinal)
+      delegationKey ordinal = declarationCoordinate ("delegate-" <> Text.pack (show ordinal))
       resultLabel target = let raw = agentNameText target in fromMaybe raw (Text.stripSuffix "-researcher" raw)
       childPayload target =
         Aeson.object

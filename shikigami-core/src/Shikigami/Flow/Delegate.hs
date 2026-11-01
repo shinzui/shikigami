@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeFamilies #-}
 
 -- | Replay-safe delegation capability for Flow bodies.
@@ -25,6 +26,7 @@ import Effectful.Dispatch.Dynamic (interpret, send)
 import Keiro.Workflow (Workflow)
 import Kiroku.Store.Effect (Store)
 import Shikigami.Agent.Decl (AgentDecl)
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate (Delegated, DelegationRequest)
 import Shikigami.Agent.Delegate qualified as AgentDelegate
 import Shikigami.Agent.Delegate.Context (DelegateCtx)
@@ -40,7 +42,7 @@ data DelegateEnv = DelegateEnv
   }
 
 data Delegate :: Effect where
-  DelegateChild :: Text -> AgentName -> Value -> Delegate m (Delegated Value)
+  DelegateChild :: DeclarationCoordinate "delegation-key" -> AgentName -> Value -> Delegate m (Delegated Value)
   DelegateBatch :: CandidateCatalog -> NonEmpty DelegationRequest -> Delegate m (NonEmpty (Delegated Value))
   AwaitOne :: (FromJSON a) => Delegated a -> Delegate m a
   AwaitAll :: (FromJSON a) => [Delegated a] -> Delegate m [Either Text a]
@@ -49,7 +51,7 @@ data Delegate :: Effect where
 type instance DispatchOf Delegate = Dynamic
 
 -- | Spawn an allow-listed child under a caller-supplied stable call-site key.
-delegate :: (Delegate :> es) => Text -> AgentName -> Value -> Eff es (Delegated Value)
+delegate :: (Delegate :> es) => DeclarationCoordinate "delegation-key" -> AgentName -> Value -> Eff es (Delegated Value)
 delegate key target payload = send (DelegateChild key target payload)
 
 delegateBatch :: (Delegate :> es) => CandidateCatalog -> NonEmpty DelegationRequest -> Eff es (NonEmpty (Delegated Value))

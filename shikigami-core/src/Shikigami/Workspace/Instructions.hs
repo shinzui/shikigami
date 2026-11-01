@@ -34,7 +34,7 @@ import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.AssignmentKey (AssignmentKey)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Prelude hiding ((.=))
-import Shikigami.Repository (RepositoryId (..))
+import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.StateRevision
 import Shikigami.Workspace.Reference (WorkspaceRef)
 import Shikigami.Workspace.Value

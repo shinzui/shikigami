@@ -1575,3 +1575,40 @@ includes existing workspace entity controls. Formatter, style and whitespace
 checks pass. Prototype compilation supplies no new Linux runtime qualification.
 The old ledger is still identified as historical; final M3 acceptance requires
 the remaining applicable findings and the combined fresh inventory to close.
+
+
+The native gate for workspace source commit `ad22a18` against `6f0260d` also
+passes: zero findings, replay-neutral impact and all 156 conformance controls.
+The retained reports are `workspace-keiro-diff.json`,
+`workspace-keiro-replay-impact.json` and `workspace-keiro-gate.json`.
+
+
+Runtime values and remaining deterministic identity encapsulation (2026-11-01):
+private duration roles keep exact numeric JSON and explicit clock/SDK lowering;
+configured bounds retain the existing 1..86400-second policy. Remaining approval
+waits retain zero for immediate expiration. Heartbeat tolerances keep their
+separate exact role and existing zero/negative semantics. Manifest strictness,
+agent inclusion and default-model requirements use named choices with their old
+boolean configuration codecs. Review, catalog and delegation-budget decoders
+require the original canonical UUIDv5 domains; producers keep their exact salts,
+inputs and byte recipes. Repository identities remain exact foreign claims with
+private representation and read-only access. Routing retains native Kioku session
+identity. Dead letters retain queue/inbox alternatives, and flow memory/sink/
+worker labels plus delegation keys keep distinct roles and the same prefixed
+journal names and derived identities. Memory priority keeps the native integer
+rank in a distinct wrapper, without inventing a new ranking range.
+
+The complete workspace build passes, including the Linux prototype fixture.
+Executed acceptance passes 629 core unit, 472 PostgreSQL (140.57 seconds), 280
+serial worker (190.82 seconds), 95 server, 37 agent, 31 API and nine client cases,
+plus domain conformance and six diagram controls. The core checks include malformed
+and wrong-domain identity refusal and exact subsecond/expired duration behavior;
+existing PostgreSQL controls retain approval, delegation, flow memory, routing,
+execution, rollback and repair evidence. The source snapshot is
+`runtime-values-source.json`. The 234-case compiler collection passes 232 controls and exposes two stale
+generation expectations from the earlier execution batch; both corrected
+controls pass separately. Final M3 will run the current complete script.
+Style and whitespace checks pass. The native gate will be recorded against
+the actual source commit before the next core edit.
+The current classification remains the historical `1e7f619` snapshot and this
+batch does not mark M2/M3 complete or certify unresolved findings.

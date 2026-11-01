@@ -41,10 +41,12 @@ import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent), co
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Directory (disabledDirectoryHandle)
+import Shikigami.Duration (parseDuration)
 import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..), atRiskCustomerLifecycleDiagram, flowDeclarationErrors, flowRegistry, lookupFlow, registeredFlowNames)
 import Shikigami.Flow.Acknowledgement (Ack (..), ackFromDecision, runAcknowledgement)
 import Shikigami.Flow.Capability
   ( MemoryEnv (..),
+    MemoryPriority (..),
     MemoryQuery (..),
     RememberOptions (..),
     SinkEnv (..),
@@ -69,6 +71,7 @@ import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.PracticeReview.Capability qualified as PracticeReview
 import Shikigami.PracticeReview.Memory qualified as PracticeReviewMemory
+import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (SinkKind (SKizashiSignal), defaultGrantTable)
 import Shikigami.Sink.Types (SinkOutcome (DeniedOutcome, Enqueued), SinkResult (..))
@@ -237,7 +240,7 @@ tests databaseFixture =
             tracer <- noopTracer
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                 memoryEnv = MemoryEnv {appEnv, agent = flowAgentDecl "at-risk-customer", identity = CompatibilityAgent (fixtureAgentName "at-risk-customer"), aliasPool = Nothing, sessionId = Nothing}
-                mid = deterministicFlowMemoryId (WorkflowName "shikigami.flow.spike") (WorkflowId "flow-crash-window") 0 "acknowledged"
+                mid = deterministicFlowMemoryId (WorkflowName "shikigami.flow.spike") (WorkflowId "flow-crash-window") 0 (declarationCoordinate "acknowledged")
                 note = object ["summary" .= ("at-risk customer alert acknowledged" :: Text)]
 
             firstWrite <- recordFlowMemory memoryEnv mid defaultRememberOptions note
@@ -275,7 +278,7 @@ tests databaseFixture =
             before <- runCount replayedId
             assertEqual "the first run recalls nothing" (Right (Completed (toJSON (0 :: Int)))) before
 
-            let decoyId = deterministicFlowMemoryId (WorkflowName "decoy") (WorkflowId "decoy") 0 "decoy"
+            let decoyId = deterministicFlowMemoryId (WorkflowName "decoy") (WorkflowId "decoy") 0 (declarationCoordinate "decoy")
             written <- recordFlowMemory memoryEnv decoyId defaultRememberOptions (object ["summary" .= ("ticket_1 was escalated before" :: Text)])
             assertRecordedId "the decoy memory is written" decoyId written
 
@@ -360,7 +363,7 @@ completedFlow =
   FlowDef
     { name = declarationCoordinate "completed-spike",
       decisionSlots = [],
-      requiresDefaultModel = True,
+      requiresDefaultModel = DefaultModelRequired,
       lifecycle = atRiskCustomerLifecycleDiagram,
       run = twoStepFlow
     }
@@ -370,7 +373,7 @@ activityFlow =
   FlowDef
     { name = declarationCoordinate "activity-spike",
       decisionSlots = [],
-      requiresDefaultModel = True,
+      requiresDefaultModel = DefaultModelRequired,
       lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> do
         activity <- currentActivity
@@ -382,11 +385,11 @@ memoryFlow =
   FlowDef
     { name = declarationCoordinate "memory-spike",
       decisionSlots = [],
-      requiresDefaultModel = True,
+      requiresDefaultModel = DefaultModelRequired,
       lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> do
-        _ <- remember "note" (object ["summary" .= ("flow durable note" :: Text)])
-        memories <- recall "note-back" (MemoryQuery "flow durable note")
+        _ <- remember (declarationCoordinate "note") (object ["summary" .= ("flow durable note" :: Text)])
+        memories <- recall (declarationCoordinate "note-back") (MemoryQuery "flow durable note")
         pure (Bool (any (\MemoryRecord {content} -> content == "flow durable note") memories))
     }
 
@@ -400,9 +403,9 @@ recallCountFlow =
   FlowDef
     { name = declarationCoordinate "recall-count-spike",
       decisionSlots = [],
-      requiresDefaultModel = True,
+      requiresDefaultModel = DefaultModelRequired,
       lifecycle = atRiskCustomerLifecycleDiagram,
-      run = \_payload -> toJSON . length <$> recall "history" (MemoryQuery "prior escalation")
+      run = \_payload -> toJSON . length <$> recall (declarationCoordinate "history") (MemoryQuery "prior escalation")
     }
 
 -- | Two memories, the second declaring the first as its lineage.
@@ -418,18 +421,18 @@ supersessionFlow =
   FlowDef
     { name = declarationCoordinate "supersession-spike",
       decisionSlots = [],
-      requiresDefaultModel = True,
+      requiresDefaultModel = DefaultModelRequired,
       lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> do
-        first <- remember "first" (object ["summary" .= ("original note" :: Text)])
-        second <- rememberWith "constraint" (revisionOptions first) (object ["summary" .= ("revised note" :: Text)])
+        first <- remember (declarationCoordinate "first") (object ["summary" .= ("original note" :: Text)])
+        second <- rememberWith (declarationCoordinate "constraint") (revisionOptions first) (object ["summary" .= ("revised note" :: Text)])
         pure (object ["first" .= idText first, "second" .= idText second])
     }
 
 revisionOptions :: MemoryId -> RememberOptions
 revisionOptions first =
   defaultRememberOptions
-    { priority = 10,
+    { priority = MemoryPriority 10,
       confidence = HighConfidence,
       memoryType = MemoryConstraint,
       supersedes = Just first,
@@ -441,9 +444,9 @@ sinkFlow =
   FlowDef
     { name = declarationCoordinate "sink-spike",
       decisionSlots = [],
-      requiresDefaultModel = True,
+      requiresDefaultModel = DefaultModelRequired,
       lifecycle = atRiskCustomerLifecycleDiagram,
-      run = \_payload -> toJSON <$> emitSignal "alert" sampleKizashiSink (object ["summary" .= ("flow alert" :: Text)])
+      run = \_payload -> toJSON <$> emitSignal (declarationCoordinate "alert") sampleKizashiSink (object ["summary" .= ("flow alert" :: Text)])
     }
 
 twoStepFlow :: (FlowEffects es) => Value -> Eff es Value
@@ -497,7 +500,7 @@ spikeRuntime :: SessionId -> FlowRuntime
 spikeRuntime session =
   FlowRuntime
     { approval = Approval.defaultApprovalEnv session,
-      acknowledgementDeadline = secondsToNominalDiffTime 1
+      acknowledgementDeadline = (either (error . show) id (parseDuration (secondsToNominalDiffTime 1)))
     }
 
 -- | The sleeping spike's runner. It bypasses the capability interpreters
@@ -557,7 +560,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
             . Routing.runRouting
               Routing.RoutingEnv
                 { Routing.agent = flowDecl,
-                  Routing.sessionId = "flow-test-session",
+                  Routing.sessionId = nominalSessionFixture,
                   Routing.behaviorEnv = behaviorEnv,
                   Routing.runtime =
                     Routing.routingRuntime
@@ -637,7 +640,7 @@ withAtRiskFlow databaseFixture action =
           runtime =
             FlowRuntime
               { approval = approvalEnv aidRef session,
-                acknowledgementDeadline = secondsToNominalDiffTime 1
+                acknowledgementDeadline = (either (error . show) id (parseDuration (secondsToNominalDiffTime 1)))
               }
       case lookupFlow (declarationCoordinate ("at-risk-customer")) of
         Just flow -> action appEnv runtime aidRef flow

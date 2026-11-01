@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Typed, strictly decoded routing decisions.
 --
 -- Model output is only a proposal.  A value becomes executable routing
@@ -27,6 +29,7 @@ import Numeric.Natural (Natural)
 import Shikigami.Agent.Decl (ExpertiseDecl (..), RouterConfidence (..), RouterPolicy (..))
 import Shikigami.Agent.ExpertiseKey (ExpertiseKey, expertiseKeyText)
 import Shikigami.Agent.Name (AgentName, agentNameText)
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Router.Catalog
   ( CandidateAvailability (..),
@@ -56,7 +59,7 @@ data RouteOutcome
 
 -- | Versioned decision tied to one exact candidate catalog.
 data RouteDecision = RouteDecision
-  { version :: !Natural,
+  { version :: !(FormatVersion "route-decision"),
     catalogVersion :: !CatalogVersion,
     outcome :: !RouteOutcome
   }
@@ -158,11 +161,10 @@ validateRouteDecision policy catalog decision =
     Nothing -> Right (ValidatedRouteDecision decision)
     Just refusals -> Left refusals
   where
-    RouteDecision {version = decisionVersion, catalogVersion = decisionCatalogVersion, outcome} = decision
+    RouteDecision {catalogVersion = decisionCatalogVersion, outcome} = decision
     CandidateCatalog {version = expectedCatalogVersion, candidates} = catalog
     errors =
-      [UnsupportedDecisionVersion decisionVersion | decisionVersion /= 1]
-        <> [StaleCatalogVersion expectedCatalogVersion decisionCatalogVersion | decisionCatalogVersion /= expectedCatalogVersion]
+      [StaleCatalogVersion expectedCatalogVersion decisionCatalogVersion | decisionCatalogVersion /= expectedCatalogVersion]
         <> validateOutcome policy (Map.fromList [(name, candidate) | candidate@CandidateEntry {name} <- candidates]) outcome
 
 validateOutcome :: RouterPolicy -> Map.Map AgentName CandidateEntry -> RouteOutcome -> [RoutingError]

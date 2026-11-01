@@ -40,6 +40,7 @@ import Shikigami.Agent.Run.Key (runKeyWithPrefix)
 import Shikigami.Agent.RunJob (RunRouteKind (ExecutionOperationRoute))
 import Shikigami.App (AppEffects)
 import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Duration (remainingDuration)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Executor (ExecutionRuntime (..), modelContext, runExecutionStore)
 import Shikigami.Execution.Identity (newAttemptId)
@@ -118,7 +119,7 @@ executionWorkflow runtime initial = do
           permission.reviewRequestId
           session
           (ApprovalRequest ("Allow tool " <> executionCoordinateText tool <> "?") (Aeson.object ["executionId" .= start.executionId, "fingerprint" .= permission.fingerprint, "scopeDigest" .= permission.scopeDigest]) ViaDanwa)
-          (max 0 (diffUTCTime permission.expiresAt now))
+          (remainingDuration (diffUTCTime permission.expiresAt now))
       _ <- step (StepName "resolve-tool-permission") do
         metadata <- liftIO (runExecutionStore runtime (Store.inspectExecution start.executionId)) >>= require
         (state, binding, _) <- maybe (throwIO (userError "execution disappeared during permission review")) pure metadata

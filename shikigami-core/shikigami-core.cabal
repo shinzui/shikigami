@@ -101,6 +101,7 @@ library
     Shikigami.Diagrams
     Shikigami.Directory
     Shikigami.Directory.Store
+    Shikigami.Duration
     Shikigami.Execution.Admission
     Shikigami.Execution.AssignmentKey
     Shikigami.Execution.Attempt
@@ -204,6 +205,7 @@ library
     Shikigami.RunEvidence.Conformance
     Shikigami.RunJobs
     Shikigami.Runtime
+    Shikigami.RuntimePolicy
     Shikigami.Sink
     Shikigami.Sink.Auth
     Shikigami.Sink.Authorization

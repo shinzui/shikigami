@@ -9,7 +9,7 @@
 module Shikigami.Attestation.Evidence
   ( EvidencePhase (..),
     TransitionError (..),
-    ReviewRequestId (..),
+    ReviewRequestId,
     CallRelationship (..),
     RecordedCallEvidence (..),
     ExpectedCall (..),
@@ -61,7 +61,7 @@ import Keiki.Core qualified as Keiki
 import Keiro.Workflow.Types (StepName, WorkflowId)
 import Kioku.Id (SessionId)
 import Numeric.Natural (Natural)
-import Shikigami.Agent.Approval (ReviewRequestId (..))
+import Shikigami.Agent.Approval (ReviewRequestId)
 import Shikigami.Agent.Run.Key (RunKey)
 import Shikigami.Attestation.Agent (AgentArtifactSet, AgentVersionRef)
 import Shikigami.Attestation.Profile (SanctionedExecutionProfileRef)
@@ -178,7 +178,7 @@ configureEvidenceCall runId callId attempt supersedes minimumStrength options =
 newEvidenceCollector ::
   RunCorrelationId ->
   Text ->
-  Int ->
+  Natural ->
   Baikai.EvidenceStrength ->
   Maybe TraceSink ->
   IO (TraceSink, EvidenceSource)
@@ -321,7 +321,7 @@ childEvidenceClosed RelevantChild {phase} =
 correlateEvidence ::
   RunCorrelationId ->
   Text ->
-  Int ->
+  Natural ->
   [Baikai.ModelCallEvidence] ->
   [RecordedCallEvidence]
 correlateEvidence runId stepName firstOrdinal = go firstOrdinal Map.empty

@@ -83,11 +83,13 @@ import Shikigami.Prelude hiding ((.=))
 import Shikigami.Repository
   ( RelativePath,
     RepoRef (..),
-    RepositoryId (..),
+    RepositoryId,
     Revision,
     mkRelativePath,
     mkRevision,
     relativePathText,
+    repositoryId,
+    repositoryIdText,
     revisionText,
   )
 

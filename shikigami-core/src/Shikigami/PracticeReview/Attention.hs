@@ -74,7 +74,7 @@ import Shikigami.PracticeReview.Capability
   )
 import Shikigami.PracticeReview.Identity (AttentionKey, attentionKeyForDigest, attentionKeyText, parseAttentionKey)
 import Shikigami.Prelude hiding ((.=))
-import Shikigami.Repository (RepoRef (..), RepositoryId (..), relativePathText, revisionText)
+import Shikigami.Repository (RepoRef (..), RepositoryId, relativePathText, repositoryId, repositoryIdText, revisionText)
 import Shikigami.Sink (GrantSource, SinkOutcome (Enqueued), SinkResult (..))
 import Shikigami.Sink.Delivery (sinkMessageId)
 import Shikigami.Sink.Intent
@@ -161,10 +161,10 @@ attentionProjection recipients verdict@PracticeReviewVerdict {reviewId = allocat
 
 targetProjectOf :: PracticeReviewVerdict -> Either Text Text
 targetProjectOf PracticeReviewVerdict {targetEvidence, applicability} =
-  case [repositoryValue | EvidenceItem {content = ContentReference {project = ProjectRef {repository = RepositoryId repositoryValue}}} <- targetEvidence] of
+  case [repositoryIdText repository | EvidenceItem {content = ContentReference {project = ProjectRef {repository}}} <- targetEvidence] of
     firstProject : _ -> Right firstProject
     [] -> case applicability of
-      Applicability {projects = ProjectRef {repository = RepositoryId repositoryValue} : _} -> Right repositoryValue
+      Applicability {projects = ProjectRef {repository} : _} -> Right (repositoryIdText repository)
       _ -> Left "practice-review attention cannot derive a target project"
 
 materialClaimProjection :: PracticeReviewVerdict -> [Value]
@@ -193,7 +193,7 @@ citedEvidenceProjection PracticeReviewVerdict {targetEvidence, referenceEvidence
       { evidenceId,
         content =
           ContentReference
-            { project = ProjectRef {repository = RepositoryId repository},
+            { project = ProjectRef {repository},
               provenance = RepoRef {revision},
               path,
               contentHash

@@ -34,6 +34,8 @@ import Shikigami.Health.Worker
     loopCheckName,
     loopLivenessAt,
     loopStaleAfter,
+    loopStaleness,
+    loopStalenessTime,
     newHeartbeats,
     newHeartbeatsWithStaleness,
     probeApplication,
@@ -84,12 +86,12 @@ livenessTests =
       testCase "a loop still inside its bound is healthy" do
         registry <- newHeartbeats [OutboxLoop]
         born <- getCurrentTime
-        loopLivenessAt registry (addUTCTime (loopStaleAfter OutboxLoop - 1) born)
+        loopLivenessAt registry (addUTCTime (loopStalenessTime (loopStaleAfter OutboxLoop) - 1) born)
           >>= assertHealthy,
       testCase "a loop past its bound fails, naming itself" do
         registry <- newHeartbeats [OutboxLoop]
         born <- getCurrentTime
-        verdict <- loopLivenessAt registry (addUTCTime (loopStaleAfter OutboxLoop + 5) born)
+        verdict <- loopLivenessAt registry (addUTCTime (loopStalenessTime (loopStaleAfter OutboxLoop) + 5) born)
         failedCheckOf verdict >>= (@?= loopCheckName OutboxLoop),
       -- failingSince must be when the loop went stale, not when the probe looked.
       -- Otherwise a dashboard reports a fresh incident on every scrape and an
@@ -97,7 +99,7 @@ livenessTests =
       testCase "failingSince is the threshold crossing, not the observation" do
         registry <- newHeartbeats [OutboxLoop]
         born <- getCurrentTime
-        let observedAt = addUTCTime (loopStaleAfter OutboxLoop + 300) born
+        let observedAt = addUTCTime (loopStalenessTime (loopStaleAfter OutboxLoop) + 300) born
         verdict <- loopLivenessAt registry observedAt
         onset <- onsetOf verdict
         -- The crossing is one bound after the last beat, which for a registry
@@ -107,14 +109,14 @@ livenessTests =
           (onset < observedAt)
         assertBool
           ("onset " <> show onset <> " should be about one bound after creation")
-          (abs (diffUTCTime onset (addUTCTime (loopStaleAfter OutboxLoop) born)) < 1),
+          (abs (diffUTCTime onset (addUTCTime (loopStalenessTime (loopStaleAfter OutboxLoop)) born)) < 1),
       -- Two sick loops must not make the probe alternate between two names, or a
       -- runbook keyed on the check name fires against a moving target.
       testCase "the first stale loop in constructor order wins" do
         registry <- newHeartbeats [OutboxLoop, ConsumerLoop]
         born <- getCurrentTime
         -- Past both bounds, so both loops are stale and only the order decides.
-        verdict <- loopLivenessAt registry (addUTCTime (loopStaleAfter ConsumerLoop + 5) born)
+        verdict <- loopLivenessAt registry (addUTCTime (loopStalenessTime (loopStaleAfter ConsumerLoop) + 5) born)
         failedCheckOf verdict >>= (@?= loopCheckName OutboxLoop),
       -- Each loop is judged against its own cadence rather than one global
       -- number: at the same instant the ten-second loop is stale, the
@@ -123,12 +125,12 @@ livenessTests =
         outboxOnly <- newHeartbeats [OutboxLoop]
         consumerOnly <- newHeartbeats [ConsumerLoop]
         born <- getCurrentTime
-        let observedAt = addUTCTime (loopStaleAfter OutboxLoop + 5) born
+        let observedAt = addUTCTime (loopStalenessTime (loopStaleAfter OutboxLoop) + 5) born
         outboxVerdict <- loopLivenessAt outboxOnly observedAt
         failedCheckOf outboxVerdict >>= (@?= loopCheckName OutboxLoop)
         loopLivenessAt consumerOnly observedAt >>= assertHealthy,
       testCase "directory liveness follows its configured refresh cadence" do
-        registry <- newHeartbeatsWithStaleness [(DirectoryLoop, 300)]
+        registry <- newHeartbeatsWithStaleness [(DirectoryLoop, loopStaleness 300)]
         born <- getCurrentTime
         loopLivenessAt registry (addUTCTime 299 born) >>= assertHealthy
         verdict <- loopLivenessAt registry (addUTCTime 301 born)
@@ -141,7 +143,7 @@ livenessTests =
         -- unregistered outbox loop, whose bound is long past.
         registry <- newHeartbeats [ConsumerLoop]
         born <- getCurrentTime
-        loopLivenessAt registry (addUTCTime (loopStaleAfter OutboxLoop + 5) born)
+        loopLivenessAt registry (addUTCTime (loopStalenessTime (loopStaleAfter OutboxLoop) + 5) born)
           >>= assertHealthy,
       -- The queue processor reports through shibuya rather than beating, so its
       -- verdict comes from the registered reporter and no heartbeat is involved.
@@ -156,7 +158,7 @@ livenessTests =
         registry <- newHeartbeats [OutboxLoop]
         born <- getCurrentTime
         registerReport registry QueueLoop (pure Healthy)
-        verdict <- loopLivenessAt registry (addUTCTime (loopStaleAfter OutboxLoop + 5) born)
+        verdict <- loopLivenessAt registry (addUTCTime (loopStalenessTime (loopStaleAfter OutboxLoop) + 5) born)
         failedCheckOf verdict >>= (@?= loopCheckName OutboxLoop),
       -- Registering twice must replace rather than accumulate, so a supervisor
       -- that restarts does not leave the probe reading a dead reporter.
@@ -183,22 +185,22 @@ supervisedTests =
         processorStateVerdict ConsumerLoop now (Just (metricsIn Idle now)) @?= Healthy,
       testCase "a processor working within its bound is healthy" do
         now <- getCurrentTime
-        let lastActivity = addUTCTime (negate (loopStaleAfter ConsumerLoop - 5)) now
+        let lastActivity = addUTCTime (negate (loopStalenessTime (loopStaleAfter ConsumerLoop) - 5)) now
         processorStateVerdict ConsumerLoop now (Just (metricsIn (Processing (emptyInFlightInfo 1) lastActivity lastActivity) now))
           @?= Healthy,
       -- The case a bare state check gets wrong. "Processing" is not by itself
       -- good news: a record in flight for ten minutes is a wedge.
       testCase "a processor stuck past its bound is unhealthy" do
         now <- getCurrentTime
-        let lastActivity = addUTCTime (negate (loopStaleAfter ConsumerLoop + 5)) now
+        let lastActivity = addUTCTime (negate (loopStalenessTime (loopStaleAfter ConsumerLoop) + 5)) now
             verdict = processorStateVerdict ConsumerLoop now (Just (metricsIn (Processing (emptyInFlightInfo 1) lastActivity lastActivity) now))
         failedCheckOf verdict >>= (@?= loopCheckName ConsumerLoop)
-        onsetOf verdict >>= (@?= addUTCTime (loopStaleAfter ConsumerLoop) lastActivity),
+        onsetOf verdict >>= (@?= addUTCTime (loopStalenessTime (loopStaleAfter ConsumerLoop)) lastActivity),
       testCase "configured five-minute work outlives the old minute bound but still expires" do
         started <- getCurrentTime
         let metrics = Just (metricsIn (Processing (emptyInFlightInfo 1) started started) started)
-        processorStateVerdictWithStaleness 330 QueueLoop (addUTCTime 120 started) metrics @?= Healthy
-        let expired = processorStateVerdictWithStaleness 330 QueueLoop (addUTCTime 331 started) metrics
+        processorStateVerdictWithStaleness (loopStaleness 330) QueueLoop (addUTCTime 120 started) metrics @?= Healthy
+        let expired = processorStateVerdictWithStaleness (loopStaleness 330) QueueLoop (addUTCTime 331 started) metrics
         failedCheckOf expired >>= (@?= loopCheckName QueueLoop)
         onsetOf expired >>= (@?= addUTCTime 330 started),
       -- What no heartbeat could report at all: the failure's own timestamp,
@@ -214,13 +216,13 @@ supervisedTests =
       testCase "a paused processor uses last progress for its health bound" do
         now <- getCurrentTime
         let recent = addUTCTime (-5) now
-            stale = addUTCTime (negate (loopStaleAfter ConsumerLoop + 5)) now
+            stale = addUTCTime (negate (loopStalenessTime (loopStaleAfter ConsumerLoop) + 5)) now
             busy = (emptyInFlightInfo 1) {inFlight = 1}
         processorStateVerdict ConsumerLoop now (Just (metricsIn (Paused (emptyInFlightInfo 1) recent stale) now)) @?= Healthy
         processorStateVerdict ConsumerLoop now (Just (metricsIn (Paused busy stale recent) now)) @?= Healthy
         let verdict = processorStateVerdict ConsumerLoop now (Just (metricsIn (Paused busy recent stale) now))
         failedCheckOf verdict >>= (@?= loopCheckName ConsumerLoop)
-        onsetOf verdict >>= (@?= addUTCTime (loopStaleAfter ConsumerLoop) stale),
+        onsetOf verdict >>= (@?= addUTCTime (loopStalenessTime (loopStaleAfter ConsumerLoop)) stale),
       testCase "a stopped processor is unhealthy" do
         now <- getCurrentTime
         verdict <- pure (processorStateVerdict QueueLoop now (Just (metricsIn Stopped now)))

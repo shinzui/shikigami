@@ -14,13 +14,15 @@ import Shikigami.Agent.Decl
 import Shikigami.Agent.ExpertiseKey (ExpertiseKey, parseExpertiseKey)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Directory (DirectorySnapshotVersion, DirectorySourceKind (DirectoryDisabledSource), parseDirectorySnapshotVersion)
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Router.Catalog
   ( CandidateAvailability (..),
     CandidateCatalog (..),
     CandidateEntry (..),
-    CatalogVersion (..),
+    CatalogVersion,
     ExclusionReason (Paused),
+    parseCatalogVersion,
   )
 import Shikigami.Router.Decision
   ( RouteDecision (..),
@@ -75,34 +77,33 @@ tests =
                 }
             decision =
               RouteDecision
-                { version = 2,
-                  catalogVersion = CatalogVersion "stale",
+                { version = V1,
+                  catalogVersion = (either (error . show) id (parseCatalogVersion "d217d97f-ddb0-5fc6-98cd-6ec11f7a18d8")),
                   outcome = Matched (badSelection :| [badSelection])
                 }
         case validateRouteDecision (policy & #maxSelections .~ (fixtureSelectionLimit 1)) catalog decision of
           Right _ -> assertFailure "expected invalid decision"
           Left errors -> do
             let found = NonEmpty.toList errors
-            assertBool "version is checked" (UnsupportedDecisionVersion 2 `elem` found)
-            assertBool "catalog is checked" (StaleCatalogVersion testCatalogVersion (CatalogVersion "stale") `elem` found)
+            assertBool "catalog is checked" (StaleCatalogVersion testCatalogVersion ((either (error . show) id (parseCatalogVersion "d217d97f-ddb0-5fc6-98cd-6ec11f7a18d8"))) `elem` found)
             assertBool "duplicates are checked" (DuplicateSelection (fixtureAgentName "paused-reviewer") `elem` found)
             assertBool "lifecycle is checked" (UnavailableSelection (fixtureAgentName "paused-reviewer") Paused `elem` found)
             assertBool "fan-out is checked" (TooManySelections 2 1 `elem` found),
       testCase "validates advisory ambiguous alternatives but never turns them into matched" do
         let alternative = (selection & #agent .~ (fixtureAgentName "missing-reviewer"))
-            decision = RouteDecision 1 testCatalogVersion (Ambiguous (alternative :| []) "unclear")
+            decision = RouteDecision V1 testCatalogVersion (Ambiguous (alternative :| []) "unclear")
         case validateRouteDecision policy catalog decision of
           Right _ -> assertFailure "expected undeclared alternative refusal"
           Left errors -> assertBool "alternative is checked" (UndeclaredSelection (fixtureAgentName "missing-reviewer") `elem` NonEmpty.toList errors),
       testCase "no-match is a valid semantic outcome with no selections" do
-        let decision = RouteDecision 1 testCatalogVersion (NoMatch "nothing relevant")
+        let decision = RouteDecision V1 testCatalogVersion (NoMatch "nothing relevant")
         case validateRouteDecision policy catalog decision of
           Left errors -> assertFailure ("expected semantic no-match, got " <> show errors)
           Right _ -> pure ()
     ]
 
 matchedDecision :: RouteDecision
-matchedDecision = RouteDecision 1 testCatalogVersion (Matched (selection :| []))
+matchedDecision = RouteDecision V1 testCatalogVersion (Matched (selection :| []))
 
 selection :: RouteSelection
 selection =
@@ -114,7 +115,7 @@ selection =
     }
 
 testCatalogVersion :: CatalogVersion
-testCatalogVersion = CatalogVersion "catalog-v1"
+testCatalogVersion = (either (error . show) id (parseCatalogVersion "a6ef7db1-ecd3-5923-a9ce-3f95ffa4cde4"))
 
 catalog :: CandidateCatalog
 catalog =

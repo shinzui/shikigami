@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | The single process-level configuration declaration.
 --
 -- Every Shikigami executable that consumes application settings — the HTTP
@@ -196,6 +198,7 @@ import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Decision.Contract (DecisionFailure, ModelAlias, modelAliasText)
 import Shikigami.Decision.ModelCatalog qualified as Decision
 import Shikigami.Directory (DirectorySettings (..))
+import Shikigami.Duration
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Inspection.Settings (InspectionSettings (..))
 import Shikigami.Objective.Types (ObjectiveSettings, defaultObjectiveSettings)
@@ -205,8 +208,10 @@ import Shikigami.PracticeReview.Capability
     parseAttentionRecipientMap,
     renderAttentionRecipientMap,
   )
+import Shikigami.RuntimePolicy
 import Shikigami.Sink.Permission (SinkKind)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
+import Shikigami.Trigger.Stream (IncludeAgentActors (..), agentActorInclusion, agentActorsIncluded)
 import Shikigami.Workspace.Settings (WorkspaceSettings, WorkspaceSupervisorSettings)
 
 -- ── Value types ─────────────────────────────────────────────────────────────
@@ -395,7 +400,7 @@ data AppConfig = AppConfig
     -- | Whether a manifest that fails to load refuses the process's startup.
     -- Off by default: upgrading must not turn a deployment that has been
     -- tolerating a broken manifest into a failed deploy on its own.
-    agentsStrict :: !Bool,
+    agentsStrict :: !ManifestStrictness,
     -- | Principal lifecycle directory and its refresh policy. Disabled by
     -- default so existing deployments retain their pre-directory behavior.
     directorySettings :: !DirectorySettings,
@@ -421,7 +426,7 @@ data AppConfig = AppConfig
     -- | Whether the activity-stream consumer matches agent-produced activities.
     -- Off by default: leaving it off is the feedback guard that stops an agent's
     -- own output from triggering it again.
-    kafkaIncludeAgentActors :: !Bool,
+    kafkaIncludeAgentActors :: !IncludeAgentActors,
     -- | Durable PGMQ target for Kafka records that cannot be decoded.
     kafkaDeadLetterQueue :: !QueueName,
     -- | Interface the public HTTP API binds.
@@ -440,18 +445,18 @@ data AppConfig = AppConfig
     -- default when this is absent; 'defaultHealthPort' is the table.
     healthPort :: !(Maybe Port),
     -- | Maximum duration of one synchronous external behavior attempt.
-    runTimeout :: !NominalDiffTime,
+    runTimeout :: !(Duration "agent-run"),
     -- | Maximum duration an approval or flow acknowledgement may remain open.
     approvalRequiredSinks :: !(Set SinkKind),
     approvalChannel :: !ApprovalChannel,
-    approvalDeadline :: !NominalDiffTime,
+    approvalDeadline :: !(Duration "approval"),
     -- | How long a parked conversation waits for its next human message before
     -- ending its epoch and completing its kioku session.
     --
     -- This is the /between-turns/ window, not a bound on a turn: a turn is
     -- bounded by 'runTimeout'. A conversation that times out is not an error —
     -- the next message opens a fresh epoch chained to the one that closed.
-    conversationIdleTimeout :: !NominalDiffTime,
+    conversationIdleTimeout :: !(Duration "conversation-idle"),
     -- | Explicit operational recipients for semantic practice-review owners.
     -- Empty keeps the fail-closed default: actionable reviews cannot reserve
     -- attention until an operator maps every owner they expect to encounter.
@@ -517,7 +522,7 @@ appConfig =
   AppConfig
     <$> optional databaseConnectionStringSetting
     <*> withDefault agentsDirectorySetting (constant "agents-directory" "Manifests live in ./agents relative to the working directory" "agents")
-    <*> withDefault agentsStrictSetting (constant "lenient-agents" "Report a manifest that fails to load, but start anyway" False)
+    <*> withDefault agentsStrictSetting (constant "lenient-agents" "Report a manifest that fails to load, but start anyway" LenientManifests)
     <*> directorySettingsConfig
     <*> httpAuthConfig
     <*> optional (secretSetting inspectionKey "Isolated administrative listener, distinct read/write credentials and bounded inspection profile" jsonDecoder)
@@ -528,18 +533,18 @@ appConfig =
     <*> withDefault kafkaEventsTopicSetting (constant "events-topic" "danwa's addressed-message integration event" "danwa.message-addressed.v1")
     <*> withDefault kafkaStreamGroupSetting (constant "stream-group" "One consumer group per stream role" "shikigami-stream")
     <*> withDefault kafkaEventsGroupSetting (constant "events-group" "One consumer group per stream role" "shikigami-events")
-    <*> withDefault kafkaIncludeAgentActorsSetting (constant "feedback-guard" "Ignore agent-produced activities so an agent cannot trigger itself" False)
+    <*> withDefault kafkaIncludeAgentActorsSetting (constant "feedback-guard" "Ignore agent-produced activities so an agent cannot trigger itself" ExcludeAgentActors)
     <*> withDefault kafkaDeadLetterQueueSetting (constant "stream-dead-letter-queue" "Keep poison Kafka records in Postgres before advancing their offsets" defaultKafkaDeadLetterQueue)
     <*> withDefault httpHostSetting (constant "loopback" "Keep a development server off the network" "127.0.0.1")
     <*> withDefault httpPortSetting (constant "http-port" "The conventional Shikigami API port" (Port 8080))
     <*> withDefault httpRequestMaxBytesSetting (constant "http-request-limit" "Bound encoded sink request bodies to 8 MiB" (ByteLimit 8_388_608))
     <*> withDefault httpResponseMaxBytesSetting (constant "http-response-limit" "Bound sink response bodies to 8 MiB" (ByteLimit 8_388_608))
     <*> optional healthPortSetting
-    <*> withDefault workerRunTimeoutSecondsSetting (constant "worker-run-timeout" "Bound one synchronous behavior attempt" (secondsToNominalDiffTime 300))
+    <*> withDefault workerRunTimeoutSecondsSetting (constant "worker-run-timeout" "Bound one synchronous behavior attempt" (knownDuration (secondsToNominalDiffTime 300)))
     <*> withDefault approvalRequireSetting (constant "approval-auto-approve" "Ordinary sinks do not require approval" mempty)
     <*> withDefault approvalChannelSetting (constant "approval-danwa" "Send human approval asks through Danwa" ViaDanwa)
-    <*> withDefault approvalDeadlineSecondsSetting (constant "approval-deadline" "Bound approval and acknowledgement waits" (secondsToNominalDiffTime 900))
-    <*> withDefault conversationIdleTimeoutSecondsSetting (constant "conversation-idle-timeout" "End a conversation epoch after half an hour of silence" (secondsToNominalDiffTime 1800))
+    <*> withDefault approvalDeadlineSecondsSetting (constant "approval-deadline" "Bound approval and acknowledgement waits" (knownDuration (secondsToNominalDiffTime 900)))
+    <*> withDefault conversationIdleTimeoutSecondsSetting (constant "conversation-idle-timeout" "End a conversation epoch after half an hour of silence" (knownDuration (secondsToNominalDiffTime 1800)))
     <*> withDefault practiceReviewAttentionRecipientsSetting (constant "practice-review-attention-unmapped" "Require operators to map every actionable review owner explicitly" emptyAttentionRecipientMap)
     <*> withDefault sinksKawaBaseUrlSetting (constant "local-kawa" "The local kawa (or stub-kawa) doorway" "http://localhost:8088")
     <*> withDefault sinksKawaSourceSegmentSetting (constant "kawa-source" "This repository's ingest source segment" "shinzui/shikigami")
@@ -807,7 +812,7 @@ directorySettingsConfig =
       ReadDirectoryFile
       ( (,)
           <$> required directoryFilePathSetting
-          <*> withDefault directoryRefreshIntervalSecondsSetting (constant "directory-refresh" "Refresh the principal directory every five seconds" (secondsToNominalDiffTime 5))
+          <*> withDefault directoryRefreshIntervalSecondsSetting (constant "directory-refresh" "Refresh the principal directory every five seconds" (knownDuration (secondsToNominalDiffTime 5)))
       )
 
 -- | The static schema, for @--describe-config@ and for tests.
@@ -860,12 +865,13 @@ agentsDirectorySetting =
     (Text.unpack <$> textDecoder)
     Text.pack
 
-agentsStrictSetting :: Setting Bool
+agentsStrictSetting :: Setting ManifestStrictness
 agentsStrictSetting =
-  publicShowSetting
+  publicSettingWithRenderer
     agentsStrictKey
     "Refuse to start when any agent manifest fails to load (off reports the failure and starts)"
-    boolDecoder
+    (manifestStrictness <$> boolDecoder)
+    (Text.pack . show . manifestsStrict)
 
 data DirectoryMode = DisableDirectory | ReadDirectoryFile
   deriving stock (Generic, Eq, Show)
@@ -888,7 +894,7 @@ directoryFilePathSetting =
     (Text.unpack <$> textDecoder)
     Text.pack
 
-directoryRefreshIntervalSecondsSetting :: Setting NominalDiffTime
+directoryRefreshIntervalSecondsSetting :: Setting (Duration "directory-refresh")
 directoryRefreshIntervalSecondsSetting =
   publicSettingWithRenderer
     directoryRefreshIntervalSecondsKey
@@ -946,12 +952,13 @@ kafkaStreamGroupSetting = publicSettingWithRenderer kafkaStreamGroupKey "Consume
 kafkaEventsGroupSetting :: Setting Text
 kafkaEventsGroupSetting = publicSettingWithRenderer kafkaEventsGroupKey "Consumer group id for the integration event consumer" textDecoder id
 
-kafkaIncludeAgentActorsSetting :: Setting Bool
+kafkaIncludeAgentActorsSetting :: Setting IncludeAgentActors
 kafkaIncludeAgentActorsSetting =
-  publicShowSetting
+  publicSettingWithRenderer
     kafkaIncludeAgentActorsKey
     "Match agent-produced activities too (meta-detectors; off is the feedback guard)"
-    boolDecoder
+    (agentActorInclusion <$> boolDecoder)
+    (Text.pack . show . agentActorsIncluded)
 
 kafkaDeadLetterQueueSetting :: Setting QueueName
 kafkaDeadLetterQueueSetting =
@@ -1040,7 +1047,7 @@ byteLimitDecoder =
           Right value -> either (const (Left (decodeFailure key byteLimitExpectation))) Right (mkByteLimit value)
     )
 
-workerRunTimeoutSecondsSetting :: Setting NominalDiffTime
+workerRunTimeoutSecondsSetting :: Setting (Duration "agent-run")
 workerRunTimeoutSecondsSetting =
   publicSettingWithRenderer
     workerRunTimeoutSecondsKey
@@ -1048,7 +1055,7 @@ workerRunTimeoutSecondsSetting =
     positiveDurationDecoder
     renderDurationSeconds
 
-approvalDeadlineSecondsSetting :: Setting NominalDiffTime
+approvalDeadlineSecondsSetting :: Setting (Duration "approval")
 approvalDeadlineSecondsSetting =
   publicSettingWithRenderer
     approvalDeadlineSecondsKey
@@ -1089,7 +1096,7 @@ approvalRequireExpectation =
 approvalChannelExpectation :: Text
 approvalChannelExpectation = "one of danwa, kizashi"
 
-conversationIdleTimeoutSecondsSetting :: Setting NominalDiffTime
+conversationIdleTimeoutSecondsSetting :: Setting (Duration "conversation-idle")
 conversationIdleTimeoutSecondsSetting =
   publicSettingWithRenderer
     conversationIdleTimeoutSecondsKey
@@ -1117,15 +1124,18 @@ attentionRecipientMapExpectation =
 -- | One day is well below @maxBound :: Int@ after conversion to microseconds on
 -- every 64-bit platform supported by this repository's deployment flake, while
 -- still allowing operational budgets far above the defaults.
-positiveDurationDecoder :: Decoder NominalDiffTime
+positiveDurationDecoder :: Decoder (Duration scope)
 positiveDurationDecoder =
   decoder
     ( \key raw ->
         case runDecoder (boundedIntegralDecoder @Int) key raw of
           Right seconds
-            | seconds >= 1 && seconds <= maxDurationSeconds -> Right (secondsToNominalDiffTime (fromIntegral seconds))
+            | seconds >= 1 && seconds <= maxDurationSeconds -> first (const (decodeFailure key durationExpectation)) (parseDuration (secondsToNominalDiffTime (fromIntegral seconds)))
           _ -> Left (decodeFailure key durationExpectation)
     )
+
+knownDuration :: NominalDiffTime -> Duration scope
+knownDuration = either (error . Text.unpack) id . parseDuration
 
 maxDurationSeconds :: Int
 maxDurationSeconds = 86_400
@@ -1133,9 +1143,9 @@ maxDurationSeconds = 86_400
 durationExpectation :: Text
 durationExpectation = "a whole number of seconds between 1 and 86400"
 
-renderDurationSeconds :: NominalDiffTime -> Text
+renderDurationSeconds :: Duration scope -> Text
 renderDurationSeconds duration =
-  Text.pack (show (floor (nominalDiffTimeToSeconds duration) :: Integer))
+  Text.pack (show (floor (nominalDiffTimeToSeconds (durationTime duration)) :: Integer))
 
 sinksKawaBaseUrlSetting :: Setting Text
 sinksKawaBaseUrlSetting = publicSettingWithRenderer sinksKawaBaseUrlKey "Base URL of the kawa ingest doorway" textDecoder id

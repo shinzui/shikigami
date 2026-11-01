@@ -38,8 +38,9 @@ import Shikigami.Router.Catalog
   ( CandidateAvailability (..),
     CandidateCatalog (..),
     CandidateEntry (..),
-    CatalogVersion (..),
+    CatalogVersion,
     ExclusionReason (Paused),
+    parseCatalogVersion,
   )
 import Shikigami.Router.SelectionLimit (SelectionLimit, parseSelectionLimit)
 import Shikigami.Trigger.Schedule (parseCron)
@@ -63,8 +64,8 @@ tests =
       testCase "preflight computes every deterministic child id in selection order" do
         let requests = batchRequest "first-key" "first" :| [batchRequest "second-key" "second"]
             expectedIds =
-              [ delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "first") "first-key",
-                delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "second") "second-key"
+              [ delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "first") (declarationCoordinate "first-key"),
+                delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "second") (declarationCoordinate "second-key")
               ]
         case preflightDelegationBatch routerDecl delegateCtx catalog parentWorkflowId requests of
           Left errors -> assertFailure ("expected valid batch, got " <> show errors)
@@ -85,7 +86,7 @@ tests =
           Left errors -> do
             let found = NonEmpty.toList errors
             assertBool "fan-out is checked" (DelegationBatchSelectionLimitExceeded 3 1 `elem` found)
-            assertBool "stable keys are distinct" (DelegationBatchDuplicateKey "same-key" `elem` found)
+            assertBool "stable keys are distinct" (DelegationBatchDuplicateKey (declarationCoordinate "same-key") `elem` found)
             assertBool "recorded availability is checked" (DelegationBatchCatalogTargetUnavailable (fixtureAgentName "paused") Paused `elem` found)
             assertBool "missing catalog targets are checked" (DelegationBatchCatalogTargetMissing (fixtureAgentName "intruder") `elem` found)
             assertBool
@@ -107,7 +108,7 @@ tests =
     ]
 
 batchRequest :: Text -> Text -> DelegationRequest
-batchRequest key target = DelegationRequest {key, target = fixtureAgentName target, payload = Null}
+batchRequest key target = DelegationRequest {key = declarationCoordinate key, target = fixtureAgentName target, payload = Null}
 
 parentWorkflowId :: WorkflowId
 parentWorkflowId = WorkflowId "router-parent"
@@ -162,7 +163,7 @@ catalog :: CandidateCatalog
 catalog =
   CandidateCatalog
     { router = fixtureAgentName "router",
-      version = CatalogVersion "catalog-v1",
+      version = (either (error . show) id (parseCatalogVersion "a6ef7db1-ecd3-5923-a9ce-3f95ffa4cde4")),
       lifecycleSource = DirectoryDisabledSource,
       lifecycleSourceVersion = either (error . show) id (parseDirectorySnapshotVersion "a6ef7db1-ecd3-5923-a9ce-3f95ffa4cde4"),
       candidates =

@@ -72,6 +72,13 @@ session and compliance contracts select their own scopes; this module performs
 no protocol dispatch, migration, storage or runtime composition. The domain-root
 entry is for that concrete value contract, not a general serialization bucket.
 
+ExecPlan 108 also adds `Duration`, which owns scoped nonnegative time spans and
+explicit clock lowering, and `RuntimePolicy`, which owns the closed manifest
+strictness and default-model requirements with their historical boolean codecs.
+These are concrete value contracts; they contain no runtime dispatch, loading,
+storage, or service composition. Configured positive budget bounds remain with
+the configuration owner, while an exhausted remaining approval wait retains zero.
+
 ## Durable identity consequences
 
 Moving the nominal binding/fixture/initial symbols changes generated source and

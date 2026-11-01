@@ -70,7 +70,7 @@ newtype Delegated a = Delegated (ChildHandle (Either AgentRunFailure AgentRunRes
 -- | One member of a delegation batch.  The key is stable call-site vocabulary,
 -- never an ordinal derived from evaluation order.
 data DelegationRequest = DelegationRequest
-  { key :: !Text,
+  { key :: !(DeclarationCoordinate "delegation-key"),
     target :: !AgentName,
     payload :: !Aeson.Value
   }
@@ -88,7 +88,7 @@ data PreparedDelegation = PreparedDelegation
 data DelegationBatchPreflightError
   = DelegationBatchRoutingPolicyMissing
   | DelegationBatchSelectionLimitExceeded !Natural !Natural
-  | DelegationBatchDuplicateKey !Text
+  | DelegationBatchDuplicateKey !(DeclarationCoordinate "delegation-key")
   | DelegationBatchCatalogRouterMismatch !AgentName !AgentName
   | DelegationBatchCatalogTargetMissing !AgentName
   | DelegationBatchCatalogTargetUnavailable !AgentName !ExclusionReason
@@ -108,7 +108,7 @@ delegate ::
   DirectoryHandle ->
   AgentDecl ->
   DelegateCtx ->
-  Text ->
+  DeclarationCoordinate "delegation-key" ->
   AgentName ->
   Aeson.Value ->
   Eff es (Delegated Aeson.Value)
@@ -118,12 +118,12 @@ delegate = delegateWith Nothing Nothing
 -- explicit model requirements through the existing child admission boundary.
 delegateAssignment ::
   (Workflow :> es, Store :> es, IOE :> es) =>
-  AgentIdentity -> Maybe ExecutionRequest -> [AgentDecl] -> DirectoryHandle -> AgentDecl -> DelegateCtx -> Text -> AgentName -> Aeson.Value -> Eff es (Delegated Aeson.Value)
+  AgentIdentity -> Maybe ExecutionRequest -> [AgentDecl] -> DirectoryHandle -> AgentDecl -> DelegateCtx -> DeclarationCoordinate "delegation-key" -> AgentName -> Aeson.Value -> Eff es (Delegated Aeson.Value)
 delegateAssignment identity request = delegateWith (Just identity) request
 
 delegateWith ::
   (Workflow :> es, Store :> es, IOE :> es) =>
-  Maybe AgentIdentity -> Maybe ExecutionRequest -> [AgentDecl] -> DirectoryHandle -> AgentDecl -> DelegateCtx -> Text -> AgentName -> Aeson.Value -> Eff es (Delegated Aeson.Value)
+  Maybe AgentIdentity -> Maybe ExecutionRequest -> [AgentDecl] -> DirectoryHandle -> AgentDecl -> DelegateCtx -> DeclarationCoordinate "delegation-key" -> AgentName -> Aeson.Value -> Eff es (Delegated Aeson.Value)
 delegateWith expectedIdentity executionRequest declarations directory decl ctx delegationKey childAgent payload = do
   either throwIO pure (assertMayDelegate decl childAgent)
   either throwIO pure (checkCycle ctx childAgent)
@@ -389,10 +389,10 @@ awaitDelegatedEither delegated =
         Just failure -> pure (Left (Text.pack (show failure)))
         Nothing -> throwIO err
 
-delegatedWorkflowIdV2 :: WorkflowId -> AgentName -> Text -> WorkflowId
+delegatedWorkflowIdV2 :: WorkflowId -> AgentName -> DeclarationCoordinate "delegation-key" -> WorkflowId
 delegatedWorkflowIdV2 parent child key = WorkflowId (UUID.toText (delegatedUuidV2 parent child key))
 
-delegatedUuidV2 :: WorkflowId -> AgentName -> Text -> UUID.UUID
+delegatedUuidV2 :: WorkflowId -> AgentName -> DeclarationCoordinate "delegation-key" -> UUID.UUID
 delegatedUuidV2 (WorkflowId parentWorkflowId) childAgent delegationKey =
   UUID.V5.generateNamed UUID.V5.namespaceURL $
     nameBytes $

@@ -47,6 +47,7 @@ import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Behavior.StubProvider (stubApiProvider)
 import Shikigami.Capability.Overlay (CapabilityDescriptor (..))
 import Shikigami.Directory (DirectoryRuntime (..), startDirectory)
+import Shikigami.Duration
 import Shikigami.Execution.Driver (ExecutionStart (..))
 import Shikigami.Execution.Foreground (driveExecutionForeground)
 import Shikigami.Execution.Identity
@@ -164,9 +165,9 @@ workflowCase configFile prefix stage = do
               rei = ReiConfig Nothing,
               http,
               hooks = Agent.defaultAgentRunHooks,
-              approvalPolicy = autoApprovePolicy 900,
+              approvalPolicy = autoApprovePolicy (either (error . show) id (parseDuration 900)),
               approvalWorkflow = Approval.defaultApprovalWorkflowEnv,
-              runTimeout = 30,
+              runTimeout = either (error . show) id (parseDuration 30),
               harness = defaultHarnessPolicy & #output .~ JsonFields (map executionCoordinate ["git", "validation", "summary"]),
               delegationBudget = defaultDelegationBudget,
               grants = StaticGrants defaultGrantTable,

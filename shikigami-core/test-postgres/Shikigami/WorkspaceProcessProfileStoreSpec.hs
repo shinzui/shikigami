@@ -20,7 +20,7 @@ import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude
-import Shikigami.Repository (RepositoryId (..))
+import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.StateRevision (initialRevision)
 import Shikigami.WorkerSession.Types (SessionAdmission (..))
 import Shikigami.WorkerSessionStoreSpec qualified as Fixture
@@ -103,8 +103,8 @@ tests fixture =
 withProfile :: DatabaseFixture -> (AppEnv -> WorkspaceBinding -> ProcessProfile -> IO a) -> IO a
 withProfile fixture callback = Fixture.withFixture fixture \env session _ -> do
   let base = workspaceCoordinate (Text.replicate 40 "a")
-  catalog <- right (mkWorkspaceCatalog [RepositoryPolicy (RepositoryId "mori://fixture/repository") (workspaceLocator "/approved/source") [base] base (processPolicyIdentity policy)])
-  repository <- right (resolveRepository catalog (RepositoryId "mori://fixture/repository") Nothing)
+  catalog <- right (mkWorkspaceCatalog [RepositoryPolicy (repositoryId "mori://fixture/repository") (workspaceLocator "/approved/source") [base] base (processPolicyIdentity policy)])
+  repository <- right (resolveRepository catalog (repositoryId "mori://fixture/repository") Nothing)
   root <- maybe (fail "missing root") pure session.context.executionRootId
   let request = WorkspaceRequest (WorkflowId "profile-run") Nothing root session.identity session.identity initialRevision
   (binding, _) <- right =<< run env (Workspaces.reserveWorkspaceTx "/private/owned-workspaces" request repository)

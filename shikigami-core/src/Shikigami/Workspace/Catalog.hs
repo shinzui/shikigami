@@ -20,7 +20,7 @@ import Data.List (nub)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import GHC.Generics (Generic)
-import Shikigami.Repository (RepositoryId (..))
+import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.Workspace.Value
 import System.FilePath (isAbsolute, normalise, splitDirectories)
 

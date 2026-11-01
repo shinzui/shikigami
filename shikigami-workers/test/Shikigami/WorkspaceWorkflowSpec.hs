@@ -47,6 +47,7 @@ import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Behavior.StubProvider (stubApiProvider)
 import Shikigami.Capability.Overlay (CapabilityDescriptor (..))
 import Shikigami.Directory (disabledDirectoryHandle)
+import Shikigami.Duration (parseDuration)
 import Shikigami.Execution.Driver (ExecutionStart (..))
 import Shikigami.Execution.Foreground (driveExecutionForeground)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
@@ -64,7 +65,7 @@ import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.PracticeReview.Capability qualified as Practice
 import Shikigami.Prelude ((&), (.~))
-import Shikigami.Repository (RepositoryId (..))
+import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config
@@ -275,7 +276,7 @@ tests fixture =
           readFile (workspaceFiles root binding </> "dependency.txt") >>= (@?= "workflow replacement\n")
           length <$> readIORef observed >>= (@?= 2),
       testCase "operator principal mismatch refuses before source allocation" $
-        withWorkflowConfig (\settings -> settings & #grants .~ [WorkspaceGrant ((either (error . show) id . mkAgentName) "workspace-worker") (declarationCoordinate "other-principal") (RepositoryId "mori://fixture/repo") Nothing]) fixture \_ root job _ deps observed -> do
+        withWorkflowConfig (\settings -> settings & #grants .~ [WorkspaceGrant ((either (error . show) id . mkAgentName) "workspace-worker") (declarationCoordinate "other-principal") (repositoryId "mori://fixture/repo") Nothing]) fixture \_ root job _ deps observed -> do
           Agent.runAgentRunWorkflow deps job >>= assertRefused
           doesPathExist root >>= (@?= False)
           readIORef observed >>= (@?= []),
@@ -342,9 +343,9 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
         pure (if ordinal == 0 then response & #message . #stopReason .~ ToolUse & #message . #content .~ Vector.singleton (Content.AssistantToolCall (Content.ToolCall "edit" "overlay__workspace-edit__replace" (Aeson.toJSON (Replacement (workspaceCoordinate ("dependency.txt")) (Just (contentDigest "old dependency\n")) "workflow replacement\n")))) else response)
       provider = (stubApiProvider & #complete .~ (complete) & #stream .~ (liftCompleteToStream complete))
   providers <- Provider.newProviderRegistryFrom [provider]
-  expected <- right (mkInstructionBundle 65536 (RepositoryId "mori://fixture/repo") (repositoryBase repository) [(workspaceCoordinate "AGENTS.md", "PRIVATE_WORKFLOW_POLICY: validate changes")])
+  expected <- right (mkInstructionBundle 65536 (repositoryId "mori://fixture/repo") (repositoryBase repository) [(workspaceCoordinate "AGENTS.md", "PRIVATE_WORKFLOW_POLICY: validate changes")])
   principal <- right (identityText (CompatibilityIdentity (fixtureAgentName "workspace-worker")))
-  let settings = WorkspaceSettings (workspaceLocator root) [WorkspaceRepository (RepositoryId "mori://fixture/repo") (workspaceLocator source) [WorkspaceRevision (repositoryBase repository) (bundleDigest expected)] (repositoryBase repository) (workspaceCoordinate "policy-1") [(workspaceCoordinate "")] [(workspaceCoordinate "dependency.txt")]] [WorkspaceGrant ((either (error . show) id . mkAgentName) "workspace-worker") (declarationCoordinate principal) (RepositoryId "mori://fixture/repo") Nothing] Nothing
+  let settings = WorkspaceSettings (workspaceLocator root) [WorkspaceRepository (repositoryId "mori://fixture/repo") (workspaceLocator source) [WorkspaceRevision (repositoryBase repository) (bundleDigest expected)] (repositoryBase repository) (workspaceCoordinate "policy-1") [(workspaceCoordinate "")] [(workspaceCoordinate "dependency.txt")]] [WorkspaceGrant ((either (error . show) id . mkAgentName) "workspace-worker") (declarationCoordinate principal) (repositoryId "mori://fixture/repo") Nothing] Nothing
   host <- right (configuredWorkspaceHost env store.pool disabledDirectoryHandle authorizer (configure settings))
   let declaration = original & #name .~ fixtureAgentName "workspace-worker" & #behavior .~ Skill (declarationCoordinate ((Text.pack skill))) & #identity .~ Just (IdentityDecl (declarationCoordinate ("workspace-principal"))) & #capabilityOverlays .~ [workspaceEditDescriptor.capability] & #sinks .~ []
       identity = CompatibilityIdentity (fixtureAgentName "workspace-worker")
@@ -367,9 +368,9 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
             rei = ReiConfig Nothing,
             http,
             hooks = Agent.defaultAgentRunHooks,
-            approvalPolicy = autoApprovePolicy 900,
+            approvalPolicy = autoApprovePolicy ((either (error . show) id . parseDuration) (900)),
             approvalWorkflow = Approval.defaultApprovalWorkflowEnv,
-            runTimeout = 30,
+            runTimeout = (either (error . show) id (parseDuration (30))),
             harness = defaultHarnessPolicy,
             delegationBudget = defaultDelegationBudget,
             grants = StaticGrants defaultGrantTable,

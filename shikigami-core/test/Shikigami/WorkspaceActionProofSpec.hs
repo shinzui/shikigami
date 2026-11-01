@@ -38,7 +38,7 @@ import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadR
 import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude ((&), (.~))
-import Shikigami.Repository (RepositoryId (..))
+import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.StateRevision qualified as Generation
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
@@ -81,7 +81,7 @@ tests =
         otherWorkspaceId <- newWorkspaceId
         let owner = VerifiedIdentity actor
             request = WorkspaceRequest (WorkflowId "run") Nothing (fixtureRootId "root") owner owner (fixtureRevision 0)
-            binding = WorkspaceBinding workspaceId request (WorkspaceRef (workspaceCoordinate ("shikigami.workspace/1")) (workspaceCoordinate "resource")) (RepositoryId "mori://fixture/repo") ((workspaceCoordinate (Text.replicate 40 "a"))) (workspaceCoordinate "policy-1") (workspaceLocator "/private/workspaces") (workspaceLocator "/operator/source")
+            binding = WorkspaceBinding workspaceId request (WorkspaceRef (workspaceCoordinate ("shikigami.workspace/1")) (workspaceCoordinate "resource")) (repositoryId "mori://fixture/repo") ((workspaceCoordinate (Text.replicate 40 "a"))) (workspaceCoordinate "policy-1") (workspaceLocator "/private/workspaces") (workspaceLocator "/operator/source")
             logical = OperationContext (executionIdentity "execution") (fixtureOperationId "operation") (fixtureOperationId "operation") (ExecutionValue.executionDigest "fingerprint") (ExecutionValue.executionDigest "scope")
             dispatch = DispatchContext logical (fixtureAttemptId "attempt") (fixtureOwner "claim-owner") (fixtureGeneration 1)
             now = read "2026-10-29 12:00:00 UTC"
@@ -101,7 +101,7 @@ tests =
         checkedAt <- right (Kikan.mkConsistencyToken "snapshot-1")
         let issued = Kikan.IssuedActionProof proof minted.expiresAt [] checkedAt
         _ <- right =<< verifyIssuedAction verifier now actionRequest issued
-        let changedBindings = [binding & #id .~ otherWorkspaceId, binding & #repository .~ (RepositoryId "mori://fixture/other"), binding & #base .~ workspaceCoordinate (Text.replicate 40 "b"), binding & #policyRevision .~ (workspaceCoordinate "policy-2"), binding & #workspace . #resource .~ (workspaceCoordinate "other-resource"), binding & #request . #rootId .~ fixtureRootId "other-root", binding & #request . #epoch .~ (fixtureRevision 1), binding & #request . #runId .~ WorkflowId "other-run"]
+        let changedBindings = [binding & #id .~ otherWorkspaceId, binding & #repository .~ (repositoryId "mori://fixture/other"), binding & #base .~ workspaceCoordinate (Text.replicate 40 "b"), binding & #policyRevision .~ (workspaceCoordinate "policy-2"), binding & #workspace . #resource .~ (workspaceCoordinate "other-resource"), binding & #request . #rootId .~ fixtureRootId "other-root", binding & #request . #epoch .~ (fixtureRevision 1), binding & #request . #runId .~ WorkflowId "other-run"]
         bindingActions <- mapM (\b -> admissionFor b >>= \a -> right (workspaceFileAction b a dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"))) changedBindings
         changedPolicy <- right (mkInstructionBundle 65536 binding.repository binding.base [((workspaceCoordinate ("AGENTS.md")), "changed policy")])
         coordinateActions <-

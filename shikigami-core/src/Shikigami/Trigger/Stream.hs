@@ -5,17 +5,32 @@
 -- so agents do not react to their own output. The live consumer is added in M2.
 module Shikigami.Trigger.Stream
   ( IncludeAgentActors (..),
+    agentActorInclusion,
+    agentActorsIncluded,
     matchesStream,
     matchesStreamWith,
   )
 where
 
+import Data.Aeson (FromJSON (..), ToJSON (..))
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), ActorKind (..), Subject (..))
 import Shikigami.Agent.Decl (StreamMatch (..))
 
 -- | Whether to include envelopes whose actor is itself an agent (opt-in; default off).
 data IncludeAgentActors = ExcludeAgentActors | IncludeAgentActors
   deriving stock (Eq, Show)
+
+agentActorInclusion :: Bool -> IncludeAgentActors
+agentActorInclusion value = if value then IncludeAgentActors else ExcludeAgentActors
+
+agentActorsIncluded :: IncludeAgentActors -> Bool
+agentActorsIncluded value = value == IncludeAgentActors
+
+instance ToJSON IncludeAgentActors where
+  toJSON = toJSON . agentActorsIncluded
+  toEncoding = toEncoding . agentActorsIncluded
+
+instance FromJSON IncludeAgentActors where parseJSON value = agentActorInclusion <$> parseJSON value
 
 -- | AND of present predicates; excludes @actor.kind = "agent"@ by default (the feedback guard).
 matchesStream :: StreamMatch -> ActivityEnvelope -> Bool

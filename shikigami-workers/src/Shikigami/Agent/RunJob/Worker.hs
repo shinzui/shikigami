@@ -54,6 +54,7 @@ import Shikigami.App (AppEnv (..))
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Directory.Store qualified as DirectoryStore
+import Shikigami.Duration
 import Shikigami.Execution.Attempt qualified as Execution
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Request (ExecutionContext (..))
@@ -256,7 +257,7 @@ dispatchRunJob env job = do
     ExecutionRoute reference ->
       Executor.executeAcceptedAttempt (AgentWorkflow.executionRuntime (agentRunDeps env)) job.identity reference >>= \case
         Right Executor.ExecutorDone -> pure Done
-        Right (Executor.ExecutorWait seconds) -> pure (Retry (RetryDelay (fromIntegral seconds)))
+        Right (Executor.ExecutorWait seconds) -> pure (Retry (RetryDelay (durationTime seconds)))
         Right Executor.ExecutorInvalidReference -> pure (routeErrorJobOutcome "execution job reference is unavailable")
         _ -> pure RetryDefault
     RouteError detail -> do

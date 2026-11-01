@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Shikigami.Flow.Acknowledgement
@@ -26,6 +27,7 @@ import Kioku.Id (SessionId)
 import Kiroku.Store.Effect (Store)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
+import Shikigami.Duration
 
 data Ack
   = Acknowledged !Value
@@ -71,7 +73,7 @@ awaitAck name req = send (AwaitAcknowledgement name req)
 runAcknowledgement ::
   (Workflow :> es, Store :> es, IOE :> es) =>
   Approval.ApprovalEnv ->
-  NominalDiffTime ->
+  Duration "approval" ->
   Eff (Acknowledgement : es) a ->
   Eff es a
 runAcknowledgement env deadline =
@@ -86,7 +88,7 @@ runAcknowledgementWithChild ::
   (Workflow :> es, Store :> es, IOE :> es) =>
   SessionId ->
   Approval.ApprovalChannel ->
-  NominalDiffTime ->
+  Duration "approval" ->
   Eff (Acknowledgement : es) a ->
   Eff es a
 runAcknowledgementWithChild session channel deadline =
@@ -125,7 +127,7 @@ awaitAcknowledgement ::
   Approval.ApprovalEnv ->
   StepName ->
   Approval.ApprovalRequest ->
-  NominalDiffTime ->
+  Duration "approval" ->
   Eff es Ack
 awaitAcknowledgement env name req deadline =
   ackFromDecision <$> Approval.awaitApproval env name req (Just deadline)

@@ -32,6 +32,7 @@ import Shikigami.Agent.Delegate (DelegationRequest (..))
 import Shikigami.Agent.Name (agentNameFromNonEmpty, agentNameText)
 import Shikigami.Decision.Contract (DecisionSlot)
 import Shikigami.Decision.ModelCatalog (slotErrors)
+import Shikigami.Duration
 import Shikigami.Flow.Acknowledgement (Acknowledgement)
 import Shikigami.Flow.AtRiskCustomer (atRiskCustomerFlow)
 import Shikigami.Flow.Capability (Activity, Memory, Sink)
@@ -58,6 +59,7 @@ import Shikigami.PracticeReview.Memory (PracticeReviewMemory)
 import Shikigami.Program.Decision qualified as Decision
 import Shikigami.Program.Decision.Examples (examplePrograms)
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
+import Shikigami.RuntimePolicy
 
 -- | Everything a flow body may do, and therefore everything it may not.
 --
@@ -104,7 +106,7 @@ type FlowEffects es =
 -- rather than a function of deployment configuration.
 data FlowRuntime = FlowRuntime
   { approval :: !ApprovalEnv,
-    acknowledgementDeadline :: !NominalDiffTime
+    acknowledgementDeadline :: !(Duration "approval")
   }
 
 data LifecycleDiagram = LifecycleDiagram
@@ -117,7 +119,7 @@ data FlowDef = FlowDef
   { name :: !(DeclarationCoordinate "flow"),
     lifecycle :: !LifecycleDiagram,
     decisionSlots :: ![DecisionSlot],
-    requiresDefaultModel :: !Bool,
+    requiresDefaultModel :: !DefaultModelRequirement,
     run :: !(forall es. (FlowEffects es) => Value -> Eff es Value)
   }
 
@@ -149,21 +151,21 @@ flowRegistry =
   [ FlowDef
       { name = declarationCoordinate "shikumi-decision-example",
         decisionSlots = exampleSlots,
-        requiresDefaultModel = False,
+        requiresDefaultModel = DefaultModelOptional,
         lifecycle = LifecycleDiagram "flowchart LR\n Request --> Triage --> Investigation --> Specialist" [],
         run = shikumiDecisionExample
       },
     FlowDef
       { name = declarationCoordinate "at-risk-customer",
         decisionSlots = [],
-        requiresDefaultModel = True,
+        requiresDefaultModel = DefaultModelRequired,
         lifecycle = atRiskCustomerLifecycleDiagram,
         run = atRiskCustomerFlow
       },
     FlowDef
       { name = declarationCoordinate "delegation-proof",
         decisionSlots = [],
-        requiresDefaultModel = True,
+        requiresDefaultModel = DefaultModelRequired,
         lifecycle =
           LifecycleDiagram
             { mermaid = "flowchart LR\n  Supervisor --> WebResearcher",
@@ -174,7 +176,7 @@ flowRegistry =
     FlowDef
       { name = declarationCoordinate "architecture-practice-router",
         decisionSlots = [],
-        requiresDefaultModel = True,
+        requiresDefaultModel = DefaultModelRequired,
         lifecycle =
           LifecycleDiagram
             { mermaid = "flowchart LR\n  Input --> Router --> Specialist",
@@ -185,7 +187,7 @@ flowRegistry =
     FlowDef
       { name = declarationCoordinate opentelemetryPracticeReviewFlowName,
         decisionSlots = [],
-        requiresDefaultModel = True,
+        requiresDefaultModel = DefaultModelRequired,
         lifecycle =
           LifecycleDiagram
             { mermaid = opentelemetryPracticeReviewMermaid,
@@ -200,7 +202,7 @@ flowRegistry =
 -- static durable vocabulary; the triggering payload remains the child's input.
 delegationProofFlow :: (FlowEffects es) => Value -> Eff es Value
 delegationProofFlow payload = do
-  child <- Delegate.delegate "web-researcher" (agentNameFromNonEmpty ('w' :| "eb-researcher")) payload
+  child <- Delegate.delegate (declarationCoordinate "web-researcher") (agentNameFromNonEmpty ('w' :| "eb-researcher")) payload
   Delegate.awaitOne child
 
 -- | First registered routing call site.  A matched decision reserves every
@@ -226,7 +228,7 @@ architecturePracticeRouterFlow payload = do
   where
     toRequest RouteSelection {agent} =
       DelegationRequest
-        { key = "architecture-practice-" <> agentNameText agent,
+        { key = declarationCoordinate ("architecture-practice-" <> agentNameText agent),
           target = agent,
           payload
         }

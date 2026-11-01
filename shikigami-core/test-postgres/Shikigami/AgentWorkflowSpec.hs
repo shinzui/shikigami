@@ -108,6 +108,7 @@ import Shikigami.Capability.Overlay qualified as CapabilityOverlay
 import Shikigami.Capability.Provider qualified as CapabilityProvider
 import Shikigami.Directory (PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Directory qualified as Directory
+import Shikigami.Duration (parseDuration)
 import Shikigami.Execution.Admission (enrollRootRun)
 import Shikigami.Execution.Driver (ExecutionDriverResult (..))
 import Shikigami.Execution.Identity (ExecutionRootId)
@@ -1357,11 +1358,11 @@ tests databaseFixture =
                   envelope = Resources.Envelope (Map.singleton Resources.LifetimeDescendants (Resources.Limited (fixtureAmount 1))) (addUTCTime 3600 now)
                   parentName = WorkflowName "shikigami.test-resource-parent"
                   parentId = WorkflowId "resource-parent"
-                  childId = delegatedWorkflowIdV2 parentId (fixtureAgentName "heartbeat") "first"
-                  deniedId = delegatedWorkflowIdV2 (WorkflowId "other-parent") (fixtureAgentName "heartbeat") "second"
+                  childId = delegatedWorkflowIdV2 parentId (fixtureAgentName "heartbeat") (declarationCoordinate "first")
+                  deniedId = delegatedWorkflowIdV2 (WorkflowId "other-parent") (fixtureAgentName "heartbeat") (declarationCoordinate "second")
                   supervisor = decl & #delegates .~ map fixtureAgentName ["heartbeat"]
                   ctx = parentDelegateContext parentSession & #executionRootId .~ Just root
-                  body key = void (delegate [decl] disabledDirectoryHandle supervisor ctx key (fixtureAgentName "heartbeat") (object []))
+                  body key = void (delegate [decl] disabledDirectoryHandle supervisor ctx (declarationCoordinate key) (fixtureAgentName "heartbeat") (object []))
               runAppIO appEnv (Resources.enrollRoot root envelope) >>= assertEqual "explicit root admitted" (Right (Right Resources.Accepted))
               runAppIO appEnv (runWorkflow parentName parentId (body "first")) >>= assertEqual "child spawned" (Right (Completed ()))
               recorded <- runAppIO appEnv (loadStepIndex agentRunWorkflowName childId 0)
@@ -1386,7 +1387,7 @@ tests databaseFixture =
                     deps = testDeps appEnv behaviorEnv defaultAgentRunHooks
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-parent"
                     parentWorkflowId = WorkflowId "delegate-parent-1"
-                    childWorkflowId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "heartbeat") "heartbeat"
+                    childWorkflowId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "heartbeat") (declarationCoordinate "heartbeat")
                     parentBody = parentDelegateWorkflow parentSession
 
                 parked <- runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody)
@@ -1428,7 +1429,7 @@ tests databaseFixture =
                           delegationBudgetId = Nothing,
                           budgetLimit = defaultDelegationBudget
                         }
-                    parentBody = void (delegate [decl] disabledDirectoryHandle supervisor ctx "cycle" (fixtureAgentName "heartbeat") (object []))
+                    parentBody = void (delegate [decl] disabledDirectoryHandle supervisor ctx (declarationCoordinate "cycle") (fixtureAgentName "heartbeat") (object []))
                 refused <- try @DelegationError (runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody))
                 case refused of
                   Left err -> assertEqual "the ancestor target is rejected" (DelegationCycleDetected (fixtureAgentName "heartbeat")) err
@@ -1444,7 +1445,7 @@ tests databaseFixture =
                     supervisor = (decl & #delegates .~ ([(fixtureAgentName "heartbeat")]))
                     zeroBudget = either (error . Text.unpack) id (mkDelegationBudget 0)
                     ctx = (parentDelegateContext parentSession) {budgetLimit = zeroBudget}
-                    parentBody = void (delegate [decl] disabledDirectoryHandle supervisor ctx "over-budget" (fixtureAgentName "heartbeat") (object []))
+                    parentBody = void (delegate [decl] disabledDirectoryHandle supervisor ctx (declarationCoordinate "over-budget") (fixtureAgentName "heartbeat") (object []))
                 refused <- try @DelegationError (runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody))
                 case refused of
                   Left err -> assertEqual "the zero budget is exhausted" DelegationBudgetExhausted err
@@ -1458,8 +1459,8 @@ tests databaseFixture =
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks proofAgents
                     parentWorkflowId = runJobWorkflowId researchSupervisorJob
-                    webWorkflowId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "web-researcher") "delegate-0"
-                    codeWorkflowId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "code-researcher") "delegate-1"
+                    webWorkflowId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "web-researcher") (declarationCoordinate "delegate-0")
+                    codeWorkflowId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "code-researcher") (declarationCoordinate "delegate-1")
                     WorkflowId webWorkflowIdText = webWorkflowId
                     WorkflowId codeWorkflowIdText = codeWorkflowId
                     expectedRunningChildLinks =
@@ -1531,7 +1532,7 @@ tests databaseFixture =
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     deps = testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks (flowDelegationDecl : proofAgents)
                     parentWorkflowId = runJobWorkflowId flowDelegationJob
-                    childWorkflowId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "web-researcher") "web-researcher"
+                    childWorkflowId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "web-researcher") (declarationCoordinate "web-researcher")
 
                 parked <- runAgentRunWorkflow deps flowDelegationJob
                 assertEqual "delegating Flow parks on its child" (Right Suspended) parked
@@ -1570,8 +1571,8 @@ tests databaseFixture =
                     supervisor = collectionSupervisorDecl
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-collect"
                     parentWorkflowId = WorkflowId "delegate-collect-parent"
-                    successId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "heartbeat") "success"
-                    failureId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "missing-task-agent") "failure"
+                    successId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "heartbeat") (declarationCoordinate "success")
+                    failureId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "missing-task-agent") (declarationCoordinate "failure")
                     parentBody = parentCollectWorkflow parentSession supervisor
 
                 parked <- runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody)
@@ -1596,8 +1597,8 @@ tests databaseFixture =
                     supervisor = collectionSupervisorDecl
                     parentWorkflowName = WorkflowName "shikigami.test-delegate-cancel"
                     parentWorkflowId = WorkflowId "delegate-cancel-parent"
-                    failureId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "missing-task-agent") "failure-first"
-                    siblingId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "heartbeat") "cancelled-sibling"
+                    failureId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "missing-task-agent") (declarationCoordinate "failure-first")
+                    siblingId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "heartbeat") (declarationCoordinate "cancelled-sibling")
                     parentBody = parentCancellationWorkflow parentSession supervisor
 
                 parked <- runAppIO appEnv (runWorkflow parentWorkflowName parentWorkflowId parentBody)
@@ -1634,7 +1635,7 @@ tests databaseFixture =
                               ApprovalPolicySnapshot
                                 { requireFor = Set.singleton SKawaDigest,
                                   channel = ViaDanwa,
-                                  deadline = secondsToNominalDiffTime 60
+                                  deadline = either (error . show) id (parseDuration 60)
                                 },
                             approvalWorkflow = ApprovalWorkflow.ApprovalWorkflowEnv {ApprovalWorkflow.notifier = notifier},
                             danwa = danwaConfig,
@@ -1950,21 +1951,21 @@ parentDelegateWorkflow currentSession = do
       disabledDirectoryHandle
       ((decl & #delegates .~ (map fixtureAgentName ["heartbeat"])))
       (parentDelegateContext currentSession)
-      "heartbeat"
+      (declarationCoordinate "heartbeat")
       (fixtureAgentName "heartbeat")
       (object ["source" .= ("delegate-test" :: Text)])
   awaitDelegated delegated
 
 parentCollectWorkflow :: SessionId -> AgentDecl -> Eff (Workflow : AppEffects) [Either Text Value]
 parentCollectWorkflow currentSession supervisor = do
-  success <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) "success" (fixtureAgentName "heartbeat") (object [])
-  failure <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) "failure" (fixtureAgentName "missing-task-agent") (object [])
+  success <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) (declarationCoordinate "success") (fixtureAgentName "heartbeat") (object [])
+  failure <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) (declarationCoordinate "failure") (fixtureAgentName "missing-task-agent") (object [])
   awaitAllDelegated [success, failure]
 
 parentCancellationWorkflow :: SessionId -> AgentDecl -> Eff (Workflow : AppEffects) [Either Text Value]
 parentCancellationWorkflow currentSession supervisor = do
-  failure <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) "failure-first" (fixtureAgentName "missing-task-agent") (object [])
-  sibling <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) "cancelled-sibling" (fixtureAgentName "heartbeat") (object [])
+  failure <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) (declarationCoordinate "failure-first") (fixtureAgentName "missing-task-agent") (object [])
+  sibling <- delegate [decl, missingTaskDecl] disabledDirectoryHandle supervisor (parentDelegateContext currentSession) (declarationCoordinate "cancelled-sibling") (fixtureAgentName "heartbeat") (object [])
   cancelSiblingsOnFailure [failure, sibling]
 
 parentDelegateContext :: SessionId -> DelegateCtx
@@ -2007,9 +2008,9 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       rei = ReiConfig {baseUrl = Nothing},
       http = testSinkHttp,
       hooks,
-      approvalPolicy = autoApprovePolicy (secondsToNominalDiffTime 900),
+      approvalPolicy = autoApprovePolicy (either (error . show) id (parseDuration 900)),
       approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
-      runTimeout = secondsToNominalDiffTime 300,
+      runTimeout = (either (error . show) id (parseDuration (secondsToNominalDiffTime 300))),
       harness = Harness.defaultHarnessPolicy,
       delegationBudget = defaultDelegationBudget,
       logger = Log.silentLogger,
@@ -2047,10 +2048,10 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
         ApprovalPolicySnapshot
           { requireFor = Set.singleton SKawaDigest,
             channel = ViaDanwa,
-            deadline = fromMaybe (secondsToNominalDiffTime 900) deadline
+            deadline = either (error . show) id (parseDuration (fromMaybe (secondsToNominalDiffTime 900) deadline))
           },
       approvalWorkflow = approvalWorkflowFromLegacy approval,
-      runTimeout = secondsToNominalDiffTime 300,
+      runTimeout = (either (error . show) id (parseDuration (secondsToNominalDiffTime 300))),
       harness = Harness.defaultHarnessPolicy,
       delegationBudget = defaultDelegationBudget,
       logger = Log.silentLogger,
@@ -2193,9 +2194,9 @@ testConversationEnvIdle idleWindow appEnv behaviorEnv conversationAgents =
       Conversation.decisions = FlowDecision.emptyDecisionServices,
       Conversation.deliveryPool = Nothing,
       Conversation.resolveRunProfile = (testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks conversationAgents).resolveRunProfile,
-      Conversation.runTimeout = secondsToNominalDiffTime 300,
+      Conversation.runTimeout = (either (error . show) id (parseDuration (secondsToNominalDiffTime 300))),
       Conversation.harness = Harness.defaultHarnessPolicy,
-      Conversation.idleTimeout = idleWindow,
+      Conversation.idleTimeout = either (error . show) id (parseDuration idleWindow),
       Conversation.danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = "part_agent_test"},
       Conversation.agents = conversationAgents,
       Conversation.grants = StaticGrants defaultGrantTable,

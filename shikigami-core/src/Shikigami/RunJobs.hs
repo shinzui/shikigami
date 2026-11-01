@@ -25,7 +25,7 @@ import Keiro.PGMQ (Job (..), JobCodec (..), JobDecodeError (..), queueRef)
 import Keiro.PGMQ.Codec (keiroJobCodec)
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (idText)
-import Shikigami.Agent.Delegate.Context (DelegationBudgetId (..))
+import Shikigami.Agent.Delegate.Context (DelegationBudgetId, delegationBudgetIdText)
 import Shikigami.Agent.Delegate.Depth (depthInt)
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Run.Key (runKeyText)
@@ -93,7 +93,7 @@ toMessage job =
     }
 
 budgetText :: DelegationBudgetId -> Text
-budgetText (DelegationBudgetId value) = value
+budgetText = delegationBudgetIdText
 
 parseValue :: (Value -> Aeson.Parser a) -> Value -> Either Text a
 parseValue parser = first Text.pack . parseEither parser

@@ -21,6 +21,7 @@ import Effectful (Eff, (:>))
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (MemoryId, idText)
 import Shikigami.Agent.Decl qualified as Agent
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Name qualified as AgentName
 import Shikigami.Flow.Capability (Sink, emitSignal)
 import Shikigami.PracticeReview
@@ -98,7 +99,7 @@ import Shikigami.PracticeReview.Memory
     resolveReview,
   )
 import Shikigami.Prelude hiding ((.=))
-import Shikigami.Repository (RepositoryId (..))
+import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.Sink.Types (SinkOutcome (Enqueued), SinkResult (..))
 
 opentelemetryPracticeReviewFlowName :: Text
@@ -217,7 +218,7 @@ reviewTrigger validatedTrigger = do
   remembered <- rememberProvisional reference (priorActiveMemoryId trigger recalled) validatedVerdict
   memoryId <- either (failFlow . ("practice-review provisional memory failed: " <>) . Text.pack . show) pure remembered
   let verdict = validatedVerdictValue validatedVerdict
-  history <- emitSignal "review-history" reviewHistorySink (reviewHistoryPayload verdict)
+  history <- emitSignal (declarationCoordinate "review-history") reviewHistorySink (reviewHistoryPayload verdict)
   attention <- case (history, actionable verdict) of
     (SinkResult {outcome = Enqueued _}, True) -> Just <$> requestPracticeReviewAttention validatedVerdict
     _ -> pure Nothing
@@ -250,7 +251,7 @@ resolveAuthorized envelope = do
   resolved <- resolveReview provisionalId validatedResolution
   ResolvedPracticeReview {memoryId, resolution = allocatedResolution} <- either (failFlow . ("practice-review resolution memory failed: " <>) . Text.pack . show) pure resolved
   let resolution = validatedResolutionValue allocatedResolution
-  history <- emitSignal "resolution-history" resolutionHistorySink (resolutionHistoryPayload verdict resolution)
+  history <- emitSignal (declarationCoordinate "resolution-history") resolutionHistorySink (resolutionHistoryPayload verdict resolution)
   pure
     ( Aeson.object
         [ "kind" .= ("practice-review-resolution" :: Text),
@@ -431,7 +432,7 @@ historyContextRefs reviewId evidence =
     )
 
 repositoryRef :: RepositoryId -> Text
-repositoryRef (RepositoryId raw) = fromMaybe raw (Text.stripPrefix "mori://" raw)
+repositoryRef value = let raw = repositoryIdText value in fromMaybe raw (Text.stripPrefix "mori://" raw)
 
 actionable :: PracticeReviewVerdict -> Bool
 actionable PracticeReviewVerdict {classification, exceptionApproval} =

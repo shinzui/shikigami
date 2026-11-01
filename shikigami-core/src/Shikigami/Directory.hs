@@ -66,6 +66,7 @@ import Shikigami.Agent.Principal
     mkAgentPrincipal,
     principalText,
   )
+import Shikigami.Duration
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude (nameBytes)
 import System.IO.Error (tryIOError)
@@ -101,7 +102,7 @@ data DirectorySettings
   = DirectoryDisabled
   | DirectoryFile
       { path :: !FilePath,
-        refreshInterval :: !NominalDiffTime
+        refreshInterval :: !(Duration "directory-refresh")
       }
   deriving stock (Generic, Eq, Show)
 
@@ -274,7 +275,7 @@ startDirectoryWithHeartbeat :: Log.Logger -> IO () -> DirectorySettings -> IO (E
 startDirectoryWithHeartbeat _ _ DirectoryDisabled =
   pure (Right DirectoryRuntime {handle = disabledDirectoryHandle, refresher = Nothing})
 startDirectoryWithHeartbeat logger heartbeat (DirectoryFile filePath interval)
-  | interval <= 0 = pure (Left "directory.refresh_interval_seconds must be positive")
+  | durationTime interval <= 0 = pure (Left "directory.refresh_interval_seconds must be positive")
   | otherwise = do
       directoryHandle <- newDirectoryHandleFor DirectoryFileSource (fileDirectorySource filePath)
       refreshDirectory directoryHandle >>= \case
@@ -428,7 +429,7 @@ renderDirectorySourceKind = \case
   DirectoryFileSource -> "directory-file"
   MeiboClientSource -> "meibo-client"
 
-refreshLoop :: Log.Logger -> IO () -> DirectoryHandle -> FilePath -> NominalDiffTime -> IO ()
+refreshLoop :: Log.Logger -> IO () -> DirectoryHandle -> FilePath -> Duration "directory-refresh" -> IO ()
 refreshLoop logger heartbeat directoryHandle filePath interval = forever do
   threadDelay (durationMicroseconds interval)
   refreshDirectory directoryHandle >>= \case
@@ -443,8 +444,8 @@ refreshLoop logger heartbeat directoryHandle filePath interval = forever do
       Log.logDebug logger "directory.refreshed" ["path" .= filePath]
   heartbeat
 
-durationMicroseconds :: NominalDiffTime -> Int
-durationMicroseconds = ceiling . (* 1_000_000) . nominalDiffTimeToSeconds
+durationMicroseconds :: Duration "directory-refresh" -> Int
+durationMicroseconds = ceiling . (* 1_000_000) . nominalDiffTimeToSeconds . durationTime
 
 buildDirectoryView :: UTCTime -> [PrincipalRecord] -> Either Text DirectoryView
 buildDirectoryView loadedAt principals = do

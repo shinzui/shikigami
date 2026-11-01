@@ -21,6 +21,7 @@ import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude hiding ((.=))
+import Shikigami.RuntimePolicy
 import System.Directory (listDirectory)
 import System.Exit (exitFailure)
 import System.FilePath ((</>))
@@ -75,7 +76,7 @@ loadAgentsReport dir = do
 -- The logger is a parameter rather than a bare @stderr@ write because these are
 -- lines a long-running process emits, and plan 28's rule is that every one of
 -- those is a single JSON object an operator can filter with @jq@.
-loadAgentsLoud :: Log.Logger -> FilePath -> Bool -> (AgentLoadReport -> IO ()) -> IO AgentLoadReport
+loadAgentsLoud :: Log.Logger -> FilePath -> ManifestStrictness -> (AgentLoadReport -> IO ()) -> IO AgentLoadReport
 loadAgentsLoud logger dir strictMode afterReport = do
   report@AgentLoadReport {entries} <- loadAgentsReport dir
   traverse_ reportFailure entries
@@ -95,7 +96,7 @@ loadAgentsLoud logger dir strictMode afterReport = do
   -- callback receives the same report callers later select from, so no second
   -- directory traversal can observe a different set of files.
   afterReport report
-  when (strictMode && failedCount > 0) do
+  when (manifestsStrict strictMode && failedCount > 0) do
     Log.logError
       logger
       "agents.manifest.strict_refused"

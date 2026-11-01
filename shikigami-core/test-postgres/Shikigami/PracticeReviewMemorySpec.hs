@@ -102,7 +102,7 @@ import Shikigami.PracticeReview.Memory
     runPracticeReviewMemory,
   )
 import Shikigami.PracticeReview.Memory qualified as ReviewMemory
-import Shikigami.Repository (RelativePath, RepositoryId (..), mkRelativePath)
+import Shikigami.Repository (RelativePath, RepositoryId, mkRelativePath, repositoryId, repositoryIdText)
 import Shikigami.Trigger.Schedule (parseCron)
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
@@ -182,7 +182,7 @@ applicabilityTests =
       testCase "empty dimensions are wildcards and populated dimensions exclude mismatches" do
         path <- expectRight (mkRelativePath "docs/adr/0001.md")
         assertBool "fully empty scope is a wildcard" (appliesTo emptyApplicability (recallContext (Just path) Set.empty))
-        let wrongProject = Applicability [ProjectRef "other" (RepositoryId "repo_other")] [] [] []
+        let wrongProject = Applicability [ProjectRef "other" (repositoryId "repo_other")] [] [] []
             wrongPractice = Applicability [] [] [] [fixturePracticeKey "logging"]
             wrongDependency = Applicability [] [] [reviewDependencyName "other-package"] []
             context = recallContext (Just path) (Set.singleton "hs-opentelemetry-api")
@@ -724,7 +724,7 @@ expectThread = \case
 boundedApplicability :: RelativePath -> Applicability
 boundedApplicability path =
   Applicability
-    { projects = [ProjectRef "target" (RepositoryId "repo_target")],
+    { projects = [ProjectRef "target" (repositoryId "repo_target")],
       paths = [path],
       dependencies = [reviewDependencyName "hs-opentelemetry-api"],
       practices = [fixturePracticeKey "opentelemetry"]
@@ -742,7 +742,7 @@ recallContext = recallContextFor (fixturePracticeKey "opentelemetry")
 recallContextFor :: PracticeKey -> Maybe RelativePath -> Set.Set Text -> ReviewRecallContext
 recallContextFor practice path dependencies =
   ReviewRecallContext
-    { project = ProjectRef "target" (RepositoryId "repo_target"),
+    { project = ProjectRef "target" (repositoryId "repo_target"),
       path,
       dependencies = Set.map reviewDependencyName dependencies,
       practice

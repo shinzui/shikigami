@@ -46,6 +46,7 @@ import GHC.TypeLits (Symbol)
 import Keiro.Workflow.Gc (runWorkflowGcWorkerWith)
 import Keiro.Workflow.Resume (ResumeSummary (..), WorkflowRegistry, resumeWorkflowsOnceUpTo, runWorkflowResumeWorkerWith)
 import Shikigami.App (AppEffects, runAppIO)
+import Shikigami.Duration
 import Shikigami.Health.Supervision (LoopExited (LoopExited))
 import Shikigami.Health.Worker (LoopName (ResumeLoop, WorkflowGcLoop))
 import Shikigami.Log qualified as Log
@@ -142,7 +143,7 @@ defaultResumeRetry = either (error . Text.unpack) id (mkResumeRetry 1_000_000 30
 runResumeWorker :: WorkerEnv -> IO ()
 runResumeWorker env@WorkerEnv {runTimeout} =
   runResumeLoop defaultResumeRetry (envLogger env) do
-    result <- runAppIO ((.appEnv) env) (runWorkflowResumeWorkerWith (shikigamiWorkflowResumeOptions ((.appEnv) env) runTimeout & #logEvent .~ logResumeEvent (envLogger env)) (workflowRegistry env))
+    result <- runAppIO ((.appEnv) env) (runWorkflowResumeWorkerWith (shikigamiWorkflowResumeOptions ((.appEnv) env) (durationTime runTimeout) & #logEvent .~ logResumeEvent (envLogger env)) (workflowRegistry env))
     pure case result of
       Left err -> Text.pack (show err)
       Right () -> "the resume runner returned without an error, which a forever loop should never do"
@@ -204,7 +205,7 @@ runBoundedResumeWorker :: Int -> Int -> WorkerEnv -> IO [ResumeSummary]
 runBoundedResumeWorker passLimit candidateLimit env =
   drainResumePasses passLimit do
     let options =
-          shikigamiWorkflowResumeOptions env.appEnv env.runTimeout
+          shikigamiWorkflowResumeOptions env.appEnv (durationTime env.runTimeout)
             & #maxConcurrentAdvances .~ 1
             & #logEvent .~ logResumeEvent (envLogger env)
     result <- runAppIO env.appEnv (resumeWorkflowsOnceUpTo candidateLimit options (workflowRegistry env))

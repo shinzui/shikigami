@@ -57,6 +57,7 @@ import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Capability.Provider qualified as CapabilityProvider
 import Shikigami.Directory (disabledDirectoryHandle)
+import Shikigami.Duration (parseDuration)
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Fixture.SinkHttp (testSinkHttp)
 import Shikigami.Flow.Capability (SinkEnv (..), runSink)
@@ -708,9 +709,9 @@ specialistAgentRunDeps appEnv behaviorEnv practiceReview =
       AgentWorkflow.rei = ReiConfig {baseUrl = Nothing},
       AgentWorkflow.http = testSinkHttp,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
-      AgentWorkflow.approvalPolicy = autoApprovePolicy (secondsToNominalDiffTime 900),
+      AgentWorkflow.approvalPolicy = autoApprovePolicy (((either (error . show) id . parseDuration) (secondsToNominalDiffTime 900))),
       AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
-      AgentWorkflow.runTimeout = secondsToNominalDiffTime 300,
+      AgentWorkflow.runTimeout = (either (error . show) id (parseDuration (secondsToNominalDiffTime 300))),
       AgentWorkflow.harness = Harness.defaultHarnessPolicy,
       AgentWorkflow.delegationBudget = defaultDelegationBudget,
       AgentWorkflow.logger = Log.silentLogger,

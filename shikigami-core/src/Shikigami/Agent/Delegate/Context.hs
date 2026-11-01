@@ -1,7 +1,10 @@
 -- | Pure delegation context carried by an agent run.
 module Shikigami.Agent.Delegate.Context
   ( DelegateCtx (..),
-    DelegationBudgetId (..),
+    DelegationBudgetId,
+    delegationBudgetIdFor,
+    delegationBudgetIdText,
+    parseDelegationBudgetId,
     DelegationError (..),
     maxDelegationDepth,
     assertMayDelegate,
@@ -13,6 +16,10 @@ where
 import Control.Exception (Exception)
 import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
+import Data.Bits ((.&.))
+import Data.Text qualified as Text
+import Data.UUID qualified as UUID
+import Data.UUID.V5 qualified as UUID.V5
 import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
 import Kioku.Id (SessionId)
 import Shikigami.Agent.Decl (AgentDecl (..), DelegationBudget)
@@ -27,8 +34,36 @@ import Shikigami.Prelude hiding ((.=))
 -- delegation tree. It is encoded as a scalar so additive 'RunJob' fields stay
 -- compact and unambiguous on the queue and in workflow journals.
 newtype DelegationBudgetId = DelegationBudgetId Text
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON)
+
+delegationBudgetIdFor :: WorkflowId -> DelegationBudgetId
+delegationBudgetIdFor (WorkflowId rootWorkflowId) =
+  DelegationBudgetId
+    ( Text.pack
+        ( UUID.toString
+            ( UUID.V5.generateNamed
+                UUID.V5.namespaceURL
+                (nameBytes ("shikigami:delegation-budget:" <> rootWorkflowId))
+            )
+        )
+    )
+
+delegationBudgetIdText :: DelegationBudgetId -> Text
+delegationBudgetIdText (DelegationBudgetId raw) = raw
+
+parseDelegationBudgetId :: Text -> Either Text DelegationBudgetId
+parseDelegationBudgetId raw = case UUID.fromText raw of
+  Just value
+    | let (_, version, variant, _) = UUID.toWords value,
+      raw == UUID.toText value,
+      version .&. 0xf000 == 0x5000,
+      variant .&. 0xc0000000 == 0x80000000 ->
+        Right (DelegationBudgetId raw)
+  _ -> Left "delegation budget requires its canonical UUIDv5 commitment"
+
+instance FromJSON DelegationBudgetId where
+  parseJSON = Aeson.withText "delegation budget identity" (either (fail . Text.unpack) pure . parseDelegationBudgetId)
 
 -- | Context a run needs to decide whether it may delegate further.
 data DelegateCtx = DelegateCtx

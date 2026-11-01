@@ -1,0 +1,9 @@
+{
+  "sourceRevision": "ad22a18",
+  "since": "6f0260d",
+  "command": "nix develop --no-write-lock-file -c just keiro-gate 6f0260d",
+  "status": "passed",
+  "findings": 0,
+  "replayVerdict": "replay-neutral",
+  "conformanceControls": 156
+}

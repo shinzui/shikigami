@@ -26,6 +26,7 @@ import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Directory (DirectoryRuntime (..))
+import Shikigami.Duration
 import Shikigami.Flow (flowDeclarationErrors)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TelemetryLoop, TimerLoop), loopStaleAfter, newHeartbeatsWithStaleness, serveProbesWith)
@@ -133,7 +134,7 @@ runWorkerCmdWith resumeBudget config = do
         [ "mode" .= if null requiredKinds then ("auto_approve" :: Text) else "required",
           "required_sink_kinds" .= requiredKinds,
           "channel" .= renderApprovalChannel ((.approvalChannel) config),
-          "deadline_seconds" .= (floor (nominalDiffTimeToSeconds ((.approvalDeadline) config)) :: Integer)
+          "deadline_seconds" .= (floor (nominalDiffTimeToSeconds (durationTime ((.approvalDeadline) config))) :: Integer)
         ]
       Log.logInfo
         logger
@@ -169,7 +170,7 @@ runWorkerCmdWith resumeBudget config = do
             WorkerEnv
               { pool = storePool,
                 appEnv,
-                inspection = consumerInspection (config.runTimeout + 30) config.inspection logger settings st storeMetrics,
+                inspection = consumerInspection (durationTime config.runTimeout + 30) config.inspection logger settings st storeMetrics,
                 agents,
                 agentReport = report,
                 behaviorEnv = behEnv,

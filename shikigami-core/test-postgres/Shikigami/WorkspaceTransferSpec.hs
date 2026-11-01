@@ -28,7 +28,7 @@ import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude
-import Shikigami.Repository (RepositoryId (..))
+import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.StateRevision (StateRevision, advanceRevision, parseRevision)
 import Shikigami.StateRevision qualified as Generation
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
@@ -211,8 +211,8 @@ withWorkspace fixture callback = Fixture.withConfiguredFixture fixture (\admissi
   runId <- maybe (fail "missing original child") pure started.childWorkflowId
   root <- maybe (fail "missing root") pure session.context.executionRootId
   let base = workspaceCoordinate (Text.replicate 40 "a")
-  catalog <- right (mkWorkspaceCatalog [RepositoryPolicy (RepositoryId "mori://fixture/repository") (workspaceLocator "/approved/source") [base] base (workspaceCoordinate "policy-1")])
-  repository <- right (resolveRepository catalog (RepositoryId "mori://fixture/repository") Nothing)
+  catalog <- right (mkWorkspaceCatalog [RepositoryPolicy (repositoryId "mori://fixture/repository") (workspaceLocator "/approved/source") [base] base (workspaceCoordinate "policy-1")])
+  repository <- right (resolveRepository catalog (repositoryId "mori://fixture/repository") Nothing)
   (binding, _) <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx "/private/owned-workspaces" (WorkspaceRequest runId (Just (sessionIdFor session, started.assignmentId)) root session.identity session.identity (fixtureRevision 0)) repository))
   run env (runTransaction (Workspaces.markWorkspaceReadyTx binding)) >>= (@?= Right ())
   instructions <- right (mkInstructionBundle 65536 binding.repository binding.base [(workspaceCoordinate "AGENTS.md", "validate before committing")])

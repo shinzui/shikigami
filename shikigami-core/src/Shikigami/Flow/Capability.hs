@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Shikigami.Flow.Capability
@@ -6,6 +7,7 @@ module Shikigami.Flow.Capability
     MemoryEnv (..),
     MemoryQuery (..),
     RememberOptions (..),
+    MemoryPriority (..),
     Sink,
     SinkEnv (..),
     currentActivity,
@@ -46,6 +48,7 @@ import Kiroku.Store.Effect (Store)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl (..), MemoryPolicy (..))
 import Shikigami.Agent.Decl qualified as Agent
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity, ResolvedAgentIdentity)
 import Shikigami.Agent.Run (behaviorKindText, recallAgentLearnings, renderLearning)
@@ -86,13 +89,13 @@ data SinkEnv = SinkEnv
   }
 
 data Memory :: Effect where
-  Recall :: Text -> MemoryQuery -> Memory m [MemoryRecord]
-  Remember :: Text -> RememberOptions -> Value -> Memory m MemoryId
+  Recall :: DeclarationCoordinate "memory-label" -> MemoryQuery -> Memory m [MemoryRecord]
+  Remember :: DeclarationCoordinate "memory-label" -> RememberOptions -> Value -> Memory m MemoryId
 
 type instance DispatchOf Memory = Dynamic
 
 data Sink :: Effect where
-  EmitSignal :: Text -> Agent.Sink -> Value -> Sink m SinkResult
+  EmitSignal :: DeclarationCoordinate "sink-label" -> Agent.Sink -> Value -> Sink m SinkResult
 
 type instance DispatchOf Sink = Dynamic
 
@@ -111,8 +114,11 @@ type instance DispatchOf Activity = Dynamic
 -- @[\"flow\", \<behavior kind\>]@ tags it has always written rather than replacing
 -- them, so a flow cannot accidentally un-tag its own memories out of the
 -- queries that find them.
+newtype MemoryPriority = MemoryPriority Int
+  deriving stock (Eq, Show)
+
 data RememberOptions = RememberOptions
-  { priority :: !Int,
+  { priority :: !MemoryPriority,
     confidence :: !Confidence,
     memoryType :: !MemoryType,
     supersedes :: !(Maybe MemoryId),
@@ -124,7 +130,7 @@ data RememberOptions = RememberOptions
 defaultRememberOptions :: RememberOptions
 defaultRememberOptions =
   RememberOptions
-    { priority = 100,
+    { priority = MemoryPriority 100,
       confidence = MediumConfidence,
       memoryType = MemoryPattern,
       supersedes = Nothing,
@@ -148,7 +154,7 @@ defaultRememberOptions =
 -- "Shikigami.Flow", it must appear as @step recall-\<label\>@ in
 -- @domain\/shikigami-agent-run.keiro@. That is what puts these names under
 -- @just keiro-gate@ instead of merely being stable by convention.
-recall :: (Memory :> es) => Text -> MemoryQuery -> Eff es [MemoryRecord]
+recall :: (Memory :> es) => DeclarationCoordinate "memory-label" -> MemoryQuery -> Eff es [MemoryRecord]
 recall label query' = send (Recall label query')
 
 -- | Record a learning, journaling it under a step name derived from @label@,
@@ -165,7 +171,7 @@ recall label query' = send (Recall label query')
 -- not from a fresh clock read or a live query. Kioku answers a second write
 -- against a known id idempotently only when the whole semantic payload matches;
 -- a payload that drifted yields a conflict rather than a silent second row.
-remember :: (Memory :> es) => Text -> Value -> Eff es MemoryId
+remember :: (Memory :> es) => DeclarationCoordinate "memory-label" -> Value -> Eff es MemoryId
 remember label = rememberWith label defaultRememberOptions
 
 -- | 'remember' with the metadata spelled out instead of defaulted.
@@ -184,7 +190,7 @@ remember label = rememberWith label defaultRememberOptions
 -- @supersedes@ and then issues a distinct merge command for each target it
 -- means to retire. Retiring a flow memory would be a second aggregate write
 -- from one capability call, and this capability does not make it.
-rememberWith :: (Memory :> es) => Text -> RememberOptions -> Value -> Eff es MemoryId
+rememberWith :: (Memory :> es) => DeclarationCoordinate "memory-label" -> RememberOptions -> Value -> Eff es MemoryId
 rememberWith label opts value = send (Remember label opts value)
 
 -- | Emit a signal through a declared sink, journaling it under a step name
@@ -197,7 +203,7 @@ rememberWith label opts value = send (Remember label opts value)
 -- change governed by @docs\/workflow-versioning.md@. Values that are themselves
 -- replay-stable (a ticket id read out of a journaled verdict) are permissible
 -- but discouraged; prefer a static token.
-emitSignal :: (Sink :> es) => Text -> Agent.Sink -> Value -> Eff es SinkResult
+emitSignal :: (Sink :> es) => DeclarationCoordinate "sink-label" -> Agent.Sink -> Value -> Eff es SinkResult
 emitSignal label sink output = send (EmitSignal label sink output)
 
 currentActivity :: (Activity :> es) => Eff es ActivityEnvelope
@@ -232,13 +238,13 @@ runMemory env@MemoryEnv {appEnv, agent = AgentDecl {memory = MemoryPolicy {recal
     ( \_ -> \case
         Recall label MemoryQuery {query} ->
           step
-            (StepName ("recall-" <> label))
+            (StepName ("recall-" <> declarationCoordinateText label))
             (liftIO (recallAgentLearnings appEnv aliasPool recallLimit identity query))
         Remember label opts value -> do
           (wfName, wfId) <- currentWorkflow
           generation <- currentRunGeneration
           let mid = deterministicFlowMemoryId wfName wfId generation label
-          step (StepName ("remember-" <> label)) (liftIO (writeMemory env mid opts value))
+          step (StepName ("remember-" <> declarationCoordinateText label)) (liftIO (writeMemory env mid opts value))
     )
     action
 
@@ -272,13 +278,13 @@ writeMemory env mid opts value =
 -- 'Shikigami.Sink.Intent.deterministicOutboxIdForMessage'. The namespace and
 -- input tuple remain distinct, so flow-memory ids cannot collide with sink
 -- outbox ids.
-deterministicFlowMemoryId :: WorkflowName -> WorkflowId -> Int -> Text -> MemoryId
+deterministicFlowMemoryId :: WorkflowName -> WorkflowId -> Int -> DeclarationCoordinate "memory-label" -> MemoryId
 deterministicFlowMemoryId (WorkflowName wfName) (WorkflowId wfId) generation label =
   KindID.decorateKindID $
     UUID.V5.generateNamed UUID.V5.namespaceURL $
       ByteString.unpack $
         TextEncoding.encodeUtf8 $
-          Text.intercalate ":" ["shikigami:flow-memory", wfName, wfId, Text.pack (show generation), label]
+          Text.intercalate ":" ["shikigami:flow-memory", wfName, wfId, Text.pack (show generation), declarationCoordinateText label]
 
 -- | Write one flow memory under a caller-supplied id, returning kioku's answer.
 --
@@ -296,7 +302,7 @@ recordFlowMemory :: MemoryEnv -> MemoryId -> RememberOptions -> Value -> IO (Eit
 recordFlowMemory
   MemoryEnv {appEnv, agent = decl, identity, sessionId}
   mid
-  RememberOptions {priority, confidence, memoryType, supersedes, extraTags}
+  RememberOptions {priority = MemoryPriority priority, confidence, memoryType, supersedes, extraTags}
   value = do
     recordedAt <- getCurrentTime
     let focus = behaviorKindText ((.behavior) decl)
@@ -330,7 +336,7 @@ runSink SinkEnv {agent, runId, occurredAt, danwaTarget, activity, grants, direct
     ( \_ -> \case
         EmitSignal label sink output -> do
           ordinal <- liftIO (atomicModifyIORef' ordinalRef \current -> (current + 1, current))
-          let stepName = StepName ("emit-signal:" <> label)
+          let stepName = StepName ("emit-signal:" <> declarationCoordinateText label)
           enqueueSinkIntentStep directory grants identity stepName agent runId ordinal occurredAt danwaTarget activity sink output
     )
     action

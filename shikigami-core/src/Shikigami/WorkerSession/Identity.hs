@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Assignment children are keyed by the retained session, rather than the
 -- coordinator's current workflow generation or epoch.
 module Shikigami.WorkerSession.Identity
@@ -9,6 +11,7 @@ module Shikigami.WorkerSession.Identity
 where
 
 import Keiro.Workflow.Types (WorkflowId (..), WorkflowName (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate (delegatedWorkflowIdV2)
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Prelude
@@ -20,8 +23,8 @@ sessionWorkflowId session = WorkflowId session.value
 sessionWorkflowName :: WorkflowName
 sessionWorkflowName = WorkflowName "shikigami.worker-session"
 
-assignmentDelegationKey :: AssignmentId -> Text
-assignmentDelegationKey assignment = assignment.value
+assignmentDelegationKey :: AssignmentId -> DeclarationCoordinate "delegation-key"
+assignmentDelegationKey assignment = declarationCoordinate assignment.value
 
 assignmentChildWorkflowIdV2 :: WorkerSessionId -> AgentName -> AssignmentId -> WorkflowId
 assignmentChildWorkflowIdV2 session target assignment =

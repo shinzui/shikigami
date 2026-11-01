@@ -16,7 +16,7 @@ import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, declarationCoord
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Prelude hiding ((.=))
-import Shikigami.Repository (RepositoryId (..))
+import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.Instructions (validWorkspacePath)
 import Shikigami.Workspace.ProcessPolicy (IdentityRange, ProcessPolicy (..), processPolicyIdentity, validIdentityRange, validProcessPolicy)

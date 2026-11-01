@@ -11,6 +11,7 @@ import Data.Time (secondsToNominalDiffTime)
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Directory
+import Shikigami.Duration
 import Shikigami.Log qualified as Log
 import Shikigami.Trigger.Schedule (parseCron)
 import System.Directory (getTemporaryDirectory, removeFile, renameFile)
@@ -44,7 +45,7 @@ tests =
         (missingPath, fileHandle) <- openBinaryTempFile temporaryDirectory "shikigami-directory-missing.json"
         hClose fileHandle
         removeFile missingPath
-        started <- startDirectory Log.silentLogger (DirectoryFile missingPath (secondsToNominalDiffTime 5))
+        started <- startDirectory Log.silentLogger (DirectoryFile missingPath (either (error . show) id (parseDuration 5)))
         case started of
           Left problem -> assertBool ("expected read failure, got " <> show problem) ("could not read directory file" `Text.isInfixOf` problem)
           Right _ -> assertFailure "configured startup unexpectedly accepted a missing directory file",

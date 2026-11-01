@@ -84,12 +84,14 @@ import Shikigami.Attestation.Resolve qualified as Snapshot
 import Shikigami.Attestation.Reviewed
   ( DiffDigest (..),
     NonConformingReason (..),
-    RepositoryId (..),
+    RepositoryId,
     ResultDigest (..),
     ReviewedArtifact (..),
     fullCommitText,
     mkFullCommit,
     pullRequestRef,
+    repositoryId,
+    repositoryIdText,
     reviewPath,
   )
 import Shikigami.Attestation.Strength
@@ -527,7 +529,7 @@ reviewedTests =
 sampleReviewedArtifact :: ReviewedArtifact
 sampleReviewedArtifact =
   ReviewedArtifact
-    { repository = RepositoryId "mori://shinzui/shikigami",
+    { repository = repositoryId "mori://shinzui/shikigami",
       baseCommit = either (error . Text.unpack) id (mkFullCommit baseHash),
       headCommit = either (error . Text.unpack) id (mkFullCommit headHash),
       diffDigest = DiffDigest "sha256:diff",

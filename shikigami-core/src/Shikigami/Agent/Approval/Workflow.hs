@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | The durable child workflow for one human approval request.
 module Shikigami.Agent.Approval.Workflow
   ( ApprovalWorkflowInput (..),
@@ -47,13 +49,14 @@ import Shikigami.Agent.Approval
   )
 import Shikigami.App (AppEffects)
 import Shikigami.Approval.Generated.WorkflowRuntime qualified as Generated
+import Shikigami.Duration
 import Shikigami.Prelude
 
 data ApprovalWorkflowInput = ApprovalWorkflowInput
   { reviewRequestId :: !ReviewRequestId,
     sessionId :: !SessionId,
     request :: !ApprovalRequest,
-    deadline :: !NominalDiffTime
+    deadline :: !(Duration "approval")
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -85,7 +88,7 @@ instance Exception ApprovalNotificationTransientFailure
 -- not cross the workflow journal; only 'ApprovalNotificationResult' does.
 data ApprovalNotifier = ApprovalNotifier
   { recordPark :: !(SessionId -> ReviewRequestId -> AwakeableId -> ApprovalRequest -> IO ()),
-    postAsk :: !(ReviewRequestId -> AwakeableId -> NominalDiffTime -> ApprovalRequest -> IO (Either ApprovalNotificationError ()))
+    postAsk :: !(ReviewRequestId -> AwakeableId -> Duration "approval" -> ApprovalRequest -> IO (Either ApprovalNotificationError ()))
   }
 
 newtype ApprovalWorkflowEnv = ApprovalWorkflowEnv
@@ -142,7 +145,7 @@ requestApproval ::
   Text ->
   SessionId ->
   ApprovalRequest ->
-  NominalDiffTime ->
+  Duration "approval" ->
   Eff es ApprovalWorkflowResult
 requestApproval requestKey sessionId request deadline = do
   (parentName, parentId) <- currentWorkflow
@@ -155,7 +158,7 @@ requestApproval requestKey sessionId request deadline = do
 -- same as the original approval path.
 requestBoundApproval ::
   (Workflow :> es, Store :> es, IOE :> es) =>
-  ReviewRequestId -> SessionId -> ApprovalRequest -> NominalDiffTime -> Eff es ApprovalWorkflowResult
+  ReviewRequestId -> SessionId -> ApprovalRequest -> Duration "approval" -> Eff es ApprovalWorkflowResult
 requestBoundApproval reviewRequestId sessionId request deadline = do
   let childId = approvalWorkflowId reviewRequestId
       input = ApprovalWorkflowInput {reviewRequestId, sessionId, request, deadline}

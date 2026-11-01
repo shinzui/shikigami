@@ -56,6 +56,7 @@ import Shikigami.Decision.StubProvider (decisionStubProvider)
 import Shikigami.Flow qualified as Flow
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude ((&), (.~))
@@ -419,20 +420,20 @@ tests fixture =
               children <- expectRight =<< runAppIO app (lookupChildrenOfParent (runJobWorkflowId request).unWorkflowId "shikigami.agent-run")
               length children @?= 0
           )
-          [ ("decision-no-match", RouteDecision 1 Fixture.catalog.version (NoMatch "none"), True),
-            ("decision-ambiguous", RouteDecision 1 Fixture.catalog.version (Ambiguous (RouteSelection (fixtureAgentName "first") [(fixtureExpertiseKey "observability")] RoutingHigh "possible" :| []) "unclear"), True),
-            ("decision-invalid-route", RouteDecision 1 Fixture.catalog.version (Matched (RouteSelection (fixtureAgentName "forged-agent") [(fixtureExpertiseKey "observability")] RoutingHigh "forged" :| [])), False)
+          [ ("decision-no-match", RouteDecision V1 Fixture.catalog.version (NoMatch "none"), True),
+            ("decision-ambiguous", RouteDecision V1 Fixture.catalog.version (Ambiguous (RouteSelection (fixtureAgentName "first") [(fixtureExpertiseKey "observability")] RoutingHigh "possible" :| []) "unclear"), True),
+            ("decision-invalid-route", RouteDecision V1 Fixture.catalog.version (Matched (RouteSelection (fixtureAgentName "forged-agent") [(fixtureExpertiseKey "observability")] RoutingHigh "forged" :| [])), False)
           ],
       testCase "a valid investigation route crosses governed delegation once" $
         withRuntime fixture \app store behavior -> do
-          let route = RouteDecision 1 Fixture.catalog.version (Matched (RouteSelection (fixtureAgentName "first") [(fixtureExpertiseKey "observability")] RoutingHigh "specialist" :| []))
+          let route = RouteDecision V1 Fixture.catalog.version (Matched (RouteSelection (fixtureAgentName "first") [(fixtureExpertiseKey "observability")] RoutingHigh "specialist" :| []))
               investigation = InvestigationResult ProposeRoute "delegate safely" (TE.decodeUtf8 (LBS.toStrict (encode route))) 0.9
           (handler, observed) <- scriptedProvider Investigate investigation
           let runtime = deps app store behavior handler (Decision.defaultDecisionServices catalog)
               request = job "decision-delegate"
           parked <- Agent.runAgentRunWorkflow runtime request
           case parked of Right Suspended -> pure (); _ -> assertFailure "expected governed child suspension"
-          let childId = delegatedWorkflowIdV2 (runJobWorkflowId request) (fixtureAgentName "first") "decision-investigate-first"
+          let childId = delegatedWorkflowIdV2 (runJobWorkflowId request) (fixtureAgentName "first") (declarationCoordinate "decision-investigate-first")
           _ <- Fixture.runSuccessfulChild app runtime childId
           _ <- assertCompleted =<< Agent.runAgentRunWorkflow runtime request
           observed >>= (\calls -> length calls @?= 3)

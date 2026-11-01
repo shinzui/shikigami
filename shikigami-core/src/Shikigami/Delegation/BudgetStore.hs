@@ -36,7 +36,7 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Numeric.Natural (Natural)
 import Shikigami.Agent.Decl (DelegationBudget, delegationBudgetInt)
-import Shikigami.Agent.Delegate.Context (DelegationBudgetId (..))
+import Shikigami.Agent.Delegate.Context (DelegationBudgetId, delegationBudgetIdFor, delegationBudgetIdText)
 import Shikigami.Execution.Coordinate (executionCoordinate)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId, executionRootIdText, operationIdWithPrefix, parseExecutionRootId)
 import Shikigami.Execution.Quantity (oneAmount)
@@ -64,17 +64,6 @@ data BudgetReservationError
   deriving stock (Eq, Show)
 
 -- | The deterministic ledger identity for a root workflow instance.
-delegationBudgetIdFor :: WorkflowId -> DelegationBudgetId
-delegationBudgetIdFor (WorkflowId rootWorkflowId) =
-  DelegationBudgetId
-    ( Text.pack
-        ( UUID.toString
-            ( UUID.V5.generateNamed
-                UUID.V5.namespaceURL
-                (nameBytes ("shikigami:delegation-budget:" <> rootWorkflowId))
-            )
-        )
-    )
 
 -- | Reserve one distinct child id under a shared ledger.
 --
@@ -178,7 +167,7 @@ bindRootStatement =
     WHERE budget_id=$1 AND (execution_root_id=$2 OR (execution_root_id IS NULL AND $3))
     RETURNING true
     """
-    (contrazip3 ((\(DelegationBudgetId v) -> v) >$< Encoders.param (Encoders.nonNullable Encoders.text)) (Encoders.param (Encoders.nonNullable Encoders.text)) (Encoders.param (Encoders.nonNullable Encoders.bool)))
+    (contrazip3 (delegationBudgetIdText >$< Encoders.param (Encoders.nonNullable Encoders.text)) (Encoders.param (Encoders.nonNullable Encoders.text)) (Encoders.param (Encoders.nonNullable Encoders.bool)))
     (fromMaybe False <$> Decoders.rowMaybe (Decoders.column (Decoders.nonNullable Decoders.bool)))
 
 insertBudgetStatement :: Statement (DelegationBudgetId, WorkflowId, DelegationBudget, UTCTime) ()
@@ -191,7 +180,7 @@ insertBudgetStatement =
     ON CONFLICT DO NOTHING
     """
     ( contrazip4
-        ((\(DelegationBudgetId value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        (delegationBudgetIdText >$< Encoders.param (Encoders.nonNullable Encoders.text))
         ((\(WorkflowId value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
         (fromIntegral . delegationBudgetInt >$< Encoders.param (Encoders.nonNullable Encoders.int4))
         (Encoders.param (Encoders.nonNullable Encoders.timestamptz))
@@ -207,7 +196,7 @@ lockBudgetStatement =
     WHERE budget_id = $1
     FOR UPDATE
     """
-    ((\(DelegationBudgetId value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+    (delegationBudgetIdText >$< Encoders.param (Encoders.nonNullable Encoders.text))
     ( Decoders.rowMaybe
         ( (,,)
             <$> Decoders.column (Decoders.nonNullable (fromIntegral <$> Decoders.int4))
@@ -227,7 +216,7 @@ reservationExistsStatement =
     )
     """
     ( contrazip2
-        ((\(DelegationBudgetId value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        (delegationBudgetIdText >$< Encoders.param (Encoders.nonNullable Encoders.text))
         ((\(WorkflowId value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
     )
     (Decoders.singleRow (Decoders.column (Decoders.nonNullable Decoders.bool)))
@@ -241,7 +230,7 @@ insertReservationStatement =
     VALUES ($1, $2, $3)
     """
     ( contrazip3
-        ((\(DelegationBudgetId value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        (delegationBudgetIdText >$< Encoders.param (Encoders.nonNullable Encoders.text))
         ((\(WorkflowId value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
         (Encoders.param (Encoders.nonNullable Encoders.timestamptz))
     )
@@ -257,7 +246,7 @@ incrementBudgetStatement =
     WHERE budget_id = $1
     """
     ( contrazip3
-        ((\(DelegationBudgetId value) -> value) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        (delegationBudgetIdText >$< Encoders.param (Encoders.nonNullable Encoders.text))
         (fromIntegral >$< Encoders.param (Encoders.nonNullable Encoders.int4))
         (Encoders.param (Encoders.nonNullable Encoders.timestamptz))
     )

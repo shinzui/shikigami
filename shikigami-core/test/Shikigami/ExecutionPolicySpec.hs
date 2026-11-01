@@ -19,7 +19,7 @@ import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
 import Shikigami.Execution.ToolPosition (ToolPosition, parseToolPosition)
 import Shikigami.Execution.Transcript
 import Shikigami.FormatVersion (FormatVersion (V1))
-import Shikigami.Repository (RepositoryId (..))
+import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Workspace.Instructions (instructionPrompt, mkInstructionBundle)
 import Shikigami.Workspace.Value
@@ -95,7 +95,7 @@ tests =
             source = ReplayContext LegacyContext Nothing [UserTurn [TextBlock "request"] Nothing, UserTurn [TextBlock (Text.replicate 3000 "x")] Nothing, AssistantTurn (answer "latest")]
         prepareModelOperationInput policy ModelTurn source Nothing Nothing @?= Left (ExecutionPolicyRefused "summary source exceeds the context ceiling"),
       testCase "version-2 summary requests and accepted summaries retain the actual request" do
-        bundle <- expectRight (mkInstructionBundle 65536 (RepositoryId ("mori://fixture/repo")) ((workspaceCoordinate (Text.replicate 40 "a"))) [((workspaceCoordinate ("AGENTS.md")), "frozen repository requirements")])
+        bundle <- expectRight (mkInstructionBundle 65536 (repositoryId ("mori://fixture/repo")) ((workspaceCoordinate (Text.replicate 40 "a"))) [((workspaceCoordinate ("AGENTS.md")), "frozen repository requirements")])
         let policy = defaultHarnessPolicy & #contextBytes .~ (fixturePolicy 3600) & #keepRecentMessages .~ (fixturePolicy 1) & #summaryTokens .~ Just (fixturePolicy 64)
             request = RequestTurn [TextBlock "current request"] Nothing
             source = ReplayContext RequestContext (Just (instructionPrompt bundle)) [UserTurn [TextBlock (Text.replicate 1000 "x")] Nothing, AssistantTurn (answer (Text.replicate 1000 "y")), request, AssistantTurn (answer (Text.replicate 1000 "z"))]

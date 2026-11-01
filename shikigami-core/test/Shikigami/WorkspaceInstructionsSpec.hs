@@ -18,7 +18,7 @@ import Shikigami.Execution.Policy
 import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
 import Shikigami.Execution.Transcript
 import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
-import Shikigami.Repository (RepositoryId (..))
+import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
@@ -82,7 +82,7 @@ tests =
         assertBool "cannot drop fixed instructions" (isLeft (selectContextView (policy & #contextBytes .~ (fixturePolicy 1024)) (context & #systemPrompt .~ Just (Text.replicate 2000 "x" <> instructionPrompt bundle))))
     ]
   where
-    repository = (RepositoryId ("mori://fixture/repo"))
+    repository = (repositoryId ("mori://fixture/repo"))
     base = Text.replicate 40 "a"
     right :: (Show e) => Either e a -> IO a
     right = either (\err -> assertFailure (show err) >> fail "unreachable") pure

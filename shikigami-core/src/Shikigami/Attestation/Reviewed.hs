@@ -12,7 +12,9 @@
 -- 'mkFullCommit' and the 'FromJSON' instance, and both run the same validation.
 module Shikigami.Attestation.Reviewed
   ( -- * Repository vocabulary
-    RepositoryId (..),
+    RepositoryId,
+    repositoryId,
+    repositoryIdText,
     Revision,
     mkRevision,
     revisionText,
@@ -47,7 +49,7 @@ import Data.Aeson (Value (String), withText)
 import Data.Char (isHexDigit)
 import Data.Text qualified as Text
 import Shikigami.Prelude
-import Shikigami.Repository (RepositoryId (..), Revision, mkRevision, revisionText)
+import Shikigami.Repository (RepositoryId, Revision, mkRevision, repositoryId, repositoryIdText, revisionText)
 
 -- ---------------------------------------------------------------------------
 -- Repository vocabulary

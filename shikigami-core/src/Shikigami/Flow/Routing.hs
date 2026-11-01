@@ -39,6 +39,7 @@ import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, (:>))
 import Effectful.Dispatch.Dynamic (interpret, send)
 import Effectful.Exception (catchSync, throwIO)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), currentWorkflow, step)
+import Kioku.Id (SessionId, idText)
 import Shibuya.Telemetry.Effect (Span, Tracing, addAttribute, defaultSpanArguments, withSpan')
 import Shikigami.Agent.Decl (AgentDecl (..), RouterConfidence (..))
 import Shikigami.Agent.ExpertiseKey (expertiseKeyText)
@@ -48,7 +49,7 @@ import Shikigami.Behavior.Compatibility
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest)
 import Shikigami.Directory (DirectoryHandle, readDirectorySnapshot, renderDirectorySourceKind)
 import Shikigami.Prelude hiding ((.=))
-import Shikigami.Router.Catalog (CandidateAvailability (..), CandidateCatalog (..), CandidateEntry (..), CatalogVersion (..), buildCandidateCatalog)
+import Shikigami.Router.Catalog (CandidateAvailability (..), CandidateCatalog (..), CandidateEntry (..), CatalogVersion, buildCandidateCatalog, catalogVersionText)
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..), RoutingError, renderRoutingError, validateRouteDecision)
 import Shikigami.Router.Declaration (RouterDeclarationError, RouterDeclarationView (policy), ValidatedRouterDeclaration, renderRouterDeclarationError, validateRouterDeclaration, validatedRouterDeclaration)
 
@@ -66,7 +67,7 @@ data RoutingRuntime = RoutingRuntime
 
 data RoutingEnv = RoutingEnv
   { agent :: !AgentDecl,
-    sessionId :: !Text,
+    sessionId :: !SessionId,
     behaviorEnv :: !BehaviorEnv,
     runtime :: !RoutingRuntime
   }
@@ -110,7 +111,7 @@ runRouting RoutingEnv {agent = routerDecl@AgentDecl {name = routerAgent}, sessio
     Route label payload ->
       withSpan' "routing.route" defaultSpanArguments \traceSpan -> do
         (WorkflowName parentWorkflowName, WorkflowId parentWorkflowId) <- currentWorkflow
-        addAttribute traceSpan "routing.parent.session_id" sessionId
+        addAttribute traceSpan "routing.parent.session_id" (idText sessionId)
         addAttribute traceSpan "routing.parent.workflow" parentWorkflowName
         addAttribute traceSpan "routing.parent.workflow_id" parentWorkflowId
         addAttribute traceSpan "router.agent" (agentNameText routerAgent)
@@ -145,9 +146,9 @@ runRouting RoutingEnv {agent = routerDecl@AgentDecl {name = routerAgent}, sessio
           pure RoutedRoute {catalog, decision}
 
 recordCatalogAttributes :: (Tracing :> es, IOE :> es) => Span -> CandidateCatalog -> Eff es ()
-recordCatalogAttributes traceSpan CandidateCatalog {router, version = CatalogVersion catalogVersion, lifecycleSource, candidates} = do
+recordCatalogAttributes traceSpan CandidateCatalog {router, version, lifecycleSource, candidates} = do
   addAttribute traceSpan "router.agent" (agentNameText router)
-  addAttribute traceSpan "routing.catalog.version" catalogVersion
+  addAttribute traceSpan "routing.catalog.version" (catalogVersionText version)
   addAttribute traceSpan "routing.lifecycle.source" (renderDirectorySourceKind lifecycleSource)
   addAttribute traceSpan "routing.candidates.available" (boundedList [agentNameText name | CandidateEntry {name, availability = Available} <- candidates])
   addAttribute

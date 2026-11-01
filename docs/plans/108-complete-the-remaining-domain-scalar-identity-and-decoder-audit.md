@@ -77,9 +77,26 @@ build passes, including the Linux prototype. All 626 core unit, 472 PostgreSQL
 compiler controls pass. The PostgreSQL result also covers the final cron-claim
 separation in the preceding declaration batch. Exact source hashes are retained
 in `docs/evidence/plan-108/workspace-values-source.json`. Style and whitespace
-checks pass. No Linux runtime qualification is inferred from fixture compilation.
+checks pass. The native gate for source commit `ad22a18` against `6f0260d` passes
+with zero findings, replay-neutral impact and all 156 conformance controls.
+No Linux runtime qualification is inferred from fixture compilation.
 The classification remains the explicitly historical `1e7f619` snapshot until
 the combined implementation is built and reconciled; M2 and M3 remain open.
+
+Runtime value implementation (2026-11-01): duration roles, manifest
+strictness, default-model requirements, private deterministic review/catalog/budget
+identities, repository identity encapsulation, native routing sessions, technical
+dead-letter alternatives and flow/delegation labels are implemented together.
+Existing scalar codecs, remaining-wait zero expiration and identity/label recipes
+are preserved. The complete workspace build, 629 core, 472 PostgreSQL (140.57 seconds),
+280 serial worker (190.82 seconds), 95 server, 37 agent, 31 API and nine client
+cases pass, together with domain conformance and six diagram controls. Public
+compiler controls exposed two stale generation expectations from an earlier
+source batch; those probes are corrected without changing production types.
+Native workflow compatibility remains pending for the committed source.
+The inventory remains the
+historical snapshot above until combined reconciliation; this note does not
+certify unresolved findings or complete M2/M3.
 
 Execution order correction (2026-10-31): finish M1b's remaining inventory before
 starting another M2 source refactor. Earlier small remediation batches produced

@@ -1,7 +1,9 @@
 {-# LANGUAGE DataKinds #-}
 
 module Shikigami.Router.Catalog
-  ( CatalogVersion (..),
+  ( CatalogVersion,
+    parseCatalogVersion,
+    catalogVersionText,
     ExclusionReason (..),
     CandidateAvailability (..),
     CandidateEntry (..),
@@ -12,11 +14,13 @@ where
 
 import Data.Aeson (withObject, withText, (.:), (.=))
 import Data.Aeson qualified as Aeson
+import Data.Bits ((.&.))
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
+import GHC.Records (HasField (..))
 import Numeric.Natural (Natural)
 import Shikigami.Agent.Decl
   ( AgentDecl (..),
@@ -43,14 +47,29 @@ import Shikigami.Prelude hiding ((.=))
 import Shikigami.Router.Declaration (RouterDeclarationView (declaration), ValidatedRouterDeclaration, validatedRouterDeclaration)
 
 -- | A stable identifier for every model-visible input in a candidate catalog.
-newtype CatalogVersion = CatalogVersion {value :: Text}
-  deriving stock (Generic, Eq, Ord, Show)
+newtype CatalogVersion = CatalogVersion Text
+  deriving stock (Eq, Ord, Show)
 
 instance ToJSON CatalogVersion where
   toJSON (CatalogVersion version) = Aeson.String version
 
 instance FromJSON CatalogVersion where
-  parseJSON = withText "catalog version" (pure . CatalogVersion)
+  parseJSON = withText "catalog version" (either (fail . Text.unpack) pure . parseCatalogVersion)
+
+catalogVersionText :: CatalogVersion -> Text
+catalogVersionText (CatalogVersion raw) = raw
+
+parseCatalogVersion :: Text -> Either Text CatalogVersion
+parseCatalogVersion raw = case UUID.fromText raw of
+  Just value
+    | let (_, version, variant, _) = UUID.toWords value,
+      raw == "" <> UUID.toText value,
+      version .&. 0xf000 == 0x5000,
+      variant .&. 0xc0000000 == 0x80000000 ->
+        Right (CatalogVersion raw)
+  _ -> Left "CatalogVersion requires its canonical UUIDv5 commitment"
+
+instance HasField "value" CatalogVersion Text where getField = catalogVersionText
 
 data ExclusionReason
   = Disabled

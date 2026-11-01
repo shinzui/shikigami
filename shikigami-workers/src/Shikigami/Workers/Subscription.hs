@@ -21,6 +21,7 @@ import Shikigami.Health.Worker
     beat,
     clearReport,
     loopStaleAfter,
+    loopStalenessTime,
     newHeartbeatsWithStaleness,
     registerReport,
     serveProbesWith,
@@ -48,7 +49,7 @@ import Shikigami.Workers.Config (directoryLoopRegistration, persistAgentLoadRepo
 runConsumeStream :: AppConfig -> IO ()
 runConsumeStream config = do
   logger <- Log.newStderrLogger Log.Info
-  let include = if (.kafkaIncludeAgentActors) config then IncludeAgentActors else ExcludeAgentActors
+  let include = (.kafkaIncludeAgentActors) config
       broker = (.kafkaBroker) config
       topic = (.kafkaActivityTopic) config
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-consume-stream" config
@@ -85,7 +86,7 @@ runConsumeStream config = do
                 topic = topic,
                 consumerGroupId = (.kafkaStreamGroup) config,
                 deadLetterQueue = (.kafkaDeadLetterQueue) config,
-                inspection = consumerInspection (loopStaleAfter ConsumerLoop) config.inspection logger settings st storeMetrics
+                inspection = consumerInspection (loopStalenessTime (loopStaleAfter ConsumerLoop)) config.inspection logger settings st storeMetrics
               }
           onHit StreamHit {agentName} = do
             let matched = ["agent" .= agentName, "topic" .= topic]
@@ -150,7 +151,7 @@ runConsumeEvents config = do
                 topic = topic,
                 consumerGroupId = (.kafkaEventsGroup) config,
                 deadLetterQueue = (.kafkaDeadLetterQueue) config,
-                inspection = consumerInspection (loopStaleAfter ConsumerLoop) config.inspection logger settings st storeMetrics
+                inspection = consumerInspection (loopStalenessTime (loopStaleAfter ConsumerLoop)) config.inspection logger settings st storeMetrics
               }
           onHit EventHit {agentName, eventType, integrationMessageId} = do
             let matched =

@@ -107,7 +107,7 @@ import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.PracticeReview.Identity
 import Shikigami.Prelude hiding ((.=))
-import Shikigami.Repository (RelativePath, RepoRef (..), RepositoryId (..), Revision, relativePathText, revisionText)
+import Shikigami.Repository (RelativePath, RepoRef (..), RepositoryId, Revision, relativePathText, repositoryId, repositoryIdText, revisionText)
 import Shikigami.Sink.Coordinate (parseSinkSession)
 
 -- | The only schema version accepted by the first contract release.
@@ -631,13 +631,13 @@ schemaErrors document actual =
     )
 
 projectErrors :: Text -> ProjectRef -> [ReviewContractError]
-projectErrors prefix ProjectRef {name, repository = RepositoryId repositoryId} =
+projectErrors prefix ProjectRef {name, repository = reference} =
   blankErrors (prefix <> ".name") name
-    <> blankErrors (prefix <> ".repository") repositoryId
+    <> blankErrors (prefix <> ".repository") (repositoryIdText reference)
 
 repoRefErrors :: Text -> RepoRef -> [ReviewContractError]
-repoRefErrors prefix RepoRef {repository = RepositoryId repositoryId} =
-  blankErrors (prefix <> ".repository") repositoryId
+repoRefErrors prefix RepoRef {repository = reference} =
+  blankErrors (prefix <> ".repository") (repositoryIdText reference)
 
 revisionRangeErrors :: Text -> RevisionRange -> [ReviewContractError]
 revisionRangeErrors prefix RevisionRange {changeKind, before} =
@@ -933,7 +933,7 @@ duplicateValues = Set.toList . snd . foldl step (Set.empty, Set.empty)
       | otherwise = (Set.insert value seen, duplicates)
 
 normalizeRepositoryId :: RepositoryId -> RepositoryId
-normalizeRepositoryId (RepositoryId repository) = RepositoryId (Text.strip repository)
+normalizeRepositoryId value = repositoryId (Text.strip (repositoryIdText value))
 
 normalizeRepoRef :: RepoRef -> RepoRef
 normalizeRepoRef RepoRef {repository, revision} =
@@ -1185,14 +1185,14 @@ evidenceProblemClaimId ordinal = ClaimId ("evidence-problem-" <> Text.justifyRig
 -- | Commit separate opaque source coordinates with explicit purpose/version.
 -- This identifies a citation, not an allocated review or resolution entity.
 sourceEvidenceIdV2 :: EvidenceRole -> RepoRef -> RelativePath -> ContentHash -> EvidenceId
-sourceEvidenceIdV2 role RepoRef {repository = RepositoryId repository, revision} path (ContentHash hash) =
+sourceEvidenceIdV2 role RepoRef {repository, revision} path (ContentHash hash) =
   EvidenceId
     ( "evidence-v2:"
         <> uuidText
           [ "source-evidence",
             "2",
             roleToken,
-            repository,
+            repositoryIdText repository,
             revisionText revision,
             relativePathText path,
             hash

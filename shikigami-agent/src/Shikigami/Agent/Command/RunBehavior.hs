@@ -21,6 +21,7 @@ import Shikigami.App.Config qualified as Config
 import Shikigami.Attestation.Profile (ProfileId (..))
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Behavior.Run (triggerOnly)
+import Shikigami.Duration
 import Shikigami.Execution.Ephemeral (EphemeralResult (..), runEphemeralBehavior)
 import Shikigami.Log qualified as Log
 import System.Exit (exitFailure)
@@ -64,7 +65,7 @@ runRunBehavior path mpayload workspace config = do
           Log.logInfo logger "execution.mode" ["mode" .= ("ephemeral" :: Text), "resumable" .= False]
           resultE <-
             withOneOffCapabilityOverlays logger denyAllActionAuthorizer workspace decl env \derivedEnv ->
-              runEphemeralBehavior config.runTimeout config.harness derivedEnv decl (triggerOnly payload)
+              runEphemeralBehavior (durationTime config.runTimeout) config.harness derivedEnv decl (triggerOnly payload)
           case resultE of
             Left overlayErr -> do
               hPutStrLn stderr ("run-behavior: " <> Text.unpack (renderOneOffCapabilityError overlayErr))

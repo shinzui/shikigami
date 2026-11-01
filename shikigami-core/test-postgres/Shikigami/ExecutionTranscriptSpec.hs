@@ -84,6 +84,7 @@ import Shikigami.Capability.Provider qualified as Capability
 import Shikigami.Capability.Tools (overlayToolName)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Decision.ModelCatalog (modelCatalog)
+import Shikigami.Duration
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Catalog qualified as ExecutionCatalog
@@ -120,7 +121,7 @@ import Shikigami.Log qualified as Log
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude ((&), (.~))
-import Shikigami.Repository (RepositoryId (..))
+import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.StateRevision qualified as Generation
@@ -171,7 +172,7 @@ tests fixture =
       testCase "workspace admission freezes scoped policy across restart and the actual model request" $
         withConfiguredResourceFixture fixture id (Map.insert R.Tokens R.ExplicitlyUnbounded) \env original _ -> do
           (executor, observed, _) <- driverRuntime env False
-          bundle <- expectRight (mkInstructionBundle 65536 (RepositoryId "mori://fixture/repo") (workspaceCoordinate (Text.replicate 40 "a")) [(workspaceCoordinate "AGENTS.md", "PRIVATE_ROOT_POLICY"), (workspaceCoordinate "src/AGENTS.md", "PRIVATE_NESTED_POLICY")])
+          bundle <- expectRight (mkInstructionBundle 65536 (repositoryId "mori://fixture/repo") (workspaceCoordinate (Text.replicate 40 "a")) [(workspaceCoordinate "AGENTS.md", "PRIVATE_ROOT_POLICY"), (workspaceCoordinate "src/AGENTS.md", "PRIVATE_NESTED_POLICY")])
           let snapshot = anotherSnapshot original "workspace-instructions"
               admission = WorkspaceAdmission (WorkspaceRef (workspaceCoordinate "shikigami.workspace/1") (workspaceCoordinate "fixture")) (workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")) snapshot.runId snapshot.selection.assignmentId rootId snapshot.identity (fixtureRevision 0) bundle Nothing
               assignment = Start.SkillAssignment snapshot.runId snapshot.agent snapshot.identity snapshot.sessionId snapshot.selection snapshot.sanctionedProfile snapshot.capabilities (Right snapshot.policy) (SkillDir "test/fixtures/durable-skill") (pure (Right (Start.SkillInput (triggerOnly (object [])) [])))
@@ -195,7 +196,7 @@ tests fixture =
       testCase "workspace fixed policy must fit before the model or menu is acquired" $
         withConfiguredResourceFixture fixture id (Map.insert R.Tokens R.ExplicitlyUnbounded) \env original _ -> do
           (executor, observed, _) <- driverRuntime env False
-          bundle <- expectRight (mkInstructionBundle 65536 (RepositoryId "mori://fixture/repo") (workspaceCoordinate (Text.replicate 40 "a")) [(workspaceCoordinate "AGENTS.md", Text.replicate 2000 "x")])
+          bundle <- expectRight (mkInstructionBundle 65536 (repositoryId "mori://fixture/repo") (workspaceCoordinate (Text.replicate 40 "a")) [(workspaceCoordinate "AGENTS.md", Text.replicate 2000 "x")])
           let snapshot = anotherSnapshot original "workspace-budget"
               admission = WorkspaceAdmission (WorkspaceRef (workspaceCoordinate "shikigami.workspace/1") (workspaceCoordinate "fixture")) (workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")) snapshot.runId snapshot.selection.assignmentId rootId snapshot.identity (fixtureRevision 0) bundle Nothing
               assignment = Start.SkillAssignment snapshot.runId snapshot.agent snapshot.identity snapshot.sessionId snapshot.selection Nothing snapshot.capabilities (Right (snapshot.policy & #contextBytes .~ (fixturePolicy 1024))) (SkillDir "test/fixtures/durable-skill") (pure (Right (Start.SkillInput (triggerOnly (object [])) [])))
@@ -205,7 +206,7 @@ tests fixture =
       testCase "workspace exact adapters describe without preparation and require trusted dispatch coordinates" $
         withFixture fixture \env original _ -> do
           prepared <- newIORef (0 :: Int)
-          bundle <- expectRight (mkInstructionBundle 65536 (RepositoryId "mori://fixture/repo") (workspaceCoordinate (Text.replicate 40 "a")) [])
+          bundle <- expectRight (mkInstructionBundle 65536 (repositoryId "mori://fixture/repo") (workspaceCoordinate (Text.replicate 40 "a")) [])
           capability <- expectRight (Overlay.mkCapabilityId "workspace.edit")
           revision <- expectRight (Overlay.mkCapabilityRevision "1")
           let admission = WorkspaceAdmission (WorkspaceRef (workspaceCoordinate "shikigami.workspace/1") (workspaceCoordinate "fixture")) (workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")) original.runId original.selection.assignmentId rootId original.identity (fixtureRevision 0) bundle Nothing
@@ -695,7 +696,7 @@ tests fixture =
           parked.modelTurns @?= (fixtureProgress 1)
           tokenRef <- newIORef Nothing
           let childEnv = Approval.ApprovalWorkflowEnv (Approval.ApprovalNotifier (\_ _ token _ -> writeIORef tokenRef (Just token)) (\_ _ _ _ -> pure (Right ())))
-              parentBody = Approval.requestBoundApproval permission.reviewRequestId snapshot.sessionId (ApprovalRequest "Allow observe?" (object []) ViaDanwa) 900
+              parentBody = Approval.requestBoundApproval permission.reviewRequestId snapshot.sessionId (ApprovalRequest "Allow observe?" (object []) ViaDanwa) ((either (error . show) id . parseDuration) (900))
               parent = runWorkflow (WorkflowName "permission-fixture") (WorkflowId snapshot.executionId.value) parentBody
               child = runChildWorkflow defaultWorkflowRunOptions Approval.approvalWorkflowName (approvalWorkflowId permission.reviewRequestId) (Approval.approvalWorkflow childEnv Nothing)
           run env parent >>= (@?= Suspended)
@@ -1075,7 +1076,7 @@ driverRuntime env toolResponse = do
         pure (Right (ToolOutput.textToolOutput "accepted observation"))
   registry <- Provider.newProviderRegistryFrom [provider]
   let selectedRuntime = SelectionRuntime (mustRight (modelCatalog [])) Nothing [provider] (base & #providerRegistry .~ Just registry) (runCorrelationId "driver") (pure (Right ())) (selectionTransaction env Nothing)
-      executor = Executor.ExecutionRuntime env (const (pure (Right ()))) (const (pure (Right ()))) (const selectedRuntime) (\_ _ _ use -> Right <$> use [Executor.BoundTool observationBinding tool]) 5
+      executor = Executor.ExecutionRuntime env (const (pure (Right ()))) (const (pure (Right ()))) (const selectedRuntime) (\_ _ _ use -> Right <$> use [Executor.BoundTool observationBinding tool]) ((either (error . show) id . parseDuration) (5))
   pure (executor, readIORef observed, readIORef toolCalls)
 
 reachPermission :: AppEnv -> Executor.ExecutionRuntime -> ExecutionSnapshot -> Int -> IO PermissionBinding
@@ -1154,7 +1155,7 @@ nativeExecutorCase fixture billing = testCase (show billing <> " preserves rich 
                 _ <- use [Executor.BoundTool binding tool]
                 pure (Left (ExecutionPolicyRefused "fixture lease release failed"))
             )
-            5
+            ((either (error . show) id . parseDuration) (5))
         request = Store.toolAttemptRequest (fixtureAttemptId "native-tool-attempt") specification.operationId binding
         reference = Attempt.JobReference V1 snapshot.executionId specification.operationId request.attemptId
     run env (runTransaction (registerAwakeableTx UUID.nil "shikigami.execution" (executionWorkflowId snapshot.executionId).unWorkflowId))
@@ -1288,7 +1289,7 @@ toolRecoveryCase fixture recovery = testCase (show recovery <> " retains its log
                         Just reference -> pure (Right (ToolOutput.textToolOutput reference))
                 Right <$> use [Executor.BoundTool binding tool]
             )
-            5
+            ((either (error . show) id . parseDuration) (5))
     run env (runTransaction (registerAwakeableTx UUID.nil "shikigami.execution" (executionWorkflowId snapshot.executionId).unWorkflowId))
     _ <- expectRight =<< run env (Store.submitExecutionAttemptWith access (fixtureRevision 3) (submission firstRequest) (\_ -> pure ()))
     Executor.executeAcceptedAttempt executor snapshot.identity first >>= (@?= Right Executor.ExecutorDone)

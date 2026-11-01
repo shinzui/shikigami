@@ -23,6 +23,7 @@ import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (.
 import Keiro.Workflow.Awakeable (awakeableNamed)
 import Kiroku.Store.Effect (Store)
 import Shikigami.Action.Authorization (ActionAuthorizer)
+import Shikigami.Agent.DeclarationValue
 import Shikigami.App (AppEffects, runAppIO)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId, operationIdWithPrefix)
@@ -36,20 +37,20 @@ import Shikigami.WorkerSession.Types
 import Shikigami.WorkerSession.Workflow (SessionRuntime (..))
 
 data Workers :: Effect where
-  WorkerCommand :: Text -> Maybe OperationId -> WorkerCommand -> Workers m (Either SessionError WorkerReply)
-  AwaitEvents :: Text -> WorkerSessionId -> StateRevision "worker-event" -> EventPageSize -> Workers m (Either SessionError [EventReceipt])
+  WorkerCommand :: DeclarationCoordinate "worker-label" -> Maybe OperationId -> WorkerCommand -> Workers m (Either SessionError WorkerReply)
+  AwaitEvents :: DeclarationCoordinate "worker-label" -> WorkerSessionId -> StateRevision "worker-event" -> EventPageSize -> Workers m (Either SessionError [EventReceipt])
 
 type instance DispatchOf Workers = Dynamic
 
-command :: (Workers :> es) => Text -> WorkerCommand -> Eff es (Either SessionError WorkerReply)
+command :: (Workers :> es) => DeclarationCoordinate "worker-label" -> WorkerCommand -> Eff es (Either SessionError WorkerReply)
 command label input = send (WorkerCommand label Nothing input)
 
 -- | A coordinator recovering a retained domain intent uses its original key
 -- even when its technical workflow has a new epoch or generation.
-commandWithKey :: (Workers :> es) => Text -> OperationId -> WorkerCommand -> Eff es (Either SessionError WorkerReply)
+commandWithKey :: (Workers :> es) => DeclarationCoordinate "worker-label" -> OperationId -> WorkerCommand -> Eff es (Either SessionError WorkerReply)
 commandWithKey label key input = send (WorkerCommand label (Just key) input)
 
-awaitEvents :: (Workers :> es) => Text -> WorkerSessionId -> StateRevision "worker-event" -> EventPageSize -> Eff es (Either SessionError [EventReceipt])
+awaitEvents :: (Workers :> es) => DeclarationCoordinate "worker-label" -> WorkerSessionId -> StateRevision "worker-event" -> EventPageSize -> Eff es (Either SessionError [EventReceipt])
 awaitEvents label session after limit = send (AwaitEvents label session after limit)
 
 resolveCoordinationPolicy :: Maybe CoordinationHost -> ActionAuthorizer -> CoordinatorRun -> IO (Either SessionError (Maybe Text))
@@ -65,16 +66,16 @@ runWorkers configured authorizer run policy = interpret \_ -> \case
       Right (WorkerEvents []) -> case enabled of
         Left err -> pure (Left err)
         Right (host, pinned) -> do
-          status <- step (StepName ("workers-state-" <> label)) (call host pinned (InspectWorker session beforeMessages firstAssignmentPageSize) (operation label "status"))
+          status <- step (StepName ("workers-state-" <> declarationCoordinateText label)) (call host pinned (InspectWorker session beforeMessages firstAssignmentPageSize) (operation label "status"))
           case status of
             Right (WorkerInspected page) | page.state.phase `elem` [Failed, Cancelled] -> pure (Right [])
             Left err -> pure (Left err)
             _ -> do
-              (token, await) <- awakeableNamed (StepName ("workers-events-" <> label))
+              (token, await) <- awakeableNamed (StepName ("workers-events-" <> declarationCoordinateText label))
               (ownerName, ownerId) <- currentWorkflow
               generationNumber <- currentRunGeneration
               generation <- either (throwIO . userError . Text.unpack) pure (parseWorkflowGeneration generationNumber)
-              subscribed <- step (StepName ("workers-subscribe-" <> label)) do
+              subscribed <- step (StepName ("workers-subscribe-" <> declarationCoordinateText label)) do
                 key <- operation label "subscribe"
                 liftIO
                   ( owned host do
@@ -90,7 +91,7 @@ runWorkers configured authorizer run policy = interpret \_ -> \case
                   if hint /= session
                     then pure (Left SessionBindingConflict)
                     else do
-                      result <- step (StepName ("workers-read-" <> label)) (call host pinned (ReadWorkerEvents session after limit) (operation label "read"))
+                      result <- step (StepName ("workers-read-" <> declarationCoordinateText label)) (call host pinned (ReadWorkerEvents session after limit) (operation label "read"))
                       pure (events result)
       _ -> pure (events first)
   where
@@ -99,10 +100,10 @@ runWorkers configured authorizer run policy = interpret \_ -> \case
       (Just host, Right (Just pinned)) -> Right (host, pinned)
       _ -> Left (SessionInputRefused "coordination is not admitted for this Flow")
     invoke label key input
-      | Text.null label || Text.length label > 64 || not (Text.all (\c -> isAscii c && (isAlphaNum c || c `elem` ['-', '_'])) label) = pure (Left (SessionInputRefused "invalid static worker label"))
+      | Text.null (declarationCoordinateText label) || Text.length (declarationCoordinateText label) > 64 || not (Text.all (\c -> isAscii c && (isAlphaNum c || c `elem` ['-', '_'])) (declarationCoordinateText label)) = pure (Left (SessionInputRefused "invalid static worker label"))
       | otherwise = case enabled of
           Left err -> pure (Left err)
-          Right (host, pinned) -> step (StepName ("workers-command-" <> label)) (call host pinned input (maybe (operation label "command") pure key))
+          Right (host, pinned) -> step (StepName ("workers-command-" <> declarationCoordinateText label)) (call host pinned input (maybe (operation label "command") pure key))
     call host pinned input keyAction = do
       key <- keyAction
       liftIO

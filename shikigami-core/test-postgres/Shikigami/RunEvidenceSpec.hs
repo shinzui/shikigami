@@ -27,6 +27,7 @@ import Kiroku.Store.Read qualified as StoreRead
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types qualified as StoreTypes
 import Numeric.Natural (Natural)
+import Shikigami.Agent.Approval (parseReviewRequestId)
 import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Attestation.Agent
@@ -603,7 +604,7 @@ sampleEvidence =
     (declarationOnlyArtifacts (DeclarationDigest "sha256:declaration"))
     sampleReviewed
     sampleProfileRef
-    (ReviewRequestId "review-request-1")
+    ((either (error . show) id (parseReviewRequestId "review_a6ef7db1-ecd3-5923-a9ce-3f95ffa4cde4")))
     (fixtureRunKey "review-request-1:attempt-1")
 
 sampleAggregateId :: RunEvidenceId
@@ -652,7 +653,7 @@ sampleAgentVersion =
 sampleReviewed :: ReviewedArtifact
 sampleReviewed =
   ReviewedArtifact
-    { repository = RepositoryId "mori://shinzui/shikigami",
+    { repository = repositoryId "mori://shinzui/shikigami",
       baseCommit = fullCommit 'a',
       headCommit = fullCommit 'b',
       diffDigest = DiffDigest "sha256:diff",

@@ -43,6 +43,7 @@ import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Decision.ModelCatalog (modelCatalog)
+import Shikigami.Duration
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Claim qualified as Claim
@@ -467,7 +468,7 @@ executorFor :: FileRuntime -> IO () -> Executor.ExecutionRuntime
 executorFor runtime checkpoint = executorForAdapter (workspaceEditAdapterWithCheckpoint checkpoint) runtime
 
 executorForAdapter :: (FileRuntime -> DurableAdapter) -> FileRuntime -> Executor.ExecutionRuntime
-executorForAdapter install runtime = Executor.ExecutionRuntime runtime.appEnv (const (pure (Right ()))) runtime.lifecycle (\_ -> error "fixture never dispatches a model") (Tools.withExecutionTools Log.silentLogger runtime.authorizer registry native) 5
+executorForAdapter install runtime = Executor.ExecutionRuntime runtime.appEnv (const (pure (Right ()))) runtime.lifecycle (\_ -> error "fixture never dispatches a model") (Tools.withExecutionTools Log.silentLogger runtime.authorizer registry native) ((either (error . show) id . parseDuration) (5))
   where
     registry = must (installDurableAdapters [install runtime] emptyCapabilityProviderRegistry)
     native = Tools.NativeToolFactory (\_ -> pure (Right [])) (\_ _ _ -> pure (Right []))

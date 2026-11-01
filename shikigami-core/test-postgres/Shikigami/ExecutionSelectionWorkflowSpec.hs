@@ -65,6 +65,7 @@ import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
 import Shikigami.Decision.Contract (ModelAlias, ModelDescriptor (..), versionedDigest)
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Decision.ModelCatalog
+import Shikigami.Duration (parseDuration)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Claim qualified as Claim
@@ -227,7 +228,7 @@ tests fixture =
               snapshot = Replay.ExecutionSnapshot V1 execution (WorkflowId "executor-http") (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (Replay.SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "body") (Replay.ReplayContext Replay.LegacyContext (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
               operationId = Replay.operationIdFor execution (fixtureRevision 0)
               specification = Replay.OperationSpec operationId Replay.ModelTurn RepeatableObservation (ExecutionValue.executionCoordinate "model") (ExecutionValue.executionDigestFor "shikigami.harness-policy/1" (toJSON snapshot.policy)) (ExecutionValue.executionDigest "scope") Nothing
-              executor authority = Executor.ExecutionRuntime app (const authority) (const authority) (const selectedRuntime) (\_ _ _ use -> Right <$> use []) 5
+              executor authority = Executor.ExecutionRuntime app (const authority) (const authority) (const selectedRuntime) (\_ _ _ use -> Right <$> use []) ((either (error . show) id . parseDuration) (5))
           _ <- expectRight =<< run app Catalog.registerProjectionCatalog
           run app (Durable.admitExecution snapshot) >>= (@?= Right Accepted)
           access <- expectRight =<< run app (Durable.authorizeReplay execution snapshot.identity (pure (Right ())))
@@ -409,9 +410,9 @@ tests fixture =
                     decisions = dependencies.decisions,
                     deliveryPool = Just store.pool,
                     resolveRunProfile = dependencies.resolveRunProfile,
-                    runTimeout = 30,
+                    runTimeout = (either (error . show) id (parseDuration (30))),
                     harness = Harness.defaultHarnessPolicy,
-                    idleTimeout = 1800,
+                    idleTimeout = (either (error . show) id (parseDuration (1800))),
                     danwa = DanwaConfig "http://localhost:1" "participant",
                     agents = [declaration],
                     grants = StaticGrants (Map.singleton "router" (Set.singleton SDanwaConversation)),

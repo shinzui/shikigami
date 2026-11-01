@@ -112,7 +112,7 @@ import Shikigami.PracticeReview
 import Shikigami.PracticeReview.IdentityStore (ReviewIdentityRef, allocatedReviewId)
 import Shikigami.PracticeReview.IdentityStore qualified as IdentityStore
 import Shikigami.Prelude (Generic, eventAesonOptions, genericParseJSON, genericToJSON)
-import Shikigami.Repository (RelativePath, RepositoryId (..), relativePathText)
+import Shikigami.Repository (RelativePath, RepositoryId, relativePathText, repositoryId, repositoryIdText)
 
 -- | Versioned content stored in Kioku's text payload.
 --
@@ -367,8 +367,8 @@ repositoryValues :: PracticeReviewVerdict -> Applicability -> [Text]
 repositoryValues PracticeReviewVerdict {targetEvidence, applicability = verdictScope} Applicability {projects = selectedProjects} =
   Set.toAscList $
     Set.fromList
-      [ repositoryValue
-      | ProjectRef {repository = RepositoryId repositoryValue} <- selectedProjects <> verdictProjects <> evidenceProjects targetEvidence
+      [ repositoryIdText repository
+      | ProjectRef {repository} <- selectedProjects <> verdictProjects <> evidenceProjects targetEvidence
       ]
   where
     Applicability {projects = verdictProjects} = verdictScope

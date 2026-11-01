@@ -21,6 +21,7 @@ import Baikai.StopReason (StopReason (ToolUse))
 import Baikai.Tool qualified as Tool
 import Control.Exception qualified as Exception
 import Data.Aeson qualified as Aeson
+import Data.Bifunctor (first)
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.List (find, sort)
@@ -34,6 +35,7 @@ import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Behavior.Compatibility (validateResponseRequest)
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest)
 import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Duration
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Claim
 import Shikigami.Execution.Identity (OperationId, operationIdText)
@@ -65,10 +67,10 @@ data ExecutionRuntime = ExecutionRuntime
     authorize :: !(ExecutionSnapshot -> IO (Either Text ())),
     selectionRuntime :: !(ExecutionSnapshot -> SelectionRuntime),
     withTools :: !(forall a. ExecutionSnapshot -> Runner.DispatchContext -> Maybe (ExecutionCoordinate "tool-name") -> ([BoundTool] -> IO a) -> IO (Either ExecutionError a)),
-    timeoutSeconds :: !Int
+    timeoutSeconds :: !(Duration "agent-run")
   }
 
-data ExecutorResult = ExecutorDone | ExecutorRetry | ExecutorWait !Int | ExecutorInvalidReference
+data ExecutorResult = ExecutorDone | ExecutorRetry | ExecutorWait !(Duration "executor-wait") | ExecutorInvalidReference
   deriving stock (Eq, Show)
 
 runExecutionStore :: ExecutionRuntime -> Eff AppEffects (Either ExecutionError a) -> IO (Either ExecutionError a)
@@ -101,7 +103,7 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
                 Left err -> pure (Left err)
                 Right (snapshot, freshState) -> do
                   owner <- claimOwnerFor <$> UUID.nextRandom
-                  claim <- runExecutionStore env (Store.claimExecutionAttempt permit freshState.revision reference owner (max 1 (min 3500 env.timeoutSeconds) + 30))
+                  claim <- runExecutionStore env (Store.claimExecutionAttempt permit freshState.revision reference owner (max 1 (min 3500 (floor (durationTime env.timeoutSeconds))) + 30))
                   case claim of
                     Right Attempt.AttemptFinished -> publish
                     Right Attempt.AttemptBusy -> waitFor current.expiresAt
@@ -121,7 +123,7 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
     waitFor expiry = do
       now <- getCurrentTime
       let seconds = maybe 60 (\deadline -> max 1 (min 3600 (ceiling (diffUTCTime deadline now) + 1))) expiry
-      pure (Right (ExecutorWait seconds))
+      pure (first ExecutionPolicyRefused (ExecutorWait <$> parseDuration (fromIntegral seconds)))
     owned :: Eff AppEffects (Either ExecutionError a) -> IO (Either ExecutionError a)
     owned = runExecutionStore env
     publish = owned (Store.publishExecutionWake reference) <&> fmap (const ExecutorDone)
@@ -140,7 +142,7 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
             Left ExecutionPolicyRefused {} -> owned (Store.abandonExecutionAttempt access state.revision reference) >>= \case Right _ -> publish; Left err -> pure (Left err)
             Left err -> pure (Left err)
             Right Accepted -> Exception.mask \restore -> do
-              dispatched <- Exception.try @Exception.SomeException (restore (timeout (max 1 (min 3500 env.timeoutSeconds) * 1000000) (dispatch access snapshot lease)))
+              dispatched <- Exception.try @Exception.SomeException (restore (timeout (max 1 (min 3500 (floor (durationTime env.timeoutSeconds))) * 1000000) (dispatch access snapshot lease)))
               result <- case dispatched of
                 Right (Just value) -> pure value
                 _ -> markUnknown access lease

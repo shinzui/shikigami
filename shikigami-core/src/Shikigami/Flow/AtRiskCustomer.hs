@@ -45,23 +45,23 @@ atRiskCustomerFlow ::
   Eff es Value
 atRiskCustomerFlow payload = do
   activity <- currentActivity
-  prior <- recall "risk-history" (riskQuery activity)
+  prior <- recall (declarationCoordinate "risk-history") (riskQuery activity)
   verdict <- step (StepName "classify") (pure (classifyRisk activity prior payload))
   if (.level) verdict /= "high"
     then pure (toJSON verdict)
     else do
-      _ <- emitSignal "alert" (alertFor verdict activity) (toJSON verdict)
+      _ <- emitSignal (declarationCoordinate "alert") (alertFor verdict activity) (toJSON verdict)
       ack <- awaitAck (StepName "await-ack") (ackRequest verdict activity)
       case ack of
         Acknowledged answer -> do
-          _ <- remember "acknowledged" (acknowledgedNote verdict answer)
+          _ <- remember (declarationCoordinate "acknowledged") (acknowledgedNote verdict answer)
           pure (resolvedValue verdict answer)
         Declined reason -> do
-          _ <- remember "declined" (declinedNote verdict reason)
+          _ <- remember (declarationCoordinate "declined") (declinedNote verdict reason)
           pure (declinedValue verdict reason)
         TimedOut -> do
-          _ <- emitSignal "escalate" (escalationFor verdict activity) (toJSON verdict)
-          _ <- remember "escalated" (escalatedNote verdict)
+          _ <- emitSignal (declarationCoordinate "escalate") (escalationFor verdict activity) (toJSON verdict)
+          _ <- remember (declarationCoordinate "escalated") (escalatedNote verdict)
           pure (escalatedValue verdict)
 
 -- | Classify this activity's risk from what it says and what the agent already

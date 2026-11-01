@@ -53,6 +53,7 @@ module Shikigami.Log.Correlation
     -- * Identifying a call within a run
     CallCorrelationId,
     callCorrelationId,
+    parseCallCorrelationId,
     renderCallCorrelationId,
 
     -- * Field names
@@ -63,6 +64,8 @@ where
 
 import Data.Aeson.Key (Key)
 import Data.Text qualified as Text
+import Data.Text.Read qualified as TextRead
+import Numeric.Natural (Natural)
 import Shikigami.Prelude
 
 -- | Which run. This is the run job's idempotency key, which is also the keiro
@@ -95,7 +98,21 @@ renderRunCorrelationId (RunCorrelationId t) = t
 -- guarantee.
 newtype CallCorrelationId = CallCorrelationId Text
   deriving stock (Eq, Ord, Show)
-  deriving newtype (ToJSON, FromJSON)
+  deriving newtype (ToJSON)
+
+parseCallCorrelationId :: Text -> Either Text CallCorrelationId
+parseCallCorrelationId raw =
+  let (prefix, ordinalText) = Text.breakOnEnd "/" raw
+   in case TextRead.decimal ordinalText :: Either String (Natural, Text) of
+        Right (ordinal, rest)
+          | Text.null rest,
+            ordinalText == Text.pack (show ordinal),
+            "/" `Text.isInfixOf` Text.dropEnd 1 prefix ->
+              Right (CallCorrelationId raw)
+        _ -> Left "call correlation requires run/component/nonnegative-ordinal"
+
+instance FromJSON CallCorrelationId where
+  parseJSON value = parseJSON value >>= either (fail . Text.unpack) pure . parseCallCorrelationId
 
 -- | Derive the identifier of one call from the run it belongs to, the journaled
 -- step it happens in, and its zero-based ordinal within that step.
@@ -109,7 +126,7 @@ newtype CallCorrelationId = CallCorrelationId Text
 -- a log line can read the run and the step straight off the identifier instead
 -- of needing a lookup table. See the module header on why this rendering is a
 -- contract.
-callCorrelationId :: RunCorrelationId -> Text -> Int -> CallCorrelationId
+callCorrelationId :: RunCorrelationId -> Text -> Natural -> CallCorrelationId
 callCorrelationId (RunCorrelationId run) step ordinal =
   CallCorrelationId (run <> "/" <> step <> "/" <> Text.pack (show ordinal))
 

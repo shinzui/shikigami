@@ -121,8 +121,15 @@ data EventHit = EventHit
   }
   deriving stock (Eq, Show)
 
-newtype DeadLetterId = DeadLetterId Text
+data DeadLetterId
+  = QueueDeadLetter !MessageId
+  | InboxDeadLetter !(DeclarationCoordinate "integration-message-id")
   deriving stock (Eq, Show)
+
+deadLetterIdText :: DeadLetterId -> Text
+deadLetterIdText = \case
+  QueueDeadLetter (MessageId messageId) -> Text.pack (show messageId)
+  InboxDeadLetter messageId -> "keiro-inbox:" <> declarationCoordinateText messageId
 
 -- | Bounded raw evidence. The full poison payload never enters the queue.
 data PayloadEvidence = PayloadEvidence
@@ -508,7 +515,7 @@ classifyInboxResult event onHit = \case
 
 permanentInboxFailure :: IntegrationEvent -> RecordDisposition
 permanentInboxFailure event =
-  PermanentlyDeadLettered (DeadLetterId ("keiro-inbox:" <> event ^. #messageId))
+  PermanentlyDeadLettered (InboxDeadLetter (declarationCoordinate (event ^. #messageId)))
 
 persistPoison :: AppEnv -> QueueName -> KafkaInboundRecord -> Text -> IO RecordDisposition
 persistPoison appEnv queue KafkaInboundRecord {topic, partition, offset, payload} failure = do
@@ -541,7 +548,7 @@ persistPoison appEnv queue KafkaInboundRecord {topic, partition, offset, payload
   pure $ case attempt of
     Left storeStartupError -> TransientFailure (Text.pack (show storeStartupError))
     Right (Left storeError) -> TransientFailure (Text.pack (show storeError))
-    Right (Right (MessageId messageId)) -> PermanentlyDeadLettered (DeadLetterId (Text.pack (show messageId)))
+    Right (Right messageId) -> PermanentlyDeadLettered (QueueDeadLetter messageId)
 
 evidenceLimit :: Int
 evidenceLimit = 256
@@ -554,8 +561,8 @@ ackDecisionFor :: RecordDisposition -> AckDecision
 ackDecisionFor = \case
   Enqueued -> AckOk
   Duplicate -> AckOk
-  PermanentlyDeadLettered (DeadLetterId deadLetterId) ->
-    AckDeadLetter (ApplicationFailure permanentFailureCode ("durable dead letter " <> deadLetterId))
+  PermanentlyDeadLettered deadLetterId ->
+    AckDeadLetter (ApplicationFailure permanentFailureCode ("durable dead letter " <> deadLetterIdText deadLetterId))
   TransientFailure err -> AckHalt (HaltOrderedStream (Text.take errorLimit err))
 
 permanentFailureCode :: DeadLetterCode
@@ -572,8 +579,8 @@ logDisposition :: Log.Logger -> Text -> RecordDisposition -> IO ()
 logDisposition logger prefix = \case
   Enqueued -> Log.logDebug logger (prefix <> ".record.enqueued") []
   Duplicate -> Log.logDebug logger (prefix <> ".record.deduped") []
-  PermanentlyDeadLettered (DeadLetterId deadLetterId) ->
-    Log.logError logger (prefix <> ".record.dead_lettered") ["dead_letter_id" .= deadLetterId]
+  PermanentlyDeadLettered deadLetterId ->
+    Log.logError logger (prefix <> ".record.dead_lettered") ["dead_letter_id" .= deadLetterIdText deadLetterId]
   TransientFailure err -> Log.logError logger (prefix <> ".record.transient_failure") ["error" .= err]
 
 data PreparedTrigger hit

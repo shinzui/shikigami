@@ -18,6 +18,7 @@ import Data.Time (UTCTime (..), fromGregorian, secondsToNominalDiffTime)
 import Keiro.Workflow (WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), defaultWorkflowRunOptions, loadStepIndex, runWorkflow)
 import Keiro.Workflow.Child (runChildWorkflow)
 import Keiro.Workflow.Child.Schema (lookupChildrenOfParent)
+import Kioku.Id qualified as NominalId
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Error (StoreError)
 import OpenTelemetry.Attributes (Attribute (..), PrimitiveAttribute (..), getAttributeMap)
@@ -55,10 +56,12 @@ import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Capability.Provider qualified as CapabilityProvider
 import Shikigami.Directory (DirectorySnapshotVersion, DirectorySourceKind (DirectoryDisabledSource), disabledDirectoryHandle, parseDirectorySnapshotVersion)
+import Shikigami.Duration (parseDuration)
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Fixture.SinkHttp (testSinkHttp)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Routing qualified as Routing
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
@@ -66,8 +69,9 @@ import Shikigami.Router.Catalog
   ( CandidateAvailability (..),
     CandidateCatalog (..),
     CandidateEntry (..),
-    CatalogVersion (..),
+    CatalogVersion,
     ExclusionReason (Paused),
+    parseCatalogVersion,
   )
 import Shikigami.Router.Decision
   ( RouteDecision (..),
@@ -98,15 +102,15 @@ semanticAndAuthorizationMatrix databaseFixture =
   withTestTracer \tracer spansRef ->
     (withDatabaseTracer databaseFixture) tracer \appEnv behaviorEnv -> do
       let singleOutcome = Matched (selection "first" RoutingHigh "single" :| [])
-      singleProbe <- newProbe catalog (Aeson.toJSON (RouteDecision 1 testCatalogVersion singleOutcome))
+      singleProbe <- newProbe catalog (Aeson.toJSON (RouteDecision V1 testCatalogVersion singleOutcome))
       single <- runDirect appEnv behaviorEnv "router-direct-single" singleProbe
       assertDirectOutcome "one authorized specialist is a valid matched route" singleOutcome single
 
-      noMatchProbe <- newProbe catalog (Aeson.toJSON (RouteDecision 1 testCatalogVersion (NoMatch "no specialist")))
+      noMatchProbe <- newProbe catalog (Aeson.toJSON (RouteDecision V1 testCatalogVersion (NoMatch "no specialist")))
       noMatch <- runDirect appEnv behaviorEnv "router-direct-no-match" noMatchProbe
       assertDirectOutcome "no-match is a successful semantic outcome" (NoMatch "no specialist") noMatch
 
-      ambiguousProbe <- newProbe catalog (Aeson.toJSON (RouteDecision 1 testCatalogVersion (Ambiguous (selection "first" RoutingHigh "possible" :| []) "unclear")))
+      ambiguousProbe <- newProbe catalog (Aeson.toJSON (RouteDecision V1 testCatalogVersion (Ambiguous (selection "first" RoutingHigh "possible" :| []) "unclear")))
       ambiguous <- runDirect appEnv behaviorEnv "router-direct-ambiguous" ambiguousProbe
       assertDirectOutcome
         "ambiguous is a successful advisory outcome"
@@ -115,20 +119,20 @@ semanticAndAuthorizationMatrix databaseFixture =
 
       let invalidCases =
             [ ( "undeclared",
-                RouteDecision 1 testCatalogVersion (Matched (selection "ghost" RoutingHigh "invented" :| [])),
+                RouteDecision V1 testCatalogVersion (Matched (selection "ghost" RoutingHigh "invented" :| [])),
                 UndeclaredSelection (fixtureAgentName "ghost")
               ),
               ( "paused",
-                RouteDecision 1 testCatalogVersion (Matched (selection "paused" RoutingHigh "paused" :| [])),
+                RouteDecision V1 testCatalogVersion (Matched (selection "paused" RoutingHigh "paused" :| [])),
                 UnavailableSelection (fixtureAgentName "paused") Paused
               ),
               ( "low-confidence",
-                RouteDecision 1 testCatalogVersion (Matched (selection "first" RoutingLow "weak" :| [])),
+                RouteDecision V1 testCatalogVersion (Matched (selection "first" RoutingLow "weak" :| [])),
                 ConfidenceBelowMinimum (fixtureAgentName "first") RoutingLow RoutingMedium
               ),
               ( "fanout",
                 RouteDecision
-                  1
+                  V1
                   testCatalogVersion
                   ( Matched
                       ( selection "first" RoutingHigh "first"
@@ -153,7 +157,7 @@ matchedReplayProof databaseFixture =
       let longRationale = Text.replicate 700 "r"
           decision =
             RouteDecision
-              1
+              V1
               testCatalogVersion
               ( Matched
                   ( selection "first" RoutingHigh longRationale
@@ -162,8 +166,8 @@ matchedReplayProof databaseFixture =
               )
           job = routerJob "router:matched-replay"
           parentWorkflowId = runJobWorkflowId job
-          firstChildId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "first") "architecture-practice-first"
-          secondChildId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "second") "architecture-practice-second"
+          firstChildId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "first") (declarationCoordinate "architecture-practice-first")
+          secondChildId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "second") (declarationCoordinate "architecture-practice-second")
       originalProbe <- newProbe catalog (Aeson.toJSON decision)
       let deps = routerDeps appEnv behaviorEnv ((.runtime) originalProbe) [routerDecl, successSpecialist "first", successSpecialist "second"]
 
@@ -211,7 +215,7 @@ matchedReplayProof databaseFixture =
       let attributes = getAttributeMap (Otel.hotAttributes hot)
       assertTextAttribute attributes "router.agent" "router"
       assertTextAttribute attributes "routing.parent.workflow" "shikigami.agent-run"
-      assertTextAttribute attributes "routing.catalog.version" "catalog-v1"
+      assertTextAttribute attributes "routing.catalog.version" "a6ef7db1-ecd3-5923-a9ce-3f95ffa4cde4"
       assertTextAttribute attributes "routing.lifecycle.source" "local-enabled"
       assertTextAttribute attributes "routing.selected.agents" "first,second"
       assertTextAttribute attributes "routing.selected.expertise" "observability,observability"
@@ -225,8 +229,8 @@ nonExecutableOutcomesSpawnNothing databaseFixture = do
   tracer <- noopTracer
   (withDatabaseTracer databaseFixture) tracer \appEnv behaviorEnv -> do
     let cases =
-          [ ("no-match", RouteDecision 1 testCatalogVersion (NoMatch "none")),
-            ("ambiguous", RouteDecision 1 testCatalogVersion (Ambiguous (selection "first" RoutingHigh "maybe" :| []) "unclear"))
+          [ ("no-match", RouteDecision V1 testCatalogVersion (NoMatch "none")),
+            ("ambiguous", RouteDecision V1 testCatalogVersion (Ambiguous (selection "first" RoutingHigh "maybe" :| []) "unclear"))
           ]
     traverse_ (runCase appEnv behaviorEnv) cases
   where
@@ -266,7 +270,7 @@ childFailureEscapes databaseFixture = do
     let decision = matchedDecision [selection "failing" RoutingHigh "route"]
         job = routerJob "router:child-failure"
         parentWorkflowId = runJobWorkflowId job
-        childWorkflowId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "failing") "architecture-practice-failing"
+        childWorkflowId = delegatedWorkflowIdV2 parentWorkflowId (fixtureAgentName "failing") (declarationCoordinate "architecture-practice-failing")
     probe <- newProbe catalog (Aeson.toJSON decision)
     let deps = routerDeps appEnv behaviorEnv ((.runtime) probe) [routerDecl, failingSpecialist]
     parked <- AgentWorkflow.runAgentRunWorkflow deps job
@@ -311,7 +315,7 @@ runDirect appEnv behaviorEnv workflowId probe =
         ( Routing.runRouting
             Routing.RoutingEnv
               { Routing.agent = routerDecl,
-                Routing.sessionId = "direct-router-session",
+                Routing.sessionId = either (error . show) id (NominalId.parseId "kioku_session_01h455vb4pex5vsknk084sn02q"),
                 Routing.behaviorEnv = behaviorEnv,
                 Routing.runtime = (.runtime) probe
               }
@@ -351,9 +355,9 @@ routerDeps appEnv behaviorEnv routing agents =
       AgentWorkflow.rei = ReiConfig {baseUrl = Nothing},
       AgentWorkflow.http = testSinkHttp,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
-      AgentWorkflow.approvalPolicy = autoApprovePolicy (secondsToNominalDiffTime 900),
+      AgentWorkflow.approvalPolicy = autoApprovePolicy (((either (error . show) id . parseDuration) (secondsToNominalDiffTime 900))),
       AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
-      AgentWorkflow.runTimeout = secondsToNominalDiffTime 300,
+      AgentWorkflow.runTimeout = (either (error . show) id (parseDuration (secondsToNominalDiffTime 300))),
       AgentWorkflow.harness = Harness.defaultHarnessPolicy,
       AgentWorkflow.delegationBudget = defaultDelegationBudget,
       AgentWorkflow.logger = Log.silentLogger,
@@ -468,7 +472,7 @@ routerPolicy =
     }
 
 testCatalogVersion :: CatalogVersion
-testCatalogVersion = CatalogVersion "catalog-v1"
+testCatalogVersion = (either (error . show) id (parseCatalogVersion "a6ef7db1-ecd3-5923-a9ce-3f95ffa4cde4"))
 
 catalog :: CandidateCatalog
 catalog =
@@ -488,7 +492,7 @@ catalog =
     }
 
 changedCatalog :: CandidateCatalog
-changedCatalog = (catalog & #version .~ (CatalogVersion "changed-catalog") & #candidates .~ ([]))
+changedCatalog = (catalog & #version .~ ((either (error . show) id (parseCatalogVersion "d217d97f-ddb0-5fc6-98cd-6ec11f7a18d8"))) & #candidates .~ ([]))
 
 candidate :: Text -> CandidateAvailability -> CandidateEntry
 candidate candidateName availability =
@@ -520,7 +524,7 @@ selection agent confidence rationale =
 matchedDecision :: [RouteSelection] -> RouteDecision
 matchedDecision selections =
   case NonEmpty.nonEmpty selections of
-    Just nonEmptySelections -> RouteDecision 1 testCatalogVersion (Matched nonEmptySelections)
+    Just nonEmptySelections -> RouteDecision V1 testCatalogVersion (Matched nonEmptySelections)
     Nothing -> error "matchedDecision test fixture requires a selection"
 
 secretTrigger :: Text

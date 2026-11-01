@@ -15,7 +15,7 @@ import Keiro.Inbox (InboxRow (..), InboxStatus (InboxCompleted), KafkaDeliveryRe
 import Keiro.Inbox.Kafka (KafkaInboundRecord (..))
 import Keiro.Integration.Event (IntegrationContentType (ApplicationJson), IntegrationEvent (..), encodeJsonIntegrationEvent, integrationHeaders)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
-import Pgmq (Message (..), MessageBody (..), QueueName, ReadMessage (..), dropQueue, parseQueueName, readMessage)
+import Pgmq (Message (..), MessageBody (..), MessageId (..), QueueName, ReadMessage (..), dropQueue, parseQueueName, readMessage)
 import Shibuya.Core.Ack (AckDecision (..))
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Activity.Coordinate
@@ -226,7 +226,7 @@ tests databaseFixture =
       testCase "each durable disposition has one terminal framework decision" do
         assertEqual "enqueued commits" AckOk (ackDecisionFor Enqueued)
         assertEqual "duplicate commits" AckOk (ackDecisionFor Duplicate)
-        case ackDecisionFor (PermanentlyDeadLettered (DeadLetterId "dlq-1")) of
+        case ackDecisionFor (PermanentlyDeadLettered (QueueDeadLetter (MessageId 1))) of
           AckDeadLetter _ -> pure ()
           other -> assertFailure ("expected dead-letter decision, got " <> show other)
     ]

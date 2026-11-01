@@ -21,6 +21,10 @@ import Data.KindID.V7 qualified as KindID
 import Data.String (fromString)
 import Data.Text (Text)
 import Numeric.Natural (Natural)
+import Shikigami.Duration qualified as Duration
+import Shikigami.Agent.Approval qualified as Approval
+import Shikigami.Router.Catalog qualified as Catalog
+import Shikigami.Repository qualified as Repository
 import Shikigami.PracticeReview qualified as Review
 import Shikigami.PracticeReview.Evidence qualified as ReviewEvidence
 import Shikigami.Agent.Name qualified as Name
@@ -74,6 +78,18 @@ import Shikigami.Execution.Policy.Limits
 import Shikigami.Execution.Policy.Types qualified as Policy
 '''
 CASES = [
+    ('duration-admission', 'value :: Either Text (Duration.Duration "approval")\nvalue = Duration.parseDuration 1\n', True),
+    ('duration-constructor', 'value = Duration.Duration\n', False),
+    ('duration-scope-coercion', 'value :: Duration.Duration "approval" -> Duration.Duration "agent-run"\nvalue = coerce\n', False),
+    ('duration-numeric', 'value :: Duration.Duration "approval"\nvalue = 1\n', False),
+    ('approval-id-constructor', 'value = Approval.ReviewRequestId\n', False),
+    ('approval-id-coercion', 'value :: Text -> Approval.ReviewRequestId\nvalue = coerce\n', False),
+    ('catalog-id-constructor', 'value = Catalog.CatalogVersion\n', False),
+    ('catalog-id-coercion', 'value :: Text -> Catalog.CatalogVersion\nvalue = coerce\n', False),
+    ('budget-id-constructor', 'value = AliasDelegate.DelegationBudgetId\n', False),
+    ('budget-id-coercion', 'value :: Text -> AliasDelegate.DelegationBudgetId\nvalue = coerce\n', False),
+    ('repository-id-constructor', 'value = Repository.RepositoryId\n', False),
+    ('repository-id-coercion', 'value :: Text -> Repository.RepositoryId\nvalue = coerce\n', False),
     ('process-policy-format', 'value :: ProcessPolicy.ProcessPolicyFormat\nvalue = ProcessPolicy.ProcessPolicyV1\nreadFormat :: ProcessPolicy.ProcessPolicy -> ProcessPolicy.ProcessPolicyFormat\nreadFormat policy = policy.format\n', True),
     ('process-policy-format-numeric', 'value :: ProcessPolicy.ProcessPolicyFormat\nvalue = 2\n', False),
     ('process-policy-format-coercion', 'value :: Int -> ProcessPolicy.ProcessPolicyFormat\nvalue = coerce\n', False),
@@ -257,7 +273,7 @@ key = fromString "key"
 generation claim = claim.generation
 owner :: Attempt.AttemptClaim -> ClaimOwner
 owner claim = claim.owner
-wake :: Attempt.ExecutionWake -> Int
+wake :: Attempt.ExecutionWake -> Execution.ExecutionGeneration
 wake value = value.generation
 ''', True),
     ("worker-epoch-is-not-attempt-generation", '''generation :: StateRevision "worker-owner" -> StateRevision "execution-attempt"
@@ -475,7 +491,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
                 "unchecked-http-request-key-coercion": ["RequestKey", "Text"],
                 "unchecked-http-request-key-literal": ["RequestKey", "IsString"],
                 "worker-epoch-is-not-attempt-generation": ["Couldn't match", "worker-owner", "execution-attempt"],
-                "native-generation-is-not-attempt-generation": ["Couldn't match", "StateRevision", "Int"],
+                "native-generation-is-not-attempt-generation": ["Couldn't match", "StateRevision", "ExecutionGeneration"],
                 "unchecked-attempt-generation": ["StateRevision", "Num"],
                 "principal-is-not-claim-owner": ["Couldn't match", "AgentPrincipal", "ClaimOwner"],
                 "unchecked-claim-owner-literal": ["ClaimOwner", "IsString"],
@@ -545,6 +561,19 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
                 "workspace-coordinate-literal": ["WorkspaceCoordinate", "IsString"],
                 "workspace-timeout-unit": ["ProcessSeconds", "RpcRequestSeconds"],
                 "workspace-settlement-boolean": ["DescendantSettlement", "Bool"],
+            })
+            fragments.update({
+                "duration-constructor": ["Duration"],
+                "duration-scope-coercion": ["approval", "agent-run"],
+                "duration-numeric": ["Duration", "Num"],
+                "approval-id-constructor": ["ReviewRequestId"],
+                "approval-id-coercion": ["ReviewRequestId", "Text"],
+                "catalog-id-constructor": ["CatalogVersion"],
+                "catalog-id-coercion": ["CatalogVersion", "Text"],
+                "budget-id-constructor": ["DelegationBudgetId"],
+                "budget-id-coercion": ["DelegationBudgetId", "Text"],
+                "repository-id-constructor": ["RepositoryId"],
+                "repository-id-coercion": ["RepositoryId", "Text"],
             })
             if name.endswith("-constructor"):
                 assert any(marker in result.stderr.lower() for marker in ["not in scope", "does not export", "illegal term-level"]), (name, result.stderr)

@@ -27,7 +27,7 @@ import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Prelude hiding ((.=))
-import Shikigami.Repository (RepositoryId (..))
+import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Transfer (WorkspaceRef)
 import Shikigami.WorkerSession.Types (AssignmentId, WorkerSessionId)

@@ -59,14 +59,16 @@ import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Capability.Provider (emptyCapabilityRuntime)
 import Shikigami.Directory (DirectoryHandle, DirectoryRuntime (..), DirectorySettings (..), startDirectoryWithHeartbeat)
 import Shikigami.Directory.Store (recordLoadStates)
+import Shikigami.Duration
 import Shikigami.Execution.Policy.Types (HarnessPolicy)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Routing qualified as Routing
-import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), beat)
+import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), LoopStaleness, beat, loopStaleness)
 import Shikigami.Inspection.Consumer (ConsumerInspection)
 import Shikigami.Log qualified as Log
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.Prelude hiding ((.=))
+import Shikigami.RuntimePolicy
 import Shikigami.Sink (DanwaConfig, GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig)
 import Shikigami.Sink.GrantStore (withActionAuthorizer)
 import Shikigami.Sink.Http (SinkHttp)
@@ -107,16 +109,16 @@ data WorkerEnv = WorkerEnv
     decisions :: !FlowDecision.DecisionServices,
     actionAuthorizer :: !ActionAuthorizer,
     workspace :: !(Maybe WorkspaceHost),
-    runTimeout :: !NominalDiffTime,
+    runTimeout :: !(Duration "agent-run"),
     harness :: !HarnessPolicy,
     delegationBudget :: !DelegationBudget,
-    approvalDeadline :: !NominalDiffTime,
+    approvalDeadline :: !(Duration "approval"),
     approvalPolicy :: !Approval.ApprovalPolicySnapshot,
     approvalNotifier :: !ApprovalWorkflow.ApprovalNotifier,
     -- | How long a parked conversation waits for its next message before its
     -- epoch ends and its kioku session is completed. Resolved from
     -- @conversation.idle_timeout_seconds@.
-    conversationIdleTimeout :: !NominalDiffTime,
+    conversationIdleTimeout :: !(Duration "conversation-idle"),
     -- | What the timer loop does about cron minutes that passed while the
     -- process was down. Resolved from @scheduler.catch_up@.
     catchUpPolicy :: !CatchUpPolicy,
@@ -181,7 +183,7 @@ envDirectory WorkerEnv {directory = value} = value
 envDirectoryRefresher :: WorkerEnv -> Maybe (IO ())
 envDirectoryRefresher WorkerEnv {directoryRefresher = value} = value
 
-envRunTimeout :: WorkerEnv -> NominalDiffTime
+envRunTimeout :: WorkerEnv -> Duration "agent-run"
 envRunTimeout WorkerEnv {runTimeout = timeout} = timeout
 
 envDelegationBudget :: WorkerEnv -> DelegationBudget
@@ -192,7 +194,7 @@ envDelegationBudget WorkerEnv {delegationBudget = limit} = limit
 envCatchUpPolicy :: WorkerEnv -> CatchUpPolicy
 envCatchUpPolicy WorkerEnv {catchUpPolicy = policy} = policy
 
-envApprovalDeadline :: WorkerEnv -> NominalDiffTime
+envApprovalDeadline :: WorkerEnv -> Duration "approval"
 envApprovalDeadline WorkerEnv {approvalDeadline = deadline} = deadline
 
 envApprovalPolicy :: WorkerEnv -> Approval.ApprovalPolicySnapshot
@@ -203,7 +205,7 @@ envApprovalNotifier WorkerEnv {approvalNotifier = notifier} = notifier
 
 -- | Named for the same reason as 'envLogger': 'Conversation.ConversationEnv'
 -- also carries a @conversationIdleTimeout@-shaped field.
-envConversationIdleTimeout :: WorkerEnv -> NominalDiffTime
+envConversationIdleTimeout :: WorkerEnv -> Duration "conversation-idle"
 envConversationIdleTimeout WorkerEnv {conversationIdleTimeout = timeout} = timeout
 
 -- | The agent-run workflow's dependencies.
@@ -271,7 +273,7 @@ conversationEnv env =
 -- where a deploy can see it, so each offender is named and — under
 -- @agents.strict@, the same switch that governs a manifest that will not load —
 -- the process refuses to start after reporting all of them.
-schedulerSchedules :: Log.Logger -> Bool -> [AgentDecl] -> IO (Map AgentName CronSchedule)
+schedulerSchedules :: Log.Logger -> ManifestStrictness -> [AgentDecl] -> IO (Map AgentName CronSchedule)
 schedulerSchedules logger strictMode declarations = do
   let scheduled =
         [ (agentName, cron)
@@ -281,7 +283,7 @@ schedulerSchedules logger strictMode declarations = do
       invalid = [(agentName, err) | (agentName, Left err) <- parsed]
   traverse_ reportInvalid invalid
   unless (null invalid) do
-    when strictMode do
+    when (manifestsStrict strictMode) do
       Log.logError
         logger
         "scheduler.cron.strict_refused"
@@ -322,10 +324,10 @@ principalIdsByAgent =
 -- | Register the directory loop only when lifecycle enforcement is enabled.
 -- Its liveness deadline scales with the configured cadence: three missed
 -- attempts, with the same ten-second floor as the one-second worker loops.
-directoryLoopRegistration :: DirectorySettings -> [(LoopName, NominalDiffTime)]
+directoryLoopRegistration :: DirectorySettings -> [(LoopName, LoopStaleness)]
 directoryLoopRegistration = \case
   DirectoryDisabled -> []
-  DirectoryFile {refreshInterval} -> [(DirectoryLoop, max 10 (refreshInterval * 3))]
+  DirectoryFile {refreshInterval} -> [(DirectoryLoop, loopStaleness (max 10 (durationTime refreshInterval * 3)))]
 
 -- | Cold-start the process directory and bind refresh attempts to liveness.
 -- A configured source without an initial valid snapshot is fail-closed and

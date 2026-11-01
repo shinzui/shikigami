@@ -58,7 +58,7 @@ import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript (ExecutionSnapshot (..), ExecutionState (..), operationIdFor)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude ((&), (.~))
-import Shikigami.Repository (RepositoryId (..))
+import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
@@ -200,8 +200,8 @@ nativeProvision configFile specFile = do
   properties <- Systemd.systemdPropertiesIdentity
   let policy = ProcessPolicy ProcessPolicyV1 spec.image properties [CommandRule (workspaceCoordinate "validate") (workspaceCoordinate "/bin/probe") [(workspaceCoordinate "validate")] (workspaceCoordinate "") (Map.singleton (workspaceCoordinate "HOME") (workspaceCoordinate "/scratch")) ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)] [(workspaceCoordinate "")] [(workspaceCoordinate "src")]
       request = WorkspaceRequest (WorkflowId "native-fixture") Nothing (fixtureRootId "native-fixture-root") principal principal (fixtureRevision 0)
-  catalog <- requireRight (mkWorkspaceCatalog [RepositoryPolicy (RepositoryId "mori://fixture/repo") (workspaceLocator source) [workspaceCoordinate base] (workspaceCoordinate base) (processPolicyIdentity policy)])
-  repository <- requireRight (resolveRepository catalog (RepositoryId "mori://fixture/repo") Nothing)
+  catalog <- requireRight (mkWorkspaceCatalog [RepositoryPolicy (repositoryId "mori://fixture/repo") (workspaceLocator source) [workspaceCoordinate base] (workspaceCoordinate base) (processPolicyIdentity policy)])
+  repository <- requireRight (resolveRepository catalog (repositoryId "mori://fixture/repo") Nothing)
   (binding, state) <- requireRight =<< transact env (Workspaces.reserveWorkspaceTx storage request repository)
   requireRight =<< allocateWorkspace storage binding state
   requireRight =<< transact env (Workspaces.markWorkspaceReadyTx binding)

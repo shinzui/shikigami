@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Probes for the worker-role processes: what \"alive\" means for a background
 -- loop, and the listener that answers.
 --
@@ -49,6 +51,9 @@ module Shikigami.Health.Worker
     LoopName (..),
     loopCheckName,
     loopStaleAfter,
+    LoopStaleness,
+    loopStaleness,
+    loopStalenessTime,
 
     -- * Heartbeats
     Heartbeats,
@@ -155,17 +160,28 @@ loopCheckName = \case
 -- 'QueueLoop' has no bound because it never beats: shibuya already tracks the
 -- processor's own liveness and 'registerReport' reads that instead. Its value
 -- here is unused and exists only to keep the function total.
-loopStaleAfter :: LoopName -> NominalDiffTime
-loopStaleAfter = \case
-  QueueLoop -> 60
-  ResumeLoop -> 10
-  WorkflowGcLoop -> 7200
-  OutboxLoop -> 10
-  TimerLoop -> 10
-  TelemetryLoop -> 45
-  ConsumerLoop -> 60
-  SchedulerLoop -> 10
-  DirectoryLoop -> 60
+newtype LoopStaleness = LoopStaleness NominalDiffTime
+  deriving stock (Eq, Ord)
+  deriving newtype (Show)
+
+loopStaleness :: NominalDiffTime -> LoopStaleness
+loopStaleness = LoopStaleness
+
+loopStalenessTime :: LoopStaleness -> NominalDiffTime
+loopStalenessTime (LoopStaleness value) = value
+
+loopStaleAfter :: LoopName -> LoopStaleness
+loopStaleAfter =
+  loopStaleness . \case
+    QueueLoop -> 60
+    ResumeLoop -> 10
+    WorkflowGcLoop -> 7200
+    OutboxLoop -> 10
+    TimerLoop -> 10
+    TelemetryLoop -> 45
+    ConsumerLoop -> 60
+    SchedulerLoop -> 10
+    DirectoryLoop -> 60
 
 -- ── Heartbeats ──────────────────────────────────────────────────────────────
 
@@ -180,7 +196,7 @@ loopStaleAfter = \case
 -- a loop did beats a callback recording when we last remembered to call it.
 data Heartbeats = Heartbeats
   { beats :: !(Map LoopName (IORef UTCTime)),
-    staleAfter :: !(Map LoopName NominalDiffTime),
+    staleAfter :: !(Map LoopName (LoopStaleness)),
     -- | Filled after the process starts, because a supervised loop's reporter
     -- does not exist until its supervisor is running.
     reports :: !(IORef (Map LoopName (IO ProbeVerdict)))
@@ -200,7 +216,7 @@ newHeartbeats loops =
 -- The directory cadence is operator-configured, so its liveness deadline must
 -- be derived from that cadence instead of the fixed defaults used by the
 -- one-second worker loops.
-newHeartbeatsWithStaleness :: [(LoopName, NominalDiffTime)] -> IO Heartbeats
+newHeartbeatsWithStaleness :: [(LoopName, LoopStaleness)] -> IO Heartbeats
 newHeartbeatsWithStaleness loops = do
   now <- getCurrentTime
   cells <- traverse (\(loop, _) -> (loop,) <$> newIORef now) loops
@@ -284,7 +300,7 @@ loopLivenessAt registry@Heartbeats {beats, staleAfter} now = do
             Nothing -> go reported rest
             Just cell -> do
               lastBeat <- readIORef cell
-              let deadline = addUTCTime (Map.findWithDefault (loopStaleAfter loop) loop staleAfter) lastBeat
+              let deadline = addUTCTime (loopStalenessTime (Map.findWithDefault (loopStaleAfter loop) loop staleAfter)) lastBeat
               if now > deadline
                 then pure (Unhealthy (loopCheckName loop) deadline)
                 else go reported rest
@@ -321,7 +337,7 @@ supervisedLoopVerdict loop = supervisedLoopVerdictWithStaleness (loopStaleAfter 
 
 -- | A queue's legitimate processing bound follows its configured attempt
 -- timeout; a fixed sixty-second probe must not kill a five-minute attempt.
-supervisedLoopVerdictWithStaleness :: NominalDiffTime -> LoopName -> Master -> ProcessorId -> IO ProbeVerdict
+supervisedLoopVerdictWithStaleness :: LoopStaleness -> LoopName -> Master -> ProcessorId -> IO ProbeVerdict
 supervisedLoopVerdictWithStaleness stale loop master processorId = do
   found <- getProcessorMetricsIO master processorId
   now <- getCurrentTime
@@ -335,17 +351,17 @@ supervisedLoopVerdictWithStaleness stale loop master processorId = do
 processorStateVerdict :: LoopName -> UTCTime -> Maybe ProcessorMetrics -> ProbeVerdict
 processorStateVerdict loop = processorStateVerdictWithStaleness (loopStaleAfter loop) loop
 
-processorStateVerdictWithStaleness :: NominalDiffTime -> LoopName -> UTCTime -> Maybe ProcessorMetrics -> ProbeVerdict
+processorStateVerdictWithStaleness :: LoopStaleness -> LoopName -> UTCTime -> Maybe ProcessorMetrics -> ProbeVerdict
 processorStateVerdictWithStaleness stale loop now = \case
   Nothing -> Unhealthy (loopCheckName loop) now
   Just ProcessorMetrics {state} -> case state of
     Idle -> Healthy
     Processing _ _ lastActivity ->
-      let deadline = addUTCTime stale lastActivity
+      let deadline = addUTCTime (loopStalenessTime stale) lastActivity
        in if now > deadline then Unhealthy (loopCheckName loop) deadline else Healthy
     Paused info _ _ | info.inFlight <= 0 -> Healthy
     Paused _ _ lastProgress ->
-      let deadline = addUTCTime stale lastProgress
+      let deadline = addUTCTime (loopStalenessTime stale) lastProgress
        in if now > deadline then Unhealthy (loopCheckName loop) deadline else Healthy
     Failed _ failedAt -> Unhealthy (loopCheckName loop) failedAt
     Stopped -> Unhealthy (loopCheckName loop) now

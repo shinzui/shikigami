@@ -35,9 +35,10 @@ import Shibuya.App (ProcessorId (ProcessorId), SupervisionStrategy (StopAllOnFai
 import Shikigami.Agent.RunJob.Worker (handleRunJob, runJob)
 import Shikigami.Agent.Workflow.Resume (runResumeWorker, runWorkflowGc)
 import Shikigami.App (AppEnv (..))
+import Shikigami.Duration
 import Shikigami.Flow.SinkOutbox.Publisher (runOutboxPublisher)
 import Shikigami.Health.Supervision (LoopExited (LoopExited), superviseLoops)
-import Shikigami.Health.Worker (LoopName (DirectoryLoop, OutboxLoop, QueueLoop, ResumeLoop, TelemetryLoop, TimerLoop, WorkflowGcLoop), registerReport, supervisedLoopVerdictWithStaleness)
+import Shikigami.Health.Worker (LoopName (DirectoryLoop, OutboxLoop, QueueLoop, ResumeLoop, TelemetryLoop, TimerLoop, WorkflowGcLoop), loopStaleness, registerReport, supervisedLoopVerdictWithStaleness)
 import Shikigami.Inspection.Consumer (withConsumerInspection)
 import Shikigami.Integration.ConsumerRuntime (withConsumerAppAcquisition)
 import Shikigami.Log qualified as Log
@@ -84,7 +85,7 @@ queueProcessorId = ProcessorId (jobName runJob)
 -- finalization failure stops the application and reaches process supervision.
 runQueueWorker :: WorkerEnv -> IO ()
 runQueueWorker env = do
-  tuning <- either (ioError . userError . Text.unpack) pure (queueTuningFor env.runTimeout)
+  tuning <- either (ioError . userError . Text.unpack) pure (queueTuningFor (durationTime env.runTimeout))
   let runtime =
         JobRuntime
           { runtimePool = (.pool) env,
@@ -113,7 +114,7 @@ runQueueWorker env = do
           -- because shibuya already tracks what the processor actually did. The
           -- master is available only once the supervisor is running, which is why
           -- the registry is filled here rather than at boot.
-          liftIO (registerReport (envHeartbeats env) QueueLoop (supervisedLoopVerdictWithStaleness (env.runTimeout + 30) QueueLoop (getAppMaster app) queueProcessorId))
+          liftIO (registerReport (envHeartbeats env) QueueLoop (supervisedLoopVerdictWithStaleness (loopStaleness (durationTime env.runTimeout + 30)) QueueLoop (getAppMaster app) queueProcessorId))
           waitApp app
           -- A returning queue loop always reaches process supervision. Retained
           -- failure health is available independently of live metric registration.

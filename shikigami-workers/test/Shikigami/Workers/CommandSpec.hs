@@ -25,6 +25,7 @@ import Options.Applicative
 import Settei.Env (envSnapshot, environmentSource)
 import Shikigami.App.Config
 import Shikigami.App.Config.Load (ConfigRun (..), appConfigRun)
+import Shikigami.Trigger.Stream (IncludeAgentActors (..))
 import Shikigami.Workers.Command
   ( RoleInfo (..),
     consumeEventsRoleInfo,
@@ -178,7 +179,7 @@ resolutionTests =
         (.kafkaBroker) config @?= "b:9092"
         (.kafkaActivityTopic) config @?= "activity.test"
         (.kafkaStreamGroup) config @?= "stream-test"
-        (.kafkaIncludeAgentActors) config @?= True
+        (.kafkaIncludeAgentActors) config @?= IncludeAgentActors
         -- The event consumer's settings must be untouched by the stream
         -- consumer's identically-spelled flags.
         (.kafkaEventsTopic) config @?= (.kafkaEventsTopic) defaultAppConfig
@@ -191,7 +192,7 @@ resolutionTests =
         (.kafkaStreamGroup) config @?= (.kafkaStreamGroup) defaultAppConfig,
       testCase "omitting the feedback-guard switch leaves the guard on" do
         config <- resolveArgs consumeStreamRoleInfo ["--broker", "b:9092"]
-        (.kafkaIncludeAgentActors) config @?= False,
+        (.kafkaIncludeAgentActors) config @?= ExcludeAgentActors,
       testCase "a --set override beats the equivalent named flag" do
         config <- resolveArgs workerRoleInfo ["--agents", "/from-flag", "--set", "agents.directory=/from-set"]
         (.agentsDirectory) config @?= "/from-set"

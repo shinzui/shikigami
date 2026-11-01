@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.AgentValueSpec (tests) where
 
 import Control.Exception (SomeException, try)
@@ -6,11 +8,16 @@ import Data.Either (isLeft)
 import Data.Foldable (for_)
 import Data.Text (Text)
 import Dhall qualified
+import Keiro.Workflow (WorkflowId (..), WorkflowName (..))
 import Kioku.Api.Access (principalRefText)
+import Shikigami.Agent.Approval (ReviewRequestId, reviewRequestIdFor)
+import Shikigami.Agent.Delegate.Context (DelegationBudgetId, delegationBudgetIdFor)
 import Shikigami.Agent.Delegate.Depth (DelegationDepth, initialDepth, nextDepth, parseDelegationDepth)
 import Shikigami.Agent.ExpertiseKey (ExpertiseKey, duplicateExpertiseKeys, expertiseKeyText, parseExpertiseKey)
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Agent.Principal
+import Shikigami.Duration
+import Shikigami.Router.Catalog (CatalogVersion)
 import Shikigami.Router.SelectionLimit (SelectionLimit, parseSelectionLimit, selectionLimitNatural)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -19,7 +26,22 @@ tests :: TestTree
 tests =
   testGroup
     "agent values"
-    [ testCase "names retain exact nonempty bytes through JSON and Dhall" do
+    [ testCase "retained deterministic identities reject malformed and wrong UUID domains" do
+        let review = reviewRequestIdFor (WorkflowName "agent") (WorkflowId "original-run") 0 "ask"
+            budget = delegationBudgetIdFor (WorkflowId "original-run")
+        eitherDecode (encode review) @?= Right review
+        eitherDecode (encode budget) @?= Right budget
+        for_ ["\"arbitrary\"", "\"123e4567-e89b-42d3-a456-426614174000\"", "\"A6EF7DB1-ECD3-5923-A9CE-3F95FFA4CDE4\""] \raw -> do
+          assertBool "review" (isLeft (eitherDecode @ReviewRequestId raw))
+          assertBool "budget" (isLeft (eitherDecode @DelegationBudgetId raw))
+          assertBool "catalog" (isLeft (eitherDecode @CatalogVersion raw)),
+      testCase "duration spans preserve subsecond waits and zero expiration" do
+        span' <- right (parseDuration 0.25 :: Either Text (Duration "approval"))
+        encode span' @?= "0.25"
+        eitherDecode (encode span') @?= Right span'
+        durationTime (remainingDuration (-1) :: Duration "approval") @?= 0
+        assertBool "negative retained span" (isLeft (eitherDecode @(Duration "approval") "-1")),
+      testCase "names retain exact nonempty bytes through JSON and Dhall" do
         for_ ["a:b", "a.b", " 名 前 ", " "] \raw -> do
           name <- right (mkAgentName raw)
           agentNameText name @?= raw

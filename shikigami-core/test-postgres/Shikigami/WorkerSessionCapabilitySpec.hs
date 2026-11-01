@@ -147,7 +147,7 @@ tests fixture =
       testCase "Flow event waits wake atomically and replay one retained event page" $
         withCapabilityFixture fixture \env admission host scope authorizer _ _ -> do
           let session = Session.sessionIdFor admission
-              body = Flow.runWorkers (Just host) authorizer scope.run (Right (Just (scopeFingerprint scope))) (Flow.awaitEvents "findings" session (fixtureRevision 0) (fixtureLimit 100))
+              body = Flow.runWorkers (Just host) authorizer scope.run (Right (Just (scopeFingerprint scope))) (Flow.awaitEvents (declarationCoordinate "findings") session (fixtureRevision 0) (fixtureLimit 100))
               drive = run env (runWorkflowWith (shikigamiWorkflowRunOptions env) flowName scope.run.runId body)
           drive >>= (@?= Suspended)
           grant <- permit env host scope authorizer
@@ -160,7 +160,7 @@ tests fixture =
       testCase "a listener journal conflict rolls back its wake and accepted message together" $
         withCapabilityFixture fixture \env admission host scope authorizer _ _ -> do
           let session = Session.sessionIdFor admission
-              body = Flow.runWorkers (Just host) authorizer scope.run (Right (Just (scopeFingerprint scope))) (Flow.awaitEvents "findings" session (fixtureRevision 0) (fixtureLimit 100))
+              body = Flow.runWorkers (Just host) authorizer scope.run (Right (Just (scopeFingerprint scope))) (Flow.awaitEvents (declarationCoordinate "findings") session (fixtureRevision 0) (fixtureLimit 100))
               workflow = scope.run.runId
           run env (runWorkflowWith (shikigamiWorkflowRunOptions env) flowName workflow body) >>= (@?= Suspended)
           token <- listenerToken env scope
@@ -177,7 +177,7 @@ tests fixture =
           let session = Session.sessionIdFor admission
               workflow = scope.run.runId
               options = shikigamiWorkflowRunOptions env
-              body = Flow.runWorkers (Just host) authorizer scope.run (Right (Just (scopeFingerprint scope))) (Flow.awaitEvents "findings" session (fixtureRevision 0) (fixtureLimit 100))
+              body = Flow.runWorkers (Just host) authorizer scope.run (Right (Just (scopeFingerprint scope))) (Flow.awaitEvents (declarationCoordinate "findings") session (fixtureRevision 0) (fixtureLimit 100))
           run env (runWorkflowWith options flowName workflow body) >>= (@?= Suspended)
           token <- listenerToken env scope
           run env (runWorkflowWith options flowName workflow (continueAsNew (Aeson.object []) :: Eff (Workflow : AppEffects) ())) >>= (@?= ContinuedAsNew)
@@ -189,7 +189,7 @@ tests fixture =
         withCapabilityFixture fixture \env admission host scope authorizer _ _ -> do
           let session = Session.sessionIdFor admission
               workflow = scope.run.runId
-              body = Flow.runWorkers (Just host) authorizer scope.run (Right (Just (scopeFingerprint scope))) (Flow.awaitEvents "findings" session (fixtureRevision 0) (fixtureLimit 100))
+              body = Flow.runWorkers (Just host) authorizer scope.run (Right (Just (scopeFingerprint scope))) (Flow.awaitEvents (declarationCoordinate "findings") session (fixtureRevision 0) (fixtureLimit 100))
           run env (runWorkflowWith (shikigamiWorkflowRunOptions env) flowName workflow body) >>= (@?= Suspended)
           token <- listenerToken env scope
           now <- getCurrentTime

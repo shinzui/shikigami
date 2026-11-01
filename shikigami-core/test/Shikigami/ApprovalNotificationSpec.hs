@@ -12,10 +12,11 @@ import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Network.HTTP.Types (Status, hContentType, status200, status204, status403, status404, status500)
 import Network.Wai (Application, pathInfo, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
-import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalRequest (..), ReviewRequestId (..))
+import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalRequest (..), ReviewRequestId, parseReviewRequestId)
 import Shikigami.Agent.Approval.Notification (approvalNotifier, renderApprovalMessage)
 import Shikigami.Agent.Approval.Workflow (ApprovalNotificationError (..), ApprovalNotifier (..))
 import Shikigami.Agent.Decl (Priority (High), SignalType (AgentRequest))
+import Shikigami.Duration (parseDuration)
 import Shikigami.Fixture.SinkHttp (testSinkHttpFor)
 import Shikigami.Log qualified as Log
 import Shikigami.Sink.Config (DanwaConfig (..), KizashiConfig (..))
@@ -32,11 +33,11 @@ tests =
               renderApprovalMessage
                 reviewId
                 awakeableId
-                (secondsToNominalDiffTime 60)
+                (either (error . show) id (parseDuration 60))
                 request {prompt = Text.replicate 2_000 "p"}
         mapM_
           (\fragment -> assertBool ("missing approval message fragment: " <> Text.unpack fragment) (fragment `Text.isInfixOf` message))
-          [ "Review: review_test",
+          [ "Review: review_a6ef7db1-ecd3-5923-a9ce-3f95ffa4cde4",
             awakeableToken,
             "Deadline: 60 seconds",
             "--approve",
@@ -51,54 +52,54 @@ tests =
               kizashiConfig = KizashiConfig {baseUrl = "http://127.0.0.1:1", defaultRecipient = "recipient:test"}
           sinkHttp <- testSinkHttpFor danwaConfig
           let notifier = approvalNotifier Log.silentLogger sinkHttp danwaConfig kizashiConfig
-          outcome <- (.postAsk) notifier reviewId awakeableId (secondsToNominalDiffTime 60) request
+          outcome <- (.postAsk) notifier reviewId awakeableId (either (error . show) id (parseDuration 60)) request
           outcome @?= Right ()
           posted <- readIORef messages
-          assertBool "Danwa receives the review id" (any (Text.isInfixOf "review_test") posted)
+          assertBool "Danwa receives the review id" (any (Text.isInfixOf "review_a6ef7db1-ecd3-5923-a9ce-3f95ffa4cde4") posted)
           assertBool "Danwa receives the opaque token" (any (Text.isInfixOf awakeableToken) posted),
       testCase "Danwa notifier classifies retryable and permanent HTTP failures" do
         testWithApplication (pure (failingDanwaApplication status500)) \transientPort -> do
           notifier <- notifierForDanwa transientPort
-          (.postAsk) notifier reviewId awakeableId 60 request >>= \case
+          (.postAsk) notifier reviewId awakeableId (either (error . show) id (parseDuration 60)) request >>= \case
             Left TransientNotification {} -> pure ()
             other -> assertFailure ("expected transient Danwa failure, got " <> show other)
         testWithApplication (pure (failingDanwaApplication status403)) \permanentPort -> do
           notifier <- notifierForDanwa permanentPort
-          (.postAsk) notifier reviewId awakeableId 60 request >>= \case
+          (.postAsk) notifier reviewId awakeableId (either (error . show) id (parseDuration 60)) request >>= \case
             Left PermanentNotification {} -> pure ()
             other -> assertFailure ("expected permanent Danwa failure, got " <> show other),
       testCase "Kizashi notifier emits AgentRequest and classifies HTTP/decode failures" do
         requests <- newIORef []
         testWithApplication (pure (kizashiApplication status200 requests)) \successPort -> do
           notifier <- notifierForKizashi successPort
-          (.postAsk) notifier reviewId awakeableId (secondsToNominalDiffTime 60) request {channel = ViaKizashi} >>= (@?= Right ())
+          (.postAsk) notifier reviewId awakeableId (either (error . show) id (parseDuration 60)) request {channel = ViaKizashi} >>= (@?= Right ())
           posted <- readIORef requests
           case posted of
             [Wire.CreateSignalReq {Wire.signalType, Wire.priority, Wire.intent, Wire.contextTags}] -> do
               signalType @?= AgentRequest
               priority @?= High
-              assertBool "Kizashi request carries review id" ("review_test" `Text.isInfixOf` intent && "review_test" `elem` contextTags)
+              assertBool "Kizashi request carries review id" ("review_a6ef7db1-ecd3-5923-a9ce-3f95ffa4cde4" `Text.isInfixOf` intent && "review_a6ef7db1-ecd3-5923-a9ce-3f95ffa4cde4" `elem` contextTags)
               assertBool "Kizashi request carries opaque token" (awakeableToken `Text.isInfixOf` intent)
             other -> assertFailure ("expected one Kizashi request, got " <> show other)
         testWithApplication (pure (kizashiApplication status500 requests)) \transientPort -> do
           notifier <- notifierForKizashi transientPort
-          (.postAsk) notifier reviewId awakeableId 60 request {channel = ViaKizashi} >>= \case
+          (.postAsk) notifier reviewId awakeableId (either (error . show) id (parseDuration 60)) request {channel = ViaKizashi} >>= \case
             Left TransientNotification {} -> pure ()
             other -> assertFailure ("expected transient notification failure, got " <> show other)
         testWithApplication (pure (kizashiApplication status403 requests)) \permanentPort -> do
           notifier <- notifierForKizashi permanentPort
-          (.postAsk) notifier reviewId awakeableId 60 request {channel = ViaKizashi} >>= \case
+          (.postAsk) notifier reviewId awakeableId (either (error . show) id (parseDuration 60)) request {channel = ViaKizashi} >>= \case
             Left PermanentNotification {} -> pure ()
             other -> assertFailure ("expected permanent notification failure, got " <> show other)
         testWithApplication (pure invalidKizashiApplication) \invalidPort -> do
           notifier <- notifierForKizashi invalidPort
-          (.postAsk) notifier reviewId awakeableId 60 request {channel = ViaKizashi} >>= \case
+          (.postAsk) notifier reviewId awakeableId (either (error . show) id (parseDuration 60)) request {channel = ViaKizashi} >>= \case
             Left PermanentNotification {} -> pure ()
             other -> assertFailure ("expected permanent decode failure, got " <> show other)
     ]
 
 reviewId :: ReviewRequestId
-reviewId = ReviewRequestId "review_test"
+reviewId = (either (error . show) id (parseReviewRequestId "review_a6ef7db1-ecd3-5923-a9ce-3f95ffa4cde4"))
 
 awakeableId :: AwakeableId
 awakeableId = AwakeableId (maybe (error "invalid approval test UUID") id (UUID.fromText awakeableToken))

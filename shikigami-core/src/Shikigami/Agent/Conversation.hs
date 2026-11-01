@@ -106,6 +106,7 @@ import Shikigami.Capability.Provider (emptyCapabilityProviderRegistry)
 import Shikigami.DanwaConversation.Generated.WorkflowRuntime qualified as ConversationGenerated
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
+import Shikigami.Duration
 import Shikigami.Execution.Driver qualified as ExecutionDriver
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Policy.Types qualified as Harness
@@ -137,13 +138,13 @@ data ConversationEnv = ConversationEnv
     decisions :: !FlowDecision.DecisionServices,
     deliveryPool :: !(Maybe Pool),
     resolveRunProfile :: !(ProfileId -> Maybe ProfileVersion -> IO (Either ProfileResolutionError ResolvedProfile)),
-    runTimeout :: !NominalDiffTime,
+    runTimeout :: !(Duration "agent-run"),
     harness :: !Harness.HarnessPolicy,
     -- | How long a parked conversation waits for its next human message before
     -- ending its epoch. This is the /between-turns/ window; 'runTimeout' bounds
     -- a turn. There is deliberately no rotation cadence beside it: the journal
     -- is bounded by construction, not by a tuning constant.
-    idleTimeout :: !NominalDiffTime,
+    idleTimeout :: !(Duration "conversation-idle"),
     danwa :: !DanwaConfig,
     agents :: ![AgentDecl],
     -- | Which grant source the conversation reply's C11 check consults.
@@ -152,10 +153,10 @@ data ConversationEnv = ConversationEnv
   }
   deriving stock (Generic)
 
-conversationRunTimeout :: ConversationEnv -> NominalDiffTime
+conversationRunTimeout :: ConversationEnv -> Duration "agent-run"
 conversationRunTimeout ConversationEnv {runTimeout = timeout} = timeout
 
-conversationIdleTimeout :: ConversationEnv -> NominalDiffTime
+conversationIdleTimeout :: ConversationEnv -> Duration "conversation-idle"
 conversationIdleTimeout ConversationEnv {idleTimeout = timeout} = timeout
 
 declaredPrincipalId :: AgentDecl -> Maybe (DeclarationCoordinate "principal")
@@ -731,7 +732,7 @@ endConversationEpoch env recordedIdentity conversationId thisEpoch sid = do
 -- later turn. There is no second counter to keep in step.
 armConversationIdleTimeout ::
   (Workflow :> es, Store :> es, IOE :> es) =>
-  NominalDiffTime ->
+  Duration "conversation-idle" ->
   AwakeableId ->
   Eff es ()
 armConversationIdleTimeout deadline aid = do
@@ -743,7 +744,7 @@ armConversationIdleTimeout deadline aid = do
           { timerId = conversationIdleTimeoutTimerId workflowName workflowId generation,
             processManagerName = unWorkflowName workflowName,
             correlationId = unWorkflowId workflowId,
-            fireAt = addUTCTime deadline now,
+            fireAt = addUTCTime (durationTime deadline) now,
             payload = Aeson.toJSON (conversationIdleTimeoutPayload aid generation)
           }
   void (runTransaction (scheduleTimerOnceTx request))
@@ -901,7 +902,7 @@ processSelectedTurn env selectedBehavior recordedIdentity decl msg@AddressedMess
     InlineConversation active ->
       step (StepName "run-behavior-v2") do
         prior <- liftIO (loadTurns env sid)
-        liftIO (runBehaviorAttempt (conversationRunTimeout env) active decl (triggerOnly (behaviorPayload msg prior)))
+        liftIO (runBehaviorAttempt (durationTime (conversationRunTimeout env)) active decl (triggerOnly (behaviorPayload msg prior)))
   case outputE of
     Left err -> pure (Left err)
     Right output -> do
@@ -992,7 +993,7 @@ conversationExecutionRuntime env =
             transact = SelectionRuntime.selectionTransaction env.appEnv env.deliveryPool
           },
       withTools = ExecutionTools.withExecutionTools Log.silentLogger denyAllActionAuthorizer emptyCapabilityProviderRegistry (ExecutionTools.staticNativeTools env.behaviorEnv.tools),
-      timeoutSeconds = fromInteger (max 1 (min 3500 (floor env.runTimeout)))
+      timeoutSeconds = env.runTimeout
     }
   where
     authority :: Execution.ExecutionSnapshot -> IO (Either Text ())
