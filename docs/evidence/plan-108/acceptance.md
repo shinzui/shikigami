@@ -892,6 +892,8 @@ constructor, coercion and Generic bypass controls.
 The private LoadState remains its previously reviewed explicit outbound SQL
 transfer record, from loadStateRows to upsertLoadStateStatement; no domain
 permission is inferred from that DTO. No workflow body, durable identity,
-migration, dependency or valid HTTP representation changes. A coherent full
-build/census reconciliation follows this source checkpoint. All milestones and
+migration, dependency or valid HTTP representation changes. The full build and
+fresh census pass on `4983d4c`: 323 modules, 931 declarations and 4,040 keys.
+The reviewed classifications total 778 (710 compliant, 29 excluded, 39 known
+violations); both modes correctly refuse 3,262 missing keys. All milestones and
 the deferred guide disposition stay open.

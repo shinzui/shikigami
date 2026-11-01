@@ -63,8 +63,8 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 
 Implementation is under way. The schema-2 census and coverage/freshness checker
 pass 24 positive/mutation tests against a successful full GHC 9.12.4 macOS build.
-The current census has 4,038 declaration/member keys. Semantic classification
-covers 776 keys: 707 compliant entries, 28 exclusions and 41 explicit violations;
+The current census has 4,040 declaration/member keys. Semantic classification
+covers 778 keys: 710 compliant entries, 29 exclusions and 39 explicit violations;
 3,262 keys remain unreviewed, and both coverage modes correctly refuse completion.
 
 Process-profile, Objective, cleanup/listing, directory, sink, HTTP acceptance and
@@ -144,8 +144,9 @@ PostgreSQL, 34 worker and 118 compiler cases. Reported principals now keep a
 nominal claim type while malformed/empty evidence remains exact. Source review
 establishes detail as advisory logging/inspection text and corrects that finding
 without weakening admission or key obligations. See
-`docs/evidence/plan-108/directory-claims-source.json`; coherent census
-reconciliation follows this source checkpoint.
+`docs/evidence/plan-108/directory-claims-source.json`. The coherent full build and
+fresh census pass on `4983d4c`: 323 modules, 931 declarations and 4,040 keys.
+Both directory findings are resolved/corrected and the two claim keys classified.
 
 The native workflow gate passes on `400cdc0` against `af76f1b`, with no findings
 and a replay-neutral native verdict. Exact reports accompany the current evidence.
