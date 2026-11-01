@@ -278,10 +278,11 @@ haskell-conventions:
 
 # Check nominal value scopes and opaque construction with the selected compiler.
 domain-value-types:
-    cabal build shikigami-core shikigami-agent:lib:shikigami-agent
+    cabal build shikigami-core shikigami-agent:lib:shikigami-agent shikigami-workers:lib:shikigami-workers
     python3 tests/types/revision-domains.py
     python3 tests/types/opaque-values.py
     python3 tests/types/workspace-scope.py
+    python3 tests/types/resume-policy.py
 
 # Frozen 0.22 consumer evidence and the explicitly bounded macOS profile.
 keiro-upgrade-audit:

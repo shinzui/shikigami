@@ -1219,3 +1219,36 @@ correctly fails with exactly 552 violations. All 24 infrastructure tests, 13 sty
 tests and 14 upgrade-inventory mutation tests pass. The existing 124 frozen
 sources and 93 release items remain intact. M2/M3 and the guide remain open.
 This snapshot adds no Linux runtime qualification.
+
+
+## M2 resume restart policy source candidate
+
+ResumeRetry is now private and admitted by mkResumeRetry before a loop can run.
+Initial/maximum backoffs have separate nominal microsecond scopes; the failure
+ceiling and healthy-run window have independent private types. Admission rejects
+negative delays/windows, a nonpositive failure ceiling and initial above maximum.
+Explicit zero delay and zero healthy window remain valid. The production default
+retains one-second initial, thirty-second cap, five failures and sixty-second
+healthy reset. Capped doubling now uses Integer before converting the bounded
+result back to Int. This prevents overflow from producing a negative sleep.
+
+The seven selected restart-policy cases pass, including actual requested sleeps
+at maxBound Int, the failure ceiling, healthy-run resets and the immediate policy.
+Four public compiler controls pass after the factory/default positive control: the
+constructor, Generic and representation-coercion bypasses refuse. The standard
+Justfile domain-value-types target now builds the worker library and runs this
+control. Haskell style and whitespace checks pass. Source hashes are retained in
+`resume-policy-source.json`; full build/census reconciliation is pending before
+the five findings are marked resolved.
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-workers-test -j1 --test-show-details=direct --test-option=-p --test-option='/resume restart policy/'
+nix develop --no-write-lock-file -c python3 tests/types/resume-policy.py
+python3 tools/style/check_haskell.py
+git diff --check
+```
+
+This process-local runtime policy changes no core Agent/Flow workflow body,
+serialized record, native DSL declaration or identity recipe. The existing native
+workflow gate evidence therefore remains applicable. There is no new retained
+decoder owner or PostgreSQL schema to qualify for this batch.

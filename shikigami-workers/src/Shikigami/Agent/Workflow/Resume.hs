@@ -1,3 +1,7 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE RoleAnnotations #-}
+
 -- | Resuming durable workflows that stopped part-way.
 --
 -- A Keiro workflow can suspend — waiting for an approval, a timer, or a child —
@@ -20,7 +24,8 @@ module Shikigami.Agent.Workflow.Resume
     terminalWorkflowRetention,
 
     -- * Restart policy
-    ResumeRetry (..),
+    ResumeRetry,
+    mkResumeRetry,
     defaultResumeRetry,
     runResumeLoop,
     runResumeLoopWith,
@@ -37,6 +42,7 @@ import Data.Generics.Labels ()
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, diffUTCTime, getCurrentTime)
+import GHC.TypeLits (Symbol)
 import Keiro.Workflow.Gc (runWorkflowGcWorkerWith)
 import Keiro.Workflow.Resume (ResumeSummary (..), WorkflowRegistry, resumeWorkflowsOnceUpTo, runWorkflowResumeWorkerWith)
 import Shikigami.App (AppEffects, runAppIO)
@@ -58,36 +64,49 @@ workflowRegistry env =
 -- milliseconds instead of minutes.
 data ResumeRetry = ResumeRetry
   { -- | Wait before the first retry.
-    initialBackoffMicros :: !Int,
+    initialBackoffMicros :: !(BackoffMicros "initial"),
     -- | Ceiling the doubling backoff stops at.
-    maxBackoffMicros :: !Int,
+    maxBackoffMicros :: !(BackoffMicros "maximum"),
     -- | How many consecutive short-lived runs before the process exits.
-    failureCeiling :: !Int,
+    failureCeiling :: !FailureCeiling,
     -- | How long a run must last to count as healthy and reset the tally.
     --
     -- Without this the tally only ever climbs, so a process with one blip an
     -- hour would exit after 'failureCeiling' hours of working correctly. What
     -- distinguishes a broken worker from an unlucky one is not how many times it
     -- restarted but whether it stays up in between.
-    healthyRunSeconds :: !NominalDiffTime
+    healthyRunSeconds :: !HealthyRunWindow
   }
 
--- | One second, doubling to thirty; five consecutive short runs is fatal; a run
--- lasting a minute counts as healthy.
---
--- The backoff is deliberately not raised to cover the resume lease TTL
--- ('Shikigami.Workflow.Versioning.shikigamiWorkflowResumeOptions' sizes it above
--- the behavior timeout). A fresh runner does not contend with leases the
--- previous one held: keiro's discovery skips instances whose lease has not
--- expired, so an early retry finds less work rather than the same work twice.
+type role BackoffMicros nominal
+
+newtype BackoffMicros (scope :: Symbol) = BackoffMicros Int
+
+newtype FailureCeiling = FailureCeiling Int
+
+newtype HealthyRunWindow = HealthyRunWindow NominalDiffTime
+
+-- | Zero delay or a zero healthy window are explicit immediate policies.
+-- Negative values, a nonpositive failure ceiling and an initial delay above
+-- the cap are refused before the loop can run or request a sleep.
+mkResumeRetry :: Int -> Int -> Int -> NominalDiffTime -> Either Text ResumeRetry
+mkResumeRetry initial maximumDelay ceilingCount healthyAfter
+  | initial < 0 || maximumDelay < initial || ceilingCount < 1 || healthyAfter < 0 =
+      Left "invalid resume restart policy"
+  | otherwise =
+      Right
+        ResumeRetry
+          { initialBackoffMicros = BackoffMicros initial,
+            maxBackoffMicros = BackoffMicros maximumDelay,
+            failureCeiling = FailureCeiling ceilingCount,
+            healthyRunSeconds = HealthyRunWindow healthyAfter
+          }
+
+-- | One second, doubling to thirty; five consecutive short runs is fatal;
+-- a run lasting a minute resets the tally. Retained workflow leases remain
+-- independent: discovery skips leases that have not expired.
 defaultResumeRetry :: ResumeRetry
-defaultResumeRetry =
-  ResumeRetry
-    { initialBackoffMicros = 1_000_000,
-      maxBackoffMicros = 30_000_000,
-      failureCeiling = 5,
-      healthyRunSeconds = 60
-    }
+defaultResumeRetry = either (error . Text.unpack) id (mkResumeRetry 1_000_000 30_000_000 5 60)
 
 -- | Run the resume loop until the process stops.
 --
@@ -145,21 +164,21 @@ runResumeLoop = runResumeLoopWith threadDelay
 -- may oversleep by any amount on a loaded machine — which is precisely the wrong
 -- half for proving a /cap/ holds.
 runResumeLoopWith :: (Int -> IO ()) -> ResumeRetry -> Log.Logger -> IO Text -> IO ()
-runResumeLoopWith sleep retry logger runOnce = do
+runResumeLoopWith sleep ResumeRetry {initialBackoffMicros = BackoffMicros initial, maxBackoffMicros = BackoffMicros maximumDelay, failureCeiling = FailureCeiling ceilingCount, healthyRunSeconds = HealthyRunWindow healthyAfter} logger runOnce = do
   Log.logInfo logger "worker.resume.started" []
-  go 0 ((.initialBackoffMicros) retry)
+  go 0 initial
   where
     go consecutiveFailures backoffMicros = do
       startedAt <- getCurrentTime
       reason <- runOnce
       endedAt <- getCurrentTime
       let lasted = diffUTCTime endedAt startedAt
-          healthy = lasted >= (.healthyRunSeconds) retry
+          healthy = lasted >= healthyAfter
           failures = if healthy then 1 else consecutiveFailures + 1
           nextBackoff =
             if healthy
-              then (.initialBackoffMicros) retry
-              else min ((.maxBackoffMicros) retry) (backoffMicros * 2)
+              then initial
+              else fromInteger (min (toInteger maximumDelay) (toInteger backoffMicros * 2))
       Log.logError
         logger
         "worker.resume.failed"
@@ -167,15 +186,15 @@ runResumeLoopWith sleep retry logger runOnce = do
           "ran_for_seconds" .= (realToFrac lasted :: Double),
           "consecutive_failures" .= failures
         ]
-      if failures >= (.failureCeiling) retry
+      if failures >= ceilingCount
         then do
           Log.logError
             logger
             "worker.resume.exhausted"
-            ["consecutive_failures" .= failures, "ceiling" .= (.failureCeiling) retry]
+            ["consecutive_failures" .= failures, "ceiling" .= ceilingCount]
           throwIO (LoopExited ResumeLoop)
         else do
-          sleep (if healthy then (.initialBackoffMicros) retry else backoffMicros)
+          sleep (if healthy then initial else backoffMicros)
           go failures nextBackoff
 
 -- | Worker-owned operational action preserving the complete Kioku resource

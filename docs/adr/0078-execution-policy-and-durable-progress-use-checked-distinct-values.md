@@ -63,6 +63,22 @@ StreamInfo.version rather than querying framework-owned tables.
 This decision covers these policy/progress values. The complete scalar/identity
 census and final packaged/runtime qualification remain separate acceptance gates.
 
+## Resume restart policy
+
+ExecPlan 108 extends checked operational values to the process-local resume
+restart policy. A private `ResumeRetry` is admitted once by `mkResumeRetry`;
+initial and maximum backoff carry distinct nominal microsecond scopes, while the
+failure ceiling and healthy-run window have separate private types. Initial and
+maximum delays are nonnegative with initial at most maximum, the failure ceiling
+is positive, and the healthy window is nonnegative. Zero delay or window retains
+its explicit immediate meaning. These values have no JSON or Generic bypass.
+
+Double the backoff in Integer, apply the already admitted Int cap, then convert
+back. Applying `min` after overflowing an Int cannot enforce a cap. The real loop
+test records the requested sleeps at the maximum Int boundary and preserves the
+existing failure ceiling and healthy-run reset behavior. This runtime retry policy
+does not change workflow steps, journals, leases or durable identity recipes.
+
 ## References
 
 [ADR-53](0053-execution-lifecycle-and-protected-replay-share-an-atomic-boundary.md),

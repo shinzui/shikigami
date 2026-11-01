@@ -667,3 +667,10 @@ workspace build and fresh census pass there (325 modules, 937 declarations,
 is classified. Normal coverage passes with 552 findings; resolved-only acceptance
 correctly fails. The 124-source/93-item upgrade inventory and its 14 mutation
 tests, 13 style tests and 24 classification tests pass. M2/M3 remain open.
+
+
+M2 resume policy source candidate (2026-11-01): private checked policy and distinct
+scalar roles close the constructor/bounds gap; capped Integer doubling removes
+Int overflow. Seven actual loop tests and four public compiler controls pass,
+with explicit zero policies preserved. Source snapshot: `resume-policy-source.json`.
+Full build/census reconciliation remains pending before resolving its five findings.

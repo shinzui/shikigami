@@ -16,10 +16,11 @@ import Control.Concurrent (threadDelay)
 import Control.Concurrent.MVar (MVar, modifyMVar, newMVar, readMVar)
 import Control.Exception (Exception, throwIO, try)
 import Control.Monad (forever, void)
-import Data.IORef (atomicModifyIORef', newIORef, readIORef)
+import Data.IORef (atomicModifyIORef', modifyIORef', newIORef, readIORef)
 import Data.List (isInfixOf)
+import Data.Time (NominalDiffTime)
 import Keiro.Workflow.Resume (ResumeSummary (..), emptyResumeSummary)
-import Shikigami.Agent.Workflow.Resume (ResumeRetry (..), drainResumePasses, runResumeLoopWith)
+import Shikigami.Agent.Workflow.Resume (ResumeRetry, drainResumePasses, mkResumeRetry, runResumeLoopWith)
 import Shikigami.Health.Supervision (LoopExited (LoopExited), superviseLoops)
 import Shikigami.Health.Worker (LoopName (OutboxLoop, ResumeLoop, TimerLoop))
 import Shikigami.Log qualified as Log
@@ -161,6 +162,26 @@ resumeRetryTests =
     "resume restart policy"
     [ -- The behavior the old code lacked entirely: it returned on the first
       -- failure and never ran again.
+      testCase "invalid policies refuse before loop admission" do
+        mapM_
+          ( \(initial, maximumDelay, ceilingCount, healthyAfter) ->
+              assertBool "invalid restart policy admitted" (case mkResumeRetry initial maximumDelay ceilingCount healthyAfter of Left _ -> True; Right _ -> False)
+          )
+          [(-1, 4, 2, 60), (1, -1, 2, 60), (5, 4, 2, 60), (1, 4, 0, 60), (1, 4, -1, 60), (1, 4, 2, -1)],
+      testCase "immediate delay and healthy window remain admitted" do
+        attempts <- newIORef (0 :: Int)
+        requested <- newIORef []
+        outcome <- try @LoopExited $ runResumeLoopWith (\micros -> modifyIORef' requested (micros :)) (retryPolicy 0 0 1 0) Log.silentLogger (modifyIORef' attempts (+ 1) >> pure "returned")
+        case outcome of Left (LoopExited name) -> name @?= ResumeLoop; Right () -> assertFailure "ceiling did not stop the loop"
+        readIORef attempts >>= (@?= 1)
+        readIORef requested >>= (@?= []),
+      testCase "doubling cannot overflow before the cap is applied" do
+        requested <- newIORef []
+        let cap = maxBound :: Int
+            initial = cap `quot` 2 + 1
+        outcome <- try @LoopExited $ runResumeLoopWith (\micros -> modifyIORef' requested (micros :)) (retryPolicy initial cap 4 3600) Log.silentLogger (pure "returned")
+        case outcome of Left (LoopExited name) -> name @?= ResumeLoop; Right () -> assertFailure "ceiling did not stop the loop"
+        (reverse <$> readIORef requested) >>= (@?= [initial, cap, cap]),
       testCase "a returning runner is retried rather than abandoned" do
         attempts <- newIORef (0 :: Int)
         outcome <-
@@ -193,7 +214,7 @@ resumeRetryTests =
             try @LoopExited $
               runResumeLoopWith
                 (\_ -> pure ())
-                (fastRetry 2) {healthyRunSeconds = 0}
+                (retryPolicy 1_000 4_000 2 0)
                 Log.silentLogger
                 do
                   count <- atomicModifyIORef' attempts (\n -> (n + 1, n + 1))
@@ -210,7 +231,7 @@ resumeRetryTests =
       -- load -- and a cap needs the upper half.
       testCase "the wait doubles between attempts and then stops at the cap" do
         requested <- newIORef []
-        let retry = (fastRetry 6) {initialBackoffMicros = 1_000, maxBackoffMicros = 4_000}
+        let retry = fastRetry 6
         _ <-
           try @LoopExited $
             runResumeLoopWith
@@ -228,13 +249,11 @@ resumeRetryTests =
 
 -- | A policy with the same shape as production and delays a test can wait out.
 fastRetry :: Int -> ResumeRetry
-fastRetry ceilingCount =
-  ResumeRetry
-    { initialBackoffMicros = 1_000,
-      maxBackoffMicros = 4_000,
-      failureCeiling = ceilingCount,
-      healthyRunSeconds = 3600
-    }
+fastRetry ceilingCount = retryPolicy 1_000 4_000 ceilingCount 3600
+
+retryPolicy :: Int -> Int -> Int -> NominalDiffTime -> ResumeRetry
+retryPolicy initial maximumDelay ceilingCount healthyAfter =
+  either (error . show) id (mkResumeRetry initial maximumDelay ceilingCount healthyAfter)
 
 bump :: MVar Int -> IO ()
 bump cell = modifyMVar cell (\n -> pure (n + 1, ()))

@@ -1,0 +1,12 @@
+{
+  "sourceParent": "769ce3b",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "files": {
+    "Justfile": "e9c4eba488ca08b86c715739e3b7797df5f4f301660e5e2eb484ef2570e1c0f6",
+    "docs/adr/0078-execution-policy-and-durable-progress-use-checked-distinct-values.md": "5f615d32af224f730c2232e7ef73d72fd6b323b4f1225f8539d826e2835557a0",
+    "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs": "4e8b3fb20533f46ec48e0d0160bc00271efe83cec10e971b8eaf266d5c01f614",
+    "shikigami-workers/test/Shikigami/Health/SupervisionSpec.hs": "2b1f238b80c027cbb19dfc0d0bafe3e264bfc258966eb58c02fb6c27c16ccff6",
+    "tests/types/resume-policy.py": "129690e751f41894bcb10ef527ff10946518c2441ebed52efb34de64efb62ceb"
+  }
+}
