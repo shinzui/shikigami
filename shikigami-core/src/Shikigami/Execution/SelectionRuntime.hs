@@ -37,7 +37,7 @@ import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Attestation.CallFacts (CallComplianceFacts (..), factsFromTerminal)
 import Shikigami.Attestation.Evidence (CallRelationship (RootCall), configureEvidenceCall)
 import Shikigami.Attestation.Profile qualified as Profile
-import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile (..))
+import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, ResolvedProfileView (..), resolvedProfileView)
 import Shikigami.Behavior.Compatibility (validateResponseRequest)
 import Shikigami.Behavior.Provider (withModelBinding)
 import Shikigami.Behavior.Provider.Call (providerCallFor, validateProfileCall)
@@ -141,7 +141,7 @@ buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = c
       pure (binding, selectedEnv, limits)
     minimumStrength options =
       max
-        (maybe Evidence.EvidenceRequestedOnly (\p -> p.profile.minimumEvidenceStrength) env.profile)
+        (maybe Evidence.EvidenceRequestedOnly (\p -> (resolvedProfileView p).profile.minimumEvidenceStrength) env.profile)
         ( case Options.evidence options of
             Just request -> case request.strictness of
               Evidence.EvidenceRequired strength -> strength
@@ -361,7 +361,7 @@ currentExecutionAuthority identity profile resolve = do
       Nothing -> pure (Right ())
       Just pinned -> do
         now <- getCurrentTime
-        current <- resolve pinned.ref.profileId (Just pinned.ref.version)
+        current <- resolve (resolvedProfileView pinned).ref.profileId (Just (resolvedProfileView pinned).ref.version)
         pure case current of
-          Right actual | actual.ref == pinned.ref && pinned.profile.lifecycle == Profile.Active && now >= pinned.profile.validFrom && not (maybe False (now >=) pinned.profile.validUntil) -> Right ()
+          Right actual | (resolvedProfileView actual).ref == (resolvedProfileView pinned).ref && (resolvedProfileView pinned).profile.lifecycle == Profile.Active && now >= (resolvedProfileView pinned).profile.validFrom && not (maybe False (now >=) (resolvedProfileView pinned).profile.validUntil) -> Right ()
           _ -> Left "ExecutionProfileAuthorityRefused"

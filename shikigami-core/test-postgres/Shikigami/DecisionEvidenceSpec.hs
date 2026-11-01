@@ -26,11 +26,10 @@ import Hasql.Transaction.Sessions qualified as Sessions
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Attestation.Compliance (ComplianceRollUp (..), evaluateCallFacts)
-import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Evidence (CallRelationship (RootCall), ExpectedCall (..))
 import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile qualified as P
-import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileFor, resolvedProfileView)
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Decision.Contract
 import Shikigami.Decision.Contract qualified as Model
@@ -83,7 +82,7 @@ epoch :: UTCTime
 epoch = UTCTime (fromGregorian 2026 1 1) 0
 
 profile :: P.ProfileLimits -> ResolvedProfile
-profile limits = ResolvedProfile content (P.SanctionedExecutionProfileRef (P.ProfileId "test") (P.ProfileVersion "1") (profileDigest content))
+profile limits = resolvedProfileFor content
   where
     content =
       P.SanctionedExecutionProfile
@@ -230,7 +229,7 @@ tests fixture =
       testCase "run-wide call ceilings survive store reconstruction" $
         withShikigamiFreshDatabase fixture \connection -> do
           let policy = profile ((P.unlimitedProfileLimits & #maxCalls .~ (Just (either (error . show) id (PV.mkCeiling 1)))))
-              pinned = (prepared & #policy .~ (Just policy.ref)) :: PreparedDecision
+              pinned = (prepared & #policy .~ (Just (resolvedProfileView policy).ref)) :: PreparedDecision
               pinnedContext = DecisionCallContext pinned model
           withPool connection \pool -> do
             _ <- expectRight =<< (decisionCallHooks (postgresDecisionEvidenceStore pool) (Just policy)).beginCall pinnedContext
@@ -241,7 +240,7 @@ tests fixture =
       testCase "concurrent admissions serialize against the same run ceiling" $
         withShikigamiFreshDatabase fixture \connection -> withPool connection \pool -> do
           let policy = profile ((P.unlimitedProfileLimits & #maxCalls .~ (Just (either (error . show) id (PV.mkCeiling 1)))))
-              pinned = (prepared & #policy .~ (Just policy.ref)) :: PreparedDecision
+              pinned = (prepared & #policy .~ (Just (resolvedProfileView policy).ref)) :: PreparedDecision
               hooks = decisionCallHooks (postgresDecisionEvidenceStore pool) (Just policy)
           a <- newEmptyMVar
           b <- newEmptyMVar
@@ -254,7 +253,7 @@ tests fixture =
       testCase "unknown cost cannot become zero after a restart and live/resumed assessments agree" $
         withShikigamiFreshDatabase fixture \connection -> do
           let policy = profile ((P.unlimitedProfileLimits & #maxCostMicroUsd .~ (Just (either (error . show) id (PV.mkCeiling 1000)))))
-              pinned = (prepared & #policy .~ (Just policy.ref)) :: PreparedDecision
+              pinned = (prepared & #policy .~ (Just (resolvedProfileView policy).ref)) :: PreparedDecision
               pinnedContext = DecisionCallContext pinned model
           withPool connection \pool -> do
             let hooks = decisionCallHooks (postgresDecisionEvidenceStore pool) (Just policy)
@@ -266,7 +265,7 @@ tests fixture =
             report <- expectReport =<< readDecisionReport store prepared.runId
             let facts = [fact | call <- report.calls, Just fact <- [call.facts]]
                 expected = [ExpectedCall (callCorrelationId prepared.runId (decisionCallIdText call.callId) 0) RootCall (decisionCallOrdinalNumber call.ordinal) | call <- report.calls]
-            report.assessment @?= Just (evaluateCallFacts policy.profile expected facts)
+            report.assessment @?= Just (evaluateCallFacts (resolvedProfileView policy).profile expected facts)
             assertBool "uncertain cost blocks a clean assessment" (maybe False (not . (\assessment -> assessment.sanctioned)) report.assessment)
             hooks.beginCall pinnedContext >>= (assertBool "uncertainty is not reset" . isLeft)
     ]
@@ -315,7 +314,7 @@ metadataCases =
 
 metadataRefusal :: DatabaseFixture -> Maybe ResolvedProfile -> Text -> IO ()
 metadataRefusal fixture pinned mutation = withShikigamiFreshDatabase fixture \connection -> withPool connection \pool -> do
-  let original = prepared & #policy .~ ((\value -> value.ref) <$> pinned)
+  let original = prepared & #policy .~ ((\value -> (resolvedProfileView value).ref) <$> pinned)
       later = original & #identity .~ decisionPreparationId (String "second-invocation") & #label .~ investigationDecisionSlot
       replacement = original & #identity .~ decisionPreparationId (String "replacement-invocation")
       store = postgresDecisionEvidenceStore pool

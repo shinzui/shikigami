@@ -22,7 +22,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Attestation.CallFacts (CallComplianceFacts)
 import Shikigami.Attestation.PolicyValue
 import Shikigami.Attestation.Profile qualified as Profile
-import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileView)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, assignmentKeyText)
 import Shikigami.Execution.Counter
 import Shikigami.Execution.Identity
@@ -44,7 +44,7 @@ data CallLimits = CallLimits
 
 callLimitsFor :: ExecutionSelection -> Maybe ResolvedProfile -> Either ResourceError CallLimits
 callLimitsFor selection profile = do
-  let wire = (\p -> p.profile.limits) <$> profile
+  let wire = (\p -> (resolvedProfileView p).profile.limits) <$> profile
       refine parser = traverse (either (Left . InvalidResourceRequest) Right . parser . toInteger . ceilingValue)
   calls <- refine parseAttemptLimit (wire >>= (.maxCalls))
   retries <- refine parseAttemptLimit (wire >>= (.maxRetries))
@@ -52,7 +52,7 @@ callLimitsFor selection profile = do
   tokens <- refine parseResourceAmount (wire >>= (.maxTokens))
   let duration = ceilingValue <$> (wire >>= (.maxDurationSeconds))
   when (maybe False (< 0) duration) (Left (InvalidResourceRequest "invalid assignment duration"))
-  let cutoff = case maybe [] pure ((\seconds -> addUTCTime (fromIntegral seconds) selection.admittedAt) <$> duration) <> maybe [] pure (profile >>= (\p -> p.profile.validUntil)) of [] -> Nothing; deadlines -> Just (minimum deadlines)
+  let cutoff = case maybe [] pure ((\seconds -> addUTCTime (fromIntegral seconds) selection.admittedAt) <$> duration) <> maybe [] pure (profile >>= (\p -> (resolvedProfileView p).profile.validUntil)) of [] -> Nothing; deadlines -> Just (minimum deadlines)
   pure (CallLimits calls retries concurrency cutoff tokens)
 
 callLimitsWithin :: CallLimits -> CallLimits -> Bool

@@ -117,6 +117,15 @@ resolved; the old primitive schema member is removed by the closed vocabulary,
 not exempted. The resolver ownership gap is now an explicit violation and
 remains open for the next owner batch.
 
+The profile snapshot source candidate passes 91 unit, 139 PostgreSQL and
+106 compiler controls. Construction/complete decoding now bind content, reference
+and commitment, and lookup checks every candidate against its requested identity.
+The five journaled policy-refusal alternatives are unchanged; typed metadata
+refusal remains at the read boundary. Normal SQL identity constraints are also
+proved before fixture-only guard-loss corruption. See
+`docs/evidence/plan-108/profile-snapshot-source.json`. Native gate qualification
+against `4af3303` and coherent census reconciliation follow this checkpoint.
+
 The native workflow gate passes on `400cdc0` against `af76f1b`, with no findings
 and a replay-neutral native verdict. Exact reports accompany the current evidence.
 The full build, fresh census and focused checks are checkpoints, not milestone
@@ -180,6 +189,14 @@ custom store candidate matches the requested coordinates. The new checked digest
 syntax cannot establish these bindings. Keep this ownership finding explicit
 until construction and the real read seam reject the mismatches, with positive,
 corruption and exact-repair controls.
+
+2026-10-31: Migration 0004 already rejects ordinary SQL writes whose profile
+content disagrees with its id/version/issuer/lifecycle columns. Three initial
+corruption injections hit that guard before reaching the reader. The accepted
+fixtures now prove the guard first, then remove it only in their disposable
+database to qualify owner refusal under injected constraint loss. Direct
+snapshot decoding and custom lookup callbacks also require their own binding
+checks because they do not inherit the SQL constraint.
 
 ## Decision Log
 

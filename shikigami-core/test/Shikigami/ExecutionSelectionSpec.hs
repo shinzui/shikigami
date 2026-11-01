@@ -20,10 +20,9 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (loadAgent)
-import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile qualified as Profile
-import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile), ResolvedProfile (..))
+import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile), ResolvedProfile, ResolvedProfileView (..), resolvedProfileFor, resolvedProfileView)
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Decision.Contract (ModelAlias, ModelDescriptor (..), versionedDigest)
@@ -189,8 +188,8 @@ tests =
         let pinned = profileFor "stub-coordinator" Profile.unlimitedProfileLimits
             identity = pure (Right ())
             exact profileId version = do
-              profileId @?= pinned.ref.profileId
-              version @?= Just pinned.ref.version
+              profileId @?= (resolvedProfileView pinned).ref.profileId
+              version @?= Just (resolvedProfileView pinned).ref.version
               pure (Right pinned)
         currentExecutionAuthority identity (Just pinned) exact >>= (@?= Right ())
         currentExecutionAuthority identity (Just pinned) (\profileId version -> pure (Left (UnknownProfile profileId version))) >>= (@?= Left "ExecutionProfileAuthorityRefused")
@@ -235,7 +234,7 @@ profileFor exact limits =
             requiredCorrelationFields = [],
             signerRequirements = Profile.noSignerRequirements
           }
-   in ResolvedProfile content (Profile.SanctionedExecutionProfileRef content.profileId content.version (profileDigest content))
+   in resolvedProfileFor content
 
 fixturePolicy :: (PolicyNumber a) => Integer -> a
 fixturePolicy number = either (error . show) id (parsePolicyNumber number)

@@ -24,7 +24,7 @@ import Data.Text qualified as Text
 import Shikigami.Attestation.PolicyValue
 import Shikigami.Attestation.Profile (SanctionedExecutionProfileRef)
 import Shikigami.Attestation.Profile qualified as Profile
-import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileView)
 import Shikigami.Behavior.Provider.Call (providerCallFor, validateProfileCall)
 import Shikigami.Decision.Contract (ModelAlias, ModelDescriptor (..), modelAliasFromNonEmpty, modelAliasText)
 import Shikigami.Decision.ModelCatalog
@@ -119,14 +119,14 @@ resolveExecutionSelection assignmentId catalog fallback declaration requested in
     Left _ -> Left ExecutionProfileConflict
     Right () -> Right ()
   unless (publicExecutionOptions (bindingOptions binding)) (Left ExecutionOptionsIncompatible)
-  when (isJust (profile >>= (\p -> p.profile.limits.maxCostMicroUsd))) (Left ExecutionResourceBoundUnsupported)
+  when (isJust (profile >>= (\p -> (resolvedProfileView p).profile.limits.maxCostMicroUsd))) (Left ExecutionResourceBoundUnsupported)
   pure
     ExecutionSelection
       { assignmentId,
         descriptor,
         effectiveOptions = toJSON (effectiveBindingOptions profile binding),
         permittedAliases = nub narrowed,
-        profile = (.ref) <$> profile,
+        profile = ((.ref) . resolvedProfileView) <$> profile,
         rootId,
         source,
         admittedAt
@@ -134,7 +134,7 @@ resolveExecutionSelection assignmentId catalog fallback declaration requested in
 
 selectionBinding :: ModelCatalog -> ModelBinding -> Maybe ResolvedProfile -> ExecutionSelection -> Either ExecutionSelectionFailure ModelBinding
 selectionBinding catalog fallback profile selection = do
-  unless (selection.profile == ((.ref) <$> profile)) (Left ExecutionProfileConflict)
+  unless (selection.profile == (((.ref) . resolvedProfileView) <$> profile)) (Left ExecutionProfileConflict)
   binding <- case selection.source of
     ProcessDefault | modelDescriptor fallback == selection.descriptor -> Right fallback
     ProcessDefault -> Left PinnedBindingUnavailable
@@ -155,7 +155,7 @@ validPermission permission = permission.defaultAlias `elem` permission.permitted
 effectiveBindingOptions :: Maybe ResolvedProfile -> ModelBinding -> Options
 effectiveBindingOptions profile binding =
   let base = bindingOptions binding
-      caps = catMaybes [Options.maxTokens base, fromIntegral . ceilingValue <$> (profile >>= (\p -> p.profile.limits.maxTokens))]
+      caps = catMaybes [Options.maxTokens base, fromIntegral . ceilingValue <$> (profile >>= (\p -> (resolvedProfileView p).profile.limits.maxTokens))]
    in (base & #maxTokens .~ (case caps of [] -> Nothing; xs -> Just (minimum xs)))
 
 -- These settings are explicitly secret in the operator configuration. A

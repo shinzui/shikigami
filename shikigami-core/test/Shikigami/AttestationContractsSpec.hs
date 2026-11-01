@@ -14,7 +14,7 @@
 module Shikigami.AttestationContractsSpec (tests) where
 
 import Control.Lens ((&), (.~))
-import Data.Aeson (FromJSON, Result (..), ToJSON, Value (..), encode, fromJSON, toJSON)
+import Data.Aeson (FromJSON, Result (..), ToJSON, Value (..), encode, fromJSON, object, toJSON, (.=))
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Lazy (ByteString)
@@ -77,6 +77,7 @@ import Shikigami.Attestation.Profile
     profileDigestText,
     unlimitedProfileLimits,
   )
+import Shikigami.Attestation.Resolve qualified as Snapshot
 import Shikigami.Attestation.Reviewed
   ( DiffDigest (..),
     NonConformingReason (..),
@@ -114,7 +115,36 @@ profileTests :: TestTree
 profileTests =
   testGroup
     "sanctioned execution profile"
-    [ testCase "a complete profile reference admits only canonical SHA-256 commitments" do
+    [ testCase "a checked profile snapshot retains the complete historical JSON shape" do
+        let snapshot = Snapshot.resolvedProfileFor fullProfile
+            view = Snapshot.resolvedProfileView snapshot
+            historical = object ["profile" .= fullProfile, "ref" .= view.ref]
+        Snapshot.parseResolvedProfile fullProfile view.ref @?= Right snapshot
+        encode snapshot @?= encode historical
+        fromJSON historical @?= Success snapshot,
+      testCase "snapshot construction and complete decoding refuse a substituted reference" do
+        let snapshot = Snapshot.resolvedProfileFor fullProfile
+            view = Snapshot.resolvedProfileView snapshot
+            other = view.ref & #profileId .~ ProfileId "unrelated-profile"
+            copied = view & #ref .~ other
+        Snapshot.parseResolvedProfile fullProfile other @?= Left "resolved profile coordinates differ from its reference"
+        -- A copied view is an explicit untrusted transfer record. It cannot be
+        -- promoted back to a snapshot without checking the binding again.
+        fromJSON (toJSON copied) @?= Success copied
+        assertBool "copied view does not become authority" (case fromJSON (toJSON copied) :: Result Snapshot.ResolvedProfile of Error _ -> True; Success _ -> False)
+        let mutate key raw = case toJSON snapshot of
+              Object fields -> case KeyMap.lookup "ref" fields of
+                Just (Object reference) -> Object (KeyMap.insert "ref" (Object (KeyMap.insert key (String raw) reference)) fields)
+                _ -> error "snapshot lacked its complete reference"
+              _ -> error "snapshot was not an object"
+        mapM_
+          (\(key, raw) -> assertBool "substituted complete snapshot refused" (case fromJSON (mutate key raw) :: Result Snapshot.ResolvedProfile of Error _ -> True; Success _ -> False))
+          [("profileId", "unrelated-profile"), ("version", "other-version"), ("digest", "sha256:" <> Text.replicate 64 "0")],
+      testCase "historical snapshot decoding does not reapply current lifecycle admission" do
+        let content = fullProfile & #lifecycle .~ Withdrawn & #validUntil .~ Just fullProfile.validFrom
+            snapshot = Snapshot.resolvedProfileFor content
+        roundTrips "historical withdrawn profile snapshot" snapshot,
+      testCase "a complete profile reference admits only canonical SHA-256 commitments" do
         roundTrips "complete profile reference" sampleProfileRef
         let computed = profileContentDigest fullProfile
         parseProfileDigest (profileDigestText computed) @?= Right computed

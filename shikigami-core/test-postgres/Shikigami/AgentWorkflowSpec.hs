@@ -97,7 +97,7 @@ import Shikigami.Attestation.Profile
     profileDigestText,
     unlimitedProfileLimits,
   )
-import Shikigami.Attestation.Resolve (ProfileResolutionError (..), ResolvedProfile (..), postgresProfileStore, resolveProfile)
+import Shikigami.Attestation.Resolve (ProfileResolutionError (..), ResolvedProfile, parseResolvedProfile, postgresProfileStore, resolveProfile)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv, newBehaviorEnvWithTraceSink)
@@ -3067,10 +3067,7 @@ defaultThinkingProhibitions =
 resolvedWorkflowProfile :: SanctionedExecutionProfile -> ProfileDigest -> ResolvedProfile
 resolvedWorkflowProfile content digest =
   let SanctionedExecutionProfile {profileId, version} = content
-   in ResolvedProfile
-        { profile = content,
-          ref = SanctionedExecutionProfileRef {profileId, version, digest}
-        }
+   in either (error . show) id (parseResolvedProfile content (SanctionedExecutionProfileRef {profileId, version, digest}))
 
 insertWorkflowProfile :: Pool -> SanctionedExecutionProfile -> ProfileDigest -> IO ()
 insertWorkflowProfile pool content claimedDigest = do

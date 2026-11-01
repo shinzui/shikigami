@@ -1,0 +1,28 @@
+{
+  "sourceParent": "4af3303",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "files": {
+    "shikigami-core/src/Shikigami/Agent/Conversation.hs": "7768d383a7d889eb5752c0f195bb4fd8cf835d628df9bfb365c0ec93ed2a27ab",
+    "shikigami-core/src/Shikigami/Agent/Workflow.hs": "17a67b7fd580204ba6a911055bd64ec818df62fd1d4bf54d02f3d37e0110aaea",
+    "shikigami-core/src/Shikigami/Attestation/Resolve.hs": "2edf10f44689eacc4b57e767af9f8c4dcf807d89ab07319c39ca20ab6a0081a9",
+    "shikigami-core/src/Shikigami/Behavior/Provider/Call.hs": "a4f9d7e9c67df6bafd0e13f475b634c4930a9d3ce718ed14da92bb0c626a0de1",
+    "shikigami-core/src/Shikigami/Decision/Evidence.hs": "eb18828e1157e396e1385284b79a358639c0572d486ead10e2f66074ffab8472",
+    "shikigami-core/src/Shikigami/Decision/ModelCatalog.hs": "06b1d88e822214054b86c16f46d5833d2db892515d00ee65ede91f0fb14d0baa",
+    "shikigami-core/src/Shikigami/Execution/Selection.hs": "93ee3e9e2d3f60c58418f3a1f609969ce1d90341d52e56a428a0579abf34eaae",
+    "shikigami-core/src/Shikigami/Execution/SelectionRuntime.hs": "49e284cc70d4cc733a2868c9e2e015fe00372dca2160e2224a0b9e1ec5f505a6",
+    "shikigami-core/src/Shikigami/Execution/SelectionStore.hs": "0299e10cb4e4d31aef1397c1f00d9b2d62f0fe094f34d8dc77c48dd611369bb2",
+    "shikigami-core/src/Shikigami/Execution/Transcript.hs": "0e9cff87fbb5cd26d8ab73d001de4ddc31727baf95151365ff1eff251cdd66f5",
+    "shikigami-core/src/Shikigami/Program/DecisionRunner.hs": "5afe206ed4baaeb1f015ec4c505cc806d76088066fedc078c3c2198a100d1278",
+    "shikigami-core/test-postgres/Shikigami/AgentWorkflowSpec.hs": "2cddd5bc88e98084af50f8ea81987f2e6e5039185cf8bf84a6e9d68f502b4d91",
+    "shikigami-core/test-postgres/Shikigami/DecisionEvidenceSpec.hs": "d92d942ab1691923858610f2b7edf86562e8b495cefd80e5e890fb512d0a4e2c",
+    "shikigami-core/test-postgres/Shikigami/DecisionWorkflowSpec.hs": "08ac4800e6c6012df270d2c2c7bc893cd32e1675eaa20e17501a8aa4d27c279b",
+    "shikigami-core/test-postgres/Shikigami/ProfileResolutionSpec.hs": "5390b315d6f480e49deb5c571f9afb0f651f97d2ee6b01d2529d5f6b2e285a9b",
+    "shikigami-core/test/Shikigami/AttestationContractsSpec.hs": "1100489f0327f0b268498462e743a41807a30b92fa0c158356dd9d496e32f9e8",
+    "shikigami-core/test/Shikigami/BehaviorProviderSpec.hs": "79636f3b2d64e0bb3a65c564b2393b6ee9f262472f700cc3ca9810251d61506d",
+    "shikigami-core/test/Shikigami/DecisionModelCatalogSpec.hs": "a10e08a6bbcdb66bb1d52daf154a3a590133d3e3c17212d79d18835db742adfd",
+    "shikigami-core/test/Shikigami/DecisionRunnerSpec.hs": "b29a86f1fe7d5b386789c37462a4b53da192c8655f84ed9ab292084a0278555c",
+    "shikigami-core/test/Shikigami/ExecutionSelectionSpec.hs": "d47caefee0610c79876fa9fbe5daa7d0864c8fa67e5df7aa6aadc19e19656c62",
+    "tests/types/opaque-values.py": "f442760c6812ec721bb99cc70a43fba871140dfc804137c36bc8230c2ad28777"
+  }
+}

@@ -85,10 +85,9 @@ import Shikigami.App.Config
     openaiApiKeyKey,
   )
 import Shikigami.App.Config.Load (ConfigOptions (..), ConfigRun (..), appConfigRun)
-import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile qualified as Profile
-import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileFor, resolvedProfileView)
 import Shikigami.Behavior.Compatibility
 import Shikigami.Behavior.Error (RunError (..))
 import Shikigami.Behavior.Provider (ProfileViolation (..), ProviderCall (ProviderCall), constrainBehaviorEnv, describeProviderSelection, newBehaviorEnvFor, providerCall, renderProfileViolation)
@@ -237,8 +236,8 @@ profileConstraintTests =
                   allowed = Profile.AllowedCall vendor api endpoint model Profile.ThinkingHigh
                   profileFor permitsCli value =
                     let template = stubProfile (Coordinate.providerCoordinateText model) ((Profile.defaultProhibitions & #cliTransportsAllowed .~ (PV.permissionFromBool permitsCli)))
-                        content = (template.profile & #allowedCalls .~ (NonEmpty.singleton value))
-                     in (template & #profile .~ (content) & #ref .~ ((template.ref & #digest .~ (profileDigest content))))
+                        content = ((resolvedProfileView template).profile & #allowedCalls .~ (NonEmpty.singleton value))
+                     in resolvedProfileFor content
               Coordinate.providerCoordinateText api @?= expectedApi
               Coordinate.providerCoordinateText endpoint @?= expectedEndpoint
               case constrainBehaviorEnv (profileFor True allowed) actual of
@@ -340,11 +339,7 @@ stubProfile allowedModel prohibitions =
             Profile.requiredCorrelationFields = [],
             Profile.signerRequirements = Profile.noSignerRequirements
           }
-      digest = profileDigest content
-   in ResolvedProfile
-        { profile = content,
-          ref = Profile.SanctionedExecutionProfileRef stubProfileId stubProfileVersion digest
-        }
+   in resolvedProfileFor content
 
 defaultThinkingProhibitions :: Profile.Prohibitions
 defaultThinkingProhibitions =
@@ -364,8 +359,8 @@ stubProfileVersion :: Profile.ProfileVersion
 stubProfileVersion = Profile.ProfileVersion "1"
 
 assertProfileViolationNamesDigest :: ResolvedProfile -> ProfileViolation -> IO ()
-assertProfileViolationNamesDigest ResolvedProfile {ref = Profile.SanctionedExecutionProfileRef _ _ claimedDigest} violation = do
-  let digest = Profile.profileDigestText claimedDigest
+assertProfileViolationNamesDigest snapshot violation = do
+  let digest = Profile.profileDigestText (resolvedProfileView snapshot).ref.digest
   let rendered = renderProfileViolation violation
   assertBool
     ("violation should name the attempted tuple: " <> Text.unpack rendered)

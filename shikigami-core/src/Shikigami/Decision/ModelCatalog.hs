@@ -33,7 +33,7 @@ import Data.List (find, nub)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Shikigami.Agent.Decl (AgentDecl (..))
-import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileView)
 import Shikigami.Behavior.Compatibility (validateResponseOptions)
 import Shikigami.Behavior.Provider.Call (ProviderCall (..), providerCallFor, validateProfileCall)
 import Shikigami.Decision.Contract
@@ -145,7 +145,7 @@ resolvePolicy programs slots catalog declaration profile = do
       narrowed = [(slot & #models .~ (filter (`elem` admitted) slot.models)) | slot <- slots]
   if any (null . (\slot -> slot.models)) narrowed
     then Left (decisionFailure ForbiddenModel "decision slot has no authorized available model")
-    else Right (DecisionPolicySnapshot narrowed resolved ((\p -> p.ref) <$> profile))
+    else Right (DecisionPolicySnapshot narrowed resolved ((\p -> (resolvedProfileView p).ref) <$> profile))
 
 pinnedBinding :: ModelCatalog -> ModelDescriptor -> Either DecisionFailure ModelBinding
 pinnedBinding (ModelCatalog active retained) wanted =

@@ -91,6 +91,41 @@ trust. The shared signing contract remains proposed in
 expression or algorithm allow-list is inferred from that proposal.
 
 
+The resolved snapshot is private and non-Generic. `resolvedProfileFor` computes
+its reference from complete content; `parseResolvedProfile` and `FromJSON` check
+id, version and content commitment together. The public `ResolvedProfileView`
+retains the exact old `profile`/`ref` JSON shape and permits inspection or copying,
+but a modified view must pass the same construction check before it becomes a
+snapshot. No Generic, record update or coercion path may bypass that check.
+Decoding a historical snapshot does not reapply expiry, withdrawal or current
+registry authority: those remain the live admission owner's responsibility.
+
+Normal SQL writes already enforce the content's id/version/issuer/lifecycle
+through the migration's `sanctioned_execution_profiles_content_identity` check.
+The snapshot parser and custom lookup seam also need their own checks: they do
+not inherit that database constraint. Corruption fixtures first prove normal
+writes reject foreign identity, then remove only the cloned example database's
+check to qualify reading retained metadata under injected constraint loss.
+The SQL reader checks complete rows against their relational id/version before
+publishing any candidate. It returns the existing `MutableProfile` policy refusal
+for a changed content commitment. Unreadable or incorrectly attributed metadata
+raises the typed `ProfileMetadataRefusal`; native SQL failures keep their
+infrastructure exception seam and missing rows remain absence. The injected
+lookup seam returns an explicit policy refusal or complete checked candidates.
+The resolver checks every candidate against the requested id and optional version
+before selecting one or reporting ambiguity. A valid first candidate cannot hide
+a foreign or malformed second member.
+
+The five journaled `ProfileResolutionError` alternatives remain unchanged.
+Metadata refusal happens at the read boundary rather than adding a new completed
+policy-error result to an existing workflow step. A repaired row can satisfy the
+same pending read. This does not claim automatic recovery after a separately
+committed permanent failure, or authorize rewriting a journal. Snapshot admission
+now rejects previously unchecked coordinate/content mismatches; valid JSON,
+canonical commitments, labels and durable identities stay unchanged. Native
+evolution reports and same-build workflow cases qualify the source adaptations.
+
+
 ## Alternatives rejected
 
 **Journal only the profile reference and re-read content when dispatching.**

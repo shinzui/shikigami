@@ -689,3 +689,66 @@ missing keys; no milestone is complete. The unchanged frozen 124-source/93-item
 upgrade inventory and all 21 mutation controls pass. Earlier 24 domain-tool tests
 remain applicable because neither the checker nor census tools changed. The guide
 stays deferred and its frozen hashes/release identities are preserved.
+
+
+## Checked profile snapshots and exact lookup ownership
+
+`profile-snapshot-source.json` binds this source candidate to parent `4af3303`
+on arm64 macOS/GHC 9.12.4. `ResolvedProfile` is private and non-Generic. Its
+factory computes a reference from complete content; its refining constructor
+and complete JSON decoder check id, version and content commitment together.
+`ResolvedProfileView` is the explicit read/JSON transfer record. Copying or
+modifying a view cannot construct an admitted snapshot without that check.
+The old required `profile`/`ref` object shape is retained byte for byte.
+Historical withdrawn/expired facts decode without reapplying live admission.
+
+SQL lookup checks the retained body's identity against its relational row;
+lookup also checks every returned candidate against the requested name and
+optional revision. `ProfileStore` returns an explicit existing policy refusal
+or complete checked candidates. Malformed/incorrectly attributed metadata
+raises `ProfileMetadataRefusal`, separate from native SQL exceptions and missing
+rows. The five serialized `ProfileResolutionError` alternatives stay unchanged;
+no new policy-failure outcome is introduced into an existing journal step.
+The SQL reader still returns the existing MutableProfile outcome for a changed
+content commitment. Repair permits the same read to recover; this does not claim
+automatic recovery after a separately committed permanent outcome.
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-test -j1 --test-show-details=direct --test-option=-p --test-option='/attestation contracts/||/governed decision runner/||/ExecutionSelection/||/a pinned profile/||/decision model admission/'
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/profile resolution/||/durable decision evidence/||/run evidence/||/durable typed decisions/||/ExecutionSelectionWorkflow/||/profile/'
+nix develop --no-write-lock-file -c python3 tests/types/opaque-values.py
+python3 tools/style/check_haskell.py
+git diff --check
+```
+
+All 91 unit, 139 PostgreSQL and 106 compiler controls pass. Positive complete
+snapshot encoding matches the historical object shape. Changed references,
+including well-formed canonical hashes, fail construction/complete decoding.
+A Generic inspection view remains usable while constructor, coercion and
+Generic promotion bypasses fail after public positive controls.
+
+Four fresh database corruption controls recompute the claimed commitment over
+foreign names, foreign revisions, incomplete bodies and negative ceilings. This
+rules out a hash mismatch as the sole refusal cause. Tests preserve the complete
+corrupt row, restore exactly the original body/hash and recover the original
+snapshot and complete row. A two-version control proves a valid first candidate
+cannot hide a malformed second one, through both direct store lookup and the
+resolver. Injected callback candidates also cannot substitute a different name
+or requested revision. Existing missing, SQL failure, mutable content, expiry,
+withdrawal, ambiguous lookup, decision/workflow/selection/compliance and coupled
+rollback cases remain passing.
+
+Normal SQL writes already reject foreign identity under migration 0004's
+`sanctioned_execution_profiles_content_identity` check. The relevant corruption
+controls first assert that rejection and unchanged original rows, then remove
+only the example database's guard to inject retained corruption. Production
+migrations and constraints are unchanged. This qualifies the reader under that
+injected loss; it does not claim ordinary writes can bypass the existing guard.
+The direct read-only store mutates no domain state; composable decision and
+execution consumers retain their owning transactional refusal checks.
+
+No label, child identity, hash input or valid journal payload changes. Agent
+workflow/conversation imports and the pure refusal-rendering projection change
+to the private snapshot API, so native evolution qualification against
+`4af3303` is still required before this checkpoint is accepted. Coherent full
+build/census reconciliation follows it. All milestones remain open.

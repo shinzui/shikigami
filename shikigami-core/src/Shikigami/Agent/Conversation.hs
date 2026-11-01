@@ -94,7 +94,7 @@ import Shikigami.Agent.Run (renderLearning)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
-import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile (..), renderProfileResolutionError)
+import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, renderProfileResolutionError)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Behavior.Run (BehaviorEnv (..), runBehaviorAttempt, triggerOnly)
 import Shikigami.Behavior.Skill (SkillDir (..))

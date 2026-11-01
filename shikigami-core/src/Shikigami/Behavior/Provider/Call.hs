@@ -23,7 +23,7 @@ import Data.Text qualified as Text
 import GHC.Generics (Generic)
 import Shikigami.Attestation.PolicyValue
 import Shikigami.Attestation.Profile qualified as Profile
-import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileView)
 import Shikigami.Behavior.Provider.Coordinate
 
 -- | The exact model-call tuple a 'BehaviorEnv' would put on the provider seam.
@@ -50,8 +50,9 @@ data ProfileViolation
   deriving anyclass (ToJSON, FromJSON)
 
 validateProfileCall :: ResolvedProfile -> ProviderCall -> Either ProfileViolation ()
-validateProfileCall ResolvedProfile {profile, ref} call =
-  let restrictions = profile.prohibitions
+validateProfileCall snapshot call =
+  let ResolvedProfileView {profile, ref} = resolvedProfileView snapshot
+      restrictions = profile.prohibitions
       permitted = any (matchesCall restrictions call) profile.allowedCalls
    in if call.endpointClass == providerCoordinate "cli" && not (permissionAllowed restrictions.cliTransportsAllowed)
         then Left (CliTransportForbidden call ref)

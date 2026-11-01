@@ -32,6 +32,7 @@ import Shikigami.Agent.Principal qualified as Principal
 import Shikigami.App.Config qualified as Config
 import Shikigami.Attestation.Envelope qualified as Attestation
 import Shikigami.Attestation.Profile qualified as Profile
+import Shikigami.Attestation.Resolve qualified as Snapshot
 import Shikigami.Attestation.PolicyValue qualified as Policy
 import Shikigami.Attestation.Reviewed qualified as Reviewed
 import Shikigami.Capability.Overlay qualified as Overlay
@@ -63,7 +64,15 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''profileDigest :: Text -> Either Text Profile.ProfileDigest
+POSITIVE = '''profileSnapshot :: Profile.SanctionedExecutionProfile -> Snapshot.ResolvedProfile
+profileSnapshot = Snapshot.resolvedProfileFor
+snapshotView :: Snapshot.ResolvedProfile -> Snapshot.ResolvedProfileView
+snapshotView = Snapshot.resolvedProfileView
+checkedSnapshot :: Profile.SanctionedExecutionProfile -> Profile.SanctionedExecutionProfileRef -> Either Text Snapshot.ResolvedProfile
+checkedSnapshot = Snapshot.parseResolvedProfile
+ordinarySnapshotView :: Snapshot.ResolvedProfileView -> ()
+ordinarySnapshotView value = Generic.from value `seq` ()
+profileDigest :: Text -> Either Text Profile.ProfileDigest
 profileDigest = Profile.parseProfileDigest
 attestationDigest :: Text -> Either Text Attestation.PayloadDigest
 attestationDigest = Attestation.parsePayloadDigest
@@ -201,6 +210,7 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('Snapshot.ResolvedProfile', 'generic'),
     ('Profile.ProfileDigest', 'generic'),
     ('Attestation.PayloadDigest', 'generic'),
     ('Attestation.SchemaVersion', 'generic'),
@@ -289,6 +299,7 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         assert result.returncode != 0 and 'RunDisposition' in result.stderr, (source_kind, result.stderr)
         print('opaque boundary: run disposition ' + source_kind + ' substitution refused: passed', flush=True)
     for label, signature, expression in [
+        ('snapshot view coercion', 'Snapshot.ResolvedProfileView -> Snapshot.ResolvedProfile', 'coerce'),
         ('profile digest raw coercion', 'Text -> Profile.ProfileDigest', 'coerce'),
         ('attestation digest raw coercion', 'Text -> Attestation.PayloadDigest', 'coerce'),
         ('attestation version raw coercion', 'Text -> Attestation.SchemaVersion', 'coerce'),
@@ -311,6 +322,7 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         assert result.returncode != 0 and 'Not in scope' not in result.stderr, (label, result.stderr)
         print('opaque boundary: ' + label + ' substitution refused: passed', flush=True)
     for kind, representation in [
+        ('Snapshot.ResolvedProfile', 'Snapshot.ResolvedProfileView'),
         ('Profile.ProfileDigest', 'Text'),
         ('Attestation.PayloadDigest', 'Text'),
         ('Attestation.SchemaVersion', 'Text'),

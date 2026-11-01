@@ -1,9 +1,12 @@
 module Shikigami.ProfileResolutionSpec (tests) where
 
+import Baikai.Evidence (commitmentDigest)
 import Contravariant.Extras (contrazip2)
 import Control.Exception (IOException, displayException, try)
-import Control.Lens (view)
-import Data.Aeson (Value, toJSON)
+import Control.Lens (view, (&), (.~))
+import Data.Aeson (Value (..), toJSON)
+import Data.Aeson.Key (Key)
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.List.NonEmpty qualified as NonEmpty
@@ -31,7 +34,55 @@ tests :: DatabaseFixture -> TestTree
 tests databaseFixture =
   testGroup
     "profile resolution"
-    [ testCase "resolves an active profile to its digest" do
+    [ testGroup
+        "owning metadata corruption"
+        [ testCase name (profileMetadataRefusal databaseFixture lostConstraint mutation)
+        | (name, lostConstraint, mutation) <-
+            [ ("content name cannot substitute for the relational profile", True, replace "profileId" (String "foreign-profile")),
+              ("content version cannot substitute for the relational version", True, replace "version" (String "foreign-version")),
+              ("a committed incomplete profile cannot become absence", False, remove "limits"),
+              ("a committed negative ceiling cannot become an unlimited policy", False, replace "limits" (Object (KeyMap.singleton "maxCalls" (toJSON (-1 :: Int)))))
+            ]
+        ],
+      testCase "a malformed second profile cannot disappear behind a valid candidate" do
+        withPool databaseFixture \pool -> do
+          let firstProfile = sampleProfile Active Nothing (ProfileVersion "1")
+              secondProfile = sampleProfile Active Nothing (ProfileVersion "2")
+              store = postgresProfileStore pool
+              snapshots = [resolvedProfileFor firstProfile, resolvedProfileFor secondProfile]
+              document = preparable "SELECT jsonb_agg(to_jsonb(p) ORDER BY p.version) FROM shikigami.sanctioned_execution_profiles p" mempty (Decoders.singleRow (Decoders.column (Decoders.nonNullable Decoders.jsonb))) :: Statement () Value
+              update = preparable "UPDATE shikigami.sanctioned_execution_profiles SET profile_content=$1,profile_digest=$2 WHERE version='2'" (contrazip2 (Encoders.param (Encoders.nonNullable Encoders.jsonb)) (Encoders.param (Encoders.nonNullable Encoders.text))) Decoders.noResult :: Statement (Value, Text) ()
+              run :: Statement params result -> params -> IO result
+              run statement value = Pool.use pool (Session.statement value statement) >>= either (fail . show) pure
+          insertProfile pool firstProfile (profileDigest firstProfile)
+          insertProfile pool secondProfile (profileDigest secondProfile)
+          store.findProfiles sampleId Nothing >>= (@?= Right snapshots)
+          resolveProfile store testNow sampleId Nothing >>= (@?= Left (AmbiguousProfile sampleId [ProfileVersion "1", ProfileVersion "2"]))
+          before <- run document ()
+          let malformed = toJSON (secondProfile & #profileId .~ ProfileId "foreign-profile")
+          protected <- Pool.use pool (Session.statement (malformed, commitmentDigest malformed) update)
+          case protected of
+            Left refusal -> assertBool "normal database identity guard remains enforced" ("sanctioned_execution_profiles_content_identity" `Text.isInfixOf` Text.pack (show refusal))
+            Right () -> assertFailure "normal database admitted a foreign profile identity"
+          run document () >>= (@?= before)
+          Pool.use pool (Session.script "ALTER TABLE shikigami.sanctioned_execution_profiles DROP CONSTRAINT sanctioned_execution_profiles_content_identity") >>= either (fail . show) pure
+          run update (malformed, commitmentDigest malformed)
+          corrupt <- run document ()
+          try @ProfileMetadataRefusal (store.findProfiles sampleId Nothing) >>= (@?= Left (ProfileMetadataUnreadable sampleId (Just (ProfileVersion "2"))))
+          try @ProfileMetadataRefusal (resolveProfile store testNow sampleId Nothing) >>= (@?= Left (ProfileMetadataUnreadable sampleId (Just (ProfileVersion "2"))))
+          run document () >>= (@?= corrupt)
+          run update (toJSON secondProfile, profileDigestText (profileDigest secondProfile))
+          store.findProfiles sampleId Nothing >>= (@?= Right snapshots)
+          run document () >>= (@?= before),
+      testCase "lookup coordinates are checked even for internally consistent candidates" do
+        let original = sampleProfile Active Nothing (ProfileVersion "1")
+            foreignName = original & #profileId .~ ProfileId "foreign-profile"
+            otherVersion = original & #version .~ ProfileVersion "2"
+            attempt requestedVersion candidates = try @ProfileMetadataRefusal (resolveProfile (ProfileStore (\_ _ -> pure (Right candidates))) testNow sampleId requestedVersion)
+        attempt Nothing [resolvedProfileFor foreignName] >>= (@?= Left (ProfileMetadataUnreadable sampleId Nothing))
+        attempt (Just (ProfileVersion "1")) [resolvedProfileFor otherVersion] >>= (@?= Left (ProfileMetadataUnreadable sampleId (Just (ProfileVersion "1"))))
+        attempt Nothing [resolvedProfileFor original, resolvedProfileFor foreignName] >>= (@?= Left (ProfileMetadataUnreadable sampleId Nothing)),
+      testCase "resolves an active profile to its digest" do
         (withPool databaseFixture) \pool -> do
           let content = sampleProfile Active Nothing (ProfileVersion "1")
               digest = profileDigest content
@@ -86,10 +137,8 @@ tests databaseFixture =
           before <- run document ()
           run setDigest "sha256:short"
           corrupt <- run document ()
-          refused <- try @IOException readProfile
-          case refused of
-            Left err -> assertBool "the owner identifies a malformed commitment" ("profile digest requires" `Text.isInfixOf` Text.pack (displayException err))
-            Right value -> assertFailure ("unproducible digest became a profile result: " <> show value)
+          refused <- try @ProfileMetadataRefusal readProfile
+          refused @?= Left (ProfileMetadataUnreadable sampleId (Just (ProfileVersion "1")))
           run document () >>= (@?= corrupt)
           run setDigest (profileDigestText digest)
           readProfile >>= (@?= Right (resolvedProfile content digest))
@@ -110,15 +159,59 @@ tests databaseFixture =
             store =
               ProfileStore \_ _ ->
                 pure
-                  [ resolvedProfile firstProfile (profileDigest firstProfile),
-                    resolvedProfile secondProfile (profileDigest secondProfile)
-                  ]
+                  ( Right
+                      [ resolvedProfile firstProfile (profileDigest firstProfile),
+                        resolvedProfile secondProfile (profileDigest secondProfile)
+                      ]
+                  )
         resolved <- resolveProfile store testNow sampleId Nothing
         assertEqual
           "both matching versions are named"
           (Left (AmbiguousProfile sampleId [ProfileVersion "1", ProfileVersion "2"]))
           resolved
     ]
+
+replace :: Key -> Value -> Value -> Value
+replace key replacement (Object fields) = Object (KeyMap.insert key replacement fields)
+replace _ _ _ = error "complete profile was not an object"
+
+remove :: Key -> Value -> Value
+remove key (Object fields) = Object (KeyMap.delete key fields)
+remove _ _ = error "complete profile was not an object"
+
+profileMetadataRefusal :: DatabaseFixture -> Bool -> (Value -> Value) -> IO ()
+profileMetadataRefusal fixture lostConstraint mutation = withPool fixture \pool -> do
+  let content = sampleProfile Active Nothing (ProfileVersion "1")
+      digest = profileDigest content
+      snapshot = resolvedProfileFor content
+      readProfile = resolveProfile (postgresProfileStore pool) testNow sampleId Nothing
+      document = preparable "SELECT to_jsonb(p) FROM shikigami.sanctioned_execution_profiles p" mempty (Decoders.singleRow (Decoders.column (Decoders.nonNullable Decoders.jsonb))) :: Statement () Value
+      update = preparable "UPDATE shikigami.sanctioned_execution_profiles SET profile_content=$1,profile_digest=$2" (contrazip2 (Encoders.param (Encoders.nonNullable Encoders.jsonb)) (Encoders.param (Encoders.nonNullable Encoders.text))) Decoders.noResult :: Statement (Value, Text) ()
+      run :: Statement params result -> params -> IO result
+      run statement value = Pool.use pool (Session.statement value statement) >>= either (fail . show) pure
+  insertProfile pool content digest
+  readProfile >>= (@?= Right snapshot)
+  before <- run document ()
+  let malformed = mutation (toJSON content)
+  if lostConstraint
+    then do
+      protected <- Pool.use pool (Session.statement (malformed, commitmentDigest malformed) update)
+      case protected of
+        Left refusal -> assertBool "normal database identity guard remains enforced" ("sanctioned_execution_profiles_content_identity" `Text.isInfixOf` Text.pack (show refusal))
+        Right () -> assertFailure "normal database admitted a foreign profile identity"
+      run document () >>= (@?= before)
+      -- Only this disposable example loses its guard, to simulate unreadable
+      -- retained metadata independently of the normal SQL write constraint.
+      Pool.use pool (Session.script "ALTER TABLE shikigami.sanctioned_execution_profiles DROP CONSTRAINT sanctioned_execution_profiles_content_identity") >>= either (fail . show) pure
+    else pure ()
+  run update (malformed, commitmentDigest malformed)
+  corrupt <- run document ()
+  refused <- try @ProfileMetadataRefusal readProfile
+  refused @?= Left (ProfileMetadataUnreadable sampleId (Just (ProfileVersion "1")))
+  run document () >>= (@?= corrupt)
+  run update (toJSON content, profileDigestText digest)
+  readProfile >>= (@?= Right snapshot)
+  run document () >>= (@?= before)
 
 withPool :: DatabaseFixture -> (Pool -> IO a) -> IO a
 withPool databaseFixture use =
@@ -159,10 +252,7 @@ sampleProfile lifecycle validUntil version =
 resolvedProfile :: SanctionedExecutionProfile -> ProfileDigest -> ResolvedProfile
 resolvedProfile content digest =
   let SanctionedExecutionProfile {profileId, version} = content
-   in ResolvedProfile
-        { profile = content,
-          ref = SanctionedExecutionProfileRef {profileId, version, digest}
-        }
+   in either (error . show) id (parseResolvedProfile content (SanctionedExecutionProfileRef {profileId, version, digest}))
 
 insertProfile :: Pool -> SanctionedExecutionProfile -> ProfileDigest -> IO ()
 insertProfile pool content claimedDigest = do

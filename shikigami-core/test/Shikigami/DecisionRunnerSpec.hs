@@ -33,10 +33,9 @@ import Data.Vector qualified as V
 import GHC.Generics (Generic)
 import Handan.Runtime (Runtime (..))
 import Keiro.Workflow.Types (WorkflowId (..))
-import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile qualified as Profile
-import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileFor, resolvedProfileView)
 import Shikigami.Behavior.Error (TransientBehaviorFailure)
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Decision.Contract
@@ -197,13 +196,13 @@ tests =
             )
         env <- environment twoNodes handler hooks
         let content =
-              forbiddenProfile.profile
+              (resolvedProfileView forbiddenProfile).profile
                 & #allowedCalls
                 .~ (Profile.AllowedCall (Coordinate.providerCoordinate "anthropic") (Coordinate.providerCoordinate "messages") (Coordinate.providerCoordinate "https") (Coordinate.providerCoordinate (Model.modelId (bindingModel bindingB))) Profile.ThinkingHigh :| [])
                 & #limits
                 .~ (Profile.unlimitedProfileLimits & #maxRetries .~ Just (mustRight (PV.mkCeiling (maxBound :: Int))))
-            policy = ResolvedProfile content (Profile.SanctionedExecutionProfileRef content.profileId content.version (profileDigest content))
-            prepared = (preparedFor twoNodes bindingB) {policy = Just policy.ref} :: PreparedDecision
+            policy = resolvedProfileFor content
+            prepared = (preparedFor twoNodes bindingB) {policy = Just (resolvedProfileView policy).ref} :: PreparedDecision
         runDecisionProgram (env & #profile .~ Just policy) prepared (programRef twoNodes) input >>= (@?= Right input)
         observed >>= (\requests -> length requests @?= 3)
         inspect >>= (\calls -> Map.size calls @?= 3),
@@ -222,7 +221,7 @@ tests =
         (handler, observed) <- fixture 0 (\_ model options -> success model options input)
         env <- environment twoNodes handler hooks
         let policy = forbiddenProfile
-            prepared = (preparedFor twoNodes bindingA) {policy = Just policy.ref} :: PreparedDecision
+            prepared = (preparedFor twoNodes bindingA) {policy = Just (resolvedProfileView policy).ref} :: PreparedDecision
         result <- runDecisionProgram ((env & #profile .~ (Just policy))) prepared (programRef twoNodes) input
         assertBool "profile refuses actual selected model" (isLeft result)
         observed >>= (@?= [])
@@ -341,7 +340,7 @@ concurrently left right = do
   pure (x, y)
 
 forbiddenProfile :: ResolvedProfile
-forbiddenProfile = ResolvedProfile content (Profile.SanctionedExecutionProfileRef (Profile.ProfileId "runner") (Profile.ProfileVersion "1") (profileDigest content))
+forbiddenProfile = resolvedProfileFor content
   where
     content =
       Profile.SanctionedExecutionProfile

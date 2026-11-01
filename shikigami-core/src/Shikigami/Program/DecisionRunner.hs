@@ -40,7 +40,7 @@ import Numeric.Natural (Natural)
 import Shikigami.Attestation.Evidence (configureEvidenceCall)
 import Shikigami.Attestation.PolicyValue
 import Shikigami.Attestation.Profile qualified as Profile
-import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileView)
 import Shikigami.Behavior.Compatibility (validateResponseRequest)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
 import Shikigami.Behavior.Provider.Call (providerCallFor, validateProfileCall)
@@ -87,7 +87,7 @@ runDecisionProgram env prepared ref input =
   where
     admission = do
       unlessEither (prepared.program == descriptor ref) ContractMismatch "prepared decision program identity differs"
-      unlessEither (prepared.policy == ((\p -> p.ref) <$> env.profile)) ContractMismatch "prepared decision policy differs"
+      unlessEither (prepared.policy == ((\p -> (resolvedProfileView p).ref) <$> env.profile)) ContractMismatch "prepared decision policy differs"
       registered <- lookupProgram env.programs ref
       binding <- pinnedBinding env.catalog prepared.model
       checked <- validateInput registered input
@@ -104,11 +104,11 @@ runDecisionProgram env prepared ref input =
             effective <- finalOptions env binding model context nodeOptions
             unless (null (evidenceRefusals handler model effective)) (abort ForbiddenModel "provider cannot uphold required decision evidence")
             ordinal <- atomicModifyIORef' count (\n -> (n + 1, n + 1))
-            let localLimit = maybe env.callLimit (min env.callLimit . fromIntegral . ceilingValue) (env.profile >>= (\p -> p.profile.limits.maxCalls))
+            let localLimit = maybe env.callLimit (min env.callLimit . fromIntegral . ceilingValue) (env.profile >>= (\p -> (resolvedProfileView p).profile.limits.maxCalls))
             when (ordinal > localLimit) (abort CallLimitExceeded "decision provider call limit exceeded")
             token <- callback (env.hooks.beginCall (DecisionCallContext prepared prepared.model))
             let correlation = callCorrelationId prepared.runId (decisionCallIdText (attemptId token)) 0
-                minimumStrength = maybe Evidence.EvidenceRequestedOnly (\p -> p.profile.minimumEvidenceStrength) env.profile
+                minimumStrength = maybe Evidence.EvidenceRequestedOnly (\p -> (resolvedProfileView p).profile.minimumEvidenceStrength) env.profile
                 correlated = configureEvidenceCall prepared.runId correlation (decisionCallOrdinalNumber (attemptOrdinal token)) Nothing minimumStrength effective
                 -- These APIs do not accept arbitrary application metadata. The
                 -- durable token/evidence association remains in finishCall.
@@ -126,7 +126,7 @@ runDecisionProgram env prepared ref input =
             when (status == CallSucceeded && not (isJust evidence)) (abort EvidenceFailure "decision provider terminal evidence is missing")
             case evidence of
               Just terminal | status == CallSucceeded -> do
-                let minimumStrength = maybe Evidence.EvidenceRequestedOnly (\p -> p.profile.minimumEvidenceStrength) env.profile
+                let minimumStrength = maybe Evidence.EvidenceRequestedOnly (\p -> (resolvedProfileView p).profile.minimumEvidenceStrength) env.profile
                 unless
                   ( terminal.strength >= minimumStrength
                       && terminal.requestedModel == providerCoordinateText prepared.model.modelId
@@ -163,7 +163,7 @@ runDecisionProgram env prepared ref input =
       privateRegistry <- newProviderRegistryFrom [wrapper]
       let config = env.runtime.runtimeConfig
           retry = config.retryPolicy
-          maxAttempts = maybe retry.maxAttempts (maybe retry.maxAttempts (fromInteger . min (toInteger retry.maxAttempts) . (+ 1) . toInteger . ceilingValue) . (\p -> p.profile.limits.maxRetries)) env.profile
+          maxAttempts = maybe retry.maxAttempts (maybe retry.maxAttempts (fromInteger . min (toInteger retry.maxAttempts) . (+ 1) . toInteger . ceilingValue) . (\p -> (resolvedProfileView p).profile.limits.maxRetries)) env.profile
           invocation =
             env.runtime
               { runtimeDefaultModel = selected,
@@ -208,8 +208,8 @@ finalOptions :: DecisionRuntime -> ModelBinding -> Model.Model -> Context -> Opt
 finalOptions env binding actual context node = do
   let selected = bindingModel binding
       base = bindingOptions binding
-      limits = (\p -> p.profile.limits) <$> env.profile
-      floorStrength = maybe Evidence.EvidenceRequestedOnly (\p -> p.profile.minimumEvidenceStrength) env.profile
+      limits = (\p -> (resolvedProfileView p).profile.limits) <$> env.profile
+      floorStrength = maybe Evidence.EvidenceRequestedOnly (\p -> (resolvedProfileView p).profile.minimumEvidenceStrength) env.profile
       minCap values = case catMaybes values of [] -> Nothing; xs -> Just (minimum xs)
       profileTokens = (>>= (fmap (fromIntegral . ceilingValue) . (\l -> l.maxTokens))) limits
       effective =

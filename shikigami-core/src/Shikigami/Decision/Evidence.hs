@@ -37,11 +37,10 @@ import Keiro.Workflow.Types (WorkflowId (..))
 import Numeric.Natural (Natural)
 import Shikigami.Attestation.CallFacts
 import Shikigami.Attestation.Compliance (ComplianceRollUp, evaluateCallFacts)
-import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Evidence (CallRelationship (RootCall), ExpectedCall (..))
 import Shikigami.Attestation.PolicyValue
 import Shikigami.Attestation.Profile qualified as Profile
-import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileView)
 import Shikigami.Behavior.Provider.Coordinate (providerCoordinateText)
 import Shikigami.Decision.Contract
 import Shikigami.Log.Correlation (CallCorrelationId, RunCorrelationId, callCorrelationId, renderCallCorrelationId, renderRunCorrelationId, runCorrelationId)
@@ -156,7 +155,7 @@ ensureTx profile prepared = do
   case storedProfile of
     Left err -> pure (Left err)
     Right actual
-      | rawProfile /= toJSON profile || actual /= profile || prepared.policy /= ((\p -> p.ref) <$> profile) -> pure (refuse ContractMismatch "decision run profile binding conflicts")
+      | rawProfile /= toJSON profile || actual /= profile || prepared.policy /= ((\p -> (resolvedProfileView p).ref) <$> profile) -> pure (refuse ContractMismatch "decision run profile binding conflicts")
       | otherwise -> do
           Tx.statement (toJSON binding) insertInvocation
           stored <- readInvocationTx prepared.identity
@@ -253,7 +252,7 @@ admit now started profile calls
   | otherwise = case profile of
       Nothing -> Right ()
       Just pinned -> do
-        let limits = pinned.profile.limits
+        let limits = (resolvedProfileView pinned).profile.limits
             facts = [fact | call <- calls, Just fact <- [call.facts]]
             unresolved = any (isNothing . (\call -> call.terminal)) calls
             unknownTokens = unresolved || length facts /= length calls || any (isNothing . (\fact -> fact.tokens)) facts
@@ -310,7 +309,7 @@ reportTx runId = do
                   (map fst verified)
                   calls
                   (all (\call -> isJust call.terminal && isJust call.facts && isJust call.evidence) calls)
-                  ((\p -> evaluateCallFacts p.profile expected facts) <$> profile)
+                  ((\p -> evaluateCallFacts (resolvedProfileView p).profile expected facts) <$> profile)
               )
           )
 
@@ -345,14 +344,7 @@ checkedRead result = case result of
   Right _ -> pure result
 
 decodeProfile :: Value -> Either DecisionFailure (Maybe ResolvedProfile)
-decodeProfile value = do
-  profile <- decode value
-  mapM_ check profile
-  pure profile
-  where
-    check resolved
-      | resolved.ref.profileId == resolved.profile.profileId && resolved.ref.version == resolved.profile.version && resolved.ref.digest == profileDigest resolved.profile = Right ()
-      | otherwise = refuse UnsupportedVersion "inconsistent retained decision profile"
+decodeProfile = decode
 
 checkInvocation :: (Value, Either DecisionFailure InvocationBinding) -> Either DecisionFailure (Value, InvocationBinding)
 checkInvocation (raw, parsed) = (raw,) <$> parsed
@@ -415,7 +407,7 @@ checkCallBindingsTx runId calls = do
 
 validateInvocationPolicies :: Maybe ResolvedProfile -> [(Value, InvocationBinding)] -> Either DecisionFailure ()
 validateInvocationPolicies profile bindings
-  | all (\(_, binding) -> binding.policy == ((\value -> value.ref) <$> profile)) bindings = Right ()
+  | all (\(_, binding) -> binding.policy == ((\value -> (resolvedProfileView value).ref) <$> profile)) bindings = Right ()
   | otherwise = refuse UnsupportedVersion "inconsistent retained decision invocation policy"
 
 decodeCalls :: [RawCall] -> Either DecisionFailure [StoredDecisionCall]

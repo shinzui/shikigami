@@ -21,10 +21,9 @@ import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.App.Config (AppConfig (..), Role (RunBehaviorRole), environmentBindings)
 import Shikigami.App.Config.Load (ConfigOptions (..), ConfigRun (..), appConfigRun)
-import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile qualified as Profile
-import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Attestation.Resolve (ResolvedProfile, resolvedProfileFor)
 import Shikigami.Behavior.Provider.Call (providerCallFor)
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Behavior.StubProvider (stubModel)
@@ -120,7 +119,7 @@ allowedDeclaration = do
   pure ((declaration & #decisionModels .~ (map fixtureModelAlias ["triage", "investigate"])))
 
 profile :: Text -> ResolvedProfile
-profile exact = ResolvedProfile content (Profile.SanctionedExecutionProfileRef (Profile.ProfileId "test") (Profile.ProfileVersion "1") (profileDigest content))
+profile exact = resolvedProfileFor content
   where
     content =
       Profile.SanctionedExecutionProfile

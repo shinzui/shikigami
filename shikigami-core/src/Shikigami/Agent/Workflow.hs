@@ -106,7 +106,7 @@ import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
 import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
-import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile (..), renderProfileResolutionError)
+import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, ResolvedProfileView (..), renderProfileResolutionError, resolvedProfileView)
 import Shikigami.Behavior.Error (RunError, TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Behavior.Provider (ProfileViolation, constrainBehaviorEnv, renderProfileViolation)
 import Shikigami.Behavior.Provider.Coordinate (providerCoordinateText)
@@ -473,7 +473,7 @@ inheritedPermissions decl job =
 selectionRefusalDetail :: AgentRunDeps -> RunJob -> AgentDecl -> Maybe ResolvedProfile -> Maybe Selection.ExecutionSelection -> Selection.ExecutionSelectionFailure -> Text
 selectionRefusalDetail deps job decl profile selected refusal =
   boundedBehaviorDetail
-    (Text.pack (show refusal) <> " model " <> model <> maybe "" (\p -> " profile " <> Text.pack (show p.ref)) profile)
+    (Text.pack (show refusal) <> " model " <> model <> maybe "" (\p -> " profile " <> Text.pack (show (resolvedProfileView p).ref)) profile)
   where
     model = case selected of
       Just pinned -> providerCoordinateText pinned.descriptor.modelId

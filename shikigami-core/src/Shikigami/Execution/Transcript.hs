@@ -31,9 +31,8 @@ import Kioku.Id (SessionId)
 import Shikigami.Agent.Approval (ReviewRequestId)
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
-import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Profile qualified as Profile
-import Shikigami.Attestation.Resolve (ResolvedProfile (..))
+import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileView)
 import Shikigami.Capability.Overlay (ResolvedCapabilitySet)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.AssignmentKey (AssignmentKey)
@@ -259,8 +258,7 @@ instance FromJSON ExecutionSnapshot where
   parseJSON = Aeson.withObject "ExecutionSnapshot" \fields -> do
     let defaults = (if KeyMap.member "workspace" fields then id else KeyMap.insert "workspace" Aeson.Null) (if KeyMap.member "toolBindings" fields then fields else KeyMap.insert "toolBindings" (toJSON ([] :: [ToolBinding])) fields)
     snapshot <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object defaults)
-    unless (snapshot.format == 1 && snapshot.executionId == executionIdFor snapshot.selection.assignmentId && snapshot.selection.profile == ((.ref) <$> snapshot.sanctionedProfile)) (fail "unsupported execution snapshot version or identity")
-    unless (maybe True (\resolved -> resolved.ref.profileId == resolved.profile.profileId && resolved.ref.version == resolved.profile.version && resolved.ref.digest == profileDigest resolved.profile) snapshot.sanctionedProfile) (fail "execution profile content differs from its immutable reference")
+    unless (snapshot.format == 1 && snapshot.executionId == executionIdFor snapshot.selection.assignmentId && snapshot.selection.profile == (((.ref) . resolvedProfileView) <$> snapshot.sanctionedProfile)) (fail "unsupported execution snapshot version or identity")
     case snapshot.selection.effectiveOptions of
       Aeson.Object options -> unless (all (\key -> case KeyMap.lookup key options of Nothing -> True; Just Aeson.Null -> True; Just (Aeson.Object fields) -> KeyMap.null fields; _ -> False) ["headers", "metadata", "apiKey"]) (fail "execution snapshot contains unsupported private model options")
       _ -> fail "execution snapshot options are unsupported"
