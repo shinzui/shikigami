@@ -74,6 +74,17 @@ when a complete payload is decoded; they do not become supported domain values.
 The public constant and checked parser are its construction boundary.
 
 
+The Plan 108 nominal-value audit also preserves exact review-author scope,
+Merkle-commitment, signature and review-class strings. A signed review scope is
+an attested claim, not a filesystem access capability. Reusing a normalizing
+content-path parser for that field would silently change historical canonical
+bytes; actual content access continues to use checked Repository.RelativePath.
+Signing-key coordinates reuse the existing nominal key domain. Run correlation,
+session and deterministic-step references retain native types and their valid
+string encodings; noncanonical or non-UUIDv7 session claims refuse on complete
+decoding rather than being rewritten. The existing canonical byte golden and
+pinned payload digest remain unchanged.
+
 ## Alternatives rejected
 
 **Use `Data.Aeson.encode` and pin the bytes with a test.** A test pins what the

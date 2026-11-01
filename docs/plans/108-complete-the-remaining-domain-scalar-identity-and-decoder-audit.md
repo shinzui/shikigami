@@ -63,8 +63,8 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 
 
 - [x] M1a: Deliver the schema-2 census and independent coverage/freshness checker; all 24 positive/mutation tests pass, and the checker detects the current incomplete classification.
-- [x] M1b (2026-11-01): Complete semantic classification. Latest coherent census on `b355dfa`: all 4,060 keys classified; 3,278 compliant, 289 exclusions and 493 explicit findings. Coverage/freshness and all 24 checker tests pass with zero missing or pending entries. The initial M1 checkpoint covered 4,053 keys before M2 added the closed format type.
-- [ ] M2: Resolve applicable scalar/identity/decoder findings in cohesive concept batches and verify actual refusal, rollback and recovery behavior. Since complete M1 acceptance, 82 findings are fixed or source-corrected; 493 remain explicit in the current fresh inventory.
+- [x] M1b (2026-11-01): Complete semantic classification. Latest coherent census on `1e7f619`: all 4,119 keys classified; 3,409 compliant, 289 exclusions and 421 explicit findings. Coverage/freshness and all 24 checker tests pass with zero missing or pending entries. The initial M1 checkpoint covered 4,053 keys before M2 added the closed format type.
+- [ ] M2: Resolve applicable scalar/identity/decoder findings in cohesive concept batches and verify actual refusal, rollback and recovery behavior. Since complete M1 acceptance, 154 findings are fixed or source-corrected; 421 remain explicit in the current fresh inventory.
 - [ ] M3: Accept the refreshed classification with zero unresolved violations, passing final behavioral evidence, and an updated guide disposition.
 
 Execution order correction (2026-10-31): finish M1b's remaining inventory before
@@ -258,6 +258,17 @@ consumer admission rule. The candidate passes 51 attestation contract tests,
 85 PostgreSQL controls and all 197 public compiler controls, including two added transactional corruption/repair
 controls. Inventory reconciliation will account for both source batches together.
 
+Both batches reconcile on `1e7f619`: full workspace build, 325 modules,
+974 declarations, 14 role entrypoints and 4,119 classified keys. All 72 old
+findings are resolved and all 59 new nominal/closed-vocabulary keys are reviewed.
+Normal coverage/freshness and all 24 checker tests pass with 3,409 compliant
+entries, 289 exclusions and 421 open findings. The native gate against
+`843cae0` passes with no findings, replay-neutral verdict and 156 conformance
+checks. Existing source snapshots remain historical; see the combined gate
+reports and the latest acceptance note. M2/M3 and final guide compliance remain
+open; continue the remaining concept batches without repeating full census work
+for every individual wrapper.
+
 ## Surprises & Discoveries
 
 
@@ -378,11 +389,11 @@ changing M2/M3 acceptance.
 ## Outcomes & Retrospective
 
 
-M1 is complete and refreshed: the entire 4,060-key inventory and its
-source/build/tool freshness check pass, as do all 24 infrastructure tests. The accepted M2 batches fix or source-correct 82 of the initial 575 findings,
-leaving 493 explicit findings for M2. Resolved-only acceptance correctly fails. Earlier tested owner/value
+M1 is complete and refreshed: the entire 4,119-key inventory and its
+source/build/tool freshness check pass, as do all 24 infrastructure tests. The accepted M2 batches fix or source-correct 154 of the initial 575 findings,
+leaving 421 explicit findings for M2. Resolved-only acceptance correctly fails. Earlier tested owner/value
 remediations remain recorded in [the current evidence](../evidence/plan-108/acceptance.md).
-M2, M3 and the frozen guide disposition remain open. FRIC-36 and FRIC-37 remain
+M2, M3 and the frozen guide disposition remain open. FRIC-36, FRIC-37 and FRIC-38 remain
 logged for triage when the plan completes.
 
 The prior upgrade work is in
@@ -430,16 +441,18 @@ identity changes. Preserve actual authorization, accounting, protected bodies
 and same-build recovery. Discover further relevant ADRs by their filenames and
 headings under `docs/adr/`; `docs/adr/README.md` describes their conventions.
 
-Decision preparation, slot and generation coordinates now have checked nominal
-representations and retain native workflow identity. Remaining concrete work
-starts with owned profile policy scalars and attestation commitments in
-`shikigami-core/src/Shikigami/Attestation/Profile.hs` and
-`shikigami-core/src/Shikigami/Attestation/Envelope.hs`, while the named decision-evidence reads now have typed invocation bindings
-and composable corruption refusal. Continue worker/session
-identity lifetime; workspace paths, native identities and scalars; review
-material/evidence values; and tool binding/policy values. The census, not this illustrative list, defines coverage.
-Review identity lifetimes and actual runtime types before selecting TypeID or a
-technical/external locator representation. Native opaque IDs remain native.
+Decision preparation, policy scalars, attestation commitments and the latest
+Objective/inspection/evidence values now retain nominal representations and
+owning decoders. The refreshed classification still records 421 findings.
+Concrete next batches include the review contracts under
+`shikigami-core/src/Shikigami/PracticeReview.hs` and
+`shikigami-core/src/Shikigami/PracticeReview/`, workspace process/policy/settings
+under `shikigami-core/src/Shikigami/Workspace/`, and execution names, commitments,
+flags and native references under `shikigami-core/src/Shikigami/Execution/`.
+Agent declarations, worker/session lifetime and sink/directory values also
+remain explicit. The census, not this illustrative list, defines coverage.
+Trace identity lifetimes before choosing TypeID: existing native IDs remain
+native, while exact external/signed labels retain their owning representation.
 
 SQL JSON surfaces under review include
 `shikigami-core/src/Shikigami/Workspace/Store.hs`,

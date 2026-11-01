@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "purpose": "unclassified audit worklist; not a compliance claim",
-  "sourceParent": "d1b4b9385b7ea46a62ed6f8a6271015c11a0da5e",
+  "sourceParent": "1e7f6190fb3a1dfc7429e6269b7e3db4c01aaff0",
   "buildRoot": "dist-newstyle/build/aarch64-osx/ghc-9.12.4",
   "compiler": "9.12.4",
   "toolSha256": "71385931ef63d9585d131d00e334139f31d59d47627c002c4849f7868f67f9ba",
@@ -242,7 +242,7 @@
       "sourcePath": "shikigami-agent/src/Shikigami/Agent/Command.hs",
       "sourceSha256": "33afad7d3f236ddafbb448b909607e120b54de4fb28d789e5a98ba8ba7d83568",
       "module": "Shikigami.Agent.Command",
-      "interfaceSha256": "9e9784ebdd6d3d0897fab2c1beb520e704c8a01a914dfaa72763bb09d7d15981",
+      "interfaceSha256": "d5f8b9dd4dd17bb3cbff1ad2c55ca9cc2fc02a47823c11fc2ed65aa94775cbbd",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-agent-0.1.0.0/build/Shikigami/Agent/Command.hi",
       "compiledSourceMd5": "d67c9acf667fca3ed90487a6cd6bfc89",
       "declarations": []
@@ -251,7 +251,7 @@
       "sourcePath": "shikigami-agent/src/Shikigami/Agent/Command/AgentRun.hs",
       "sourceSha256": "7f4a452e42d6646abfa4300e54d10c6b33ca5a4c4d1fa355840c33b7128bd622",
       "module": "Shikigami.Agent.Command.AgentRun",
-      "interfaceSha256": "6d41570e9f289bbf97f07d98869fa3c64adacfac58a25939e619eed9b70f6c26",
+      "interfaceSha256": "a0457a4b4b069a6e3ef9e251400fbbc23d5810c54dba7ea29dd05c19c306f86c",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-agent-0.1.0.0/build/Shikigami/Agent/Command/AgentRun.hi",
       "compiledSourceMd5": "fd65f80ee1204bd387383ae4c55180fb",
       "declarations": []
@@ -260,7 +260,7 @@
       "sourcePath": "shikigami-agent/src/Shikigami/Agent/Command/Launch.hs",
       "sourceSha256": "61cb1ee8f3c9f2d848b294210539cdf43bd2652951499ee3371a0bc7b2bbb901",
       "module": "Shikigami.Agent.Command.Launch",
-      "interfaceSha256": "9dfd4de416ef0ed7940bfb9cc451a7d2ba8239d8d979110c909bb8ea01df480a",
+      "interfaceSha256": "681df2496b2723de417fbf5a07b9a357ed5895bfbba692ba02b6a53969d054d0",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-agent-0.1.0.0/build/Shikigami/Agent/Command/Launch.hi",
       "compiledSourceMd5": "65f152900f78a7ce56d34cb34dd7e9e2",
       "declarations": [
@@ -342,7 +342,7 @@
       "sourcePath": "shikigami-agent/src/Shikigami/Agent/Command/RunBehavior.hs",
       "sourceSha256": "e1d63d4919ed74b40d94528f2271b755997bcf50094ca4f6a9e59eb0b24c4efb",
       "module": "Shikigami.Agent.Command.RunBehavior",
-      "interfaceSha256": "cb9529c4001b9a4e6d2362499a72380f3b1c7f4996e23500a4c003d36f77220d",
+      "interfaceSha256": "39fde9dffe4145c0a70143639ac2ebb39deb83e61cb2a82c431a9c3f74355422",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-agent-0.1.0.0/build/Shikigami/Agent/Command/RunBehavior.hi",
       "compiledSourceMd5": "80392a88da2a9777645a37f7ef9742b0",
       "declarations": []
@@ -919,7 +919,7 @@
       "sourcePath": "shikigami-client/src/Shikigami/Client/Command.hs",
       "sourceSha256": "65af8eb86663f3e2590cb27376f67c4f350e3ca239ee18f3744cb9697aad0257",
       "module": "Shikigami.Client.Command",
-      "interfaceSha256": "de0cabd035fad684c76b5e699612c0651e65bf116647df0bfbf81f164b239420",
+      "interfaceSha256": "d72bebc160a688458ea47c05d646bb5ef1c7b5f2569fcffe44a46e6a84963c92",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-client-0.1.0.0/build/Shikigami/Client/Command.hi",
       "compiledSourceMd5": "84ecf6597ce57d1917eb523915018d6f",
       "declarations": [
@@ -971,7 +971,7 @@
       "sourcePath": "shikigami-client/src/Shikigami/Client/Version.hs",
       "sourceSha256": "163865eaf961b1689b300357d4aab3364eb5582496ddfc4fbd4ef46ebbd700b3",
       "module": "Shikigami.Client.Version",
-      "interfaceSha256": "949be1235151e72dc6767f4a889d0df1c7f26b7a10c7d429750c4b8dda5d6a48",
+      "interfaceSha256": "e22ed0e383c62ecac1b4a9a75792dba80ea39463b76223d6dd8e44bc1867a5eb",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-client-0.1.0.0/build/Shikigami/Client/Version.hi",
       "compiledSourceMd5": "f6bfa83786388c88f242092560e7e5c5",
       "declarations": []
@@ -987,11 +987,11 @@
     },
     {
       "sourcePath": "shikigami-core/inspection/Shikigami/Inspection/Runtime.hs",
-      "sourceSha256": "893091569f0605ba59d764f905c610dc3a4dd051be56bac80d075dd7e2f4c327",
+      "sourceSha256": "e8835e22693386c4f35db0f3ab005ddbb1c8d6a65218abd3e9a17d42086becc0",
       "module": "Shikigami.Inspection.Runtime",
-      "interfaceSha256": "bed963fbdc86e1ad08fa1cb1fc9c5df0cb74bcbc611b6f0dae206993e1df7e78",
+      "interfaceSha256": "5bd39497961be2f31fb86c9b9e66e60bcbf24a9fe691fb807a528768a7d04cca",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/l/inspection/build/inspection/Shikigami/Inspection/Runtime.hi",
-      "compiledSourceMd5": "63b14ccabc34b74d9ee97924ff681fee",
+      "compiledSourceMd5": "fa773f2694e355d4660db2be5c866fa0",
       "declarations": [
         {
           "name": "CompanionFailure",
@@ -1117,7 +1117,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Action/Authorization/Config.hs",
       "sourceSha256": "e9d93c19ac1b8316399da2b092c100e4e6f55dc24e5c45d32bba568938e355dc",
       "module": "Shikigami.Action.Authorization.Config",
-      "interfaceSha256": "e374d39dabf422868796fe8badf040fe9359c1036e9fbe10d665b1ece7b7ec01",
+      "interfaceSha256": "dd9253fa797de1bfae4bf8f1af81615fc98c79053663159fdca83a1849bda979",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Action/Authorization/Config.hi",
       "compiledSourceMd5": "7c16f28ead8985108cafea7a8b54ecd5",
       "declarations": []
@@ -1529,7 +1529,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Agent/Conversation.hs",
       "sourceSha256": "a8fb081f94cbe568b69be5a03cd32c2d028370ac243935d40b2cf8bcf07a3b71",
       "module": "Shikigami.Agent.Conversation",
-      "interfaceSha256": "d68aea7ed527c215090f09ebc695bb24d81701a68b007ec8ae168a04ac20c401",
+      "interfaceSha256": "db85c0439fca83aca8feb9e92fa810cf6ebd8e6dc4b6c8a1835d44f00d441c2f",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Agent/Conversation.hi",
       "compiledSourceMd5": "e3ed4a7512046a479fefb65620f437cc",
       "declarations": [
@@ -2849,7 +2849,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Agent/Workflow.hs",
       "sourceSha256": "e4695f8714c317e924361ae6b7230f6f035c03ad9c77dc39717b50d9a5f27de8",
       "module": "Shikigami.Agent.Workflow",
-      "interfaceSha256": "693a9204e8d361b1455c0d310f76a5a5654bc1d1004ac94ffb2d240d79653d80",
+      "interfaceSha256": "68e54832c789b1a19cf5cb343735eabb0dffa7325b36791dcadec6c25ecd2c5e",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Agent/Workflow.hi",
       "compiledSourceMd5": "a2d8c9fecdc0139f53bb6f7496435998",
       "declarations": [
@@ -3347,7 +3347,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/App/Config.hs",
       "sourceSha256": "8c159d3ca9a64cafeaf9e037c0ab6451f3549a92e3b40bce81b3b8ec5136fa6a",
       "module": "Shikigami.App.Config",
-      "interfaceSha256": "ed4e49f0fd9f5569d8b063f0b624b396ae0e7d26bc25c24253e570cbc1ec8343",
+      "interfaceSha256": "d1f2317fe76c28e3cd6192f83e380788975a43bf47b0e63f3c0162a91a4e4d83",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/App/Config.hi",
       "compiledSourceMd5": "6a6d538eba2151472b6d698a1e0cf2b4",
       "declarations": [
@@ -3733,7 +3733,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/App/Config/Load.hs",
       "sourceSha256": "1b2ffceef917c24cda13565cd27e0df4af9284e7df52b660886d475ccd1aa8e1",
       "module": "Shikigami.App.Config.Load",
-      "interfaceSha256": "d3e524bb348c2be419e1737fba5fe07fe8d5c084a3387d63f840d917f601cba7",
+      "interfaceSha256": "99783237473eddb219592a2e53e1e4c84d9802841ebee14b74725f50b89a06cf",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/App/Config/Load.hi",
       "compiledSourceMd5": "6888351c4222d931bed6bbf319269200",
       "declarations": [
@@ -3791,7 +3791,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/App/Role.hs",
       "sourceSha256": "310f4238bb41a8e92ee472c6968d96d62e1a8b100dc048393d088b314d8edd6c",
       "module": "Shikigami.App.Role",
-      "interfaceSha256": "3ac93c3bbdca346da847596932a1523d1ac399c0b4359642247f2e6b43b0c6c2",
+      "interfaceSha256": "16605d8038efcaa549954bcd7befef01ba498d793c9208c07b48ef574f84b501",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/App/Role.hi",
       "compiledSourceMd5": "1b1bab078b098dce39c8b715aa2ab4c6",
       "declarations": [
@@ -3821,7 +3821,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/App/Version.hs",
       "sourceSha256": "91b1129e8299d3764bb38ab815c1ad142989f6431e2d4e57477f29aa0d865f2e",
       "module": "Shikigami.App.Version",
-      "interfaceSha256": "e2aa66175ce403576da97476f1a59a99958799e08cf16b703540c3b2ba5f99c3",
+      "interfaceSha256": "d11a3af5eb7becf97a36fdd310771f015b4a0ab3b87119f424d9731edcfbe53f",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/App/Version.hi",
       "compiledSourceMd5": "dd6597b4a2c65f6573c7e20ea295b010",
       "declarations": []
@@ -4002,16 +4002,16 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Attestation/CallFacts.hs",
-      "sourceSha256": "9c790df85669a2d78eaf2ca5870f6ae03fe4b056119164f66ec2baa2d2995bf0",
+      "sourceSha256": "4cb47a9323964328d93d0b4852ffc3b20b838af7b0aedd85650c2dcf517aed11",
       "module": "Shikigami.Attestation.CallFacts",
-      "interfaceSha256": "ed6c15f0b796ec282748104ca4ad90ce5817dc2a4cac25e27f9f5b4591d592ed",
+      "interfaceSha256": "560f5b9a94ea74b4efb10022a94fc09c03ce2ef98ff4c04392fc4392ba79ff89",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Attestation/CallFacts.hi",
-      "compiledSourceMd5": "e9a1a9f9555ba6e7e0532650b40ae323",
+      "compiledSourceMd5": "6c66a06783a377ac3cee64675069e299",
       "declarations": [
         {
           "name": "CallComplianceFacts",
           "kind": "data",
-          "declaration": "data CallComplianceFacts\n    = CallComplianceFacts {format :: {-# UNPACK #-}(Shikigami.FormatVersion.FormatVersion\n                                                      \"call-compliance\"),\n                           callId :: !Shikigami.Log.Correlation.CallCorrelationId,\n                           relationship :: !Shikigami.Attestation.Evidence.CallRelationship,\n                           relationshipKnown :: !GHC.Types.Bool,\n                           resolvedModelId :: !Data.Text.Internal.Text,\n                           requestedAlias :: !(GHC.Internal.Maybe.Maybe\n                                                 Data.Text.Internal.Text),\n                           requestedModelId :: !Data.Text.Internal.Text,\n                           observedModelId :: !(Baikai.Evidence.Observed\n                                                  Data.Text.Internal.Text),\n                           endpoint :: !Baikai.Evidence.EndpointIdentity,\n                           thinking :: !Baikai.Evidence.ThinkingTranslation,\n                           strength :: !Baikai.Evidence.EvidenceStrength,\n                           status :: !Baikai.Evidence.CallStatus,\n                           providerCallId :: !Data.Text.Internal.Text,\n                           providerRunId :: !Data.Text.Internal.Text,\n                           attempt :: !GHC.Num.Natural.Natural,\n                           correlationFields :: ![Data.Text.Internal.Text],\n                           tokens :: !(GHC.Internal.Maybe.Maybe GHC.Num.Natural.Natural),\n                           costMicroUsd :: !(GHC.Internal.Maybe.Maybe\n                                               GHC.Internal.Real.Rational),\n                           costUncertain :: !GHC.Types.Bool}",
+          "declaration": "data CallComplianceFacts\n    = CallComplianceFacts {format :: {-# UNPACK #-}(Shikigami.FormatVersion.FormatVersion\n                                                      \"call-compliance\"),\n                           callId :: !Shikigami.Log.Correlation.CallCorrelationId,\n                           relationship :: !Shikigami.Attestation.Evidence.CallRelationship,\n                           relationshipKnown :: !RelationshipKnowledge,\n                           resolvedModelId :: !(Shikigami.Behavior.Provider.Coordinate.ProviderCoordinate\n                                                  \"provider-model-id\"),\n                           requestedAlias :: !(GHC.Internal.Maybe.Maybe\n                                                 Shikigami.Decision.ModelAlias.ModelAlias),\n                           requestedModelId :: !(Shikigami.Behavior.Provider.Coordinate.ProviderCoordinate\n                                                   \"provider-model-id\"),\n                           observedModelId :: !(Baikai.Evidence.Observed\n                                                  (Shikigami.Behavior.Provider.Coordinate.ProviderCoordinate\n                                                     \"provider-model-id\")),\n                           endpoint :: !Baikai.Evidence.EndpointIdentity,\n                           thinking :: !Baikai.Evidence.ThinkingTranslation,\n                           strength :: !Baikai.Evidence.EvidenceStrength,\n                           status :: !Baikai.Evidence.CallStatus,\n                           providerCallId :: !(Shikigami.Behavior.Provider.Coordinate.ProviderCoordinate\n                                                 \"provider-call-id\"),\n                           providerRunId :: !(Shikigami.Behavior.Provider.Coordinate.ProviderCoordinate\n                                                \"provider-run-id\"),\n                           attempt :: !Shikigami.Attestation.Evidence.ProviderAttempt,\n                           correlationFields :: ![CorrelationField],\n                           tokens :: !(GHC.Internal.Maybe.Maybe MeasuredTokens),\n                           costMicroUsd :: !(GHC.Internal.Maybe.Maybe MeasuredMicroUsd),\n                           costUncertain :: !CostCertainty}",
           "members": [
             {
               "member": "CallComplianceFacts.format",
@@ -4027,23 +4027,23 @@
             },
             {
               "member": "CallComplianceFacts.relationshipKnown",
-              "type": "!Bool"
+              "type": "!RelationshipKnowledge"
             },
             {
               "member": "CallComplianceFacts.resolvedModelId",
-              "type": "!Text"
+              "type": "!(ProviderCoordinate \"provider-model-id\")"
             },
             {
               "member": "CallComplianceFacts.requestedAlias",
-              "type": "!(Maybe Text)"
+              "type": "!(Maybe ModelAlias)"
             },
             {
               "member": "CallComplianceFacts.requestedModelId",
-              "type": "!Text"
+              "type": "!(ProviderCoordinate \"provider-model-id\")"
             },
             {
               "member": "CallComplianceFacts.observedModelId",
-              "type": "!(Baikai.Observed Text)"
+              "type": "!(Baikai.Observed (ProviderCoordinate \"provider-model-id\"))"
             },
             {
               "member": "CallComplianceFacts.endpoint",
@@ -4063,53 +4063,105 @@
             },
             {
               "member": "CallComplianceFacts.providerCallId",
-              "type": "!Text"
+              "type": "!(ProviderCoordinate \"provider-call-id\")"
             },
             {
               "member": "CallComplianceFacts.providerRunId",
-              "type": "!Text"
+              "type": "!(ProviderCoordinate \"provider-run-id\")"
             },
             {
               "member": "CallComplianceFacts.attempt",
-              "type": "!Natural"
+              "type": "!ProviderAttempt"
             },
             {
               "member": "CallComplianceFacts.correlationFields",
-              "type": "![Text]"
+              "type": "![CorrelationField]"
             },
             {
               "member": "CallComplianceFacts.tokens",
-              "type": "!(Maybe Natural)"
+              "type": "!(Maybe MeasuredTokens)"
             },
             {
               "member": "CallComplianceFacts.costMicroUsd",
-              "type": "!(Maybe Rational)"
+              "type": "!(Maybe MeasuredMicroUsd)"
             },
             {
               "member": "CallComplianceFacts.costUncertain",
-              "type": "!Bool"
+              "type": "!CostCertainty"
             }
           ],
-          "sourceDeclaration": "data CallComplianceFacts = CallComplianceFacts\n  { format :: !(FormatVersion \"call-compliance\"),\n    callId :: !CallCorrelationId,\n    relationship :: !CallRelationship,\n    relationshipKnown :: !Bool,\n    resolvedModelId :: !Text,\n    requestedAlias :: !(Maybe Text),\n    requestedModelId :: !Text,\n    observedModelId :: !(Baikai.Observed Text),\n    endpoint :: !Baikai.EndpointIdentity,\n    thinking :: !Baikai.ThinkingTranslation,\n    strength :: !Baikai.EvidenceStrength,\n    status :: !Baikai.CallStatus,\n    providerCallId :: !Text,\n    providerRunId :: !Text,\n    attempt :: !Natural,\n    correlationFields :: ![Text],\n    tokens :: !(Maybe Natural),\n    costMicroUsd :: !(Maybe Rational),\n    costUncertain :: !Bool\n  }\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON)"
+          "sourceDeclaration": "data CallComplianceFacts = CallComplianceFacts\n  { format :: !(FormatVersion \"call-compliance\"),\n    callId :: !CallCorrelationId,\n    relationship :: !CallRelationship,\n    relationshipKnown :: !RelationshipKnowledge,\n    resolvedModelId :: !(ProviderCoordinate \"provider-model-id\"),\n    requestedAlias :: !(Maybe ModelAlias),\n    requestedModelId :: !(ProviderCoordinate \"provider-model-id\"),\n    observedModelId :: !(Baikai.Observed (ProviderCoordinate \"provider-model-id\")),\n    endpoint :: !Baikai.EndpointIdentity,\n    thinking :: !Baikai.ThinkingTranslation,\n    strength :: !Baikai.EvidenceStrength,\n    status :: !Baikai.CallStatus,\n    providerCallId :: !(ProviderCoordinate \"provider-call-id\"),\n    providerRunId :: !(ProviderCoordinate \"provider-run-id\"),\n    attempt :: !ProviderAttempt,\n    correlationFields :: ![CorrelationField],\n    tokens :: !(Maybe MeasuredTokens),\n    costMicroUsd :: !(Maybe MeasuredMicroUsd),\n    costUncertain :: !CostCertainty\n  }\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON)"
+        },
+        {
+          "name": "CorrelationField",
+          "kind": "data",
+          "declaration": "data CorrelationField\n    = ResponseId\n    | ProviderRequestId\n    | ClientRequestId\n    | ProviderCallId\n    | ProviderRunId",
+          "members": [],
+          "sourceDeclaration": "data CorrelationField = ResponseId | ProviderRequestId | ClientRequestId | ProviderCallId | ProviderRunId\n  deriving stock (Eq, Show)"
+        },
+        {
+          "name": "CostCertainty",
+          "kind": "data",
+          "declaration": "data CostCertainty = CostKnown | CostUncertain",
+          "members": [],
+          "sourceDeclaration": "data CostCertainty = CostKnown | CostUncertain\n  deriving stock (Eq, Show)"
+        },
+        {
+          "name": "MeasuredMicroUsd",
+          "kind": "newtype",
+          "declaration": "newtype MeasuredMicroUsd\n    = MeasuredMicroUsd GHC.Internal.Real.Rational",
+          "members": [
+            {
+              "member": "MeasuredMicroUsd.#1",
+              "type": "Rational"
+            }
+          ],
+          "sourceDeclaration": "newtype MeasuredMicroUsd = MeasuredMicroUsd Rational\n  deriving stock (Eq, Ord, Show)\n  deriving newtype (ToJSON, FromJSON)"
+        },
+        {
+          "name": "MeasuredTokens",
+          "kind": "newtype",
+          "declaration": "newtype MeasuredTokens = MeasuredTokens GHC.Num.Natural.Natural",
+          "members": [
+            {
+              "member": "MeasuredTokens.#1",
+              "type": "Natural"
+            }
+          ],
+          "sourceDeclaration": "newtype MeasuredTokens = MeasuredTokens Natural\n  deriving stock (Eq, Ord, Show)\n  deriving newtype (ToJSON, FromJSON)"
+        },
+        {
+          "name": "RelationshipKnowledge",
+          "kind": "data",
+          "declaration": "data RelationshipKnowledge\n    = RelationshipUnknown | RelationshipKnown",
+          "members": [],
+          "sourceDeclaration": "data RelationshipKnowledge = RelationshipUnknown | RelationshipKnown\n  deriving stock (Eq, Show)"
         }
       ]
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Attestation/Compliance.hs",
-      "sourceSha256": "45a89fb649c403975c989616f726c4f0947cfdfe320f2f2d912bc63407937e5a",
+      "sourceSha256": "fd019bcbab36b669f783e0ffc1df8d5c9b9ab0793a07ad0c84b9b4f7d250fc72",
       "module": "Shikigami.Attestation.Compliance",
-      "interfaceSha256": "2d7c731ce5fa896696f8caa46c6d24c46bf3b0ea22df5bd1869e289b33ed8a1c",
+      "interfaceSha256": "b8d8b8ff829fcd27f489e5e35c4598cae0e124e6a0f999abe17f95e82e515a24",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Attestation/Compliance.hi",
-      "compiledSourceMd5": "3b78bb31b038d30171fa07c211da8426",
+      "compiledSourceMd5": "1ae801e7ce380fe810ae9b4a7bc0e1db",
       "declarations": [
+        {
+          "name": "ComplianceDecision",
+          "kind": "data",
+          "declaration": "data ComplianceDecision\n    = ComplianceSanctioned | ComplianceNonConforming",
+          "members": [],
+          "sourceDeclaration": "data ComplianceDecision = ComplianceSanctioned | ComplianceNonConforming\n  deriving stock (Eq, Show)"
+        },
         {
           "name": "ComplianceRollUp",
           "kind": "data",
-          "declaration": "data ComplianceRollUp\n    = ComplianceRollUp {sanctioned :: !GHC.Types.Bool,\n                        reasons :: ![Shikigami.Attestation.Reviewed.NonConformingReason],\n                        accountedCalls :: ![Shikigami.Log.Correlation.CallCorrelationId]}",
+          "declaration": "data ComplianceRollUp\n    = ComplianceRollUp {sanctioned :: !ComplianceDecision,\n                        reasons :: ![Shikigami.Attestation.Reviewed.NonConformingReason],\n                        accountedCalls :: ![Shikigami.Log.Correlation.CallCorrelationId]}",
           "members": [
             {
               "member": "ComplianceRollUp.sanctioned",
-              "type": "!Bool"
+              "type": "!ComplianceDecision"
             },
             {
               "member": "ComplianceRollUp.reasons",
@@ -4120,22 +4172,22 @@
               "type": "![CallCorrelationId]"
             }
           ],
-          "sourceDeclaration": "data ComplianceRollUp = ComplianceRollUp\n  { sanctioned :: !Bool,\n    reasons :: ![NonConformingReason],\n    accountedCalls :: ![CallCorrelationId]\n  }\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
+          "sourceDeclaration": "data ComplianceRollUp = ComplianceRollUp\n  { sanctioned :: !ComplianceDecision,\n    reasons :: ![NonConformingReason],\n    accountedCalls :: ![CallCorrelationId]\n  }\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
         }
       ]
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Attestation/Envelope.hs",
-      "sourceSha256": "aed5826915d0b0daf81e79678fb69203b5e6ca4592849ec19b557702cf71a720",
+      "sourceSha256": "2fb81d6b8b4a8ff6c22834af9067e9e960c7893348fbf4cf18dc6fccc182873d",
       "module": "Shikigami.Attestation.Envelope",
-      "interfaceSha256": "c0a7297cb403a08ebf402d11fdc21ad7b2871f6217bd447678a89249b9e4af8d",
+      "interfaceSha256": "1f968ec51753812f49652b15a37ec5d354076fa9f75cd065be9e4f1e3da3d438",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Attestation/Envelope.hi",
-      "compiledSourceMd5": "9381023f924107ebaee741bb3e2a7ee3",
+      "compiledSourceMd5": "75f1a7d8d34002701aab6fc6cd763da2",
       "declarations": [
         {
           "name": "AgentRunAttestation",
           "kind": "data",
-          "declaration": "data AgentRunAttestation\n    = AgentRunAttestation {payload :: !AttestationPayload,\n                           payloadDigest :: !PayloadDigest,\n                           signature :: !(GHC.Internal.Maybe.Maybe Data.Text.Internal.Text),\n                           keyId :: !(GHC.Internal.Maybe.Maybe Data.Text.Internal.Text)}",
+          "declaration": "data AgentRunAttestation\n    = AgentRunAttestation {payload :: !AttestationPayload,\n                           payloadDigest :: !PayloadDigest,\n                           signature :: !(GHC.Internal.Maybe.Maybe AttestationSignature),\n                           keyId :: !(GHC.Internal.Maybe.Maybe\n                                        (Shikigami.Attestation.PolicyValue.PolicyCoordinate\n                                           \"signing-key-id\"))}",
           "members": [
             {
               "member": "AgentRunAttestation.payload",
@@ -4147,19 +4199,19 @@
             },
             {
               "member": "AgentRunAttestation.signature",
-              "type": "!(Maybe Text)"
+              "type": "!(Maybe AttestationSignature)"
             },
             {
               "member": "AgentRunAttestation.keyId",
-              "type": "!(Maybe Text)"
+              "type": "!(Maybe (PolicyCoordinate \"signing-key-id\"))"
             }
           ],
-          "sourceDeclaration": "data AgentRunAttestation = AgentRunAttestation\n  { payload :: !AttestationPayload,\n    payloadDigest :: !PayloadDigest,\n    signature :: !(Maybe Text),\n    keyId :: !(Maybe Text)\n  }\n  deriving stock (Eq, Show, Generic)"
+          "sourceDeclaration": "data AgentRunAttestation = AgentRunAttestation\n  { payload :: !AttestationPayload,\n    payloadDigest :: !PayloadDigest,\n    signature :: !(Maybe AttestationSignature),\n    keyId :: !(Maybe (PolicyCoordinate \"signing-key-id\"))\n  }\n  deriving stock (Eq, Show, Generic)"
         },
         {
           "name": "AttestationPayload",
           "kind": "data",
-          "declaration": "data AttestationPayload\n    = AttestationPayload {schemaVersion :: {-# UNPACK #-}SchemaVersion,\n                          issuer :: !Shikigami.Attestation.Profile.Issuer,\n                          issuedAt :: !Data.Time.Clock.Internal.UTCTime.UTCTime,\n                          expiresAt :: !(GHC.Internal.Maybe.Maybe\n                                           Data.Time.Clock.Internal.UTCTime.UTCTime),\n                          runId :: !Data.Text.Internal.Text,\n                          sessionId :: !(GHC.Internal.Maybe.Maybe Data.Text.Internal.Text),\n                          reviewClass :: !Data.Text.Internal.Text,\n                          profile :: !Shikigami.Attestation.Profile.SanctionedExecutionProfileRef,\n                          reviewed :: !Shikigami.Attestation.Reviewed.ReviewedArtifact,\n                          agentVersion :: !Shikigami.Attestation.Agent.AgentVersionRef,\n                          agentArtifacts :: !Shikigami.Attestation.Agent.AgentArtifactSet,\n                          callEvidence :: !CallEvidenceSet,\n                          reviewResultDigest :: !Shikigami.Attestation.Reviewed.ResultDigest,\n                          completeness :: !CompletenessVerdict,\n                          sanctioned :: !SanctionedVerdict,\n                          strength :: !Shikigami.Attestation.Strength.AttestationStrength}",
+          "declaration": "data AttestationPayload\n    = AttestationPayload {schemaVersion :: {-# UNPACK #-}SchemaVersion,\n                          issuer :: !Shikigami.Attestation.Profile.Issuer,\n                          issuedAt :: !Data.Time.Clock.Internal.UTCTime.UTCTime,\n                          expiresAt :: !(GHC.Internal.Maybe.Maybe\n                                           Data.Time.Clock.Internal.UTCTime.UTCTime),\n                          runId :: !Shikigami.Log.Correlation.RunCorrelationId,\n                          sessionId :: !(GHC.Internal.Maybe.Maybe Kioku.Id.SessionId),\n                          reviewClass :: !ReviewClass,\n                          profile :: !Shikigami.Attestation.Profile.SanctionedExecutionProfileRef,\n                          reviewed :: !Shikigami.Attestation.Reviewed.ReviewedArtifact,\n                          agentVersion :: !Shikigami.Attestation.Agent.AgentVersionRef,\n                          agentArtifacts :: !Shikigami.Attestation.Agent.AgentArtifactSet,\n                          callEvidence :: !CallEvidenceSet,\n                          reviewResultDigest :: !Shikigami.Attestation.Reviewed.ResultDigest,\n                          completeness :: !CompletenessVerdict,\n                          sanctioned :: !SanctionedVerdict,\n                          strength :: !Shikigami.Attestation.Strength.AttestationStrength}",
           "members": [
             {
               "member": "AttestationPayload.schemaVersion",
@@ -4179,15 +4231,15 @@
             },
             {
               "member": "AttestationPayload.runId",
-              "type": "!Text"
+              "type": "!RunCorrelationId"
             },
             {
               "member": "AttestationPayload.sessionId",
-              "type": "!(Maybe Text)"
+              "type": "!(Maybe SessionId)"
             },
             {
               "member": "AttestationPayload.reviewClass",
-              "type": "!Text"
+              "type": "!ReviewClass"
             },
             {
               "member": "AttestationPayload.profile",
@@ -4226,12 +4278,24 @@
               "type": "!AttestationStrength"
             }
           ],
-          "sourceDeclaration": "data AttestationPayload = AttestationPayload\n  { schemaVersion :: !SchemaVersion,\n    issuer :: !Issuer,\n    issuedAt :: !UTCTime,\n    \n    expiresAt :: !(Maybe UTCTime),\n    runId :: !Text,\n    sessionId :: !(Maybe Text),\n    \n    \n    reviewClass :: !Text,\n    profile :: !SanctionedExecutionProfileRef,\n    reviewed :: !ReviewedArtifact,\n    agentVersion :: !AgentVersionRef,\n    agentArtifacts :: !AgentArtifactSet,\n    callEvidence :: !CallEvidenceSet,\n    reviewResultDigest :: !ResultDigest,\n    completeness :: !CompletenessVerdict,\n    sanctioned :: !SanctionedVerdict,\n    \n    \n    \n    strength :: !AttestationStrength\n  }\n  deriving stock (Eq, Show, Generic)"
+          "sourceDeclaration": "data AttestationPayload = AttestationPayload\n  { schemaVersion :: !SchemaVersion,\n    issuer :: !Issuer,\n    issuedAt :: !UTCTime,\n    \n    expiresAt :: !(Maybe UTCTime),\n    runId :: !RunCorrelationId,\n    sessionId :: !(Maybe SessionId),\n    \n    \n    reviewClass :: !ReviewClass,\n    profile :: !SanctionedExecutionProfileRef,\n    reviewed :: !ReviewedArtifact,\n    agentVersion :: !AgentVersionRef,\n    agentArtifacts :: !AgentArtifactSet,\n    callEvidence :: !CallEvidenceSet,\n    reviewResultDigest :: !ResultDigest,\n    completeness :: !CompletenessVerdict,\n    sanctioned :: !SanctionedVerdict,\n    \n    \n    \n    strength :: !AttestationStrength\n  }\n  deriving stock (Eq, Show, Generic)"
+        },
+        {
+          "name": "AttestationSignature",
+          "kind": "newtype",
+          "declaration": "newtype AttestationSignature\n    = AttestationSignature Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "AttestationSignature.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype AttestationSignature = AttestationSignature Text\n  deriving stock (Eq, Ord, Show)\n  deriving newtype (ToJSON, FromJSON)"
         },
         {
           "name": "CallEvidenceSet",
           "kind": "data",
-          "declaration": "data CallEvidenceSet\n    = CallEvidenceRecords {records :: ![Data.Aeson.Types.Internal.Value]}\n    | CallEvidenceMerkleRoot {merkleRoot :: !Data.Text.Internal.Text}",
+          "declaration": "data CallEvidenceSet\n    = CallEvidenceRecords {records :: ![Data.Aeson.Types.Internal.Value]}\n    | CallEvidenceMerkleRoot {merkleRoot :: !MerkleCommitment}",
           "members": [
             {
               "member": "CallEvidenceRecords.records",
@@ -4239,10 +4303,10 @@
             },
             {
               "member": "CallEvidenceMerkleRoot.merkleRoot",
-              "type": "!Text"
+              "type": "!MerkleCommitment"
             }
           ],
-          "sourceDeclaration": "data CallEvidenceSet\n  = \n    CallEvidenceRecords {records :: ![Value]}\n  | \n    CallEvidenceMerkleRoot {merkleRoot :: !Text}\n  deriving stock (Eq, Show, Generic)"
+          "sourceDeclaration": "data CallEvidenceSet\n  = \n    CallEvidenceRecords {records :: ![Value]}\n  | \n    CallEvidenceMerkleRoot {merkleRoot :: !MerkleCommitment}\n  deriving stock (Eq, Show, Generic)"
         },
         {
           "name": "CompletenessVerdict",
@@ -4257,6 +4321,18 @@
           "sourceDeclaration": "data CompletenessVerdict\n  = EvidenceComplete\n  | EvidenceIncomplete {missing :: ![NonConformingReason]}\n  deriving stock (Eq, Show, Generic)"
         },
         {
+          "name": "MerkleCommitment",
+          "kind": "newtype",
+          "declaration": "newtype MerkleCommitment = MerkleCommitment Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "MerkleCommitment.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype MerkleCommitment = MerkleCommitment Text\n  deriving stock (Eq, Ord, Show)\n  deriving newtype (ToJSON, FromJSON)"
+        },
+        {
           "name": "PayloadDigest",
           "kind": "newtype",
           "declaration": "newtype PayloadDigest = PayloadDigest Data.Text.Internal.Text",
@@ -4267,6 +4343,18 @@
             }
           ],
           "sourceDeclaration": "newtype PayloadDigest = PayloadDigest Text\n  deriving stock (Eq, Ord, Show)\n  deriving newtype (ToJSON)"
+        },
+        {
+          "name": "ReviewClass",
+          "kind": "newtype",
+          "declaration": "newtype ReviewClass = ReviewClass Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "ReviewClass.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype ReviewClass = ReviewClass Text\n  deriving stock (Eq, Ord, Show)\n  deriving newtype (ToJSON, FromJSON)"
         },
         {
           "name": "SanctionedVerdict",
@@ -4295,11 +4383,11 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Attestation/Evidence.hs",
-      "sourceSha256": "9c5f23284992726dd8a915d7ec550f876f5ab427c3e9d6f7900ed5dc2d1f122f",
+      "sourceSha256": "3595f946e5b5c0f8f12fedc3b701e5ded2575dc28aa69ad3a78c9f676c8b246c",
       "module": "Shikigami.Attestation.Evidence",
-      "interfaceSha256": "d72a4c78c7e01cc5c4597084e28398f72a77438616bb654fed96e5c908e1c5b2",
+      "interfaceSha256": "fc1762cc7eb506fe0e0b936a9009903b4d08a7ecc87f7bbf1bde688ace81587e",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Attestation/Evidence.hi",
-      "compiledSourceMd5": "702b9f0af9ccc901bcd111cd4eed04a4",
+      "compiledSourceMd5": "6fbda0608b2cf890464b12217b7cdee3",
       "declarations": [
         {
           "name": "BehaviorTerminalState",
@@ -4358,7 +4446,7 @@
         {
           "name": "ExpectedCall",
           "kind": "data",
-          "declaration": "data ExpectedCall\n    = ExpectedCall {callId :: !Shikigami.Log.Correlation.CallCorrelationId,\n                    relationship :: !CallRelationship,\n                    attempt :: !GHC.Num.Natural.Natural}",
+          "declaration": "data ExpectedCall\n    = ExpectedCall {callId :: !Shikigami.Log.Correlation.CallCorrelationId,\n                    relationship :: !CallRelationship,\n                    attempt :: !ProviderAttempt}",
           "members": [
             {
               "member": "ExpectedCall.callId",
@@ -4370,10 +4458,10 @@
             },
             {
               "member": "ExpectedCall.attempt",
-              "type": "!Natural"
+              "type": "!ProviderAttempt"
             }
           ],
-          "sourceDeclaration": "data ExpectedCall = ExpectedCall\n  { callId :: !CallCorrelationId,\n    relationship :: !CallRelationship,\n    attempt :: !Natural\n  }\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
+          "sourceDeclaration": "data ExpectedCall = ExpectedCall\n  { callId :: !CallCorrelationId,\n    relationship :: !CallRelationship,\n    attempt :: !ProviderAttempt\n  }\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
         },
         {
           "name": "PeakConcurrency",
@@ -4388,9 +4476,21 @@
           "sourceDeclaration": "newtype PeakConcurrency = PeakConcurrency Natural\n  deriving stock (Eq, Ord, Show, Generic)\n  deriving newtype (ToJSON, FromJSON)"
         },
         {
+          "name": "ProviderAttempt",
+          "kind": "newtype",
+          "declaration": "newtype ProviderAttempt = ProviderAttempt GHC.Num.Natural.Natural",
+          "members": [
+            {
+              "member": "ProviderAttempt.#1",
+              "type": "Natural"
+            }
+          ],
+          "sourceDeclaration": "newtype ProviderAttempt = ProviderAttempt Natural\n  deriving stock (Eq, Ord, Show)\n  deriving newtype (ToJSON, FromJSON)"
+        },
+        {
           "name": "RecordedCallEvidence",
           "kind": "data",
-          "declaration": "data RecordedCallEvidence\n    = RecordedCallEvidence {callId :: !Shikigami.Log.Correlation.CallCorrelationId,\n                            relationship :: !CallRelationship,\n                            resolvedModelId :: !Data.Text.Internal.Text,\n                            requestedAlias :: !(GHC.Internal.Maybe.Maybe\n                                                  Data.Text.Internal.Text),\n                            evidence :: !Baikai.Evidence.ModelCallEvidence}",
+          "declaration": "data RecordedCallEvidence\n    = RecordedCallEvidence {callId :: !Shikigami.Log.Correlation.CallCorrelationId,\n                            relationship :: !CallRelationship,\n                            resolvedModelId :: !(Shikigami.Behavior.Provider.Coordinate.ProviderCoordinate\n                                                   \"provider-model-id\"),\n                            requestedAlias :: !(GHC.Internal.Maybe.Maybe\n                                                  Shikigami.Decision.ModelAlias.ModelAlias),\n                            evidence :: !Baikai.Evidence.ModelCallEvidence}",
           "members": [
             {
               "member": "RecordedCallEvidence.callId",
@@ -4402,18 +4502,18 @@
             },
             {
               "member": "RecordedCallEvidence.resolvedModelId",
-              "type": "!Text"
+              "type": "!(ProviderCoordinate \"provider-model-id\")"
             },
             {
               "member": "RecordedCallEvidence.requestedAlias",
-              "type": "!(Maybe Text)"
+              "type": "!(Maybe ModelAlias)"
             },
             {
               "member": "RecordedCallEvidence.evidence",
               "type": "!Baikai.ModelCallEvidence"
             }
           ],
-          "sourceDeclaration": "data RecordedCallEvidence = RecordedCallEvidence\n  { callId :: !CallCorrelationId,\n    relationship :: !CallRelationship,\n    resolvedModelId :: !Text,\n    requestedAlias :: !(Maybe Text),\n    evidence :: !Baikai.ModelCallEvidence\n  }\n  deriving stock (Eq, Show, Generic)"
+          "sourceDeclaration": "data RecordedCallEvidence = RecordedCallEvidence\n  { callId :: !CallCorrelationId,\n    relationship :: !CallRelationship,\n    resolvedModelId :: !(ProviderCoordinate \"provider-model-id\"),\n    requestedAlias :: !(Maybe ModelAlias),\n    evidence :: !Baikai.ModelCallEvidence\n  }\n  deriving stock (Eq, Show, Generic)"
         },
         {
           "name": "RelevantChild",
@@ -4474,7 +4574,7 @@
         {
           "name": "RunEvidence",
           "kind": "data",
-          "declaration": "data RunEvidence\n    = RunEvidence {runEvidenceId :: !Shikigami.Generated.Nominals.Internal.RunEvidenceId,\n                   runId :: !Shikigami.Log.Correlation.RunCorrelationId,\n                   phase :: !EvidencePhase,\n                   agentVersion :: !Shikigami.Attestation.Agent.AgentVersionRef,\n                   artifacts :: !Shikigami.Attestation.Agent.AgentArtifactSet,\n                   reviewed :: !Shikigami.Attestation.Reviewed.ReviewedArtifact,\n                   profile :: !Shikigami.Attestation.Profile.SanctionedExecutionProfileRef,\n                   reviewRequestId :: !Shikigami.Agent.Approval.ReviewRequestId,\n                   idempotencyKey :: !Shikigami.Agent.Run.Key.RunKey,\n                   expectedCalls :: ![ExpectedCall],\n                   calls :: ![RecordedCallEvidence],\n                   deterministicSteps :: ![Data.Text.Internal.Text],\n                   expectedChildRunIds :: ![Shikigami.Log.Correlation.RunCorrelationId],\n                   delegatedChildren :: ![RelevantChild],\n                   observedArtifactDigest :: !(GHC.Internal.Maybe.Maybe\n                                                 Shikigami.Attestation.Reviewed.DiffDigest),\n                   resultEvidence :: !(GHC.Internal.Maybe.Maybe ResultEvidence),\n                   durationSeconds :: !(GHC.Internal.Maybe.Maybe RunDurationSeconds),\n                   peakConcurrency :: !(GHC.Internal.Maybe.Maybe PeakConcurrency)}",
+          "declaration": "data RunEvidence\n    = RunEvidence {runEvidenceId :: !Shikigami.Generated.Nominals.Internal.RunEvidenceId,\n                   runId :: !Shikigami.Log.Correlation.RunCorrelationId,\n                   phase :: !EvidencePhase,\n                   agentVersion :: !Shikigami.Attestation.Agent.AgentVersionRef,\n                   artifacts :: !Shikigami.Attestation.Agent.AgentArtifactSet,\n                   reviewed :: !Shikigami.Attestation.Reviewed.ReviewedArtifact,\n                   profile :: !Shikigami.Attestation.Profile.SanctionedExecutionProfileRef,\n                   reviewRequestId :: !Shikigami.Agent.Approval.ReviewRequestId,\n                   idempotencyKey :: !Shikigami.Agent.Run.Key.RunKey,\n                   expectedCalls :: ![ExpectedCall],\n                   calls :: ![RecordedCallEvidence],\n                   deterministicSteps :: ![Keiro.Workflow.Types.StepName],\n                   expectedChildRunIds :: ![Shikigami.Log.Correlation.RunCorrelationId],\n                   delegatedChildren :: ![RelevantChild],\n                   observedArtifactDigest :: !(GHC.Internal.Maybe.Maybe\n                                                 Shikigami.Attestation.Reviewed.DiffDigest),\n                   resultEvidence :: !(GHC.Internal.Maybe.Maybe ResultEvidence),\n                   durationSeconds :: !(GHC.Internal.Maybe.Maybe RunDurationSeconds),\n                   peakConcurrency :: !(GHC.Internal.Maybe.Maybe PeakConcurrency)}",
           "members": [
             {
               "member": "RunEvidence.runEvidenceId",
@@ -4522,7 +4622,7 @@
             },
             {
               "member": "RunEvidence.deterministicSteps",
-              "type": "![Text]"
+              "type": "![StepName]"
             },
             {
               "member": "RunEvidence.expectedChildRunIds",
@@ -4549,7 +4649,7 @@
               "type": "!(Maybe PeakConcurrency)"
             }
           ],
-          "sourceDeclaration": "data RunEvidence = RunEvidence\n  { runEvidenceId :: !RunEvidenceId,\n    runId :: !RunCorrelationId,\n    phase :: !EvidencePhase,\n    agentVersion :: !AgentVersionRef,\n    artifacts :: !AgentArtifactSet,\n    reviewed :: !ReviewedArtifact,\n    profile :: !SanctionedExecutionProfileRef,\n    reviewRequestId :: !ReviewRequestId,\n    idempotencyKey :: !RunKey,\n    expectedCalls :: ![ExpectedCall],\n    calls :: ![RecordedCallEvidence],\n    deterministicSteps :: ![Text],\n    expectedChildRunIds :: ![RunCorrelationId],\n    delegatedChildren :: ![RelevantChild],\n    observedArtifactDigest :: !(Maybe DiffDigest),\n    resultEvidence :: !(Maybe ResultEvidence),\n    durationSeconds :: !(Maybe RunDurationSeconds),\n    peakConcurrency :: !(Maybe PeakConcurrency)\n  }\n  deriving stock (Eq, Show, Generic)"
+          "sourceDeclaration": "data RunEvidence = RunEvidence\n  { runEvidenceId :: !RunEvidenceId,\n    runId :: !RunCorrelationId,\n    phase :: !EvidencePhase,\n    agentVersion :: !AgentVersionRef,\n    artifacts :: !AgentArtifactSet,\n    reviewed :: !ReviewedArtifact,\n    profile :: !SanctionedExecutionProfileRef,\n    reviewRequestId :: !ReviewRequestId,\n    idempotencyKey :: !RunKey,\n    expectedCalls :: ![ExpectedCall],\n    calls :: ![RecordedCallEvidence],\n    deterministicSteps :: ![StepName],\n    expectedChildRunIds :: ![RunCorrelationId],\n    delegatedChildren :: ![RelevantChild],\n    observedArtifactDigest :: !(Maybe DiffDigest),\n    resultEvidence :: !(Maybe ResultEvidence),\n    durationSeconds :: !(Maybe RunDurationSeconds),\n    peakConcurrency :: !(Maybe PeakConcurrency)\n  }\n  deriving stock (Eq, Show, Generic)"
         },
         {
           "name": "SealRefusal",
@@ -4587,11 +4687,11 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Attestation/EvidenceStore.hs",
-      "sourceSha256": "e774022a1d1c1f87a5ac8a2997557de676af2c1133fad25f2a3da459b72fed79",
+      "sourceSha256": "3d0a643d3fcbe0400cc940fbfe1a38ff9ed335474c94c7c138958d116a0fcc30",
       "module": "Shikigami.Attestation.EvidenceStore",
-      "interfaceSha256": "554aaf48025812db5c07d7fc9098448e9869565fc7b1dd9ef8e7a5e08aff1a32",
+      "interfaceSha256": "d18da53bff59b649d891925c350da9335a782d4d41a42e489c8747e3b2f7b324",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Attestation/EvidenceStore.hi",
-      "compiledSourceMd5": "5464d0900381838a7394b1f00440d868",
+      "compiledSourceMd5": "2330cb779149979a176869639db89282",
       "declarations": [
         {
           "name": "CallProjection",
@@ -5221,11 +5321,11 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Attestation/Reviewed.hs",
-      "sourceSha256": "2102488c2ee6564d90a6347efec475824d99775969ff474920b127e4e96b07e0",
+      "sourceSha256": "b852d39195cc1d5c1f22aeb8c863e35448e5ea8b798dbee068cd35eed15c5ece",
       "module": "Shikigami.Attestation.Reviewed",
-      "interfaceSha256": "0807fe2ed969fd8b5693b83d92d4960cbdce7b8f2cda5fe7643c9651022122ca",
+      "interfaceSha256": "966e3ee67734938e706ea0a05fde72c9dcd32ad4ee0bbaf5908464960dce0667",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Attestation/Reviewed.hi",
-      "compiledSourceMd5": "5cf158236974d17df110865c10a52b45",
+      "compiledSourceMd5": "51aea388a3d26bd8251d79946a76d47a",
       "declarations": [
         {
           "name": "DiffDigest",
@@ -5428,6 +5528,18 @@
           "sourceDeclaration": "data NonConformingReason\n  = \n    ModelNotPermitted {callId :: !Text, modelId :: !Text}\n  | \n    \n    ThinkingTranslationNotPermitted\n      { callId :: !Text,\n        requestedThinking :: !Text,\n        effectiveThinking :: !Text\n      }\n  | \n    \n    ProhibitedDefaultThinking {callId :: !Text}\n  | \n    \n    ProhibitedAlias {callId :: !Text, alias :: !Text, resolvedModelId :: !Text}\n  | ProhibitedProviderFallback {callId :: !Text, fromProvider :: !Text, toProvider :: !Text}\n  | ProhibitedModelFallback {callId :: !Text, fromModelId :: !Text, toModelId :: !Text}\n  | ProhibitedEffortClamping {callId :: !Text, requestedThinking :: !Text, clampedTo :: !Text}\n  | ProhibitedTransport {callId :: !Text, transport :: !Text}\n  | ProhibitedEndpoint {callId :: !Text, endpointClass :: !Text}\n  | \n    MissingCallEvidence {callId :: !Text}\n  | \n    MissingRetryEvidence {callId :: !Text, attempt :: !Int}\n  | \n    MissingContinuationEvidence {callId :: !Text}\n  | \n    MissingDelegatedChildEvidence {childRunId :: !Text}\n  | \n    \n    MissingCorrelationField {callId :: !Text, correlationField :: !Text}\n  | \n    ReviewedArtifactMismatch {expectedDigest :: !Text, actualDigest :: !Text}\n  | \n    \n    ReviewResultDigestMismatch {expectedDigest :: !Text, actualDigest :: !Text}\n  | \n    \n    \n    EvidenceBelowRequiredStrength\n      { callId :: !Text,\n        requiredStrength :: !EvidenceStrength,\n        observedStrength :: !EvidenceStrength\n      }\n  | \n    UnknownCallUsage {callId :: !Text, resource :: !Text}\n  | \n    LimitExceeded {limitName :: !Text, limitValue :: !Text, observedValue :: !Text}\n  | \n    \n    \n    \n    \n    \n    \n    \n    \n    NotApplicable {step :: !Text}\n  deriving stock (Eq, Show, Generic)"
         },
         {
+          "name": "PullRequestRef",
+          "kind": "newtype",
+          "declaration": "newtype PullRequestRef = PullRequestRef Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "PullRequestRef.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype PullRequestRef = PullRequestRef Text\n  deriving stock (Eq, Ord, Show)\n  deriving newtype (ToJSON, FromJSON)"
+        },
+        {
           "name": "ResultDigest",
           "kind": "newtype",
           "declaration": "newtype ResultDigest\n    = ResultDigest {value :: Data.Text.Internal.Text}",
@@ -5440,9 +5552,21 @@
           "sourceDeclaration": "newtype ResultDigest = ResultDigest {value :: Text}\n  deriving stock (Eq, Ord, Show, Generic)\n  deriving newtype (ToJSON, FromJSON)"
         },
         {
+          "name": "ReviewPath",
+          "kind": "newtype",
+          "declaration": "newtype ReviewPath = ReviewPath Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "ReviewPath.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype ReviewPath = ReviewPath Text\n  deriving stock (Eq, Ord, Show)\n  deriving newtype (ToJSON, FromJSON)"
+        },
+        {
           "name": "ReviewedArtifact",
           "kind": "data",
-          "declaration": "data ReviewedArtifact\n    = ReviewedArtifact {repository :: !Shikigami.Repository.RepositoryId,\n                        baseCommit :: !FullCommit,\n                        headCommit :: !FullCommit,\n                        diffDigest :: !DiffDigest,\n                        pathScope :: ![Data.Text.Internal.Text],\n                        pullRequest :: !(GHC.Internal.Maybe.Maybe Data.Text.Internal.Text)}",
+          "declaration": "data ReviewedArtifact\n    = ReviewedArtifact {repository :: !Shikigami.Repository.RepositoryId,\n                        baseCommit :: !FullCommit,\n                        headCommit :: !FullCommit,\n                        diffDigest :: !DiffDigest,\n                        pathScope :: ![ReviewPath],\n                        pullRequest :: !(GHC.Internal.Maybe.Maybe PullRequestRef)}",
           "members": [
             {
               "member": "ReviewedArtifact.repository",
@@ -5462,14 +5586,14 @@
             },
             {
               "member": "ReviewedArtifact.pathScope",
-              "type": "![Text]"
+              "type": "![ReviewPath]"
             },
             {
               "member": "ReviewedArtifact.pullRequest",
-              "type": "!(Maybe Text)"
+              "type": "!(Maybe PullRequestRef)"
             }
           ],
-          "sourceDeclaration": "data ReviewedArtifact = ReviewedArtifact\n  { repository :: !RepositoryId,\n    \n    baseCommit :: !FullCommit,\n    \n    headCommit :: !FullCommit,\n    diffDigest :: !DiffDigest,\n    \n    pathScope :: ![Text],\n    \n    \n    \n    \n    \n    \n    pullRequest :: !(Maybe Text)\n  }\n  deriving stock (Eq, Show, Generic)"
+          "sourceDeclaration": "data ReviewedArtifact = ReviewedArtifact\n  { repository :: !RepositoryId,\n    \n    baseCommit :: !FullCommit,\n    \n    headCommit :: !FullCommit,\n    diffDigest :: !DiffDigest,\n    \n    pathScope :: ![ReviewPath],\n    \n    \n    \n    \n    \n    \n    pullRequest :: !(Maybe PullRequestRef)\n  }\n  deriving stock (Eq, Show, Generic)"
         }
       ]
     },
@@ -6835,11 +6959,11 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Decision/Evidence.hs",
-      "sourceSha256": "eb18828e1157e396e1385284b79a358639c0572d486ead10e2f66074ffab8472",
+      "sourceSha256": "1c3a656484dc9b0f527dae1186c0beb2c1a4d1197eff485cf3546247c9252e2d",
       "module": "Shikigami.Decision.Evidence",
-      "interfaceSha256": "76c8955cddd199776f2b18938bc2480f954b8432afecfa58f596b4e32b10954a",
+      "interfaceSha256": "e321abfd094aefbf3f499de6789b68d3233a3ea6a3504c6bf4975955a9b6be95",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Decision/Evidence.hi",
-      "compiledSourceMd5": "f8fe13aaf8cf67f64199afadfdc7f5dd",
+      "compiledSourceMd5": "00bf12d1c68ba3eee8cc4c0f36ff0288",
       "declarations": [
         {
           "name": "DecisionEvidenceReport",
@@ -7556,7 +7680,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Execution/Attempt.hs",
       "sourceSha256": "aa036aa8f65224bf9faa1b6866fa30fc3be56314d9324df79bbf09fafcd3188a",
       "module": "Shikigami.Execution.Attempt",
-      "interfaceSha256": "6d4722018fdb8cf5bdf06a050dfc0dc2deea8ebedb83647e4c033af42bde6379",
+      "interfaceSha256": "24d2a28674e7b28942c28bdee5b413400f60966268b825e9da1c9cf4d10f50b1",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/Attempt.hi",
       "compiledSourceMd5": "87cb8dbc9c566dbff6ded622cb39a6a8",
       "declarations": [
@@ -7990,7 +8114,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Execution/Executor.hs",
       "sourceSha256": "3e50d8af1e012ebb2f29ba3d9b8b4a2db0352026a9bd6a43685a94db921484de",
       "module": "Shikigami.Execution.Executor",
-      "interfaceSha256": "1c1bdb326bc08dcf93aac34ddcc68ee268c3d1e960665318c265882c7a9898cc",
+      "interfaceSha256": "80daf2a4bea7ffafca6a133f017852621a4c0b2593e83c5f537762a19a8c9eb4",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/Executor.hi",
       "compiledSourceMd5": "4356ac0db8566feafa00b3e15089c812",
       "declarations": [
@@ -9131,11 +9255,11 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Execution/SelectionRuntime.hs",
-      "sourceSha256": "49e284cc70d4cc733a2868c9e2e015fe00372dca2160e2224a0b9e1ec5f505a6",
+      "sourceSha256": "24ef6ab4ab38f03a93e44685a797b087cf306de77fa21cc0b0a4e14df85d943c",
       "module": "Shikigami.Execution.SelectionRuntime",
-      "interfaceSha256": "93110cd766ba318c488416ab48f575725ace4de1a5ef2f153414fed88353c4c0",
+      "interfaceSha256": "da4a6dec126b4412a9fd4ec2ad4b58df6cb634df00d6bd9d68e029b422d12cff",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/SelectionRuntime.hi",
-      "compiledSourceMd5": "92dcc29c037b91a5e4724ded18cbbab8",
+      "compiledSourceMd5": "6a1c6ecfe49fff57d8020b4d4e3c7b59",
       "declarations": [
         {
           "name": "PreparedSelectionCall",
@@ -9195,7 +9319,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Execution/SelectionStore.hs",
       "sourceSha256": "0299e10cb4e4d31aef1397c1f00d9b2d62f0fe094f34d8dc77c48dd611369bb2",
       "module": "Shikigami.Execution.SelectionStore",
-      "interfaceSha256": "4f1f9493cabb1b4b380961e0ce71daaece045f1bf71d4d338300c1a3d2df0b2f",
+      "interfaceSha256": "b90c510785255a944d72692802214456412b30c56c55e87c3ab0bc940f9dc90a",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/SelectionStore.hi",
       "compiledSourceMd5": "59fd065ec4ca5c6488df1647cf7ad1bc",
       "declarations": [
@@ -9454,7 +9578,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Execution/Store.hs",
       "sourceSha256": "550e8a480a909d131c7588f433f16fd5363a09adad6c0f89f4e2f552dee64fb1",
       "module": "Shikigami.Execution.Store",
-      "interfaceSha256": "749f11549b045933b2f2bbc3079a84450b3ffa062a747e920a73422258e87306",
+      "interfaceSha256": "bfe3b548be8ddc51d2a49091d2e2c88f7ec81d8137cf4bf684ece4a634562798",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Execution/Store.hi",
       "compiledSourceMd5": "6c921a0e717a9789d58436f57198815a",
       "declarations": [
@@ -10740,7 +10864,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Flow/Decision.hs",
       "sourceSha256": "971a90f1f25acde1d61c8bdcac3b04d674d980741bb188ebb52d6681e73dd91b",
       "module": "Shikigami.Flow.Decision",
-      "interfaceSha256": "4d1fa113f3677539a60c679916e6ab8c0c7dcfd5ecfbb2a0033335c1399c2b73",
+      "interfaceSha256": "6e96d0e6e49ca658e2a4ace2c97208ec565b6bec198c7a41e8565bf77729f3ed",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Flow/Decision.hi",
       "compiledSourceMd5": "0d62ff927251783ea2426e358e184ddd",
       "declarations": [
@@ -11221,107 +11345,162 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Inspection/Settings.hs",
-      "sourceSha256": "510c870c60741e1ff33aaa428440d025936bf63ade0258ad94e7637275a37ce8",
+      "sourceSha256": "2d69877366df440fc5b3377b209608e7bd464aef9be101867fd4aea534f37e6f",
       "module": "Shikigami.Inspection.Settings",
-      "interfaceSha256": "0a0936ae65f8d2b7a66955cbe58aa8dcd5f7ed84614a5634b2f5731c4fa4e1c4",
+      "interfaceSha256": "98d71783395eb34a7e1a0f0f30bf3f178e49a549a910187acc061aec4e5d556a",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Inspection/Settings.hi",
-      "compiledSourceMd5": "72589083a698bf385bbd43e14534efea",
+      "compiledSourceMd5": "7e321db7e606b90c07c9d19caaebbeb1",
       "declarations": [
         {
           "name": "InspectionCredential",
           "kind": "newtype",
-          "declaration": "newtype InspectionCredential\n    = InspectionCredential Data.Text.Internal.Text",
+          "declaration": "newtype InspectionCredential scope\n    = InspectionCredential Data.Text.Internal.Text",
           "members": [
             {
               "member": "InspectionCredential.#1",
               "type": "Text"
             }
           ],
-          "sourceDeclaration": "newtype InspectionCredential = InspectionCredential Text deriving stock (Eq)"
+          "sourceDeclaration": "newtype InspectionCredential (scope :: Symbol) = InspectionCredential Text deriving stock (Eq)"
+        },
+        {
+          "name": "InspectionHost",
+          "kind": "newtype",
+          "declaration": "newtype InspectionHost = InspectionHost Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "InspectionHost.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype InspectionHost = InspectionHost Text\n  deriving stock (Eq)"
+        },
+        {
+          "name": "InspectionLimit",
+          "kind": "newtype",
+          "declaration": "newtype InspectionLimit scope = InspectionLimit GHC.Types.Int",
+          "members": [
+            {
+              "member": "InspectionLimit.#1",
+              "type": "Int"
+            }
+          ],
+          "sourceDeclaration": "newtype InspectionLimit (scope :: Symbol) = InspectionLimit Int\n  deriving stock (Eq, Ord)"
+        },
+        {
+          "name": "InspectionOrigin",
+          "kind": "newtype",
+          "declaration": "newtype InspectionOrigin = InspectionOrigin Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "InspectionOrigin.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype InspectionOrigin = InspectionOrigin Text\n  deriving stock (Eq)"
+        },
+        {
+          "name": "InspectionPort",
+          "kind": "newtype",
+          "declaration": "newtype InspectionPort = InspectionPort GHC.Types.Int",
+          "members": [
+            {
+              "member": "InspectionPort.#1",
+              "type": "Int"
+            }
+          ],
+          "sourceDeclaration": "newtype InspectionPort = InspectionPort Int\n  deriving stock (Eq)"
         },
         {
           "name": "InspectionSettings",
           "kind": "data",
-          "declaration": "data InspectionSettings\n    = InspectionSettings {host :: !Data.Text.Internal.Text,\n                          port :: {-# UNPACK #-}GHC.Types.Int,\n                          readToken :: !InspectionCredential,\n                          writeToken :: !(GHC.Internal.Maybe.Maybe InspectionCredential),\n                          mutationsEnabled :: !GHC.Types.Bool,\n                          allowedOrigins :: ![Data.Text.Internal.Text],\n                          maxConcurrentReads :: {-# UNPACK #-}GHC.Types.Int,\n                          readDeadlineSeconds :: {-# UNPACK #-}GHC.Types.Int,\n                          mutationDeadlineSeconds :: {-# UNPACK #-}GHC.Types.Int,\n                          deliveryDeadlineSeconds :: {-# UNPACK #-}GHC.Types.Int,\n                          statementTimeoutMillis :: {-# UNPACK #-}GHC.Types.Int,\n                          maxResponseBytes :: {-# UNPACK #-}GHC.Types.Int,\n                          maxRequestBytes :: {-# UNPACK #-}GHC.Types.Int,\n                          maxConnections :: {-# UNPACK #-}GHC.Types.Int,\n                          maxViews :: {-# UNPACK #-}GHC.Types.Int,\n                          maxFrameBytes :: {-# UNPACK #-}GHC.Types.Int,\n                          maxQueuedBytes :: {-# UNPACK #-}GHC.Types.Int,\n                          maxQueuedFrames :: {-# UNPACK #-}GHC.Types.Int,\n                          refreshMillis :: {-# UNPACK #-}GHC.Types.Int}",
+          "declaration": "data InspectionSettings\n    = InspectionSettings {host :: !InspectionHost,\n                          port :: ! {-# UNPACK #-}N:InspectionPortInspectionPort,\n                          readToken :: !(InspectionCredential \"read\"),\n                          writeToken :: !(GHC.Internal.Maybe.Maybe\n                                            (InspectionCredential \"write\")),\n                          mutationsEnabled :: !MutationAccess,\n                          allowedOrigins :: ![InspectionOrigin],\n                          maxConcurrentReads :: ! {-# UNPACK #-}(N:InspectionLimit\n                                                                     <\"maxConcurrentReads\">_N)(InspectionLimit\n                                                                                                 \"maxConcurrentReads\"),\n                          readDeadlineSeconds :: ! {-# UNPACK #-}(N:InspectionLimit\n                                                                      <\"readDeadlineSeconds\">_N)(InspectionLimit\n                                                                                                   \"readDeadlineSeconds\"),\n                          mutationDeadlineSeconds :: ! {-# UNPACK #-}(N:InspectionLimit\n                                                                          <\"mutationDeadlineSeconds\">_N)(InspectionLimit\n                                                                                                           \"mutationDeadlineSeconds\"),\n                          deliveryDeadlineSeconds :: ! {-# UNPACK #-}(N:InspectionLimit\n                                                                          <\"deliveryDeadlineSeconds\">_N)(InspectionLimit\n                                                                                                           \"deliveryDeadlineSeconds\"),\n                          statementTimeoutMillis :: ! {-# UNPACK #-}(N:InspectionLimit\n                                                                         <\"statementTimeoutMillis\">_N)(InspectionLimit\n                                                                                                         \"statementTimeoutMillis\"),\n                          maxResponseBytes :: ! {-# UNPACK #-}(N:InspectionLimit\n                                                                   <\"maxResponseBytes\">_N)(InspectionLimit\n                                                                                             \"maxResponseBytes\"),\n                          maxRequestBytes :: ! {-# UNPACK #-}(N:InspectionLimit\n                                                                  <\"maxRequestBytes\">_N)(InspectionLimit\n                                                                                           \"maxRequestBytes\"),\n                          maxConnections :: ! {-# UNPACK #-}(N:InspectionLimit\n                                                                 <\"maxConnections\">_N)(InspectionLimit\n                                                                                         \"maxConnections\"),\n                          maxViews :: ! {-# UNPACK #-}(N:InspectionLimit\n                                                           <\"maxViews\">_N)(InspectionLimit\n                                                                             \"maxViews\"),\n                          maxFrameBytes :: ! {-# UNPACK #-}(N:InspectionLimit\n                                                                <\"maxFrameBytes\">_N)(InspectionLimit\n                                                                                       \"maxFrameBytes\"),\n                          maxQueuedBytes :: ! {-# UNPACK #-}(N:InspectionLimit\n                                                                 <\"maxQueuedBytes\">_N)(InspectionLimit\n                                                                                         \"maxQueuedBytes\"),\n                          maxQueuedFrames :: ! {-# UNPACK #-}(N:InspectionLimit\n                                                                  <\"maxQueuedFrames\">_N)(InspectionLimit\n                                                                                           \"maxQueuedFrames\"),\n                          refreshMillis :: ! {-# UNPACK #-}(N:InspectionLimit\n                                                                <\"refreshMillis\">_N)(InspectionLimit\n                                                                                       \"refreshMillis\")}",
           "members": [
             {
               "member": "InspectionSettings.host",
-              "type": "!Text"
+              "type": "!InspectionHost"
             },
             {
               "member": "InspectionSettings.port",
-              "type": "!Int"
+              "type": "!InspectionPort"
             },
             {
               "member": "InspectionSettings.readToken",
-              "type": "!InspectionCredential"
+              "type": "!(InspectionCredential \"read\")"
             },
             {
               "member": "InspectionSettings.writeToken",
-              "type": "!(Maybe InspectionCredential)"
+              "type": "!(Maybe (InspectionCredential \"write\"))"
             },
             {
               "member": "InspectionSettings.mutationsEnabled",
-              "type": "!Bool"
+              "type": "!MutationAccess"
             },
             {
               "member": "InspectionSettings.allowedOrigins",
-              "type": "![Text]"
+              "type": "![InspectionOrigin]"
             },
             {
               "member": "InspectionSettings.maxConcurrentReads",
-              "type": "!Int"
+              "type": "!(InspectionLimit \"maxConcurrentReads\")"
             },
             {
               "member": "InspectionSettings.readDeadlineSeconds",
-              "type": "!Int"
+              "type": "!(InspectionLimit \"readDeadlineSeconds\")"
             },
             {
               "member": "InspectionSettings.mutationDeadlineSeconds",
-              "type": "!Int"
+              "type": "!(InspectionLimit \"mutationDeadlineSeconds\")"
             },
             {
               "member": "InspectionSettings.deliveryDeadlineSeconds",
-              "type": "!Int"
+              "type": "!(InspectionLimit \"deliveryDeadlineSeconds\")"
             },
             {
               "member": "InspectionSettings.statementTimeoutMillis",
-              "type": "!Int"
+              "type": "!(InspectionLimit \"statementTimeoutMillis\")"
             },
             {
               "member": "InspectionSettings.maxResponseBytes",
-              "type": "!Int"
+              "type": "!(InspectionLimit \"maxResponseBytes\")"
             },
             {
               "member": "InspectionSettings.maxRequestBytes",
-              "type": "!Int"
+              "type": "!(InspectionLimit \"maxRequestBytes\")"
             },
             {
               "member": "InspectionSettings.maxConnections",
-              "type": "!Int"
+              "type": "!(InspectionLimit \"maxConnections\")"
             },
             {
               "member": "InspectionSettings.maxViews",
-              "type": "!Int"
+              "type": "!(InspectionLimit \"maxViews\")"
             },
             {
               "member": "InspectionSettings.maxFrameBytes",
-              "type": "!Int"
+              "type": "!(InspectionLimit \"maxFrameBytes\")"
             },
             {
               "member": "InspectionSettings.maxQueuedBytes",
-              "type": "!Int"
+              "type": "!(InspectionLimit \"maxQueuedBytes\")"
             },
             {
               "member": "InspectionSettings.maxQueuedFrames",
-              "type": "!Int"
+              "type": "!(InspectionLimit \"maxQueuedFrames\")"
             },
             {
               "member": "InspectionSettings.refreshMillis",
-              "type": "!Int"
+              "type": "!(InspectionLimit \"refreshMillis\")"
             }
           ],
-          "sourceDeclaration": "data InspectionSettings = InspectionSettings\n  { host :: !Text,\n    port :: !Int,\n    readToken :: !InspectionCredential,\n    writeToken :: !(Maybe InspectionCredential),\n    mutationsEnabled :: !Bool,\n    allowedOrigins :: ![Text],\n    maxConcurrentReads :: !Int,\n    readDeadlineSeconds :: !Int,\n    mutationDeadlineSeconds :: !Int,\n    deliveryDeadlineSeconds :: !Int,\n    statementTimeoutMillis :: !Int,\n    maxResponseBytes :: !Int,\n    maxRequestBytes :: !Int,\n    maxConnections :: !Int,\n    maxViews :: !Int,\n    maxFrameBytes :: !Int,\n    maxQueuedBytes :: !Int,\n    maxQueuedFrames :: !Int,\n    refreshMillis :: !Int\n  }\n  deriving stock (Generic, Eq)"
+          "sourceDeclaration": "data InspectionSettings = InspectionSettings\n  { host :: !InspectionHost,\n    port :: !InspectionPort,\n    readToken :: !(InspectionCredential \"read\"),\n    writeToken :: !(Maybe (InspectionCredential \"write\")),\n    mutationsEnabled :: !MutationAccess,\n    allowedOrigins :: ![InspectionOrigin],\n    maxConcurrentReads :: !(InspectionLimit \"maxConcurrentReads\"),\n    readDeadlineSeconds :: !(InspectionLimit \"readDeadlineSeconds\"),\n    mutationDeadlineSeconds :: !(InspectionLimit \"mutationDeadlineSeconds\"),\n    deliveryDeadlineSeconds :: !(InspectionLimit \"deliveryDeadlineSeconds\"),\n    statementTimeoutMillis :: !(InspectionLimit \"statementTimeoutMillis\"),\n    maxResponseBytes :: !(InspectionLimit \"maxResponseBytes\"),\n    maxRequestBytes :: !(InspectionLimit \"maxRequestBytes\"),\n    maxConnections :: !(InspectionLimit \"maxConnections\"),\n    maxViews :: !(InspectionLimit \"maxViews\"),\n    maxFrameBytes :: !(InspectionLimit \"maxFrameBytes\"),\n    maxQueuedBytes :: !(InspectionLimit \"maxQueuedBytes\"),\n    maxQueuedFrames :: !(InspectionLimit \"maxQueuedFrames\"),\n    refreshMillis :: !(InspectionLimit \"refreshMillis\")\n  }\n  deriving stock (Generic, Eq)"
+        },
+        {
+          "name": "MutationAccess",
+          "kind": "data",
+          "declaration": "data MutationAccess = InspectionReadOnly | InspectionMutable",
+          "members": [],
+          "sourceDeclaration": "data MutationAccess = InspectionReadOnly | InspectionMutable\n  deriving stock (Eq, Show)"
         }
       ]
     },
@@ -11528,18 +11707,18 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Objective/Acceptance.hs",
-      "sourceSha256": "d459460433a3d49573165571ca1f534cc36f4ea6a9cbda5710d017f05981bfc7",
+      "sourceSha256": "80b20cdb28593d94a19ad5b7e38a0301945d271885e0903c9e9103140f72f950",
       "module": "Shikigami.Objective.Acceptance",
-      "interfaceSha256": "0ce850ea7d63c684f3c70585b11b2d3a713991a4efb1813ed25b9b1dc3f75a1e",
+      "interfaceSha256": "d83ddeb150dcf4926203bd6c3612781a8b89bde8aef2503d97c2e24b0b54e9c2",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Objective/Acceptance.hi",
-      "compiledSourceMd5": "322ad974680f38a1926a2b1b6e5a5e18",
+      "compiledSourceMd5": "2b3675f3ee95355073d352e6060b1c1a",
       "declarations": []
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Objective/Authority.hs",
       "sourceSha256": "5c0d1b8b1028e77b8280ae488f34ee352b63bab84c5aa6a09719fdf299eb856b",
       "module": "Shikigami.Objective.Authority",
-      "interfaceSha256": "aec7526899dd3083a8110512dd1850e09757882c668a7c237827634936b03775",
+      "interfaceSha256": "c0a78d2dfec3c5b2297ca9805a24863fa265c4762408f255768ea5721fbfe489",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Objective/Authority.hi",
       "compiledSourceMd5": "4526668db7dea30c009bcb0a637d9bd5",
       "declarations": [
@@ -11575,11 +11754,11 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Objective/Capability.hs",
-      "sourceSha256": "883afbe97d22dee22bd8f77b6b45cda40e80c1b3d81a242c0b0f8899f782af4e",
+      "sourceSha256": "d158f0265685e3fcbbb61211c0967a351102a15506ac5b38a2c8b89ef6f4fd26",
       "module": "Shikigami.Objective.Capability",
-      "interfaceSha256": "6513c2577eff91d32e189d63ec196394e0c38f3cd7ff0d04783cbf443114e868",
+      "interfaceSha256": "4d655c79ec984f0fa47ebbe5dcc6c277168c1f8c37bdc2e4700315ecbf89a8cf",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Objective/Capability.hi",
-      "compiledSourceMd5": "ffee616bf56e69f24095c05495df471f",
+      "compiledSourceMd5": "38b40cd57f827acf8ed932dab5b97cb9",
       "declarations": [
         {
           "name": "ObjectiveHost",
@@ -11626,16 +11805,16 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Objective/Command.hs",
-      "sourceSha256": "f98828601bd56013d500b763a8d635560c4386b2f67de6a8f45064be75d56b5a",
+      "sourceSha256": "e2bb786cfa434cdd0156124128a5795b73fd1e5744533059ca85f11a6b755a75",
       "module": "Shikigami.Objective.Command",
-      "interfaceSha256": "f19ede5d9c2bd91b15d3650c84954276a55377284dc55c474d309750e051431a",
+      "interfaceSha256": "0d7e584e1a6b377dfc36bf33d049a264c97b224e4a3b9df2ffe4ae593d4c1e44",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Objective/Command.hi",
-      "compiledSourceMd5": "9c993fe594b5f29c4c5c9e19e8eb0cc2",
+      "compiledSourceMd5": "e8c19c235d111b1637f1f464fcb5dcd4",
       "declarations": [
         {
           "name": "Command",
           "kind": "data",
-          "declaration": "data Command\n    = ReviseInstructions !Shikigami.Objective.Content.Instructions\n    | ReviseCriteria ![Shikigami.Objective.Types.Criterion]\n    | SetAssignments ![Shikigami.Objective.Types.AssignmentDraft]\n    | RecordProgress !Shikigami.Objective.Keys.ObjectiveAssignmentId\n                     !Shikigami.Objective.Types.AssignmentState\n                     ![Shikigami.Objective.Content.DecisionNote]\n                     ![Shikigami.Objective.Content.AssumptionNote]\n    | RecordEvidence !Shikigami.Objective.Keys.ObjectiveAssignmentId\n                     !Shikigami.Objective.Types.EvidenceInput\n    | SetNextAction ![Shikigami.Objective.Content.NextAction]\n    | SetBlocked !GHC.Types.Bool\n    | ProposeCompletion !Shikigami.Objective.Types.CompletionProposal\n    | AcceptCompletion\n    | CancelObjective\n    | GrantMember !Shikigami.Objective.Types.AccessPrincipal\n                  ![Shikigami.Objective.Types.Role]\n    | RevokeMember !Shikigami.Objective.Types.AccessPrincipal\n    | BindConversation !Data.Text.Internal.Text\n    | LinkExternal !Shikigami.Objective.Types.ExternalReference",
+          "declaration": "data Command\n    = ReviseInstructions !Shikigami.Objective.Content.Instructions\n    | ReviseCriteria ![Shikigami.Objective.Types.Criterion]\n    | SetAssignments ![Shikigami.Objective.Types.AssignmentDraft]\n    | RecordProgress !Shikigami.Objective.Keys.ObjectiveAssignmentId\n                     !Shikigami.Objective.Types.AssignmentState\n                     ![Shikigami.Objective.Content.DecisionNote]\n                     ![Shikigami.Objective.Content.AssumptionNote]\n    | RecordEvidence !Shikigami.Objective.Keys.ObjectiveAssignmentId\n                     !Shikigami.Objective.Types.EvidenceInput\n    | SetNextAction ![Shikigami.Objective.Content.NextAction]\n    | SetBlocked !Shikigami.Objective.Types.BlockState\n    | ProposeCompletion !Shikigami.Objective.Types.CompletionProposal\n    | AcceptCompletion\n    | CancelObjective\n    | GrantMember !Shikigami.Objective.Types.AccessPrincipal\n                  ![Shikigami.Objective.Types.Role]\n    | RevokeMember !Shikigami.Objective.Types.AccessPrincipal\n    | BindConversation !Shikigami.Objective.Keys.ConversationRef\n    | LinkExternal !Shikigami.Objective.Types.ExternalReference",
           "members": [
             {
               "member": "ReviseInstructions.#1",
@@ -11679,7 +11858,7 @@
             },
             {
               "member": "SetBlocked.#1",
-              "type": "!Bool"
+              "type": "!BlockState"
             },
             {
               "member": "ProposeCompletion.#1",
@@ -11699,14 +11878,14 @@
             },
             {
               "member": "BindConversation.#1",
-              "type": "!Text"
+              "type": "!ConversationRef"
             },
             {
               "member": "LinkExternal.#1",
               "type": "!ExternalReference"
             }
           ],
-          "sourceDeclaration": "data Command\n  = ReviseInstructions !Instructions\n  | ReviseCriteria ![Criterion]\n  | SetAssignments ![AssignmentDraft]\n  | RecordProgress !ObjectiveAssignmentId !AssignmentState ![DecisionNote] ![AssumptionNote]\n  | RecordEvidence !ObjectiveAssignmentId !EvidenceInput\n  | SetNextAction ![NextAction]\n  | SetBlocked !Bool\n  | ProposeCompletion !CompletionProposal\n  | AcceptCompletion\n  | CancelObjective\n  | GrantMember !AccessPrincipal ![Role]\n  | RevokeMember !AccessPrincipal\n  | BindConversation !Text\n  | LinkExternal !ExternalReference\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON)"
+          "sourceDeclaration": "data Command\n  = ReviseInstructions !Instructions\n  | ReviseCriteria ![Criterion]\n  | SetAssignments ![AssignmentDraft]\n  | RecordProgress !ObjectiveAssignmentId !AssignmentState ![DecisionNote] ![AssumptionNote]\n  | RecordEvidence !ObjectiveAssignmentId !EvidenceInput\n  | SetNextAction ![NextAction]\n  | SetBlocked !BlockState\n  | ProposeCompletion !CompletionProposal\n  | AcceptCompletion\n  | CancelObjective\n  | GrantMember !AccessPrincipal ![Role]\n  | RevokeMember !AccessPrincipal\n  | BindConversation !ConversationRef\n  | LinkExternal !ExternalReference\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON)"
         },
         {
           "name": "InternalCommand",
@@ -11882,11 +12061,11 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Objective/Keys.hs",
-      "sourceSha256": "e96278d43f750ac886183c263485dfc11fdaa61cd8d72d1f1b3a6005d2a5ac33",
+      "sourceSha256": "49fefb6fc32934f1f3f5c6bce9717e510b59da7324466516177fcbf68e3f0bd6",
       "module": "Shikigami.Objective.Keys",
-      "interfaceSha256": "ff0f62b068ed9257a1c9136ade5ac83f93e2697fdf2d60f4148afb11bbddcced",
+      "interfaceSha256": "e28752b93b91b9685c0afffe7c663cc8fa191e55235ffe502a3c369ed7302935",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Objective/Keys.hi",
-      "compiledSourceMd5": "7c0f146d9b993dbf67c21f2caa84d1d9",
+      "compiledSourceMd5": "0d09d8afbfc1bdb247d251ff6e5f0911",
       "declarations": [
         {
           "name": "ArtifactRef",
@@ -11899,6 +12078,42 @@
             }
           ],
           "sourceDeclaration": "newtype ArtifactRef = ArtifactRef Text\n  deriving stock (Eq, Ord, Show)"
+        },
+        {
+          "name": "AssignmentDigest",
+          "kind": "newtype",
+          "declaration": "newtype AssignmentDigest = AssignmentDigest Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "AssignmentDigest.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype AssignmentDigest = AssignmentDigest Text\n  deriving stock (Eq, Ord, Show)"
+        },
+        {
+          "name": "CallerId",
+          "kind": "newtype",
+          "declaration": "newtype CallerId = CallerId Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "CallerId.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype CallerId = CallerId Text\n  deriving stock (Eq, Ord, Show)"
+        },
+        {
+          "name": "ConversationRef",
+          "kind": "newtype",
+          "declaration": "newtype ConversationRef = ConversationRef Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "ConversationRef.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype ConversationRef = ConversationRef Text\n  deriving stock (Eq, Ord, Show)"
         },
         {
           "name": "CriterionKey",
@@ -11925,6 +12140,42 @@
           "sourceDeclaration": "newtype EvidenceKey = EvidenceKey Text\n  deriving stock (Eq, Ord, Show)"
         },
         {
+          "name": "ExecPlanRef",
+          "kind": "newtype",
+          "declaration": "newtype ExecPlanRef = ExecPlanRef Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "ExecPlanRef.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype ExecPlanRef = ExecPlanRef Text\n  deriving stock (Eq, Ord, Show)"
+        },
+        {
+          "name": "IntentionRef",
+          "kind": "newtype",
+          "declaration": "newtype IntentionRef = IntentionRef Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "IntentionRef.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype IntentionRef = IntentionRef Text\n  deriving stock (Eq, Ord, Show)"
+        },
+        {
+          "name": "MutationFingerprint",
+          "kind": "newtype",
+          "declaration": "newtype MutationFingerprint\n    = MutationFingerprint Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "MutationFingerprint.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype MutationFingerprint = MutationFingerprint Text\n  deriving stock (Eq, Ord, Show)"
+        },
+        {
           "name": "ObjectiveAssignmentId",
           "kind": "newtype",
           "declaration": "newtype ObjectiveAssignmentId\n    = ObjectiveAssignmentId Data.Text.Internal.Text",
@@ -11935,6 +12186,90 @@
             }
           ],
           "sourceDeclaration": "newtype ObjectiveAssignmentId = ObjectiveAssignmentId Text\n  deriving stock (Eq, Ord, Show)"
+        },
+        {
+          "name": "ObjectivePayloadDigest",
+          "kind": "newtype",
+          "declaration": "newtype ObjectivePayloadDigest\n    = ObjectivePayloadDigest Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "ObjectivePayloadDigest.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype ObjectivePayloadDigest = ObjectivePayloadDigest Text\n  deriving stock (Eq, Ord, Show)"
+        },
+        {
+          "name": "OperatorId",
+          "kind": "newtype",
+          "declaration": "newtype OperatorId = OperatorId Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "OperatorId.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype OperatorId = OperatorId Text\n  deriving stock (Eq, Ord, Show)"
+        },
+        {
+          "name": "OriginLabel",
+          "kind": "newtype",
+          "declaration": "newtype OriginLabel = OriginLabel Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "OriginLabel.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype OriginLabel = OriginLabel Text\n  deriving stock (Eq, Ord, Show)"
+        },
+        {
+          "name": "ProtocolTaskRef",
+          "kind": "newtype",
+          "declaration": "newtype ProtocolTaskRef = ProtocolTaskRef Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "ProtocolTaskRef.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype ProtocolTaskRef = ProtocolTaskRef Text\n  deriving stock (Eq, Ord, Show)"
+        },
+        {
+          "name": "ResultCommitment",
+          "kind": "newtype",
+          "declaration": "newtype ResultCommitment = ResultCommitment Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "ResultCommitment.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype ResultCommitment = ResultCommitment Text\n  deriving stock (Eq, Ord, Show)"
+        },
+        {
+          "name": "RunReference",
+          "kind": "newtype",
+          "declaration": "newtype RunReference = RunReference Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "RunReference.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype RunReference = RunReference Text\n  deriving stock (Eq, Ord, Show)"
+        },
+        {
+          "name": "TurnReference",
+          "kind": "newtype",
+          "declaration": "newtype TurnReference = TurnReference Data.Text.Internal.Text",
+          "members": [
+            {
+              "member": "TurnReference.#1",
+              "type": "Text"
+            }
+          ],
+          "sourceDeclaration": "newtype TurnReference = TurnReference Text\n  deriving stock (Eq, Ord, Show)"
         }
       ]
     },
@@ -11957,11 +12292,11 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Objective/Store.hs",
-      "sourceSha256": "8865ac38ab2f985fca9e69611715c86542f71e05a22a23ae56b4978ce6c69f3b",
+      "sourceSha256": "55e85a41263e08b991162da25e7c28da5725272f60eac0d3788af168deed1998",
       "module": "Shikigami.Objective.Store",
-      "interfaceSha256": "79c4d4775dc45ef65a46a421310d1148613767bd21b3a9eb7076b8cf64fcb470",
+      "interfaceSha256": "e75c416fc85194ce1e81b51e7d48c79b6f5d9b2bc381ab16758f59b84342fe58",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Objective/Store.hi",
-      "compiledSourceMd5": "a841dbde1b5c96bb4f3364bf60e67b1c",
+      "compiledSourceMd5": "349a36e28c7ffa7e62af2bf5323ee1f1",
       "declarations": [
         {
           "name": "Abort",
@@ -11986,20 +12321,20 @@
     },
     {
       "sourcePath": "shikigami-core/src/Shikigami/Objective/Types.hs",
-      "sourceSha256": "1df73e4dd6a7b07c382b5d6cc4dfd1cd46538bf92b8b2bff1f2fc2d3901901d4",
+      "sourceSha256": "d597779dc98499fe78502e6248bd0cf46fed6e62d870146a87ca815f18b370c7",
       "module": "Shikigami.Objective.Types",
-      "interfaceSha256": "de0c82e6950c80ebe3f60c783c36486723265a713e84cc6e47bf6c30ddd54cb1",
+      "interfaceSha256": "6133c74563d1a0eadfe19220be448b332891bbe4bc648eccff8fa3b0a5d51a82",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Objective/Types.hi",
-      "compiledSourceMd5": "650b4b885cf12281a1522b391ba0fc4b",
+      "compiledSourceMd5": "0b607e29375b58c4e506c7a7a5a60597",
       "declarations": [
         {
           "name": "AccessPrincipal",
           "kind": "data",
-          "declaration": "data AccessPrincipal\n    = VerifiedCaller !Data.Text.Internal.Text\n    | RecordedAgent !Shikigami.Agent.Principal.AgentIdentity\n    | LocalOperator !Data.Text.Internal.Text",
+          "declaration": "data AccessPrincipal\n    = VerifiedCaller !Shikigami.Objective.Keys.CallerId\n    | RecordedAgent !Shikigami.Agent.Principal.AgentIdentity\n    | LocalOperator !Shikigami.Objective.Keys.OperatorId",
           "members": [
             {
               "member": "VerifiedCaller.#1",
-              "type": "!Text"
+              "type": "!CallerId"
             },
             {
               "member": "RecordedAgent.#1",
@@ -12007,10 +12342,10 @@
             },
             {
               "member": "LocalOperator.#1",
-              "type": "!Text"
+              "type": "!OperatorId"
             }
           ],
-          "sourceDeclaration": "data AccessPrincipal = VerifiedCaller !Text | RecordedAgent !AgentIdentity | LocalOperator !Text\n  deriving stock (Eq, Ord, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
+          "sourceDeclaration": "data AccessPrincipal = VerifiedCaller !CallerId | RecordedAgent !AgentIdentity | LocalOperator !OperatorId\n  deriving stock (Eq, Ord, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
         },
         {
           "name": "Assignment",
@@ -12088,6 +12423,13 @@
           "sourceDeclaration": "data AssignmentState = Pending | Working | Done | Withdrawn\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
         },
         {
+          "name": "BlockState",
+          "kind": "data",
+          "declaration": "data BlockState = Unblocked | IsBlocked",
+          "members": [],
+          "sourceDeclaration": "data BlockState = Unblocked | IsBlocked\n  deriving stock (Eq, Ord, Show)"
+        },
+        {
           "name": "CheckDisposition",
           "kind": "data",
           "declaration": "data CheckDisposition = CheckPassed | CheckFailed | ResultObserved",
@@ -12157,15 +12499,15 @@
         {
           "name": "CreationOrigin",
           "kind": "data",
-          "declaration": "data CreationOrigin\n    = ExecutionOrigin {runId :: !Data.Text.Internal.Text,\n                       executionId :: !Data.Text.Internal.Text,\n                       operationId :: !Shikigami.Execution.Identity.OperationId}\n    | ConversationOrigin {conversationId :: !Data.Text.Internal.Text,\n                          turnId :: !Data.Text.Internal.Text,\n                          runId :: !Data.Text.Internal.Text,\n                          operationId :: !Shikigami.Execution.Identity.OperationId}\n    | FlowOrigin {workflowId :: !Data.Text.Internal.Text,\n                  generation :: !GHC.Num.Integer.Integer,\n                  label :: !Data.Text.Internal.Text,\n                  operationId :: !Shikigami.Execution.Identity.OperationId}",
+          "declaration": "data CreationOrigin\n    = ExecutionOrigin {runId :: !Shikigami.Objective.Keys.RunReference,\n                       executionId :: !Shikigami.Execution.Transcript.ExecutionId,\n                       operationId :: !Shikigami.Execution.Identity.OperationId}\n    | ConversationOrigin {conversationId :: !Shikigami.Objective.Keys.ConversationRef,\n                          turnId :: !Shikigami.Objective.Keys.TurnReference,\n                          runId :: !Shikigami.Objective.Keys.RunReference,\n                          operationId :: !Shikigami.Execution.Identity.OperationId}\n    | FlowOrigin {workflowId :: !Keiro.Workflow.Types.WorkflowId,\n                  generation :: !(Shikigami.StateRevision.StateRevision\n                                    \"objective-origin-generation\"),\n                  label :: !Shikigami.Objective.Keys.OriginLabel,\n                  operationId :: !Shikigami.Execution.Identity.OperationId}",
           "members": [
             {
               "member": "ExecutionOrigin.runId",
-              "type": "!Text"
+              "type": "!RunReference"
             },
             {
               "member": "ExecutionOrigin.executionId",
-              "type": "!Text"
+              "type": "!ExecutionId"
             },
             {
               "member": "ExecutionOrigin.operationId",
@@ -12173,15 +12515,15 @@
             },
             {
               "member": "ConversationOrigin.conversationId",
-              "type": "!Text"
+              "type": "!ConversationRef"
             },
             {
               "member": "ConversationOrigin.turnId",
-              "type": "!Text"
+              "type": "!TurnReference"
             },
             {
               "member": "ConversationOrigin.runId",
-              "type": "!Text"
+              "type": "!RunReference"
             },
             {
               "member": "ConversationOrigin.operationId",
@@ -12189,27 +12531,27 @@
             },
             {
               "member": "FlowOrigin.workflowId",
-              "type": "!Text"
+              "type": "!WorkflowId"
             },
             {
               "member": "FlowOrigin.generation",
-              "type": "!Integer"
+              "type": "!(StateRevision \"objective-origin-generation\")"
             },
             {
               "member": "FlowOrigin.label",
-              "type": "!Text"
+              "type": "!OriginLabel"
             },
             {
               "member": "FlowOrigin.operationId",
               "type": "!OperationId"
             }
           ],
-          "sourceDeclaration": "data CreationOrigin\n  = ExecutionOrigin {runId :: !Text, executionId :: !Text, operationId :: !OperationId}\n  | ConversationOrigin {conversationId :: !Text, turnId :: !Text, runId :: !Text, operationId :: !OperationId}\n  | FlowOrigin {workflowId :: !Text, generation :: !Integer, label :: !Text, operationId :: !OperationId}\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
+          "sourceDeclaration": "data CreationOrigin\n  = ExecutionOrigin {runId :: !RunReference, executionId :: !ExecutionId, operationId :: !OperationId}\n  | ConversationOrigin {conversationId :: !ConversationRef, turnId :: !TurnReference, runId :: !RunReference, operationId :: !OperationId}\n  | FlowOrigin {workflowId :: !WorkflowId, generation :: !(StateRevision \"objective-origin-generation\"), label :: !OriginLabel, operationId :: !OperationId}\n  deriving stock (Eq, Show, Generic)"
         },
         {
           "name": "Criterion",
           "kind": "data",
-          "declaration": "data Criterion\n    = Criterion {key :: !Shikigami.Objective.Keys.CriterionKey,\n                 description :: !Shikigami.Objective.Content.CriterionDescription,\n                 kind :: !CriterionKind,\n                 journeyRequired :: !GHC.Types.Bool}",
+          "declaration": "data Criterion\n    = Criterion {key :: !Shikigami.Objective.Keys.CriterionKey,\n                 description :: !Shikigami.Objective.Content.CriterionDescription,\n                 kind :: !CriterionKind,\n                 journeyRequired :: !JourneyRequirement}",
           "members": [
             {
               "member": "Criterion.key",
@@ -12225,10 +12567,10 @@
             },
             {
               "member": "Criterion.journeyRequired",
-              "type": "!Bool"
+              "type": "!JourneyRequirement"
             }
           ],
-          "sourceDeclaration": "data Criterion = Criterion {key :: !CriterionKey, description :: !CriterionDescription, kind :: !CriterionKind, journeyRequired :: !Bool}\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
+          "sourceDeclaration": "data Criterion = Criterion {key :: !CriterionKey, description :: !CriterionDescription, kind :: !CriterionKind, journeyRequired :: !JourneyRequirement}\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
         },
         {
           "name": "CriterionKind",
@@ -12240,7 +12582,7 @@
         {
           "name": "Evidence",
           "kind": "data",
-          "declaration": "data Evidence\n    = Evidence {input :: !EvidenceInput,\n                verification :: !EvidenceVerification,\n                assignmentId :: !Shikigami.Objective.Keys.ObjectiveAssignmentId,\n                assignmentDigest :: !Data.Text.Internal.Text,\n                recordedBy :: !AccessPrincipal,\n                revision :: !(Shikigami.StateRevision.StateRevision \"objective\"),\n                instructionsRevision :: !(Shikigami.StateRevision.StateRevision\n                                            \"objective-instructions\"),\n                criteriaRevision :: !(Shikigami.StateRevision.StateRevision\n                                        \"objective-criteria\")}",
+          "declaration": "data Evidence\n    = Evidence {input :: !EvidenceInput,\n                verification :: !EvidenceVerification,\n                assignmentId :: !Shikigami.Objective.Keys.ObjectiveAssignmentId,\n                assignmentDigest :: !Shikigami.Objective.Keys.AssignmentDigest,\n                recordedBy :: !AccessPrincipal,\n                revision :: !(Shikigami.StateRevision.StateRevision \"objective\"),\n                instructionsRevision :: !(Shikigami.StateRevision.StateRevision\n                                            \"objective-instructions\"),\n                criteriaRevision :: !(Shikigami.StateRevision.StateRevision\n                                        \"objective-criteria\")}",
           "members": [
             {
               "member": "Evidence.input",
@@ -12256,7 +12598,7 @@
             },
             {
               "member": "Evidence.assignmentDigest",
-              "type": "!Text"
+              "type": "!AssignmentDigest"
             },
             {
               "member": "Evidence.recordedBy",
@@ -12275,12 +12617,12 @@
               "type": "!(StateRevision \"objective-criteria\")"
             }
           ],
-          "sourceDeclaration": "data Evidence = Evidence\n  { input :: !EvidenceInput,\n    verification :: !EvidenceVerification,\n    assignmentId :: !ObjectiveAssignmentId,\n    assignmentDigest :: !Text,\n    recordedBy :: !AccessPrincipal,\n    revision :: !(StateRevision \"objective\"),\n    instructionsRevision :: !(StateRevision \"objective-instructions\"),\n    criteriaRevision :: !(StateRevision \"objective-criteria\")\n  }\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
+          "sourceDeclaration": "data Evidence = Evidence\n  { input :: !EvidenceInput,\n    verification :: !EvidenceVerification,\n    assignmentId :: !ObjectiveAssignmentId,\n    assignmentDigest :: !AssignmentDigest,\n    recordedBy :: !AccessPrincipal,\n    revision :: !(StateRevision \"objective\"),\n    instructionsRevision :: !(StateRevision \"objective-instructions\"),\n    criteriaRevision :: !(StateRevision \"objective-criteria\")\n  }\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
         },
         {
           "name": "EvidenceInput",
           "kind": "data",
-          "declaration": "data EvidenceInput\n    = ResultEvidence {key :: !Shikigami.Objective.Keys.EvidenceKey,\n                      criterion :: !Shikigami.Objective.Keys.CriterionKey,\n                      result :: !ResultReference,\n                      journey :: !GHC.Types.Bool}\n    | Attestation {key :: !Shikigami.Objective.Keys.EvidenceKey,\n                   criterion :: !Shikigami.Objective.Keys.CriterionKey,\n                   artifact :: !Shikigami.Objective.Keys.ArtifactRef,\n                   statement :: !Shikigami.Objective.Content.AttestationStatement,\n                   journey :: !GHC.Types.Bool}",
+          "declaration": "data EvidenceInput\n    = ResultEvidence {key :: !Shikigami.Objective.Keys.EvidenceKey,\n                      criterion :: !Shikigami.Objective.Keys.CriterionKey,\n                      result :: !ResultReference,\n                      journey :: !JourneyEvidence}\n    | Attestation {key :: !Shikigami.Objective.Keys.EvidenceKey,\n                   criterion :: !Shikigami.Objective.Keys.CriterionKey,\n                   artifact :: !Shikigami.Objective.Keys.ArtifactRef,\n                   statement :: !Shikigami.Objective.Content.AttestationStatement,\n                   journey :: !JourneyEvidence}",
           "members": [
             {
               "member": "ResultEvidence.key",
@@ -12296,7 +12638,7 @@
             },
             {
               "member": "ResultEvidence.journey",
-              "type": "!Bool"
+              "type": "!JourneyEvidence"
             },
             {
               "member": "Attestation.key",
@@ -12316,15 +12658,15 @@
             },
             {
               "member": "Attestation.journey",
-              "type": "!Bool"
+              "type": "!JourneyEvidence"
             }
           ],
-          "sourceDeclaration": "data EvidenceInput\n  = ResultEvidence {key :: !EvidenceKey, criterion :: !CriterionKey, result :: !ResultReference, journey :: !Bool}\n  | Attestation {key :: !EvidenceKey, criterion :: !CriterionKey, artifact :: !ArtifactRef, statement :: !AttestationStatement, journey :: !Bool}\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
+          "sourceDeclaration": "data EvidenceInput\n  = ResultEvidence {key :: !EvidenceKey, criterion :: !CriterionKey, result :: !ResultReference, journey :: !JourneyEvidence}\n  | Attestation {key :: !EvidenceKey, criterion :: !CriterionKey, artifact :: !ArtifactRef, statement :: !AttestationStatement, journey :: !JourneyEvidence}\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
         },
         {
           "name": "EvidenceVerification",
           "kind": "data",
-          "declaration": "data EvidenceVerification\n    = EvidenceVerification {disposition :: !CheckDisposition,\n                            criterion :: !(GHC.Internal.Maybe.Maybe\n                                             Shikigami.Objective.Keys.CriterionKey),\n                            journey :: !GHC.Types.Bool}",
+          "declaration": "data EvidenceVerification\n    = EvidenceVerification {disposition :: !CheckDisposition,\n                            criterion :: !(GHC.Internal.Maybe.Maybe\n                                             Shikigami.Objective.Keys.CriterionKey),\n                            journey :: !JourneyEvidence}",
           "members": [
             {
               "member": "EvidenceVerification.disposition",
@@ -12336,30 +12678,44 @@
             },
             {
               "member": "EvidenceVerification.journey",
-              "type": "!Bool"
+              "type": "!JourneyEvidence"
             }
           ],
-          "sourceDeclaration": "data EvidenceVerification = EvidenceVerification\n  { disposition :: !CheckDisposition,\n    criterion :: !(Maybe CriterionKey),\n    journey :: !Bool\n  }\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
+          "sourceDeclaration": "data EvidenceVerification = EvidenceVerification\n  { disposition :: !CheckDisposition,\n    criterion :: !(Maybe CriterionKey),\n    journey :: !JourneyEvidence\n  }\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
         },
         {
           "name": "ExternalReference",
           "kind": "data",
-          "declaration": "data ExternalReference\n    = ReiIntention !Data.Text.Internal.Text\n    | ExecPlan !Data.Text.Internal.Text\n    | ProtocolTask !Data.Text.Internal.Text",
+          "declaration": "data ExternalReference\n    = ReiIntention !Shikigami.Objective.Keys.IntentionRef\n    | ExecPlan !Shikigami.Objective.Keys.ExecPlanRef\n    | ProtocolTask !Shikigami.Objective.Keys.ProtocolTaskRef",
           "members": [
             {
               "member": "ReiIntention.#1",
-              "type": "!Text"
+              "type": "!IntentionRef"
             },
             {
               "member": "ExecPlan.#1",
-              "type": "!Text"
+              "type": "!ExecPlanRef"
             },
             {
               "member": "ProtocolTask.#1",
-              "type": "!Text"
+              "type": "!ProtocolTaskRef"
             }
           ],
-          "sourceDeclaration": "data ExternalReference = ReiIntention !Text | ExecPlan !Text | ProtocolTask !Text\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
+          "sourceDeclaration": "data ExternalReference = ReiIntention !IntentionRef | ExecPlan !ExecPlanRef | ProtocolTask !ProtocolTaskRef\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
+        },
+        {
+          "name": "JourneyEvidence",
+          "kind": "data",
+          "declaration": "data JourneyEvidence = NoJourney | JourneyObserved",
+          "members": [],
+          "sourceDeclaration": "data JourneyEvidence = NoJourney | JourneyObserved\n  deriving stock (Eq, Ord, Show)"
+        },
+        {
+          "name": "JourneyRequirement",
+          "kind": "data",
+          "declaration": "data JourneyRequirement = JourneyOptional | JourneyRequired",
+          "members": [],
+          "sourceDeclaration": "data JourneyRequirement = JourneyOptional | JourneyRequired\n  deriving stock (Eq, Ord, Show)"
         },
         {
           "name": "Member",
@@ -12502,17 +12858,24 @@
           "sourceDeclaration": "data ObjectiveError\n  = ObjectiveMissing\n  | ObjectiveDenied\n  | ObjectiveConflict\n  | ObjectiveInvalid !Text\n  | ObjectiveInvalidEvidence\n  | ObjectiveUnavailable\n  | ObjectiveUnresolved\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
         },
         {
+          "name": "ObjectiveService",
+          "kind": "data",
+          "declaration": "data ObjectiveService = ObjectivesDisabled | ObjectivesEnabled",
+          "members": [],
+          "sourceDeclaration": "data ObjectiveService = ObjectivesDisabled | ObjectivesEnabled\n  deriving stock (Eq, Ord, Show)"
+        },
+        {
           "name": "ObjectiveSettings",
           "kind": "data",
-          "declaration": "data ObjectiveSettings\n    = ObjectiveSettings {enabled :: !GHC.Types.Bool,\n                         operator :: !(GHC.Internal.Maybe.Maybe Data.Text.Internal.Text),\n                         administration :: !OperatorPolicy,\n                         agentCreation :: ![Data.Text.Internal.Text]}",
+          "declaration": "data ObjectiveSettings\n    = ObjectiveSettings {enabled :: !ObjectiveService,\n                         operator :: !(GHC.Internal.Maybe.Maybe\n                                         Shikigami.Objective.Keys.OperatorId),\n                         administration :: !OperatorPolicy,\n                         agentCreation :: ![Shikigami.Agent.Principal.AgentPrincipal]}",
           "members": [
             {
               "member": "ObjectiveSettings.enabled",
-              "type": "!Bool"
+              "type": "!ObjectiveService"
             },
             {
               "member": "ObjectiveSettings.operator",
-              "type": "!(Maybe Text)"
+              "type": "!(Maybe OperatorId)"
             },
             {
               "member": "ObjectiveSettings.administration",
@@ -12520,10 +12883,10 @@
             },
             {
               "member": "ObjectiveSettings.agentCreation",
-              "type": "![Text]"
+              "type": "![AgentPrincipal]"
             }
           ],
-          "sourceDeclaration": "data ObjectiveSettings = ObjectiveSettings\n  { enabled :: !Bool,\n    operator :: !(Maybe Text),\n    administration :: !OperatorPolicy,\n    agentCreation :: ![Text]\n  }\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON)"
+          "sourceDeclaration": "data ObjectiveSettings = ObjectiveSettings\n  { enabled :: !ObjectiveService,\n    operator :: !(Maybe OperatorId),\n    administration :: !OperatorPolicy,\n    agentCreation :: ![AgentPrincipal]\n  }\n  deriving stock (Eq, Show, Generic)"
         },
         {
           "name": "OperatorPolicy",
@@ -12535,7 +12898,7 @@
         {
           "name": "Receipt",
           "kind": "data",
-          "declaration": "data Receipt\n    = Receipt {objectiveId :: !Shikigami.Generated.Nominals.Internal.ObjectiveId,\n               operationId :: !Shikigami.Execution.Identity.OperationId,\n               fingerprint :: !Data.Text.Internal.Text,\n               revision :: !(Shikigami.StateRevision.StateRevision \"objective\"),\n               payloadDigest :: !Data.Text.Internal.Text}",
+          "declaration": "data Receipt\n    = Receipt {objectiveId :: !Shikigami.Generated.Nominals.Internal.ObjectiveId,\n               operationId :: !Shikigami.Execution.Identity.OperationId,\n               fingerprint :: !Shikigami.Objective.Keys.MutationFingerprint,\n               revision :: !(Shikigami.StateRevision.StateRevision \"objective\"),\n               payloadDigest :: !Shikigami.Objective.Keys.ObjectivePayloadDigest}",
           "members": [
             {
               "member": "Receipt.objectiveId",
@@ -12547,7 +12910,7 @@
             },
             {
               "member": "Receipt.fingerprint",
-              "type": "!Text"
+              "type": "!MutationFingerprint"
             },
             {
               "member": "Receipt.revision",
@@ -12555,15 +12918,15 @@
             },
             {
               "member": "Receipt.payloadDigest",
-              "type": "!Text"
+              "type": "!ObjectivePayloadDigest"
             }
           ],
-          "sourceDeclaration": "data Receipt = Receipt\n  { objectiveId :: !ObjectiveId,\n    operationId :: !OperationId,\n    fingerprint :: !Text,\n    revision :: !(StateRevision \"objective\"),\n    payloadDigest :: !Text\n  }\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
+          "sourceDeclaration": "data Receipt = Receipt\n  { objectiveId :: !ObjectiveId,\n    operationId :: !OperationId,\n    fingerprint :: !MutationFingerprint,\n    revision :: !(StateRevision \"objective\"),\n    payloadDigest :: !ObjectivePayloadDigest\n  }\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
         },
         {
           "name": "ResultReference",
           "kind": "data",
-          "declaration": "data ResultReference\n    = WorkerResult {receipt :: !Shikigami.WorkerSession.Types.ResultReceipt,\n                    artifact :: !Shikigami.Objective.Keys.ArtifactRef}\n    | RetainedResult {runId :: !Data.Text.Internal.Text,\n                      executionId :: !Data.Text.Internal.Text,\n                      digest :: !Data.Text.Internal.Text,\n                      artifact :: !Shikigami.Objective.Keys.ArtifactRef}",
+          "declaration": "data ResultReference\n    = WorkerResult {receipt :: !Shikigami.WorkerSession.Types.ResultReceipt,\n                    artifact :: !Shikigami.Objective.Keys.ArtifactRef}\n    | RetainedResult {runId :: !Shikigami.Objective.Keys.RunReference,\n                      executionId :: !Shikigami.Execution.Transcript.ExecutionId,\n                      digest :: !Shikigami.Objective.Keys.ResultCommitment,\n                      artifact :: !Shikigami.Objective.Keys.ArtifactRef}",
           "members": [
             {
               "member": "WorkerResult.receipt",
@@ -12575,22 +12938,22 @@
             },
             {
               "member": "RetainedResult.runId",
-              "type": "!Text"
+              "type": "!RunReference"
             },
             {
               "member": "RetainedResult.executionId",
-              "type": "!Text"
+              "type": "!ExecutionId"
             },
             {
               "member": "RetainedResult.digest",
-              "type": "!Text"
+              "type": "!ResultCommitment"
             },
             {
               "member": "RetainedResult.artifact",
               "type": "!ArtifactRef"
             }
           ],
-          "sourceDeclaration": "data ResultReference\n  = WorkerResult {receipt :: !ResultReceipt, artifact :: !ArtifactRef}\n  | RetainedResult {runId :: !Text, executionId :: !Text, digest :: !Text, artifact :: !ArtifactRef}\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
+          "sourceDeclaration": "data ResultReference\n  = WorkerResult {receipt :: !ResultReceipt, artifact :: !ArtifactRef}\n  | RetainedResult {runId :: !RunReference, executionId :: !ExecutionId, digest :: !ResultCommitment, artifact :: !ArtifactRef}\n  deriving stock (Eq, Show, Generic)\n  deriving anyclass (ToJSON, FromJSON)"
         },
         {
           "name": "Role",
@@ -12632,7 +12995,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/ObjectiveLifecycle/BehaviorHoles.hs",
       "sourceSha256": "3a6eb565be28dbce5a9068940eaff9b5171190b7bcfc581d52ed9c6e6408bd6f",
       "module": "Shikigami.ObjectiveLifecycle.BehaviorHoles",
-      "interfaceSha256": "dc656aa4c0fc2c18976819579ca6a28e77e84ca619805dcde76c59aa6cbfa838",
+      "interfaceSha256": "8f280b9647e9449fa5d21f6024d309bc0af7fb2c7f41071654adb974fec06a46",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/ObjectiveLifecycle/BehaviorHoles.hi",
       "compiledSourceMd5": "de9c284053f8f6eefba0dd812de508ac",
       "declarations": []
@@ -12641,7 +13004,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/ObjectiveLifecycle/Conformance.hs",
       "sourceSha256": "006894da93fe6d2d1dab1d771aedd8eb46f849cefb096c26ba1a6221b9af1d30",
       "module": "Shikigami.ObjectiveLifecycle.Conformance",
-      "interfaceSha256": "bc5c6616e46d17ae105f617f897bb2ca38ec6f9339feeeb6a35c764660675cc5",
+      "interfaceSha256": "6430396b58dad13cf8fe0a3c65bf442af0b276a5cebb3f663acbbc1cb612ddce",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/ObjectiveLifecycle/Conformance.hi",
       "compiledSourceMd5": "26437304a2f5a62fff0867b71e9bac00",
       "declarations": []
@@ -15189,7 +15552,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Program/DecisionRunner.hs",
       "sourceSha256": "5afe206ed4baaeb1f015ec4c505cc806d76088066fedc078c3c2198a100d1278",
       "module": "Shikigami.Program.DecisionRunner",
-      "interfaceSha256": "cf390558d40ae6956d0594b3c25cdba10ed605e4bd5a52a53a6b769a22fc6ecc",
+      "interfaceSha256": "a8e20930be5d78781b0c4812e3c428ea3cffb52b477880b791a40a8921393d0b",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Program/DecisionRunner.hi",
       "compiledSourceMd5": "fdefe126f408c5da9c7d2eed7430af5e",
       "declarations": [
@@ -15730,7 +16093,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/RunEvidence/Query.hs",
       "sourceSha256": "cc5ae1f2aacaf86ec3b5f819ff7590d4a8dda15584189102b6d5aef18d7cebd2",
       "module": "Shikigami.RunEvidence.Query",
-      "interfaceSha256": "e1aea319b447d8ee8673ab336c779d4ee1b8e77e861c4c1b9ebae438b0a19e9e",
+      "interfaceSha256": "3fd8f0ef897ba60c9010537495e18839d8b9fe79caa47af49b3fd526206455cc",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/RunEvidence/Query.hi",
       "compiledSourceMd5": "8bd93eedac721387d81e69b4c1a1701b",
       "declarations": [
@@ -16427,7 +16790,7 @@
       "sourcePath": "shikigami-core/src/Shikigami/Sink/Http.hs",
       "sourceSha256": "b804977b5973f31e7d92c85bc8398397e26607e85f8d810e4dbb0013963781ae",
       "module": "Shikigami.Sink.Http",
-      "interfaceSha256": "6a442171019fd73cc1c9b8caae5669a0a3d7e98861d2f4502fb99b8bf1f523a8",
+      "interfaceSha256": "e73cb6e96a4bc8336988195eec0223c57dc9cedcd6deb8b72aca8c635b331547",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/build/Shikigami/Sink/Http.hi",
       "compiledSourceMd5": "4b0c78a7b111053334a5fb7d67002d06",
       "declarations": [
@@ -20420,7 +20783,7 @@
       "sourcePath": "shikigami-migrations/app/Shikigami/Migrations/Version.hs",
       "sourceSha256": "c9243c5abef69e98c4c703a04e1e0667055a3747e7e4f5993a01697ca5dfe13f",
       "module": "Shikigami.Migrations.Version",
-      "interfaceSha256": "aae46fa10df0ed400b93d19a9302416a46add9b62ffe6cd553ac2e2a69f46586",
+      "interfaceSha256": "37df4a46046aa4c7119fc7f0b303bc9f2f05d2e4e132fe112b9e6a69ac2df13e",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-migrations-0.1.0.0/x/shikigami-migrate/build/shikigami-migrate/shikigami-migrate-tmp/Shikigami/Migrations/Version.hi",
       "compiledSourceMd5": "3731fd8b31de6c71b060960468246367",
       "declarations": []
@@ -20455,7 +20818,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Agent/Handler.hs",
       "sourceSha256": "7b70bf98773386fe676cacfe852bf5dbd46ad0252b40f3de3b93c18ddb3f1149",
       "module": "Shikigami.Agent.Handler",
-      "interfaceSha256": "f75ce9c7558649f9b50c31c3e05fb0196e80faf0bf4e3043f4d1797c3dd7cc60",
+      "interfaceSha256": "bd6be4b161c55c8964c30e652df00861af805cdb902ff4c3cbaf817b325d97f0",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Agent/Handler.hi",
       "compiledSourceMd5": "f9969fe32de14c42c3b4845528d57ec1",
       "declarations": []
@@ -20464,7 +20827,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/AgentRun/Handler.hs",
       "sourceSha256": "f1b7267f03169cb0351d10e2abc90bdbf256eb8159d9e4d0fdd2842a4c310f63",
       "module": "Shikigami.AgentRun.Handler",
-      "interfaceSha256": "1ddeef3a2bc6bdfb1e78da87c87c35e9dc594efc0795f80a3e535401cf47ef92",
+      "interfaceSha256": "7b6cdb707ac45ac1e15cd3c807cabb545d7109cb52321b381cbeb7a57e1c1058",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/AgentRun/Handler.hi",
       "compiledSourceMd5": "f87c2dec32f274896d403aeaa724f9eb",
       "declarations": []
@@ -20473,7 +20836,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Caller/Verifier.hs",
       "sourceSha256": "e73891affe9c8f62723e0ab4872afa67a3d397c3640fb126975d4db12eb54c7e",
       "module": "Shikigami.Caller.Verifier",
-      "interfaceSha256": "39cc06e155447f8e19a685dd56be8589274329a29b9d368c024acf2696910a86",
+      "interfaceSha256": "d183fb7a12f8b5b23fe82eed1f16593997e270ab4d48b5f498fd2724dd2e03f7",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Caller/Verifier.hi",
       "compiledSourceMd5": "5106b9e6f49badb0c8cbfbcdc6f15348",
       "declarations": []
@@ -20491,7 +20854,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Inspection/Server.hs",
       "sourceSha256": "555b13a1579be3a9dccfa86e5bdfaa93034308d9ac21ae6bafe7524100b6261b",
       "module": "Shikigami.Inspection.Server",
-      "interfaceSha256": "2696a4ff159da7b64e141bf16b76988e23aec583479d6608b6013465753e87db",
+      "interfaceSha256": "ef7749c4d42fdf23b32b372912ff4e3d57799b9b1b92c2c943b4c4cd8daa7817",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Inspection/Server.hi",
       "compiledSourceMd5": "76bfcc2ede3a8cf205b41780701e1637",
       "declarations": []
@@ -20500,7 +20863,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/App.hs",
       "sourceSha256": "f1ae52537c92b6dc01451f8785626440d2e8331dcebf5ec6f1a5bc5cc3cbdb26",
       "module": "Shikigami.Server.App",
-      "interfaceSha256": "de2ccf95ad13e33d984f86f1840067fcce0280ceeb87b95cb997c466d10d7cdb",
+      "interfaceSha256": "f3faeaa817a921580f21ff3f0b4c8659a803239e52b3d3e9bfa5191e8c97d7c9",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/App.hi",
       "compiledSourceMd5": "c073bba470d7706265d70539b5df996c",
       "declarations": []
@@ -20509,7 +20872,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Boot.hs",
       "sourceSha256": "bb4eaa62c4770353e7a6a7920c3f009505a6a9d7c5ad1b46613f86a78836bfe0",
       "module": "Shikigami.Server.Boot",
-      "interfaceSha256": "a32248ec4d55f500b09e0f4100fe1dee689c6b0af1b8d8b27418ca16dc1d91cb",
+      "interfaceSha256": "ee04e3611bffde461a3cf96d5a9f87dc8f2883db03db8b134c2c295388887a3f",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Boot.hi",
       "compiledSourceMd5": "a117a025b1c68b3c0f22e3b2ae67644e",
       "declarations": []
@@ -20518,7 +20881,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command.hs",
       "sourceSha256": "f41df8750b0c8ef26e943e9db0f26ddccd3bd4e00d3d04ea4bec901f970aeeb4",
       "module": "Shikigami.Server.Command",
-      "interfaceSha256": "b165814eb1f684c5b2b5e9d052a1e91afdc2c4bb552d9d51f3ff3d30b927b382",
+      "interfaceSha256": "f9e6f73e78eee3df4c3fe00d65dedb537f29e80544dc73607ccc19aa395a3987",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command.hi",
       "compiledSourceMd5": "9d808a9d9d74d1bedf178ec54ca222a0",
       "declarations": [
@@ -20535,7 +20898,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Agents.hs",
       "sourceSha256": "0d4fb1867eea4e3385e7584d6475aa2ff9741307a35a40a6156f9e9ec29c251a",
       "module": "Shikigami.Server.Command.Agents",
-      "interfaceSha256": "41a2fb8ea6ce6f7d45eed31f03a0ec9996216be4671bd4dcb9a7af517e6ca68e",
+      "interfaceSha256": "bdc2d3a7c311763b49baaf76d9af3a71931794c712a0cc31c6d24d0624a913f1",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/Agents.hi",
       "compiledSourceMd5": "542d5c8c7fc38b3d6c53f3b1558432cc",
       "declarations": [
@@ -20657,7 +21020,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/DanwaSpike.hs",
       "sourceSha256": "bb1b69f8ab8141415365a269cc7bae631d08a58aa51d400b7b788abcd5fdefb3",
       "module": "Shikigami.Server.Command.DanwaSpike",
-      "interfaceSha256": "430f2f3f7fa146dec748eed073fe3e713bc976c3a4a45acfa3c15b3946836d75",
+      "interfaceSha256": "afe82ef3b9a7a579f997356b4446e87c2adbb652527d3fd1f117827b8821b816",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/DanwaSpike.hi",
       "compiledSourceMd5": "4a77a2358b97cbb596e56fda521a7d96",
       "declarations": []
@@ -20666,7 +21029,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/EnqueueRun.hs",
       "sourceSha256": "921403f874ad25f63df2a2f0f23d4fd472abfc9faed02f4057eebd5e8ef5685c",
       "module": "Shikigami.Server.Command.EnqueueRun",
-      "interfaceSha256": "7e729c2fd0e95d8575d0ecfc63622de1218e82c98198dd27c2cb536189a58e9b",
+      "interfaceSha256": "0358ac4150bcc817015b3f9bdb331b918a475f0e445a59a5382801497b84bf7a",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/EnqueueRun.hi",
       "compiledSourceMd5": "53e4a6c80527b6117c0091cfb8fbbb32",
       "declarations": []
@@ -20675,7 +21038,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Executions.hs",
       "sourceSha256": "6a6b95a81f64a088cd7d1395c2c2d9c409e021bb27bcd22133522af0fb37e67c",
       "module": "Shikigami.Server.Command.Executions",
-      "interfaceSha256": "f07e6c5d6f6a4545b48fc12fe83c030b042418421cdcb69f8378a947f901bdba",
+      "interfaceSha256": "08ef0ba17dac06c0d357cf2786238483ff2e52f87860fe58f5a2181db426922b",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/Executions.hi",
       "compiledSourceMd5": "6bee0671cfd6f2b20c72a7a89289722b",
       "declarations": []
@@ -20684,7 +21047,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Grants.hs",
       "sourceSha256": "0e0f081805d81f915bc97b5597b478190c7dbdf5ba00a6d65048f29d33cdc2a0",
       "module": "Shikigami.Server.Command.Grants",
-      "interfaceSha256": "0335f1eb1636ba76bc1446289f3e3ea8ab7b76140606274765ae72b9d0877000",
+      "interfaceSha256": "c76c5a5cc0e7a38dc66419041b2aba64f25eb1f610ffd0dfa0c2b8537c376193",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/Grants.hi",
       "compiledSourceMd5": "f2794a989a83cf900ae10f8526706358",
       "declarations": []
@@ -20693,7 +21056,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Ops.hs",
       "sourceSha256": "77899d6edf10e48bc999e6984282f35dbb7fb736eb702f963781922b7face61e",
       "module": "Shikigami.Server.Command.Ops",
-      "interfaceSha256": "9df5b00e5612ee4bafb87f7122fa1d042b389cc27bb9093a4310daf2063a254b",
+      "interfaceSha256": "0cd7ba562f5a3be04e19f0b0cc942754217993d7c3e8028d1fe19a07de426ba6",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/Ops.hi",
       "compiledSourceMd5": "09857328f9fd6060c18058d3f2621f26",
       "declarations": []
@@ -20702,7 +21065,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/PublishFixture.hs",
       "sourceSha256": "f3812c3137bf58d5a6fd881f74fba8768e12ac94b7ecec8db7615bc5121a96c2",
       "module": "Shikigami.Server.Command.PublishFixture",
-      "interfaceSha256": "a3b903e5bd4e2153ea9a25d52777ff6e6ab2351908bcf3800d9354eb02282f5c",
+      "interfaceSha256": "6f9a10ccbc3e4ebebe5f29c9bb8a7fe94b4b22f203eabec6cf59564434b95af4",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/PublishFixture.hi",
       "compiledSourceMd5": "1384cdbb747b023d801a83817b60f61f",
       "declarations": []
@@ -20720,7 +21083,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/ResolveApproval.hs",
       "sourceSha256": "9c3fb04eac0cfa9f0c7f3be43492454d6273502317a3377bb95b062a22b04d3f",
       "module": "Shikigami.Server.Command.ResolveApproval",
-      "interfaceSha256": "61c9a977cd31f00ea62fd1d6be5f01c24732212f2548c56a1f47e8795a436f64",
+      "interfaceSha256": "a5bdf26c0f93ac6e84fe27fd810d2fd64f528113841c5b4208652b2564c529c6",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/ResolveApproval.hi",
       "compiledSourceMd5": "1dda02d00ef6ab3d1bbc9834ae9b309a",
       "declarations": []
@@ -20729,7 +21092,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Resources.hs",
       "sourceSha256": "27ed32734e3ad8809483f109f8718d973028b07f5751741df48a2fd9083b6330",
       "module": "Shikigami.Server.Command.Resources",
-      "interfaceSha256": "c9a32e2d79b92df6cb31672244e31ef556d01da83ae93c00088d37c11eb10f71",
+      "interfaceSha256": "fc10817417614ec568e8e0f99a055422e704d5ca6bcfda4c6061005c8395b8e8",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/Resources.hi",
       "compiledSourceMd5": "2c341d2061c7bee9b28668c37d17f584",
       "declarations": []
@@ -20738,7 +21101,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Runs.hs",
       "sourceSha256": "0b24c5fd6dacbc9a4c68a3b9639b560af1215b55b97193452b44b03a75c1fa10",
       "module": "Shikigami.Server.Command.Runs",
-      "interfaceSha256": "7c1e09a3f0535c117ee870e7f9bc56f00ab42bb1ae4154d29ee223b339c81e01",
+      "interfaceSha256": "951fd21422e77f1302ccc927761ffc980bff76e411addc7b99534a20df5c999d",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/Runs.hi",
       "compiledSourceMd5": "28dd26a3f28d1b6d560758d58ec7bc89",
       "declarations": [
@@ -20776,7 +21139,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/StubKanmon.hs",
       "sourceSha256": "e513fd0e16b4cac0dfa55d0e80be46135cbef3d0887819ecd2e6d9e649d81127",
       "module": "Shikigami.Server.Command.StubKanmon",
-      "interfaceSha256": "7b84f59768cd06f75af7b990a1c7ccec0122010c6291190a495c28b5d9fd8b64",
+      "interfaceSha256": "86420d93aed0028faeaaa23fb01f530a0c24aeb59cbedf6ebade0ad74c31e739",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/StubKanmon.hi",
       "compiledSourceMd5": "db0bbc4ebd9938bafb3dcb110fbf5ef6",
       "declarations": []
@@ -20785,7 +21148,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/StubKawa.hs",
       "sourceSha256": "dc7928196956048145378693b434e9952966ff4d05396d579b8f9f1596a8e8bb",
       "module": "Shikigami.Server.Command.StubKawa",
-      "interfaceSha256": "5f2ff5cd63da99f5f3cca200207140afd9f6cf2ae9aa825cd9b169eee84a8a1e",
+      "interfaceSha256": "3f149d9d0ad91811de0b4adadd21091c6f1ea1b1ca0f9a02f369020f5b150680",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/StubKawa.hi",
       "compiledSourceMd5": "1c75ea79ecde904e6c1ede9fff0804e2",
       "declarations": []
@@ -20803,7 +21166,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Command/Workers.hs",
       "sourceSha256": "68e8ba66088394fd7b771e66fbbdb550e5591e1b9e671a5fbee411dc1904f13b",
       "module": "Shikigami.Server.Command.Workers",
-      "interfaceSha256": "148c50d71b869f65edcc30800b4a55822e6d499d02fe520d24a9d8c61716ee1b",
+      "interfaceSha256": "69dd4b705ef1df72be1f8b2b8f390d9a82eef9ccdf46515f4c54a4aa3cd40396",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Command/Workers.hi",
       "compiledSourceMd5": "ddceaf9f93f49efcffb3017d45d2a4a9",
       "declarations": []
@@ -20812,7 +21175,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Config.hs",
       "sourceSha256": "013a5361f192510655063257a9a3ca814527297c2a11b8e1c128a95636204a68",
       "module": "Shikigami.Server.Config",
-      "interfaceSha256": "fc6a0809dd6c0ff61a46c78a8f46eae3449bdcfab97fce90adb5ad0bfd286835",
+      "interfaceSha256": "cf7d958fde9d51dcfbc4df1dfb31ffe614beb9874e25cd9303f5e25c8071175e",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Config.hi",
       "compiledSourceMd5": "4d49da9ff7a679e0b4db0a47cd660fa7",
       "declarations": [
@@ -20847,7 +21210,7 @@
       "sourcePath": "shikigami-server/src/Shikigami/Server/Seam.hs",
       "sourceSha256": "5d8f347fce3990a6f8619288a1fdddd15655cd15230ab2d005365dd3bb4af67a",
       "module": "Shikigami.Server.Seam",
-      "interfaceSha256": "c3899fc10e609c161dbc70444554b0c1454052c435abdc362b836a5efbf8bc92",
+      "interfaceSha256": "f72b8d8be6869acdf683bdd62d38771b1e46fae853d1d7c95bb241f694187954",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/build/Shikigami/Server/Seam.hi",
       "compiledSourceMd5": "5018d25fb36359c7f57b66d5608af162",
       "declarations": [
@@ -21052,7 +21415,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs",
       "sourceSha256": "3b7c8a03e81643da0bd0fda7f73005b6bc6ca91683f8ab143630d7fad247ee4c",
       "module": "Shikigami.Agent.RunJob.Worker",
-      "interfaceSha256": "c40057538832f2ad68220709b1a47610f34e6e6c81c4fd8ed0409c5877319bcb",
+      "interfaceSha256": "ed9dc0441bbd30b44571654631016523b6ec612e468ab568ca7b7c7be77b77c2",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Agent/RunJob/Worker.hi",
       "compiledSourceMd5": "877f9d80b055db75c27708eeb3a6b076",
       "declarations": [
@@ -21203,7 +21566,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Health/Worker.hs",
       "sourceSha256": "22628fa1b09da0bb2b2bbefb85b99ce09853a71f60f78b65e1f6dd17a608cb8f",
       "module": "Shikigami.Health.Worker",
-      "interfaceSha256": "db8e5d97aa8e9dac3284fcecbdcf7f8f93cd21de14b11265a861dcf300e7f845",
+      "interfaceSha256": "edd571e015c203f6ab6e8194f4b488760025ea88007ba8d5e37d6ab1b517cb91",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Health/Worker.hi",
       "compiledSourceMd5": "1ea2cfac83d81e52dc353df9db019f90",
       "declarations": [
@@ -21250,11 +21613,11 @@
     },
     {
       "sourcePath": "shikigami-workers/src/Shikigami/Inspection/Consumer.hs",
-      "sourceSha256": "666a7d583b083eb1170d0598d5ad6df9bf77f9abebfe319211120c287afd4f44",
+      "sourceSha256": "e50fb3889936d348bfc1892a5e9a0c749044b4b8f00c75f947cd002b4a5746e0",
       "module": "Shikigami.Inspection.Consumer",
-      "interfaceSha256": "32f453fcbfe198c71d6ebfa68eafb98100f429178f0c4566c3164e9d1d5fe857",
+      "interfaceSha256": "8e9347089ebad868695336cc10453655f5cbd267d9f33628c7788a7006ac316f",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Inspection/Consumer.hi",
-      "compiledSourceMd5": "deae4c6a033a047d8dcf520fd2feefc3",
+      "compiledSourceMd5": "a153cc6aa79dc313b7b0abe382bba70c",
       "declarations": [
         {
           "name": "ConsumerInspection",
@@ -21606,7 +21969,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workers/Command.hs",
       "sourceSha256": "d3c68cd6b9c063669697deff2a1976e15b4d39d2da128fba60ec1ff46d8ebf2b",
       "module": "Shikigami.Workers.Command",
-      "interfaceSha256": "05748d4c33fe45d319520cdd1e64d241c2b3f38be2d9379fd05c07a5abfdb1b8",
+      "interfaceSha256": "d577c53f3369395ecf9203456c8fdb0ce509785549ecba9cb98045177335a946",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workers/Command.hi",
       "compiledSourceMd5": "f1346c9ac4e7e76efa36f8793a8cb6e1",
       "declarations": []
@@ -21615,7 +21978,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workers/Command/Scheduler.hs",
       "sourceSha256": "58df8751d256a897c9d479c26609222dc1c88c79d5b55a3f6537372296c9595d",
       "module": "Shikigami.Workers.Command.Scheduler",
-      "interfaceSha256": "4d2469ed927ce2bd1766805a1d54e30d2b0d0e0e7b89a6eb980a010f0de79faf",
+      "interfaceSha256": "baff372c6e46e4045cf7ac63d65479f0d0c64dbba6bea99ff1888bb0a12a36f7",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workers/Command/Scheduler.hi",
       "compiledSourceMd5": "54c0ab9c0cb00f80cf8a54f1cbe134fe",
       "declarations": []
@@ -21624,7 +21987,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workers/Command/Worker.hs",
       "sourceSha256": "f955ba6f14d24c27a6327b5553da9a7f1d1da2dcf6fbbc6ac4beef30e6a1e137",
       "module": "Shikigami.Workers.Command.Worker",
-      "interfaceSha256": "8e831c1b4a41e3de80e0482f39ea800465164684631cecb781f3141b6455c6c3",
+      "interfaceSha256": "00022586b55e1a04da97a2a06b1a0afe4950a6a0204bf63c8f12cc100cd7fa91",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workers/Command/Worker.hi",
       "compiledSourceMd5": "0c1b906783aa9e4fa8edd8b6af3a7476",
       "declarations": []
@@ -21633,7 +21996,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workers/Config.hs",
       "sourceSha256": "78733c5c067980aca561a749430f3d67f4ea842bfd72f1a082f939d7de6c6c2b",
       "module": "Shikigami.Workers.Config",
-      "interfaceSha256": "282ac1ad125b3209cd11c891890623420edb53c5287d5a978003c9d22d07b6a7",
+      "interfaceSha256": "a61bef77e2891c9f47c61566ea299656cb5b31437c9c7b50c44cfd7fc1503409",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workers/Config.hi",
       "compiledSourceMd5": "bcb0ea04bf54bea23b6818272f761649",
       "declarations": [
@@ -21801,7 +22164,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workers/Subscription.hs",
       "sourceSha256": "cb465ddefa704e9573908d378c3b0d9c0a0c147fda0954d802f6e3d9d0c716ab",
       "module": "Shikigami.Workers.Subscription",
-      "interfaceSha256": "79ba120d9d738a29c9553e078a82cd008f89f8c9e6406cb3447959739b98111b",
+      "interfaceSha256": "4ada86c7e15df44d0f87838f0cc94bcedea4f4bd4d7b43051778cfc2aae9a195",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workers/Subscription.hi",
       "compiledSourceMd5": "9a3aa848b04dca0b385c2fd1f408d3d8",
       "declarations": []
@@ -21981,7 +22344,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/ConfiguredHost.hs",
       "sourceSha256": "0839dd9bf185721b6f537d188cbaefd015ddf7fe295b4415bb649e54df0dd42b",
       "module": "Shikigami.Workspace.ConfiguredHost",
-      "interfaceSha256": "78ea898ead876fab80d7de34de644407ff3592ed5ba80d808a3a34267d05e3c4",
+      "interfaceSha256": "658538db50e6b65c6e49eaced96576916ae6fc9996f2a2ba2249dfcb837c82b1",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/ConfiguredHost.hi",
       "compiledSourceMd5": "d1a1e45e48337356eef9d6d18c68c7e0",
       "declarations": []
@@ -22019,7 +22382,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Daemon.hs",
       "sourceSha256": "1a0fb4bdf463c94075e8f14e23ccb8d006cf2685aa904f360d8e1dfca2cc3b0e",
       "module": "Shikigami.Workspace.Daemon",
-      "interfaceSha256": "050b2d130a2546867e4248788a5074747b22d139d3819aa84ddb8c3c9e08e65e",
+      "interfaceSha256": "e06e3e16f2241470c7c5a2ab547b3449a72953bf3cd510e4f788f3b6a10033af",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/Daemon.hi",
       "compiledSourceMd5": "442f57cfa7bfda971ecb3cf2ff85a4af",
       "declarations": []
@@ -22028,7 +22391,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/FileProvider.hs",
       "sourceSha256": "09632b3275a6d09e8b0602e4cfd233ca33e9b5a8ef9b345e9c2d41f08d6ebd0d",
       "module": "Shikigami.Workspace.FileProvider",
-      "interfaceSha256": "91461ea1deff002cdf29fa35e0e539b06a8af941215fea357917e3c95fe185c9",
+      "interfaceSha256": "2eebe9ff97aed1c720275e78265a43a8e007b79a33b4c58e1aa49ab5c277d24e",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/FileProvider.hi",
       "compiledSourceMd5": "9d1e21e68e90dba2e4c7c9edc48eca8a",
       "declarations": [
@@ -22177,7 +22540,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/GitProvider.hs",
       "sourceSha256": "afbdec97109737d3139f1bf65e866705e116581fa14e36a5f0801e2ad8920c43",
       "module": "Shikigami.Workspace.GitProvider",
-      "interfaceSha256": "7d5d4f1c5aadf87e65139edac0633c5e5c3900ce2c5ffbabd45d0ffb518e6fe7",
+      "interfaceSha256": "5976ec68ad2fb7d7e0ddd5170e61bc1b1d2f6b77d6a8e60e993a7108f1aeb7ca",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/GitProvider.hi",
       "compiledSourceMd5": "86c4d450237124e2a185acbf8af64ca1",
       "declarations": [
@@ -22338,7 +22701,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Maintenance.hs",
       "sourceSha256": "3a12dc52d3f33c6168f9615453bb09716e2ff4732e5a8d7e8805886cde524e33",
       "module": "Shikigami.Workspace.Maintenance",
-      "interfaceSha256": "9c659f164788cd484eaa1a45cb1fd9fbac9f465602aee296911fbffe6ec00740",
+      "interfaceSha256": "2c581629ea023c3b3c110f184355d7cba43f6d61e4d7f0c1d68cdcd037181afb",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/Maintenance.hi",
       "compiledSourceMd5": "6b67bd95c2f5b19878adeab53b961c1d",
       "declarations": [
@@ -22738,7 +23101,7 @@
       "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Supervisor.hs",
       "sourceSha256": "a852039aed5fc5523e340d1f60f17462025dd8fd715a5952ae57d5da09c7a8cd",
       "module": "Shikigami.Workspace.Supervisor",
-      "interfaceSha256": "4bd2d10d1c79c59bd825fa468b44863674f77bbda0a01d890f28f4cca4b92764",
+      "interfaceSha256": "d3e6f457680ce1627ec19e52755589cb58fc33eb69d33fa6b99e9a240f067585",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/build/Shikigami/Workspace/Supervisor.hi",
       "compiledSourceMd5": "0df60909fc21b970c02461694eb8fad3",
       "declarations": [
@@ -22988,7 +23351,7 @@
       "sourcePath": "shikigami-agent/app/agent-launch/Main.hs",
       "sourceSha256": "0f69d8c8b75356ff063419da493912ee728c976594c3d78cb831e7dd92bdb98f",
       "module": "Main",
-      "interfaceSha256": "68bec1f31bf47560ebc62ce6780f10416e268b56c1d3f148eddf00a82648a404",
+      "interfaceSha256": "08abca1da7621c67664adb23d15eba2a47913d886deacf12be137d6f9c6b269c",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-agent-0.1.0.0/x/shikigami-agent-launch/build/shikigami-agent-launch/shikigami-agent-launch-tmp/Main.hi",
       "compiledSourceMd5": "58a42f8e006570b44faefc87688b3e6d",
       "declarations": []
@@ -22997,7 +23360,7 @@
       "sourcePath": "shikigami-agent/app/agent-run/Main.hs",
       "sourceSha256": "39b77637fb092fc2c7522709203f14b38c141a87f15f71dbb9102fa19ebe5d35",
       "module": "Main",
-      "interfaceSha256": "b0f93102eff77d02ae09c68e593cc3b24531bed80dee853d9b93fddb8c2c1d18",
+      "interfaceSha256": "37a9da482cab2bb6c47cfbb544984f127dee60dd5fa6b990b2eb3ab00e2202f7",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-agent-0.1.0.0/x/shikigami-agent-run/build/shikigami-agent-run/shikigami-agent-run-tmp/Main.hi",
       "compiledSourceMd5": "0f0c7a7bc247b22802777bfa99706fc9",
       "declarations": []
@@ -23006,7 +23369,7 @@
       "sourcePath": "shikigami-agent/app/run-behavior/Main.hs",
       "sourceSha256": "960c92613f679862569d1cb50b8887e6d99bd6e307ccc4f6bc36e59f26f61afb",
       "module": "Main",
-      "interfaceSha256": "573414055617162dc78fe4a04507faf31422ba2b5549bec535d32fa465db74a8",
+      "interfaceSha256": "fb167279f9c7689a6e0942a3458684a85bd222c456e2df3cf5b4a7ad80ef7982",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-agent-0.1.0.0/x/shikigami-run-behavior/build/shikigami-run-behavior/shikigami-run-behavior-tmp/Main.hi",
       "compiledSourceMd5": "872a396f8b610654f49e32129b574ed4",
       "declarations": []
@@ -23024,7 +23387,7 @@
       "sourcePath": "shikigami-client/app/Main.hs",
       "sourceSha256": "3eca180a6b451f46987eccfb8eecc097824c1c223cc3a5b9cafaac2d10fd8418",
       "module": "Main",
-      "interfaceSha256": "e440fec25cfc5600dc24069a9c2e746d1357d5424ecb7888d81669d768fd5265",
+      "interfaceSha256": "0f69be1fd8481fa826c9cf0c91c9da6149dab40023412f074da04b42f2f142b7",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-client-0.1.0.0/x/shikigami-client/build/shikigami-client/shikigami-client-tmp/Main.hi",
       "compiledSourceMd5": "f65729e2a7db8dfb9a3f6a5b3b6c6c54",
       "declarations": []
@@ -23033,7 +23396,7 @@
       "sourcePath": "shikigami-migrations/app/Main.hs",
       "sourceSha256": "a1d4be2f4055b382ce13f7efa28f4b1d5ea524b113ede3c79d317fb94a179202",
       "module": "Main",
-      "interfaceSha256": "6995d54b4693b55a9527550155de5870088a035722cd79d17d23e2c195f74f9e",
+      "interfaceSha256": "aabeb77bd7298deeac7cd85772e4ad0fbf01fc6166ee0d1ae573124b6e9cb02f",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-migrations-0.1.0.0/x/shikigami-migrate/build/shikigami-migrate/shikigami-migrate-tmp/Main.hi",
       "compiledSourceMd5": "a74e22d719261437483e372044723d6e",
       "declarations": [
@@ -23055,7 +23418,7 @@
       "sourcePath": "shikigami-server/app/admin/Main.hs",
       "sourceSha256": "60c690060eba75279536187476b9fccc599e5e2fce7512b62802e4eea654e483",
       "module": "Main",
-      "interfaceSha256": "a7120c392e975559be35664b5670e1278a352a180c0e7901b36a638c85c850e0",
+      "interfaceSha256": "815280ebd26b437eeba160179b13277af7beb7908b1b9f7a9963579de80614b2",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/x/shikigami/build/shikigami/shikigami-tmp/Main.hi",
       "compiledSourceMd5": "f272b6ddcab000c0c979351ea99ef71c",
       "declarations": []
@@ -23064,7 +23427,7 @@
       "sourcePath": "shikigami-server/app/server/Main.hs",
       "sourceSha256": "bc6d2ab480dbc76f43c39af3301eaa372a5b62818e7e914db869aa11791e2fe1",
       "module": "Main",
-      "interfaceSha256": "c51d7396b5984f2f3638cfacfa143b1d209f923d421d04ad05fe36246753f381",
+      "interfaceSha256": "2e4df030d29c663ed54373cecdb40964af75c82530de8029b460c2e5c69e7794",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-server-0.1.0.0/x/shikigami-server/build/shikigami-server/shikigami-server-tmp/Main.hi",
       "compiledSourceMd5": "ad9f24eb395595f20019b06aade2a72f",
       "declarations": []
@@ -23073,7 +23436,7 @@
       "sourcePath": "shikigami-workers/app/consume-events/Main.hs",
       "sourceSha256": "c45b1aa9c0b98648449057981176cfe1620ba113665de9e82b37910ff6f0f23e",
       "module": "Main",
-      "interfaceSha256": "a18902d6900f46a9736c83306310b3e9a382c969dd841d904c17db1eaf72a55b",
+      "interfaceSha256": "de1b3b9494bccdc76ac6d89a945a8ccaf047d875c43ec1e081ebcdcb95a27707",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/x/shikigami-consume-events/build/shikigami-consume-events/shikigami-consume-events-tmp/Main.hi",
       "compiledSourceMd5": "44166cf86488655b834c89df8a2e0781",
       "declarations": []
@@ -23082,7 +23445,7 @@
       "sourcePath": "shikigami-workers/app/consume-stream/Main.hs",
       "sourceSha256": "0707635bb6897294b2b5133e0d832c46f1135782e8590f8f95e8c16ab6d7e096",
       "module": "Main",
-      "interfaceSha256": "b5e0051983976def00848a8d65f1ae12e9854890ca679a29cbfb22b0d432ac61",
+      "interfaceSha256": "e6fcb7037c658869e0d3c96d26160616702e304c7522b0f170d42ea519a0fec1",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/x/shikigami-consume-stream/build/shikigami-consume-stream/shikigami-consume-stream-tmp/Main.hi",
       "compiledSourceMd5": "8dfc46b1ff1d6cd4564c90b3fad66da6",
       "declarations": []
@@ -23091,7 +23454,7 @@
       "sourcePath": "shikigami-workers/app/scheduler/Main.hs",
       "sourceSha256": "b1950f202a3a9e13526e59f28eb6644d77a5da1d79f3153f7b3673359d289e3a",
       "module": "Main",
-      "interfaceSha256": "47d593574791a075ff3ede9dd20810d07b5063c7525d1c6024bcb8eb797d5848",
+      "interfaceSha256": "959c6b53d0927a3148abd35f84560602eed86f8c3dd76235b0c1dfdce8ca609c",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/x/shikigami-scheduler/build/shikigami-scheduler/shikigami-scheduler-tmp/Main.hi",
       "compiledSourceMd5": "6f24bc5a5474dc988060094a4a426804",
       "declarations": []
@@ -23100,7 +23463,7 @@
       "sourcePath": "shikigami-workers/app/worker/Main.hs",
       "sourceSha256": "157acd723c534a475b5526b183e180dac507c65b70ecbd039356fb20610915d6",
       "module": "Main",
-      "interfaceSha256": "eee5e0b478746b28c86a5ef8a0f48112b81e16f71718dfd180ae16b5960c6dbe",
+      "interfaceSha256": "a6dccfd2ba7827f3e4bc3285dfd4ab8d2f79914cc307f057ae812fbf9e1de1d1",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/x/shikigami-worker/build/shikigami-worker/shikigami-worker-tmp/Main.hi",
       "compiledSourceMd5": "8542c898382b9a22933ddd079c4a0ac9",
       "declarations": []
@@ -23118,7 +23481,7 @@
       "sourcePath": "shikigami-workers/app/workspace-supervisor/Main.hs",
       "sourceSha256": "eb602e6ed70e8eeb4ccb677ab490e3755c7b384826feb913b742bf073dfd32c3",
       "module": "Main",
-      "interfaceSha256": "a61b84940186f04afc86beb767409d21faca3b28292f577b04f6ff8bf434ac03",
+      "interfaceSha256": "8f6c2dcd29b990b951d5b4ac5caaed5a65eaf54e6fdb6d95d8fac62bde3d92c6",
       "interfacePath": "dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-workers-0.1.0.0/x/shikigami-workspace-supervisor/build/shikigami-workspace-supervisor/shikigami-workspace-supervisor-tmp/Main.hi",
       "compiledSourceMd5": "2cc0c28b6e7a3aefd652651c15085279",
       "declarations": []

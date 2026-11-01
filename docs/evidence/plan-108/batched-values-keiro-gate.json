@@ -1,0 +1,13 @@
+{
+  "candidate": "1e7f619",
+  "base": "843cae0",
+  "command": "nix develop --no-write-lock-file -c just keiro-gate 843cae0",
+  "exitCode": 0,
+  "findings": [],
+  "replayVerdict": "replay-neutral",
+  "conformanceChecks": 156,
+  "reports": [
+    "docs/evidence/plan-108/batched-values-keiro-diff.json",
+    "docs/evidence/plan-108/batched-values-replay-impact.json"
+  ]
+}

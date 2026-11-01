@@ -296,7 +296,7 @@
         {
           "id": "complete-domain-scalar-and-identity-census",
           "disposition": "deferred",
-          "rationale": "Explicit follow-up under ADR-106 and plan108 after the user requested bounded macOS upgrade completion. Plan 108 has classified all 4,060 declaration/member keys across 325 modules and 940 declarations, with zero missing or pending entries. Its fresh inventory retains 493 explicit violations; exhaustive remediation remains open. Accepted individual clauses retain their evidence. This is not a compliance or non-applicability claim."
+          "rationale": "Explicit follow-up under ADR-106 and plan108 after the user requested bounded macOS upgrade completion. Plan 108 has classified all 4,119 declaration/member keys across 325 modules and 974 declarations, with zero missing or pending entries. Its fresh inventory retains 421 explicit violations; exhaustive remediation remains open. Accepted individual clauses retain their evidence. This is not a compliance or non-applicability claim."
         }
       ],
       "evidence": [

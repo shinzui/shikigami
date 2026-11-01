@@ -15,7 +15,8 @@ distinct from configured ModelAlias and credential-registration coordinates.
 ## Decision
 
 Behavior.Provider.Coordinate owns private ProviderCoordinate values with nominal
-scopes `provider-name`, `provider-api`, `endpoint-class` and `provider-model-id`.
+scopes `provider-name`, `provider-api`, `endpoint-class`, `provider-model-id`,
+`provider-call-id` and `provider-run-id`.
 The scopes prevent substitution even through coerce. No Generic, IsString or
 public constructor is supplied. Exact text capture is total: the current SDK
 supports opaque/custom vocabulary, and this change invents no nonempty, syntax,
@@ -37,6 +38,17 @@ The provider's model ID is an external lookup coordinate. It is neither a local
 allocated entity nor the operator alias that may be repointed. Keep its exact
 foreign representation in a nominal domain; do not mint a TypeID or borrow the
 model-alias admission rule.
+
+Restartable CallComplianceFacts and RecordedCallEvidence retain the same native
+model coordinate and ModelAlias values. Exact measured token, rational cost and
+provider-attempt quantities have distinct private wrappers without numeric or
+Generic escape hatches. Provider attempts retain the actual native Natural
+domain (including zero, although the default is one); capture does not invent
+consumer positivity. Relationship knowledge, cost certainty and compliance
+verdicts use distinct closed states with the original boolean codec. Correlation
+fields decode against the five names the producer emits. Unknown fields and
+empty model aliases refuse in the owning decision transaction, preserving
+original calls, accounting and retry uncertainty until exact repair.
 
 ## Alternatives rejected
 
@@ -69,4 +81,5 @@ change does not qualify Linux containment or the final packaged runtime.
 - [ADR-104](0104-model-registration-coordinates-and-commitments-remain-checked.md)
 - `mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids`
 - `mori://shinzui/baikai/docs/model-call-evidence`
+- [Plan108](../plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md)
 - [Plan107](../plans/107-adopt-current-haskell-and-service-architecture-practices.md)

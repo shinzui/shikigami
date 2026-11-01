@@ -1486,3 +1486,33 @@ identity recipes, valid journal bytes, SQL schema or the selected macOS scope.
 The extended public compiler suite also passes all 197 controls, including
 native attestation session/step access, opaque quantity/label coercion and Generic
 refusal, independent evidence states, and cross-role verdict substitution.
+
+
+Both source batches reconcile on `1e7f619`: the complete workspace build and
+fresh census pass with 325 modules, 974 declarations and 14 entrypoints. Manual
+source/member reconciliation resolves their 72 findings and reviews all 59 new
+nominal/closed-vocabulary keys. Coverage/freshness and all 24 checker tests pass:
+4,119 keys, 3,409 compliant, 289 exclusions and 421 remaining violations, with
+zero missing or pending entries. Resolved-only acceptance remains a failing
+completion gate; no existing finding is waived as debt.
+
+The native gate against `843cae0` passes with no findings, replay-neutral verdict
+and 156 conformance controls. Reports are `batched-values-keiro-diff.json`,
+`batched-values-replay-impact.json` and `batched-values-keiro-gate.json`. The
+source candidate's ordinary type/codec changes do not alter workflow bodies,
+steps or identity recipes; this native result does not certify malformed old
+metadata or Linux runtime behavior. ADR-6 records preservation of signed labels,
+and ADR-105 records the native evidence-coordinate/measurement extension.
+
+
+The complete already-built core unit executable also passes all 624 cases on
+this coherent source candidate (5.77 seconds), from the core package directory:
+
+```bash
+nix develop .. --no-write-lock-file -c ../dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/t/shikigami-core-test/build/shikigami-core-test/shikigami-core-test --num-threads=1
+```
+
+The frozen upgrade audit and final whitespace check pass. Existing 95-case
+server and 27-case Objective PostgreSQL evidence remains applicable to its
+unchanged source batch; the new attestation owner group passes 85 cases.
+M2/M3 and final guide compliance remain open with 421 findings.
