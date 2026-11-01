@@ -35,7 +35,7 @@ agentRunServer env caller agent = AgentRunApi {request = requestRun, show = show
       | isNothing (Catalog.lookupAgent env.catalog agent) = pure (RunShowAgentMissing missingAgent)
       | not (validRunKey runId) = pure (RunMissing missingRun)
       | otherwise =
-          liftIO (env.readRunStatus agent runId) >>= \case
+          liftIO (env.readRunStatus agent (WorkflowId runId)) >>= \case
             Left Status.RunStatusStoreUnavailable -> pure (RunShowUnavailable unavailable)
             Left Status.RunStatusHistoryInvalid -> pure (RunShowInternal (problem Internal "The stored run history cannot be interpreted."))
             Right Nothing -> pure (RunMissing missingRun)

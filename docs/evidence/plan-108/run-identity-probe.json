@@ -1,0 +1,36 @@
+{
+  "sourceParent": "3ead4a6",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "publicProbe": "{-# LANGUAGE ImportQualifiedPost #-}\n{-# LANGUAGE OverloadedRecordDot #-}\nmodule StatusBoundary where\nimport Data.Text (Text)\nimport Keiro.Workflow.Types (WorkflowId)\nimport Kioku.Id (SessionId)\nimport Shikigami.Agent.Name (AgentName)\nimport Shikigami.AgentRun.Status (RunStatusFailure, RunStatusView)\nimport Shikigami.Server.Seam (ServerEnv (..))\nreadStatus :: ServerEnv -> AgentName -> WorkflowId -> IO (Either RunStatusFailure (Maybe RunStatusView))\nreadStatus env = env.readRunStatus\n",
+  "controls": [
+    {
+      "case": "native workflow API",
+      "passed": true
+    },
+    {
+      "case": "raw text substitution",
+      "passed": true
+    },
+    {
+      "case": "session substitution",
+      "passed": true
+    }
+  ],
+  "cliExpression": "let inspect raw = case sessionStep (Map.singleton \"open-session\" (Aeson.toJSON (StepProduced raw :: StepResult Text))) of { SessionOpened _ _ _ -> \"opened\" :: Text; SessionUnreadable _ -> \"unreadable\"; _ -> \"unexpected\" } in LazyChar8.putStrLn (Aeson.encode (map inspect [\"kioku_session_01kvxa7d2cezhs874g3n8dfgme\", \"kioku_session_00000000008008000000000001\", \"kioku_session_0000000000e000000000000001\"]))",
+  "cliCases": [
+    {
+      "input": "kioku_session_01kvxa7d2cezhs874g3n8dfgme",
+      "result": "opened"
+    },
+    {
+      "input": "kioku_session_00000000008008000000000001",
+      "result": "unreadable"
+    },
+    {
+      "input": "kioku_session_0000000000e000000000000001",
+      "result": "unreadable"
+    }
+  ],
+  "limitations": "Public compiler interfaces and the actual private pure CLI decoder are exercised. This is not a live CLI/database integration test. Existing status/HTTP suites qualify their unchanged behavior; the core status native session admission contract is unchanged."
+}

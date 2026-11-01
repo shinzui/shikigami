@@ -11591,14 +11591,18 @@
       "member": "$self",
       "sourceSha256": "06597f0f369ee085f454c123b85e8de34a2c7d7fa9e53f99070a97cae84ef95c",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque AgentVersion documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "Agent artifact/version construction and attestation/profile binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal immutable agent version label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Agent",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Agent.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -11608,14 +11612,18 @@
       "member": "AgentVersion.value",
       "sourceSha256": "06597f0f369ee085f454c123b85e8de34a2c7d7fa9e53f99070a97cae84ef95c",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque AgentVersion documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "Agent artifact/version construction and attestation/profile binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal immutable agent version label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Agent",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Agent.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -11689,14 +11697,18 @@
       "member": "$self",
       "sourceSha256": "06597f0f369ee085f454c123b85e8de34a2c7d7fa9e53f99070a97cae84ef95c",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque BehaviorDigest documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "Agent artifact/version construction and attestation/profile binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal behavior artifact digest label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Agent",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Agent.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -11706,14 +11718,18 @@
       "member": "BehaviorDigest.value",
       "sourceSha256": "06597f0f369ee085f454c123b85e8de34a2c7d7fa9e53f99070a97cae84ef95c",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque BehaviorDigest documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "Agent artifact/version construction and attestation/profile binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal behavior artifact digest label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Agent",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Agent.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -11723,14 +11739,18 @@
       "member": "$self",
       "sourceSha256": "06597f0f369ee085f454c123b85e8de34a2c7d7fa9e53f99070a97cae84ef95c",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque DeclarationDigest documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "Agent artifact/version construction and attestation/profile binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal declaration artifact digest label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Agent",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Agent.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -11740,14 +11760,18 @@
       "member": "DeclarationDigest.value",
       "sourceSha256": "06597f0f369ee085f454c123b85e8de34a2c7d7fa9e53f99070a97cae84ef95c",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque DeclarationDigest documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "Agent artifact/version construction and attestation/profile binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal declaration artifact digest label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Agent",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Agent.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -11757,14 +11781,18 @@
       "member": "$self",
       "sourceSha256": "06597f0f369ee085f454c123b85e8de34a2c7d7fa9e53f99070a97cae84ef95c",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque GroundingDigest documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "Agent artifact/version construction and attestation/profile binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal grounding artifact digest label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Agent",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Agent.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -11774,14 +11802,18 @@
       "member": "GroundingDigest.value",
       "sourceSha256": "06597f0f369ee085f454c123b85e8de34a2c7d7fa9e53f99070a97cae84ef95c",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque GroundingDigest documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "Agent artifact/version construction and attestation/profile binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal grounding artifact digest label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Agent",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Agent.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -11791,14 +11823,18 @@
       "member": "$self",
       "sourceSha256": "06597f0f369ee085f454c123b85e8de34a2c7d7fa9e53f99070a97cae84ef95c",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque LogicalAgentId documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "Agent artifact/version construction and attestation/profile binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal stable logical agent label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Agent",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Agent.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -11808,14 +11844,18 @@
       "member": "LogicalAgentId.value",
       "sourceSha256": "06597f0f369ee085f454c123b85e8de34a2c7d7fa9e53f99070a97cae84ef95c",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque LogicalAgentId documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "Agent artifact/version construction and attestation/profile binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal stable logical agent label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Agent",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Agent.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -11825,14 +11865,18 @@
       "member": "$self",
       "sourceSha256": "06597f0f369ee085f454c123b85e8de34a2c7d7fa9e53f99070a97cae84ef95c",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque PolicyDigest documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "Agent artifact/version construction and attestation/profile binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal policy artifact digest label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Agent",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Agent.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -11842,14 +11886,18 @@
       "member": "PolicyDigest.value",
       "sourceSha256": "06597f0f369ee085f454c123b85e8de34a2c7d7fa9e53f99070a97cae84ef95c",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque PolicyDigest documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "Agent artifact/version construction and attestation/profile binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal policy artifact digest label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Agent",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Agent.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -11859,14 +11907,18 @@
       "member": "$self",
       "sourceSha256": "06597f0f369ee085f454c123b85e8de34a2c7d7fa9e53f99070a97cae84ef95c",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque RuntimeDigest documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "Agent artifact/version construction and attestation/profile binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal runtime artifact digest label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Agent",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Agent.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -11876,14 +11928,18 @@
       "member": "RuntimeDigest.value",
       "sourceSha256": "06597f0f369ee085f454c123b85e8de34a2c7d7fa9e53f99070a97cae84ef95c",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque RuntimeDigest documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "Agent artifact/version construction and attestation/profile binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal runtime artifact digest label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Agent",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Agent.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -11893,14 +11949,18 @@
       "member": "$self",
       "sourceSha256": "06597f0f369ee085f454c123b85e8de34a2c7d7fa9e53f99070a97cae84ef95c",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque SkillsDigest documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "Agent artifact/version construction and attestation/profile binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal skills artifact digest label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Agent",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Agent.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -11910,14 +11970,18 @@
       "member": "SkillsDigest.value",
       "sourceSha256": "06597f0f369ee085f454c123b85e8de34a2c7d7fa9e53f99070a97cae84ef95c",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque SkillsDigest documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "Agent artifact/version construction and attestation/profile binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal skills artifact digest label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Agent",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Agent.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -11927,14 +11991,18 @@
       "member": "$self",
       "sourceSha256": "06597f0f369ee085f454c123b85e8de34a2c7d7fa9e53f99070a97cae84ef95c",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque ToolCatalogDigest documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "Agent artifact/version construction and attestation/profile binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal tool catalog artifact digest label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Agent",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Agent.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -11944,14 +12012,18 @@
       "member": "ToolCatalogDigest.value",
       "sourceSha256": "06597f0f369ee085f454c123b85e8de34a2c7d7fa9e53f99070a97cae84ef95c",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque ToolCatalogDigest documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "Agent artifact/version construction and attestation/profile binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal tool catalog artifact digest label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Agent",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Agent.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -14736,15 +14808,19 @@
       "declaration": "Issuer",
       "member": "$self",
       "sourceSha256": "7772fe23a0669d10b00ef72bb0b6c1fc4fd76e99ccb25993fcef8c51ada7612f",
-      "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque Issuer documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "profile resolution/admission and attestation identity binding",
+      "classification": "external-identity",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal external issuer label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Profile",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Profile.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -14753,15 +14829,19 @@
       "declaration": "Issuer",
       "member": "Issuer.value",
       "sourceSha256": "7772fe23a0669d10b00ef72bb0b6c1fc4fd76e99ccb25993fcef8c51ada7612f",
-      "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque Issuer documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "profile resolution/admission and attestation identity binding",
+      "classification": "external-identity",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal external issuer label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Profile",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Profile.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -14813,14 +14893,18 @@
       "member": "$self",
       "sourceSha256": "7772fe23a0669d10b00ef72bb0b6c1fc4fd76e99ccb25993fcef8c51ada7612f",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque ProfileId documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "profile resolution/admission and attestation identity binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal operator profile identity label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Profile",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Profile.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -14830,14 +14914,18 @@
       "member": "ProfileId.value",
       "sourceSha256": "7772fe23a0669d10b00ef72bb0b6c1fc4fd76e99ccb25993fcef8c51ada7612f",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque ProfileId documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "profile resolution/admission and attestation identity binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal operator profile identity label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Profile",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Profile.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -15019,14 +15107,18 @@
       "member": "$self",
       "sourceSha256": "7772fe23a0669d10b00ef72bb0b6c1fc4fd76e99ccb25993fcef8c51ada7612f",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque ProfileVersion documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "profile resolution/admission and attestation identity binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal immutable profile version label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Profile",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Profile.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -15036,14 +15128,18 @@
       "member": "ProfileVersion.value",
       "sourceSha256": "7772fe23a0669d10b00ef72bb0b6c1fc4fd76e99ccb25993fcef8c51ada7612f",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque ProfileVersion documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "profile resolution/admission and attestation identity binding",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal immutable profile version label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Profile",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Profile.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -16066,14 +16162,18 @@
       "member": "$self",
       "sourceSha256": "2102488c2ee6564d90a6347efec475824d99775969ff474920b127e4e96b07e0",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque DiffDigest documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "reviewed artifact/result commitments and compliance refusal production",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal reviewed artifact digest label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Reviewed",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Reviewed.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -16083,14 +16183,18 @@
       "member": "DiffDigest.value",
       "sourceSha256": "2102488c2ee6564d90a6347efec475824d99775969ff474920b127e4e96b07e0",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque DiffDigest documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "reviewed artifact/result commitments and compliance refusal production",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal reviewed artifact digest label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Reviewed",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Reviewed.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -16862,14 +16966,18 @@
       "member": "$self",
       "sourceSha256": "2102488c2ee6564d90a6347efec475824d99775969ff474920b127e4e96b07e0",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque ResultDigest documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "reviewed artifact/result commitments and compliance refusal production",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal review result digest label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Reviewed",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Reviewed.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {
@@ -16879,14 +16987,18 @@
       "member": "ResultDigest.value",
       "sourceSha256": "2102488c2ee6564d90a6347efec475824d99775969ff474920b127e4e96b07e0",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Opaque ResultDigest documentary identity/commitment exposes unchecked public constructor and Generic decoding. Preserve producer-owned bytes and distinguish parsing/admission from allocating identity; no new digest algorithm or foreign identifier grammar is implied.",
-      "authority": "reviewed artifact/result commitments and compliance refusal production",
+      "disposition": "compliant",
+      "invariant": "Distinct nominal review result digest label with the existing exact Text wire representation; no additional scalar grammar is defined by this contract.",
+      "authority": "Existing Attestation.Agent/Profile/Reviewed contracts and ADR-6 wire fixtures; frozen mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
       "boundaryOwner": "Shikigami.Attestation.Reviewed",
-      "rationale": "The successful value/API still exposes primitive roles or an unchecked public representation. Preserve current owner validation, identity recipes and wire bytes in a nominal admitted value; a schema hint or aggregate validation does not retain scalar distinctions across APIs.",
+      "rationale": "Source-supported correction: this is already a dedicated newtype, not a primitive alias or an untyped domain record field. Its constructor/derived text codec captures an opaque documentary value. The frozen guide requires hidden construction when an invariant needs enforcement; public construction or Generic alone does not demonstrate an invalid value for this open label contract. No Num, Integral, IsString or enumeration behavior is derived. Existing pinned complete attestation fixtures deliberately retain opaque labels such as sha256:decl and sha256:diff. Imposing a new hash/identifier grammar would change admission beyond this audit. Profile lookup/binding and actual computed ProfileDigest/PayloadDigest verification remain separate checked obligations, not granted by these labels.",
       "evidence": [
         "shikigami-core/src/Shikigami/Attestation/Reviewed.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "docs/adr/0006-the-attestation-payload-encoding-is-a-wire-format.md",
+        "shikigami-core/test/Shikigami/AttestationContractsSpec.hs",
+        "shikigami-core/src/Shikigami/Attestation/Resolve.hs",
+        "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md"
       ]
     },
     {

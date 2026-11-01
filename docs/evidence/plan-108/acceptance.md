@@ -1,8 +1,8 @@
 # Plan 108 acceptance evidence
 
-Implementation is in progress. Five decoder boundaries and one policy scalar have
-focused acceptance below. No complete milestone or exhaustive semantic compliance
-is accepted yet. The frozen domain guide remains deferred.
+Implementation is in progress. M1 semantic coverage is complete; M2 remediation
+and M3 final acceptance remain open. The dated checkpoints below preserve their
+original counts and source identities. The frozen domain guide remains deferred.
 
 The starting revision is `914ec061f637aab50adbe480eff691406671b8c4` on arm64
 macOS with GHC 9.12.4. The frozen guide was read at its recorded revision through
@@ -1264,3 +1264,33 @@ all 24 infrastructure tests pass; resolved-only mode correctly refuses exactly
 All five source/test/tool/ADR hashes in `resume-policy-source.json` match. Earlier
 closed-format native and behavioral evidence remains applicable; no new core
 workflow body, serialization or retained decoder boundary changed in this batch.
+
+
+## Run inspection and scope review (2026-11-01)
+
+The six-file source change retains native WorkflowId through the public server
+callback and core status functions. HTTP/CLI text is converted at the adapter;
+response bytes are unchanged. The CLI reuses `Sink.Coordinate.parseSinkSession`
+to refuse a native v4 or wrong-variant session in retained inspection metadata.
+No new helper module, parser grammar or gate is introduced; the core status
+session decoder and all unrelated behavior remain unchanged.
+
+`run-identity-source.json` binds the changed source and probe bytes. The focused
+command from the repository root passes all 27 selected cases (8/10/9):
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-test shikigami-workers-test shikigami-server-test -j1 --test-show-details=direct --test-option=-p --test-option='/SinkIntent/||/run status composition/||/agent-run HTTP/'
+nix develop --no-write-lock-file -c cabal test shikigami-core-test -j1 --test-show-details=direct --test-option=-p --test-option='/attestation contracts/'
+```
+
+The second command passes all 48 attestation cases. Existing fixtures deliberately
+preserve documentary labels such as `sha256:decl`, `sha256:diff` and `sha256:result`.
+Fourteen existing dedicated newtypes (28 declaration/payload keys) have no
+additional syntax contract; public construction/Generic alone is not a violation
+for those opaque labels. Source-supported correction preserves their exact codec,
+while computed ProfileDigest/PayloadDigest retain their actual checked invariant.
+
+`run-identity-probe.json` retains the public positive client, Text and SessionId
+substitution refusals and the expression executing the actual private CLI
+`sessionStep`. All four controls pass. This is compiler/pure-decoder evidence,
+not a live CLI/database test. Coherent full build/census reconciliation is pending.

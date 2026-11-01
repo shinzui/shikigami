@@ -83,7 +83,7 @@ import Shikigami.AgentRun.Status qualified as Status
 -- @lookupInstance@ and @statusToText@ are not re-exported by "Keiro.Workflow";
 -- the module that owns instance rows exports both.
 import Keiro.Workflow.Instance (lookupInstance, statusToText)
-import Kioku.Id (SessionId, idText, parseId)
+import Kioku.Id (SessionId, idText)
 import Kioku.Session (SessionRow (..))
 import Kioku.Session qualified as Session
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
@@ -100,6 +100,7 @@ import Shikigami.Execution.SelectionStore qualified as SelectionStore
 import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Migrations (verifyShikigamiMigrations)
+import Shikigami.Sink.Coordinate (parseSinkSession)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
@@ -140,7 +141,7 @@ runRunsShow wfName wfId asJson config = do
               Left _ -> die "run lifecycle store is unavailable"
               Right Nothing -> die ("no workflow instance named " <> wfName <> " with id " <> wfId)
               Right (Just request) -> do
-                result <- Status.deriveRunStatus store request.agentName wfId
+                result <- Status.deriveRunStatus store request.agentName (WorkflowId wfId)
                 case result of
                   Left failure -> die (Status.runStatusFailureText failure)
                   Right status -> LazyChar8.putStrLn (Aeson.encode (withLifecycle status (object ["workflow" .= Aeson.Null, "session" .= Aeson.Null])))
@@ -156,7 +157,7 @@ runRunsShow wfName wfId asJson config = do
                       _ -> Nothing
                   _ -> Nothing
             finalLifecycle <- case agent of
-              Just name | wfName == "shikigami.agent-run" -> Status.deriveRunStatus store name wfId
+              Just name | wfName == "shikigami.agent-run" -> Status.deriveRunStatus store name (WorkflowId wfId)
               _ -> pure (Right Nothing)
             case finalLifecycle of
               Left failure -> die (Status.runStatusFailureText failure)
@@ -244,9 +245,9 @@ resolveSession = \case
 -- produced arm encodes as the bare id, the second records the bare id directly,
 -- and 'StepResult''s decoder reads either.
 --
--- The id is decoded as 'Text' and then parsed with kioku's strict 'parseId'
--- rather than through a @FromJSON SessionId@ instance, because 'parseId' rejects
--- a wrong type prefix and names both prefixes when it does.
+-- The recorded text is admitted through the native session refiner: strict
+-- prefix/encoding, UUID version/variant and canonical renderer. This does not
+-- allocate a session or use a current-clock check for historical metadata.
 sessionStep :: Map Text Value -> SessionLink
 sessionStep steps =
   case Map.lookup "open-session" steps <|> Map.lookup "resolve-session" steps of
@@ -256,7 +257,7 @@ sessionStep steps =
         Aeson.Error detail -> SessionUnreadable (Text.pack detail)
         Aeson.Success (StepRefused detail) -> SessionRefused detail
         Aeson.Success (StepProduced raw) ->
-          case parseId raw of
+          case parseSinkSession raw of
             Left detail -> SessionUnreadable detail
             Right sid -> SessionOpened sid Nothing Nothing
 

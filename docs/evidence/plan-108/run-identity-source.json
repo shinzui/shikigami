@@ -1,0 +1,22 @@
+{
+  "sourceParent": "3ead4a6",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "files": {
+    "shikigami-core/src/Shikigami/AgentRun/Status.hs": "4c85f41465d2789ae5d9d520672867833d50c04b3fc2ec0d57126c33213fa4bf",
+    "shikigami-core/test-postgres/Shikigami/AgentWorkflowSpec.hs": "11b6c4b168f2de8a7ff303922d9a1966aee9713c0e2d0e855b6970ed906065a6",
+    "shikigami-server/src/Shikigami/AgentRun/Handler.hs": "f1b7267f03169cb0351d10e2abc90bdbf256eb8159d9e4d0fdd2842a4c310f63",
+    "shikigami-server/src/Shikigami/Server/Command/Runs.hs": "0b24c5fd6dacbc9a4c68a3b9639b560af1215b55b97193452b44b03a75c1fa10",
+    "shikigami-server/src/Shikigami/Server/Seam.hs": "5d8f347fce3990a6f8619288a1fdddd15655cd15230ab2d005365dd3bb4af67a",
+    "shikigami-workers/test/Shikigami/AgentRun/StatusSpec.hs": "eb7ed6be7c27f9e925ab81df4a0b5defbd474cdc6258edc577c29be75969d32d",
+    "docs/evidence/plan-108/run-identity-probe.json": "3a6f9ada1bb497690113d33e52bdf38d23592506d26dd21c31fce2f695d58cd4"
+  },
+  "tests": {
+    "SinkIntent": 8,
+    "run status composition": 10,
+    "agent-run HTTP": 9,
+    "attestation contracts": 48,
+    "public compiler and actual CLI decoder controls": 4
+  },
+  "limitations": "Focused tests and compiler/pure CLI probes only; no new retained codec, workflow body, dependency, framework, or Linux qualification. The existing core status session parser is unchanged."
+}

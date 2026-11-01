@@ -94,7 +94,7 @@ tests fixture =
         withFixture fixture \store job _connection -> do
           accepted <- acceptedRequest store job
           messageId <- sendDeadLetter store accepted.queueMessageId (Aeson.Number 7)
-          deriveRunStatus store job.agentName (runJobWorkflowId job).unWorkflowId >>= \case
+          deriveRunStatus store job.agentName (runJobWorkflowId job) >>= \case
             Left _ -> pure ()
             result -> assertFailure ("malformed evidence was a lifecycle: " <> show result)
           unchanged <- acceptedRequest store job
@@ -110,7 +110,7 @@ tests fixture =
           accepted <- acceptedRequest store job
           _ <- sendDeadLetter store accepted.queueMessageId (Aeson.String "retryable receipt failure")
           _ <- right =<< Pool.use store.pool (Session.script "ALTER TABLE shikigami.agent_run_requests ADD CONSTRAINT simulate_receipt_failure CHECK (disposition <> 'dead_lettered')")
-          deriveRunStatus store job.agentName (runJobWorkflowId job).unWorkflowId >>= \case
+          deriveRunStatus store job.agentName (runJobWorkflowId job) >>= \case
             Left _ -> pure ()
             _ -> assertFailure "failed receipt write was reported as a lifecycle"
           _ <- right =<< Pool.use store.pool (Session.script "ALTER TABLE shikigami.agent_run_requests DROP CONSTRAINT simulate_receipt_failure")
@@ -139,7 +139,7 @@ tests fixture =
                 )
           view <- getStatus store job
           view.lifecycle @?= Succeeded
-          deriveRunStatus store (fixtureAgentName "other") (runJobWorkflowId job).unWorkflowId >>= (@?= Right Nothing),
+          deriveRunStatus store (fixtureAgentName "other") (runJobWorkflowId job) >>= (@?= Right Nothing),
       testCase "a normally completed workflow without complete is a behavior failure" $
         withFixture fixture \store job _connection -> do
           _ <- right =<< runStoreIO store (runWorkflow agentRunWorkflowName (runJobWorkflowId job) (pure ()))
@@ -150,7 +150,7 @@ tests fixture =
           case row of
             Just instance_ -> do
               let facts = RunFacts Nothing (Just (instance_ & #status .~ WfFailed & #lastError .~ Just "workflow failed")) mempty Nothing Nothing
-              fmap (.kind) (classifyRun job.agentName (runJobWorkflowId job).unWorkflowId facts).failure @?= Just WorkflowFailed
+              fmap (.kind) (classifyRun job.agentName (runJobWorkflowId job) facts).failure @?= Just WorkflowFailed
             Nothing -> assertFailure "workflow instance missing",
       testCase "worker dead letters close pre-workflow acceptance, without inventing rows" $
         withFixture fixture \store job _connection -> do
@@ -172,7 +172,7 @@ tests fixture =
           view.lifecycle @?= Failed
           fmap (.kind) view.failure @?= Just Refused
           _ <- right =<< Pool.use store.pool (Session.script "DROP TABLE shikigami.agent_run_requests")
-          deriveRunStatus store job.agentName (runJobWorkflowId job).unWorkflowId >>= \case
+          deriveRunStatus store job.agentName (runJobWorkflowId job) >>= \case
             Left _ -> pure ()
             _ -> assertFailure "store failure was rendered as a lifecycle"
     ]
@@ -184,7 +184,7 @@ crashAfterIngest job = do
 
 getStatus :: KirokuStore -> RunJob -> IO RunStatusView
 getStatus store job = do
-  result <- right =<< deriveRunStatus store job.agentName (runJobWorkflowId job).unWorkflowId
+  result <- right =<< deriveRunStatus store job.agentName (runJobWorkflowId job)
   maybe (assertFailure "missing status") pure result
 
 withFixture :: DatabaseFixture -> (KirokuStore -> RunJob -> Text -> IO a) -> IO a

@@ -183,14 +183,14 @@ tests databaseFixture =
 
             freshOutcome <- runAgentRunWorkflow deps freshJob
             assertBool ("fresh agent run completes: " <> show freshOutcome) (isCompleted freshOutcome)
-            status <- RunStatus.deriveRunStatus kirokuStore freshJob.agentName (runJobWorkflowId freshJob).unWorkflowId
+            status <- RunStatus.deriveRunStatus kirokuStore freshJob.agentName (runJobWorkflowId freshJob)
             case status of
               Right (Just view) -> do
                 assertEqual "real successful run lifecycle" RunStatus.Succeeded view.lifecycle
                 assertBool "success exposes its session" (isJust view.sessionId)
                 assertBool "success exposes its summary" (isJust view.summary)
                 assertBool "success exposes completion time" (isJust view.completedAt)
-                assertEqual "repeated status reads are stable" (Right (Just view)) =<< RunStatus.deriveRunStatus kirokuStore freshJob.agentName (runJobWorkflowId freshJob).unWorkflowId
+                assertEqual "repeated status reads are stable" (Right (Just view)) =<< RunStatus.deriveRunStatus kirokuStore freshJob.agentName (runJobWorkflowId freshJob)
               other -> assertFailure ("successful status missing: " <> show other)
             freshIndex <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (runJobWorkflowId freshJob) 0)
             assertEqual "fresh journal writes the v2 behavior label" (Right True) (Map.member "run-behavior-v2" <$> freshIndex)
@@ -335,7 +335,7 @@ tests databaseFixture =
             assertBool ("first attempt is permanent: " <> show firstAttempt) (isPermanent firstAttempt)
             assertBool ("replay keeps the permanent value: " <> show replayed) (isPermanent replayed)
             assertEqual "permanent behavior body executes once" 1 =<< readIORef attempts
-            status <- RunStatus.deriveRunStatus kirokuStore permanentFailureJob.agentName (runJobWorkflowId permanentFailureJob).unWorkflowId
+            status <- RunStatus.deriveRunStatus kirokuStore permanentFailureJob.agentName (runJobWorkflowId permanentFailureJob)
             case status of
               Right (Just view) -> do
                 assertEqual "completed failure is not success" RunStatus.Failed view.lifecycle

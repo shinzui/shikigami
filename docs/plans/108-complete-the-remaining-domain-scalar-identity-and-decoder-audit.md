@@ -325,6 +325,19 @@ command receipts. Use a closed process-policy format with unchanged numeric
 JSON/commitments. [ADR-107](../adr/0107-profile-and-objective-corruption-refuses-within-the-owning-transaction.md)
 holds this durable owner boundary; it does not exempt the remaining scalars.
 
+2026-11-01: The user explicitly asks not to expand scope or over-engineer.
+Apply the frozen guide to actual producer/consumer meaning and demonstrated
+invariants; a primitive representation or public constructor alone is not an
+automatic reason for another abstraction. Preserve existing nominal documentary
+values when there is no additional refinement contract. Do not invent identifier
+grammars, new identity allocations, broader decoder behavior, extra shared helper
+modules or new gate infrastructure to clear a finding. Reuse existing refiners and
+checks; record source-supported classification corrections instead of manufacturing
+new requirements. Keep source changes confined to the concrete accepted audit
+obligations and group focused checks before coherent full-build reconciliation.
+This clarifies implementation discipline without waiving a concrete violation or
+changing M2/M3 acceptance.
+
 ## Outcomes & Retrospective
 
 
@@ -682,3 +695,19 @@ policy findings are resolved and the six new private scalar keys are classified.
 Normal coverage and 24 infrastructure tests pass; resolved-only mode correctly
 refuses the remaining 547 findings. No core workflow body or retained codec
 changes, so this batch needs no new native compatibility or PostgreSQL gate.
+
+
+M2 run-inspection source checkpoint (2026-11-01): retain native WorkflowId through
+the status callback and reuse the existing checked session parser in the CLI.
+The change is six existing Haskell files, with no helper module or new gate.
+All 27 selected sink/status/HTTP cases and four public compiler/actual CLI decoder
+controls pass. Source/byte identity: `run-identity-source.json`; probe detail:
+`run-identity-probe.json`. Full build/census reconciliation remains pending.
+
+Scope review corrects 28 findings on already nominal, intentionally opaque
+attestation labels. The frozen guide requires hidden construction when a value
+has an invariant; it does not define a new grammar for these documentary labels.
+Existing complete wire fixtures deliberately use opaque short digest labels, and
+all 48 attestation contract tests pass. Concrete computed ProfileDigest and
+PayloadDigest checks remain intact. The correction adds no runtime abstraction
+or admission rule and does not waive the remaining scalar/identity obligations.

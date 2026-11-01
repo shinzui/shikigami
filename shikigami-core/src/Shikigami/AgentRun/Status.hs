@@ -78,15 +78,15 @@ runStatusFailureText = \case
   RunStatusStoreUnavailable -> "The run status store is unavailable."
   RunStatusHistoryInvalid -> "The stored run history cannot be interpreted."
 
-gatherRunFacts :: KirokuStore -> AgentName -> Text -> IO (Either RunStatusFailure (Maybe RunFacts))
+gatherRunFacts :: KirokuStore -> AgentName -> WorkflowId -> IO (Either RunStatusFailure (Maybe RunFacts))
 gatherRunFacts store agent runId = do
-  request <- lookupRunRequest store.pool agent (WorkflowId runId)
+  request <- lookupRunRequest store.pool agent runId
   case request of
     Left _ -> pure (Left unavailable)
     Right accepted -> do
       stored <- runStoreIO store do
-        instance_ <- lookupInstance agentRunWorkflowName (WorkflowId runId)
-        steps <- maybe (pure Map.empty) (\row -> loadStepIndex agentRunWorkflowName (WorkflowId runId) (fromIntegral row.generation)) instance_
+        instance_ <- lookupInstance agentRunWorkflowName runId
+        steps <- maybe (pure Map.empty) (\row -> loadStepIndex agentRunWorkflowName runId (fromIntegral row.generation)) instance_
         let job = recordedJob steps
             owned = maybe False (const True) accepted || maybe False ((== agent) . (.agentName)) job
         if not owned || (isNothing accepted && isNothing instance_)
@@ -135,10 +135,10 @@ recordedJob steps =
     Aeson.Success job -> Just job
     Aeson.Error _ -> Nothing
 
-classifyRun :: AgentName -> Text -> RunFacts -> RunStatusView
+classifyRun :: AgentName -> WorkflowId -> RunFacts -> RunStatusView
 classifyRun agent runId facts =
   RunStatusView
-    { runId,
+    { runId = runId.unWorkflowId,
       agentName = agentNameText agent,
       lifecycle,
       trigger = triggerText . (.triggerKind) <$> recordedJob facts.steps,
@@ -178,7 +178,7 @@ classifyRun agent runId facts =
       Just row | row.disposition == RunDeadLettered -> row.dispositionAt
       _ -> Nothing
 
-deriveRunStatus :: KirokuStore -> AgentName -> Text -> IO (Either RunStatusFailure (Maybe RunStatusView))
+deriveRunStatus :: KirokuStore -> AgentName -> WorkflowId -> IO (Either RunStatusFailure (Maybe RunStatusView))
 deriveRunStatus store agent runId = fmap (fmap (classifyRun agent runId)) <$> gatherRunFacts store agent runId
 
 lifecycleText :: RunLifecycle -> Text
