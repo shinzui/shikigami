@@ -6,8 +6,8 @@
     "practice": "opentelemetry",
     "specialist": "opentelemetry-practice-reviewer",
     "lineage": {
-      "parentSessionId": "session-router-consistent",
-      "childSessionId": "session-specialist-consistent",
+      "parentSessionId": "kioku_session_01kvxa7d2cezhs874g3n8dfg00",
+      "childSessionId": "kioku_session_01kvxa7d2cezhs874g3n8dfg01",
       "parentWorkflowId": "workflow-router-consistent",
       "childWorkflowId": "workflow-specialist-consistent"
     },
@@ -66,8 +66,8 @@
     "practice": "opentelemetry",
     "specialist": "opentelemetry-practice-reviewer",
     "lineage": {
-      "parentSessionId": "session-router-target",
-      "childSessionId": "session-specialist-target",
+      "parentSessionId": "kioku_session_01kvxa7d2cezhs874g3n8dfg02",
+      "childSessionId": "kioku_session_01kvxa7d2cezhs874g3n8dfg03",
       "parentWorkflowId": "workflow-router-target",
       "childWorkflowId": "workflow-specialist-target"
     },
@@ -121,8 +121,8 @@
     "practice": "opentelemetry",
     "specialist": "opentelemetry-practice-reviewer",
     "lineage": {
-      "parentSessionId": "session-router-reference",
-      "childSessionId": "session-specialist-reference",
+      "parentSessionId": "kioku_session_01kvxa7d2cezhs874g3n8dfg04",
+      "childSessionId": "kioku_session_01kvxa7d2cezhs874g3n8dfg05",
       "parentWorkflowId": "workflow-router-reference",
       "childWorkflowId": "workflow-specialist-reference"
     },
@@ -187,8 +187,8 @@
     "practice": "opentelemetry",
     "specialist": "opentelemetry-practice-reviewer",
     "lineage": {
-      "parentSessionId": "session-router-exception",
-      "childSessionId": "session-specialist-exception",
+      "parentSessionId": "kioku_session_01kvxa7d2cezhs874g3n8dfg06",
+      "childSessionId": "kioku_session_01kvxa7d2cezhs874g3n8dfg07",
       "parentWorkflowId": "workflow-router-exception",
       "childWorkflowId": "workflow-specialist-exception"
     },
@@ -247,8 +247,8 @@
     "practice": "opentelemetry",
     "specialist": "opentelemetry-practice-reviewer",
     "lineage": {
-      "parentSessionId": "session-router-unresolved",
-      "childSessionId": "session-specialist-unresolved",
+      "parentSessionId": "kioku_session_01kvxa7d2cezhs874g3n8dfg08",
+      "childSessionId": "kioku_session_01kvxa7d2cezhs874g3n8dfg09",
       "parentWorkflowId": "workflow-router-unresolved",
       "childWorkflowId": "workflow-specialist-unresolved"
     },

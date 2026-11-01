@@ -76,7 +76,7 @@ import Kioku.Memory qualified as Memory
 import Kioku.Memory.Domain (RecordMemoryData (..), SupersedeMemoryData (..))
 import Kioku.Memory.ReadModel (MemoryRow (..))
 import Shikigami.Agent.Decl (AgentDecl (..))
-import Shikigami.Agent.Name (agentNameText)
+import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity)
 import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
@@ -84,6 +84,7 @@ import Shikigami.Memory.Scope (shikigamiNamespace)
 import Shikigami.PracticeReview
   ( Applicability (..),
     ContentReference (..),
+    DependencyName,
     EvidenceItem (..),
     PracticeKey,
     PracticeReviewResolution (..),
@@ -98,6 +99,7 @@ import Shikigami.PracticeReview
     ValidatedPracticeReviewVerdict,
     ValidatedResolutionRequest,
     confidencePercent,
+    dependencyNameText,
     practiceKeyText,
     resolutionIdText,
     reviewIdText,
@@ -126,7 +128,7 @@ data PracticeReviewMemoryEnvelope
 data ReviewRecallContext = ReviewRecallContext
   { project :: !ProjectRef,
     path :: !(Maybe RelativePath),
-    dependencies :: !(Set Text),
+    dependencies :: !(Set DependencyName),
     practice :: !PracticeKey
   }
   deriving stock (Eq, Show, Generic)
@@ -341,7 +343,7 @@ practiceReviewTags envelope =
         <> maybe [] (\value -> ["outcome:" <> value]) outcomeValue
         <> (("project:" <>) . normalizeToken <$> projectValues)
         <> (("path:" <>) . normalizeToken . relativePathText <$> tagPaths)
-        <> (("dependency:" <>) . normalizeToken <$> tagDependencies)
+        <> (("dependency:" <>) . normalizeToken . dependencyNameText <$> tagDependencies)
     )
   where
     (validatedVerdict, stateTag, resolutionValue, outcomeValue, applicabilityForTags) =
@@ -412,10 +414,10 @@ pathContains parent child =
       childText = relativePathText child
    in childText == parentText || (parentText <> "/") `Text.isPrefixOf` childText
 
-matchesDependencies :: [Text] -> Set Text -> Bool
+matchesDependencies :: [DependencyName] -> Set DependencyName -> Bool
 matchesDependencies [] _ = True
 matchesDependencies allowed current =
-  not (Set.disjoint (Set.fromList (normalizeToken <$> allowed)) (Set.map normalizeToken current))
+  not (Set.disjoint (Set.fromList (normalizeToken . dependencyNameText <$> allowed)) (Set.map (normalizeToken . dependencyNameText) current))
 
 matchesPractices :: [PracticeKey] -> PracticeKey -> Bool
 matchesPractices [] _ = True
@@ -431,7 +433,7 @@ data PracticeReviewMemoryEnv = PracticeReviewMemoryEnv
   }
 
 data PracticeReviewMemory :: Effect where
-  ReserveReviewIdentity :: ValidatedPracticeReviewTrigger -> PracticeKey -> Text -> PracticeReviewMemory m (Either ReviewMemoryError ReviewIdentityRef)
+  ReserveReviewIdentity :: ValidatedPracticeReviewTrigger -> PracticeKey -> AgentName -> PracticeReviewMemory m (Either ReviewMemoryError ReviewIdentityRef)
   RememberProvisional :: ReviewIdentityRef -> Maybe MemoryId -> ValidatedPracticeReviewVerdict -> PracticeReviewMemory m (Either ReviewMemoryError MemoryId)
   ResolveReview :: MemoryId -> ValidatedResolutionRequest -> PracticeReviewMemory m (Either ReviewMemoryError ResolvedPracticeReview)
   RecallPracticeReviews :: ReviewRecallContext -> PracticeReviewMemory m RecalledPracticeReviews
@@ -452,7 +454,7 @@ instance FromJSON ResolvedPracticeReview where
   parseJSON = withObject "ResolvedPracticeReview" \value ->
     ResolvedPracticeReview <$> value .: "memoryId" <*> (value .: "resolution" >>= parseValidatedResolution)
 
-reserveReviewIdentity :: (PracticeReviewMemory :> es) => ValidatedPracticeReviewTrigger -> PracticeKey -> Text -> Eff es (Either ReviewMemoryError ReviewIdentityRef)
+reserveReviewIdentity :: (PracticeReviewMemory :> es) => ValidatedPracticeReviewTrigger -> PracticeKey -> AgentName -> Eff es (Either ReviewMemoryError ReviewIdentityRef)
 reserveReviewIdentity trigger practice specialist = send (ReserveReviewIdentity trigger practice specialist)
 
 rememberProvisional :: (PracticeReviewMemory :> es) => ReviewIdentityRef -> Maybe MemoryId -> ValidatedPracticeReviewVerdict -> Eff es (Either ReviewMemoryError MemoryId)

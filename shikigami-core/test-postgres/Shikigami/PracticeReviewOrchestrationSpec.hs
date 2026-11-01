@@ -88,9 +88,11 @@ import Shikigami.PracticeReview
     validatedVerdictValue,
   )
 import Shikigami.PracticeReview qualified as Review
+import Shikigami.PracticeReview qualified as ReviewValue
 import Shikigami.PracticeReview.Attention
-  ( AttentionKey (..),
+  ( AttentionKey,
     PracticeReviewAttentionEnv (..),
+    attentionKeyText,
     deriveAttentionKey,
     runPracticeReviewAttentionAtomic,
   )
@@ -105,6 +107,7 @@ import Shikigami.PracticeReview.Authorization
     mkAuthorizedResolutionReceipt,
     validateAuthorizedPracticeReviewResolution,
   )
+import Shikigami.PracticeReview.Authorization qualified as ReviewAuth
 import Shikigami.PracticeReview.Capability
   ( AttentionRecipientMap,
     AttentionReservationResult (..),
@@ -125,7 +128,7 @@ import Shikigami.PracticeReview.Evidence
     EvidenceReader (..),
     EvidenceSource (..),
   )
-import Shikigami.PracticeReview.Identity (newReviewId)
+import Shikigami.PracticeReview.Identity (attentionKeyForDigest, newReviewId)
 import Shikigami.PracticeReview.IdentityStore qualified as IdentityStore
 import Shikigami.PracticeReview.Memory
   ( PracticeReviewMemoryEnv (..),
@@ -141,6 +144,7 @@ import Shikigami.PracticeReviewEvidenceSpec
 import Shikigami.Repository (RepoRef (..), revisionText)
 import Shikigami.RunJobs (decodeRunJob)
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
+import Shikigami.Sink.Delivery (sinkMessageId)
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (SinkKind (SKawaDigest, SKizashiSignal))
 import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
@@ -171,28 +175,29 @@ authorizationTests =
         resolution <- firstResolution
         validated <- expectRight (validateResolutionRequest resolution)
         receipt <- expectRight (mkAuthorizedResolutionReceipt Human (resolverOf resolution) "mori://shinzui/shikigami/reviews/approval-1" (resolvedAtOf resolution) validated)
-        let envelope = AuthorizedPracticeReviewResolution {schemaVersion = 2, resolution, authorization = receipt}
+        let envelope = AuthorizedPracticeReviewResolution {schemaVersion = ReviewAuth.authorizationEnvelopeSchemaVersion, resolution, authorization = receipt}
         decoded <- decodeOrFail (encode envelope)
         validateAuthorizedPracticeReviewResolution decoded @?= Right (validated, receipt)
-        (.authorizationId) receipt @?= "dc9940fc-5b78-5d6d-b8fb-0b9d4ddcd166",
+        ReviewAuth.resolutionAuthorizationIdText ((.authorizationId) receipt) @?= "dc9940fc-5b78-5d6d-b8fb-0b9d4ddcd166",
       testCase "subject mismatch, disallowed source, and altered receipt are refused" do
         resolution <- firstResolution
         validated <- expectRight (validateResolutionRequest resolution)
         mismatched <- expectRight (mkAuthorizedResolutionReceipt Human (fixtureOwnerPrincipal "different-subject") "activity://approval/1" (resolvedAtOf resolution) validated)
-        let mismatchedEnvelope = AuthorizedPracticeReviewResolution {schemaVersion = 2, resolution, authorization = mismatched}
+        let mismatchedEnvelope = AuthorizedPracticeReviewResolution {schemaVersion = ReviewAuth.authorizationEnvelopeSchemaVersion, resolution, authorization = mismatched}
         assertBool "subject mismatch was accepted" (isSubjectMismatch (validateAuthorizedPracticeReviewResolution mismatchedEnvelope))
         assertBool
           "noncanonical authorization source was accepted"
           (isSourceInvalid (mkAuthorizedResolutionReceipt Human (resolverOf resolution) "https://example.invalid/approval" (resolvedAtOf resolution) validated))
         validReceipt <- expectRight (mkAuthorizedResolutionReceipt Human (resolverOf resolution) "activity://approval/1" (resolvedAtOf resolution) validated)
-        let validEnvelope = AuthorizedPracticeReviewResolution {schemaVersion = 2, resolution, authorization = validReceipt}
-        altered <- decodeOrFail (encode (alterAuthorizationId "altered" (Aeson.toJSON validEnvelope)))
+        let validEnvelope = AuthorizedPracticeReviewResolution {schemaVersion = ReviewAuth.authorizationEnvelopeSchemaVersion, resolution, authorization = validReceipt}
+        assertDecodeFailure @AuthorizedPracticeReviewResolution (alterAuthorizationId "altered" (Aeson.toJSON validEnvelope))
+        altered <- decodeOrFail (encode (alterAuthorizationId "00000000-0000-5000-8000-000000000000" (Aeson.toJSON validEnvelope)))
         assertBool "altered authorization id was accepted" (isIdInvalid (validateAuthorizedPracticeReviewResolution altered)),
       testCase "authorization decoders reject unknown envelope and receipt fields" do
         resolution <- firstResolution
         validated <- expectRight (validateResolutionRequest resolution)
         receipt <- expectRight (mkAuthorizedResolutionReceipt Human (resolverOf resolution) "activity://approval/1" (resolvedAtOf resolution) validated)
-        let envelope = AuthorizedPracticeReviewResolution {schemaVersion = 2, resolution, authorization = receipt}
+        let envelope = AuthorizedPracticeReviewResolution {schemaVersion = ReviewAuth.authorizationEnvelopeSchemaVersion, resolution, authorization = receipt}
         assertDecodeFailure @AuthorizedPracticeReviewResolution (insertObjectField "unexpected" Aeson.Null (Aeson.toJSON envelope))
         assertDecodeFailure @AuthorizedPracticeReviewResolution (insertAuthorizationField "unexpected" Aeson.Null (Aeson.toJSON envelope))
         assertDecodeFailure @PracticeReviewResolutionRequest (insertObjectField "resolutionId" (String "caller-selected") (Aeson.toJSON resolution))
@@ -209,7 +214,7 @@ attentionIdentityTests =
         validated <- expectRight (validateVerdict verdict)
         recipients <- expectRight (mkAttentionRecipientMap [("team-example-service", "recipient_target")])
         key <- expectRight (deriveAttentionKey recipients validated)
-        key @?= AttentionKey "4978b57a-1a3d-5210-b82d-671276f2c485"
+        attentionKeyText key @?= "4978b57a-1a3d-5210-b82d-671276f2c485"
         normalized <- expectRight (validateVerdict (verdict & #recommendedAction .~ "  Ask   the target owner to reconcile the decision.  "))
         deriveAttentionKey recipients normalized @?= Right key,
       testCase "recipient and material action changes produce distinct attention keys" do
@@ -318,8 +323,8 @@ completeClassificationTests databaseFixture =
               commandKey = "complete-resolution-" <> resolutionLabel
               resolution =
                 PracticeReviewResolutionRequest
-                  { schemaVersion = 1,
-                    idempotencyKey = commandKey,
+                  { schemaVersion = ReviewValue.practiceReviewSchemaVersion,
+                    idempotencyKey = reviewResolutionKey commandKey,
                     reviewId,
                     outcome,
                     resolver = fixtureOwnerPrincipal "architecture-council",
@@ -338,7 +343,7 @@ completeClassificationTests databaseFixture =
                   (resolvedAtOf resolution)
                   validatedResolution
               )
-          let envelope = AuthorizedPracticeReviewResolution {schemaVersion = 2, resolution, authorization = receipt}
+          let envelope = AuthorizedPracticeReviewResolution {schemaVersion = ReviewAuth.authorizationEnvelopeSchemaVersion, resolution, authorization = receipt}
               runtime = completeRuntime evidenceCalls evaluatorCalls attentionCalls consistent
               workflowId = WorkflowId ("practice-review-complete-resolution-" <> resolutionLabel)
               runOnce = runPracticeReviewInput appEnv behaviorEnv session runtime workflowId (Aeson.toJSON envelope)
@@ -494,8 +499,8 @@ replayTests databaseFixture =
             reviewId <- allocatedIdFor appEnv contractTrigger
             let resolution =
                   PracticeReviewResolutionRequest
-                    { schemaVersion = 1,
-                      idempotencyKey = "resolution-command-fixture",
+                    { schemaVersion = ReviewValue.practiceReviewSchemaVersion,
+                      idempotencyKey = reviewResolutionKey "resolution-command-fixture",
                       reviewId,
                       outcome = Rejected,
                       resolver = fixtureOwnerPrincipal "architecture-council",
@@ -518,7 +523,7 @@ replayTests databaseFixture =
                     (resolvedAtOf resolution)
                     validatedResolution
                 )
-            let envelope = AuthorizedPracticeReviewResolution {schemaVersion = 2, resolution, authorization = receipt}
+            let envelope = AuthorizedPracticeReviewResolution {schemaVersion = ReviewAuth.authorizationEnvelopeSchemaVersion, resolution, authorization = receipt}
             resolved <- runInput (WorkflowId "practice-review-resolution-replay") (Aeson.toJSON envelope)
             assertResolutionOutcome resolved
             resolvedReplay <- runInput (WorkflowId "practice-review-resolution-replay") (Aeson.toJSON envelope)
@@ -535,7 +540,7 @@ atomicAttentionTests databaseFixture =
         verdict <- targetSuspectVerdict
         firstVerdict <- expectRight (validateVerdict verdict)
         secondReviewId <- newReviewId
-        let secondTriggerKey = "equivalent-trigger-two"
+        let secondTriggerKey = reviewTriggerKey "equivalent-trigger-two"
         secondVerdict <-
           expectRight
             ( validateVerdict
@@ -708,11 +713,25 @@ completeRuntime evidenceCalls evaluatorCalls attentionCalls proposal =
       dependencyPinResolver = completeDependencyPinResolver,
       evaluator = \_ evidence _ -> do
         modifyIORef' evaluatorCalls (+ 1)
-        pure (Right (Aeson.toJSON (proposalWithEvidence evidence proposal))),
+        -- Historical model proposals may contain placeholder host metadata. The
+        -- host owns these fields; replay must replace them before decoding.
+        pure
+          ( Right
+              ( foldr
+                  (uncurry insertObjectField)
+                  (Aeson.toJSON (proposalWithEvidence evidence proposal))
+                  [ ("schemaVersion", Number 99),
+                    ("reviewId", String "model-placeholder"),
+                    ("triggerIdempotencyKey", String ""),
+                    ("specialist", String ""),
+                    ("lineage", String "model-placeholder")
+                  ]
+              )
+          ),
       attention = \validated -> do
         modifyIORef' attentionCalls (+ 1)
         let PracticeReviewVerdict {reviewId} = validatedVerdictValue validated
-        pure (Right (Reserved ("attention-" <> reviewIdText reviewId) ("outbox-" <> reviewIdText reviewId))),
+        pure (Right (Reserved (attentionKeyForDigest ("fixture-attention-" <> reviewIdText reviewId)) (sinkMessageId ("outbox-" <> reviewIdText reviewId)))),
       attentionRecipients = emptyAttentionRecipientMap
     }
 
@@ -740,7 +759,7 @@ proposalWithEvidence EvidenceBundle {target, references, upstream} proposal =
                  { claimId = fixtureClaimId "claim-complete-orchestration",
                    kind = Fact,
                    statement = "The bounded evidence supports the proposed architecture-practice classification.",
-                   material = True,
+                   material = ReviewValue.Material,
                    evidenceIds = citationIds
                  }
              ]
@@ -807,7 +826,7 @@ incompleteRuntime evidenceCalls evaluatorCalls attentionCalls =
       evaluator = \_ _ _ -> modifyIORef' evaluatorCalls (+ 1) >> pure (Left "evaluator must not run"),
       attention = \_ -> do
         modifyIORef' attentionCalls (+ 1)
-        pure (Right (Reserved "fixture-attention" "fixture-outbox")),
+        pure (Right (Reserved (attentionKeyForDigest "fixture-attention") (sinkMessageId "fixture-outbox"))),
       attentionRecipients = emptyAttentionRecipientMap
     }
   where
@@ -1001,7 +1020,7 @@ removeAllocatedId value = value
 allocatedIdFor :: AppEnv -> PracticeReviewTrigger -> IO ReviewId
 allocatedIdFor app trigger = do
   validated <- expectRight (validateTrigger trigger)
-  reference <- IdentityStore.reserveReviewIdentity app (CompatibilityAgent (fixtureAgentName reviewerAgent)) validated (fixturePracticeKey "opentelemetry") reviewerAgent >>= expectRight
+  reference <- IdentityStore.reserveReviewIdentity app (CompatibilityAgent (fixtureAgentName reviewerAgent)) validated (fixturePracticeKey "opentelemetry") (fixtureAgentName reviewerAgent) >>= expectRight
   pure (IdentityStore.allocatedReviewId reference)
 
 ingressTests :: DatabaseFixture -> TestTree
@@ -1033,3 +1052,9 @@ ingressTests fixture = testCase "practice resolution ingress authorizes the ID-f
       envelope <- decodeOrFail (encode job.triggerPayload)
       (validated, _) <- expectRight (validateAuthorizedPracticeReviewResolution envelope)
       Aeson.toJSON (Review.validatedResolutionRequestValue validated) @?= Aeson.toJSON request
+
+reviewResolutionKey :: Text -> ReviewValue.ResolutionKey
+reviewResolutionKey = either (error . show) id . ReviewValue.parseResolutionKey
+
+reviewTriggerKey :: Text -> ReviewValue.TriggerKey
+reviewTriggerKey = either (error . show) id . ReviewValue.parseTriggerKey

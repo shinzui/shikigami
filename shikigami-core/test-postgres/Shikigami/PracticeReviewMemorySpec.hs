@@ -72,6 +72,7 @@ import Shikigami.PracticeReview
     validatedVerdictValue,
   )
 import Shikigami.PracticeReview qualified as Review
+import Shikigami.PracticeReview qualified as ReviewValue
 import Shikigami.PracticeReview.Identity (newResolutionId)
 import Shikigami.PracticeReview.IdentityStore qualified as IdentityStore
 import Shikigami.PracticeReview.Memory
@@ -180,7 +181,7 @@ applicabilityTests =
         assertBool "fully empty scope is a wildcard" (appliesTo emptyApplicability (recallContext (Just path) Set.empty))
         let wrongProject = Applicability [ProjectRef "other" (RepositoryId "repo_other")] [] [] []
             wrongPractice = Applicability [] [] [] [fixturePracticeKey "logging"]
-            wrongDependency = Applicability [] [] ["other-package"] []
+            wrongDependency = Applicability [] [] [reviewDependencyName "other-package"] []
             context = recallContext (Just path) (Set.singleton "hs-opentelemetry-api")
         assertBool "project mismatch excludes" (not (appliesTo wrongProject context))
         assertBool "practice mismatch excludes" (not (appliesTo wrongPractice context))
@@ -222,7 +223,7 @@ postgresTests databaseFixture =
         withReviewEnv databaseFixture \app session -> do
           trigger <- readFixture "trigger-valid.json" >>= decodeOrFail >>= expectRight . validateTrigger
           let creator = CompatibilityAgent (fixtureAgentName "opentelemetry-practice-reviewer")
-              reserve = IdentityStore.reserveReviewIdentity app creator trigger (fixturePracticeKey "opentelemetry") "opentelemetry-practice-reviewer"
+              reserve = IdentityStore.reserveReviewIdentity app creator trigger (fixturePracticeKey "opentelemetry") (fixtureAgentName "opentelemetry-practice-reviewer")
           gate <- newEmptyMVar
           left <- newEmptyMVar
           right <- newEmptyMVar
@@ -237,9 +238,9 @@ postgresTests databaseFixture =
           eitherDecode (encode recovered) @?= Right recovered
           changedPath <- expectRight (mkRelativePath "docs/adr/changed.md")
           changed <- expectRight (validateTrigger (validatedTriggerValue trigger & #changedDecisionPaths .~ [changedPath]))
-          conflict <- IdentityStore.reserveReviewIdentity app creator changed (fixturePracticeKey "opentelemetry") "opentelemetry-practice-reviewer"
+          conflict <- IdentityStore.reserveReviewIdentity app creator changed (fixturePracticeKey "opentelemetry") (fixtureAgentName "opentelemetry-practice-reviewer")
           assertBool "changed trigger reused receipt" (isLeft conflict)
-          other <- IdentityStore.reserveReviewIdentity app (CompatibilityAgent (fixtureAgentName "another-reviewer")) trigger (fixturePracticeKey "opentelemetry") "opentelemetry-practice-reviewer" >>= expectRight
+          other <- IdentityStore.reserveReviewIdentity app (CompatibilityAgent (fixtureAgentName "another-reviewer")) trigger (fixturePracticeKey "opentelemetry") (fixtureAgentName "opentelemetry-practice-reviewer") >>= expectRight
           assertBool "creators shared an allocation" (allocatedReviewId other /= allocatedReviewId first)
           (verdicts, _) <- readAllocatedContracts app
           verdict <- itemAt "target-suspect verdict" 1 verdicts
@@ -251,7 +252,7 @@ postgresTests databaseFixture =
           case refusedWrite of Left (ReviewMemoryRefused _) -> pure (); unexpected -> assertFailure (show unexpected)
           activePracticeRows app (fixturePracticeKey "opentelemetry") >>= (\rows -> length rows @?= 0)
           -- Allocation is durable without a successful workflow/journal response.
-          runReviewOperation app session (WorkflowId "allocation-recovery") (reserveReviewIdentity trigger (fixturePracticeKey "opentelemetry") "opentelemetry-practice-reviewer") >>= expectCompleted >>= (\value -> value @?= Right first),
+          runReviewOperation app session (WorkflowId "allocation-recovery") (reserveReviewIdentity trigger (fixturePracticeKey "opentelemetry") (fixtureAgentName "opentelemetry-practice-reviewer")) >>= expectCompleted >>= (\value -> value @?= Right first),
       testCase "resolution receipts recover the same entity and bind the complete command" do
         withReviewEnv databaseFixture \app _ -> do
           (_, resolutions) <- readAllocatedContracts app
@@ -273,7 +274,7 @@ postgresTests databaseFixture =
         withReviewEnv databaseFixture \app session -> do
           trigger <- readFixture "trigger-valid.json" >>= decodeOrFail >>= expectRight . validateTrigger
           withStore app.connectionSettings \store -> Pool.use store.pool (Session.script "DROP TABLE shikigami.practice_review_identities") >>= expectRight
-          result <- try @SomeException (runReviewOperation app session (WorkflowId "identity-store-unavailable") (reserveReviewIdentity trigger (fixturePracticeKey "opentelemetry") "opentelemetry-practice-reviewer"))
+          result <- try @SomeException (runReviewOperation app session (WorkflowId "identity-store-unavailable") (reserveReviewIdentity trigger (fixturePracticeKey "opentelemetry") (fixtureAgentName "opentelemetry-practice-reviewer")))
           case result of Left _ -> pure (); Right (Left _) -> pure (); unexpected -> assertFailure (show unexpected)
           journal <- loadReviewStepIndex app (WorkflowId "identity-store-unavailable")
           assertBool "transport failure became a journaled result" (Map.notMember "practice-review-reserve-identity" journal),
@@ -697,7 +698,7 @@ competingRejected :: ValidatedPracticeReviewResolution -> IO ValidatedPracticeRe
 competingRejected accepted = do
   identifier <- newResolutionId
   let acceptedValue = validatedResolutionValue accepted
-      commandKey = "race-rejected"
+      commandKey = reviewResolutionKey "race-rejected"
       rejectedValue =
         acceptedValue
           & #resolutionId
@@ -722,7 +723,7 @@ boundedApplicability path =
   Applicability
     { projects = [ProjectRef "target" (RepositoryId "repo_target")],
       paths = [path],
-      dependencies = ["hs-opentelemetry-api"],
+      dependencies = [reviewDependencyName "hs-opentelemetry-api"],
       practices = [fixturePracticeKey "opentelemetry"]
     }
 
@@ -740,7 +741,7 @@ recallContextFor practice path dependencies =
   ReviewRecallContext
     { project = ProjectRef "target" (RepositoryId "repo_target"),
       path,
-      dependencies,
+      dependencies = Set.map reviewDependencyName dependencies,
       practice
     }
 
@@ -841,3 +842,9 @@ readAllocatedContracts app = do
       let raw@PracticeReviewResolution {reviewId, supersedingReviewId} = validatedResolutionValue validated
       changed <- expectRight (validateResolution (raw & #reviewId .~ replace reviewId & #supersedingReviewId .~ fmap replace supersedingReviewId))
       IdentityStore.reserveResolutionIdentity app creator (requestFor changed) >>= expectRight
+
+reviewDependencyName :: Text -> ReviewValue.DependencyName
+reviewDependencyName = either (error . show) id . ReviewValue.parseDependencyName
+
+reviewResolutionKey :: Text -> ReviewValue.ResolutionKey
+reviewResolutionKey = either (error . show) id . ReviewValue.parseResolutionKey

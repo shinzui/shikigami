@@ -38,6 +38,13 @@ last error, timestamps, and downstream signal id remain exclusively in
 operators repair the existing outbox/receipt identity.
 
 
+Owner maps retain sorted owner components internally. The existing configuration
+syntax still uses `+` between owners, but a single principal containing `+` cannot
+match a set of two principals. AttentionKey and recipient references are private
+nominal values; the original valid string codecs, namespace and frozen UUIDv5
+recipe remain unchanged. An unreadable retained journal result condemns the
+reservation transaction, including its tentative review association.
+
 ## Alternatives rejected
 
 **Use `ReviewId` as the attention key.** Rejected because trigger-specific ids cannot coalesce an

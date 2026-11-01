@@ -13,6 +13,7 @@ import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Generics.Labels ()
 import Data.List (find, sortOn)
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Maybe (listToMaybe)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
@@ -20,12 +21,14 @@ import Effectful (Eff, (:>))
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (MemoryId, idText)
 import Shikigami.Agent.Decl qualified as Agent
+import Shikigami.Agent.Name qualified as AgentName
 import Shikigami.Flow.Capability (Sink, emitSignal)
 import Shikigami.PracticeReview
   ( ClaimKind (Inference),
     ContentReference (..),
     EvidenceItem (..),
     ExceptionApproval (..),
+    Materiality (..),
     PracticeAdoptionBinding (..),
     PracticeReviewClaim (..),
     PracticeReviewClassification (..),
@@ -46,6 +49,7 @@ import Shikigami.PracticeReview
     ValidatedPracticeReviewVerdict,
     evidenceProblemClaimId,
     practiceKeyText,
+    practiceReviewSchemaVersion,
     reviewIdText,
     validateTrigger,
     validateVerdict,
@@ -204,7 +208,7 @@ reviewTrigger validatedTrigger = do
     case (.completeness) evidence of
       Complete -> do
         rawProposal <- evaluatePracticeReview evidence recalled
-        rawVerdict <- case Aeson.fromJSON (case rawProposal of Aeson.Object proposal -> Aeson.Object (KeyMap.insert "reviewId" (toJSON identifier) proposal); other -> other) of
+        rawVerdict <- case Aeson.fromJSON (case rawProposal of Aeson.Object proposal -> Aeson.Object (foldr (\(key, value) -> KeyMap.insert key value) proposal [("schemaVersion", toJSON practiceReviewSchemaVersion), ("reviewId", toJSON identifier), ("triggerIdempotencyKey", toJSON trigger.idempotencyKey), ("specialist", toJSON opentelemetrySpecialist), ("lineage", toJSON lineage)]); other -> other) of
           Aeson.Error detail -> failFlow ("practice-review evaluator returned invalid verdict JSON: " <> Text.pack detail)
           Aeson.Success verdict -> pure verdict
         either failFlow pure (trustedVerdict identifier trigger adoption lineage evidence rawVerdict)
@@ -262,10 +266,10 @@ reviewLineage PracticeReviewExecutionContext {parentWorkflowId, parentSessionId,
     (Just recordedParentWorkflowId, Just recordedParentSessionId) ->
       Right
         ReviewLineage
-          { parentSessionId = idText recordedParentSessionId,
-            childSessionId = idText childSessionId,
-            parentWorkflowId = recordedParentWorkflowId.unWorkflowId,
-            childWorkflowId = childWorkflowId.unWorkflowId,
+          { parentSessionId = recordedParentSessionId,
+            childSessionId,
+            parentWorkflowId = recordedParentWorkflowId,
+            childWorkflowId,
             priorReviewId
           }
     _ -> Left "practice-review trigger requires recorded parent workflow and session lineage"
@@ -310,7 +314,7 @@ trustedVerdict
   proposal@PracticeReviewVerdict {classification = proposalClassification, exceptionApproval = proposalApproval, reReviewCondition = proposalReReview} =
     firstProblem "invalid practice-review evaluator verdict" $
       validateVerdict
-        (proposal & #schemaVersion .~ (1) & #reviewId .~ (identifier) & #triggerIdempotencyKey .~ (triggerKey) & #practice .~ (adoptionPractice) & #specialist .~ (opentelemetrySpecialist) & #lineage .~ (lineage) & #targetEvidence .~ (citations evidenceTarget) & #referenceEvidence .~ (citations evidenceReferences) & #upstreamEvidence .~ (citations evidenceUpstream) & #recommendedOwner .~ (trustedOwner adoption proposalClassification proposalApproval) & #reReviewCondition .~ ((proposalReReview & #watches .~ ([provenance | EvidenceItem {content = ContentReference {provenance}} <- allCitations evidence]))))
+        (proposal & #schemaVersion .~ practiceReviewSchemaVersion & #reviewId .~ (identifier) & #triggerIdempotencyKey .~ (triggerKey) & #practice .~ (adoptionPractice) & #specialist .~ (opentelemetrySpecialist) & #lineage .~ (lineage) & #targetEvidence .~ (citations evidenceTarget) & #referenceEvidence .~ (citations evidenceReferences) & #upstreamEvidence .~ (citations evidenceUpstream) & #recommendedOwner .~ (trustedOwner adoption proposalClassification proposalApproval) & #reReviewCondition .~ ((proposalReReview & #watches .~ ([provenance | EvidenceItem {content = ContentReference {provenance}} <- allCitations evidence]))))
 
 incompleteVerdict ::
   ReviewId ->
@@ -328,7 +332,7 @@ incompleteVerdict
     firstProblem "invalid deterministic unresolved verdict" $
       validateVerdict
         PracticeReviewVerdict
-          { schemaVersion = 1,
+          { schemaVersion = practiceReviewSchemaVersion,
             reviewId = identifier,
             triggerIdempotencyKey = triggerKey,
             practice = adoptionPractice,
@@ -367,7 +371,7 @@ problemClaims problems =
       { claimId = evidenceProblemClaimId ordinal,
         kind = Inference,
         statement = Text.take 512 (Text.pack (show problem)),
-        material = True,
+        material = Material,
         evidenceIds = []
       }
   | (ordinal, problem) <- zip [(1 :: Int) ..] (sortOn show problems)
@@ -447,5 +451,5 @@ firstProblem prefix = either (Left . ((prefix <> ": ") <>) . Text.pack . show) R
 failFlow :: Text -> Eff es value
 failFlow detail = throw (PracticeReviewFlowFailure detail) `seq` pure (error "unreachable")
 
-opentelemetrySpecialist :: Text
-opentelemetrySpecialist = "opentelemetry-practice-reviewer"
+opentelemetrySpecialist :: AgentName.AgentName
+opentelemetrySpecialist = AgentName.agentNameFromNonEmpty ('o' :| "pentelemetry-practice-reviewer")

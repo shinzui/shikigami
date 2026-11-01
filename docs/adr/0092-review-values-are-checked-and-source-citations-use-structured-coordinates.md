@@ -51,6 +51,15 @@ including model-provided labels. They are not allocated review/resolution entity
 ids. ReviewId/ResolutionId allocation authority remains a separate open audit;
 this decision does not exempt them from the TypeID default.
 
+The remaining review fields follow the same rule: distinct producer trigger and
+resolution keys, dependency/document references, checked authorization UUIDv5
+and source locators, bounded evidence page size, and native AgentName, SessionId
+and WorkflowId values. Schema and materiality have closed vocabularies with the
+original number/boolean codecs. Model proposals remain raw journaled values;
+the Flow supplies authoritative schema, review/key, specialist and lineage fields
+before decoding a proposal. This preserves replay of historical model placeholders
+without granting the model authority over those coordinates.
+
 ## Alternatives rejected
 
 Leaving scalar checks solely in the whole validator permits invalid direct

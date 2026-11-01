@@ -64,6 +64,9 @@ import Shikigami.Execution.ToolPosition qualified as Position
 import Shikigami.Decision.Contract qualified as Decision
 import Shikigami.Decision.Evidence qualified as DecisionEvidence
 import Shikigami.Log.Correlation qualified as Correlation
+import Shikigami.PracticeReview.Identity qualified as ReviewId
+import Shikigami.PracticeReview.Authorization qualified as ReviewAuth
+import Shikigami.PracticeReview.Capability qualified as ReviewCapability
 import Shikigami.PracticeReview.IdentityStore qualified as ReviewIdentity
 import Shikigami.PracticeReview qualified as Review
 import Shikigami.PracticeReview.Evidence qualified as Evidence
@@ -80,7 +83,17 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''nativeAttestationSession :: Attestation.AttestationPayload -> Maybe SessionId
+POSITIVE = '''reviewDependency :: Text -> Either Text Review.DependencyName
+reviewDependency = Review.parseDependencyName
+reviewLineageSession :: Review.ReviewLineage -> SessionId
+reviewLineageSession value = value.childSessionId
+reviewSpecialist :: Review.PracticeReviewVerdict -> Name.AgentName
+reviewSpecialist value = value.specialist
+reviewAttention :: Text -> ReviewId.AttentionKey
+reviewAttention = ReviewId.attentionKeyForDigest
+reviewPageSize :: Int -> Either Text Evidence.EvidencePageSize
+reviewPageSize = Evidence.parseEvidencePageSize
+nativeAttestationSession :: Attestation.AttestationPayload -> Maybe SessionId
 nativeAttestationSession value = value.sessionId
 nativeEvidenceSteps :: RunEvidence.RunEvidence -> [StepName]
 nativeEvidenceSteps value = value.deterministicSteps
@@ -278,6 +291,16 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('Review.DependencyName', 'generic'),
+    ('Review.DocumentId', 'generic'),
+    ('Review.TriggerKey', 'generic'),
+    ('Review.ResolutionKey', 'generic'),
+    ('ReviewAuth.ResolutionAuthorizationId', 'generic'),
+    ('ReviewAuth.ResolutionSourceRef', 'generic'),
+    ('ReviewId.AttentionKey', 'generic'),
+    ('ReviewCapability.AttentionRecipient', 'generic'),
+    ('Evidence.MutableGitRef', 'generic'),
+    ('Evidence.EvidencePageSize', 'generic'),
     ('Reviewed.PullRequestRef', 'generic'),
     ('Reviewed.ReviewPath', 'generic'),
     ('Attestation.ReviewClass', 'generic'),
@@ -404,6 +427,14 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         assert result.returncode != 0 and 'RunDisposition' in result.stderr, (source_kind, result.stderr)
         print('opaque boundary: run disposition ' + source_kind + ' substitution refused: passed', flush=True)
     for label, signature, expression in [
+        ('review trigger/resolution substitution', 'Review.TriggerKey -> Review.ResolutionKey', 'coerce'),
+        ('review dependency/document substitution', 'Review.DependencyName -> Review.DocumentId', 'coerce'),
+        ('review raw key coercion', 'Text -> Review.TriggerKey', 'coerce'),
+        ('review authorization coercion', 'UUID -> ReviewAuth.ResolutionAuthorizationId', 'coerce'),
+        ('attention UUID coercion', 'UUID -> ReviewId.AttentionKey', 'coerce'),
+        ('attention recipient coercion', 'Text -> ReviewCapability.AttentionRecipient', 'coerce'),
+        ('review page size coercion', 'Int -> Evidence.EvidencePageSize', 'coerce'),
+        ('materiality boolean substitution', 'Bool -> Review.Materiality', 'id'),
         ('format scope substitution', 'Format.FormatVersion \"execution-state\" -> Format.FormatVersion \"execution-job\"', 'id'),
         ('format scope coercion', 'Format.FormatVersion \"execution-state\" -> Format.FormatVersion \"execution-job\"', 'coerce'),
         ('sink ordinal raw coercion', 'Int -> SinkCoordinate.SinkOrdinal', 'coerce'),

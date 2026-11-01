@@ -18,6 +18,9 @@ module Shikigami.PracticeReview.Capability
     requestPracticeReviewAttention,
     AttentionReservationResult (..),
     AttentionRecipientMap,
+    AttentionRecipient,
+    parseAttentionRecipient,
+    attentionRecipientText,
     mkAttentionRecipientMap,
     parseAttentionRecipientMap,
     renderAttentionRecipientMap,
@@ -59,10 +62,12 @@ import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Behavior.Compatibility
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest)
 import Shikigami.PracticeReview
-  ( PracticeAdoptionBinding,
+  ( OwnerPrincipal,
+    PracticeAdoptionBinding,
     ValidatedPracticeReviewResolution,
     ValidatedPracticeReviewTrigger,
     ValidatedPracticeReviewVerdict,
+    ownerPrincipalText,
     validatedResolutionValue,
     validatedVerdictValue,
   )
@@ -74,11 +79,13 @@ import Shikigami.PracticeReview.Evidence
     acquireEvidence,
     defaultEvidenceLimits,
   )
+import Shikigami.PracticeReview.Identity (AttentionKey)
 import Shikigami.PracticeReview.Memory
   ( AdjudicatedPracticeReview (..),
     RecalledPracticeReviews (..),
   )
 import Shikigami.Prelude hiding ((.=))
+import Shikigami.Sink.Delivery (SinkMessageId)
 
 -- | Recorded execution metadata that is trusted independently of producer
 -- payload JSON. A delegated review requires both parent values.
@@ -156,12 +163,12 @@ evaluatePracticeReview evidence recalled = send (EvaluatePracticeReview evidence
 
 data AttentionReservationResult
   = Reserved
-      { attentionKey :: !Text,
-        outboxMessageId :: !Text
+      { attentionKey :: !AttentionKey,
+        outboxMessageId :: !SinkMessageId
       }
   | Coalesced
-      { attentionKey :: !Text,
-        outboxMessageId :: !Text
+      { attentionKey :: !AttentionKey,
+        outboxMessageId :: !SinkMessageId
       }
   | AttentionSkipped !Value
   deriving stock (Eq, Show, Generic)
@@ -192,7 +199,7 @@ data PracticeReviewRuntime = PracticeReviewRuntime
   }
   deriving stock (Generic)
 
-newtype AttentionRecipientMap = AttentionRecipientMap (Map Text Text)
+newtype AttentionRecipientMap = AttentionRecipientMap (Map AttentionOwnerSet AttentionRecipient)
   deriving stock (Eq, Show)
 
 mkAttentionRecipientMap :: [(Text, Text)] -> Either Text AttentionRecipientMap
@@ -200,11 +207,8 @@ mkAttentionRecipientMap entries = AttentionRecipientMap <$> foldM add Map.empty 
   where
     add current (rawOwnerKey, rawRecipient) = do
       ownerKey <- canonicalOwnerKey rawOwnerKey
-      let recipient = Text.strip rawRecipient
-      unlessEither
-        ("recipient_" `Text.isPrefixOf` recipient && Text.length recipient > Text.length ("recipient_" :: Text))
-        ("invalid Kizashi practice-review recipient: " <> rawRecipient)
-      unlessEither (Map.notMember ownerKey current) ("duplicate practice-review owner key: " <> ownerKey)
+      recipient <- parseAttentionRecipient rawRecipient
+      unlessEither (Map.notMember ownerKey current) ("duplicate practice-review owner key: " <> ownerKeyText ownerKey)
       pure (Map.insert ownerKey recipient current)
 
 -- | Parse the scalar configuration form @owner=recipient,owner+owner=recipient@.
@@ -221,20 +225,20 @@ parseAttentionRecipientMap raw
 
 renderAttentionRecipientMap :: AttentionRecipientMap -> Text
 renderAttentionRecipientMap (AttentionRecipientMap recipients) =
-  Text.intercalate "," [ownerKey <> "=" <> recipient | (ownerKey, recipient) <- Map.toAscList recipients]
+  Text.intercalate "," [ownerKeyText ownerKey <> "=" <> attentionRecipientText recipient | (ownerKey, recipient) <- Map.toAscList recipients]
 
 emptyAttentionRecipientMap :: AttentionRecipientMap
 emptyAttentionRecipientMap = AttentionRecipientMap Map.empty
 
-lookupAttentionRecipient :: AttentionRecipientMap -> [Text] -> Maybe Text
+lookupAttentionRecipient :: AttentionRecipientMap -> [OwnerPrincipal] -> Maybe AttentionRecipient
 lookupAttentionRecipient (AttentionRecipientMap recipients) owners =
-  Map.lookup (Text.intercalate "+" (sort (Text.strip <$> owners))) recipients
+  Map.lookup (AttentionOwnerSet (sort (Text.strip . ownerPrincipalText <$> owners))) recipients
 
-canonicalOwnerKey :: Text -> Either Text Text
+canonicalOwnerKey :: Text -> Either Text AttentionOwnerSet
 canonicalOwnerKey raw = do
   let owners = sort (Text.strip <$> Text.splitOn "+" raw)
   unlessEither (not (null owners) && all (not . Text.null) owners) ("invalid practice-review owner key: " <> raw)
-  pure (Text.intercalate "+" owners)
+  pure (AttentionOwnerSet owners)
 
 unlessEither :: Bool -> Text -> Either Text ()
 unlessEither True _ = Right ()
@@ -395,3 +399,31 @@ runPracticeReviewAttention journal PracticeReviewRuntime {attention} =
     journaled label operation
       | journal = step (StepName label) (liftIO operation)
       | otherwise = liftIO operation
+
+-- Retain components, not a delimiter-joined lookup key: one owner containing
+-- '+' must not match a configured set containing two different owners.
+newtype AttentionOwnerSet = AttentionOwnerSet [Text]
+  deriving stock (Eq, Ord, Show)
+
+ownerKeyText :: AttentionOwnerSet -> Text
+ownerKeyText (AttentionOwnerSet owners) = Text.intercalate "+" owners
+
+newtype AttentionRecipient = AttentionRecipient Text
+  deriving stock (Eq, Ord, Show)
+
+parseAttentionRecipient :: Text -> Either Text AttentionRecipient
+parseAttentionRecipient raw
+  | "recipient_" `Text.isPrefixOf` value && Text.length value > Text.length ("recipient_" :: Text) = Right (AttentionRecipient value)
+  | otherwise = Left ("invalid Kizashi practice-review recipient: " <> raw)
+  where
+    value = Text.strip raw
+
+attentionRecipientText :: AttentionRecipient -> Text
+attentionRecipientText (AttentionRecipient value) = value
+
+instance ToJSON AttentionRecipient where
+  toJSON = toJSON . attentionRecipientText
+  toEncoding = toEncoding . attentionRecipientText
+
+instance FromJSON AttentionRecipient where
+  parseJSON = Aeson.withText "attention recipient" (either (fail . Text.unpack) pure . parseAttentionRecipient)

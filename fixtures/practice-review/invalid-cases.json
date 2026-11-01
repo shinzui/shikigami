@@ -90,7 +90,7 @@
     "operation": "replace",
     "pointer": "/schemaVersion",
     "replacement": 2,
-    "expected": "trigger-validation"
+    "expected": "trigger-decode"
   },
   {
     "name": "Kizashi acknowledgement is not a resolution",

@@ -1,6 +1,13 @@
 -- | Ingress authorization proof for explicit practice-review resolution.
 module Shikigami.PracticeReview.Authorization
   ( ResolutionAuthorityKind (..),
+    AuthorizationSchema (..),
+    authorizationEnvelopeSchemaVersion,
+    ResolutionAuthorizationId,
+    parseResolutionAuthorizationId,
+    resolutionAuthorizationIdText,
+    ResolutionSourceRef,
+    resolutionSourceText,
     ResolutionSubmissionEvidence (..),
     AuthorizedResolutionReceipt (authorizationId, authorityKind, verifiedSubject, sourceReference, authorizedAt),
     AuthorizedPracticeReviewResolution (..),
@@ -18,6 +25,7 @@ import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (Parser)
 import Data.Bifunctor (first)
+import Data.Bits ((.&.))
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.UUID qualified as UUID
@@ -56,10 +64,10 @@ newtype ResolutionSubmissionEvidence = ResolutionSubmissionEvidence {value :: Te
 instance Show ResolutionSubmissionEvidence where show _ = "<resolution-submission-evidence>"
 
 data AuthorizedResolutionReceipt = AuthorizedResolutionReceipt
-  { authorizationId :: !Text,
+  { authorizationId :: !ResolutionAuthorizationId,
     authorityKind :: !ResolutionAuthorityKind,
     verifiedSubject :: !OwnerPrincipal,
-    sourceReference :: !Text,
+    sourceReference :: !ResolutionSourceRef,
     authorizedAt :: !UTCTime
   }
   deriving stock (Eq, Show, Generic)
@@ -78,7 +86,7 @@ instance FromJSON AuthorizedResolutionReceipt where
       <*> objectValue .: "authorizedAt"
 
 data AuthorizedPracticeReviewResolution = AuthorizedPracticeReviewResolution
-  { schemaVersion :: !Int,
+  { schemaVersion :: !AuthorizationSchema,
     resolution :: !PracticeReviewResolutionRequest,
     authorization :: !AuthorizedResolutionReceipt
   }
@@ -122,16 +130,9 @@ mkAuthorizedResolutionReceipt ::
   Either ResolutionAuthorizationError AuthorizedResolutionReceipt
 mkAuthorizedResolutionReceipt authorityKind verifiedSubject sourceReference authorizedAt validated = do
   validateSource sourceReference
-  let receiptWithoutId =
-        AuthorizedResolutionReceipt
-          { authorizationId = "",
-            authorityKind,
-            verifiedSubject,
-            sourceReference = Text.strip sourceReference,
-            authorizedAt
-          }
-      authorizationId = expectedAuthorizationId validated receiptWithoutId
-  pure receiptWithoutId {authorizationId}
+  let source = ResolutionSourceRef (Text.strip sourceReference)
+      authorizationId = authorizationIdFor validated authorityKind verifiedSubject source authorizedAt
+  pure AuthorizedResolutionReceipt {authorizationId, authorityKind, verifiedSubject, sourceReference = source, authorizedAt}
 
 validateAuthorizedPracticeReviewResolution ::
   AuthorizedPracticeReviewResolution ->
@@ -155,11 +156,10 @@ validateReceipt validated receipt@AuthorizedResolutionReceipt {authorizationId, 
   whenEither
     (verifiedSubject == resolver)
     (AuthorizationSubjectMismatch resolver verifiedSubject)
-  validateSource sourceReference
   let expected = expectedAuthorizationId validated receipt
   whenEither
     (authorizationId == expected)
-    (AuthorizationIdInvalid expected authorizationId)
+    (AuthorizationIdInvalid (resolutionAuthorizationIdText expected) (resolutionAuthorizationIdText authorizationId))
 
 validateSource :: Text -> Either ResolutionAuthorizationError ()
 validateSource raw
@@ -169,21 +169,14 @@ validateSource raw
   where
     normalized = Text.strip raw
 
-expectedAuthorizationId :: ValidatedResolutionRequest -> AuthorizedResolutionReceipt -> Text
-expectedAuthorizationId validated AuthorizedResolutionReceipt {authorityKind, verifiedSubject, sourceReference, authorizedAt} =
-  UUID.toText (UUID.V5.generateNamed UUID.V5.namespaceURL (nameBytes preimage))
+expectedAuthorizationId :: ValidatedResolutionRequest -> AuthorizedResolutionReceipt -> ResolutionAuthorizationId
+expectedAuthorizationId validated AuthorizedResolutionReceipt {authorityKind, verifiedSubject, sourceReference, authorizedAt} = authorizationIdFor validated authorityKind verifiedSubject sourceReference authorizedAt
+
+authorizationIdFor :: ValidatedResolutionRequest -> ResolutionAuthorityKind -> OwnerPrincipal -> ResolutionSourceRef -> UTCTime -> ResolutionAuthorizationId
+authorizationIdFor validated authorityKind verifiedSubject sourceReference authorizedAt =
+  ResolutionAuthorizationId (UUID.V5.generateNamed UUID.V5.namespaceURL (nameBytes preimage))
   where
-    preimage =
-      versionedDigest
-        "shikigami.practice-review-resolution-authorization/2"
-        ( Aeson.object
-            [ "request" .= validatedResolutionRequestValue validated,
-              "authorityKind" .= authorityKind,
-              "subject" .= verifiedSubject,
-              "source" .= Text.strip sourceReference,
-              "authorizedAt" .= authorizedAt
-            ]
-        )
+    preimage = versionedDigest "shikigami.practice-review-resolution-authorization/2" (Aeson.object ["request" .= validatedResolutionRequestValue validated, "authorityKind" .= authorityKind, "subject" .= verifiedSubject, "source" .= Text.strip (resolutionSourceText sourceReference), "authorizedAt" .= authorizedAt])
 
 enqueueAuthorizedPracticeReviewResolution ::
   Pool ->
@@ -221,8 +214,8 @@ enqueueAuthorizedPracticeReviewResolution pool identity agent ReviewResolutionAu
                       enqueueAddressedRunWithKey pool identity target AgentWorkflowRoute (Aeson.toJSON envelope) requestKey
                         <&> first (ResolutionEnqueueFailed . Text.pack . show)
 
-authorizationEnvelopeSchemaVersion :: Int
-authorizationEnvelopeSchemaVersion = 2
+authorizationEnvelopeSchemaVersion :: AuthorizationSchema
+authorizationEnvelopeSchemaVersion = AuthorizationV2
 
 authorityEnumOptions :: Options
 authorityEnumOptions =
@@ -246,3 +239,49 @@ rejectUnknownKeys label allowed objectValue =
 whenEither :: Bool -> error -> Either error ()
 whenEither True _ = Right ()
 whenEither False err = Left err
+
+data AuthorizationSchema = AuthorizationV2
+  deriving stock (Eq, Show)
+
+instance ToJSON AuthorizationSchema where
+  toJSON AuthorizationV2 = toJSON (2 :: Int)
+  toEncoding AuthorizationV2 = toEncoding (2 :: Int)
+
+instance FromJSON AuthorizationSchema where
+  parseJSON value = do
+    version <- parseJSON @Integer value
+    if version == 2 then pure AuthorizationV2 else fail "unsupported authorization envelope schema version"
+
+newtype ResolutionAuthorizationId = ResolutionAuthorizationId UUID.UUID
+  deriving stock (Eq, Ord, Show)
+
+parseResolutionAuthorizationId :: Text -> Either Text ResolutionAuthorizationId
+parseResolutionAuthorizationId raw = case UUID.fromText raw of
+  Just value
+    | let (_, version, variant, _) = UUID.toWords value,
+      raw == UUID.toText value,
+      version .&. 0xf000 == 0x5000,
+      variant .&. 0xc0000000 == 0x80000000 ->
+        Right (ResolutionAuthorizationId value)
+  _ -> Left "resolution authorization commitment requires a canonical RFC 4122 UUIDv5"
+
+resolutionAuthorizationIdText :: ResolutionAuthorizationId -> Text
+resolutionAuthorizationIdText (ResolutionAuthorizationId value) = UUID.toText value
+
+instance ToJSON ResolutionAuthorizationId where
+  toJSON = toJSON . resolutionAuthorizationIdText
+  toEncoding = toEncoding . resolutionAuthorizationIdText
+
+instance FromJSON ResolutionAuthorizationId where
+  parseJSON = Aeson.withText "resolution authorization commitment" (either (fail . Text.unpack) pure . parseResolutionAuthorizationId)
+
+newtype ResolutionSourceRef = ResolutionSourceRef Text
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON)
+
+resolutionSourceText :: ResolutionSourceRef -> Text
+resolutionSourceText (ResolutionSourceRef value) = value
+
+instance FromJSON ResolutionSourceRef where
+  parseJSON = Aeson.withText "resolution authorization source" \raw ->
+    either (fail . show) (const (pure (ResolutionSourceRef raw))) (validateSource raw)

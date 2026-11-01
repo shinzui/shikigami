@@ -269,6 +269,18 @@ reports and the latest acceptance note. M2/M3 and final guide compliance remain
 open; continue the remaining concept batches without repeating full census work
 for every individual wrapper.
 
+The next practice-review source batch replaces its remaining primitive schema,
+producer-key, dependency/document, specialist, lineage, authorization, attention
+and paging fields together. It passes all 39 review contract/evidence tests and
+30 review PostgreSQL cases. The frozen attention UUID and authorization-id
+vectors remain unchanged. Existing complete orchestration/replay controls now
+supply malformed model placeholders for host-owned metadata and still recover
+the authoritative native identities before decoding. Owner-set lookup retains
+individual components rather than an ambiguous joined key. A failed retained
+attention-result decode condemns its owning reservation transaction. The full
+inventory and native gate will reconcile this with the next source batch rather
+than rebuilding the census for each wrapper. M2/M3 remain open.
+
 ## Surprises & Discoveries
 
 

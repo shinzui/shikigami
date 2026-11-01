@@ -28,6 +28,7 @@ import Shikigami.PracticeReview
     validatedTriggerValue,
   )
 import Shikigami.PracticeReview qualified as Review
+import Shikigami.PracticeReview.Capability qualified as Capability
 import Shikigami.PracticeReview.Identity (newResolutionId, newReviewId)
 import Shikigami.Repository
   ( mkRelativePath,
@@ -113,12 +114,14 @@ triggerContractTests =
       testCase "validation accumulates independent trigger errors" do
         value <- readFixtureValue "trigger-valid.json"
         badSchema <- expectRight (setPointer ["schemaVersion"] (Number 2) value)
-        blankKey <- expectRight (setPointer ["idempotencyKey"] (String " ") badSchema)
-        noPaths <- expectRight (setPointer ["changedDecisionPaths"] (Array Vector.empty) blankKey)
+        expectDecodeFailure (Proxy @PracticeReviewTrigger) "unsupported schema" badSchema
+        blankKey <- expectRight (setPointer ["idempotencyKey"] (String " ") value)
+        expectDecodeFailure (Proxy @PracticeReviewTrigger) "blank producer key" blankKey
+        noPaths <- expectRight (setPointer ["changedDecisionPaths"] (Array Vector.empty) value)
         noAdoptions <- expectRight (setPointer ["adoptions"] (Array Vector.empty) noPaths)
         trigger <- decodeLazyOrFail @PracticeReviewTrigger (encode noAdoptions)
         case validateTrigger trigger of
-          Left problems -> assertBool "expected at least four independent errors" (NonEmpty.length problems >= 4)
+          Left problems -> assertBool "expected at least two independent composite errors" (NonEmpty.length problems >= 2)
           Right _ -> assertFailure "multiply invalid trigger unexpectedly validated"
     ]
 
@@ -325,11 +328,22 @@ scalarValueTests =
     "checked review values"
     [ testCase "review text units preserve exact strings and refuse blank values" do
         assertTextValue Review.parsePracticeKey Review.practiceKeyText
+        assertTextValue Review.parseDependencyName Review.dependencyNameText
+        assertTextValue Review.parseDocumentId Review.documentIdText
+        assertTextValue Review.parseTriggerKey Review.triggerKeyText
+        assertTextValue Review.parseResolutionKey Review.resolutionKeyText
         assertTextValue Review.parseOwnerPrincipal Review.ownerPrincipalText
         assertTextValue Review.parseEvidenceId Review.evidenceIdText
         assertTextValue Review.parseClaimId Review.claimIdText
         assertTextValue Review.parseContentHash Review.contentHashText
         Review.claimIdText (Review.evidenceProblemClaimId 1) @?= "evidence-problem-001",
+      testCase "attention owner sets preserve components and configuration bytes" do
+        recipients <- expectRight (Capability.parseAttentionRecipientMap "owner-b+owner-a=recipient_review")
+        Capability.renderAttentionRecipientMap recipients @?= "owner-a+owner-b=recipient_review"
+        owners <- traverse (expectRight . Review.parseOwnerPrincipal) ["owner-b", "owner-a"]
+        fmap Capability.attentionRecipientText (Capability.lookupAttentionRecipient recipients owners) @?= Just "recipient_review"
+        joined <- expectRight (Review.parseOwnerPrincipal "owner-a+owner-b")
+        Capability.lookupAttentionRecipient recipients [joined] @?= Nothing,
       testCase "confidence retains bounded integer percentage bytes" do
         Review.confidencePercent Review.zeroConfidence @?= 0
         forM_ [0, 73, 100] \number -> do

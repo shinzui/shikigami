@@ -11,14 +11,23 @@ module Shikigami.PracticeReview.Identity
     parseResolutionId,
     resolutionIdText,
     newResolutionId,
+    AttentionKey,
+    parseAttentionKey,
+    attentionKeyText,
+    attentionKeyForDigest,
   )
 where
 
 import Data.Aeson (FromJSON (..), ToJSON (..), withText)
 import Data.Bifunctor (first)
+import Data.Bits ((.&.))
+import Data.ByteString qualified as Bytes
 import Data.KindID.V7 qualified as KindID
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Encoding
+import Data.UUID qualified as UUID
+import Data.UUID.V5 qualified as UUIDv5
 
 newtype ReviewId = ReviewId (KindID.KindID "shikigami_practice_review")
   deriving stock (Eq, Ord, Show)
@@ -69,3 +78,32 @@ instance ToJSON ResolutionId where
 
 instance FromJSON ResolutionId where
   parseJSON = withText "resolution identity" (either (fail . Text.unpack) pure . parseResolutionId)
+
+-- Deterministic coalescing locator, separate from allocated review entities.
+newtype AttentionKey = AttentionKey UUID.UUID
+  deriving stock (Eq, Ord, Show)
+
+parseAttentionKey :: Text -> Either Text AttentionKey
+parseAttentionKey raw = case UUID.fromText raw of
+  Just value
+    | let (_, version, variant, _) = UUID.toWords value,
+      raw == UUID.toText value,
+      version .&. 0xf000 == 0x5000,
+      variant .&. 0xc0000000 == 0x80000000 ->
+        Right (AttentionKey value)
+  _ -> Left "attention key requires a canonical RFC 4122 UUIDv5"
+
+attentionKeyText :: AttentionKey -> Text
+attentionKeyText (AttentionKey value) = UUID.toText value
+
+attentionKeyForDigest :: Text -> AttentionKey
+attentionKeyForDigest digest = AttentionKey (UUIDv5.generateNamed namespace (Bytes.unpack (Encoding.encodeUtf8 ("practice-review-attention-v1:" <> digest))))
+  where
+    namespace = UUIDv5.generateNamed UUIDv5.namespaceURL (Bytes.unpack (Encoding.encodeUtf8 "mori://shinzui/shikigami/contracts/practice-review-attention/v1"))
+
+instance ToJSON AttentionKey where
+  toJSON = toJSON . attentionKeyText
+  toEncoding = toEncoding . attentionKeyText
+
+instance FromJSON AttentionKey where
+  parseJSON = withText "attention coalescing key" (either (fail . Text.unpack) pure . parseAttentionKey)

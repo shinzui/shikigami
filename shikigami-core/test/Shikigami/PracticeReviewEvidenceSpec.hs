@@ -50,6 +50,7 @@ import Shikigami.PracticeReview
     validateTrigger,
     validatedTriggerValue,
   )
+import Shikigami.PracticeReview qualified as ReviewValue
 import Shikigami.PracticeReview.Evidence
   ( DependencyPinResolver (..),
     EvidenceBundle (..),
@@ -73,6 +74,8 @@ import Shikigami.PracticeReview.Evidence
     acquireEvidence,
     mkEvidenceLimits,
     mkRedactionRule,
+    mutableGitRef,
+    mutableGitRefText,
     summarizeEvidenceBundle,
     validatePinnedContent,
     validatePinnedDiff,
@@ -289,7 +292,7 @@ completeOpenTelemetryTrigger triggerKey =
       PracticeAdoptionBinding
         { practice = fixturePracticeKey "opentelemetry",
           references = [practiceReference1],
-          claimedApplicability = Applicability [targetProject] [] ["libfoo"] [fixturePracticeKey "opentelemetry"],
+          claimedApplicability = Applicability [targetProject] [] [reviewDependencyName "libfoo"] [fixturePracticeKey "opentelemetry"],
           mode = Advisory,
           owners =
             ReviewOwners
@@ -298,7 +301,7 @@ completeOpenTelemetryTrigger triggerKey =
                 triageOwner = fixtureOwnerPrincipal "architecture-council",
                 exceptionApprover = Just (fixtureOwnerPrincipal "architecture-council")
               },
-          upstreamProjects = [RegisteredUpstreamProject {project = upstreamProject, dependency = "libfoo"}]
+          upstreamProjects = [RegisteredUpstreamProject {project = upstreamProject, dependency = reviewDependencyName "libfoo"}]
         }
 
     validateOpenTelemetryTrigger binding =
@@ -306,7 +309,7 @@ completeOpenTelemetryTrigger triggerKey =
         PracticeReviewTrigger
           { schemaVersion = practiceReviewSchemaVersion,
             triggerKind = TargetChange,
-            idempotencyKey = triggerKey,
+            idempotencyKey = reviewTriggerKey triggerKey,
             target = targetProject,
             targetRange = RevisionRange {changeKind = Modified, before = Just baseCommit, head = headCommit},
             changedDecisionPaths = [decisionPath],
@@ -371,7 +374,7 @@ validatedTriggerFor binding =
     PracticeReviewTrigger
       { schemaVersion = practiceReviewSchemaVersion,
         triggerKind = TargetChange,
-        idempotencyKey = "trigger-practice-evidence",
+        idempotencyKey = reviewTriggerKey "trigger-practice-evidence",
         target = targetProject,
         targetRange = RevisionRange {changeKind = Modified, before = Just baseCommit, head = headCommit},
         changedDecisionPaths = [decisionPath],
@@ -388,7 +391,7 @@ validatedAddedTriggerFor binding =
     PracticeReviewTrigger
       { schemaVersion = practiceReviewSchemaVersion,
         triggerKind = TargetChange,
-        idempotencyKey = "trigger-added-practice-evidence",
+        idempotencyKey = reviewTriggerKey "trigger-added-practice-evidence",
         target = targetProject,
         targetRange = RevisionRange {changeKind = Added, before = Nothing, head = headCommit},
         changedDecisionPaths = [decisionPath],
@@ -409,7 +412,7 @@ bindingWithoutUpstream :: PracticeAdoptionBinding
 bindingWithoutUpstream = bindingWith [practiceReference1] []
 
 bindingWithReferences :: [RegisteredPracticeReference] -> PracticeAdoptionBinding
-bindingWithReferences references = bindingWith references [RegisteredUpstreamProject {project = upstreamProject, dependency = "libfoo"}]
+bindingWithReferences references = bindingWith references [RegisteredUpstreamProject {project = upstreamProject, dependency = reviewDependencyName "libfoo"}]
 
 bindingWith :: [RegisteredPracticeReference] -> [RegisteredUpstreamProject] -> PracticeAdoptionBinding
 bindingWith references upstreamProjects =
@@ -433,7 +436,7 @@ practiceReference1 =
   RegisteredPracticeReference
     { project = practiceProject,
       provenance = practiceRef1,
-      documentIds = ["PRACTICE-1"]
+      documentIds = [reviewDocumentId "PRACTICE-1"]
     }
 
 practiceReference2 :: RegisteredPracticeReference
@@ -441,7 +444,7 @@ practiceReference2 =
   RegisteredPracticeReference
     { project = practiceProject,
       provenance = practiceRef2,
-      documentIds = ["PRACTICE-1"]
+      documentIds = [reviewDocumentId "PRACTICE-1"]
     }
 
 practiceProject :: ProjectRef
@@ -487,11 +490,11 @@ compatiblePinResolver :: DependencyPinResolver
 compatiblePinResolver =
   DependencyPinResolver
     { resolvePin = \RegisteredUpstreamProject {dependency} inputs ->
-        if dependency == "libfoo" && any (ByteString8.isInfixOf "libfoo ==2.0" . snd) inputs
+        if dependency == reviewDependencyName "libfoo" && any (ByteString8.isInfixOf "libfoo ==2.0" . snd) inputs
           then
             Right
               UpstreamSelection
-                { mutableRef = "v2.0.0",
+                { mutableRef = mutableGitRef "v2.0.0",
                   paths = [relativePath "src/Foo.hs"]
                 }
           else Left "target does not carry a compatible libfoo pin"
@@ -509,7 +512,7 @@ fixtureReader = makeReader fixtureResolveRef fixtureReadBlob fixtureReadDiff fix
 makeReader :: (RepositoryId -> Text -> IO (Either EvidenceReadError RepoRef)) -> (RepoRef -> RelativePath -> IO (Either EvidenceReadError PinnedContent)) -> (RepositoryId -> Revision -> Revision -> Maybe RelativePath -> IO (Either EvidenceReadError PinnedDiff)) -> (RepoRef -> EvidenceQuery -> PageRequest -> IO (Either EvidenceReadError PinnedMatchPage)) -> EvidenceReader
 makeReader resolve blobReader diffReader grepPage =
   EvidenceReader
-    { resolveRef = resolve,
+    { resolveRef = \repository selector -> resolve repository (mutableGitRefText selector),
       readBlob = blobReader,
       readDiff = diffReader,
       readTree = \reference _ _ ->
@@ -684,7 +687,7 @@ validatedResolution outcome resultingApplicability commandKey =
       PracticeReviewResolution
         { schemaVersion = practiceReviewSchemaVersion,
           resolutionId = either (error . show) id (parseResolutionId "shikigami_practice_review_resolution_7vrc7qfsy9fjer83xyg2t8m382"),
-          idempotencyKey = commandKey,
+          idempotencyKey = reviewResolutionKey commandKey,
           reviewId,
           outcome,
           resolver = fixtureOwnerPrincipal "principal-resolver",
@@ -856,3 +859,15 @@ fixtureOwnerPrincipal = either (error . show) id . parseOwnerPrincipal
 
 fixtureReviewId :: Text -> ReviewId
 fixtureReviewId = either (error . show) id . parseReviewId
+
+reviewTriggerKey :: Text -> ReviewValue.TriggerKey
+reviewTriggerKey = either (error . show) id . ReviewValue.parseTriggerKey
+
+reviewResolutionKey :: Text -> ReviewValue.ResolutionKey
+reviewResolutionKey = either (error . show) id . ReviewValue.parseResolutionKey
+
+reviewDependencyName :: Text -> ReviewValue.DependencyName
+reviewDependencyName = either (error . show) id . ReviewValue.parseDependencyName
+
+reviewDocumentId :: Text -> ReviewValue.DocumentId
+reviewDocumentId = either (error . show) id . ReviewValue.parseDocumentId

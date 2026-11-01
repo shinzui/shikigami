@@ -20,6 +20,7 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Tx
 import Kiroku.Store.Transaction (runTransaction)
+import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity, resolvedIdentity, resolvedIdentityText)
 import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Decision.Contract (versionedDigest)
@@ -28,7 +29,7 @@ import Shikigami.PracticeReview.Identity (newResolutionId, newReviewId)
 import Shikigami.Prelude hiding ((.=))
 
 -- Positional and private: exported accessors cannot be used for record updates.
-data ReviewIdentityRef = ReviewIdentityRef !ReviewId !ValidatedPracticeReviewTrigger !PracticeKey !Text
+data ReviewIdentityRef = ReviewIdentityRef !ReviewId !ValidatedPracticeReviewTrigger !PracticeKey !AgentName
   deriving stock (Eq, Show)
 
 allocatedReviewId :: ReviewIdentityRef -> ReviewId
@@ -47,21 +48,21 @@ instance FromJSON ReviewIdentityRef where
     unless (specialist == normalizeSpecialist specialist && validReviewRequest trigger practice specialist) (fail "invalid allocated review request")
     pure (ReviewIdentityRef identifier trigger practice specialist)
 
-reviewCoordinates :: ResolvedAgentIdentity -> ValidatedPracticeReviewTrigger -> PracticeKey -> Text -> (Text, Text, Text, Value)
+reviewCoordinates :: ResolvedAgentIdentity -> ValidatedPracticeReviewTrigger -> PracticeKey -> AgentName -> (Text, Text, Text, Value)
 reviewCoordinates identity validated practice specialist =
   let trigger@PracticeReviewTrigger {idempotencyKey, target = ProjectRef {repository}} = validatedTriggerValue validated
       binding = Aeson.object ["creator" .= resolvedIdentity identity, "trigger" .= trigger, "practice" .= practice, "specialist" .= specialist]
       key = versionedDigest "shikigami.practice-review-request/2" (Aeson.object ["targetRepository" .= repository, "key" .= idempotencyKey, "practice" .= practice, "specialist" .= specialist])
    in ("review", resolvedIdentityText identity, key, binding)
 
-reserveReviewIdentity :: AppEnv -> ResolvedAgentIdentity -> ValidatedPracticeReviewTrigger -> PracticeKey -> Text -> IO (Either Text ReviewIdentityRef)
+reserveReviewIdentity :: AppEnv -> ResolvedAgentIdentity -> ValidatedPracticeReviewTrigger -> PracticeKey -> AgentName -> IO (Either Text ReviewIdentityRef)
 reserveReviewIdentity app identity trigger practice specialist
   | not (validReviewRequest trigger practice normalized) = pure (Left "invalid allocated review request")
   | otherwise = reserveValidReviewIdentity app identity trigger practice normalized
   where
     normalized = normalizeSpecialist specialist
 
-reserveValidReviewIdentity :: AppEnv -> ResolvedAgentIdentity -> ValidatedPracticeReviewTrigger -> PracticeKey -> Text -> IO (Either Text ReviewIdentityRef)
+reserveValidReviewIdentity :: AppEnv -> ResolvedAgentIdentity -> ValidatedPracticeReviewTrigger -> PracticeKey -> AgentName -> IO (Either Text ReviewIdentityRef)
 reserveValidReviewIdentity app identity trigger practice specialist = do
   candidate <- newReviewId
   let (kind, owner, key, binding) = reviewCoordinates identity trigger practice specialist
@@ -97,7 +98,7 @@ reserveResolutionIdentity app identity request = do
           owner <- Tx.statement (reviewIdText reviewId) selectReviewOwner
           if owner /= Just (resolvedIdentityText identity)
             then pure (Left "resolution does not belong to this review owner")
-            else reserve "resolution" (reviewIdText reviewId) idempotencyKey (toJSON raw) (resolutionIdText candidate)
+            else reserve "resolution" (reviewIdText reviewId) (resolutionKeyText idempotencyKey) (toJSON raw) (resolutionIdText candidate)
       )
       >>= storeResult
   pure $ do
@@ -146,12 +147,12 @@ selectReviewOwner =
 storeResult :: Either error a -> IO a
 storeResult = either (const (ioError (userError "practice-review identity store unavailable"))) pure
 
-validReviewRequest :: ValidatedPracticeReviewTrigger -> PracticeKey -> Text -> Bool
+validReviewRequest :: ValidatedPracticeReviewTrigger -> PracticeKey -> AgentName -> Bool
 validReviewRequest validated practice specialist =
   let PracticeReviewTrigger {adoptions} = validatedTriggerValue validated
-   in not (Text.null (Text.strip specialist)) && any (\PracticeAdoptionBinding {practice = registered} -> registered == practice) adoptions
+   in not (Text.null (Text.strip (agentNameText specialist))) && any (\PracticeAdoptionBinding {practice = registered} -> registered == practice) adoptions
 
 -- This is the review contract's existing named-key normalization, not an agent
 -- principal or compatibility-scope derivation.
-normalizeSpecialist :: Text -> Text
-normalizeSpecialist = Text.toCaseFold . Text.strip
+normalizeSpecialist :: AgentName -> AgentName
+normalizeSpecialist value = either (const value) id (mkAgentName (Text.toCaseFold (Text.strip (agentNameText value))))

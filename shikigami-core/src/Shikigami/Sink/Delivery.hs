@@ -28,6 +28,7 @@ module Shikigami.Sink.Delivery
   )
 where
 
+import Data.Aeson (withText)
 import Data.Bifunctor (first)
 import Data.Functor.Contravariant ((>$<))
 import Data.Text qualified as Text
@@ -240,3 +241,10 @@ parseDeliveryStatus = \case
 
 renderUsage :: Either Pool.UsageError a -> Either Text a
 renderUsage = first (Text.pack . show)
+
+instance ToJSON SinkMessageId where
+  toJSON = toJSON . sinkMessageIdText
+  toEncoding = toEncoding . sinkMessageIdText
+
+instance FromJSON SinkMessageId where
+  parseJSON = withText "sink integration message id" (pure . sinkMessageId)

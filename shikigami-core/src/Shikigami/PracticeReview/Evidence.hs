@@ -16,6 +16,12 @@ module Shikigami.PracticeReview.Evidence
     EvidenceQuery (..),
     EvidenceCursor (..),
     PageRequest (..),
+    EvidencePageSize,
+    parseEvidencePageSize,
+    evidencePageSizeInt,
+    MutableGitRef,
+    mutableGitRef,
+    mutableGitRefText,
     EvidenceLimits,
     RedactionRule,
     mkEvidenceLimits,
@@ -66,6 +72,8 @@ import Shikigami.PracticeReview
     RevisionRange (..),
     ValidatedPracticeReviewResolution,
     ValidatedPracticeReviewTrigger,
+    dependencyNameText,
+    documentIdText,
     parseContentHash,
     sourceEvidenceIdV2,
     validatedResolutionValue,
@@ -87,7 +95,7 @@ import Shikigami.Repository
 -- Content operations take only immutable 'RepoRef' values. 'resolveRef' is the
 -- one operation that accepts a branch, tag, or other mutable ref.
 data EvidenceReader = EvidenceReader
-  { resolveRef :: !(RepositoryId -> Text -> IO (Either EvidenceReadError RepoRef)),
+  { resolveRef :: !(RepositoryId -> MutableGitRef -> IO (Either EvidenceReadError RepoRef)),
     readBlob :: !(RepoRef -> RelativePath -> IO (Either EvidenceReadError PinnedContent)),
     readDiff :: !(RepositoryId -> Revision -> Revision -> Maybe RelativePath -> IO (Either EvidenceReadError PinnedDiff)),
     readTree :: !(RepoRef -> Maybe RelativePath -> PageRequest -> IO (Either EvidenceReadError PinnedTreePage)),
@@ -186,7 +194,7 @@ data EvidenceQuery = EvidenceQuery
   deriving stock (Eq, Show, Generic)
 
 data PageRequest = PageRequest
-  { first :: !Int,
+  { first :: !EvidencePageSize,
     cursor :: !(Maybe EvidenceCursor)
   }
   deriving stock (Eq, Show, Generic)
@@ -315,7 +323,7 @@ data PinnedDiffView = PinnedDiffView
 -- | The mutable upstream ref selected from a target dependency pin and the
 -- pinned paths that become required after that ref is resolved once.
 data UpstreamSelection = UpstreamSelection
-  { mutableRef :: !Text,
+  { mutableRef :: !MutableGitRef,
     paths :: ![RelativePath]
   }
   deriving stock (Eq, Show, Generic)
@@ -588,7 +596,7 @@ acquireRegisteredReference limits reader registered = do
   acquired <-
     traverse
       (acquireReferenceDocument limits reader project reference)
-      (registered ^. #documentIds)
+      (map documentIdText (registered ^. #documentIds))
   pure (concatMap fst acquired, concatMap snd acquired)
 
 acquireReferenceDocument :: EvidenceLimits -> EvidenceReader -> ProjectRef -> RepoRef -> Text -> IO ([ReadResult], [EvidenceProblem])
@@ -648,7 +656,7 @@ discoverReferencePaths limits reader reference documentId =
             )
       | otherwise = do
           let remaining = maximumMatches - matchesRead
-              request = PageRequest {first = min 100 remaining, cursor}
+              request = PageRequest {first = EvidencePageSize (min 100 remaining), cursor}
           result <- (.grep) reader reference evidenceQuery request
           case result of
             Left failure ->
@@ -733,7 +741,7 @@ acquireRegisteredUpstream limits reader pinResolver pinInputs registered =
   case (.resolvePin) pinResolver registered pinInputs of
     Left reason -> pure ([], [IncompatibleUpstreamVersion dependency reason])
     Right selection
-      | Text.null (Text.strip (selection ^. #mutableRef)) ->
+      | Text.null (Text.strip (mutableGitRefText (selection ^. #mutableRef))) ->
           pure ([], [IncompatibleUpstreamVersion dependency "dependency pin resolved to an empty upstream ref"])
       | null (selection ^. #paths) ->
           pure ([], [IncompatibleUpstreamVersion dependency "dependency pin selected no required upstream paths"])
@@ -760,7 +768,7 @@ acquireRegisteredUpstream limits reader pinResolver pinInputs registered =
                   let (readProblems, successes) = partitionEithers readResults
                   pure (successes, pathProblems <> readProblems)
   where
-    dependency = registered ^. #dependency
+    dependency = dependencyNameText (registered ^. #dependency)
     project = registered ^. #project
     upstreamRepository = project ^. #repository
 
@@ -788,10 +796,10 @@ applicabilityCovers trigger binding targetPaths applicability =
   where
     scopedProjects = applicability ^. #projects
     scopedPaths = applicability ^. #paths
-    scopedDependencies = normalizeName <$> (applicability ^. #dependencies)
+    scopedDependencies = normalizeName . dependencyNameText <$> (applicability ^. #dependencies)
     scopedPractices = applicability ^. #practices
     targetRepository = trigger ^. #target . #repository
-    targetDependencies = normalizeName . (^. #dependency) <$> (binding ^. #upstreamProjects)
+    targetDependencies = normalizeName . dependencyNameText . (^. #dependency) <$> (binding ^. #upstreamProjects)
     targetPractice = binding ^. #practice
 
     projectCovered =
@@ -896,3 +904,26 @@ unlessEither False problem = Left problem
 
 mapLeft :: (left -> mapped) -> Either left value -> Either mapped value
 mapLeft function = either (Left . function) Right
+
+-- The acquisition loop already emits only positive pages of at most 100.
+newtype EvidencePageSize = EvidencePageSize Int
+  deriving stock (Eq, Ord, Show)
+
+parseEvidencePageSize :: Int -> Either Text EvidencePageSize
+parseEvidencePageSize number
+  | number >= 1 && number <= 100 = Right (EvidencePageSize number)
+  | otherwise = Left "evidence page size must be in 1..100"
+
+evidencePageSizeInt :: EvidencePageSize -> Int
+evidencePageSizeInt (EvidencePageSize value) = value
+
+-- Exact foreign Git selector, separate from the immutable Revision it resolves
+-- to. The selection owner retains its existing empty-selector refusal.
+newtype MutableGitRef = MutableGitRef Text
+  deriving stock (Eq, Ord, Show)
+
+mutableGitRef :: Text -> MutableGitRef
+mutableGitRef = MutableGitRef
+
+mutableGitRefText :: MutableGitRef -> Text
+mutableGitRefText (MutableGitRef value) = value

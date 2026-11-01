@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Versioned, pure contracts for architecture-practice review.
 --
 -- This module deliberately contains no workflow, persistence, model-provider,
@@ -15,6 +17,19 @@ module Shikigami.PracticeReview
     parseOwnerPrincipal,
     ownerPrincipalText,
     ProjectRef (..),
+    DependencyName,
+    parseDependencyName,
+    dependencyNameText,
+    DocumentId,
+    parseDocumentId,
+    documentIdText,
+    TriggerKey,
+    parseTriggerKey,
+    triggerKeyText,
+    ResolutionKey,
+    parseResolutionKey,
+    resolutionKeyText,
+    Materiality (..),
     RevisionChangeKind (..),
     RevisionRange (..),
     Applicability (..),
@@ -76,7 +91,8 @@ module Shikigami.PracticeReview
   )
 where
 
-import Data.Aeson (Value (Object), withObject, withText, (.:), (.:?))
+import Data.Aeson (Value (Object), withObject, withText, (.:), (.:?), (.=))
+import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString qualified as ByteString
@@ -85,13 +101,18 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TextEncoding
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUIDv5
+import Keiro.Workflow.Types (WorkflowId (..))
+import Kioku.Id (SessionId, idText)
+import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.PracticeReview.Identity
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.Repository (RelativePath, RepoRef (..), RepositoryId (..), Revision, relativePathText, revisionText)
+import Shikigami.Sink.Coordinate (parseSinkSession)
 
 -- | The only schema version accepted by the first contract release.
-practiceReviewSchemaVersion :: Int
-practiceReviewSchemaVersion = 1
+practiceReviewSchemaVersion :: FormatVersion scope
+practiceReviewSchemaVersion = V1
 
 -- | Stable key for one registered architecture practice.
 newtype PracticeKey = PracticeKey {value :: Text}
@@ -143,7 +164,7 @@ instance FromJSON RevisionRange where parseJSON = genericParseJSON practiceRevie
 data Applicability = Applicability
   { projects :: ![ProjectRef],
     paths :: ![RelativePath],
-    dependencies :: ![Text],
+    dependencies :: ![DependencyName],
     practices :: ![PracticeKey]
   }
   deriving stock (Eq, Show, Generic)
@@ -177,7 +198,7 @@ instance FromJSON ReviewOwners where parseJSON = genericParseJSON practiceReview
 data RegisteredPracticeReference = RegisteredPracticeReference
   { project :: !ProjectRef,
     provenance :: !RepoRef,
-    documentIds :: ![Text]
+    documentIds :: ![DocumentId]
   }
   deriving stock (Eq, Show, Generic)
 
@@ -189,7 +210,7 @@ instance FromJSON RegisteredPracticeReference where parseJSON = genericParseJSON
 -- evidence acquisition from a target dependency pin.
 data RegisteredUpstreamProject = RegisteredUpstreamProject
   { project :: !ProjectRef,
-    dependency :: !Text
+    dependency :: !DependencyName
   }
   deriving stock (Eq, Show, Generic)
 
@@ -239,9 +260,9 @@ instance FromJSON ChangedReference where parseJSON = genericParseJSON practiceRe
 -- rejects @specialist@ and @candidates@ keys instead of relying on Aeson's
 -- default unknown-field behavior, which would silently discard them.
 data PracticeReviewTrigger = PracticeReviewTrigger
-  { schemaVersion :: !Int,
+  { schemaVersion :: !(FormatVersion "practice-review-trigger"),
     triggerKind :: !PracticeReviewTriggerKind,
-    idempotencyKey :: !Text,
+    idempotencyKey :: !TriggerKey,
     target :: !ProjectRef,
     targetRange :: !RevisionRange,
     changedDecisionPaths :: ![RelativePath],
@@ -327,7 +348,7 @@ data PracticeReviewClaim = PracticeReviewClaim
   { claimId :: !ClaimId,
     kind :: !ClaimKind,
     statement :: !Text,
-    material :: !Bool,
+    material :: !Materiality,
     evidenceIds :: ![EvidenceId]
   }
   deriving stock (Eq, Show, Generic)
@@ -338,17 +359,22 @@ instance FromJSON PracticeReviewClaim where parseJSON = genericParseJSON practic
 
 -- | Parent router and child specialist execution lineage.
 data ReviewLineage = ReviewLineage
-  { parentSessionId :: !Text,
-    childSessionId :: !Text,
-    parentWorkflowId :: !Text,
-    childWorkflowId :: !Text,
+  { parentSessionId :: !SessionId,
+    childSessionId :: !SessionId,
+    parentWorkflowId :: !WorkflowId,
+    childWorkflowId :: !WorkflowId,
     priorReviewId :: !(Maybe ReviewId)
   }
   deriving stock (Eq, Show, Generic)
 
-instance ToJSON ReviewLineage where toJSON = genericToJSON practiceReviewAesonOptions
+instance ToJSON ReviewLineage where
+  toJSON value = Aeson.object (["parentSessionId" .= value.parentSessionId, "childSessionId" .= value.childSessionId, "parentWorkflowId" .= value.parentWorkflowId.unWorkflowId, "childWorkflowId" .= value.childWorkflowId.unWorkflowId] <> maybe [] (\prior -> ["priorReviewId" .= prior]) value.priorReviewId)
 
-instance FromJSON ReviewLineage where parseJSON = genericParseJSON practiceReviewAesonOptions
+instance FromJSON ReviewLineage where
+  parseJSON = withObject "review lineage" \fields ->
+    ReviewLineage <$> (fields .: "parentSessionId" >>= session) <*> (fields .: "childSessionId" >>= session) <*> (WorkflowId <$> fields .: "parentWorkflowId") <*> (WorkflowId <$> fields .: "childWorkflowId") <*> fields .:? "priorReviewId"
+    where
+      session = either (fail . Text.unpack) pure . parseSinkSession . Text.strip
 
 -- | Closed semantic role selected for attention routing.
 data RecommendedOwnerRole
@@ -409,11 +435,11 @@ instance FromJSON PracticeReviewClassification where parseJSON = genericParseJSO
 
 -- | A provisional, evidence-bearing specialist verdict.
 data PracticeReviewVerdict = PracticeReviewVerdict
-  { schemaVersion :: !Int,
+  { schemaVersion :: !(FormatVersion "practice-review-verdict"),
     reviewId :: !ReviewId,
-    triggerIdempotencyKey :: !Text,
+    triggerIdempotencyKey :: !TriggerKey,
     practice :: !PracticeKey,
-    specialist :: !Text,
+    specialist :: !AgentName,
     lineage :: !ReviewLineage,
     targetEvidence :: ![EvidenceItem],
     referenceEvidence :: ![EvidenceItem],
@@ -444,9 +470,9 @@ instance FromJSON ResolutionOutcome where parseJSON = genericParseJSON practiceR
 
 -- | An authorized command that adjudicates one provisional review.
 data PracticeReviewResolution = PracticeReviewResolution
-  { schemaVersion :: !Int,
+  { schemaVersion :: !(FormatVersion "practice-review-resolution"),
     resolutionId :: !ResolutionId,
-    idempotencyKey :: !Text,
+    idempotencyKey :: !ResolutionKey,
     reviewId :: !ReviewId,
     outcome :: !ResolutionOutcome,
     resolver :: !OwnerPrincipal,
@@ -463,8 +489,8 @@ instance FromJSON PracticeReviewResolution where parseJSON = genericParseJSON pr
 
 -- | Authorized command before its owner allocates a resolution entity.
 data PracticeReviewResolutionRequest = PracticeReviewResolutionRequest
-  { schemaVersion :: !Int,
-    idempotencyKey :: !Text,
+  { schemaVersion :: !(FormatVersion "practice-review-resolution"),
+    idempotencyKey :: !ResolutionKey,
     reviewId :: !ReviewId,
     outcome :: !ResolutionOutcome,
     resolver :: !OwnerPrincipal,
@@ -493,11 +519,11 @@ validateResolutionRequest :: PracticeReviewResolutionRequest -> Either (NonEmpty
 validateResolutionRequest PracticeReviewResolutionRequest {schemaVersion, idempotencyKey, reviewId, outcome, resolver, reason, resolvedAt, resultingApplicability, supersedingReviewId} =
   toValidationResult
     ( schemaErrors "resolution" schemaVersion
-        <> blankErrors "resolution.idempotencyKey" idempotencyKey
+        <> blankErrors "resolution.idempotencyKey" (resolutionKeyText idempotencyKey)
         <> blankErrors "resolution.reason" reason
         <> resolutionOutcomeErrors outcome resultingApplicability supersedingReviewId reviewId
     )
-    (ValidatedResolutionRequest PracticeReviewResolutionRequest {schemaVersion, idempotencyKey = normalizeOpaqueKey idempotencyKey, reviewId, outcome, resolver = normalizeOwnerPrincipal resolver, reason, resolvedAt, resultingApplicability = fmap normalizeApplicability resultingApplicability, supersedingReviewId})
+    (ValidatedResolutionRequest PracticeReviewResolutionRequest {schemaVersion, idempotencyKey = normalizeResolutionKey idempotencyKey, reviewId, outcome, resolver = normalizeOwnerPrincipal resolver, reason, resolvedAt, resultingApplicability = fmap normalizeApplicability resultingApplicability, supersedingReviewId})
 
 allocateResolution :: ResolutionId -> ValidatedResolutionRequest -> ValidatedPracticeReviewResolution
 allocateResolution resolutionId (ValidatedResolutionRequest PracticeReviewResolutionRequest {schemaVersion, idempotencyKey, reviewId, outcome, resolver, reason, resolvedAt, resultingApplicability, supersedingReviewId}) =
@@ -593,7 +619,7 @@ check condition fieldName problem = [contractError fieldName problem | condition
 blankErrors :: Text -> Text -> [ReviewContractError]
 blankErrors fieldName raw = check (Text.null (Text.strip raw)) fieldName "must not be empty"
 
-schemaErrors :: Text -> Int -> [ReviewContractError]
+schemaErrors :: Text -> FormatVersion scope -> [ReviewContractError]
 schemaErrors document actual =
   check
     (actual /= practiceReviewSchemaVersion)
@@ -626,7 +652,7 @@ applicabilityErrors requireBounded prefix Applicability {projects, paths, depend
     prefix
     "must bound at least one project, path, dependency, or practice"
     <> concatMap (uncurry projectErrors) (indexedFields (prefix <> ".projects") projects)
-    <> concatMap (uncurry blankErrors) (indexedFields (prefix <> ".dependencies") dependencies)
+    <> concatMap (uncurry blankErrors) (indexedFields (prefix <> ".dependencies") (map dependencyNameText dependencies))
 
 triggerErrors :: PracticeReviewTrigger -> [ReviewContractError]
 triggerErrors
@@ -641,7 +667,7 @@ triggerErrors
       referenceChange
     } =
     schemaErrors "trigger" schemaVersion
-      <> blankErrors "trigger.idempotencyKey" idempotencyKey
+      <> blankErrors "trigger.idempotencyKey" (triggerKeyText idempotencyKey)
       <> projectErrors "trigger.target" target
       <> revisionRangeErrors "trigger.targetRange" targetRange
       <> check (null changedDecisionPaths) "trigger.changedDecisionPaths" "must contain at least one path"
@@ -696,12 +722,12 @@ registeredReferenceErrors
         (prefix <> ".provenance.repository")
         "must match the registered project repository"
       <> check (null documentIds) (prefix <> ".documentIds") "must contain at least one document id"
-      <> concatMap (uncurry blankErrors) (indexedFields (prefix <> ".documentIds") documentIds)
+      <> concatMap (uncurry blankErrors) (indexedFields (prefix <> ".documentIds") (map documentIdText documentIds))
 
 upstreamProjectErrors :: Text -> RegisteredUpstreamProject -> [ReviewContractError]
 upstreamProjectErrors prefix RegisteredUpstreamProject {project, dependency} =
   projectErrors (prefix <> ".project") project
-    <> blankErrors (prefix <> ".dependency") dependency
+    <> blankErrors (prefix <> ".dependency") (dependencyNameText dependency)
 
 verdictErrors :: PracticeReviewVerdict -> [ReviewContractError]
 verdictErrors
@@ -723,8 +749,8 @@ verdictErrors
       applicability
     } =
     schemaErrors "verdict" schemaVersion
-      <> blankErrors "verdict.triggerIdempotencyKey" triggerIdempotencyKey
-      <> blankErrors "verdict.specialist" specialist
+      <> blankErrors "verdict.triggerIdempotencyKey" (triggerKeyText triggerIdempotencyKey)
+      <> blankErrors "verdict.specialist" (agentNameText specialist)
       <> lineageErrors lineage
       <> check (classification /= Unresolved && null targetEvidence) "verdict.targetEvidence" "must contain pinned target evidence"
       <> check (classification /= Unresolved && null referenceEvidence) "verdict.referenceEvidence" "must contain pinned practice evidence"
@@ -746,10 +772,10 @@ verdictErrors
 
 lineageErrors :: ReviewLineage -> [ReviewContractError]
 lineageErrors ReviewLineage {parentSessionId, childSessionId, parentWorkflowId, childWorkflowId} =
-  blankErrors "verdict.lineage.parentSessionId" parentSessionId
-    <> blankErrors "verdict.lineage.childSessionId" childSessionId
-    <> blankErrors "verdict.lineage.parentWorkflowId" parentWorkflowId
-    <> blankErrors "verdict.lineage.childWorkflowId" childWorkflowId
+  blankErrors "verdict.lineage.parentSessionId" (idText parentSessionId)
+    <> blankErrors "verdict.lineage.childSessionId" (idText childSessionId)
+    <> blankErrors "verdict.lineage.parentWorkflowId" parentWorkflowId.unWorkflowId
+    <> blankErrors "verdict.lineage.childWorkflowId" childWorkflowId.unWorkflowId
 
 evidenceCollectionErrors :: EvidenceRole -> Text -> [EvidenceItem] -> [ReviewContractError]
 evidenceCollectionErrors expected prefix =
@@ -838,7 +864,7 @@ classificationErrors classification recommendedOwner exceptionApproval applicabi
         "must be triage-owner or joint-owners for unresolved"
     materialClaimRequired =
       check
-        (not (any (\PracticeReviewClaim {material, evidenceIds} -> material && not (null evidenceIds)) claims))
+        (not (any (\PracticeReviewClaim {material, evidenceIds} -> material == Material && not (null evidenceIds)) claims))
         "verdict.claims"
         "suspect classifications require a cited material claim"
     noExceptionApproval =
@@ -868,7 +894,7 @@ resolutionErrors
       supersedingReviewId
     } =
     schemaErrors "resolution" schemaVersion
-      <> blankErrors "resolution.idempotencyKey" idempotencyKey
+      <> blankErrors "resolution.idempotencyKey" (resolutionKeyText idempotencyKey)
       <> blankErrors "resolution.reason" reason
       <> resolutionOutcomeErrors outcome resultingApplicability supersedingReviewId reviewId
 
@@ -922,7 +948,7 @@ normalizeApplicability Applicability {projects, paths, dependencies, practices} 
   Applicability
     { projects = fmap normalizeProject projects,
       paths,
-      dependencies = fmap Text.strip dependencies,
+      dependencies = fmap (\(DependencyName name) -> DependencyName (Text.strip name)) dependencies,
       practices = fmap normalizePracticeKey practices
     }
 
@@ -962,12 +988,12 @@ normalizeRegisteredReference RegisteredPracticeReference {project, provenance, d
   RegisteredPracticeReference
     { project = normalizeProject project,
       provenance = normalizeRepoRef provenance,
-      documentIds = fmap Text.strip documentIds
+      documentIds = fmap (\(DocumentId name) -> DocumentId (Text.strip name)) documentIds
     }
 
 normalizeUpstreamProject :: RegisteredUpstreamProject -> RegisteredUpstreamProject
 normalizeUpstreamProject RegisteredUpstreamProject {project, dependency} =
-  RegisteredUpstreamProject {project = normalizeProject project, dependency = Text.strip dependency}
+  RegisteredUpstreamProject {project = normalizeProject project, dependency = case dependency of DependencyName name -> DependencyName (Text.strip name)}
 
 normalizeAdoption :: PracticeAdoptionBinding -> PracticeAdoptionBinding
 normalizeAdoption PracticeAdoptionBinding {practice, references, claimedApplicability, mode, owners, upstreamProjects} =
@@ -989,7 +1015,7 @@ normalizeTrigger PracticeReviewTrigger {schemaVersion, triggerKind, idempotencyK
   PracticeReviewTrigger
     { schemaVersion,
       triggerKind,
-      idempotencyKey = normalizeOpaqueKey idempotencyKey,
+      idempotencyKey = normalizeTriggerKey idempotencyKey,
       target = normalizeProject target,
       targetRange = normalizeRevisionRange targetRange,
       changedDecisionPaths,
@@ -1024,10 +1050,10 @@ normalizeClaim PracticeReviewClaim {claimId, kind, statement, material, evidence
 normalizeLineage :: ReviewLineage -> ReviewLineage
 normalizeLineage ReviewLineage {parentSessionId, childSessionId, parentWorkflowId, childWorkflowId, priorReviewId} =
   ReviewLineage
-    { parentSessionId = Text.strip parentSessionId,
-      childSessionId = Text.strip childSessionId,
-      parentWorkflowId = Text.strip parentWorkflowId,
-      childWorkflowId = Text.strip childWorkflowId,
+    { parentSessionId,
+      childSessionId,
+      parentWorkflowId = WorkflowId (Text.strip parentWorkflowId.unWorkflowId),
+      childWorkflowId = WorkflowId (Text.strip childWorkflowId.unWorkflowId),
       priorReviewId = fmap normalizeReviewId priorReviewId
     }
 
@@ -1044,9 +1070,9 @@ normalizeVerdict PracticeReviewVerdict {schemaVersion, reviewId, triggerIdempote
   PracticeReviewVerdict
     { schemaVersion,
       reviewId = normalizeReviewId reviewId,
-      triggerIdempotencyKey = normalizeOpaqueKey triggerIdempotencyKey,
+      triggerIdempotencyKey = normalizeTriggerKey triggerIdempotencyKey,
       practice = normalizePracticeKey practice,
-      specialist = normalizeNamedKey specialist,
+      specialist = normalizeSpecialist specialist,
       lineage = normalizeLineage lineage,
       targetEvidence = fmap normalizeEvidenceItem targetEvidence,
       referenceEvidence = fmap normalizeEvidenceItem referenceEvidence,
@@ -1067,7 +1093,7 @@ normalizeResolution PracticeReviewResolution {schemaVersion, resolutionId, idemp
   PracticeReviewResolution
     { schemaVersion,
       resolutionId = normalizeResolutionId resolutionId,
-      idempotencyKey = normalizeOpaqueKey idempotencyKey,
+      idempotencyKey = normalizeResolutionKey idempotencyKey,
       reviewId = normalizeReviewId reviewId,
       outcome,
       resolver = normalizeOwnerPrincipal resolver,
@@ -1177,3 +1203,74 @@ sourceEvidenceIdV2 role RepoRef {repository = RepositoryId repository, revision}
       TargetEvidence -> "target"
       ReferenceEvidence -> "reference"
       UpstreamEvidence -> "upstream"
+
+newtype DependencyName = DependencyName Text
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON)
+
+parseDependencyName :: Text -> Either Text DependencyName
+parseDependencyName = checkedReviewText "dependency name" DependencyName
+
+dependencyNameText :: DependencyName -> Text
+dependencyNameText (DependencyName value) = value
+
+instance FromJSON DependencyName where
+  parseJSON = withText "dependency name" (either (fail . Text.unpack) pure . parseDependencyName)
+
+newtype DocumentId = DocumentId Text
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON)
+
+parseDocumentId :: Text -> Either Text DocumentId
+parseDocumentId = checkedReviewText "document locator" DocumentId
+
+documentIdText :: DocumentId -> Text
+documentIdText (DocumentId value) = value
+
+instance FromJSON DocumentId where
+  parseJSON = withText "document locator" (either (fail . Text.unpack) pure . parseDocumentId)
+
+newtype TriggerKey = TriggerKey Text
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON)
+
+parseTriggerKey :: Text -> Either Text TriggerKey
+parseTriggerKey = checkedReviewText "trigger producer key" TriggerKey
+
+triggerKeyText :: TriggerKey -> Text
+triggerKeyText (TriggerKey value) = value
+
+instance FromJSON TriggerKey where
+  parseJSON = withText "trigger producer key" (either (fail . Text.unpack) pure . parseTriggerKey)
+
+newtype ResolutionKey = ResolutionKey Text
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON)
+
+parseResolutionKey :: Text -> Either Text ResolutionKey
+parseResolutionKey = checkedReviewText "resolution producer key" ResolutionKey
+
+resolutionKeyText :: ResolutionKey -> Text
+resolutionKeyText (ResolutionKey value) = value
+
+instance FromJSON ResolutionKey where
+  parseJSON = withText "resolution producer key" (either (fail . Text.unpack) pure . parseResolutionKey)
+
+normalizeTriggerKey :: TriggerKey -> TriggerKey
+normalizeTriggerKey (TriggerKey value) = TriggerKey (normalizeOpaqueKey value)
+
+normalizeResolutionKey :: ResolutionKey -> ResolutionKey
+normalizeResolutionKey (ResolutionKey value) = ResolutionKey (normalizeOpaqueKey value)
+
+normalizeSpecialist :: AgentName -> AgentName
+normalizeSpecialist value = either (const value) id (mkAgentName (normalizeNamedKey (agentNameText value)))
+
+data Materiality = Contextual | Material
+  deriving stock (Eq, Show)
+
+instance ToJSON Materiality where
+  toJSON value = toJSON (value == Material)
+  toEncoding value = toEncoding (value == Material)
+
+instance FromJSON Materiality where
+  parseJSON value = (\material -> if material then Material else Contextual) <$> parseJSON @Bool value

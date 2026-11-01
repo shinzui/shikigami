@@ -3,7 +3,9 @@
 
 -- | Cross-run semantic attention reservation for actionable practice reviews.
 module Shikigami.PracticeReview.Attention
-  ( AttentionKey (..),
+  ( AttentionKey,
+    parseAttentionKey,
+    attentionKeyText,
     PracticeReviewAttentionEnv (..),
     deriveAttentionKey,
     resolveAttentionRecipient,
@@ -17,16 +19,12 @@ import Control.Exception qualified as Exception
 import Data.Aeson (Value (..), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
-import Data.ByteString qualified as ByteString
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.Int (Int32)
 import Data.List (sortOn)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
-import Data.Text.Encoding qualified as TextEncoding
-import Data.UUID qualified as UUID
-import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Hasql.Decoders qualified as Decoders
@@ -55,6 +53,7 @@ import Shikigami.PracticeReview
   ( Applicability (..),
     ContentReference (..),
     EvidenceItem (..),
+    Materiality (..),
     PracticeReviewClaim (..),
     PracticeReviewVerdict (..),
     ProjectRef (..),
@@ -66,23 +65,23 @@ import Shikigami.PracticeReview
     validatedVerdictValue,
   )
 import Shikigami.PracticeReview.Capability
-  ( AttentionRecipientMap,
+  ( AttentionRecipient,
+    AttentionRecipientMap,
     AttentionReservationResult (..),
     PracticeReviewAttention (RequestPracticeReviewAttention),
+    attentionRecipientText,
     lookupAttentionRecipient,
   )
+import Shikigami.PracticeReview.Identity (AttentionKey, attentionKeyForDigest, attentionKeyText, parseAttentionKey)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Repository (RepoRef (..), RepositoryId (..), relativePathText, revisionText)
 import Shikigami.Sink (GrantSource, SinkOutcome (Enqueued), SinkResult (..))
+import Shikigami.Sink.Delivery (sinkMessageId)
 import Shikigami.Sink.Intent
   ( enqueuePreparedSinkIntentTx,
     prepareSinkIntentForRecipientWithMessageId,
     preparedSinkResult,
   )
-
-newtype AttentionKey = AttentionKey {value :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
 
 data PracticeReviewAttentionEnv = PracticeReviewAttentionEnv
   { agent :: !AgentName,
@@ -102,14 +101,14 @@ data AttentionProjection = AttentionProjection
     practiceKey :: !Text,
     classification :: !Text,
     ownerRole :: !Text,
-    recipient :: !Text,
+    recipient :: !AttentionRecipient,
     reviewId :: !Text,
     claimEvidenceDigest :: !Text,
     intent :: !Text
   }
   deriving stock (Eq, Show, Generic)
 
-resolveAttentionRecipient :: AttentionRecipientMap -> PracticeReviewVerdict -> Either Text Text
+resolveAttentionRecipient :: AttentionRecipientMap -> PracticeReviewVerdict -> Either Text AttentionRecipient
 resolveAttentionRecipient recipients PracticeReviewVerdict {recommendedOwner} =
   case recommendedOwner of
     Nothing -> Left "actionable practice review has no recommended owner"
@@ -118,7 +117,7 @@ resolveAttentionRecipient recipients PracticeReviewVerdict {recommendedOwner} =
        in maybe
             (Left ("no attention recipient configured for owners: " <> Text.intercalate "+" (sortOn id owners)))
             Right
-            (lookupAttentionRecipient recipients owners)
+            (lookupAttentionRecipient recipients principals)
 
 deriveAttentionKey :: AttentionRecipientMap -> ValidatedPracticeReviewVerdict -> Either Text AttentionKey
 deriveAttentionKey recipients validated = do
@@ -145,14 +144,7 @@ attentionProjection recipients verdict@PracticeReviewVerdict {reviewId = allocat
             "citedEvidence" .= citedEvidenceProjection verdict
           ]
       claimEvidenceDigest = commitmentDigest semanticProjection
-      attentionKey =
-        AttentionKey
-          ( UUID.toText
-              ( UUID.V5.generateNamed
-                  attentionNamespace
-                  (nameBytes ("practice-review-attention-v1:" <> claimEvidenceDigest))
-              )
-          )
+      attentionKey = attentionKeyForDigest claimEvidenceDigest
   pure
     AttentionProjection
       { key = attentionKey,
@@ -183,7 +175,7 @@ materialClaimProjection PracticeReviewVerdict {claims} =
         "statement" .= normalizeWords statement,
         "evidenceIds" .= sortOn id evidenceIds
       ]
-  | PracticeReviewClaim {claimId, kind, statement, material = True, evidenceIds = rawEvidenceIds} <- sortOn claimKey claims,
+  | PracticeReviewClaim {claimId, kind, statement, material = Material, evidenceIds = rawEvidenceIds} <- sortOn claimKey claims,
     let evidenceIds = rawEvidenceIds
   ]
   where
@@ -211,7 +203,7 @@ citedEvidenceProjection PracticeReviewVerdict {targetEvidence, referenceEvidence
     Set.member evidenceId citedIds
   ]
   where
-    citedIds = Set.fromList [evidenceId | PracticeReviewClaim {material = True, evidenceIds} <- claims, evidenceId <- evidenceIds]
+    citedIds = Set.fromList [evidenceId | PracticeReviewClaim {material = Material, evidenceIds} <- claims, evidenceId <- evidenceIds]
     evidenceKey EvidenceItem {evidenceId} = evidenceId
 
 runPracticeReviewAttentionAtomic ::
@@ -234,8 +226,8 @@ reserveAttention PracticeReviewAttentionEnv {agent, identity, runId, occurredAt,
   generation <- currentRunGeneration
   now <- liftIO getCurrentTime
   let stepName = StepName "practice-review-attention"
-      AttentionProjection {key = AttentionKey key, reviewId = projectionReviewId} = projection
-      messageId = "practice-review-attention:" <> key
+      AttentionProjection {key, reviewId = projectionReviewId} = projection
+      messageId = "practice-review-attention:" <> attentionKeyText key
       output = attentionOutput projection
       sink = attentionSink projection
   prepared <-
@@ -253,7 +245,7 @@ reserveAttention PracticeReviewAttentionEnv {agent, identity, runId, occurredAt,
           Nothing
           activity
           messageId
-          ((.recipient) projection)
+          (attentionRecipientText projection.recipient)
           sink
           output
           now
@@ -263,8 +255,8 @@ reserveAttention PracticeReviewAttentionEnv {agent, identity, runId, occurredAt,
       | not (isEnqueued result) ->
           step stepName (pure (AttentionSkipped (Aeson.toJSON skipped)))
     _ -> do
-      let reserved = Reserved {attentionKey = key, outboxMessageId = messageId}
-          coalesced = Coalesced {attentionKey = key, outboxMessageId = messageId}
+      let reserved = Reserved {attentionKey = key, outboxMessageId = sinkMessageId messageId}
+          coalesced = Coalesced {attentionKey = key, outboxMessageId = sinkMessageId messageId}
       reservedAppend <- prepareJournalAppend workflowName workflowId generation (StepRecorded (unStepName stepName) (Aeson.toJSON reserved) now)
       coalescedAppend <- prepareJournalAppend workflowName workflowId generation (StepRecorded (unStepName stepName) (Aeson.toJSON coalesced) now)
       transactionResult <- runTransaction do
@@ -283,7 +275,11 @@ reserveAttention PracticeReviewAttentionEnv {agent, identity, runId, occurredAt,
                 when inserted (enqueuePreparedSinkIntentTx prepared)
                 pure (Right result)
               JournalAlreadyPresent stored ->
-                pure (firstText (parseEither Aeson.parseJSON stored))
+                case parseEither Aeson.parseJSON stored of
+                  Left detail -> do
+                    Tx.condemn
+                    pure (Left (Text.pack detail))
+                  Right retained -> pure (Right retained)
               JournalRefusedTerminal marker -> do
                 Tx.condemn
                 pure (Left ("practice-review attention journal refused by terminal marker: " <> marker))
@@ -295,10 +291,9 @@ reserveAttention PracticeReviewAttentionEnv {agent, identity, runId, occurredAt,
     verdict = validatedVerdictValue validated
     isEnqueued Enqueued {} = True
     isEnqueued _ = False
-    firstText = either (Left . Text.pack) Right
 
 attentionOutput :: AttentionProjection -> Value
-attentionOutput AttentionProjection {key = AttentionKey attentionKey, reviewId, intent} =
+attentionOutput AttentionProjection {key = attentionKey, reviewId, intent} =
   Aeson.object
     [ "subject_id" .= ("practice-review/" <> reviewId),
       "review_id" .= reviewId,
@@ -324,11 +319,11 @@ insertAttentionTx :: AttentionProjection -> Text -> UTCTime -> Tx.Transaction Bo
 insertAttentionTx projection outboxMessageId createdAt =
   isJust <$> Tx.statement (projection, outboxMessageId, createdAt) insertAttentionStatement
 
-lookupAttentionOutboxTx :: Text -> Tx.Transaction (Maybe Text)
-lookupAttentionOutboxTx key = Tx.statement key lookupAttentionOutboxStatement
+lookupAttentionOutboxTx :: AttentionKey -> Tx.Transaction (Maybe Text)
+lookupAttentionOutboxTx key = Tx.statement (attentionKeyText key) lookupAttentionOutboxStatement
 
-linkAttentionReviewTx :: Text -> Text -> UTCTime -> Tx.Transaction ()
-linkAttentionReviewTx key reviewId linkedAt = Tx.statement (key, reviewId, linkedAt) linkAttentionReviewStatement
+linkAttentionReviewTx :: AttentionKey -> Text -> UTCTime -> Tx.Transaction ()
+linkAttentionReviewTx key reviewId linkedAt = Tx.statement (attentionKeyText key, reviewId, linkedAt) linkAttentionReviewStatement
 
 insertAttentionStatement :: Statement (AttentionProjection, Text, UTCTime) (Maybe Text)
 insertAttentionStatement =
@@ -347,13 +342,13 @@ insertAttentionStatement =
 
 attentionProjectionParams :: Encoders.Params AttentionProjection
 attentionProjectionParams =
-  (view (#key . #value) >$< textParam)
+  (attentionKeyText . view #key >$< textParam)
     <> (fromIntegral . view #schemaVersion >$< intParam)
     <> (view #targetProject >$< textParam)
     <> (view #practiceKey >$< textParam)
     <> (view #classification >$< textParam)
     <> (view #ownerRole >$< textParam)
-    <> (view #recipient >$< textParam)
+    <> (attentionRecipientText . view #recipient >$< textParam)
     <> (view #reviewId >$< textParam)
     <> (view #claimEvidenceDigest >$< textParam)
 
@@ -400,9 +395,3 @@ enumText value = case Aeson.toJSON value of
 
 normalizeWords :: Text -> Text
 normalizeWords = Text.unwords . Text.words . Text.strip
-
-attentionNamespace :: UUID.UUID
-attentionNamespace =
-  UUID.V5.generateNamed
-    UUID.V5.namespaceURL
-    (ByteString.unpack (TextEncoding.encodeUtf8 "mori://shinzui/shikigami/contracts/practice-review-attention/v1"))
