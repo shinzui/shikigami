@@ -62,10 +62,17 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 ## Progress
 
 
-- [x] M1a: Deliver the schema-2 census and independent coverage/freshness checker; all 24 positive/mutation tests pass, and the checker detects the current incomplete classification.
-- [x] M1b (2026-11-01): Complete semantic classification. Latest coherent census on `1e7f619`: all 4,119 keys classified; 3,409 compliant, 289 exclusions and 421 explicit findings. Coverage/freshness and all 24 checker tests pass with zero missing or pending entries. The initial M1 checkpoint covered 4,053 keys before M2 added the closed format type.
-- [ ] M2: Resolve applicable scalar/identity/decoder findings in cohesive concept batches and verify actual refusal, rollback and recovery behavior. Since complete M1 acceptance, 154 findings are fixed or source-corrected; 421 remain explicit in the current fresh inventory.
-- [ ] M3: Accept the refreshed classification with zero unresolved violations, passing final behavioral evidence, and an updated guide disposition.
+- [x] M1a: Deliver the schema-2 census and independent coverage/freshness checker. All 24 positive/mutation controls pass, including refusal of incomplete and stale snapshots.
+- [x] M1b (2026-11-01): Complete semantic classification of all 4,253 final keys across 331 modules, 1,049 declarations and 14 role entrypoints. All entries are source-bound and independently checked; the original inventory and remaining findings are preserved in the historical checkpoints below.
+- [x] M2 (2026-11-01): Resolve every applicable scalar/identity/decoder finding. Combined reconciliation resolves 385 surviving findings and accounts for 36 moved/removed former findings through independently reviewed successor keys; no finding is waived as debt.
+- [x] M3 (2026-11-01): Accept the fresh 4,253-key classification with zero violations or pending entries, all 531 compiler controls, complete behavioral coverage including the three corrected-fixture reruns, a passing full build and replay-neutral native workflow gate. The frozen guide row is implemented; all 124 source and 93 release identities remain intact.
+
+Final acceptance on `c5a4caf`: 331 modules, 1,049 declarations and 14 role
+entrypoints; 3,964 compliant entries and 289 justified exclusions. All 24
+classification controls, 21 upgrade controls, 13 style controls and six diagram
+checks pass. The notes below are historical checkpoints; this final acceptance
+supersedes their open-status and remaining-count statements. See
+`docs/evidence/plan-108/final-verification.json` and the acceptance note.
 
 Workspace scalar implementation (2026-11-01): workspace records retain scoped
 coordinates/locators, native repository identities, bounded process/RPC/Unix
@@ -513,15 +520,31 @@ changing M2/M3 acceptance.
 
 ## Outcomes & Retrospective
 
+All milestones are complete on source `c5a4caf`. The final compiled census and
+resolved-only checker cover every one of 4,253 keys with fresh source, interface
+and tool hashes: zero missing keys, pending dispositions or violations. The guide
+row and its exhaustive-census clause are implemented without changing the frozen
+124-source/93-release closure.
 
-M1 is complete and refreshed: the entire 4,119-key inventory and its
-source/build/tool freshness check pass, as do all 24 infrastructure tests. The accepted M2 batches fix or source-correct 154 of the initial 575 findings,
-leaving 421 explicit findings for M2. Resolved-only acceptance correctly fails. Earlier tested owner/value
-remediations remain recorded in [the current evidence](../evidence/plan-108/acceptance.md).
-M2, M3 and the frozen guide disposition remain open. FRIC-36, FRIC-37 and FRIC-38 remain
-logged for triage when the plan completes.
+The complete build and 531 compiler controls pass. Every behavioral case is
+covered by the broad final-production runs and actual reruns of the three
+corrected fixtures; the acceptance note distinguishes those runs. The native gate
+against `4ac29de` has zero findings, replay-neutral impact and passing conformance.
+Positive codecs, deterministic identities and workflow step shapes are retained.
+Linux prototype compilation makes no Linux runtime or containment claim.
 
-The prior upgrade work is in
+Repeated small source/build/census cycles dominated the work. Final completion
+uses one coherent source boundary, combined semantic reconciliation and preserved
+passing evidence, with targeted reruns for fixture-only repairs. No additional
+validation framework or dependency migration was introduced.
+
+FRIC-36 is accepted for this bounded plan: retain the existing compiler harness
+and run the complete probes at a coherent source boundary. FRIC-37 is accepted
+with the source-before-final-build and evidence-last sequence. FRIC-38 is accepted
+with serial worker qualification under unchanged native deadlines. Their triage
+records are in `docs/friction-log/`; all three are closed as accepted.
+
+The prior upgrade remains in
 [plan107](107-adopt-current-haskell-and-service-architecture-practices.md) and
 [the adoption evidence](../evidence/keiro-0.22/haskell-service-adoption.md).
 

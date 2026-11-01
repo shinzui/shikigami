@@ -51,6 +51,13 @@ the then-current workflow deployment rules. The final release profile is explici
 expanding it requires new evidence. Source/compiler/flags, schema ownership and
 all implemented runtime invariants remain qualified on macOS.
 
+Plan 108 subsequently completed the standalone follow-up on source `c5a4caf`.
+Its fresh 4,253-key classification has zero violations or pending entries, and its
+own behavioral/compiler/build/native acceptance is recorded in
+`docs/evidence/plan-108/final-verification.json`. The domain-guide row and exhaustive
+census clause are now implemented. This closes the specific deferral above;
+it neither expands the upgrade's macOS profile nor rewrites its historical evidence.
+
 ## References
 
 - [MasterPlan 16](../masterplans/16-upgrade-shikigami-to-keiro-0-22-and-retire-superseded-runtime-workarounds.md)

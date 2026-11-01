@@ -1,0 +1,13 @@
+{
+  "sourceRevision": "c5a4caf24fafbbc5c8abc2b42d2af8b9b58e960b",
+  "sinceRevision": "4ac29de",
+  "command": "nix develop --no-write-lock-file -c just keiro-gate 4ac29de",
+  "exitCode": 0,
+  "findings": 0,
+  "replayImpact": "replay-neutral",
+  "conformance": "passed",
+  "reports": [
+    "final-values-keiro-diff.json",
+    "final-values-keiro-replay-impact.json"
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "sourceRevision": "c5a4caf24fafbbc5c8abc2b42d2af8b9b58e960b",
+  "platform": "aarch64-darwin",
+  "compiler": "GHC 9.12.4",
+  "build": {
+    "command": "cabal build all --enable-tests -j1",
+    "exitCode": 0,
+    "linuxPrototype": "compiled only; no Linux runtime qualification"
+  },
+  "classification": {
+    "modules": 331,
+    "declarations": 1049,
+    "entrypoints": 14,
+    "keys": 4253,
+    "compliant": 3964,
+    "notApplicable": 289,
+    "violations": 0,
+    "pending": 0,
+    "coverageAndFreshness": "passed",
+    "checkerControls": 24
+  },
+  "compilerControls": {
+    "revisionDomains": 253,
+    "opaqueValues": 269,
+    "workspaceScope": 5,
+    "resumePolicy": 4,
+    "total": 531,
+    "exitCode": 0
+  },
+  "behavioral": {
+    "productionSourceIdenticalAcrossRuns": true,
+    "core": {
+      "broadPassed": 631,
+      "total": 632,
+      "correctedFixtureRerunPassed": 1
+    },
+    "postgres": {
+      "broadPassed": 471,
+      "total": 472,
+      "correctedFixtureRerunPassed": 1,
+      "broadSeconds": 158.63
+    },
+    "workers": {
+      "broadPassed": 279,
+      "total": 280,
+      "correctedFixtureRerunPassed": 1,
+      "broadSeconds": 207.78,
+      "threads": 1
+    },
+    "fixtureCorrections": [
+      "Edit coupled profile user/group inputs together before checked construction in the core proof fixture.",
+      "Edit coupled profile user/group inputs together before checked construction in the worker reservation fixture.",
+      "Send invalid confidence as raw model JSON rather than constructing an admitted invalid confidence in the workflow fixture."
+    ],
+    "fixedOriginalTests": "All three passed after one batched rebuild: 0.07, 0.39 and 0.67 seconds. No production change or test exclusion.",
+    "server": 95,
+    "agent": 37,
+    "api": 31,
+    "client": 9,
+    "domainConformance": "passed",
+    "diagrams": 6
+  },
+  "compatibility": {
+    "sourceRevision": "c5a4caf24fafbbc5c8abc2b42d2af8b9b58e960b",
+    "sinceRevision": "4ac29de",
+    "command": "nix develop --no-write-lock-file -c just keiro-gate 4ac29de",
+    "exitCode": 0,
+    "findings": 0,
+    "replayImpact": "replay-neutral",
+    "conformance": "passed",
+    "reports": [
+      "final-values-keiro-diff.json",
+      "final-values-keiro-replay-impact.json"
+    ]
+  },
+  "guideClosure": {
+    "sources": 124,
+    "releaseItems": 93,
+    "frozenSourceIdentities": "unchanged"
+  },
+  "frictionTriage": {
+    "FRIC-36": "accepted",
+    "FRIC-37": "accepted",
+    "FRIC-38": "accepted"
+  }
+}

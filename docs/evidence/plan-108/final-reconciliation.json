@@ -1,0 +1,338 @@
+{
+  "resolvedExistingKeys": 385,
+  "addedKeys": 175,
+  "removedKeys": [
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Agent/Approval.hs",
+      "module": "Shikigami.Agent.Approval",
+      "declaration": "ReviewRequestId",
+      "member": "ReviewRequestId.value",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Directory.hs",
+      "module": "Shikigami.Directory",
+      "declaration": "DirectorySnapshotVersion",
+      "member": "DirectorySnapshotVersion.value",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Execution/Transcript.hs",
+      "module": "Shikigami.Execution.Transcript",
+      "declaration": "ExecutionId",
+      "member": "$self",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Execution/Transcript.hs",
+      "module": "Shikigami.Execution.Transcript",
+      "declaration": "ExecutionId",
+      "member": "ExecutionId.value",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/PracticeReview/Attention.hs",
+      "module": "Shikigami.PracticeReview.Attention",
+      "declaration": "AttentionKey",
+      "member": "$self",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/PracticeReview/Attention.hs",
+      "module": "Shikigami.PracticeReview.Attention",
+      "declaration": "AttentionKey",
+      "member": "AttentionKey.value",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Repository.hs",
+      "module": "Shikigami.Repository",
+      "declaration": "RepositoryId",
+      "member": "RepositoryId.value",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Router/Catalog.hs",
+      "module": "Shikigami.Router.Catalog",
+      "declaration": "CatalogVersion",
+      "member": "CatalogVersion.value",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Capability.hs",
+      "module": "Shikigami.WorkerSession.Capability",
+      "declaration": "WorkerCommand",
+      "member": "InspectWorker.limit",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Types.hs",
+      "module": "Shikigami.WorkerSession.Types",
+      "declaration": "AssignmentId",
+      "member": "$self",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Types.hs",
+      "module": "Shikigami.WorkerSession.Types",
+      "declaration": "AssignmentId",
+      "member": "AssignmentId.value",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Types.hs",
+      "module": "Shikigami.WorkerSession.Types",
+      "declaration": "WorkerSessionId",
+      "member": "$self",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/WorkerSession/Types.hs",
+      "module": "Shikigami.WorkerSession.Types",
+      "declaration": "WorkerSessionId",
+      "member": "WorkerSessionId.value",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "CommandRule",
+      "member": "CommandRule.arguments",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "CommandRule",
+      "member": "CommandRule.directory",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "CommandRule",
+      "member": "CommandRule.environment",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "CommandRule",
+      "member": "CommandRule.executable",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "CommandRule",
+      "member": "CommandRule.outputBytes",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "CommandRule",
+      "member": "CommandRule.rule",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "CommandRule",
+      "member": "CommandRule.timeoutSeconds",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "IdentityRange",
+      "member": "IdentityRange.firstId",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "IdentityRange",
+      "member": "IdentityRange.lastId",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "ProcessImage",
+      "member": "ProcessImage.collectorExecutable",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "ProcessImage",
+      "member": "ProcessImage.deadlineExecutable",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "ProcessImage",
+      "member": "ProcessImage.environmentExecutable",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "ProcessImage",
+      "member": "ProcessImage.rootDirectory",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "ProcessImage",
+      "member": "ProcessImage.rootIdentity",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "ProcessPolicy",
+      "member": "ProcessPolicy.format",
+      "previousDisposition": "compliant",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "ProcessPolicy",
+      "member": "ProcessPolicy.image",
+      "previousDisposition": "compliant",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "ProcessPolicy",
+      "member": "ProcessPolicy.propertiesDigest",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "ProcessPolicy",
+      "member": "ProcessPolicy.readPaths",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "ProcessPolicy",
+      "member": "ProcessPolicy.rules",
+      "previousDisposition": "compliant",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "ProcessPolicy",
+      "member": "ProcessPolicy.writePaths",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "ProcessProfile",
+      "member": "ProcessProfile.bindingDigest",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "ProcessProfile",
+      "member": "ProcessProfile.groupId",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "ProcessProfile",
+      "member": "ProcessProfile.instructionDigest",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "ProcessProfile",
+      "member": "ProcessProfile.policy",
+      "previousDisposition": "compliant",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-core/src/Shikigami/Workspace/ProcessPolicy.hs",
+      "module": "Shikigami.Workspace.ProcessPolicy",
+      "declaration": "ProcessProfile",
+      "member": "ProcessProfile.userId",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-workers/src/Shikigami/Trigger/Consumer.hs",
+      "module": "Shikigami.Trigger.Consumer",
+      "declaration": "DeadLetterId",
+      "member": "DeadLetterId.#1",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Integration.hs",
+      "module": "Shikigami.Workspace.Integration",
+      "declaration": "Request",
+      "member": "Request.artifacts",
+      "previousDisposition": "compliant",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    },
+    {
+      "sourcePath": "shikigami-workers/src/Shikigami/Workspace/Integration.hs",
+      "module": "Shikigami.Workspace.Integration",
+      "declaration": "Request",
+      "member": "Request.expectedParent",
+      "previousDisposition": "violation",
+      "reason": "The compiled declaration/member moved to its named opaque owner or explicit Input proposal, or was removed by the revised typed API. Successor keys are classified independently."
+    }
+  ],
+  "counts": {
+    "compliant": 3964,
+    "not-applicable": 289
+  }
+}

@@ -64,7 +64,7 @@ class AuditTests(unittest.TestCase):
 
     def test_named_follow_up_is_required(self):
         row = next(r for r in self.sources['sources'] if r['source'] == audit.DOMAIN)
-        row['followUp'] = 'docs/plans/missing.md'
+        row.update(status='deferred', followUp='docs/plans/missing.md', scopeDecision=audit.DECISION)
         self.assertTrue(self.errors())
 
     def test_duplicate_clause_refuses(self):

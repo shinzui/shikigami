@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the frozen 0.22 upgrade scope without claiming the deferred audit."""
+"""Validate the frozen 0.22 source closure and its evidenced dispositions."""
 import argparse
 import hashlib
 import json
@@ -97,7 +97,8 @@ def main():
     errors = validate(sources, releases, args.root, corpora)
     if errors:
         parser.exit(1, '\n'.join(errors) + '\n')
-    print('Keiro 0.22 audit: 124 sources, 93 release items; one explicit follow-up, no pending upgrade gate; frozen files/evidence verified.')
+    deferred = sum(row.get('status') == 'deferred' for row in sources['sources'])
+    print(f'Keiro 0.22 audit: 124 sources, 93 release items; {deferred} deferred sources, no pending upgrade gate; frozen files/evidence verified.')
 
 
 if __name__ == '__main__':

@@ -101,7 +101,7 @@
       "sourcePath": "runtime-patterns/architecture/domain-newtypes-and-typeids.md",
       "sourceSha256": "c9bb6e61d42c1345f23529b211f66d7485200aa2bfda41ef9966e8a13970a844",
       "owner": "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md",
-      "status": "deferred",
+      "status": "implemented",
       "clauses": [
         {
           "id": "allocated-entity-identity",
@@ -116,7 +116,7 @@
         {
           "id": "revision-domains",
           "disposition": "implemented",
-          "rationale": "Abstract nominal StateRevision scopes cover objective, assignment, instructions, criteria, worker-session and worker-owner counters, including commands, objective/checkpoint/ownership provider contracts, workspace requests/admissions/controls/fences and private RPC. Numeric JSON stays unchanged. Private constructors reject negative counters, operator flags refine before runtime IO and predecessor lookup refuses zero. Domain/provider interfaces retain scope; generated/SQL adapters render integers explicitly. All 545 pure, 375 serial PostgreSQL, 260 worker and 95 server cases pass under ADR-74. Mailbox/resource counters remain in the pending census."
+          "rationale": "Abstract nominal StateRevision scopes cover objective, assignment, instructions, criteria, worker-session and worker-owner counters, including commands, objective/checkpoint/ownership provider contracts, workspace requests/admissions/controls/fences and private RPC. Numeric JSON stays unchanged. Private constructors reject negative counters, operator flags refine before runtime IO and predecessor lookup refuses zero. Domain/provider interfaces retain scope; generated/SQL adapters render integers explicitly. All 545 pure, 375 serial PostgreSQL, 260 worker and 95 server cases pass under ADR-74."
         },
         {
           "id": "objective-prose",
@@ -126,7 +126,7 @@
         {
           "id": "resource-root-policy-revision",
           "disposition": "implemented",
-          "rationale": "Resource-root policy revisions retain a separate execution-root scope in state and reservation/attempt/allocation/control APIs. Valid root JSON remains numeric and a complete positive round-trip precedes negative admission refusal. Eight compiler boundary cases reject root/worker/objective substitution. All enabled components compile and 546 pure, 375 serial PostgreSQL and 95 server cases pass. Resource amounts and wider scalar census remain pending."
+          "rationale": "Resource-root policy revisions retain a separate execution-root scope in state and reservation/attempt/allocation/control APIs. Valid root JSON remains numeric and a complete positive round-trip precedes negative admission refusal. Eight compiler boundary cases reject root/worker/objective substitution. All enabled components compile and 546 pure, 375 serial PostgreSQL and 95 server cases pass."
         },
         {
           "id": "mailbox-and-event-positions",
@@ -136,67 +136,67 @@
         {
           "id": "execution-revision-and-operation-positions",
           "disposition": "implemented",
-          "rationale": "Execution transcript/expected-command revisions and PreparedTool retain execution; state cursors, retained operation positions and operation-id derivation retain execution-operation. Generated Int and SQL adapters render explicitly with existing writer/position bounds. Three full positive codec/byte/identity controls precede invalid-input cases; 14 real compiler clients reject scope substitution. All 552 pure, 376 serial PostgreSQL and 260 serial worker tests pass. Other resource amounts/counters and the full census remain pending."
+          "rationale": "Execution transcript/expected-command revisions and PreparedTool retain execution; state cursors, retained operation positions and operation-id derivation retain execution-operation. Generated Int and SQL adapters render explicitly with existing writer/position bounds. Three full positive codec/byte/identity controls precede invalid-input cases; 14 real compiler clients reject scope substitution. All 552 pure, 376 serial PostgreSQL and 260 serial worker tests pass."
         },
         {
           "id": "checked-resource-amounts",
           "disposition": "implemented",
-          "rationale": "Private ResourceAmount admits nonnegative int64 units at construction/JSON decode. Dimension-keyed vectors and finite/active ceilings retain it. Checked vector arithmetic rejects overflow/underflow before accounting publication and preserves dimension/finite-limit refusal priority. Actual HTTP valid/overflow reports prove exact settlement versus retained unknown billing holds; synthetic full-counter settlement leaves root/attempt unchanged. ADR-76 and 555 pure/378 PostgreSQL/260 worker/95 server evidence cover this change. Distinct counters/policy values and the complete census remain pending."
+          "rationale": "Private ResourceAmount admits nonnegative int64 units at construction/JSON decode. Dimension-keyed vectors and finite/active ceilings retain it. Checked vector arithmetic rejects overflow/underflow before accounting publication and preserves dimension/finite-limit refusal priority. Actual HTTP valid/overflow reports prove exact settlement versus retained unknown billing holds; synthetic full-counter settlement leaves root/attempt unchanged. ADR-76 and 555 pure/378 PostgreSQL/260 worker/95 server evidence cover this change."
         },
         {
           "id": "attempt-counts-and-operational-call-limits",
           "disposition": "implemented",
-          "rationale": "Private nominal AttemptCount separates root active/unknown and selection call/active/unknown values. AttemptLimit separates finite call/retry/concurrency ceilings, with ResourceAmount token caps and typed profile refinement failure before provider setup. Exact codecs, scope compiler failures and four real coupled root/assignment underflow refusals pass. Full acceptance is 556 pure/382 PostgreSQL/260 workers/95 server plus 23 compiler clients under ADR-77. Other counters/policies and complete identity/scalar census remain pending."
+          "rationale": "Private nominal AttemptCount separates root active/unknown and selection call/active/unknown values. AttemptLimit separates finite call/retry/concurrency ceilings, with ResourceAmount token caps and typed profile refinement failure before provider setup. Exact codecs, scope compiler failures and four real coupled root/assignment underflow refusals pass. Full acceptance is 556 pure/382 PostgreSQL/260 workers/95 server plus 23 compiler clients under ADR-77."
         },
         {
           "id": "execution-policy-and-durable-progress",
           "disposition": "implemented",
-          "rationale": "Seven private policy ceilings and three separate bounded durable progress counts retain their meanings and numeric JSON/bytes. Override refinement is once at configuration admission. Pre-inline checked progress rejects full receipt capacity without changing native/application/accounting/queue participants; public native stream/queue observations replace private SQL. ADR-78, full codec controls, 31 compiler clients and 557 pure/383 PostgreSQL/260 workers/95 server cases cover this change. The complete scalar/identity census remains pending."
+          "rationale": "Seven private policy ceilings and three separate bounded durable progress counts retain their meanings and numeric JSON/bytes. Override refinement is once at configuration admission. Pre-inline checked progress rejects full receipt capacity without changing native/application/accounting/queue participants; public native stream/queue observations replace private SQL. ADR-78, full codec controls, 31 compiler clients and 557 pure/383 PostgreSQL/260 workers/95 server cases cover this change."
         },
         {
           "id": "worker-admission-limits-and-instruction-text",
           "disposition": "implemented",
-          "rationale": "Private MaximumSessions, MaximumAssignments and MailboxLimit retain individual policies through scopes, admission and store APIs. Private protected InstructionText rejects blank/oversized UTF-8 without changing valid text. Complete admission/command/numeric wire controls precede invalid input; authority, full-payload and coupled transaction checks remain. ADR-79 and 559 pure/383 PostgreSQL/260 worker/95 server/37 compiler cases cover this clause. Native generation and replay are neutral. The complete scalar/identity census remains pending."
+          "rationale": "Private MaximumSessions, MaximumAssignments and MailboxLimit retain individual policies through scopes, admission and store APIs. Private protected InstructionText rejects blank/oversized UTF-8 without changing valid text. Complete admission/command/numeric wire controls precede invalid input; authority, full-payload and coupled transaction checks remain. ADR-79 and 559 pure/383 PostgreSQL/260 worker/95 server/37 compiler cases cover this clause. Native generation and replay are neutral."
         },
         {
           "id": "opaque-values-reject-generic-bypasses",
           "disposition": "implemented",
-          "rationale": "Actual selected-compiler and runtime probes demonstrated thirteen opaque Generic parse/render bypasses, including zero ports, unpinned revisions and type-only credential disclosure paths. Remove those thirteen instances while preserving factories/codecs. Fourteen positive-first opaque clients and 37 nominal clients pass with exact main-library unit selection, all enabled components build, 559 pure/95 server tests pass, and native diff/replay is neutral under ADR-80. Refreshed worklist is 310 modules/882 declarations; complete scalar/identity review remains pending."
+          "rationale": "Actual selected-compiler and runtime probes demonstrated thirteen opaque Generic parse/render bypasses, including zero ports, unpinned revisions and type-only credential disclosure paths. Remove those thirteen instances while preserving factories/codecs. Fourteen positive-first opaque clients and 37 nominal clients pass with exact main-library unit selection, all enabled components build, 559 pure/95 server tests pass, and native diff/replay is neutral under ADR-80. Refreshed worklist is 310 modules/882 declarations; complete scalar/identity review is resolved by the final exhaustive-census clause."
         },
         {
           "id": "validated-results-and-residual-private-construction",
           "disposition": "implemented",
-          "rationale": "Validated router declarations and pinned diffs use private non-Generic seals with Generic read views. Constructors, representation coercion, generic conversion and unchecked JSON admission are rejected after positive public controls. DecisionFailure, instruction bundles and run/call correlations lose residual Generic construction. The explicit bundle codec preserves valid bytes and validator ownership. Workflow reads project the same policy without step/journal changes. ADR-81, 63 compiler clients and full 559 pure/383 PostgreSQL/260 worker/95 server/30 API/9 client/37 agent plus native/domain/diagram acceptance cover this clause. The complete scalar/identity census remains pending."
+          "rationale": "Validated router declarations and pinned diffs use private non-Generic seals with Generic read views. Constructors, representation coercion, generic conversion and unchecked JSON admission are rejected after positive public controls. DecisionFailure, instruction bundles and run/call correlations lose residual Generic construction. The explicit bundle codec preserves valid bytes and validator ownership. Workflow reads project the same policy without step/journal changes. ADR-81, 63 compiler clients and full 559 pure/383 PostgreSQL/260 worker/95 server/30 API/9 client/37 agent plus native/domain/diagram acceptance cover this clause."
         },
         {
           "id": "resource-root-and-termination-decisions",
           "disposition": "implemented",
-          "rationale": "Cancellation, Overage and Termination are distinct closed types. Root JSON remains boolean; command termination has no wire codec. Irreversible cancellation, sticky overage, drain/settlement rules and native terminal selection are unchanged. Complete false/true root codecs and 67 compiler clients pass with 559 pure/383 PostgreSQL/260 workers/95 server cases under ADR-82; native generation/replay is neutral. The full scalar/identity census remains pending."
+          "rationale": "Cancellation, Overage and Termination are distinct closed types. Root JSON remains boolean; command termination has no wire codec. Irreversible cancellation, sticky overage, drain/settlement rules and native terminal selection are unchanged. Complete false/true root codecs and 67 compiler clients pass with 559 pure/383 PostgreSQL/260 workers/95 server cases under ADR-82; native generation/replay is neutral."
         },
         {
           "id": "retained-tool-response-positions",
           "disposition": "implemented",
-          "rationale": "Private ToolPosition retains 0..255 through tool inputs, continuations, specifications and workspace consumers. Whole-assistant admission retains 128 calls and binding checks. Explicit list adapters and shared continuation preserve valid bytes and behavior. ADR-83 records refusal of structurally invalid routes above 255; 72 compiler clients and 560 pure/383 PostgreSQL/260 worker/95 server cases pass with neutral native reports. The complete scalar/identity census remains pending."
+          "rationale": "Private ToolPosition retains 0..255 through tool inputs, continuations, specifications and workspace consumers. Whole-assistant admission retains 128 calls and binding checks. Explicit list adapters and shared continuation preserve valid bytes and behavior. ADR-83 records refusal of structurally invalid routes above 255; 72 compiler clients and 560 pure/383 PostgreSQL/260 worker/95 server cases pass with neutral native reports."
         },
         {
           "id": "execution-assignment-locators",
           "disposition": "implemented",
-          "rationale": "Private AssignmentKey owns existing 1..256-character admission throughout selection, binding, call receipts, inspection and workspace allocation/instructions/transfers. Domain and statement APIs retain it; SQL encoders lower explicitly. Technical workflow/message derivation, execution lookup and action hashes retain exact string inputs, including total empty/Unicode derivation. ADR-84, complete positive byte controls and 77 compiler clients pass with 561 pure/383 PostgreSQL/260 worker/95 server cases and neutral native reports. Complete scalar/identity review remains pending."
+          "rationale": "Private AssignmentKey owns existing 1..256-character admission throughout selection, binding, call receipts, inspection and workspace allocation/instructions/transfers. Domain and statement APIs retain it; SQL encoders lower explicitly. Technical workflow/message derivation, execution lookup and action hashes retain exact string inputs, including total empty/Unicode derivation. ADR-84, complete positive byte controls and 77 compiler clients pass with 561 pure/383 PostgreSQL/260 worker/95 server cases and neutral native reports. Complete scalar/identity review is resolved by the final exhaustive-census clause."
         },
         {
           "id": "attempt-claim-owner-and-generation",
           "disposition": "implemented",
-          "rationale": "Private ClaimOwner retains the existing technical lease token; StateRevision execution-attempt retains the fence through execution, workspace registrations/receipts and supervisor RPC. Native workflow generations remain Int; active positivity, RPC bounds, stale-owner matching and atomic accounting/publication remain. ADR-85, complete claim/active-attempt wire controls, 85 compiler clients and 562 pure/383 PostgreSQL/260 worker/95 server cases pass with neutral native reports. The complete scalar/identity census remains pending."
+          "rationale": "Private ClaimOwner retains the existing technical lease token; StateRevision execution-attempt retains the fence through execution, workspace registrations/receipts and supervisor RPC. Native workflow generations remain Int; active positivity, RPC bounds, stale-owner matching and atomic accounting/publication remain. ADR-85, complete claim/active-attempt wire controls, 85 compiler clients and 562 pure/383 PostgreSQL/260 worker/95 server cases pass with neutral native reports."
         },
         {
           "id": "structured-run-coordinates-and-http-request-key",
           "disposition": "implemented",
-          "rationale": "Actual before probes, admitted delegation preflight and a real PostgreSQL acceptance case reproduced delimiter collisions. Versioned structured commitments distinguish child and HTTP run coordinates; original caller keys are retained explicitly as private RequestKey through API, CLI, SQL and response adapters. Ninety compiler clients, 563 pure/385 PostgreSQL/260 worker/95 server/31 API/9 client/37 agent, 73 offline CLI checks and live Hurl pass under ADR-86. Exactly two native WorkflowBodyChanged findings are retained as the ADR-27 first-release reset; aggregate replay neutrality does not assert child-history compatibility. The full scalar/identity census remains pending."
+          "rationale": "Actual before probes, admitted delegation preflight and a real PostgreSQL acceptance case reproduced delimiter collisions. Versioned structured commitments distinguish child and HTTP run coordinates; original caller keys are retained explicitly as private RequestKey through API, CLI, SQL and response adapters. Ninety compiler clients, 563 pure/385 PostgreSQL/260 worker/95 server/31 API/9 client/37 agent, 73 offline CLI checks and live Hurl pass under ADR-86. Exactly two native WorkflowBodyChanged findings are retained as the ADR-27 first-release reset; aggregate replay neutrality does not assert child-history compatibility."
         },
         {
           "id": "retained-agent-routing-values",
           "disposition": "implemented",
-          "rationale": "Private AgentName, ExpertiseKey, SelectionLimit and DelegationDepth retain their scalar invariants through declarations, routing, delegation, scheduling, lifecycle admission, SQL and HTTP/CLI adapters. Valid string/numeric codecs and complete conversation seeds retain their wire values; the unbound seed uses Maybe AgentName. JSON/Dhall/model inputs refine at admission. Positive-first compiler clients reject constructors, representation coercion, literals and Generic bypasses. ADR-87, six scalar cases, 569 pure/386 PostgreSQL/260 worker/95 server acceptance and 107 compiler clients cover this clause. The complete census remains pending."
+          "rationale": "Private AgentName, ExpertiseKey, SelectionLimit and DelegationDepth retain their scalar invariants through declarations, routing, delegation, scheduling, lifecycle admission, SQL and HTTP/CLI adapters. Valid string/numeric codecs and complete conversation seeds retain their wire values; the unbound seed uses Maybe AgentName. JSON/Dhall/model inputs refine at admission. Positive-first compiler clients reject constructors, representation coercion, literals and Generic bypasses. ADR-87, six scalar cases, 569 pure/386 PostgreSQL/260 worker/95 server acceptance and 107 compiler clients cover this clause."
         },
         {
           "id": "distinct-compatibility-attribution-scopes",
@@ -206,97 +206,97 @@
         {
           "id": "full-run-keys-and-distinct-trigger-caller-keys",
           "disposition": "implemented",
-          "rationale": "Private nonempty RunKey remains in run acceptance, lifecycle refusals, SQL and status joins; a separate addressed caller RequestKey retains its own existing policy, distinct from the bounded HTTP key. Real queue/inbox controls reproduced equal caller keys across agents and agent/message delimiter collisions; v2 structured factories retain agent/route/source coordinates and native redelivery. CLI empty-key admission fails before configuration/stdin, and one-off invocation uses a native UUID nonce rather than allocating an unused Kioku session id. HTTP v2 and delegated child key bytes remain unchanged. ADR-88, 573 pure/386 PostgreSQL/262 worker/95 server cases, 118 compiler clients and 82 CLI checks cover this clause. Fresh producer identities intentionally reset under the unused first-release exception; full scalar/allocated-identity review remains pending."
+          "rationale": "Private nonempty RunKey remains in run acceptance, lifecycle refusals, SQL and status joins; a separate addressed caller RequestKey retains its own existing policy, distinct from the bounded HTTP key. Real queue/inbox controls reproduced equal caller keys across agents and agent/message delimiter collisions; v2 structured factories retain agent/route/source coordinates and native redelivery. CLI empty-key admission fails before configuration/stdin, and one-off invocation uses a native UUID nonce rather than allocating an unused Kioku session id. HTTP v2 and delegated child key bytes remain unchanged. ADR-88, 573 pure/386 PostgreSQL/262 worker/95 server cases, 118 compiler clients and 82 CLI checks cover this clause. Fresh producer identities intentionally reset under the unused first-release exception; full scalar/allocated-identity review is resolved by the final exhaustive-census clause."
         },
         {
           "id": "checked-protected-payload-units",
           "disposition": "implemented",
-          "rationale": "Private PayloadId, PayloadDigest and PayloadByteCount retain locator, canonical hash and positive int64 byte units through references, execution bindings, stores and retained Git/process routing. Complete valid JSON bytes remain unchanged; owner body/scope/kind/access checks remain authoritative and persistent size policy stays separate from ephemeral inputs. Real body-table corruption regressions preserve CorruptReplay/SessionBindingConflict. ADR-89, 577 pure/388 PostgreSQL/262 worker/95 server cases and 133 compiler clients cover this clause; complete scalar/identity and other JSON-row corruption review remain pending."
+          "rationale": "Private PayloadId, PayloadDigest and PayloadByteCount retain locator, canonical hash and positive int64 byte units through references, execution bindings, stores and retained Git/process routing. Complete valid JSON bytes remain unchanged; owner body/scope/kind/access checks remain authoritative and persistent size policy stays separate from ephemeral inputs. Real body-table corruption regressions preserve CorruptReplay/SessionBindingConflict. ADR-89, 577 pure/388 PostgreSQL/262 worker/95 server cases and 133 compiler clients cover this clause; complete scalar/identity and other JSON-row corruption review are resolved by the final exhaustive-census clause."
         },
         {
           "id": "transactional-execution-and-session-json-refinement",
           "disposition": "implemented",
-          "rationale": "Two new PostgreSQL controls reproduce stored-reference corruption disguised as storage unavailability, with three existing malformed-data controls passing. Execution/session statement results now capture Either () typed values; owner transaction traversal produces CorruptReplay/SessionBindingConflict before commit. Native guards and true transport failures retain their behavior. The focused five and full 577 pure/390 PostgreSQL/262 worker/95 server plus native/domain/diagram/82 CLI/live HTTP checks pass under ADR-90. Other owners and complete scalar/identity review remain pending."
+          "rationale": "Two new PostgreSQL controls reproduce stored-reference corruption disguised as storage unavailability, with three existing malformed-data controls passing. Execution/session statement results now capture Either () typed values; owner transaction traversal produces CorruptReplay/SessionBindingConflict before commit. Native guards and true transport failures retain their behavior. The focused five and full 577 pure/390 PostgreSQL/262 worker/95 server plus native/domain/diagram/82 CLI/live HTTP checks pass under ADR-90. Other owners and complete scalar/identity review are resolved by the final exhaustive-census clause."
         },
         {
           "id": "operation-uncertainty-and-call-receipt-ordinals",
           "disposition": "implemented",
-          "rationale": "OperationUncertainty retains explicit states and exact boolean JSON; private positive int64 CallOrdinal stays distinct from the observed selection count. Checked next-ordinal admission preserves refusal priority and SQL/SDK rendering stays explicit. Complete operation and actual accepted-receipt byte controls precede invalid values; 141 compiler clients prevent substitution/private construction/Generic bypasses. ADR-91 and 578 pure/390 PostgreSQL/262 worker/95 server plus native/domain/diagram/82 CLI/live HTTP checks cover this clause; complete scalar/identity review remains pending."
+          "rationale": "OperationUncertainty retains explicit states and exact boolean JSON; private positive int64 CallOrdinal stays distinct from the observed selection count. Checked next-ordinal admission preserves refusal priority and SQL/SDK rendering stays explicit. Complete operation and actual accepted-receipt byte controls precede invalid values; 141 compiler clients prevent substitution/private construction/Generic bypasses. ADR-91 and 578 pure/390 PostgreSQL/262 worker/95 server plus native/domain/diagram/82 CLI/live HTTP checks cover this clause; complete scalar/identity review is resolved by the final exhaustive-census clause."
         },
         {
           "id": "checked-review-values-and-source-citation-coordinates",
           "disposition": "implemented",
-          "rationale": "Six private review types reject blank/out-of-range values without Generic/Num/IsString construction, retaining complete valid fixture and scalar bytes. Explicit raw content-plane hash Text refines once; graph/owner/authorization checks remain. A before public-validator case reproduces opaque path/hash citation aliasing; v2 length-prefixed commitments separate admitted coordinates with frozen vectors. ADR-92 and 581 pure/390 PostgreSQL/262 worker/95 server plus 170 compiler/native/domain/diagram/82 CLI/live HTTP checks cover this clause. Fresh source identity meaning intentionally resets under ADR-27, without a historical factory fallback or live Mori claim. Complete scalar/allocated-identity review remains pending."
+          "rationale": "Six private review types reject blank/out-of-range values without Generic/Num/IsString construction, retaining complete valid fixture and scalar bytes. Explicit raw content-plane hash Text refines once; graph/owner/authorization checks remain. A before public-validator case reproduces opaque path/hash citation aliasing; v2 length-prefixed commitments separate admitted coordinates with frozen vectors. ADR-92 and 581 pure/390 PostgreSQL/262 worker/95 server plus 170 compiler/native/domain/diagram/82 CLI/live HTTP checks cover this clause. Fresh source identity meaning intentionally resets under ADR-27, without a historical factory fallback or live Mori claim. Complete scalar/allocated-identity review is resolved by the final exhaustive-census clause."
         },
         {
           "id": "allocated-review-entities-and-durable-request-receipts",
           "disposition": "implemented",
-          "rationale": "Private KindID-v7 ReviewId/ResolutionId replace entity derivations. Creator/request-bound receipts retain concurrent, lost-response and cross-workflow recovery; current owner/metadata are rechecked before publication. The declared allocation step precedes model work. ID-free resolution authorization binds the full canonical command before enqueue; owner allocation precedes candidate recording and complete allocated results feed history. Migration integrity, live schema drift refusal, record-before-retire and loser cleanup remain qualified. ADR-93, 580 pure/394 PostgreSQL/262 worker/95 server, 184 compiler clients, native/domain/diagram/82 CLI/live HTTP acceptance cover this clause. Exactly one retained AgentRun WorkflowBodyChanged finding establishes the intentional unused first-release reset; complete scalar/identity review remains pending."
+          "rationale": "Private KindID-v7 ReviewId/ResolutionId replace entity derivations. Creator/request-bound receipts retain concurrent, lost-response and cross-workflow recovery; current owner/metadata are rechecked before publication. The declared allocation step precedes model work. ID-free resolution authorization binds the full canonical command before enqueue; owner allocation precedes candidate recording and complete allocated results feed history. Migration integrity, live schema drift refusal, record-before-retire and loser cleanup remain qualified. ADR-93, 580 pure/394 PostgreSQL/262 worker/95 server, 184 compiler clients, native/domain/diagram/82 CLI/live HTTP acceptance cover this clause. Exactly one retained AgentRun WorkflowBodyChanged finding establishes the intentional unused first-release reset; complete scalar/identity review is resolved by the final exhaustive-census clause."
         },
         {
           "id": "allocated-accounting-entities-and-native-root-origins",
           "disposition": "implemented",
-          "rationale": "Private KindID-v7 ExecutionRootId/AttemptId/AllocationId replace arbitrary-text/UUIDv4/derived-root identity. Native-run origin receipts bind creator, agent and immutable envelope and publish atomically with roots; real races, lost-response recovery, binding refusals, zero-row rollback and retry pass. Existing conservation, fencing, inheritance and settlement retain their rules. Delegation captures checked root restoration; operator arguments refine before configuration IO. ADR-94, 581 pure/397 PostgreSQL/262 worker/95 server, 200 compiler clients, native/domain/diagram/83 CLI/live HTTP and twelve reviewed schema additions cover this clause. Native neutrality does not establish old opaque-payload compatibility. Logical operation locators, complete scalar/identity and remaining decoder-owner review remain pending."
+          "rationale": "Private KindID-v7 ExecutionRootId/AttemptId/AllocationId replace arbitrary-text/UUIDv4/derived-root identity. Native-run origin receipts bind creator, agent and immutable envelope and publish atomically with roots; real races, lost-response recovery, binding refusals, zero-row rollback and retry pass. Existing conservation, fencing, inheritance and settlement retain their rules. Delegation captures checked root restoration; operator arguments refine before configuration IO. ADR-94, 581 pure/397 PostgreSQL/262 worker/95 server, 200 compiler clients, native/domain/diagram/83 CLI/live HTTP and twelve reviewed schema additions cover this clause. Native neutrality does not establish old opaque-payload compatibility. Logical operation locators, complete scalar/identity and remaining decoder-owner review are resolved by the final exhaustive-census clause."
         },
         {
           "id": "checked-logical-operation-locators",
           "disposition": "implemented",
-          "rationale": "ADR-53 and actual execution/cursor, native-child, worker/Objective receipt and retained-handoff call sites establish concrete locator authorities separate from allocated accounting entities. Private non-Generic OperationId rejects empty admission while exact string bytes, prefixes and preimages remain. Owner length/scope/fingerprint/revision/authorization policies stay in place; operator flags refine before configuration IO. Malformed pending workspace keys return an owning refusal and preserve an unresolved fence before receipt publication. ADR-95, 582 pure/397 PostgreSQL/262 worker/95 server, 206 compiler, native/domain/diagram/84 CLI/live HTTP acceptance cover this clause. Complete scalar/identity and remaining decoder-owner review remain pending."
+          "rationale": "ADR-53 and actual execution/cursor, native-child, worker/Objective receipt and retained-handoff call sites establish concrete locator authorities separate from allocated accounting entities. Private non-Generic OperationId rejects empty admission while exact string bytes, prefixes and preimages remain. Owner length/scope/fingerprint/revision/authorization policies stay in place; operator flags refine before configuration IO. Malformed pending workspace keys return an owning refusal and preserve an unresolved fence before receipt publication. ADR-95, 582 pure/397 PostgreSQL/262 worker/95 server, 206 compiler, native/domain/diagram/84 CLI/live HTTP acceptance cover this clause. Complete scalar/identity and remaining decoder-owner review are resolved by the final exhaustive-census clause."
         },
         {
           "id": "decision-call-identity-and-ordinal",
           "disposition": "implemented",
-          "rationale": "ADR-96 retains application-owned actual-call expectations as private canonical KindID-v7 DecisionCallId values through tokens, outcomes, reports and memory maps. Distinct positive signed-int64 DecisionCallOrdinal values reject invalid JSON and cannot substitute for selection ordinals. SQL/correlation/provider adapters project explicitly; retained ownership, run locks and resource ceilings remain. Wrong-ordinal completion and malformed retained-ID controls refuse before successful state publication. Program/model and the complete scalar census remain pending."
+          "rationale": "ADR-96 retains application-owned actual-call expectations as private canonical KindID-v7 DecisionCallId values through tokens, outcomes, reports and memory maps. Distinct positive signed-int64 DecisionCallOrdinal values reject invalid JSON and cannot substitute for selection ordinals. SQL/correlation/provider adapters project explicitly; retained ownership, run locks and resource ceilings remain. Wrong-ordinal completion and malformed retained-ID controls refuse before successful state publication."
         },
         {
           "id": "program-registration-values",
           "disposition": "implemented",
-          "rationale": "ADR-97 retains seven registration identities/versions as private nominal-scoped ProgramIdentity values after boundary refinement; complete descriptor decoding rejects emptiness. The computed ProgramParameterDigest has its concrete canonical SHA-256 encoding and preserves the existing domain/preimage. A closed ParametersV1 format retains numeric one. Opaque implementation/version labels preserve admitted bytes without invented hash/version syntax. Complete immutable binding and Haskell type-witness checks remain; unrelated model/decision values and the complete census stay pending."
+          "rationale": "ADR-97 retains seven registration identities/versions as private nominal-scoped ProgramIdentity values after boundary refinement; complete descriptor decoding rejects emptiness. The computed ProgramParameterDigest has its concrete canonical SHA-256 encoding and preserves the existing domain/preimage. A closed ParametersV1 format retains numeric one. Opaque implementation/version labels preserve admitted bytes without invented hash/version syntax."
         },
         {
           "id": "owned-resource-row-decoding",
           "disposition": "implemented",
-          "rationale": "ADR-98 captures ResourcesStore root/operation/attempt/allocation FromJSON refusals as typed row data and condemns the transaction before returning ResourceStateCorrupt. Concrete SQL failures keep StoreError. Five positive-first PostgreSQL corruption cases fail against the original decoder and pass with explicit refusal, preserved holds and coupled/batch rollback. Valid queries, locks, limits and native owners remain; other stores and the full scalar/identity census remain pending."
+          "rationale": "ADR-98 captures ResourcesStore root/operation/attempt/allocation FromJSON refusals as typed row data and condemns the transaction before returning ResourceStateCorrupt. Concrete SQL failures keep StoreError. Five positive-first PostgreSQL corruption cases fail against the original decoder and pass with explicit refusal, preserved holds and coupled/batch rollback."
         },
         {
           "id": "owned-assignment-call-row-decoding",
           "disposition": "implemented",
-          "rationale": "ADR-99 captures SelectionStore assignment/call/bounded-list FromJSON refusals as typed row data, condemns inside the read and returns CallStateCorrupt. Admission, completion, reconciliation and inspection preserve that ownership; CLI inspection distinguishes it from outer StoreError and absent valid history. Positive two-call PostgreSQL controls reject a malformed whole set without dropping a member, preserve holds and roll back coupled root publication; SQL-failure controls remain outer store errors. Other stores and the full scalar/identity census remain pending."
+          "rationale": "ADR-99 captures SelectionStore assignment/call/bounded-list FromJSON refusals as typed row data, condemns inside the read and returns CallStateCorrupt. Admission, completion, reconciliation and inspection preserve that ownership; CLI inspection distinguishes it from outer StoreError and absent valid history. Positive two-call PostgreSQL controls reject a malformed whole set without dropping a member, preserve holds and roll back coupled root publication; SQL-failure controls remain outer store errors."
         },
         {
           "id": "owned-git-intent-decoding-and-format",
           "disposition": "implemented",
-          "rationale": "ADR-100 retains a closed numeric-one GitRecordFormat and typed optional Git/origin reads. Malformed JSON, unexpected SQL NULL, unsupported format and invalid joined origin condemn inside the transaction with WorkspaceBindingConflict. The provider preserves FileEffectUnresolved for data and FileEffectUnavailable for SQL failure; it cannot treat bad intent as missing. Positive-first controls preserve the common barrier, roll back tentative freeze and keep lost-ack HEAD/publication singular. Other workspace stores and the full scalar/identity census remain pending."
+          "rationale": "ADR-100 retains a closed numeric-one GitRecordFormat and typed optional Git/origin reads. Malformed JSON, unexpected SQL NULL, unsupported format and invalid joined origin condemn inside the transaction with WorkspaceBindingConflict. The provider preserves FileEffectUnresolved for data and FileEffectUnavailable for SQL failure; it cannot treat bad intent as missing. Positive-first controls preserve the common barrier, roll back tentative freeze and keep lost-ack HEAD/publication singular."
         },
         {
           "id": "owned-process-intent-decoding-and-routing-format",
           "disposition": "implemented",
-          "rationale": "ADR-101 captures ProcessStore direct/joined FromJSON refusals as typed row data, condemns inside the read and preserves WorkspaceBindingConflict rather than missing intent. Supervisor data remains unresolved while SQL failure is unavailable. Closed numeric-one ProcessRoutingFormat preserves process/file routing bytes and original coordinates. Positive controls preserve the barrier, roll back a freeze and keep accepted-attempt uncertainty/one launch without fabricated receipt. Other workspace stores and the full scalar/identity census remain pending."
+          "rationale": "ADR-101 captures ProcessStore direct/joined FromJSON refusals as typed row data, condemns inside the read and preserves WorkspaceBindingConflict rather than missing intent. Supervisor data remains unresolved while SQL failure is unavailable. Closed numeric-one ProcessRoutingFormat preserves process/file routing bytes and original coordinates. Positive controls preserve the barrier, roll back a freeze and keep accepted-attempt uncertainty/one launch without fabricated receipt."
         },
         {
           "id": "workspace-entity-allocation",
           "disposition": "implemented",
-          "rationale": "ADR-102 retains a private checked UUIDv7 WorkspaceId beside the unchanged technical origin/provider locator. PostgreSQL 18 allocates inside the existing immutable origin reservation; concurrent/lost-response requests return its committed winner and refusal condemns the transaction. Fresh DDL uniquely binds the identity to protected JSON. Real concurrent, rollback, immutable-conflict, follow-up/transfer and action-proof controls pass. Binding digests intentionally reset under ADR-27; the full scalar/identity and other decoder-owner review remains pending."
+          "rationale": "ADR-102 retains a private checked UUIDv7 WorkspaceId beside the unchanged technical origin/provider locator. PostgreSQL 18 allocates inside the existing immutable origin reservation; concurrent/lost-response requests return its committed winner and refusal condemns the transaction. Fresh DDL uniquely binds the identity to protected JSON. Real concurrent, rollback, immutable-conflict, follow-up/transfer and action-proof controls pass. Binding digests intentionally reset under ADR-27; the full scalar/identity and other decoder-owner review is resolved by the final exhaustive-census clause."
         },
         {
           "id": "model-alias-domain-through-permissions",
           "disposition": "implemented",
-          "rationale": "ADR-103 seals the exact nonempty model lookup name and retains it through catalog/configuration, declarations, policies, requests, selections, queued jobs, delegation and worker receipts. Checked JSON/Dhall codecs preserve valid strings; consumer-specific syntax/cardinality/key bounds remain with their owners. Positive retained-field compiler clients and actual model/profile/inherited permission controls pass. Other model metadata/decision scalars and the complete census remain pending."
+          "rationale": "ADR-103 seals the exact nonempty model lookup name and retains it through catalog/configuration, declarations, policies, requests, selections, queued jobs, delegation and worker receipts. Checked JSON/Dhall codecs preserve valid strings; consumer-specific syntax/cardinality/key bounds remain with their owners. Positive retained-field compiler clients and actual model/profile/inherited permission controls pass."
         },
         {
           "id": "model-registration-coordinates-and-commitment",
           "disposition": "implemented",
-          "rationale": "ADR-104 retains private nominal-scoped model version and credential-binding key/version values after the existing nonempty registration boundary, with complete checked descriptor JSON. The computed ModelDescriptorDigest retains its exact canonical SHA-256 encoding/domain/preimage. Real former-preimage, codec, scope/Generic compiler and model/evidence/recovery controls pass. Provider tuple values, other decision scalars and the full census remain pending."
+          "rationale": "ADR-104 retains private nominal-scoped model version and credential-binding key/version values after the existing nonempty registration boundary, with complete checked descriptor JSON. The computed ModelDescriptorDigest retains its exact canonical SHA-256 encoding/domain/preimage. Real former-preimage, codec, scope/Generic compiler and model/evidence/recovery controls pass."
         },
         {
           "id": "foreign-provider-tuple-domains",
           "disposition": "implemented",
-          "rationale": "ADR-105 retains private nominal provider/API/endpoint/vendor-model coordinates through actual SDK capture, ProviderCall, signed-profile AllowedCall, ModelDescriptor and evidence-to-policy comparisons. Total exact-text capture preserves foreign custom vocabulary without invented syntax or allocated identity. The unchanged literal profile bytes, exact HTTP/CLI tuple refusals, actual model/thinking dispatch and compiler scope/Generic controls pass. Other profile/decision values, decoder owners and complete classification remain pending."
+          "rationale": "ADR-105 retains private nominal provider/API/endpoint/vendor-model coordinates through actual SDK capture, ProviderCall, signed-profile AllowedCall, ModelDescriptor and evidence-to-policy comparisons. Total exact-text capture preserves foreign custom vocabulary without invented syntax or allocated identity. The unchanged literal profile bytes, exact HTTP/CLI tuple refusals, actual model/thinking dispatch and compiler scope/Generic controls pass. Other profile/decision values, decoder owners and complete classification are resolved by the final exhaustive-census clause."
         },
         {
           "id": "complete-domain-scalar-and-identity-census",
-          "disposition": "deferred",
-          "rationale": "Explicit follow-up under ADR-106 and plan108 after the user requested bounded macOS upgrade completion. Plan 108 has classified all 4,119 declaration/member keys across 325 modules and 974 declarations, with zero missing or pending entries. Its fresh inventory retains 421 explicit violations; exhaustive remediation remains open. Accepted individual clauses retain their evidence. This is not a compliance or non-applicability claim."
+          "disposition": "implemented",
+          "rationale": "Plan 108 completes the source-bound audit on c5a4caf: 331 modules, 1,049 declarations, 14 role entrypoints and all 4,253 keys classified, with 3,964 compliant entries, 289 justified exclusions, zero violations and no pending keys. Private nominal wrappers, native identities and checked owner decoders preserve original positive wire values and identity recipes. All 531 public compiler controls pass; complete behavioral runs plus the three actual repaired-fixture reruns cover every case. The full build, independent freshness checker and replay-neutral native workflow gate pass. No debt waiver or Linux runtime claim is used."
         }
       ],
       "evidence": [
@@ -442,9 +442,15 @@
         "docs/evidence/keiro-0.22/provider-coordinates-fold-identities.json",
         "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md",
         "docs/adr/0106-the-keiro-upgrade-closes-on-a-bounded-macos-profile.md",
-        "docs/evidence/keiro-0.22/macos-final-qualification.json"
+        "docs/evidence/keiro-0.22/macos-final-qualification.json",
+        "docs/evidence/plan-108/domain-classification.json",
+        "docs/evidence/keiro-0.22/domain-declarations.json",
+        "docs/evidence/plan-108/final-verification.json",
+        "docs/evidence/plan-108/final-values-source.json",
+        "docs/evidence/plan-108/final-values-keiro-gate.json",
+        "docs/evidence/plan-108/final-reconciliation.json",
+        "docs/evidence/plan-108/acceptance.md"
       ],
-      "followUp": "docs/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md",
       "scopeDecision": "docs/adr/0106-the-keiro-upgrade-closes-on-a-bounded-macos-profile.md"
     },
     {

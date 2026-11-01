@@ -1654,3 +1654,34 @@ workspace-scope controls and four resume-policy controls. The two stale positive
 signatures in the opaque-value fixture now reflect the already admitted Natural
 call ordinal and native/scoped instruction-bundle inputs. No production API was
 weakened to satisfy these controls. Total current compiler controls: 531.
+
+
+## Final exhaustive acceptance
+
+Source `c5a4caf` passes the complete workspace build after its source commit and
+native compatibility gate against `4ac29de`. The raw native diff and replay-impact
+reports are retained unchanged as `final-values-keiro-diff.json` and
+`final-values-keiro-replay-impact.json`: zero findings, no breaking change,
+replay-neutral verdict and passing conformance. Metadata is separate in
+`final-values-keiro-gate.json`.
+
+The persisted schema-2 census contains 331 modules, 1,049 declarations and 14
+entrypoints. All 4,253 keys are classified: 3,964 compliant, 289 justified
+exclusions, zero violations and zero pending entries. The resolved-only independent
+checker verifies exact source, compiled interface and tool hashes. The 41 removed
+or moved keys and their old dispositions are retained in `final-reconciliation.json`;
+36 were former findings whose successor representations are independently reviewed.
+No unresolved finding is excluded because of cost.
+
+The 531 current compiler controls pass. Every runtime case has actual passing
+evidence: 632 core, 472 PostgreSQL, 280 serial worker, 95 server, 37 agent, 31 API
+and nine client cases, combining the broad runs and the three targeted corrected-
+fixture reruns described above. Domain conformance, six diagram cases, 24 checker
+controls, 21 upgrade controls and 13 style controls pass. The corrected fixtures
+and the broad runs use identical production code; no additional broad rerun is
+claimed. Commands and exact disposition details are in `final-verification.json`.
+
+The guide row and exhaustive census clause are implemented. The frozen 124-source
+and 93-release identities are unchanged. M1, M2 and M3 are complete. FRIC-36,
+FRIC-37 and FRIC-38 have accepted, documented triage outcomes. All acceptance is
+on arm64 macOS; prototype compilation adds no Linux runtime qualification.
