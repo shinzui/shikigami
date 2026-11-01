@@ -1067,5 +1067,16 @@ git diff --check
 
 ADR-22 records the native coordinate and owning-read constraints. No workflow
 step/label/order, valid journal result, identity recipe or migration changes. The
-required native gate, full build and fresh census/classification reconciliation
-follow the source commit. All milestones and the guide deferral remain open.
+native gate passes on `abb2cf0` against `82cf413`, with no findings, a replay-
+neutral verdict and all 156 conformance checks. Exact reports are retained in
+`sink-coordinates-keiro-gate.json`, `sink-coordinates-keiro-diff.json` and
+`sink-coordinates-replay-impact.json`.
+
+The coherent full build and fresh census pass on `abb2cf0`: 324 modules, 936
+declarations and 4,053 keys. All eight agent/session/ordinal findings are resolved;
+the eight new ordinal/context keys and all 18 source environment keys are
+classified after producer/consumer review. The classification totals 864 keys
+(785 compliant, 35 excluded, 44 known violations). Both modes correctly refuse
+3,189 missing keys after source/build/tool/entry validation. The frozen 124-source/
+93-item inventory and 21 mutation checks pass; the earlier unchanged-tool 24-case
+result remains applicable. All milestones and the guide deferral remain open.

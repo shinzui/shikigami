@@ -63,9 +63,9 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 
 Implementation is under way. The schema-2 census and coverage/freshness checker
 pass 24 positive/mutation tests against a successful full GHC 9.12.4 macOS build.
-The current census has 4,045 declaration/member keys. Semantic classification
-covers 838 keys: 751 compliant entries, 35 exclusions and 52 explicit violations;
-3,207 keys remain unreviewed, and both coverage modes correctly refuse completion.
+The current census has 4,053 declaration/member keys. Semantic classification
+covers 864 keys: 785 compliant entries, 35 exclusions and 44 explicit violations;
+3,189 keys remain unreviewed, and both coverage modes correctly refuse completion.
 
 Process-profile, Objective, cleanup/listing, directory, sink, HTTP acceptance and
 workspace binding/file/transfer read boundaries now have owning transactional
@@ -183,9 +183,12 @@ admission. An old compiled valid-session encoder supplies the exact wire golden;
 synthetic run labels are now negative data. Owning receipt queries bind all five
 intent coordinates, refusing both malformed and well-formed foreign rows with
 composed rollback, no extra HTTP and exact repair. See
-`docs/evidence/plan-108/sink-coordinates-source.json`. The required native
-workflow gate and coherent build/census reconciliation follow this source
-checkpoint; scalar detail and external-reference findings remain open.
+`docs/evidence/plan-108/sink-coordinates-source.json`. The native gate passes
+on `abb2cf0` against `82cf413`: no findings, replay-neutral, 156 conformance
+checks. The full build and fresh census pass: 324 modules, 936 declarations and
+4,053 keys. Eight findings are resolved; eight new scalar/context keys and all
+18 source environment keys are classified. Both modes correctly refuse 3,189
+missing keys. Scalar detail and external-reference findings remain open.
 
 The native workflow gate passes on `400cdc0` against `af76f1b`, with no findings
 and a replay-neutral native verdict. Exact reports accompany the current evidence.

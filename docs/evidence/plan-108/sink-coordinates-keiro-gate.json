@@ -1,0 +1,12 @@
+{
+  "sourceParent": "82cf413",
+  "candidate": "abb2cf0",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "command": "nix develop --no-write-lock-file -c just keiro-gate 82cf413",
+  "exitCode": 0,
+  "nativeDiff": "sink-coordinates-keiro-diff.json",
+  "replayImpact": "sink-coordinates-replay-impact.json",
+  "generatedConformance": "passed",
+  "limitations": "Native workflow steps, labels, identity recipes and valid journal result codecs retain their meaning. The pre-change valid-session wire golden and actual owning receipt/publisher controls independently qualify the representation; formerly malformed queued coordinates now refuse explicitly without a new first-release waiver."
+}
