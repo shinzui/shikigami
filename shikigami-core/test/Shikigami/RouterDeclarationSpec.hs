@@ -4,6 +4,7 @@ import Data.Either (isLeft)
 import Data.Generics.Labels ()
 import Data.Text qualified as Text
 import Numeric.Natural (Natural)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl
   ( AgentDecl (..),
     AmbiguousPolicy (ReturnAmbiguous),
@@ -15,6 +16,7 @@ import Shikigami.Agent.Decl
     Trigger (..),
     defaultMemoryPolicy,
   )
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.ExpertiseKey (ExpertiseKey, parseExpertiseKey)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Prelude
@@ -27,6 +29,7 @@ import Shikigami.Router.Declaration
     validatedRouterDeclaration,
   )
 import Shikigami.Router.SelectionLimit (SelectionLimit, parseSelectionLimit, selectionLimitNatural)
+import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -75,10 +78,10 @@ baseRouter =
   AgentDecl
     { name = fixtureAgentName "architecture-practice-router",
       description = "Routes architecture practice reviews",
-      trigger = Event {eventType = "proof.architecture-practice"},
+      trigger = Event {eventType = declarationCoordinate ("proof.architecture-practice")},
       behavior =
         ShikumiProgram
-          { task = "noop-summary",
+          { task = declarationCoordinate ("noop-summary"),
             preferEnrichment = False,
             grounding = Nothing,
             enabledBy = Nothing
@@ -90,7 +93,7 @@ baseRouter =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,

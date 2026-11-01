@@ -53,6 +53,7 @@ import Handan.Contract (Envelope (..), Status (ErrorS))
 import Handan.Runtime (Runtime, newRuntime)
 import Handan.Task (Task (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Behavior.Error
   ( FailureClass (..),
     RunError (..),
@@ -164,8 +165,8 @@ runBehavior env decl input
         )
   | otherwise = case (.behavior) decl of
       ShikumiProgram {task = t} ->
-        case lookupTask t of
-          Nothing -> pure (Left (UnknownTask t))
+        case lookupTask (declarationCoordinateText t) of
+          Nothing -> pure (Left (UnknownTask (declarationCoordinateText t)))
           Just tk -> runProgramTask ((.runtime) env) tk input
       Skill {path = p} ->
         runSkillWith
@@ -173,7 +174,7 @@ runBehavior env decl input
           ((.options) env)
           ((.tools) env)
           ((.toolTurnLimit) env)
-          (SkillDir (Text.unpack p))
+          (SkillDir (Text.unpack (declarationCoordinateText p)))
           input
           (completeBehaviorRequest env)
       Flow {} ->

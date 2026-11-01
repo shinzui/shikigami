@@ -67,7 +67,7 @@ agentView env decl = do
     AgentView
       { name = agentNameText decl.name,
         description = decl.description,
-        enabled = decl.enabled,
+        enabled = Decl.agentEnabled decl.enabled,
         trigger = case decl.trigger of
           Decl.Schedule {} -> "schedule"
           Decl.Stream {} -> "stream"
@@ -80,7 +80,7 @@ agentView env decl = do
           Decl.Flow {} -> "flow",
         sinks = fmap sinkKind decl.sinks,
         delegates = map agentNameText decl.delegates,
-        principalId = (.principal) <$> decl.identity,
+        principalId = (Decl.declarationCoordinateText . (.principal)) <$> decl.identity,
         lifecycle = case lifecycle of
           Catalog.LifecycleActive -> "active"
           Catalog.LifecyclePaused -> "paused"

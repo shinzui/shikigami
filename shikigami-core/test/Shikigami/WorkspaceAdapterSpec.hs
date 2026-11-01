@@ -2,12 +2,15 @@ module Shikigami.WorkspaceAdapterSpec (tests) where
 
 import Data.Aeson (object)
 import Data.Either (isLeft)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (Behavior (Skill))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Capability.Catalog
 import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider
 import Shikigami.Execution.Coordinate qualified as ExecutionValue
 import Shikigami.Execution.Policy.Types
+import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -46,7 +49,7 @@ tests =
     descriptor = CapabilityDescriptor capability revision [CapabilityToolDescriptor "edit" IdempotentMutation]
     adapter = DurableAdapter descriptor [DurableToolContract (ExecutionValue.executionCoordinate "edit") "Edit." (object []) IdempotentEffect NoInvoiceCost] unavailable
     unavailable _ _ _ = assertFailure "admission invoked an adapter callback" >> fail "unreachable"
-    subject = ResolutionSubject (Just "worker") Durable (Skill "fixture") Nothing
+    subject = ResolutionSubject (fmap declarationCoordinate ((Just "worker"))) Durable (Skill (declarationCoordinate ("fixture"))) Nothing
     allow _ _ = Right ()
     right :: (Show e) => Either e a -> IO a
     right = either (\err -> assertFailure (show err) >> fail "unreachable") pure

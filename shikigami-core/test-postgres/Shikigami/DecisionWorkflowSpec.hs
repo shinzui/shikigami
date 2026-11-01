@@ -30,7 +30,9 @@ import Keiro.Outbox qualified as Outbox
 import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowOutcome (..), WorkflowRunOptions (..), loadStepIndex, runWorkflowWith)
 import Keiro.Workflow.Child.Schema (lookupChildrenOfParent)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), ProfileRequirement (..), RecipientFrom (SubjectOwner), RouterConfidence (RoutingHigh), SignalType (Reminder), Sink (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate (delegatedWorkflowIdV2)
 import Shikigami.Agent.ExpertiseKey (ExpertiseKey, parseExpertiseKey)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
@@ -40,6 +42,7 @@ import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Attestation.Compliance (ComplianceDecision (..), ComplianceRollUp (..))
 import Shikigami.Attestation.PolicyValue qualified as PV
+import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile, resolvedProfileFor)
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
@@ -63,6 +66,7 @@ import Shikigami.Router.Catalog (CandidateCatalog (..))
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
 import Shikigami.RouterWorkflowSpec qualified as Fixture
 import Shikigami.Sink (GrantSource (StaticGrants), SinkKind (SKizashiSignal))
+import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Shikumi.Program (Program (FMap))
 import System.Directory (doesFileExist)
@@ -81,7 +85,7 @@ catalog :: ModelCatalog
 catalog = mustRight (modelCatalog [a, b])
 
 declaration :: AgentDecl
-declaration = (Fixture.routerDecl & #behavior .~ (Flow {name = "shikumi-decision-example"}) & #decisionModels .~ (map fixtureModelAlias ["triage", "investigate"]))
+declaration = (Fixture.routerDecl & #behavior .~ (Flow {name = declarationCoordinate ("shikumi-decision-example")}) & #decisionModels .~ (map fixtureModelAlias ["triage", "investigate"]))
 
 job :: Text -> RunJob
 job key = (Fixture.routerJob key) {triggerPayload = object ["request" .= ("Investigate the architecture practice" :: Text)]}
@@ -185,7 +189,7 @@ tests fixture =
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned
           hooks <- crashAt False "record"
-          let withSink = (declaration & #sinks .~ ([KizashiSignal "shinzui/shikigami" Reminder Normal 50 SubjectOwner (Just "recipient") "decision complete" []]))
+          let withSink = (declaration & #sinks .~ ([KizashiSignal (activityCoordinate ("shinzui/shikigami")) Reminder Normal (either (error . show) id (parseSignalImportance (50))) SubjectOwner (fmap declarationCoordinate ((Just "recipient"))) "decision complete" []]))
               runtime = (deps app store behavior handler (Decision.defaultDecisionServices catalog)) {Agent.hooks = hooks, Agent.agents = [withSink, Fixture.successSpecialist "first"], Agent.grants = StaticGrants (Map.singleton "router" (Set.singleton SKizashiSignal))}
               request = job "decision-completed-replay"
           first <- try @SomeException (Agent.runAgentRunWorkflow runtime request)
@@ -279,7 +283,7 @@ tests fixture =
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned
           let policy = profileFor ["stub-triage", "stub-investigate"]
-              declared = (declaration & #sanctionedProfile .~ (Just (ProfileRequirement "decision-profile" (Just "1"))))
+              declared = (declaration & #sanctionedProfile .~ (Just (ProfileRequirement (ProfileId ("decision-profile")) (fmap ProfileVersion ((Just "1"))))))
               runtime =
                 (deps app store behavior handler (Decision.defaultDecisionServices catalog))
                   { Agent.agents = [declared],
@@ -293,7 +297,7 @@ tests fixture =
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned
           let policy = profileFor ["stub-triage"]
-              declared = (declaration & #sanctionedProfile .~ (Just (ProfileRequirement "decision-profile" (Just "1"))))
+              declared = (declaration & #sanctionedProfile .~ (Just (ProfileRequirement (ProfileId ("decision-profile")) (fmap ProfileVersion ((Just "1"))))))
               runtime =
                 (deps app store behavior handler (Decision.defaultDecisionServices catalog))
                   { Agent.agents = [declared],
@@ -306,7 +310,7 @@ tests fixture =
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned
           let policy = profileFor ["stub-triage", "stub-investigate"]
-              declared = (Fixture.routerDecl & #sanctionedProfile .~ (Just (ProfileRequirement "decision-profile" (Just "1"))))
+              declared = (Fixture.routerDecl & #sanctionedProfile .~ (Just (ProfileRequirement (ProfileId ("decision-profile")) (fmap ProfileVersion ((Just "1"))))))
               runtime =
                 (deps app store behavior handler (Decision.defaultDecisionServices catalog))
                   { Agent.agents = [declared],

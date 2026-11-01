@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.Agent.Conversation
   ( ConversationEnv (..),
     ConversationTurnFailure (..),
@@ -82,6 +84,7 @@ import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
 import Shikigami.Agent.Decl qualified as Agent
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Agent.Principal
   ( AgentIdentity (..),
@@ -155,7 +158,7 @@ conversationRunTimeout ConversationEnv {runTimeout = timeout} = timeout
 conversationIdleTimeout :: ConversationEnv -> NominalDiffTime
 conversationIdleTimeout ConversationEnv {idleTimeout = timeout} = timeout
 
-declaredPrincipalId :: AgentDecl -> Maybe Text
+declaredPrincipalId :: AgentDecl -> Maybe (DeclarationCoordinate "principal")
 declaredPrincipalId AgentDecl {identity} = declared <$> identity
   where
     declared IdentityDecl {principal} = principal
@@ -845,7 +848,7 @@ admitConversationExecution :: ConversationEnv -> ResolvedAgentIdentity -> AgentD
 admitConversationExecution env recordedIdentity decl msg executionContext = do
   profileResolution <- step (StepName "resolve-conversation-profile") $ liftIO case decl.sanctionedProfile of
     Nothing -> pure (Right Nothing)
-    Just Agent.ProfileRequirement {profileId, version} -> fmap Just <$> env.resolveRunProfile (ProfileId profileId) (ProfileVersion <$> version)
+    Just Agent.ProfileRequirement {profileId, version} -> fmap Just <$> env.resolveRunProfile profileId version
   case profileResolution of
     Left refusal -> pure (Left (renderProfileResolutionError refusal))
     Right profile -> do
@@ -922,14 +925,14 @@ processSelectedTurn env selectedBehavior recordedIdentity decl msg@AddressedMess
               }
       Right <$> step (StepName "turn-result") (pure result)
 
-runConversationSkillStep :: ConversationEnv -> ResolvedAgentIdentity -> AgentDecl -> AddressedMessage -> SessionId -> RecordedTurn -> Maybe ResolvedProfile -> Selection.ExecutionSelection -> Text -> Eff (Workflow : AppEffects) (Either Text Value)
+runConversationSkillStep :: ConversationEnv -> ResolvedAgentIdentity -> AgentDecl -> AddressedMessage -> SessionId -> RecordedTurn -> Maybe ResolvedProfile -> Selection.ExecutionSelection -> DeclarationCoordinate "skill-path" -> Eff (Workflow : AppEffects) (Either Text Value)
 runConversationSkillStep env recordedIdentity decl msg sid userTurn profile selection path = do
   (_, workflowId) <- currentWorkflow
   let runtime = conversationExecutionRuntime env
       describe = ExecutionTools.describeExecutionTools Log.silentLogger denyAllActionAuthorizer emptyCapabilityProviderRegistry (ExecutionTools.staticNativeTools env.behaviorEnv.tools)
       assignment =
         ExecutionStart.SkillAssignment
-          { runId = workflowId.unWorkflowId,
+          { runId = workflowId,
             agent = decl.name,
             identity = resolvedIdentity recordedIdentity,
             sessionId = sid,
@@ -937,7 +940,7 @@ runConversationSkillStep env recordedIdentity decl msg sid userTurn profile sele
             sanctionedProfile = profile,
             capabilities = emptyResolvedCapabilitySet,
             policy = Harness.narrowHarnessPolicy env.harness decl.harness,
-            skillDir = SkillDir (Text.unpack path),
+            skillDir = SkillDir (Text.unpack (declarationCoordinateText path)),
             input = do
               prior <- loadTurns env sid
               pure do
@@ -984,7 +987,7 @@ conversationExecutionRuntime env =
             profile = snapshot.sanctionedProfile,
             providers = env.decisions.providers,
             baseEnv = env.behaviorEnv,
-            runId = runCorrelationId snapshot.runId,
+            runId = runCorrelationId snapshot.runId.unWorkflowId,
             authorize = authority snapshot,
             transact = SelectionRuntime.selectionTransaction env.appEnv env.deliveryPool
           },

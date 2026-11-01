@@ -10,6 +10,8 @@ module Shikigami.Capability.Provider
   ( CapabilityRuntime (..),
     emptyCapabilityRuntime,
     CapabilityScope (..),
+    CapabilityRun (..),
+    capabilityRunText,
     CapabilityAcquireError (..),
     CapabilityReleaseError (..),
     CapabilityLease (..),
@@ -47,12 +49,14 @@ import Data.Text qualified as Text
 import Effectful.Dispatch.Static (unsafeEff_)
 import Effectful.Error.Static (throwError)
 import GHC.Generics (Generic)
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kikan.En.Action (AgentAction (..), actionValueErrorText, mkCapabilityTarget, mkCapabilityToolTarget)
 import Shikigami.Action.Authorization
   ( ActionAuthorizationFailure (..),
     ActionAuthorizer (..),
     authorizationFailureDetail,
   )
+import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, declarationCoordinateText)
 import Shikigami.Behavior.Error (boundedBehaviorDetail)
 import Shikigami.Capability.Catalog
   ( CapabilityCatalog,
@@ -104,9 +108,16 @@ emptyCapabilityRuntime =
     }
 
 -- | Public, non-secret inputs a provider may use to scope one acquisition.
+data CapabilityRun = WorkflowRun !WorkflowId | OneOffRun !Text
+  deriving stock (Eq, Show, Generic)
+
+capabilityRunText :: CapabilityRun -> Text
+capabilityRunText (WorkflowRun workflow) = workflow.unWorkflowId
+capabilityRunText (OneOffRun identifier) = identifier
+
 data CapabilityScope = CapabilityScope
-  { runId :: !Text,
-    principal :: !Text,
+  { runId :: !CapabilityRun,
+    principal :: !(DeclarationCoordinate "principal"),
     mode :: !ExecutionMode
   }
   deriving stock (Eq, Show, Generic)
@@ -134,7 +145,7 @@ data CapabilityProvider = CapabilityProvider
 data CapabilityProviderRegistry
   = CapabilityProviderRegistry
       (Map (CapabilityId, CapabilityRevision) CapabilityProvider)
-      (Map (CapabilityId, CapabilityRevision, Text) DurableAdapter)
+      (Map (CapabilityId, CapabilityRevision, DescriptorDigest) DurableAdapter)
 
 data CapabilityProviderRegistryError
   = DuplicateCapabilityProvider
@@ -366,7 +377,7 @@ authorizeProvider :: ActionAuthorizer -> CapabilityScope -> CapabilityDescriptor
 authorizeProvider ActionAuthorizer {authorize} CapabilityScope {principal} CapabilityDescriptor {capability, revision} =
   case mkCapabilityTarget (capabilityIdText capability) (capabilityRevisionText revision) of
     Left problem -> pure (Left (ActionCoordinatesInvalid (actionValueErrorText problem)))
-    Right target -> fmap (const ()) <$> authorize principal (ConnectCapability target)
+    Right target -> fmap (const ()) <$> authorize (declarationCoordinateText principal) (ConnectCapability target)
 
 guardCapabilityTool :: ActionAuthorizer -> CapabilityScope -> CapabilityDescriptor -> SomeTool -> SomeTool
 guardCapabilityTool ActionAuthorizer {authorize} CapabilityScope {principal} CapabilityDescriptor {capability, revision} (SomeTool Tool {name, description, run}) =
@@ -379,7 +390,7 @@ guardCapabilityTool ActionAuthorizer {authorize} CapabilityScope {principal} Cap
             unsafeEff_
               case mkCapabilityToolTarget (capabilityIdText capability) (capabilityRevisionText revision) name of
                 Left problem -> pure (Left (ActionCoordinatesInvalid (actionValueErrorText problem)))
-                Right target -> authorize principal (InvokeCapabilityTool target)
+                Right target -> authorize (declarationCoordinateText principal) (InvokeCapabilityTool target)
           case authorization of
             Right _ -> run input
             Left failure@ActionPolicyDenied {} -> throwError (ValidationFailure (authorizationFailureDetail failure))
@@ -391,7 +402,7 @@ guardCapabilityTool ActionAuthorizer {authorize} CapabilityScope {principal} Cap
       unsafeEff_
         case mkCapabilityToolTarget (capabilityIdText capability) (capabilityRevisionText revision) name of
           Left problem -> pure (Left (ActionCoordinatesInvalid (actionValueErrorText problem)))
-          Right target -> authorize principal (InvokeCapabilityTool target)
+          Right target -> authorize (declarationCoordinateText principal) (InvokeCapabilityTool target)
     case authorization of
       Right _ -> run input
       Left failure@ActionPolicyDenied {} -> throwError (ValidationFailure (authorizationFailureDetail failure))
@@ -447,7 +458,7 @@ logReleaseFailed logger scope descriptor detail =
 
 lifecycleFields :: CapabilityScope -> CapabilityDescriptor -> [Text] -> [Pair]
 lifecycleFields CapabilityScope {runId, principal, mode} CapabilityDescriptor {capability, revision} names =
-  [ "run_id" .= runId,
+  [ "run_id" .= capabilityRunText runId,
     "principal" .= principal,
     "mode" .= mode,
     "capability" .= capabilityIdText capability,
@@ -504,5 +515,7 @@ resolveDurableAdapter (CapabilityProviderRegistry _ registry) descriptor = Map.l
 durableAdapterInstalled :: CapabilityProviderRegistry -> CapabilityDescriptor -> Bool
 durableAdapterInstalled registry descriptor = maybe False (const True) (resolveDurableAdapter registry descriptor)
 
-descriptorDigest :: CapabilityDescriptor -> Text
-descriptorDigest = versionedDigest "shikigami.durable-adapter-descriptor/1" . Aeson.toJSON
+newtype DescriptorDigest = DescriptorDigest Text deriving stock (Eq, Ord)
+
+descriptorDigest :: CapabilityDescriptor -> DescriptorDigest
+descriptorDigest = DescriptorDigest . versionedDigest "shikigami.durable-adapter-descriptor/1" . Aeson.toJSON

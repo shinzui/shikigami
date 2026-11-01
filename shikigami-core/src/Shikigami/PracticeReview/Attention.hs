@@ -305,10 +305,10 @@ attentionOutput AttentionProjection {key = attentionKey, reviewId, intent} =
 attentionSink :: AttentionProjection -> Agent.Sink
 attentionSink AttentionProjection {intent} =
   Agent.KizashiSignal
-    { Agent.source = "shinzui/shikigami",
+    { Agent.source = Agent.activityCoordinate "shinzui/shikigami",
       Agent.signalType = Agent.TaskCandidate,
       Agent.priority = Agent.High,
-      Agent.importance = 8,
+      Agent.importance = either (error . show) id (Agent.parseSignalImportance 8),
       Agent.recipientFrom = Agent.Actor,
       Agent.defaultRecipient = Nothing,
       Agent.intentTemplate = intent,

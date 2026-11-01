@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Imperative delegation from one durable agent run to another.
 module Shikigami.Agent.Delegate
   ( Delegated (..),
@@ -35,6 +37,7 @@ import Keiro.Workflow.Child (ChildHandle, WorkflowChildCancelled (..), WorkflowC
 import Kiroku.Store.Effect (Store)
 import Numeric.Natural (Natural)
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), RouterPolicy (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..), assertMayDelegate, checkCycle, checkDepth)
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity)
@@ -308,7 +311,7 @@ delegateBatch declarations directory decl ctx catalog requests = do
     spawnPrepared PreparedDelegation {request = DelegationRequest {key, target, payload}} =
       delegate declarations directory decl ctx key target payload
 
-declaredPrincipalId :: AgentDecl -> Maybe Text
+declaredPrincipalId :: AgentDecl -> Maybe (DeclarationCoordinate "principal")
 declaredPrincipalId AgentDecl {identity} = (.principal) <$> identity
 
 -- | Suspend until the delegated child completes and decode its behavior output.

@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | The guarded channel-egress client. Shikigami authenticates only to Kanmon;
 -- provider credentials and destination authorization remain downstream.
 module Shikigami.Sink.KanmonClient
@@ -20,6 +22,7 @@ import Data.Text.Encoding qualified as TextEncoding
 import Network.HTTP.Types.Header (Header)
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Decl (Sink (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Prelude
 import Shikigami.Sink.Config (KanmonConfig (..))
 import Shikigami.Sink.Http (HttpEnv, HttpFailure, postJSONWithHeaders, renderHttpFailure)
@@ -57,15 +60,15 @@ buildEgressRequest ctx@SinkContext {conversationKey = resolvedConversationKey, t
             triggeringActivityId = nonEmpty resolvedTriggeringActivityId
           }
 
-postEgress :: HttpEnv -> KanmonConfig -> Text -> Text -> EgressActionRequest -> IO (Either KanmonError EgressActionResponse)
+postEgress :: HttpEnv -> KanmonConfig -> DeclarationCoordinate "channel" -> DeclarationCoordinate "channel-action" -> EgressActionRequest -> IO (Either KanmonError EgressActionResponse)
 postEgress env = postEgressWithHeaders env []
 
-postEgressWithHeaders :: HttpEnv -> [Header] -> KanmonConfig -> Text -> Text -> EgressActionRequest -> IO (Either KanmonError EgressActionResponse)
+postEgressWithHeaders :: HttpEnv -> [Header] -> KanmonConfig -> DeclarationCoordinate "channel" -> DeclarationCoordinate "channel-action" -> EgressActionRequest -> IO (Either KanmonError EgressActionResponse)
 postEgressWithHeaders env headers KanmonConfig {baseUrl} channel action request =
-  case validateRoute channel action of
+  case validateRoute (declarationCoordinateText channel) (declarationCoordinateText action) of
     Left problem -> pure (Left (KanmonUsageError problem))
     Right () -> do
-      let url = Text.dropWhileEnd (== '/') baseUrl <> "/channels/" <> channel <> "/actions/" <> action
+      let url = Text.dropWhileEnd (== '/') baseUrl <> "/channels/" <> declarationCoordinateText channel <> "/actions/" <> declarationCoordinateText action
       postJSONWithHeaders env headers url request <&> \case
         Left failure -> Left (KanmonHttpError failure)
         Right body ->
@@ -94,7 +97,7 @@ validateRoute channel action = do
 
 declaredKey :: Sink -> Maybe Text
 declaredKey = \case
-  ChannelEgress {conversationKey} -> nonEmpty conversationKey
+  ChannelEgress {conversationKey} -> nonEmpty (declarationCoordinateText <$> conversationKey)
   _ -> Nothing
 
 objectText :: Text -> Value -> Maybe Text
@@ -107,7 +110,7 @@ objectText key = \case
 
 activitySubjectId :: Maybe Activity.ActivityEnvelope -> Maybe Text
 activitySubjectId = \case
-  Just Activity.ActivityEnvelope {Activity.subject = Activity.Subject {Activity.subjectId}} -> nonEmpty (Just subjectId)
+  Just Activity.ActivityEnvelope {Activity.subject = Activity.Subject {Activity.subjectId}} -> nonEmpty (Just (Activity.activityCoordinateText subjectId))
   Nothing -> Nothing
 
 firstNonEmpty :: [Maybe Text] -> Maybe Text

@@ -25,6 +25,7 @@ where
 
 import Data.Text qualified as Text
 import Shikigami.Agent.Decl (AgentDecl (..), RecipientFrom (..), Sink (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Prelude
 
 -- | Every declaration error in an agent's sinks, in declaration order.
@@ -45,9 +46,9 @@ sinkErrors = \case
             <> " requires defaultRecipient (no ownership directory exists to resolve it)"
         ]
   ChannelEgress {channel, action, conversationKey} ->
-    routeErrors "channel" channel
-      <> routeErrors "action" action
-      <> ["conversationKey must be non-empty when declared" | maybe False (Text.null . Text.strip) conversationKey]
+    routeErrors "channel" (declarationCoordinateText channel)
+      <> routeErrors "action" (declarationCoordinateText action)
+      <> ["conversationKey must be non-empty when declared" | maybe False (Text.null . Text.strip . declarationCoordinateText) conversationKey]
   _ -> []
 
 -- | Validate one path component in Kanmon's channel-action route. The client

@@ -17,8 +17,10 @@ import Keiro.Workflow (StepName (..), Workflow, step)
 import Kioku.Api.Types (MemoryRecord (..))
 import Numeric.Natural (Natural)
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa), ApprovalRequest (..))
 import Shikigami.Agent.Decl (Priority (High, Urgent), RecipientFrom (AreaOwner), SignalType (Alert), Sink (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Flow.Acknowledgement (Ack (..), Acknowledgement, awaitAck)
 import Shikigami.Flow.Capability (Activity, Memory, MemoryQuery (..), currentActivity, emitSignal, recall, remember)
 import Shikigami.Flow.Capability qualified as Capability
@@ -77,7 +79,7 @@ atRiskCustomerFlow payload = do
 -- it was, so a fresh database still produces the verdict the workflow tests pin.
 classifyRisk :: ActivityEnvelope -> [MemoryRecord] -> Value -> RiskVerdict
 classifyRisk activity prior input =
-  let ticket = (.subjectId) ((.subject) activity)
+  let ticket = activityCoordinateText ((.subjectId) ((.subject) activity))
       textBlob = Text.toLower (Text.unwords (textFields input <> textFields ((.payload) activity)))
       risks = riskFields input <> riskFields ((.payload) activity)
       highByEnrichment =
@@ -105,17 +107,17 @@ mentionsPriorEscalation ticket MemoryRecord {content} =
 
 riskQuery :: ActivityEnvelope -> MemoryQuery
 riskQuery ActivityEnvelope {subject} =
-  MemoryQuery ("customer risk history for " <> (.subjectId) subject)
+  MemoryQuery ("customer risk history for " <> activityCoordinateText ((.subjectId) subject))
 
 alertFor :: RiskVerdict -> ActivityEnvelope -> Sink
 alertFor verdict activity =
   riskSignal
     "Relationship at risk: {verdict.rationale}"
     High
-    80
+    (either (error . show) id (parseSignalImportance 80))
     [ "verb:relationship.at_risk",
       "subject:" <> activitySubjectType activity,
-      "activity:" <> (.activityId) activity,
+      "activity:" <> activityCoordinateText ((.activityId) activity),
       "ticket:" <> (.ticketId) verdict
     ]
 
@@ -124,28 +126,28 @@ escalationFor verdict activity =
   riskSignal
     "Escalate unacknowledged at-risk customer: {verdict.rationale}"
     Urgent
-    95
+    (either (error . show) id (parseSignalImportance 95))
     [ "verb:relationship.escalation_required",
       "subject:" <> activitySubjectType activity,
-      "activity:" <> (.activityId) activity,
+      "activity:" <> activityCoordinateText ((.activityId) activity),
       "ticket:" <> (.ticketId) verdict
     ]
 
-riskSignal :: Text -> Priority -> Natural -> [Text] -> Sink
+riskSignal :: Text -> Priority -> SignalImportance -> [Text] -> Sink
 riskSignal intentTemplate priority importance extraContextTags =
   KizashiSignal
-    { source = "shinzui/shikigami",
+    { source = activityCoordinate "shinzui/shikigami",
       signalType = Alert,
       priority,
       importance,
       recipientFrom = AreaOwner,
-      defaultRecipient = Just "role_relationship_owner",
+      defaultRecipient = Just (declarationCoordinate "role_relationship_owner"),
       intentTemplate,
       extraContextTags
     }
 
 activitySubjectType :: ActivityEnvelope -> Text
-activitySubjectType ActivityEnvelope {subject = Subject {kind = subjectType}} = subjectType
+activitySubjectType ActivityEnvelope {subject = Subject {kind = subjectType}} = activityCoordinateText subjectType
 
 ackRequest :: RiskVerdict -> ActivityEnvelope -> ApprovalRequest
 ackRequest verdict activity =

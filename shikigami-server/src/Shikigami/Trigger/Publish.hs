@@ -17,6 +17,7 @@ import Kafka.Effectful (produceMessageSync, runKafkaProducer)
 import Kafka.Producer (BrokerAddress (..), ProducePartition (UnassignedPartition), ProducerRecord (..), TopicName (..), brokersList)
 import Kafka.Types (KafkaError, headersFromList)
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
+import Shikigami.Activity.Coordinate (activityCoordinateText)
 import Shikigami.Prelude
 
 -- | Publish one envelope to the topic on the broker. Returns a typed error on failure.
@@ -29,19 +30,19 @@ publishEnvelope broker topic env = do
       -- (PreferIntegrationMessageId), which is the envelope's activity_id.
       headers =
         headersFromList
-          [ ("keiro-message-id", TE.encodeUtf8 aid),
-            ("keiro-source", TE.encodeUtf8 src),
+          [ ("keiro-message-id", TE.encodeUtf8 (activityCoordinateText aid)),
+            ("keiro-source", TE.encodeUtf8 (activityCoordinateText src)),
             ("keiro-destination", TE.encodeUtf8 topic),
-            ("keiro-event-type", TE.encodeUtf8 vb),
+            ("keiro-event-type", TE.encodeUtf8 (activityCoordinateText vb)),
             ("keiro-schema-version", "1"),
             ("content-type", "application/json"),
-            ("keiro-occurred-at", TE.encodeUtf8 oat)
+            ("keiro-occurred-at", TE.encodeUtf8 (activityCoordinateText oat))
           ]
       record =
         ProducerRecord
           { prTopic = TopicName topic,
             prPartition = UnassignedPartition,
-            prKey = Just (TE.encodeUtf8 sid),
+            prKey = Just (TE.encodeUtf8 (activityCoordinateText sid)),
             prValue = Just (LBS.toStrict (encode env)),
             prHeaders = headers
           }

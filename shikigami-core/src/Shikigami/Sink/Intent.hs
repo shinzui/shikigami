@@ -54,7 +54,7 @@ import Kioku.Id (SessionId, idText)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizationFailure (..), authorizationFailureDetail)
-import Shikigami.Activity (ActivityEnvelope)
+import Shikigami.Activity (ActivityEnvelope, activityCoordinateText)
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Agent.Name (AgentName)
@@ -436,7 +436,7 @@ egressMetadata :: Sink -> Maybe ActivityEnvelope -> Value -> (Maybe Text, Maybe 
 egressMetadata sink activity output = case sink of
   ChannelEgress {} ->
     ( resolveConversationKey sink activity output,
-      (.activityId) <$> activity
+      (activityCoordinateText . (.activityId)) <$> activity
     )
   _ -> (Nothing, Nothing)
 

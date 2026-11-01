@@ -398,10 +398,10 @@ allCitations :: EvidenceBundle -> [EvidenceItem]
 allCitations EvidenceBundle {target, references, upstream} = citations (target <> references <> upstream)
 
 reviewHistorySink :: Agent.Sink
-reviewHistorySink = Agent.KawaDigest {Agent.subjectType = "practice-review", Agent.verb = "practice-review.completed"}
+reviewHistorySink = Agent.KawaDigest {Agent.subjectType = Agent.activityCoordinate "practice-review", Agent.verb = Agent.activityCoordinate "practice-review.completed"}
 
 resolutionHistorySink :: Agent.Sink
-resolutionHistorySink = Agent.KawaDigest {Agent.subjectType = "practice-review", Agent.verb = "practice-review.resolved"}
+resolutionHistorySink = Agent.KawaDigest {Agent.subjectType = Agent.activityCoordinate "practice-review", Agent.verb = Agent.activityCoordinate "practice-review.resolved"}
 
 reviewHistoryPayload :: PracticeReviewVerdict -> Value
 reviewHistoryPayload verdict@PracticeReviewVerdict {reviewId, targetEvidence, referenceEvidence, upstreamEvidence} =

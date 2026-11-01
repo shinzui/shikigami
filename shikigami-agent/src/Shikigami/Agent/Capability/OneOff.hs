@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Operator-owned capability composition for the two one-off commands.
 module Shikigami.Agent.Capability.OneOff
   ( OneOffCapabilityError (..),
@@ -22,6 +24,7 @@ import Shikigami.Agent.Capability.Workspace
   )
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
 import Shikigami.Agent.Decl qualified as Agent
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Behavior.Run qualified as Behavior
 import Shikigami.Capability.Catalog
@@ -40,6 +43,7 @@ import Shikigami.Capability.Overlay
   )
 import Shikigami.Capability.Provider
   ( CapabilityProviderRegistryError,
+    CapabilityRun (..),
     CapabilityRuntime (..),
     CapabilityRuntimeError,
     CapabilityScope (..),
@@ -120,7 +124,7 @@ withOneOffCapabilityOverlays logger actionAuthorizer workspaceArgument decl@Agen
                       unique <- newUnique
                       let runtimeScope =
                             CapabilityScope
-                              { runId = "one-off:" <> Text.pack (show (hashUnique unique)),
+                              { runId = OneOffRun ("one-off:" <> Text.pack (show (hashUnique unique))),
                                 principal = declaredPrincipal,
                                 mode = OneOff
                               }
@@ -148,12 +152,12 @@ withOneOffCapabilityOverlays logger actionAuthorizer workspaceArgument decl@Agen
     declaredPrincipal =
       case principalText decl of
         Just value -> value
-        Nothing -> ""
+        Nothing -> declarationCoordinate ""
 
 authorizeForMode :: ExecutionMode -> ResolutionSubject -> CapabilityDescriptor -> Either CapabilityResolutionError ()
 authorizeForMode expectedMode ResolutionSubject {principal, mode} descriptor@CapabilityDescriptor {capability, tools}
   | mode /= expectedMode = denied (executionModeText expectedMode <> " workspace capability used in the wrong execution mode")
-  | maybe True Text.null principal = denied "a non-empty declared principal is required"
+  | maybe True (Text.null . declarationCoordinateText) principal = denied "a non-empty declared principal is required"
   | descriptor /= workspaceReadDescriptor = denied "only the immutable workspace.read revision 1 descriptor is installed"
   | capability /= workspaceReadId = denied "only workspace.read is authorized"
   | any ((/= Observation) . operationClassOf) tools = denied "workspace.read admits observation tools only"
@@ -167,7 +171,7 @@ executionModeText = \case
   OneOff -> "one-off"
   Durable -> "durable"
 
-principalText :: AgentDecl -> Maybe Text
+principalText :: AgentDecl -> Maybe (DeclarationCoordinate "principal")
 principalText AgentDecl {identity} =
   case identity of
     Nothing -> Nothing

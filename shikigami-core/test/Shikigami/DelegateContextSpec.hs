@@ -2,11 +2,14 @@ module Shikigami.DelegateContextSpec (tests) where
 
 import Data.Foldable (traverse_)
 import Data.Text (Text)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..), assertMayDelegate, checkCycle, checkDepth)
 import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
+import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertEqual, testCase)
 
@@ -64,7 +67,7 @@ delegatingAgent =
   AgentDecl
     { name = fixtureAgentName "lead",
       description = "delegation guard fixture",
-      trigger = Event {eventType = "test"},
+      trigger = Event {eventType = declarationCoordinate ("test")},
       behavior = Deterministic {rule = "test", params = mempty},
       sinks = [],
       delegates = map fixtureAgentName ["worker"],
@@ -73,7 +76,7 @@ delegatingAgent =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,

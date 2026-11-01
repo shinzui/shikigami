@@ -42,6 +42,7 @@ import Settei (answer, defaultResolveOptions, resolve)
 import Settei.Env (envSnapshot, environmentSource)
 import Shikigami.Action.Authorization (ActionAuthorizationFailure (..), ActionAuthorizer (..), allowAllActionAuthorizerForTests)
 import Shikigami.Activity qualified as Activity
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl
@@ -55,6 +56,7 @@ import Shikigami.Agent.Decl
     defaultDelegationBudget,
     defaultMemoryPolicy,
   )
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..))
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), ResolvedAgentIdentity (VerifiedAgent), compatibilityIdentity, mkAgentPrincipal)
@@ -84,6 +86,7 @@ import Shikigami.Sink.GrantStore qualified as GrantStore
 import Shikigami.Sink.Http (credentialsFromConfig, newSinkHttp)
 import Shikigami.Sink.Wire qualified as Wire
 import Shikigami.Telemetry.TraceContext qualified as TraceContext
+import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase, (@?=))
 
@@ -276,7 +279,7 @@ journalTruth databaseFixture =
 
 egressIntentMetadata :: DatabaseFixture -> IO ()
 egressIntentMetadata databaseFixture =
-  (withFixture databaseFixture) "egress-metadata" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
+  (withFixture databaseFixture) "egress-metadata" [ChannelEgress {channel = declarationCoordinate ("intercom"), action = declarationCoordinate ("reply_to_conversation"), conversationKey = fmap declarationCoordinate (Nothing)}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
     _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" (compatibilityIdentity (fixtureAgentName "heartbeat")) SChannelEgress (Just "test")
     [row] <- runWorkflowAndRows deps appEnv ((runJob & #triggerPayload .~ (Aeson.toJSON triggeringActivity)))
     case Integration.decodeJsonIntegrationEvent (rowEvent row) of
@@ -288,22 +291,22 @@ egressIntentMetadata databaseFixture =
 triggeringActivity :: Activity.ActivityEnvelope
 triggeringActivity =
   Activity.ActivityEnvelope
-    { Activity.activityId = "act_channel_1",
-      Activity.occurredAt = "2026-08-23T12:00:00Z",
-      Activity.source = "external/intercom",
-      Activity.actor = Activity.Actor {Activity.kind = "human", Activity.id = "person_42", Activity.session = Nothing},
-      Activity.subject = Activity.Subject {Activity.kind = "conversation", Activity.subjectId = "conv_55012"},
-      Activity.verb = "conversation.message_received",
+    { Activity.activityId = activityCoordinate ("act_channel_1"),
+      Activity.occurredAt = activityCoordinate ("2026-08-23T12:00:00Z"),
+      Activity.source = activityCoordinate ("external/intercom"),
+      Activity.actor = Activity.Actor {Activity.kind = either (error . show) id (parseActorKind ("human")), Activity.id = activityCoordinate ("person_42"), Activity.session = fmap activityCoordinate (Nothing)},
+      Activity.subject = Activity.Subject {Activity.kind = activityCoordinate ("conversation"), Activity.subjectId = activityCoordinate ("conv_55012")},
+      Activity.verb = activityCoordinate ("conversation.message_received"),
       Activity.payload = object ["text" .= ("Could I get an update?" :: Text)],
       Activity.contextRefs = [],
-      Activity.idempotencyKey = "intercom-message-1"
+      Activity.idempotencyKey = activityCoordinate ("intercom-message-1")
     }
 
 egressReceiptRecording :: DatabaseFixture -> IO ()
 egressReceiptRecording databaseFixture = do
   requests <- newIORef []
   testWithApplication (pure (kanmonApp requests)) \port ->
-    (withFixture databaseFixture) "egress-receipt" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
+    (withFixture databaseFixture) "egress-receipt" [ChannelEgress {channel = declarationCoordinate ("intercom"), action = declarationCoordinate ("reply_to_conversation"), conversationKey = fmap declarationCoordinate (Nothing)}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
       _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" (compatibilityIdentity (fixtureAgentName "heartbeat")) SChannelEgress (Just "test")
       authenticatedHttp <- expectRight "construct authenticated sink HTTP" =<< newSinkHttp testHttpLimits (credentialsFromConfig kanmonTestConfig) unreachableDanwa
       let configuredDeps =
@@ -334,7 +337,7 @@ egressPermanentRejection :: DatabaseFixture -> IO ()
 egressPermanentRejection databaseFixture = do
   requests <- newIORef (0 :: Int)
   testWithApplication (pure (rejectingKanmonApp requests)) \port ->
-    (withFixture databaseFixture) "egress-403" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
+    (withFixture databaseFixture) "egress-403" [ChannelEgress {channel = declarationCoordinate ("intercom"), action = declarationCoordinate ("reply_to_conversation"), conversationKey = fmap declarationCoordinate (Nothing)}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
       _ <- expectRight "grant ChannelEgress" =<< GrantStore.upsertGrant pool "heartbeat" (compatibilityIdentity (fixtureAgentName "heartbeat")) SChannelEgress (Just "test")
       let configuredDeps = (deps & #kanmon .~ (KanmonConfig {baseUrl = localBaseUrl port}))
       [row] <- runWorkflowAndRows configuredDeps appEnv ((runJob & #triggerPayload .~ (Aeson.toJSON triggeringActivity)))
@@ -350,7 +353,7 @@ egressDenied :: DatabaseFixture -> IO ()
 egressDenied databaseFixture = do
   requests <- newIORef (0 :: Int)
   testWithApplication (pure (rejectingKanmonApp requests)) \port ->
-    (withFixture databaseFixture) "egress-denied" [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
+    (withFixture databaseFixture) "egress-denied" [ChannelEgress {channel = declarationCoordinate ("intercom"), action = declarationCoordinate ("reply_to_conversation"), conversationKey = fmap declarationCoordinate (Nothing)}] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
       let configuredDeps = (deps & #kanmon .~ (KanmonConfig {baseUrl = localBaseUrl port}))
       rows <- runWorkflowAndRows configuredDeps appEnv ((runJob & #triggerPayload .~ (Aeson.toJSON triggeringActivity)))
       assertEqual "denied egress creates no outbox row" [] rows
@@ -599,7 +602,7 @@ mutableDirectory lifecycleRef = do
   directory <-
     newDirectoryHandle do
       lifecycle <- readIORef lifecycleRef
-      staticDirectorySource [PrincipalRecord {principalId = "agent_heartbeat", handle = "heartbeat", lifecycle}]
+      staticDirectorySource [PrincipalRecord {principalId = declarationCoordinate ("agent_heartbeat"), handle = declarationCoordinate ("heartbeat"), lifecycle}]
   refreshDirectory directory >>= either (assertFailure . Text.unpack) pure
   pure directory
 
@@ -623,10 +626,10 @@ agentDeclaration sinks =
   AgentDecl
     { name = fixtureAgentName "heartbeat",
       description = "sink delivery test agent",
-      trigger = Event {eventType = "test"},
+      trigger = Event {eventType = declarationCoordinate ("test")},
       behavior =
         ShikumiProgram
-          { task = "noop-summary",
+          { task = declarationCoordinate ("noop-summary"),
             preferEnrichment = False,
             grounding = Nothing,
             enabledBy = Nothing
@@ -638,7 +641,7 @@ agentDeclaration sinks =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,
@@ -675,12 +678,12 @@ verifiedHeartbeatIdentity = VerifiedAgent (either (error . Text.unpack) id (mkAg
 signalSink :: Text -> Sink
 signalSink requestedIntent =
   KizashiSignal
-    { source = "shinzui/shikigami",
+    { source = activityCoordinate ("shinzui/shikigami"),
       signalType = Reminder,
       priority = Normal,
-      importance = 50,
+      importance = either (error . show) id (parseSignalImportance (50)),
       recipientFrom = SubjectOwner,
-      defaultRecipient = Just "recipient",
+      defaultRecipient = fmap declarationCoordinate (Just "recipient"),
       intentTemplate = requestedIntent,
       extraContextTags = []
     }
@@ -808,7 +811,7 @@ receiptCommitGap databaseFixture = do
   remote <- newIORef Map.empty
   posts <- newIORef (0 :: Int)
   testWithApplication (pure (\request respond -> modifyIORef' posts (+ 1) >> kawaDoorwayApplication remote request respond)) \port ->
-    withFixture databaseFixture "receipt-gap" [KawaDigest {subjectType = "agent", verb = "completed"}] unreachableKizashi unreachableDanwa \base appEnv pool runJob -> do
+    withFixture databaseFixture "receipt-gap" [KawaDigest {subjectType = activityCoordinate ("agent"), verb = activityCoordinate ("completed")}] unreachableKizashi unreachableDanwa \base appEnv pool runJob -> do
       let deps = (base & #kawa .~ (KawaConfig {baseUrl = "http://127.0.0.1:" <> Text.pack (show port), sourceSegment = "shinzui/shikigami"}))
       [row] <- runWorkflowAndRows deps appEnv runJob
       expectRight "inject receipt commit failure" =<< Pool.use pool (Session.statement () (preparable "ALTER TABLE shikigami.sink_deliveries ADD CONSTRAINT receipt_gap CHECK (status <> 'delivered') NOT VALID" Encoders.noParams Decoders.noResult))
@@ -839,7 +842,7 @@ corruptDelivery fixture = do
   posts <- newIORef (0 :: Int)
   remote <- newIORef Map.empty
   testWithApplication (pure (\request respond -> modifyIORef' posts (+ 1) >> kawaDoorwayApplication remote request respond)) \port ->
-    withFixture fixture "corrupt-delivery" [KawaDigest {subjectType = "agent", verb = "completed"}] unreachableKizashi unreachableDanwa \base env pool job -> do
+    withFixture fixture "corrupt-delivery" [KawaDigest {subjectType = activityCoordinate ("agent"), verb = activityCoordinate ("completed")}] unreachableKizashi unreachableDanwa \base env pool job -> do
       let deps = base & #kawa .~ (KawaConfig {baseUrl = localBaseUrl port, sourceSegment = "shinzui/shikigami"})
           sql query = expectRight "SQL" =<< Pool.use pool (Session.statement () (preparable query Encoders.noParams Decoders.noResult))
       Delivery.lookupDelivery pool (Delivery.deliveryReceiptKey "absent-receipt") >>= (@?= Right Nothing)

@@ -7,7 +7,9 @@ import Data.Foldable (traverse_)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (secondsToNominalDiffTime)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Behavior.Error
   ( FailureClass (..),
@@ -17,6 +19,7 @@ import Shikigami.Behavior.Error
     classifyRunError,
   )
 import Shikigami.Behavior.Run (newBehaviorEnv, runBehaviorAttempt, runBehaviorAttemptWith, triggerOnly)
+import Shikigami.Trigger.Schedule (cronExpressionClaim, parseCron)
 import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase)
@@ -85,10 +88,10 @@ missingTaskAgent =
   AgentDecl
     { name = fixtureAgentName "missing-task-agent",
       description = "Exercises permanent behavior classification",
-      trigger = Schedule {cron = "* * * * *"},
+      trigger = Schedule {cron = cronExpressionClaim "* * * * *"},
       behavior =
         ShikumiProgram
-          { task = "missing-task",
+          { task = declarationCoordinate ("missing-task"),
             preferEnrichment = False,
             grounding = Nothing,
             enabledBy = Nothing
@@ -100,7 +103,7 @@ missingTaskAgent =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,

@@ -22,10 +22,13 @@ import Keiro.Workflow.Awakeable (AwakeableId (..), awakeableIdText, awakeableIdT
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
 import Keiro.Workflow.Gc (WorkflowGcPolicy (..), gcWorkflowsOnce)
 import Keiro.Workflow.Instance (lookupInstance)
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizationFailure (..), ActionAuthorizer (..), allowAllActionAuthorizerForTests)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill, Flow))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
@@ -58,6 +61,7 @@ import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RouterWorkflowSpec qualified as Fixture
 import Shikigami.StateRevision (StateRevision, initialRevision, parseRevision)
+import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.WorkerSession.Capability
 import Shikigami.WorkerSession.Handoff (TransferServices (..))
 import Shikigami.WorkerSession.Identity (sessionWorkflowId, sessionWorkflowName)
@@ -199,7 +203,7 @@ tests fixture =
       testCase "coordinating Skills require admitted scope and retain a worker tool instead of running a fixed supervisor" $
         withCapabilityFixture fixture \env admission host scope authorizer _ _ -> do
           behavior <- newBehaviorEnv
-          let declaration = scope.agent & #behavior .~ CoordinatingSkill "test/fixtures/durable-skill"
+          let declaration = scope.agent & #behavior .~ CoordinatingSkill (declarationCoordinate ("test/fixtures/durable-skill"))
               acceptedScope requested =
                 scope
                   & #run
@@ -293,7 +297,7 @@ withCapabilityFixture fixture callback = withFixture fixture \env admission _ ->
   version <- checkpointVersion admission
   (checkpoints, _) <- fixtureCheckpoints version False
   let run = CoordinatorRun (WorkflowId "capability-parent") admission.context.identity memory admission.context.executionRootId admission.context.executionPermissions
-      scope = CoordinationScope V1 run admission.scope.parent (admission.delegator & #behavior .~ CoordinatingSkill "fixture-coordinator") admission.context [WorkerSlot admission.scope.workerKey admission.worker admission.identity admission.objective (Just (Session.sessionIdFor admission))] (fixtureLimit 8) admission.maximumAssignments admission.mailboxLimit
+      scope = CoordinationScope V1 run admission.scope.parent (admission.delegator & #behavior .~ CoordinatingSkill (declarationCoordinate ("fixture-coordinator"))) admission.context [WorkerSlot admission.scope.workerKey admission.worker admission.identity admission.objective (Just (Session.sessionIdFor admission))] (fixtureLimit 8) admission.maximumAssignments admission.mailboxLimit
       sessions = SessionRuntime env [admission.delegator & #name .~ fixtureAgentName "worker" & #delegates .~ map fixtureAgentName []] disabledDirectoryHandle (const (pure (Right ()))) (Just checkpoints)
   current <- newIORef (Just scope)
   revoked <- newIORef False
@@ -313,7 +317,7 @@ snapshotFor scope = do
   now <- getCurrentTime
   let descriptor = ModelDescriptor (fixtureModelAlias "worker-model") (fixtureModelRegistration "1") (Model.modelDescriptorDigest (toJSON ("fixture-model" :: Text))) (Coordinate.providerCoordinate "fixture") (Coordinate.providerCoordinate "fixture") (Coordinate.providerCoordinate "fixture") (Coordinate.providerCoordinate "fixture") Nothing (fixtureModelRegistration "fixture") (fixtureModelRegistration "1")
       selection = ExecutionSelection (fixtureAssignment "coordination-assignment") descriptor (Aeson.object []) [fixtureModelAlias "worker-model"] Nothing scope.run.rootId ProcessDefault now
-  pure (Replay.ExecutionSnapshot V1 (Replay.executionIdFor selection.assignmentId) scope.run.runId.unWorkflowId (fixtureAgentName "coordinator") scope.run.identity scope.run.sessionId selection Nothing (Replay.SkillInstructions (ExecutionValue.executionCoordinate "fixture") "fixture" "fixture") (Replay.ReplayContext Replay.RequestContext Nothing [Replay.RequestTurn [Replay.TextBlock "coordinate"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] Nothing)
+  pure (Replay.ExecutionSnapshot V1 (Replay.executionIdFor selection.assignmentId) scope.run.runId (fixtureAgentName "coordinator") scope.run.identity scope.run.sessionId selection Nothing (Replay.SkillInstructions (ExecutionValue.executionCoordinate "fixture") "fixture" "fixture") (Replay.ReplayContext Replay.RequestContext Nothing [Replay.RequestTurn [Replay.TextBlock "coordinate"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] Nothing)
 
 executeTool :: BoundTool -> Aeson.Value -> IO ToolOutput
 executeTool tool arguments = expectRight =<< (expectRight =<< runEff (runErrorNoCallStack @ShikumiError (runLLM (runErasedOutput tool.tool arguments))))

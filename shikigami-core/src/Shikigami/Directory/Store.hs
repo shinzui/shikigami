@@ -39,6 +39,7 @@ import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Transaction
 import Hasql.Transaction.Sessions qualified as Transaction.Sessions
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Loader (AgentLoadEntry (..), AgentLoadReport (..), LoadError (..))
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Agent.Run.Key (RunKey, parseRunKey, runKeyText)
@@ -151,7 +152,7 @@ loadStateRows directory observedAt AgentLoadReport {entries} = fmap toRow entrie
               agentName = Just name,
               principalId = declaredPrincipal <$> identity,
               status = Loaded,
-              enabled = Just enabled,
+              enabled = Just (agentEnabled enabled),
               error = Nothing,
               observedAt
             }
@@ -168,7 +169,7 @@ loadStateRows directory observedAt AgentLoadReport {entries} = fmap toRow entrie
           }
 
 declaredPrincipal :: IdentityDecl -> Text
-declaredPrincipal IdentityDecl {principal} = principal
+declaredPrincipal IdentityDecl {principal} = declarationCoordinateText principal
 
 deleteDirectoryStatement :: Statement FilePath ()
 deleteDirectoryStatement =

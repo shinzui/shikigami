@@ -15,6 +15,7 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
+import Keiro.Workflow.Types (WorkflowId (..))
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId, executionRootIdText, operationIdText, parseOperationId)
@@ -52,7 +53,7 @@ reserveWorkspaceTx storageRoot request repository = do
               pure (Right pair)
             _ -> pure (Left WorkspaceBindingConflict)
     valid = validWorkspaceRequest storageRoot request
-    key = workspaceOriginKey (maybe (toJSON request.runId) toJSON request.assignment)
+    key = workspaceOriginKey (maybe (toJSON request.runId.unWorkflowId) toJSON request.assignment)
     -- This is the provider address of the natural origin, not its entity ID.
     resource = (workspaceRefForKey key).resource
     bindingFor identifier = WorkspaceBinding identifier request (workspaceRefForKey key) (repositoryIdentity repository) (repositoryBase repository) (repositoryPolicyRevision repository) storageRoot (repositorySource repository)
@@ -62,7 +63,7 @@ validWorkspaceRequest storageRoot request =
   let root = executionRootIdText request.rootId
       validKey value = not (Text.null value) && Text.length value <= 256 && not (Text.any (== '\0') value)
       validIdentity = either (const False) validKey . identityText
-   in storageRoot /= "/" && ".." `notElem` splitDirectories storageRoot && isAbsolute storageRoot && normalise storageRoot == storageRoot && not ('\0' `elem` storageRoot) && validKey request.runId && validKey root && validIdentity request.principal && validIdentity request.owner && revisionNumber request.epoch < 9223372036854775808 && maybe True (\(session, assignment) -> validKey session.value && validKey assignment.value) request.assignment
+   in storageRoot /= "/" && ".." `notElem` splitDirectories storageRoot && isAbsolute storageRoot && normalise storageRoot == storageRoot && not ('\0' `elem` storageRoot) && validKey request.runId.unWorkflowId && validKey root && validIdentity request.principal && validIdentity request.owner && revisionNumber request.epoch < 9223372036854775808 && maybe True (\(session, assignment) -> validKey session.value && validKey assignment.value) request.assignment
 
 -- | Reconstruct the existing provider locator from relational session/message
 -- coordinates, without trusting a JSON binding to discover its own location.
@@ -90,7 +91,7 @@ inspectWorkspaceTx ref
 
 checkedBinding :: WorkspaceRef -> (WorkspaceBinding, AllocationState) -> Either Text (WorkspaceBinding, AllocationState)
 checkedBinding ref pair@(binding, _)
-  | binding.workspace == ref && workspaceRefForKey (workspaceOriginKey (maybe (toJSON binding.request.runId) toJSON binding.request.assignment)) == ref && validWorkspaceRequest binding.storageRoot binding.request = Right pair
+  | binding.workspace == ref && workspaceRefForKey (workspaceOriginKey (maybe (toJSON binding.request.runId.unWorkflowId) toJSON binding.request.assignment)) == ref && validWorkspaceRequest binding.storageRoot binding.request = Right pair
   | otherwise = Left "workspace address or request mismatch"
 
 -- | Keep the original bounded page while decoding attribution before filtering

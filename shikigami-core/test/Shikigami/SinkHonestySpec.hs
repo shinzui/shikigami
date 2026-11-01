@@ -26,7 +26,10 @@ import Data.Text qualified as Text
 import Network.HTTP.Types (hContentType, status200, status404, status503)
 import Network.Wai (Application, pathInfo, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
+import Shikigami.Activity.Coordinate
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
+import Shikigami.Trigger.Schedule (cronExpressionClaim, parseCron)
 
 -- Qualified: @Actor@ names both an activity's actor and the routing strategy
 -- that reads it.
@@ -218,8 +221,8 @@ agentWith sinks =
   AgentDecl
     { name = fixtureAgentName "triage-note",
       description = "a declaration used only for its sinks",
-      trigger = Schedule {cron = "*/5 * * * *"},
-      behavior = Skill {path = "agents/skills/triage-note"},
+      trigger = Schedule {cron = cronExpressionClaim "*/5 * * * *"},
+      behavior = Skill {path = declarationCoordinate ("agents/skills/triage-note")},
       sinks,
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
@@ -227,7 +230,7 @@ agentWith sinks =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,
@@ -238,34 +241,34 @@ agentWith sinks =
 signalWith :: RecipientFrom -> Maybe Text -> Sink
 signalWith recipientFrom defaultRecipient =
   KizashiSignal
-    { source = "shinzui/shikigami",
+    { source = activityCoordinate ("shinzui/shikigami"),
       signalType = Alert,
       priority = High,
-      importance = 7,
+      importance = either (error . show) id (parseSignalImportance (7)),
       recipientFrom,
-      defaultRecipient,
+      defaultRecipient = declarationCoordinate <$> defaultRecipient,
       intentTemplate = "escalate this",
       extraContextTags = []
     }
 
 egressWith :: Text -> Text -> Maybe Text -> Sink
 egressWith channel action conversationKey =
-  ChannelEgress {channel, action, conversationKey}
+  ChannelEgress {channel = declarationCoordinate channel, action = declarationCoordinate action, conversationKey = declarationCoordinate <$> conversationKey}
 
 -- | An activity whose actor is a person, so a resolved recipient is visibly not
 -- the agent's own name or the fallback.
 triggerActivity :: Activity.ActivityEnvelope
 triggerActivity =
   Activity.ActivityEnvelope
-    { Activity.activityId = "act_1",
-      Activity.occurredAt = "2026-07-31T09:00:00Z",
-      Activity.source = "shinzui/rei",
-      Activity.actor = Activity.Actor {Activity.kind = "human", Activity.id = "person:mai", Activity.session = Nothing},
-      Activity.subject = Activity.Subject {Activity.kind = "intention", Activity.subjectId = "int_42"},
-      Activity.verb = "intention.stalled",
+    { Activity.activityId = activityCoordinate ("act_1"),
+      Activity.occurredAt = activityCoordinate ("2026-07-31T09:00:00Z"),
+      Activity.source = activityCoordinate ("shinzui/rei"),
+      Activity.actor = Activity.Actor {Activity.kind = either (error . show) id (parseActorKind ("human")), Activity.id = activityCoordinate ("person:mai"), Activity.session = fmap activityCoordinate (Nothing)},
+      Activity.subject = Activity.Subject {Activity.kind = activityCoordinate ("intention"), Activity.subjectId = activityCoordinate ("int_42")},
+      Activity.verb = activityCoordinate ("intention.stalled"),
       Activity.payload = sampleOutput,
       Activity.contextRefs = [],
-      Activity.idempotencyKey = "act_1"
+      Activity.idempotencyKey = activityCoordinate ("act_1")
     }
 
 stubKizashiApp :: IORef [CreateSignalReq] -> Application
@@ -414,7 +417,7 @@ ctxWithIdentity agentIdentity rei =
 sampleReiSink :: Sink
 sampleReiSink =
   ReiAction
-    { intentionId = "int_42",
+    { intentionId = declarationCoordinate ("int_42"),
       note = "follow up on the stalled export"
     }
 

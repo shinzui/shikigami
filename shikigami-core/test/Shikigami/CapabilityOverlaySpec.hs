@@ -6,9 +6,12 @@ import Data.Foldable (traverse_)
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (Behavior (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Capability.Catalog
 import Shikigami.Capability.Overlay
+import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -170,9 +173,9 @@ repositorySearchDescriptor =
 durableSkillSubject :: ResolutionSubject
 durableSkillSubject =
   ResolutionSubject
-    { principal = Just "principal_capability_proof",
+    { principal = Just (declarationCoordinate "principal_capability_proof"),
       mode = Durable,
-      behavior = Skill {path = "agents/skills/triage-note"},
+      behavior = Skill {path = declarationCoordinate ("agents/skills/triage-note")},
       profile = Nothing
     }
 

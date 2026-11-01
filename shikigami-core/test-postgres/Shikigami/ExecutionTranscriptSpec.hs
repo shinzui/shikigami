@@ -53,6 +53,7 @@ import Keiro.Workflow.Awakeable (AwakeableId (..), awakeableIdText, awakeableNam
 import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), countPendingAwakeables, lookupAwakeable, registerAwakeableTx)
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
 import Keiro.Workflow.Child (runChildWorkflow)
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Read qualified as StoreRead
@@ -62,8 +63,10 @@ import Pgmq (QueueMetrics (queueLength))
 import Pgmq.Hasql.Statements.Message qualified as PgmqMessage
 import Pgmq.Hasql.Statements.QueueObservability qualified as PgmqQueue
 import Shikigami.Action.Authorization (denyAllActionAuthorizer)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalRequest (..), approvalWorkflowId, resolveApproval)
 import Shikigami.Agent.Approval.Workflow qualified as Approval
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
@@ -121,6 +124,7 @@ import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.StateRevision qualified as Generation
 import Shikigami.Trigger.Enqueue (addressedRunJob, enqueueRunJobTx, ensureRunQueue, runQueueName)
+import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikumi.Tool (mkDynTool)
@@ -161,7 +165,7 @@ tests fixture =
           let retired = assignment & #skillDir .~ SkillDir "/missing-retired-skill" & #policy .~ Left "retired process policy is invalid" & #input .~ (assertFailure "existing execution reconstructed its input" >> pure (Left UnsupportedReplay))
           Start.admitSkillExecution executor (\_ -> assertFailure "existing assignment reacquired its menu" >> pure (Left UnsupportedReplay)) retired >>= (@?= Right accepted)
           readIORef described >>= (@?= 1)
-          Start.admitSkillExecution executor describe (retired & #runId .~ "different-run") >>= (@?= Left ExecutionIdentityConflict),
+          Start.admitSkillExecution executor describe (retired & #runId .~ WorkflowId "different-run") >>= (@?= Left ExecutionIdentityConflict),
       testCase "workspace admission freezes scoped policy across restart and the actual model request" $
         withConfiguredResourceFixture fixture id (Map.insert R.Tokens R.ExplicitlyUnbounded) \env original _ -> do
           (executor, observed, _) <- driverRuntime env False
@@ -1410,7 +1414,7 @@ withConfiguredResourceFixture fixture configure editLimits use = withShikigamiFr
   let env = AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing
       limits = editLimits (Map.insert R.Tokens (R.Limited (fixtureAmount 1000)) (Map.fromList [(dimension, R.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]))
       selection = mustRight (resolveExecutionSelection (fixtureAssignment "transcript-assignment") (mustRight (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just rootId) now)
-      snapshot = configure (ExecutionSnapshot V1 (executionIdFor selection.assignmentId) "transcript-run" (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "PRIVATE_REPLAY_MARKER") (ReplayContext LegacyContext (Just "system") [UserTurn [TextBlock "PRIVATE_REPLAY_MARKER"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing)
+      snapshot = configure (ExecutionSnapshot V1 (executionIdFor selection.assignmentId) (WorkflowId "transcript-run") (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "PRIVATE_REPLAY_MARKER") (ReplayContext LegacyContext (Just "system") [UserTurn [TextBlock "PRIVATE_REPLAY_MARKER"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing)
   _ <- expectRight =<< run env Catalog.registerProjectionCatalog
   run env (Roots.enrollRoot rootId (R.Envelope limits (addUTCTime 3600 now))) >>= (@?= Right R.Accepted)
   run env (Store.admitExecution snapshot) >>= (@?= Right R.Accepted)

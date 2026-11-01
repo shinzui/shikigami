@@ -36,7 +36,9 @@ import Handan.Runtime (newRuntime)
 import Handan.Task (EvalHandle, Task (..), TaskKind (KEffect))
 import Kioku.Api.Types (MemoryRecord (..))
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent))
 import Shikigami.Agent.Run (recallQuery)
@@ -45,6 +47,7 @@ import Shikigami.Behavior.Run (defaultToolTurnLimit, newBehaviorEnv, programArgs
 import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
 import Shikigami.Flow.AtRiskCustomer (RiskVerdict (..), classifyRisk)
 import Shikigami.Memory.Scope (agentScope)
+import Shikigami.Trigger.Schedule (cronExpressionClaim, parseCron)
 import Shikumi.Tool (mkRegistry)
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
@@ -95,15 +98,15 @@ calmPayload = object ["text" .= ("customer says thanks, all good" :: Text)]
 activityFor :: Text -> ActivityEnvelope
 activityFor ticket =
   ActivityEnvelope
-    { activityId = "act_" <> ticket,
-      occurredAt = "2026-07-15T12:00:00Z",
-      source = "shinzui/shikigami",
-      actor = Actor {kind = "human", id = "someone", session = Nothing},
-      subject = Subject {kind = "ticket", subjectId = ticket},
-      verb = "ticket.updated",
+    { activityId = activityCoordinate ("act_" <> ticket),
+      occurredAt = activityCoordinate ("2026-07-15T12:00:00Z"),
+      source = activityCoordinate ("shinzui/shikigami"),
+      actor = Actor {kind = either (error . show) id (parseActorKind ("human")), id = activityCoordinate ("someone"), session = fmap activityCoordinate (Nothing)},
+      subject = Subject {kind = activityCoordinate ("ticket"), subjectId = activityCoordinate (ticket)},
+      verb = activityCoordinate ("ticket.updated"),
       payload = object [],
       contextRefs = [],
-      idempotencyKey = "act_" <> ticket
+      idempotencyKey = activityCoordinate ("act_" <> ticket)
     }
 
 escalationMemory :: Text -> MemoryRecord
@@ -309,8 +312,8 @@ triageDecl =
   AgentDecl
     { name = fixtureAgentName "triage-note",
       description = "triage inbound tickets into a short note",
-      trigger = Event {eventType = "ticket.received"},
-      behavior = Skill {path = "agents/skills/triage-note"},
+      trigger = Event {eventType = declarationCoordinate ("ticket.received")},
+      behavior = Skill {path = declarationCoordinate ("agents/skills/triage-note")},
       sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
@@ -318,7 +321,7 @@ triageDecl =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,
@@ -331,10 +334,10 @@ heartbeatDecl =
   AgentDecl
     { name = fixtureAgentName "heartbeat",
       description = "",
-      trigger = Schedule {cron = "* * * * *"},
+      trigger = Schedule {cron = cronExpressionClaim "* * * * *"},
       behavior =
         ShikumiProgram
-          { task = "noop-summary",
+          { task = declarationCoordinate ("noop-summary"),
             preferEnrichment = False,
             grounding = Nothing,
             enabledBy = Nothing
@@ -346,7 +349,7 @@ heartbeatDecl =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,

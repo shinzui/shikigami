@@ -94,6 +94,7 @@ import Shikigami.Agent.Approval
   )
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, IdentityDecl (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate (awaitAllDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Delegate.Depth (depthInt, initialDepth)
@@ -115,7 +116,8 @@ import Shikigami.Behavior.Skill (SkillDir (..))
 import Shikigami.Capability.Catalog qualified as Capability
 import Shikigami.Capability.Overlay (CapabilityDescriptor, ResolvedCapabilitySet, capabilityIdText)
 import Shikigami.Capability.Provider
-  ( CapabilityRuntime (..),
+  ( CapabilityRun (..),
+    CapabilityRuntime (..),
     CapabilityRuntimeError,
     CapabilityScope (..),
     durableAdapterInstalled,
@@ -498,7 +500,7 @@ executionRuntime deps =
             profile = snapshot.sanctionedProfile,
             providers = deps.decisions.providers,
             baseEnv = deps.behaviorEnv,
-            runId = runCorrelationId snapshot.runId,
+            runId = runCorrelationId snapshot.runId.unWorkflowId,
             authorize = authority snapshot,
             transact = SelectionRuntime.selectionTransaction deps.appEnv deps.deliveryPool
           },
@@ -639,7 +641,7 @@ runSessionedAgent deps activeBehaviorEnv durableSelection resolvedProfile resolv
 -- The new branch journals admission metadata and awaits a registered child.
 -- The terminal body is a protected read; memory and sinks retain their existing
 -- owners and step labels below.
-runDurableSkillStep :: AgentRunDeps -> Maybe ResolvedProfile -> ResolvedCapabilitySet -> RunJob -> AgentDecl -> SessionId -> [MemoryRecord] -> Selection.ExecutionSelection -> Text -> Eff (Workflow : AppEffects) (Either Text Value)
+runDurableSkillStep :: AgentRunDeps -> Maybe ResolvedProfile -> ResolvedCapabilitySet -> RunJob -> AgentDecl -> SessionId -> [MemoryRecord] -> Selection.ExecutionSelection -> DeclarationCoordinate "skill-path" -> Eff (Workflow : AppEffects) (Either Text Value)
 runDurableSkillStep deps profile overlays job decl sid prior selection path = do
   let runtime = executionRuntime deps
       coordinating = case decl.behavior of CoordinatingSkill {} -> True; _ -> False
@@ -654,7 +656,7 @@ runDurableSkillStep deps profile overlays job decl sid prior selection path = do
               pure admitted
       assignment =
         ExecutionStart.SkillAssignment
-          { runId = (runJobWorkflowId job).unWorkflowId,
+          { runId = runJobWorkflowId job,
             agent = job.agentName,
             identity = job.identity,
             sessionId = sid,
@@ -662,7 +664,7 @@ runDurableSkillStep deps profile overlays job decl sid prior selection path = do
             sanctionedProfile = profile,
             capabilities = overlays,
             policy = Harness.narrowHarnessPolicy deps.harness decl.harness,
-            skillDir = SkillDir (Text.unpack path),
+            skillDir = SkillDir (Text.unpack (declarationCoordinateText path)),
             input = pure (Right (ExecutionStart.SkillInput (BehaviorInput job.triggerPayload prior) []))
           }
   admitted <-
@@ -762,11 +764,11 @@ finishRunFailure deps recordedIdentity decl sid err = do
 capabilityScopeForRun :: RunJob -> CapabilityScope
 capabilityScopeForRun job =
   CapabilityScope
-    { runId = (runJobWorkflowId job).unWorkflowId,
+    { runId = WorkflowRun (runJobWorkflowId job),
       -- C13 always binds to the identity admitted for this concrete run. The
       -- manifest principal remains part of pure catalog admission, but it must
       -- never replace a verified Meibo run principal at an IO boundary.
-      principal = either (const "") id (identityText ((.identity) job)),
+      principal = declarationCoordinate (either (const "") id (identityText ((.identity) job))),
       mode = Capability.Durable
     }
 
@@ -804,8 +806,8 @@ resolveRequiredProfile deps AgentDecl {sanctionedProfile} =
       fmap Just
         <$> (.resolveRunProfile)
           deps
-          (ProfileId profileId)
-          (ProfileVersion <$> version)
+          profileId
+          version
 
 -- | A journaled step value that may record a refusal instead of a result.
 --
@@ -1007,11 +1009,11 @@ runFlowBehavior ::
   SessionId ->
   AgentDecl ->
   RunJob ->
-  Text ->
+  DeclarationCoordinate "flow" ->
   Eff (Workflow : AppEffects) (Either Text Value)
 runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job flowName =
   case Flow.lookupFlow flowName of
-    Nothing -> pure (Left ("unknown flow " <> flowName))
+    Nothing -> pure (Left ("unknown flow " <> declarationCoordinateText flowName))
     Just flow@Flow.FlowDef {Flow.run} -> do
       (_, childWorkflowId) <- currentWorkflow
       let coordinator = WorkerCapability.CoordinatorRun childWorkflowId job.identity sid job.executionRootId job.executionPermissions
@@ -1138,15 +1140,15 @@ activityFromJob job@RunJob {triggerPayload} =
 syntheticActivityFromJob :: RunJob -> Activity.ActivityEnvelope
 syntheticActivityFromJob RunJob {agentName, occurredAt, triggerPayload, idempotencyKey} =
   Activity.ActivityEnvelope
-    { Activity.activityId = runKeyText idempotencyKey,
-      Activity.occurredAt = Text.pack (iso8601Show occurredAt),
-      Activity.source = "shinzui/shikigami",
-      Activity.actor = Activity.Actor {Activity.kind = "service", Activity.id = agentNameText agentName, Activity.session = Nothing},
-      Activity.subject = Activity.Subject {Activity.kind = "run", Activity.subjectId = runKeyText idempotencyKey},
-      Activity.verb = "run.triggered",
+    { Activity.activityId = Activity.activityCoordinate (runKeyText idempotencyKey),
+      Activity.occurredAt = Activity.activityCoordinate (Text.pack (iso8601Show occurredAt)),
+      Activity.source = Activity.activityCoordinate "shinzui/shikigami",
+      Activity.actor = Activity.Actor {Activity.kind = Activity.ServiceActor, Activity.id = Activity.activityCoordinate (agentNameText agentName), Activity.session = Nothing},
+      Activity.subject = Activity.Subject {Activity.kind = Activity.activityCoordinate "run", Activity.subjectId = Activity.activityCoordinate (runKeyText idempotencyKey)},
+      Activity.verb = Activity.activityCoordinate "run.triggered",
       Activity.payload = triggerPayload,
       Activity.contextRefs = [],
-      Activity.idempotencyKey = runKeyText idempotencyKey
+      Activity.idempotencyKey = Activity.activityCoordinate (runKeyText idempotencyKey)
     }
 
 runDeclaredSupervisor ::

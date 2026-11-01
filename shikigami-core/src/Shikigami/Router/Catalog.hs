@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.Router.Catalog
   ( CatalogVersion (..),
     ExclusionReason (..),
@@ -21,6 +23,7 @@ import Shikigami.Agent.Decl
     ExpertiseDecl (..),
     IdentityDecl (..),
   )
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.ExpertiseKey (expertiseKeyText)
 import Shikigami.Agent.Loader
   ( AgentLoadEntry (..),
@@ -29,9 +32,10 @@ import Shikigami.Agent.Loader
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Directory
   ( DirectorySnapshot (..),
-    DirectorySnapshotVersion (..),
+    DirectorySnapshotVersion,
     DirectorySourceKind (..),
     PrincipalRecord (..),
+    directorySnapshotVersionText,
     renderDirectorySourceKind,
   )
 import Shikigami.Directory qualified as Directory
@@ -138,7 +142,7 @@ buildCandidateCatalog report snapshot validated =
 data LifecycleIndex
   = LocalEnabled
   | ConfiguredUnavailable
-  | ConfiguredPrincipals !(Map Text PrincipalRecord) !(Map Text PrincipalRecord)
+  | ConfiguredPrincipals !(Map (DeclarationCoordinate "principal") PrincipalRecord) !(Map Text PrincipalRecord)
 
 indexSnapshot :: DirectorySnapshot -> LifecycleIndex
 indexSnapshot DirectoryDisabledSnapshot {} = LocalEnabled
@@ -146,7 +150,7 @@ indexSnapshot DirectoryUnavailableSnapshot {} = ConfiguredUnavailable
 indexSnapshot DirectoryConfiguredSnapshot {principals} =
   ConfiguredPrincipals
     (Map.fromList [(principalId, principal) | principal@PrincipalRecord {principalId} <- principals])
-    (Map.fromList [(normalizeHandle handle, principal) | principal@PrincipalRecord {handle} <- principals])
+    (Map.fromList [(normalizeHandle (declarationCoordinateText handle), principal) | principal@PrincipalRecord {handle} <- principals])
 
 loadedDeclarationsByName :: [AgentLoadEntry] -> Map AgentName [AgentDecl]
 loadedDeclarationsByName = foldl' addEntry Map.empty
@@ -179,7 +183,7 @@ resolvedCandidate lifecycleIndex AgentDecl {name, description, expertise, enable
       description = Just description,
       expertise,
       availability =
-        if enabled
+        if agentEnabled enabled
           then lifecycleAvailability lifecycleIndex identity name
           else Excluded Disabled
     }
@@ -204,7 +208,7 @@ snapshotIdentity DirectoryConfiguredSnapshot {source, version} = (source, versio
 snapshotIdentity DirectoryUnavailableSnapshot {source, version} = (source, version)
 
 catalogVersionFor :: AgentName -> DirectorySourceKind -> DirectorySnapshotVersion -> [CandidateEntry] -> Natural -> CatalogVersion
-catalogVersionFor routerName sourceKind (DirectorySnapshotVersion sourceVersion) candidateEntries failureCount =
+catalogVersionFor routerName sourceKind sourceVersion candidateEntries failureCount =
   CatalogVersion
     ( Text.pack
         ( UUID.toString
@@ -215,7 +219,7 @@ catalogVersionFor routerName sourceKind (DirectorySnapshotVersion sourceVersion)
                         [ "shikigami-router-catalog-v1",
                           agentNameText routerName,
                           renderDirectorySourceKind sourceKind,
-                          sourceVersion,
+                          directorySnapshotVersionText sourceVersion,
                           tshow failureCount,
                           canonicalList candidateValues candidateEntries
                         ]

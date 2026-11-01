@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
 
 -- | The typed @shikigami_run_jobs@ consumer.
@@ -42,6 +43,7 @@ import OpenTelemetry.Trace.Core qualified as Otel
 import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), addAttribute, runTracing, withSpan')
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity (..), meiboPrincipal, principalText)
 import Shikigami.Agent.Run.Key (runKeyText)
@@ -163,7 +165,7 @@ admitRunJobWith storePool directory declarations job =
         Left reason -> recordRefusal declaredPrincipalId reason
         Right recorded -> do
           decision <- Directory.consultIdentityLifecycle directory recorded
-          case lifecycleRefusal (principalText <$> meiboPrincipal recorded) decision of
+          case lifecycleRefusal ((declarationCoordinate . principalText) <$> meiboPrincipal recorded) decision of
             Nothing -> pure (DrainAllowed ((job & #identity .~ (recorded))))
             Just (resolvedPrincipalId, skipReason) -> recordRefusal resolvedPrincipalId skipReason
   where
@@ -173,7 +175,7 @@ admitRunJobWith storePool directory declarations job =
       let runSkip =
             DirectoryStore.RunSkip
               { DirectoryStore.agentName = ((.agentName) job),
-                DirectoryStore.principalId = DirectoryStore.reportedPrincipalClaim <$> resolvedPrincipalId,
+                DirectoryStore.principalId = (DirectoryStore.reportedPrincipalClaim . declarationCoordinateText) <$> resolvedPrincipalId,
                 DirectoryStore.stage = DirectoryStore.DrainStage,
                 DirectoryStore.detail = routeKindText ((.routeKind) job),
                 DirectoryStore.reason = skipReason,
@@ -183,7 +185,7 @@ admitRunJobWith storePool directory declarations job =
         Left problem -> pure (DrainAuditFailed problem)
         Right () -> pure (DrainSkipped runSkip)
 
-lifecycleRefusal :: Maybe Text -> Directory.LifecycleDecision -> Maybe (Maybe Text, Text)
+lifecycleRefusal :: Maybe (DeclarationCoordinate "principal") -> Directory.LifecycleDecision -> Maybe (Maybe (DeclarationCoordinate "principal"), Text)
 lifecycleRefusal declaredPrincipalId = \case
   Directory.AllowRun _ -> Nothing
   Directory.SkipRun principal skipReason -> Just (Just ((.principalId) principal), skipReason)

@@ -13,6 +13,7 @@ import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Tx
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.App (AppEnv, runAppIO)
@@ -103,7 +104,7 @@ withProfile fixture callback = Fixture.withFixture fixture \env session _ -> do
   catalog <- right (mkWorkspaceCatalog [RepositoryPolicy "mori://fixture/repository" "/approved/source" [base] base (processPolicyIdentity policy)])
   repository <- right (resolveRepository catalog "mori://fixture/repository" Nothing)
   root <- maybe (fail "missing root") pure session.context.executionRootId
-  let request = WorkspaceRequest "profile-run" Nothing root session.identity session.identity initialRevision
+  let request = WorkspaceRequest (WorkflowId "profile-run") Nothing root session.identity session.identity initialRevision
   (binding, _) <- right =<< run env (Workspaces.reserveWorkspaceTx "/private/owned-workspaces" request repository)
   run env (Workspaces.markWorkspaceReadyTx binding) >>= (@?= Right ())
   (profile, state) <- right =<< run env (reserveProcessProfileTx binding digest policy range)

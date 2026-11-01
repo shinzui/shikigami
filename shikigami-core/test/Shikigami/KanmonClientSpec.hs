@@ -14,7 +14,9 @@ import Network.Wai.Handler.Warp (testWithApplication)
 import Settei (answer, defaultResolveOptions, resolve)
 import Settei.Env (envSnapshot, environmentSource)
 import Shikigami.Activity qualified as Activity
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (Sink (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.App.Config (AppConfig, CredentialRef (..), appConfig, environmentBindings)
@@ -31,6 +33,7 @@ import Shikigami.Sink.KanmonClient
 import Shikigami.Sink.Permission (SinkKind (SChannelEgress))
 import Shikigami.Sink.Types (SinkContext (..))
 import Shikigami.Sink.Wire (EgressActionRequest (..), EgressActionResponse (..))
+import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -59,7 +62,7 @@ tests =
         seen <- newIORef []
         testWithApplication (pure (acceptingKanmon seen)) \port -> do
           env <- configuredKanmonEnv
-          result <- postEgressWithHeaders env sampleTraceHeaders (KanmonConfig (localBaseUrl port)) "intercom" "reply_to_conversation" request
+          result <- postEgressWithHeaders env sampleTraceHeaders (KanmonConfig (localBaseUrl port)) (declarationCoordinate "intercom") (declarationCoordinate "reply_to_conversation") request
           result @?= Right (EgressActionResponse "act_reply_1" "conversation.reply_sent")
           requests <- readIORef seen
           case requests of
@@ -73,7 +76,7 @@ tests =
         calls <- newIORef (0 :: Int)
         testWithApplication (pure (countingApplication calls)) \port -> do
           env <- configuredKanmonEnv
-          postEgress env (KanmonConfig (localBaseUrl port)) "inter/com" "reply_to_conversation" request >>= \case
+          postEgress env (KanmonConfig (localBaseUrl port)) (declarationCoordinate "inter/com") (declarationCoordinate "reply_to_conversation") request >>= \case
             Left (KanmonUsageError _) -> pure ()
             other -> assertFailure ("expected a usage error, got " <> show other)
           readIORef calls >>= (@?= 0),
@@ -84,7 +87,7 @@ tests =
         manager <- newSinkManager
         let env = HttpEnv {manager, token = Just source, limits = testHttpLimits}
         testWithApplication (pure (countingApplication calls)) \port -> do
-          result <- postEgress env (KanmonConfig (localBaseUrl port)) "intercom" "reply_to_conversation" request
+          result <- postEgress env (KanmonConfig (localBaseUrl port)) (declarationCoordinate "intercom") (declarationCoordinate "reply_to_conversation") request
           result @?= Left (KanmonHttpError (TransientHttpFailure (CredentialUnavailable failure)))
           assertBool "rendering carries no token or request content" (not ("reply text" `Text.isInfixOf` renderKanmonError (either id (const (KanmonUsageError "unexpected")) result)))
           readIORef calls >>= (@?= 0),
@@ -117,20 +120,20 @@ request =
     }
 
 egress :: Maybe Text -> Sink
-egress conversationKey = ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey}
+egress conversationKey = ChannelEgress {channel = declarationCoordinate ("intercom"), action = declarationCoordinate ("reply_to_conversation"), conversationKey = declarationCoordinate <$> conversationKey}
 
 triggerActivity :: Activity.ActivityEnvelope
 triggerActivity =
   Activity.ActivityEnvelope
-    { Activity.activityId = "act_1",
-      Activity.occurredAt = "2026-08-23T12:00:00Z",
-      Activity.source = "external/intercom",
-      Activity.actor = Activity.Actor {Activity.kind = "human", Activity.id = "person_1", Activity.session = Nothing},
-      Activity.subject = Activity.Subject {Activity.kind = "conversation", Activity.subjectId = "conv_activity"},
-      Activity.verb = "conversation.message_received",
+    { Activity.activityId = activityCoordinate ("act_1"),
+      Activity.occurredAt = activityCoordinate ("2026-08-23T12:00:00Z"),
+      Activity.source = activityCoordinate ("external/intercom"),
+      Activity.actor = Activity.Actor {Activity.kind = either (error . show) id (parseActorKind ("human")), Activity.id = activityCoordinate ("person_1"), Activity.session = fmap activityCoordinate (Nothing)},
+      Activity.subject = Activity.Subject {Activity.kind = activityCoordinate ("conversation"), Activity.subjectId = activityCoordinate ("conv_activity")},
+      Activity.verb = activityCoordinate ("conversation.message_received"),
       Activity.payload = object [],
       Activity.contextRefs = [],
-      Activity.idempotencyKey = "message_1"
+      Activity.idempotencyKey = activityCoordinate ("message_1")
     }
 
 sampleContext :: SinkContext

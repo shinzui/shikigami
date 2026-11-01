@@ -1,8 +1,11 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 
 module Shikigami.Agent.Decl
-  ( AgentDecl (..),
+  ( module Shikigami.Agent.DeclarationValue,
+    module Shikigami.Activity.Coordinate,
+    AgentDecl (..),
     IdentityDecl (..),
     MemoryScopeDecl (..),
     RecordPolicy (..),
@@ -40,16 +43,20 @@ import Data.Text qualified as Text
 import Dhall (Decoder (..), FromDhall (..))
 import Dhall qualified
 import Numeric.Natural (Natural)
+import Shikigami.Activity.Coordinate
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.ExpertiseKey (ExpertiseKey)
 import Shikigami.Agent.Name (AgentName)
+import Shikigami.Attestation.Profile (ProfileId, ProfileVersion)
 import Shikigami.Capability.Overlay (CapabilityId)
 import Shikigami.Decision.ModelAlias (ModelAlias)
 import Shikigami.Execution.Policy.Types (HarnessOverrides)
 import Shikigami.Execution.Request (ExecutionPolicy)
 import Shikigami.Prelude
 import Shikigami.Router.SelectionLimit (SelectionLimit)
+import Shikigami.Trigger.Schedule (CronExpressionClaim)
 
-data IdentityDecl = IdentityDecl {principal :: !Text}
+data IdentityDecl = IdentityDecl {principal :: !(DeclarationCoordinate "principal")}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromDhall, ToJSON, FromJSON)
 
@@ -216,53 +223,53 @@ data RecipientFrom = SubjectOwner | AreaOwner | Actor
   deriving anyclass (FromDhall, ToJSON, FromJSON)
 
 data StreamMatch = StreamMatch
-  { verb :: !(Maybe Text),
-    source :: !(Maybe Text),
-    subjectType :: !(Maybe Text),
-    verbs :: ![Text]
+  { verb :: !(Maybe (ActivityCoordinate "verb")),
+    source :: !(Maybe (ActivityCoordinate "source")),
+    subjectType :: !(Maybe (ActivityCoordinate "subject-kind")),
+    verbs :: ![ActivityCoordinate "verb"]
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromDhall, ToJSON, FromJSON)
 
 data Trigger
-  = Schedule {cron :: !Text}
+  = Schedule {cron :: !CronExpressionClaim}
   | Stream {match :: !StreamMatch}
-  | Event {eventType :: !Text}
+  | Event {eventType :: !(DeclarationCoordinate "event-type")}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromDhall, ToJSON, FromJSON)
 
 data Behavior
   = Deterministic {rule :: !Text, params :: !(Map Text Text)}
   | ShikumiProgram
-      { task :: !Text,
+      { task :: !(DeclarationCoordinate "task"),
         preferEnrichment :: !Bool,
         grounding :: !(Maybe Text),
         enabledBy :: !(Maybe Text)
       }
-  | Skill {path :: !Text}
-  | CoordinatingSkill {path :: !Text}
-  | Flow {name :: !Text}
+  | Skill {path :: !(DeclarationCoordinate "skill-path")}
+  | CoordinatingSkill {path :: !(DeclarationCoordinate "skill-path")}
+  | Flow {name :: !(DeclarationCoordinate "flow")}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromDhall, ToJSON, FromJSON)
 
 data Sink
-  = KawaDigest {subjectType :: !Text, verb :: !Text}
+  = KawaDigest {subjectType :: !(ActivityCoordinate "subject-kind"), verb :: !(ActivityCoordinate "verb")}
   | KizashiSignal
-      { source :: !Text,
+      { source :: !(ActivityCoordinate "source"),
         signalType :: !SignalType,
         priority :: !Priority,
-        importance :: !Natural,
+        importance :: !SignalImportance,
         recipientFrom :: !RecipientFrom,
-        defaultRecipient :: !(Maybe Text),
+        defaultRecipient :: !(Maybe (DeclarationCoordinate "recipient")),
         intentTemplate :: !Text,
         extraContextTags :: ![Text]
       }
-  | ReiAction {intentionId :: !Text, note :: !Text}
+  | ReiAction {intentionId :: !(DeclarationCoordinate "intention"), note :: !Text}
   | DanwaConversation {topic :: !Text}
   | ChannelEgress
-      { channel :: !Text,
-        action :: !Text,
-        conversationKey :: !(Maybe Text)
+      { channel :: !(DeclarationCoordinate "channel"),
+        action :: !(DeclarationCoordinate "channel-action"),
+        conversationKey :: !(Maybe (DeclarationCoordinate "conversation"))
       }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromDhall, ToJSON, FromJSON)
@@ -271,8 +278,8 @@ data Sink
 -- open a memory session. An absent version means "the one active version" and
 -- therefore still fails if the store returns zero or multiple candidates.
 data ProfileRequirement = ProfileRequirement
-  { profileId :: !Text,
-    version :: !(Maybe Text)
+  { profileId :: !ProfileId,
+    version :: !(Maybe ProfileVersion)
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromDhall, ToJSON, FromJSON)
@@ -292,7 +299,7 @@ data AgentDecl = AgentDecl
     capabilityOverlays :: ![CapabilityId],
     identity :: !(Maybe IdentityDecl),
     memory :: !MemoryPolicy,
-    enabled :: !Bool,
+    enabled :: !AgentEnablement,
     expertise :: ![ExpertiseDecl],
     routing :: !(Maybe RouterPolicy)
   }

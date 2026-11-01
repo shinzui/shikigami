@@ -17,7 +17,9 @@ import Data.Time (UTCTime (..), fromGregorian)
 import Settei.Env (envSnapshot, environmentSource)
 import Settei.Key (parseKey)
 import Settei.Optparse (DiagnosticMode (..), cliOverride)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.App.Config (AppConfig (..), Role (RunBehaviorRole), environmentBindings)
 import Shikigami.App.Config.Load (ConfigOptions (..), ConfigRun (..), appConfigRun)
@@ -32,6 +34,7 @@ import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Flow (FlowDef (..), flowRegistry)
 import Shikigami.Program.Decision
+import Shikigami.Trigger.Schedule (parseCron)
 import Shikumi.Program (Program (Embed))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -86,7 +89,7 @@ tests =
         assertBool "duplicate slot labels" (not (null (slotErrors registry declaration [slot, slot])))
         assertBool "unknown contract" (not (null (slotErrors (mustRight (programRegistry [])) declaration [slot])))
         assertBool "undeclared alias" (not (null (slotErrors registry ((declaration & #decisionModels .~ ([]))) [slot])))
-        assertBool "existing flows have empty inventories" (all (\flow -> flow.name == "shikumi-decision-example" || null flow.decisionSlots) flowRegistry),
+        assertBool "existing flows have empty inventories" (all (\flow -> flow.name == declarationCoordinate "shikumi-decision-example" || null flow.decisionSlots) flowRegistry),
       testCase "historical declaration JSON defaults to no permission and keeps its bytes" do
         declaration <- mustRight <$> loadAgent "../agents/heartbeat.dhall"
         case toJSON declaration of

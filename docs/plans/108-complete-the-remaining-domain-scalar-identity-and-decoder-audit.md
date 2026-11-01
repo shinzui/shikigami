@@ -319,6 +319,26 @@ corrected getter boundary. The full workspace build also passes, including
 the Linux prototype target. These source changes await the combined census refresh;
 remaining findings and M2/M3 stay open.
 
+The execution batch is committed as `b57cbd8`; its native gate against `cd10844`
+passes with no findings, replay-neutral impact and all 156 conformance controls.
+The next combined candidate carries native workflow IDs through execution and
+workspace admissions, with an explicit separate one-off capability-run constructor.
+It also replaces declaration/activity/directory scalar fields with scoped nominal
+coordinates, native profile IDs, exact retained activity/trigger references,
+typed cron claims feeding the existing parsed scheduler with its original
+strict/lenient diagnostics and wire spelling, closed actor/context/enablement vocabulary and
+checked signal importance/context references. Directory indexes retain nominal
+principal/normalized-handle keys and its snapshot UUID decoder is private and
+canonical. The full workspace build, including the Linux prototype target,
+passes after formatting. All six runtime package suites pass (1,078 cases,
+including 280 serial worker cases); the six diagram controls also pass. All 28
+focused compiler controls pass. Server tests require the built administrative
+executable on PATH, matching their Cabal build-tool dependency. The earlier
+472-case PostgreSQL pass predates the final cron-claim separation; retain that
+scope distinction and run final PostgreSQL acceptance in M3. The exact current
+source hashes are retained in `declaration-values-source.json`; this is source
+validation, not a refreshed classification or completion of M2/M3.
+
 ## Surprises & Discoveries
 
 

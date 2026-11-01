@@ -8,8 +8,11 @@ import Data.Generics.Labels ()
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (secondsToNominalDiffTime)
+import Shikigami.Activity.Coordinate
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Directory
 import Shikigami.Log qualified as Log
+import Shikigami.Trigger.Schedule (parseCron)
 import System.Directory (getTemporaryDirectory, removeFile, renameFile)
 import System.IO (hClose, openBinaryTempFile)
 import Test.Tasty (TestTree, testGroup)
@@ -20,7 +23,7 @@ tests =
   testGroup
     "principal directory"
     [ testCase "disabled mode preserves compatibility" $
-        consultLifecycle disabledDirectoryHandle (Just "agent_missing") "missing"
+        consultLifecycle disabledDirectoryHandle (Just (declarationCoordinate "agent_missing")) "missing"
           >>= (@?= AllowRun Nothing),
       testCase "disabled mode has an explicit immutable snapshot" do
         readDirectorySnapshot disabledDirectoryHandle >>= \case
@@ -48,7 +51,7 @@ tests =
       testCase "active principal is admitted and extra Meibo fields are ignored" $
         withDirectoryHandle activeDirectory do
           \directoryHandle ->
-            consultLifecycle directoryHandle (Just heartbeatId) "wrong-handle"
+            consultLifecycle directoryHandle (Just (declarationCoordinate heartbeatId)) "wrong-handle"
               >>= (@?= AllowRun (Just heartbeat)),
       testCase "handle fallback is case-insensitive and trimmed" $
         withDirectoryHandle activeDirectory do
@@ -58,14 +61,14 @@ tests =
       testCase "an explicit principal id never falls back to the handle" $
         withDirectoryHandle activeDirectory do
           \directoryHandle ->
-            consultLifecycle directoryHandle (Just "agent_unknown") "heartbeat"
+            consultLifecycle directoryHandle (Just (declarationCoordinate "agent_unknown")) "heartbeat"
               >>= (@?= UnknownPrincipal "agent_unknown"),
       testCase "paused and deactivated principals are skipped" $
         withDirectoryHandle lifecycleDirectory do
           \directoryHandle -> do
-            consultLifecycle directoryHandle (Just heartbeatId) "heartbeat"
+            consultLifecycle directoryHandle (Just (declarationCoordinate heartbeatId)) "heartbeat"
               >>= (@?= SkipRun heartbeatPaused "principal lifecycle is paused")
-            consultLifecycle directoryHandle (Just archiveId) "archive"
+            consultLifecycle directoryHandle (Just (declarationCoordinate archiveId)) "archive"
               >>= (@?= SkipRun archive "principal lifecycle is deactivated"),
       testCase "unknown handle is rejected in configured mode" $
         withDirectoryHandle activeDirectory do
@@ -87,7 +90,7 @@ tests =
             BS.writeFile filePath duplicateHandleDirectory
             refreshDirectory directoryHandle >>= assertLeftContaining "duplicate normalized handle"
             readDirectorySnapshot directoryHandle >>= (@?= beforeFailure)
-            consultLifecycle directoryHandle (Just heartbeatId) "heartbeat"
+            consultLifecycle directoryHandle (Just (declarationCoordinate heartbeatId)) "heartbeat"
               >>= (@?= AllowRun (Just heartbeat)),
       testCase "identical refreshes preserve the semantic snapshot version" $
         withDirectoryFile activeDirectory do
@@ -102,15 +105,15 @@ tests =
           \filePath -> do
             directoryHandle <- newDirectoryHandle (fileDirectorySource filePath)
             refreshDirectory directoryHandle >>= (@?= Right ())
-            consultLifecycle directoryHandle (Just heartbeatId) "heartbeat"
+            consultLifecycle directoryHandle (Just (declarationCoordinate heartbeatId)) "heartbeat"
               >>= (@?= AllowRun (Just heartbeat))
             replaceFileAtomically filePath pausedDirectory
             refreshDirectory directoryHandle >>= (@?= Right ())
-            consultLifecycle directoryHandle (Just heartbeatId) "heartbeat"
+            consultLifecycle directoryHandle (Just (declarationCoordinate heartbeatId)) "heartbeat"
               >>= (@?= SkipRun heartbeatPaused "principal lifecycle is paused")
             replaceFileAtomically filePath activeDirectory
             refreshDirectory directoryHandle >>= (@?= Right ())
-            consultLifecycle directoryHandle (Just heartbeatId) "heartbeat"
+            consultLifecycle directoryHandle (Just (declarationCoordinate heartbeatId)) "heartbeat"
               >>= (@?= AllowRun (Just heartbeat)),
       testCase "inspection order is deterministic by normalized handle" $
         withDirectoryHandle lifecycleDirectory do
@@ -125,13 +128,13 @@ archiveId :: Text
 archiveId = "agent_01h0000000000000000archive"
 
 heartbeat :: PrincipalRecord
-heartbeat = PrincipalRecord {principalId = heartbeatId, handle = "heartbeat", lifecycle = Active}
+heartbeat = PrincipalRecord {principalId = declarationCoordinate (heartbeatId), handle = declarationCoordinate ("heartbeat"), lifecycle = Active}
 
 heartbeatPaused :: PrincipalRecord
 heartbeatPaused = (heartbeat & #lifecycle .~ (Paused))
 
 archive :: PrincipalRecord
-archive = PrincipalRecord {principalId = archiveId, handle = "archive", lifecycle = Deactivated}
+archive = PrincipalRecord {principalId = declarationCoordinate (archiveId), handle = declarationCoordinate ("archive"), lifecycle = Deactivated}
 
 activeDirectory :: ByteString
 activeDirectory =

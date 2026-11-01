@@ -68,13 +68,13 @@ instance Show SessionChild where show _ = "SessionChild <protected>"
 -- A trigger payload cannot supply session or assignment authority. A historical
 -- child mapping that no longer matches current ownership refuses fallback to a
 -- new standalone allocation.
-lookupSessionChildTx :: Text -> Transaction (Either WorkspaceError (Maybe SessionChild))
+lookupSessionChildTx :: WorkflowId -> Transaction (Either WorkspaceError (Maybe SessionChild))
 lookupSessionChildTx run = do
   matches <- Tx.statement () (selectChild run) >>= checkedRead
   pure case matches of
     Right [] -> Right Nothing
     Right [(state, binding, message)]
-      | state.sessionId == binding.sessionId && message.sessionId == state.sessionId && message.childWorkflowId == Just (WorkflowId run) && state.phase == Active && state.activeAssignment == Just message.assignmentId && message.phase == Running && message.epoch == state.epoch ->
+      | state.sessionId == binding.sessionId && message.sessionId == state.sessionId && message.childWorkflowId == Just run && state.phase == Active && state.activeAssignment == Just message.assignmentId && message.phase == Running && message.epoch == state.epoch ->
           Right (Just (SessionChild state.sessionId message.assignmentId message.sequence state.owner state.epoch binding.rootId state.handoff))
     _ -> Left WorkspaceBindingConflict
 
@@ -160,7 +160,7 @@ admitSuccessorTx binding admission = do
   control <- Store.inspectWorkspaceControlTx binding
   child <- lookupSessionChildTx admission.runId
   case child of
-    Right (Just current) | current.owner == admission.owner && current.epoch == admission.epoch && current.rootId == admission.rootId && admission.epoch > binding.request.epoch && admission.assignmentId == assignmentIdFor admission.runId && matchesAdmission binding admission && admission.filePolicy == Just transferableFilePolicy -> case current.handoff of
+    Right (Just current) | current.owner == admission.owner && current.epoch == admission.epoch && current.rootId == admission.rootId && admission.epoch > binding.request.epoch && admission.assignmentId == assignmentIdFor admission.runId.unWorkflowId && matchesAdmission binding admission && admission.filePolicy == Just transferableFilePolicy -> case current.handoff of
       Just progress | progress.stage == TransferEstablished && isJust progress.fence && isJust progress.checkpoint -> do
         transferred <- maybe (pure (Right Nothing)) (inspectTransferTx binding) (previousRevision admission.epoch)
         case transferred of
@@ -171,7 +171,7 @@ admitSuccessorTx binding admission = do
                 new = Store.WorkspaceControl intent.newOwner intent.newEpoch Store.AdmissionOpen
             if settled == Right True && earlier == Right True && (control == Right (Just old) || control == Right (Just new))
               then do
-                Tx.statement (admission.runId, binding.workspace.resource, current.session.value, current.assignment.value, current.sequence, admission) insertAdmission
+                Tx.statement (admission.runId.unWorkflowId, binding.workspace.resource, current.session.value, current.assignment.value, current.sequence, admission) insertAdmission
                 stored <- inspectAdmissionTx binding admission.runId
                 if stored == Right (Just admission)
                   then Tx.statement (binding.workspace.resource, toJSON intent.newOwner, intent.newEpoch) establishControl >> pure (Right ())
@@ -190,20 +190,20 @@ admitFollowupTx binding admission = do
   child <- lookupSessionChildTx admission.runId
   case (child, binding.request.assignment) of
     (Right (Just current), Just (session, originalAssignment))
-      | current.session == session && isNothing current.handoff && current.sequence > initialRevision && current.owner == binding.request.owner && current.epoch == binding.request.epoch && admission.owner == current.owner && admission.epoch == current.epoch && admission.runId /= binding.request.runId && admission.assignmentId == assignmentIdFor admission.runId && admission.filePolicy == Just transferableFilePolicy && matchesAdmission binding admission -> do
-          original <- assignmentTerminalTx session originalAssignment True (executionIdFor (assignmentIdFor binding.request.runId)) current.owner current.rootId
+      | current.session == session && isNothing current.handoff && current.sequence > initialRevision && current.owner == binding.request.owner && current.epoch == binding.request.epoch && admission.owner == current.owner && admission.epoch == current.epoch && admission.runId /= binding.request.runId && admission.assignmentId == assignmentIdFor admission.runId.unWorkflowId && admission.filePolicy == Just transferableFilePolicy && matchesAdmission binding admission -> do
+          original <- assignmentTerminalTx session originalAssignment True (executionIdFor (assignmentIdFor binding.request.runId.unWorkflowId)) current.owner current.rootId
           earlier <- priorAdmissionsSettledTx binding current
           let prior = (&&) <$> original <*> earlier
           settled <- workspaceSettledTx binding
           if prior == Right True && settled == Right True && control == Right (Just (Store.WorkspaceControl current.owner current.epoch Store.AdmissionOpen))
             then do
-              Tx.statement (admission.runId, binding.workspace.resource, session.value, current.assignment.value, current.sequence, admission) insertAdmission
+              Tx.statement (admission.runId.unWorkflowId, binding.workspace.resource, session.value, current.assignment.value, current.sequence, admission) insertAdmission
               actual <- inspectAdmissionTx binding admission.runId
               pure (if actual == Right (Just admission) then Right () else Left WorkspaceBindingConflict)
             else pure (Left WorkspaceBindingConflict)
     _ -> pure (Left WorkspaceBindingConflict)
 
-findFollowupWorkspaceTx :: Text -> SessionChild -> FilePath -> ResolvedRepository -> Transaction (Either WorkspaceError (Maybe WorkspaceBinding))
+findFollowupWorkspaceTx :: WorkflowId -> SessionChild -> FilePath -> ResolvedRepository -> Transaction (Either WorkspaceError (Maybe WorkspaceBinding))
 findFollowupWorkspaceTx run child storage repository = do
   retained <- priorWorkspacesTx child
   pure do
@@ -329,7 +329,7 @@ checkedRead = \case
 operationKey :: OperationId -> Text
 operationKey = operationIdText
 
-selectChild :: Text -> Statement () (Either Text [(SessionState, SessionBinding, MessageReceipt)])
+selectChild :: WorkflowId -> Statement () (Either Text [(SessionState, SessionBinding, MessageReceipt)])
 selectChild run = preparable "SELECT s.state,s.binding,m.state FROM shikigami.worker_session_messages m JOIN shikigami.worker_sessions s USING(session_id)" E.noParams (D.foldlRows collect (Right []) row)
   where
     row = liftA3 (,,) <$> jsonRow <*> jsonRow <*> jsonRow
@@ -339,7 +339,7 @@ selectChild run = preparable "SELECT s.state,s.binding,m.state FROM shikigami.wo
       unless (state.sessionId == binding.sessionId && message.sessionId == state.sessionId) (Left "inconsistent session child attribution")
       -- Unreadable attribution cannot authorize a standalone-allocation
       -- fallback. Keep at most two matches while validating the whole scan.
-      let next = if message.childWorkflowId == Just (WorkflowId run) then take 2 (pair : matches) else matches
+      let next = if message.childWorkflowId == Just run then take 2 (pair : matches) else matches
       length next `seq` pure next
 
 selectSession :: Statement Text (Maybe (Either Text (SessionState, SessionBinding)))
@@ -378,25 +378,25 @@ insertAdmission = preparable "INSERT INTO shikigami.workspace_successor_admissio
 selectAdmission :: Statement Text (Maybe (Either Text WorkspaceAdmission))
 selectAdmission = preparable "SELECT admission FROM shikigami.workspace_successor_admissions WHERE run_id=$1" textParam (D.rowMaybe jsonRow)
 
-inspectAdmissionTx :: WorkspaceBinding -> Text -> Transaction (Either WorkspaceError (Maybe WorkspaceAdmission))
+inspectAdmissionTx :: WorkspaceBinding -> WorkflowId -> Transaction (Either WorkspaceError (Maybe WorkspaceAdmission))
 inspectAdmissionTx binding run = do
-  retained <- Tx.statement run selectAdmission
+  retained <- Tx.statement run.unWorkflowId selectAdmission
   checkedRead do
     parsed <- sequence retained
     case parsed of
-      Just admission | admission.runId /= run || admission.assignmentId /= assignmentIdFor run || not (matchesAdmission binding admission) -> Left "inconsistent retained admission"
+      Just admission | admission.runId /= run || admission.assignmentId /= assignmentIdFor run.unWorkflowId || not (matchesAdmission binding admission) -> Left "inconsistent retained admission"
       _ -> Right parsed
 
-admissionRow :: D.Row (Either Text (Text, WorkerSessionId, AssignmentId, WorkspaceAdmission))
+admissionRow :: D.Row (Either Text (WorkflowId, WorkerSessionId, AssignmentId, WorkspaceAdmission))
 admissionRow = assemble <$> text <*> text <*> text <*> jsonRow
   where
     text = D.column (D.nonNullable D.text)
     assemble run session assignment admission = do
       retained <- admission
       parsed <- parseAssignmentId assignment
-      pure (run, workerSessionId session, parsed, retained)
+      pure (WorkflowId run, workerSessionId session, parsed, retained)
 
-selectCurrentAdmission :: Statement Text [Either Text (Text, WorkerSessionId, AssignmentId, WorkspaceAdmission)]
+selectCurrentAdmission :: Statement Text [Either Text (WorkflowId, WorkerSessionId, AssignmentId, WorkspaceAdmission)]
 selectCurrentAdmission = preparable "SELECT run_id,session_id,assignment_id,admission FROM shikigami.workspace_successor_admissions WHERE resource=$1 ORDER BY sequence DESC" textParam (D.rowList admissionRow)
 
 selectPriorAssignments :: Statement (Text, StateRevision "worker-message") [Text]
@@ -435,8 +435,8 @@ priorAdmissionsSettledTx binding child = do
           pure (and <$> sequence states)
   where
     valid (run, session, assignment, admission) = do
-      unless (run == admission.runId && admission.assignmentId == assignmentIdFor run && matchesAdmission binding admission) (Left "inconsistent prior workspace admission")
+      unless (run == admission.runId && admission.assignmentId == assignmentIdFor run.unWorkflowId && matchesAdmission binding admission) (Left "inconsistent prior workspace admission")
       pure (session, assignment, admission)
 
-priorAdmissions :: Statement (Text, StateRevision "worker-message") [Either Text (Text, WorkerSessionId, AssignmentId, WorkspaceAdmission)]
+priorAdmissions :: Statement (Text, StateRevision "worker-message") [Either Text (WorkflowId, WorkerSessionId, AssignmentId, WorkspaceAdmission)]
 priorAdmissions = preparable "SELECT run_id,session_id,assignment_id,admission FROM shikigami.workspace_successor_admissions WHERE resource=$1 AND sequence<$2 ORDER BY sequence" (contrazip2 textParam sequenceParam) (D.rowList admissionRow)

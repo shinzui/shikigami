@@ -16,6 +16,8 @@ import Keiro.Workflow.Instance (WorkflowStatus (..), cancelWorkflow, lookupInsta
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Effect (runStoreIO)
 import Pgmq qualified
+import Shikigami.Activity.Coordinate
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity)
@@ -32,6 +34,7 @@ import Shikigami.Migrations.TestSupport
 import Shikigami.Prelude hiding (repeated, view, (.=))
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Trigger.Enqueue
+import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -165,7 +168,7 @@ tests fixture =
       testCase "drain lifecycle refusal is terminal and storage failure stays an error" $
         withFixture fixture \store job _connection -> do
           declaration <- right =<< loadAgent "../agents/heartbeat.dhall"
-          directory <- Directory.newDirectoryHandle (Directory.staticDirectorySource [Directory.PrincipalRecord "agent_heartbeat" "heartbeat" Directory.Paused])
+          directory <- Directory.newDirectoryHandle (Directory.staticDirectorySource [Directory.PrincipalRecord (declarationCoordinate ("agent_heartbeat")) (declarationCoordinate ("heartbeat")) Directory.Paused])
           _ <- Directory.refreshDirectory directory
           _ <- admitRunJobWith store.pool directory [declaration] (job & #identity .~ UnresolvedLegacyIdentity)
           view <- getStatus store job

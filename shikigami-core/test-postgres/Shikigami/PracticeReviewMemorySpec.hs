@@ -35,12 +35,14 @@ import Kioku.Memory.Domain (RecordMemoryData (..))
 import Kioku.Memory.ReadModel (MemoryRow (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Error (StoreError)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl
   ( AgentDecl (..),
     Behavior (..),
     Trigger (..),
     defaultMemoryPolicy,
   )
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent))
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
@@ -101,6 +103,7 @@ import Shikigami.PracticeReview.Memory
   )
 import Shikigami.PracticeReview.Memory qualified as ReviewMemory
 import Shikigami.Repository (RelativePath, RepositoryId (..), mkRelativePath)
+import Shikigami.Trigger.Schedule (parseCron)
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 import Test.Tasty (TestTree, testGroup)
@@ -551,7 +554,7 @@ reviewAgentDecl =
   AgentDecl
     { name = fixtureAgentName "opentelemetry-practice-reviewer",
       description = "practice-review memory integration test agent",
-      trigger = Event {eventType = "architecture.practice-review.test"},
+      trigger = Event {eventType = declarationCoordinate ("architecture.practice-review.test")},
       behavior = Deterministic {rule = "practice-review-memory-test", params = mempty},
       sinks = [],
       delegates = map fixtureAgentName [],
@@ -560,7 +563,7 @@ reviewAgentDecl =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,

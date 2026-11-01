@@ -11,13 +11,17 @@ import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import GHC.Generics (Generic)
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kikan.En.Action (AgentAction (ConnectCapability), actionResource, canonicalResourceText)
 import Shikigami.Action.Authorization (ActionAuthorizationFailure (ActionPolicyDenied), ActionAuthorizer (..), allowAllActionAuthorizerForTests)
+import Shikigami.Activity.Coordinate
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Capability.Catalog (ExecutionMode (Durable))
 import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider
 import Shikigami.Capability.Tools
 import Shikigami.Log qualified as Log
+import Shikigami.Trigger.Schedule (parseCron)
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Tool (SomeTool (..), ToolRegistry, mkRegistry, mkTool, registryNames)
 import System.Timeout (timeout)
@@ -254,7 +258,7 @@ runOverlays registry resolved base =
   withCapabilityOverlays Log.silentLogger allowAllActionAuthorizerForTests registry testScope resolved base
 
 testScope :: CapabilityScope
-testScope = CapabilityScope {runId = "run-test", principal = "principal-test", mode = Durable}
+testScope = CapabilityScope {runId = WorkflowRun (WorkflowId "run-test"), principal = declarationCoordinate "principal-test", mode = Durable}
 
 successfulProvider ::
   IORef [Text] ->

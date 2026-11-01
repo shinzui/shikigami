@@ -29,8 +29,10 @@ import Kiroku.Store.Error (StoreError)
 import Shibuya.Telemetry.Effect (runTracingNoop)
 import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
 import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..))
@@ -70,6 +72,7 @@ import Shikigami.PracticeReview.Memory qualified as PracticeReviewMemory
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (SinkKind (SKizashiSignal), defaultGrantTable)
 import Shikigami.Sink.Types (SinkOutcome (DeniedOutcome, Enqueued), SinkResult (..))
+import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.WorkerSession.Capability (CoordinatorRun (..))
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Test.Tasty (TestTree, testGroup)
@@ -82,10 +85,10 @@ tests databaseFixture =
     [ -- No FlowRuntime is constructed here any more, and that is the assertion:
       -- asking which flows exist no longer requires the machinery for running one.
       testCase "flow registry resolves at-risk-customer and misses unknown flows" do
-        case lookupFlow "at-risk-customer" of
-          Just FlowDef {name = flowName} -> assertEqual "registered flow name" "at-risk-customer" flowName
+        case lookupFlow (declarationCoordinate ("at-risk-customer")) of
+          Just FlowDef {name = flowName} -> assertEqual "registered flow name" (declarationCoordinate "at-risk-customer") flowName
           Nothing -> assertFailure "expected at-risk-customer flow to be registered"
-        case lookupFlow "unknown-flow" of
+        case lookupFlow (declarationCoordinate ("unknown-flow")) of
           Nothing -> pure ()
           Just flow -> assertFailure ("expected unknown lookup to miss, got " <> show flow),
       -- registeredFlowNames is what `shikigami validate` and worker boot consult,
@@ -101,11 +104,11 @@ tests databaseFixture =
         assertEqual
           "unknown flow is refused, and the message names what is registered"
           ["unknown flow no-such-flow; registered flows: shikumi-decision-example, at-risk-customer, delegation-proof, architecture-practice-router, opentelemetry-practice-review"]
-          (flowDeclarationErrors (flowBehaviorAgent (Flow {name = "no-such-flow"})))
+          (flowDeclarationErrors (flowBehaviorAgent (Flow {name = declarationCoordinate ("no-such-flow")})))
         assertEqual
           "a registered flow is accepted"
           []
-          (flowDeclarationErrors (flowBehaviorAgent (Flow {name = "at-risk-customer"})))
+          (flowDeclarationErrors (flowBehaviorAgent (Flow {name = declarationCoordinate ("at-risk-customer")})))
         assertEqual
           "a non-flow behavior is not this check's business"
           []
@@ -355,7 +358,7 @@ tests databaseFixture =
 completedFlow :: FlowDef
 completedFlow =
   FlowDef
-    { name = "completed-spike",
+    { name = declarationCoordinate "completed-spike",
       decisionSlots = [],
       requiresDefaultModel = True,
       lifecycle = atRiskCustomerLifecycleDiagram,
@@ -365,19 +368,19 @@ completedFlow =
 activityFlow :: FlowDef
 activityFlow =
   FlowDef
-    { name = "activity-spike",
+    { name = declarationCoordinate "activity-spike",
       decisionSlots = [],
       requiresDefaultModel = True,
       lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> do
         activity <- currentActivity
-        pure (String ((.activityId) activity))
+        pure (String (activityCoordinateText ((.activityId) activity)))
     }
 
 memoryFlow :: FlowDef
 memoryFlow =
   FlowDef
-    { name = "memory-spike",
+    { name = declarationCoordinate "memory-spike",
       decisionSlots = [],
       requiresDefaultModel = True,
       lifecycle = atRiskCustomerLifecycleDiagram,
@@ -395,7 +398,7 @@ memoryFlow =
 recallCountFlow :: FlowDef
 recallCountFlow =
   FlowDef
-    { name = "recall-count-spike",
+    { name = declarationCoordinate "recall-count-spike",
       decisionSlots = [],
       requiresDefaultModel = True,
       lifecycle = atRiskCustomerLifecycleDiagram,
@@ -413,7 +416,7 @@ recallCountFlow =
 supersessionFlow :: FlowDef
 supersessionFlow =
   FlowDef
-    { name = "supersession-spike",
+    { name = declarationCoordinate "supersession-spike",
       decisionSlots = [],
       requiresDefaultModel = True,
       lifecycle = atRiskCustomerLifecycleDiagram,
@@ -436,7 +439,7 @@ revisionOptions first =
 sinkFlow :: FlowDef
 sinkFlow =
   FlowDef
-    { name = "sink-spike",
+    { name = declarationCoordinate "sink-spike",
       decisionSlots = [],
       requiresDefaultModel = True,
       lifecycle = atRiskCustomerLifecycleDiagram,
@@ -636,7 +639,7 @@ withAtRiskFlow databaseFixture action =
               { approval = approvalEnv aidRef session,
                 acknowledgementDeadline = secondsToNominalDiffTime 1
               }
-      case lookupFlow "at-risk-customer" of
+      case lookupFlow (declarationCoordinate ("at-risk-customer")) of
         Just flow -> action appEnv runtime aidRef flow
         Nothing -> assertFailure "at-risk-customer flow should be registered"
 
@@ -715,26 +718,26 @@ outboxCount appEnv =
 sampleActivity :: ActivityEnvelope
 sampleActivity =
   ActivityEnvelope
-    { activityId = "act_flow_test",
-      occurredAt = "2026-06-27T00:00:00Z",
-      source = "shinzui/shikigami",
-      actor = Actor {kind = "service", id = "flow-test", session = Nothing},
-      subject = Subject {kind = "ticket", subjectId = "ticket_1"},
-      verb = "customer.risk_detected",
+    { activityId = activityCoordinate ("act_flow_test"),
+      occurredAt = activityCoordinate ("2026-06-27T00:00:00Z"),
+      source = activityCoordinate ("shinzui/shikigami"),
+      actor = Actor {kind = either (error . show) id (parseActorKind ("service")), id = activityCoordinate ("flow-test"), session = fmap activityCoordinate (Nothing)},
+      subject = Subject {kind = activityCoordinate ("ticket"), subjectId = activityCoordinate ("ticket_1")},
+      verb = activityCoordinate ("customer.risk_detected"),
       payload = object [],
       contextRefs = [],
-      idempotencyKey = "act_flow_test"
+      idempotencyKey = activityCoordinate ("act_flow_test")
     }
 
 sampleKizashiSink :: Sink
 sampleKizashiSink =
   KizashiSignal
-    { source = "shinzui/shikigami",
+    { source = activityCoordinate ("shinzui/shikigami"),
       signalType = Reminder,
       priority = Normal,
-      importance = 50,
+      importance = either (error . show) id (parseSignalImportance (50)),
       recipientFrom = SubjectOwner,
-      defaultRecipient = Just "recipient_x",
+      defaultRecipient = fmap declarationCoordinate (Just "recipient_x"),
       intentTemplate = "triage this",
       extraContextTags = ["verb:customer.risk_detected"]
     }
@@ -749,7 +752,7 @@ flowAgentDecl flowAgent =
   AgentDecl
     { name = fixtureAgentName flowAgent,
       description = "flow capability test agent",
-      trigger = Event {eventType = "customer.risk_detected"},
+      trigger = Event {eventType = declarationCoordinate ("customer.risk_detected")},
       behavior =
         Deterministic
           { rule = "flow-test",
@@ -762,7 +765,7 @@ flowAgentDecl flowAgent =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,

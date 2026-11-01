@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | @shikigami agents list|sync@: the joined declaration and principal
 -- inventory.
 --
@@ -38,12 +40,14 @@ import Kioku.Memory qualified as Memory
 import Kioku.Memory.ReadModel (MemoryRow (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Effect (runStoreIO)
+import Shikigami.Activity.Coordinate (activityCoordinateText)
 import Shikigami.Agent.Decl
   ( AgentDecl (..),
     IdentityDecl (..),
     StreamMatch (..),
     Trigger (..),
   )
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Loader
   ( AgentLoadEntry (..),
     AgentLoadReport (..),
@@ -71,6 +75,7 @@ import Shikigami.Sink.GrantStore
     listGrantIdentityEvidence,
     reconcileGrantPrincipal,
   )
+import Shikigami.Trigger.Schedule (cronExpressionText)
 import System.Exit (exitFailure)
 import System.FilePath (takeBaseName)
 import System.IO (hPutStrLn, stderr)
@@ -177,7 +182,7 @@ reconcileAgentInventory pool inventory =
   foldM reconcileOne (Right []) inventory
   where
     joinedKeys =
-      [ (declName decl, (.principalId) joined)
+      [ (declName decl, declarationCoordinateText ((.principalId) joined))
       | AgentInventoryEntry {declaration = Just decl, principal = Just joined} <- inventory
       ]
     nameCounts = Map.fromListWith (+) [(agentName, 1 :: Int) | (agentName, _) <- joinedKeys]
@@ -190,7 +195,7 @@ reconcileAgentInventory pool inventory =
 
     reconcileEntry AgentInventoryEntry {declaration = Just decl, principal = Just joined} = do
       let agentName = declName decl
-          joinedId = (.principalId) joined
+          joinedId = declarationCoordinateText ((.principalId) joined)
           nameCount = Map.findWithDefault 0 agentName nameCounts
           principalCount = Map.findWithDefault 0 joinedId principalCounts
       if nameCount == 1 && principalCount == 1
@@ -246,7 +251,7 @@ reconcileAgentInventory pool inventory =
         ( Right
             AgentSyncEntry
               { name = principalHandle directoryPrincipal,
-                principalId = Just ((.principalId) directoryPrincipal),
+                principalId = Just (declarationCoordinateText ((.principalId) directoryPrincipal)),
                 outcome = MissingManifest
               }
         )
@@ -270,7 +275,7 @@ reconcileAgentAliases pool legacyScopes grantEvidence inventory rawExplicitMappi
     joined =
       [ (declName decl, rawPrincipal)
       | AgentInventoryEntry {declaration = Just decl, principal = Just directoryPrincipal} <- inventory,
-        let rawPrincipal = (.principalId) directoryPrincipal
+        let rawPrincipal = declarationCoordinateText ((.principalId) directoryPrincipal)
       ]
     nameCounts = Map.fromListWith (+) [(agentName, 1 :: Int) | (agentName, _) <- joined]
     principalCounts = Map.fromListWith (+) [(rawPrincipal, 1 :: Int) | (_, rawPrincipal) <- joined]
@@ -506,9 +511,9 @@ inventoryRow AgentInventoryEntry {declaration = Just decl, principal, directoryC
   [ declName decl,
     behaviorKindText ((.behavior) decl),
     triggerSummary ((.trigger) decl),
-    if (.enabled) decl then "yes" else "no",
+    if agentEnabled ((.enabled) decl) then "yes" else "no",
     "loaded",
-    maybe "NO PRINCIPAL" (.principalId) principal,
+    maybe "NO PRINCIPAL" (declarationCoordinateText . (.principalId)) principal,
     case principal of
       Just joined -> renderLifecycle ((.lifecycle) joined)
       Nothing
@@ -523,7 +528,7 @@ inventoryRow AgentInventoryEntry {principal = Just directoryPrincipal} =
     "-",
     "-",
     "NO MANIFEST",
-    (.principalId) directoryPrincipal,
+    declarationCoordinateText ((.principalId) directoryPrincipal),
     renderLifecycle ((.lifecycle) directoryPrincipal)
   ]
 inventoryRow _ = ["INVALID", "-", "-", "-", "-", "-", "-"]
@@ -681,7 +686,7 @@ hasAliasIssue AliasSyncEntry {outcome = AliasReconciled AliasInserted {}} = Fals
 hasAliasIssue AliasSyncEntry {outcome = AliasReconciled AliasAlreadyPresent {}} = False
 hasAliasIssue _ = True
 
-declaredPrincipalId :: AgentDecl -> Maybe Text
+declaredPrincipalId :: AgentDecl -> Maybe (DeclarationCoordinate "principal")
 declaredPrincipalId AgentDecl {identity} = declared <$> identity
   where
     declared IdentityDecl {principal} = principal
@@ -690,7 +695,7 @@ declName :: AgentDecl -> Text
 declName AgentDecl {name} = agentNameText name
 
 principalHandle :: PrincipalRecord -> Text
-principalHandle PrincipalRecord {handle} = handle
+principalHandle PrincipalRecord {handle} = declarationCoordinateText handle
 
 runtimeDirectoryHandle :: DirectoryRuntime -> DirectoryHandle
 runtimeDirectoryHandle DirectoryRuntime {handle} = handle
@@ -703,8 +708,8 @@ renderLifecycle = \case
 
 triggerSummary :: Trigger -> Text
 triggerSummary = \case
-  Schedule {cron} -> "schedule " <> cron
-  Event {eventType} -> "event " <> eventType
+  Schedule {cron} -> "schedule " <> cronExpressionText cron
+  Event {eventType} -> "event " <> declarationCoordinateText eventType
   Stream {match} -> Text.unwords ("stream" : streamMatchParts match)
 
 streamMatchParts :: StreamMatch -> [Text]
@@ -715,12 +720,12 @@ streamMatchParts StreamMatch {verb, source, subjectType, verbs} =
   where
     parts =
       catMaybes
-        [ ("source=" <>) <$> source,
-          ("subject=" <>) <$> subjectType,
-          ("verb=" <>) <$> verb,
+        [ (("source=" <>) . activityCoordinateText) <$> source,
+          (("subject=" <>) . activityCoordinateText) <$> subjectType,
+          (("verb=" <>) . activityCoordinateText) <$> verb,
           case verbs of
             [] -> Nothing
-            _ -> Just ("verbs=" <> Text.intercalate "," verbs)
+            _ -> Just ("verbs=" <> Text.intercalate "," (map activityCoordinateText verbs))
         ]
 
 columnWidths :: [[Text]] -> [Int]

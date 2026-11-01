@@ -40,9 +40,11 @@ import Kiroku.Store.Error (StoreError)
 import Pgmq qualified
 import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), RecordPolicy (Never), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent), compatibilityIdentity)
@@ -150,6 +152,7 @@ import Shikigami.Sink.Delivery (sinkMessageId)
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (SinkKind (SKawaDigest, SKizashiSignal))
 import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
+import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
@@ -935,8 +938,8 @@ reviewerDecl =
   AgentDecl
     { name = fixtureAgentName reviewerAgent,
       description = "practice-review orchestration fixture",
-      trigger = Event {eventType = "practice-review.requested"},
-      behavior = Flow {name = "opentelemetry-practice-review"},
+      trigger = Event {eventType = declarationCoordinate ("practice-review.requested")},
+      behavior = Flow {name = declarationCoordinate ("opentelemetry-practice-review")},
       sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
@@ -944,7 +947,7 @@ reviewerDecl =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy & #recordPolicy .~ Never,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,
@@ -955,15 +958,15 @@ reviewerDecl =
 reviewActivity :: ActivityEnvelope
 reviewActivity =
   ActivityEnvelope
-    { activityId = "act_practice_review_fixture",
-      occurredAt = "2026-08-26T00:00:00Z",
-      source = "shinzui/shikigami",
-      actor = Actor {kind = "agent", id = reviewerAgent, session = Nothing},
-      subject = Subject {kind = "practice-review", subjectId = "fixture"},
-      verb = "practice-review.requested",
+    { activityId = activityCoordinate ("act_practice_review_fixture"),
+      occurredAt = activityCoordinate ("2026-08-26T00:00:00Z"),
+      source = activityCoordinate ("shinzui/shikigami"),
+      actor = Actor {kind = either (error . show) id (parseActorKind ("agent")), id = activityCoordinate (reviewerAgent), session = fmap activityCoordinate (Nothing)},
+      subject = Subject {kind = activityCoordinate ("practice-review"), subjectId = activityCoordinate ("fixture")},
+      verb = activityCoordinate ("practice-review.requested"),
       payload = Aeson.object [],
       contextRefs = [],
-      idempotencyKey = "practice-review-fixture"
+      idempotencyKey = activityCoordinate ("practice-review-fixture")
     }
 
 reviewerAgent :: Text

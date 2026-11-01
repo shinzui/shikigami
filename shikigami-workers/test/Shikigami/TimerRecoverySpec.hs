@@ -34,6 +34,8 @@ import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Connection qualified as StoreConnection
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..))
+import Shikigami.Activity.Coordinate
+import Shikigami.Agent.DeclarationValue
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Attempt (ExecutionWake (..), JobReference (..))
@@ -45,7 +47,7 @@ import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
-import Shikigami.Trigger.Schedule (CatchUpPolicy (SkipMissed))
+import Shikigami.Trigger.Schedule (CatchUpPolicy (SkipMissed), parseCron)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..))
 import Shikigami.Trigger.Timer (runTimerPass)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)

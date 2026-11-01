@@ -22,6 +22,7 @@ import Data.UUID.V4 qualified as UUID
 import Effectful (Eff)
 import Hasql.Transaction qualified as Tx
 import Keiro.Workflow.Awakeable (AwakeableId (..))
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization
 import Shikigami.Agent.Name (AgentName, mkAgentName)
@@ -364,7 +365,7 @@ sibling :: AppEnv -> WorkspaceBinding -> ProcessProfile -> Text.Text -> IO (Work
 sibling env original profile runId = do
   catalog <- right (mkWorkspaceCatalog [RepositoryPolicy original.repository original.source [original.base] original.base original.policyRevision])
   repository <- right (resolveRepository catalog original.repository Nothing)
-  let request = original.request & #runId .~ runId
+  let request = original.request & #runId .~ WorkflowId runId
   (binding, state) <- right =<< run env (runTransaction (Store.reserveWorkspaceTx original.storageRoot request repository))
   allocateWorkspace original.storageRoot binding state >>= (@?= Right ())
   run env (runTransaction (Store.markWorkspaceReadyTx binding)) >>= (@?= Right ())

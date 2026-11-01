@@ -25,6 +25,7 @@ import Kafka.Producer
   )
 import Kafka.Types (KafkaError, headersFromList)
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
+import Shikigami.Activity.Coordinate (activityCoordinate, activityCoordinateText)
 import Shikigami.Prelude
 import Shikigami.Sink.Wire (IngestRequest (..))
 import System.IO (hPutStrLn, stderr)
@@ -46,15 +47,15 @@ republish broker topic (IngestRequest {verb = vb, actor = ac, subject = sj, payl
   let Subject {kind = sty, subjectId = sid} = sj
       env =
         ActivityEnvelope
-          { activityId = actId,
-            occurredAt = oat,
-            source = "shinzui/shikigami",
+          { activityId = activityCoordinate actId,
+            occurredAt = activityCoordinate oat,
+            source = activityCoordinate "shinzui/shikigami",
             actor = ac,
             subject = sj,
-            verb = vb,
+            verb = activityCoordinate vb,
             payload = pl,
             contextRefs = crs,
-            idempotencyKey = sevid
+            idempotencyKey = activityCoordinate sevid
           }
       -- keiro parses keiro-source-event-id as a UUID (EventId); our source_event_id
       -- is not a UUID, so we OMIT that optional header. The consumer dedupes on
@@ -73,7 +74,7 @@ republish broker topic (IngestRequest {verb = vb, actor = ac, subject = sj, payl
         ProducerRecord
           { prTopic = TopicName topic,
             prPartition = UnassignedPartition,
-            prKey = Just (TE.encodeUtf8 (sty <> ":" <> sid)),
+            prKey = Just (TE.encodeUtf8 (activityCoordinateText sty <> ":" <> activityCoordinateText sid)),
             prValue = Just (LBS.toStrict (encode env)),
             prHeaders = headers
           }

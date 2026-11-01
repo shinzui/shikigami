@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.Server.Command.RenderLifecycle
   ( runRenderLifecycle,
   )
@@ -7,6 +9,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TIO
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Loader (LoadError (..), loadAgent)
 import Shikigami.Flow qualified as Flow
 import System.Exit (exitFailure)
@@ -32,11 +35,11 @@ runRenderLifecycle path = do
 -- satisfy 'Flow.lookupFlow', which took a @FlowRuntime@ because a flow body
 -- closed over one. Acknowledgement is a capability now, so asking a flow for its
 -- diagram no longer requires the machinery for running it.
-renderFlow :: Text -> IO ()
+renderFlow :: DeclarationCoordinate "flow" -> IO ()
 renderFlow flowName =
   case Flow.lookupFlow flowName of
     Nothing -> do
-      hPutStrLn stderr ("render-lifecycle: unknown flow " <> Text.unpack flowName)
+      hPutStrLn stderr ("render-lifecycle: unknown flow " <> Text.unpack (declarationCoordinateText flowName))
       exitFailure
     Just flow ->
       TIO.putStrLn ((.mermaid) ((.lifecycle) flow))

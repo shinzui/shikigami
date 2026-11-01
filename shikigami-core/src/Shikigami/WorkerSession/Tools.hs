@@ -29,7 +29,7 @@ import Shikumi.Tool (SomeTool (..), ToolError (..))
 import Shikumi.Tool.Output (ToolOutput (..), textToolOutput)
 
 coordinatorRunFor :: ExecutionSnapshot -> CoordinatorRun
-coordinatorRunFor snapshot = CoordinatorRun (WorkflowId snapshot.runId) snapshot.identity snapshot.sessionId snapshot.selection.rootId (Just snapshot.selection.permittedAliases)
+coordinatorRunFor snapshot = CoordinatorRun snapshot.runId snapshot.identity snapshot.sessionId snapshot.selection.rootId (Just snapshot.selection.permittedAliases)
 
 coordinationTools :: Maybe CoordinationHost -> ActionAuthorizer -> NativeToolFactory
 coordinationTools Nothing _ = NativeToolFactory (\_ -> pure (Right [])) (\_ _ _ -> pure (Right []))

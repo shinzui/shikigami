@@ -16,6 +16,7 @@ import Data.Aeson (Value)
 import Data.List (nub)
 import Data.Text qualified as Text
 import Shikigami.Action.Authorization (ActionAuthorizer)
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Principal (principalScopeText, resolveAgentIdentity)
 import Shikigami.Capability.Catalog (ExecutionMode (Durable))
 import Shikigami.Capability.Overlay
@@ -97,7 +98,7 @@ withBoundTools logger authorizer providers snapshot context requested tools use 
                         _ -> pure (Left (ExecutionPolicyRefused "offered tool menu exceeds its supported ceiling"))
                 pure (either (const (Left (ExecutionPolicyRefused "exact capability lease is unavailable"))) id result)
   where
-    scope subject = CapabilityScope snapshot.runId (principalScopeText subject) Durable
+    scope subject = CapabilityScope (WorkflowRun snapshot.runId) (declarationCoordinate (principalScopeText subject)) Durable
     selected = filter needed (resolvedCapabilities snapshot.capabilities)
     governed = filter (durableAdapterInstalled providers) selected
     generic = filter (not . durableAdapterInstalled providers) selected

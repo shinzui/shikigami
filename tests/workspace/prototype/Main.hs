@@ -32,6 +32,7 @@ import FixtureIdentity (fixtureOperationId, fixtureRootId)
 import GHC.Generics (Generic)
 import GHC.Stack (HasCallStack, callStack, prettyCallStack)
 import Hasql.Transaction (Transaction)
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kikan.En.Action qualified as Kikan
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Kiroku.Store.Transaction (runTransaction)
@@ -196,7 +197,7 @@ nativeProvision configFile specFile = do
   base <- Text.strip . Encoding.decodeUtf8 <$> git ["-C", source, "rev-parse", "HEAD"]
   properties <- Systemd.systemdPropertiesIdentity
   let policy = ProcessPolicy ProcessPolicyV1 spec.image properties [CommandRule "validate" "/bin/probe" ["validate"] "" (Map.singleton "HOME" "/scratch") 30 1024] [""] ["src"]
-      request = WorkspaceRequest "native-fixture" Nothing (fixtureRootId "native-fixture-root") principal principal (fixtureRevision 0)
+      request = WorkspaceRequest (WorkflowId "native-fixture") Nothing (fixtureRootId "native-fixture-root") principal principal (fixtureRevision 0)
   catalog <- requireRight (mkWorkspaceCatalog [RepositoryPolicy "mori://fixture/repo" source [base] base (processPolicyIdentity policy)])
   repository <- requireRight (resolveRepository catalog "mori://fixture/repo" Nothing)
   (binding, state) <- requireRight =<< transact env (Workspaces.reserveWorkspaceTx storage request repository)
@@ -292,7 +293,7 @@ prepareCase config prefix name mode = do
   initial <- requireRight . Aeson.eitherDecodeStrict @ReadyProfile =<< Bytes.readFile (prefix </> "native-ready.json")
   withRuntime config \env authorizer current client -> do
     let owner = initial.binding.request.owner
-        request = WorkspaceRequest ("case-" <> Text.pack name) Nothing (fixtureRootId ("case-root-" <> Text.pack name)) owner owner (fixtureRevision 0)
+        request = WorkspaceRequest (WorkflowId ("case-" <> Text.pack name)) Nothing (fixtureRootId ("case-root-" <> Text.pack name)) owner owner (fixtureRevision 0)
         base = initial.binding.base
         policy = initial.profile.policy
     catalog <- requireRight (mkWorkspaceCatalog [RepositoryPolicy initial.binding.repository initial.binding.source [base] base (processPolicyIdentity policy)])

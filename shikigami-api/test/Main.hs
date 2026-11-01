@@ -7,6 +7,7 @@ import Data.List (sort)
 import Data.Text (Text)
 import Shikigami.Agent.ApiSpec qualified as AgentApiSpec
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.AgentRun.ApiSpec qualified as AgentRunApiSpec
 import Shikigami.Api.OpenApiSpec qualified as OpenApiSpec
@@ -19,6 +20,7 @@ import Shikigami.Api.Problem
     problemStatus,
     problemTitle,
   )
+import Shikigami.Trigger.Schedule (cronExpressionClaim, parseCron)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
 
@@ -52,8 +54,8 @@ packageBoundaryTests =
               AgentDecl
                 { name = fixtureAgentName "boundary-probe",
                   description = "proves shikigami-api may import shikigami-core",
-                  trigger = Schedule {cron = "* * * * *"},
-                  behavior = Skill {path = "skills/none"},
+                  trigger = Schedule {cron = cronExpressionClaim "* * * * *"},
+                  behavior = Skill {path = declarationCoordinate "skills/none"},
                   sinks = [],
                   delegates = map fixtureAgentName [],
                   delegationBudget = Nothing,
@@ -63,7 +65,7 @@ packageBoundaryTests =
                   capabilityOverlays = [],
                   identity = Nothing,
                   memory = defaultMemoryPolicy,
-                  enabled = True,
+                  enabled = AgentEnabled,
                   expertise = [],
                   decisionModels = [],
                   routing = Nothing

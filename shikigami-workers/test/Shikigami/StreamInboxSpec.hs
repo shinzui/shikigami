@@ -18,7 +18,9 @@ import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, wit
 import Pgmq (Message (..), MessageBody (..), QueueName, ReadMessage (..), dropQueue, parseQueueName, readMessage)
 import Shibuya.Core.Ack (AckDecision (..))
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), StreamMatch (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
@@ -43,6 +45,7 @@ import Shikigami.Trigger.Consumer
   )
 import Shikigami.Trigger.Enqueue (enqueueAddressedRunWithKey, ensureRunQueue, runQueueName)
 import Shikigami.Trigger.RequestKey qualified as Addressed
+import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertEqual, assertFailure, testCase)
@@ -65,8 +68,8 @@ tests databaseFixture =
       testCase "integration keys retain separate agent and opaque message coordinates" do
         withFixture databaseFixture \appEnv pool -> do
           ensureQueue pool
-          let first = streamAgent {name = fixtureAgentName "a:b", trigger = Event {eventType = "probe.run"}}
-              second = streamAgent {name = fixtureAgentName "a", trigger = Event {eventType = "probe.run"}}
+          let first = streamAgent {name = fixtureAgentName "a:b", trigger = Event {eventType = declarationCoordinate ("probe.run")}}
+              second = streamAgent {name = fixtureAgentName "a", trigger = Event {eventType = declarationCoordinate ("probe.run")}}
               firstEvent = activityEvent {messageId = "c", eventType = "probe.run"}
               secondEvent = activityEvent {messageId = "b:c", eventType = "probe.run"}
           processDecodedIntegrationEvent appEnv [first] (const (pure ())) firstEvent Nothing >>= assertEqual "first delivery commits" Enqueued
@@ -311,7 +314,7 @@ directoryWith :: Lifecycle -> IO DirectoryHandle
 directoryWith lifecycle = do
   directory <-
     newDirectoryHandle
-      (staticDirectorySource [PrincipalRecord {principalId = "agent_risk", handle = "risk-agent", lifecycle}])
+      (staticDirectorySource [PrincipalRecord {principalId = declarationCoordinate ("agent_risk"), handle = declarationCoordinate ("risk-agent"), lifecycle}])
   refreshDirectory directory >>= \case
     Left problem -> assertFailure (Text.unpack problem)
     Right () -> pure directory
@@ -325,10 +328,10 @@ streamAgent =
         Stream
           { match =
               StreamMatch
-                { verb = Just "customer.risk_detected",
-                  source = Nothing,
-                  subjectType = Just "ticket",
-                  verbs = []
+                { verb = fmap activityCoordinate (Just "customer.risk_detected"),
+                  source = fmap activityCoordinate (Nothing),
+                  subjectType = fmap activityCoordinate (Just "ticket"),
+                  verbs = map activityCoordinate ([])
                 }
           },
       behavior = Deterministic {rule = "test", params = Map.empty},
@@ -339,7 +342,7 @@ streamAgent =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,
@@ -373,15 +376,15 @@ activityEvent =
 sampleActivity :: ActivityEnvelope
 sampleActivity =
   ActivityEnvelope
-    { activityId = "act_stream_1",
-      occurredAt = "2026-08-19T00:00:00Z",
-      source = "shinzui/test",
-      actor = Actor {kind = "service", id = "fixture", session = Nothing},
-      subject = Subject {kind = "ticket", subjectId = "ticket-1"},
-      verb = "customer.risk_detected",
+    { activityId = activityCoordinate ("act_stream_1"),
+      occurredAt = activityCoordinate ("2026-08-19T00:00:00Z"),
+      source = activityCoordinate ("shinzui/test"),
+      actor = Actor {kind = either (error . show) id (parseActorKind ("service")), id = activityCoordinate ("fixture"), session = fmap activityCoordinate (Nothing)},
+      subject = Subject {kind = activityCoordinate ("ticket"), subjectId = activityCoordinate ("ticket-1")},
+      verb = activityCoordinate ("customer.risk_detected"),
       payload = Aeson.object ["risk" .= ("high" :: Text)],
       contextRefs = [],
-      idempotencyKey = "act_stream_1"
+      idempotencyKey = activityCoordinate ("act_stream_1")
     }
 
 deliveryRef :: KafkaDeliveryRef

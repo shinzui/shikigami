@@ -10,7 +10,7 @@ module Shikigami.Trigger.Stream
   )
 where
 
-import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
+import Shikigami.Activity (ActivityEnvelope (..), Actor (..), ActorKind (..), Subject (..))
 import Shikigami.Agent.Decl (StreamMatch (..))
 
 -- | Whether to include envelopes whose actor is itself an agent (opt-in; default off).
@@ -32,7 +32,7 @@ matchesStreamWith include m env =
     StreamMatch {verb = mVerb, source = mSource, subjectType = mSubjectType, verbs = mVerbs} = m
     guardActor = case include of
       IncludeAgentActors -> True
-      ExcludeAgentActors -> aKind /= "agent"
+      ExcludeAgentActors -> aKind /= AgentActor
     -- single-verb predicate AND multi-verb list (empty list = any verb)
     verbOk = maybe True (== eVerb) mVerb && (null mVerbs || eVerb `elem` mVerbs)
     sourceOk = maybe True (== eSource) mSource

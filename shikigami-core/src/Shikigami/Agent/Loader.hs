@@ -18,6 +18,7 @@ import Data.List (isSuffixOf, sort)
 import Data.Text qualified as Text
 import Dhall (auto, inputFile)
 import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude hiding ((.=))
 import System.Directory (listDirectory)
@@ -121,11 +122,11 @@ enabledAgentsFromReport logger AgentLoadReport {entries} = do
   traverse_ reportDisabled entries
   pure
     [ declaration
-    | AgentLoaded {declaration = declaration@AgentDecl {enabled = True}} <- entries
+    | AgentLoaded {declaration = declaration@AgentDecl {enabled = AgentEnabled}} <- entries
     ]
   where
     reportDisabled = \case
-      AgentLoaded {path, declaration = AgentDecl {name, enabled = False}} ->
+      AgentLoaded {path, declaration = AgentDecl {name, enabled = AgentDisabled}} ->
         Log.logInfo
           logger
           "agents.manifest.disabled"

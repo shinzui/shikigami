@@ -24,6 +24,7 @@ import OpenTelemetry.Attributes (Attribute (..), PrimitiveAttribute (..), getAtt
 import OpenTelemetry.Exporter.InMemory.Span (inMemoryListExporter)
 import OpenTelemetry.Trace.Core qualified as Otel
 import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl
@@ -39,6 +40,7 @@ import Shikigami.Agent.Decl
     defaultMemoryPolicy,
     mkDelegationBudget,
   )
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate (delegatedWorkflowIdV2)
 import Shikigami.Agent.Delegate.Context (DelegationError (..))
 import Shikigami.Agent.ExpertiseKey (ExpertiseKey, parseExpertiseKey)
@@ -52,7 +54,7 @@ import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Capability.Provider qualified as CapabilityProvider
-import Shikigami.Directory (DirectorySnapshotVersion (..), DirectorySourceKind (DirectoryDisabledSource), disabledDirectoryHandle)
+import Shikigami.Directory (DirectorySnapshotVersion, DirectorySourceKind (DirectoryDisabledSource), disabledDirectoryHandle, parseDirectorySnapshotVersion)
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Fixture.SinkHttp (testSinkHttp)
 import Shikigami.Flow.Decision qualified as FlowDecision
@@ -76,6 +78,7 @@ import Shikigami.Router.Decision
 import Shikigami.Router.SelectionLimit (SelectionLimit, parseSelectionLimit)
 import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
+import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
@@ -394,8 +397,8 @@ routerDecl =
   AgentDecl
     { name = fixtureAgentName "router",
       description = "routes architecture practice work",
-      trigger = Event {eventType = "test.router"},
-      behavior = Flow {name = "architecture-practice-router"},
+      trigger = Event {eventType = declarationCoordinate ("test.router")},
+      behavior = Flow {name = declarationCoordinate ("architecture-practice-router")},
       sinks = [],
       delegates = map fixtureAgentName ["first", "second", "third", "paused", "failing"],
       delegationBudget = Just defaultDelegationBudget,
@@ -403,7 +406,7 @@ routerDecl =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,
@@ -416,7 +419,7 @@ successSpecialist specialistName =
   specialist
     specialistName
     ShikumiProgram
-      { task = "noop-summary",
+      { task = declarationCoordinate ("noop-summary"),
         preferEnrichment = False,
         grounding = Nothing,
         enabledBy = Nothing
@@ -427,7 +430,7 @@ failingSpecialist =
   specialist
     "failing"
     ShikumiProgram
-      { task = "missing-router-test-task",
+      { task = declarationCoordinate ("missing-router-test-task"),
         preferEnrichment = False,
         grounding = Nothing,
         enabledBy = Nothing
@@ -438,7 +441,7 @@ specialist specialistName specialistBehavior =
   AgentDecl
     { name = fixtureAgentName specialistName,
       description = "router specialist",
-      trigger = Event {eventType = "test.specialist"},
+      trigger = Event {eventType = declarationCoordinate ("test.specialist")},
       behavior = specialistBehavior,
       sinks = [],
       delegates = map fixtureAgentName [],
@@ -447,7 +450,7 @@ specialist specialistName specialistBehavior =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [expertiseEntry],
       execution = Nothing,
       harness = Nothing,
@@ -473,7 +476,7 @@ catalog =
     { router = fixtureAgentName "router",
       version = testCatalogVersion,
       lifecycleSource = DirectoryDisabledSource,
-      lifecycleSourceVersion = DirectorySnapshotVersion "directory-v1",
+      lifecycleSourceVersion = either (error . show) id (parseDirectorySnapshotVersion "a6ef7db1-ecd3-5923-a9ce-3f95ffa4cde4"),
       candidates =
         [ candidate "first" Available,
           candidate "second" Available,

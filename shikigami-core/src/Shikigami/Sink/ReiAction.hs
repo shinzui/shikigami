@@ -29,6 +29,7 @@ where
 import Data.Aeson (Value)
 import Data.Text qualified as Text
 import Shikigami.Agent.Decl (Sink (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Prelude
 import Shikigami.Sink.Config (ReiConfig (..))
 import Shikigami.Sink.Http (HttpEnv, postJSONWithHeaders, renderHttpFailure)
@@ -49,17 +50,17 @@ runReiAction http ReiConfig {baseUrl} ctx sink output =
   case sink of
     ReiAction {intentionId = iid, note = nt} ->
       case baseUrl of
-        Nothing -> pure (Left (unconfiguredMessage iid))
+        Nothing -> pure (Left (unconfiguredMessage (declarationCoordinateText iid)))
         Just url -> do
           let req =
                 ReiActionReq
-                  { intentionId = iid,
+                  { intentionId = declarationCoordinateText iid,
                     note = nt,
                     output,
                     sourceEventId = mkSourceEventId ctx
                   }
           result <- postJSONWithHeaders http ((.traceHeaders) ctx) (url <> reiActionPath) req
-          pure (either (Left . renderHttpFailure) (const (Right ("rei-action recorded for intention " <> iid))) result)
+          pure (either (Left . renderHttpFailure) (const (Right ("rei-action recorded for intention " <> declarationCoordinateText iid))) result)
     _ -> pure (Left "runReiAction: not a ReiAction sink")
 
 -- | What an operator reads when a finding could not be handed to rei because no

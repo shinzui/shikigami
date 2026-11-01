@@ -10,6 +10,7 @@ import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
 import Data.List (find, isSuffixOf, sort)
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl
   ( AgentDecl (..),
     ExpertiseDecl (..),
@@ -23,6 +24,7 @@ import Shikigami.Agent.Decl
     delegationBudgetNatural,
     recallLimitNatural,
   )
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.ExpertiseKey (expertiseKeyText)
 import Shikigami.Agent.Loader
   ( AgentLoadEntry (..),
@@ -38,6 +40,7 @@ import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Capability.Overlay (capabilityIdText)
 import Shikigami.Log qualified as Log
 import Shikigami.Router.SelectionLimit (selectionLimitInt)
+import Shikigami.Trigger.Schedule (parseCron)
 import System.Directory (doesDirectoryExist, listDirectory)
 import System.Exit (ExitCode (ExitFailure))
 import System.FilePath (takeExtension, (</>))
@@ -56,11 +59,11 @@ tests =
               memory = MemoryPolicy {scope, recallLimit, recordPolicy},
               enabled
             } -> do
-              principal @?= "principal_shikigami_proof"
+              principal @?= declarationCoordinate "principal_shikigami_proof"
               scope @?= AgentScope
               recallLimitNatural recallLimit @?= 3
               recordPolicy @?= Never
-              enabled @?= False
+              enabled @?= AgentDisabled
           other -> assertFailure ("unexpected proof declaration: " <> show other),
       testCase "restores defaults for an unchanged manifest" do
         decl <- expectLoaded "../agents/heartbeat.dhall"
@@ -80,7 +83,7 @@ tests =
               delegates @?= []
               delegationBudget @?= Nothing
               capabilityOverlays @?= []
-              enabled @?= True,
+              enabled @?= AgentEnabled,
       testCase "decodes a declared delegation allow-list and budget" do
         AgentDecl {delegates, delegationBudget} <- expectLoaded "../agents/proof/research-supervisor.dhall"
         map agentNameText delegates @?= ["web-researcher", "code-researcher"]
@@ -103,7 +106,7 @@ tests =
           other -> assertFailure ("unexpected specialist declaration: " <> show other),
       testCase "decodes and round-trips the ChannelEgress proof declaration" do
         decl@AgentDecl {sinks} <- expectLoaded "../agents/proof/channel-reply.dhall"
-        sinks @?= [ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}]
+        sinks @?= [ChannelEgress {channel = declarationCoordinate ("intercom"), action = declarationCoordinate ("reply_to_conversation"), conversationKey = fmap declarationCoordinate (Nothing)}]
         eitherDecode (encode decl) @?= Right decl,
       testCase "the v1 declaration JSON shape contains every field and round-trips" do
         decl <- expectLoaded "../agents/heartbeat.dhall"

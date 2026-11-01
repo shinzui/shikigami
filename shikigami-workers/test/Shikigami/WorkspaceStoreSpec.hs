@@ -16,6 +16,7 @@ import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUID
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
@@ -76,7 +77,7 @@ tests fixture =
         (original, _) <- right =<< run env (reserveWorkspaceTx root request repo)
         mapM_
           (\changed -> run env (reserveWorkspaceTx root changed repo) >>= (@?= Left WorkspaceBindingConflict))
-          [request & #runId .~ "different", request & #owner .~ CompatibilityIdentity (fixtureAgentName "other"), request & #epoch .~ (fixtureRevision 1), request & #rootId .~ fixtureRootId "other"]
+          [request & #runId .~ WorkflowId "different", request & #owner .~ CompatibilityIdentity (fixtureAgentName "other"), request & #epoch .~ (fixtureRevision 1), request & #rootId .~ fixtureRootId "other"]
         changed <- resolved (repositorySource repo) (repositoryBase repo) "policy-2"
         run env (reserveWorkspaceTx root request changed) >>= (@?= Left WorkspaceBindingConflict)
         changedSource <- resolved (repositorySource repo <> "-other") (repositoryBase repo) "policy-1"
@@ -203,7 +204,7 @@ tests fixture =
     takeDirectoryOfFiles root binding = takeDirectory (workspaceFiles root binding)
 
 request :: WorkspaceRequest
-request = WorkspaceRequest "run" (Just (workerSessionId "session", fixtureAssignmentId "one")) (fixtureRootId "root") (CompatibilityIdentity (fixtureAgentName "parent")) (CompatibilityIdentity (fixtureAgentName "worker")) (fixtureRevision 0)
+request = WorkspaceRequest (WorkflowId "run") (Just (workerSessionId "session", fixtureAssignmentId "one")) (fixtureRootId "root") (CompatibilityIdentity (fixtureAgentName "parent")) (CompatibilityIdentity (fixtureAgentName "worker")) (fixtureRevision 0)
 
 resolved :: FilePath -> Text.Text -> Text.Text -> IO ResolvedRepository
 resolved source base policy = do

@@ -11,6 +11,7 @@ import Data.Text qualified as Text
 import Effectful (runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
 import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Capability.OneOff (withOneOffCapabilityOverlays)
 import Shikigami.Agent.Capability.Workspace
 import Shikigami.Agent.Decl
@@ -20,10 +21,12 @@ import Shikigami.Agent.Decl
     Trigger (..),
     defaultMemoryPolicy,
   )
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv)
 import Shikigami.Capability.Overlay (CapabilityId)
 import Shikigami.Log qualified as Log
+import Shikigami.Trigger.Schedule (parseCron)
 import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (runLLM)
 import Shikumi.Tool (ToolError (..), runToolCall)
@@ -242,16 +245,16 @@ testDecl capabilityOverlays =
   AgentDecl
     { name = fixtureAgentName "workspace-capability-test",
       description = "workspace capability test",
-      trigger = Event {eventType = "test"},
-      behavior = Skill {path = "unused"},
+      trigger = Event {eventType = declarationCoordinate ("test")},
+      behavior = Skill {path = declarationCoordinate ("unused")},
       sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays,
-      identity = Just IdentityDecl {principal = "principal_workspace_test"},
+      identity = Just IdentityDecl {principal = declarationCoordinate ("principal_workspace_test")},
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,

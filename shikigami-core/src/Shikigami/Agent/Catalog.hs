@@ -13,6 +13,7 @@ where
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Loader (AgentLoadEntry (..), AgentLoadReport (..), loadedAgents)
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..))
@@ -54,4 +55,4 @@ agentLifecycle configured directory decl = do
     Nothing -> LifecycleUnverified
 
 runnable :: AgentDecl -> AgentLifecycleView -> Bool
-runnable decl lifecycle = decl.enabled && lifecycle `elem` [LifecycleActive, LifecycleUnverified]
+runnable decl lifecycle = agentEnabled decl.enabled && lifecycle `elem` [LifecycleActive, LifecycleUnverified]

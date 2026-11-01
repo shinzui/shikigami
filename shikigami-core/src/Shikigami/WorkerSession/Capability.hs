@@ -36,6 +36,7 @@ import Kikan.En.Action (AgentAction (InvokeCapabilityTool), mkCapabilityToolTarg
 import Kioku.Id (SessionId)
 import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill), IdentityDecl (..))
+import Shikigami.Agent.DeclarationValue (agentEnabled)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), assertMayDelegate)
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
@@ -305,7 +306,7 @@ executeAdmittedCommand host authorizer (CoordinationGrant scope) operation comma
             (Left err, _) -> pure (Left err)
             (_, Left err) -> pure (Left err)
             _ -> pure (Left SessionMissing)
-    currentSlot slot = case (host.services.sessions.checkpoints, find (\decl -> decl.name == slot.target && decl.enabled) host.services.sessions.agents) of
+    currentSlot slot = case (host.services.sessions.checkpoints, find (\decl -> decl.name == slot.target && agentEnabled decl.enabled) host.services.sessions.agents) of
       (Just provider, Just decl) -> do
         actual <- liftIO (Directory.identityAdmission host.services.sessions.directory ((.principal) <$> decl.identity) slot.target)
         version <- trySync (liftIO (provider.current slot.objective))

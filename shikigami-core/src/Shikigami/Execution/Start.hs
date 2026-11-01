@@ -14,6 +14,7 @@ import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Effectful (Eff)
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (SessionId)
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
@@ -36,7 +37,7 @@ import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), instructionPro
 import System.Timeout (timeout)
 
 data SkillAssignment = SkillAssignment
-  { runId :: !Text,
+  { runId :: !WorkflowId,
     agent :: !AgentName,
     identity :: !AgentIdentity,
     sessionId :: !SessionId,

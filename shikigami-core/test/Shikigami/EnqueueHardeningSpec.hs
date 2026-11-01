@@ -16,7 +16,9 @@ import Data.Time (UTCTime (..), diffUTCTime, fromGregorian, getCurrentTime)
 import Data.UUID qualified as UUID
 import Pgmq (parseQueueName, queueNameToText)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), StreamMatch (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Run.Key (RunKey, newCliRunKey, parseRunKey, runKeyFromUUID, runKeyText)
 import Shikigami.Agent.RunJob (RunJob, RunRouteKind (AgentWorkflowRoute, ConversationWorkflowRoute))
@@ -24,6 +26,7 @@ import Shikigami.Agent.RunJob qualified as RunJob
 import Shikigami.Prelude (nameBytes)
 import Shikigami.Trigger.Enqueue (addressedRunKey, addressedRunKeyWithKey, envelopeOccurredAt, runJobFromEnvelope, runQueueName)
 import Shikigami.Trigger.RequestKey qualified as Addressed
+import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
 
@@ -112,15 +115,15 @@ tests =
 envelopeAt :: Text -> ActivityEnvelope
 envelopeAt occurred =
   ActivityEnvelope
-    { activityId = "act_1",
-      occurredAt = occurred,
-      source = "shinzui/rei",
-      actor = Actor {kind = "human", id = "someone", session = Nothing},
-      subject = Subject {kind = "ticket", subjectId = "t-1"},
-      verb = "ticket.received",
+    { activityId = activityCoordinate ("act_1"),
+      occurredAt = activityCoordinate (occurred),
+      source = activityCoordinate ("shinzui/rei"),
+      actor = Actor {kind = either (error . show) id (parseActorKind ("human")), id = activityCoordinate ("someone"), session = fmap activityCoordinate (Nothing)},
+      subject = Subject {kind = activityCoordinate ("ticket"), subjectId = activityCoordinate ("t-1")},
+      verb = activityCoordinate ("ticket.received"),
       payload = object [],
       contextRefs = [],
-      idempotencyKey = "act_1"
+      idempotencyKey = activityCoordinate ("act_1")
     }
 
 samplePayload :: Value
@@ -135,10 +138,10 @@ streamAgent =
         Stream
           { match =
               StreamMatch
-                { verb = Just "ticket.received",
-                  source = Nothing,
-                  subjectType = Just "ticket",
-                  verbs = []
+                { verb = fmap activityCoordinate (Just "ticket.received"),
+                  source = fmap activityCoordinate (Nothing),
+                  subjectType = fmap activityCoordinate (Just "ticket"),
+                  verbs = map activityCoordinate ([])
                 }
           },
       behavior = Deterministic {rule = "test", params = mempty},
@@ -149,7 +152,7 @@ streamAgent =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,

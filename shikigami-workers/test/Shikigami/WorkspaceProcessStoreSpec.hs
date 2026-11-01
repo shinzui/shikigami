@@ -21,6 +21,7 @@ import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..))
@@ -270,7 +271,7 @@ writeCollector directory record changed = do
 withProcess :: DatabaseFixture -> (AppEnv -> WorkspaceBinding -> ProcessRecord -> IO a) -> IO a
 withProcess fixture use = Fixture.withFixture fixture \env _ root repository -> do
   let owner = CompatibilityIdentity (fixtureAgentName "process-worker")
-      request = WorkspaceRequest "process-run" Nothing (fixtureRootId "process-root") owner owner (fixtureRevision 0)
+      request = WorkspaceRequest (WorkflowId "process-run") Nothing (fixtureRootId "process-root") owner owner (fixtureRevision 0)
   (binding, _) <- right =<< run env (Store.reserveWorkspaceTx root request repository)
   allocateWorkspace root binding Reserved >>= (@?= Right ())
   run env (Store.markWorkspaceReadyTx binding) >>= (@?= Right ())

@@ -20,6 +20,7 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
+import Keiro.Workflow.Types (WorkflowId (..))
 import Shikigami.Execution.Progress (noPendingReceipts)
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Store qualified as Execution
@@ -107,7 +108,7 @@ cleanupEligibleTx binding = do
     Left err -> pure (Left err)
     Right Nothing -> pure (Right False)
     Right (Just request) -> do
-      let execution = executionIdFor (assignmentIdFor request.runId)
+      let execution = executionIdFor (assignmentIdFor request.runId.unWorkflowId)
       retained <- Store.inspectWorkspaceTx binding.workspace
       executed <- Execution.inspectExecutionTx execution
       sessions <- Sessions.rootSessionsTerminalTx request.rootId

@@ -14,6 +14,7 @@ import Relay.Pagination.Servant qualified as Relay
 import Servant.Server.Generic (AsServerT)
 import Shikigami.Agent.Catalog qualified as Catalog
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
+import Shikigami.Agent.DeclarationValue (agentEnabled)
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.RunJob (RunRouteKind (..))
 import Shikigami.AgentRun.Api
@@ -53,7 +54,7 @@ agentRunServer env caller agent = AgentRunApi {request = requestRun, show = show
     invalidPage page = Relay.RelayPageError {Relay.code = if page.pageSize == 0 then "invalid_page_size" else "invalid_cursor", Relay.message = "Use a positive page size and a cursor issued by this route.", Relay.retryable = False, Relay.parameter = Just (if page.pageSize == 0 then (if page.direction == Forward then "first" else "last") else (if page.direction == Forward then "after" else "before"))}
     requestRun body = case Catalog.lookupAgent env.catalog agent of
       Nothing -> pure (RunAgentMissing (problem AgentNotFound "No declared agent has this name."))
-      Just decl | not decl.enabled -> pure (RunAgentNotRunnable (problem AgentNotRunnable "The agent is disabled in its declaration."))
+      Just decl | not (agentEnabled decl.enabled) -> pure (RunAgentNotRunnable (problem AgentNotRunnable "The agent is disabled in its declaration."))
       Just decl -> do
         admission <- liftIO (Directory.identityAdmission env.directory ((.principal) <$> decl.identity) agent)
         case admission of

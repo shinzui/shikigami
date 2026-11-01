@@ -60,12 +60,14 @@ import Network.HTTP.Types (hContentType, status200, status204, status400, status
 import Network.Wai (Application, pathInfo, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalPolicySnapshot (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, autoApprovePolicy, defaultApprovalEnv, resolveApproval)
 import Shikigami.Agent.Approval.Notification qualified as ApprovalNotification
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), ProfileRequirement (..), RecordPolicy (..), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy, mkDelegationBudget, mkRecallLimit)
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate (awaitAllDelegated, awaitDelegated, cancelSiblingsOnFailure, delegate, delegatedWorkflowIdV2)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..))
 import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
@@ -137,6 +139,7 @@ import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (.
 import Shikigami.Sink.GrantStore (checkGrant, reconcileGrantPrincipal, revokeGrant, upsertGrant)
 import Shikigami.Sink.Permission (SinkKind (..))
 import Shikigami.Trigger.Enqueue qualified as Enqueue
+import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Workflow.Registry qualified as Registry
 import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions, shikigamiWorkflowRunOptions, terminalWorkflowRetention)
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
@@ -210,7 +213,7 @@ tests databaseFixture =
                     )
             behaviorEnv <- newBehaviorEnvWithTraceSink (Just traceSink)
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                declaration = capabilityDecl "overlay-lifecycle" (Skill {path = "../agents/skills/triage-note"}) [workspaceReadId] (Just overlayIdentity) [KawaDigest {subjectType = "overlay", verb = "overlay.read"}]
+                declaration = capabilityDecl "overlay-lifecycle" (Skill {path = declarationCoordinate ("../agents/skills/triage-note")}) [workspaceReadId] (Just overlayIdentity) [KawaDigest {subjectType = activityCoordinate ("overlay"), verb = activityCoordinate ("overlay.read")}]
                 hooks =
                   AgentRunHooks
                     { beforeStepBody = \stepName -> recordCapabilityEvent events ("before:" <> unStepName stepName),
@@ -263,12 +266,12 @@ tests databaseFixture =
                     denyCapability
                 mutationRuntime = capabilityRuntime [mutation] [] allowCapability
                 cases =
-                  [ ("unknown", capabilityDecl "overlay-unknown" (Skill {path = "unused"}) [unknownId] (Just overlayIdentity) [], CapabilityProvider.emptyCapabilityRuntime),
-                    ("duplicate", capabilityDecl "overlay-duplicate" (Skill {path = "unused"}) [workspaceReadId, workspaceReadId] (Just overlayIdentity) [], allowedRuntime),
-                    ("denied", capabilityDecl "overlay-denied" (Skill {path = "unused"}) [workspaceReadId] (Just overlayIdentity) [], deniedRuntime),
-                    ("missing-identity", capabilityDecl "overlay-no-identity" (Skill {path = "unused"}) [workspaceReadId] Nothing [], allowedRuntime),
-                    ("non-skill", capabilityDecl "overlay-non-skill" (ShikumiProgram {task = "noop-summary", preferEnrichment = False, grounding = Nothing, enabledBy = Nothing}) [workspaceReadId] (Just overlayIdentity) [], allowedRuntime),
-                    ("mutation", capabilityDecl "overlay-mutation" (Skill {path = "unused"}) [descriptorCapability mutation] (Just overlayIdentity) [], mutationRuntime)
+                  [ ("unknown", capabilityDecl "overlay-unknown" (Skill {path = declarationCoordinate ("unused")}) [unknownId] (Just overlayIdentity) [], CapabilityProvider.emptyCapabilityRuntime),
+                    ("duplicate", capabilityDecl "overlay-duplicate" (Skill {path = declarationCoordinate ("unused")}) [workspaceReadId, workspaceReadId] (Just overlayIdentity) [], allowedRuntime),
+                    ("denied", capabilityDecl "overlay-denied" (Skill {path = declarationCoordinate ("unused")}) [workspaceReadId] (Just overlayIdentity) [], deniedRuntime),
+                    ("missing-identity", capabilityDecl "overlay-no-identity" (Skill {path = declarationCoordinate ("unused")}) [workspaceReadId] Nothing [], allowedRuntime),
+                    ("non-skill", capabilityDecl "overlay-non-skill" (ShikumiProgram {task = declarationCoordinate ("noop-summary"), preferEnrichment = False, grounding = Nothing, enabledBy = Nothing}) [workspaceReadId] (Just overlayIdentity) [], allowedRuntime),
+                    ("mutation", capabilityDecl "overlay-mutation" (Skill {path = declarationCoordinate ("unused")}) [descriptorCapability mutation] (Just overlayIdentity) [], mutationRuntime)
                   ]
             forM_ cases \(label, declaration, runtime) -> do
               let runJob = capabilityJob (agentDeclNameForTest declaration) ("overlay-refusal:" <> label)
@@ -820,7 +823,7 @@ tests databaseFixture =
                 behaviorEnv <- newBehaviorEnv
                 directory <-
                   newDirectoryHandle
-                    (staticDirectorySource [PrincipalRecord {principalId = "agent_heartbeat", handle = "heartbeat", lifecycle = Directory.Active}])
+                    (staticDirectorySource [PrincipalRecord {principalId = declarationCoordinate ("agent_heartbeat"), handle = declarationCoordinate ("heartbeat"), lifecycle = Directory.Active}])
                 refreshDirectory directory >>= either (assertFailure . Text.unpack) pure
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
                     env = (testConversationEnv appEnv behaviorEnv [conversationDecl]) {Conversation.directory = directory}
@@ -927,7 +930,7 @@ tests databaseFixture =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                    declaration = capabilityDecl "conversation-overlay" (Skill {path = "unused"}) [workspaceReadId] (Just overlayIdentity) []
+                    declaration = capabilityDecl "conversation-overlay" (Skill {path = declarationCoordinate ("unused")}) [workspaceReadId] (Just overlayIdentity) []
                     env = testConversationEnv appEnv behaviorEnv [declaration]
                     message = permanentConversationMessage
 
@@ -2541,14 +2544,14 @@ descriptorCapability :: CapabilityOverlay.CapabilityDescriptor -> CapabilityOver
 descriptorCapability CapabilityOverlay.CapabilityDescriptor {CapabilityOverlay.capability} = capability
 
 overlayIdentity :: IdentityDecl
-overlayIdentity = IdentityDecl {principal = "principal_overlay_test"}
+overlayIdentity = IdentityDecl {principal = declarationCoordinate ("principal_overlay_test")}
 
 capabilityDecl :: Text -> Behavior -> [CapabilityOverlay.CapabilityId] -> Maybe IdentityDecl -> [Sink] -> AgentDecl
 capabilityDecl agentName agentBehavior overlays agentIdentity agentSinks =
   AgentDecl
     { name = fixtureAgentName agentName,
       description = "capability overlay workflow test agent",
-      trigger = Event {eventType = "test"},
+      trigger = Event {eventType = declarationCoordinate ("test")},
       behavior = agentBehavior,
       sinks = agentSinks,
       delegates = map fixtureAgentName [],
@@ -2557,7 +2560,7 @@ capabilityDecl agentName agentBehavior overlays agentIdentity agentSinks =
       capabilityOverlays = overlays,
       identity = agentIdentity,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,
@@ -2623,22 +2626,22 @@ decl =
   AgentDecl
     { name = fixtureAgentName "heartbeat",
       description = "workflow test agent",
-      trigger = Event {eventType = "test"},
+      trigger = Event {eventType = declarationCoordinate ("test")},
       behavior =
         ShikumiProgram
-          { task = "noop-summary",
+          { task = declarationCoordinate ("noop-summary"),
             preferEnrichment = False,
             grounding = Nothing,
             enabledBy = Nothing
           },
-      sinks = [KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}],
+      sinks = [KawaDigest {subjectType = activityCoordinate ("heartbeat"), verb = activityCoordinate ("heartbeat.tick")}],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,
@@ -2651,10 +2654,10 @@ missingTaskDecl =
   AgentDecl
     { name = fixtureAgentName "missing-task-agent",
       description = "workflow test agent with a permanent program-input failure",
-      trigger = Event {eventType = "test"},
+      trigger = Event {eventType = declarationCoordinate ("test")},
       behavior =
         ShikumiProgram
-          { task = "missing-task",
+          { task = declarationCoordinate ("missing-task"),
             preferEnrichment = False,
             grounding = Nothing,
             enabledBy = Nothing
@@ -2666,7 +2669,7 @@ missingTaskDecl =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,
@@ -2679,27 +2682,27 @@ profiledDecl =
   AgentDecl
     { name = fixtureAgentName "heartbeat",
       description = "workflow test agent with a sanctioned profile",
-      trigger = Event {eventType = "test"},
+      trigger = Event {eventType = declarationCoordinate ("test")},
       behavior =
         ShikumiProgram
-          { task = "noop-summary",
+          { task = declarationCoordinate ("noop-summary"),
             preferEnrichment = False,
             grounding = Nothing,
             enabledBy = Nothing
           },
-      sinks = [KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}],
+      sinks = [KawaDigest {subjectType = activityCoordinate ("heartbeat"), verb = activityCoordinate ("heartbeat.tick")}],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile =
         Just
           ProfileRequirement
-            { profileId = "sanctioned-review",
-              version = Just "1"
+            { profileId = ProfileId ("sanctioned-review"),
+              version = fmap ProfileVersion (Just "1")
             },
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,
@@ -2712,21 +2715,21 @@ profiledSkillDecl =
   AgentDecl
     { name = fixtureAgentName "profiled-skill",
       description = "workflow test skill with a sanctioned profile",
-      trigger = Event {eventType = "test"},
-      behavior = Skill {path = "agents/skills/triage-note"},
+      trigger = Event {eventType = declarationCoordinate ("test")},
+      behavior = Skill {path = declarationCoordinate ("agents/skills/triage-note")},
       sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile =
         Just
           ProfileRequirement
-            { profileId = "sanctioned-review",
-              version = Just "1"
+            { profileId = ProfileId ("sanctioned-review"),
+              version = fmap ProfileVersion (Just "1")
             },
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,
@@ -2739,8 +2742,8 @@ flowDecl =
   AgentDecl
     { name = fixtureAgentName "at-risk-customer",
       description = "workflow flow test agent",
-      trigger = Event {eventType = "test"},
-      behavior = Flow {name = "at-risk-customer"},
+      trigger = Event {eventType = declarationCoordinate ("test")},
+      behavior = Flow {name = declarationCoordinate ("at-risk-customer")},
       sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
@@ -2748,7 +2751,7 @@ flowDecl =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,
@@ -2763,8 +2766,8 @@ profiledFlowDecl =
     & #sanctionedProfile
       .~ Just
         ProfileRequirement
-          { profileId = "sanctioned-review",
-            version = Just "1"
+          { profileId = ProfileId ("sanctioned-review"),
+            version = fmap ProfileVersion (Just "1")
           }
 
 flowDelegationDecl :: AgentDecl
@@ -2772,8 +2775,8 @@ flowDelegationDecl =
   AgentDecl
     { name = fixtureAgentName "flow-delegation-supervisor",
       description = "workflow Flow delegation test agent",
-      trigger = Event {eventType = "test"},
-      behavior = Flow {name = "delegation-proof"},
+      trigger = Event {eventType = declarationCoordinate ("test")},
+      behavior = Flow {name = declarationCoordinate ("delegation-proof")},
       sinks = [],
       delegates = map fixtureAgentName ["web-researcher"],
       delegationBudget = Just (either (error . Text.unpack) id (mkDelegationBudget 1)),
@@ -2781,7 +2784,7 @@ flowDelegationDecl =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,
@@ -2795,7 +2798,7 @@ collectionSupervisorDecl =
 
 conversationDecl :: AgentDecl
 conversationDecl =
-  (decl & #trigger .~ (Event {eventType = addressedMessageEventType}) & #sinks .~ ([DanwaConversation {topic = "support"}]))
+  (decl & #trigger .~ (Event {eventType = declarationCoordinate (addressedMessageEventType)}) & #sinks .~ ([DanwaConversation {topic = "support"}]))
 
 withRecordPolicy :: RecordPolicy -> AgentDecl -> AgentDecl
 withRecordPolicy recordPolicy = #memory . #recordPolicy .~ recordPolicy

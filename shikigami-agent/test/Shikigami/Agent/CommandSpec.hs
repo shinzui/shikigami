@@ -19,6 +19,7 @@ import Data.List (isInfixOf)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Options.Applicative
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Command
   ( RoleInfo (..),
     agentRoles,
@@ -28,8 +29,11 @@ import Shikigami.Agent.Command
 import Shikigami.Agent.Command.RunBehavior (profileRequirementRefusal)
 import Shikigami.Agent.Decl (AgentDecl (..), ProfileRequirement (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.Decl qualified as Agent
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.App.Config (Role (..))
+import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
+import Shikigami.Trigger.Schedule (parseCron)
 import System.Exit (ExitCode (ExitSuccess))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
@@ -87,8 +91,8 @@ testDecl sanctionedProfile =
   AgentDecl
     { name = fixtureAgentName "profile-command-test",
       description = "profile command test",
-      trigger = Event {eventType = "test"},
-      behavior = Agent.Skill {path = "agents/skills/triage-note"},
+      trigger = Event {eventType = declarationCoordinate ("test")},
+      behavior = Agent.Skill {path = declarationCoordinate ("agents/skills/triage-note")},
       sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
@@ -96,7 +100,7 @@ testDecl sanctionedProfile =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,
@@ -107,8 +111,8 @@ testDecl sanctionedProfile =
 requiredProfile :: ProfileRequirement
 requiredProfile =
   ProfileRequirement
-    { profileId = "sanctioned-review",
-      version = Just "1"
+    { profileId = ProfileId ("sanctioned-review"),
+      version = fmap ProfileVersion (Just "1")
     }
 
 assertHasAll :: RoleInfo -> [String] -> IO ()

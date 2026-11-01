@@ -9,6 +9,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Keiro.Workflow (WorkflowId (..))
 import Kioku.Id qualified as NominalId
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl
   ( AgentDecl (..),
     AmbiguousPolicy (ReturnAmbiguous),
@@ -20,6 +21,7 @@ import Shikigami.Agent.Decl
     defaultDelegationBudget,
     defaultMemoryPolicy,
   )
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate
   ( DelegationBatchPreflightError (..),
     DelegationRequest (..),
@@ -31,7 +33,7 @@ import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..))
 import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
-import Shikigami.Directory (DirectorySnapshotVersion (..), DirectorySourceKind (DirectoryDisabledSource))
+import Shikigami.Directory (DirectorySnapshotVersion, DirectorySourceKind (DirectoryDisabledSource), parseDirectorySnapshotVersion)
 import Shikigami.Router.Catalog
   ( CandidateAvailability (..),
     CandidateCatalog (..),
@@ -40,6 +42,7 @@ import Shikigami.Router.Catalog
     ExclusionReason (Paused),
   )
 import Shikigami.Router.SelectionLimit (SelectionLimit, parseSelectionLimit)
+import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
@@ -129,7 +132,7 @@ routerDecl =
   AgentDecl
     { name = fixtureAgentName "router",
       description = "batch routing fixture",
-      trigger = Event {eventType = "test"},
+      trigger = Event {eventType = declarationCoordinate ("test")},
       behavior = Deterministic {rule = "test", params = mempty},
       sinks = [],
       delegates = map fixtureAgentName ["first", "second", "paused"],
@@ -138,7 +141,7 @@ routerDecl =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,
@@ -161,7 +164,7 @@ catalog =
     { router = fixtureAgentName "router",
       version = CatalogVersion "catalog-v1",
       lifecycleSource = DirectoryDisabledSource,
-      lifecycleSourceVersion = DirectorySnapshotVersion "directory-v1",
+      lifecycleSourceVersion = either (error . show) id (parseDirectorySnapshotVersion "a6ef7db1-ecd3-5923-a9ce-3f95ffa4cde4"),
       candidates =
         [ candidate "first" Available,
           candidate "second" Available,

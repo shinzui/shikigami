@@ -34,6 +34,7 @@ import Kioku.Memory.Embedding qualified as Embedding
 import Kioku.Recall qualified as Recall
 import Kioku.Recall.Capability qualified as RecallCapability
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), RecallLimit, recallLimitInt)
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (..))
@@ -63,10 +64,10 @@ recordActivityAsMemory appEnv AgentDecl {name = agentName'} env = do
       Subject {kind = sty} = subj
       recordedIdentity = CompatibilityAgent agentName'
       scope' = agentScope recordedIdentity
-      tags' = Set.fromList ["verb:" <> vb, "subject:" <> sty]
+      tags' = Set.fromList ["verb:" <> activityCoordinateText vb, "subject:" <> activityCoordinateText sty]
       content' = TL.toStrict (encodeToLazyText pl)
   mid <- genMemoryId
-  recordedAt' <- maybe getCurrentTime pure (iso8601ParseM (Text.unpack oat))
+  recordedAt' <- maybe getCurrentTime pure (iso8601ParseM (Text.unpack (activityCoordinateText oat)))
   res <-
     runAppIO appEnv $
       Memory.recordWithContext

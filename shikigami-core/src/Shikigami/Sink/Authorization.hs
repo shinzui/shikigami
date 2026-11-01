@@ -24,6 +24,7 @@ import Shikigami.Action.Authorization
     ActionAuthorizer (..),
   )
 import Shikigami.Agent.Decl (Sink (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Sink.Types qualified as Sink
 
@@ -56,17 +57,17 @@ sinkAction ActionAuthorizer {kawaSource} sink danwaTarget resolvedRecipient reso
   case sink of
     KawaDigest {} -> DispatchKawa <$> firstValue (mkKawaTarget kawaSource)
     KizashiSignal {defaultRecipient} -> do
-      recipient <- maybe (Left "Kizashi recipient was not resolved before authorization") Right (resolvedRecipient <|> defaultRecipient)
+      recipient <- maybe (Left "Kizashi recipient was not resolved before authorization") Right (resolvedRecipient <|> (declarationCoordinateText <$> defaultRecipient))
       DispatchKizashi <$> firstValue (mkKizashiTarget recipient)
     ReiAction {intentionId} ->
       ActOnIntention
-        <$> firstValue (mkIntentionTarget intentionId)
+        <$> firstValue (mkIntentionTarget (declarationCoordinateText intentionId))
         <*> pure (mkAutonomyContext ActAutonomy now)
     DanwaConversation {topic} ->
       let targetText = maybe topic (\Sink.DanwaTarget {conversationId} -> conversationId) danwaTarget
        in AttachDanwa <$> firstValue (mkDanwaTarget targetText)
     ChannelEgress {channel} -> do
       conversation <- maybe (Left "channel conversation was not resolved before authorization") Right resolvedConversation
-      DispatchChannel <$> firstValue (mkChannelTarget channel conversation)
+      DispatchChannel <$> firstValue (mkChannelTarget (declarationCoordinateText channel) conversation)
   where
     firstValue = either (Left . actionValueErrorText) Right

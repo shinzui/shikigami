@@ -1516,3 +1516,32 @@ The frozen upgrade audit and final whitespace check pass. Existing 95-case
 server and 27-case Objective PostgreSQL evidence remains applicable to its
 unchanged source batch; the new attestation owner group passes 85 cases.
 M2/M3 and final guide compliance remain open with 421 findings.
+
+
+The next combined source candidate is bound by `declaration-values-source.json`
+against `b57cbd8`. It carries native workflow identities through execution and
+workspace admissions, distinguishes one-off capability runs, and retains scoped
+nominal declaration/activity/directory claims. Profiles reuse their native
+coordinates; actor/context/enablement vocabulary is closed; signal importance
+and context references use the existing bounds. Cron declarations remain claims
+until the existing scheduler parser produces an admitted schedule, preserving
+its strict/lenient diagnostics. Synthetic activity references retain their
+original trigger keys. Existing valid wire spellings, identity recipes and
+workflow step shapes remain intact.
+
+The formatted full workspace build passes, including the Linux prototype
+compilation target. Runtime suites pass: core 626, API 31, client 9, server 95,
+agent 37 and workers 280; all six diagram controls also pass. Worker tests run
+serially from the worker package directory (200.52 seconds). Server tests need
+the built `shikigami` executable on PATH, as declared by their Cabal build-tool
+dependency; running that binary without this path caused fourteen harness
+failures, all resolved with the correct tool environment (95 passed, 19.15
+seconds). All 28 focused public compiler controls pass after positive native
+getters/factories, including role substitution and private construction refusals.
+
+A previous 472-case core PostgreSQL pass (134.05 seconds) covers the native
+workflow and declaration candidate before the final cron-claim separation.
+Final coherent PostgreSQL and full compiler/classification acceptance remains
+required in M3. No Linux runtime qualification is claimed by prototype compilation.
+The ledger remains at its identified older census; no remaining finding is
+waived and the guide remains deferred.

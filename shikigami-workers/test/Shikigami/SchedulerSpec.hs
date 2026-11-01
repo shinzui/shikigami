@@ -20,8 +20,10 @@ import Keiro.Workflow.Sleep qualified as Sleep
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Connection qualified as StoreConnection
 import Pgmq (Message (..), MessageBody (..), ReadMessage (..), readMessage)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
@@ -32,7 +34,7 @@ import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
-import Shikigami.Trigger.Schedule (CatchUpPolicy (..), CronSchedule, nextDue, parseCron)
+import Shikigami.Trigger.Schedule (CatchUpPolicy (..), CronSchedule, cronExpressionClaim, nextDue, parseCron)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, parseSchedulePayload, runSchedulerTimerWorker, scheduleFireAction, scheduleTimerId, scheduleTimerPayload, shikigamiTimerFallback)
 import Shikigami.Workers.Config (schedulerSchedules)
 import System.Exit (ExitCode (ExitFailure))
@@ -130,7 +132,7 @@ tests databaseFixture =
                 pool = StoreConnection.pool kirokuStore
                 env =
                   (testSchedulerEnv pool (Map.singleton (fixtureAgentName "heartbeat") cron) FireAll Log.silentLogger)
-                    { principalIds = Map.singleton (fixtureAgentName "heartbeat") (Just "agent_heartbeat"),
+                    { principalIds = Map.singleton (fixtureAgentName "heartbeat") (Just (declarationCoordinate "agent_heartbeat")),
                       directory
                     }
             ensureQueue pool
@@ -312,7 +314,7 @@ scheduledAgent agentName cron =
   AgentDecl
     { name = fixtureAgentName agentName,
       description = "scheduler spec fixture",
-      trigger = Schedule {cron},
+      trigger = Schedule {cron = cronExpressionClaim cron},
       behavior = Deterministic {rule = "test", params = Map.empty},
       sinks = [],
       delegates = map fixtureAgentName [],
@@ -321,7 +323,7 @@ scheduledAgent agentName cron =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,
@@ -338,7 +340,7 @@ directoryWith :: Lifecycle -> IO DirectoryHandle
 directoryWith lifecycle = do
   directory <-
     newDirectoryHandle
-      (staticDirectorySource [PrincipalRecord {principalId = "agent_heartbeat", handle = "heartbeat", lifecycle}])
+      (staticDirectorySource [PrincipalRecord {principalId = declarationCoordinate ("agent_heartbeat"), handle = declarationCoordinate ("heartbeat"), lifecycle}])
   refreshDirectory directory >>= \case
     Left problem -> assertFailure (Text.unpack problem)
     Right () -> pure directory

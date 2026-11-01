@@ -13,7 +13,7 @@ import Shikigami.Agent.Decl
   )
 import Shikigami.Agent.ExpertiseKey (ExpertiseKey, parseExpertiseKey)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
-import Shikigami.Directory (DirectorySnapshotVersion (..), DirectorySourceKind (DirectoryDisabledSource))
+import Shikigami.Directory (DirectorySnapshotVersion, DirectorySourceKind (DirectoryDisabledSource), parseDirectorySnapshotVersion)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Router.Catalog
   ( CandidateAvailability (..),
@@ -122,7 +122,7 @@ catalog =
     { router = fixtureAgentName "router",
       version = testCatalogVersion,
       lifecycleSource = DirectoryDisabledSource,
-      lifecycleSourceVersion = DirectorySnapshotVersion "directory-v1",
+      lifecycleSourceVersion = either (error . show) id (parseDirectorySnapshotVersion "a6ef7db1-ecd3-5923-a9ce-3f95ffa4cde4"),
       candidates =
         [ CandidateEntry
             { name = fixtureAgentName "reviewer",

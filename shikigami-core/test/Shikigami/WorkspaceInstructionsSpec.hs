@@ -9,6 +9,7 @@ import Data.Generics.Labels ()
 import Data.Text (Text)
 import Data.Text qualified as AssignmentText
 import Data.Text qualified as Text
+import Keiro.Workflow.Types (WorkflowId (..))
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
@@ -29,8 +30,8 @@ tests =
     "workspace instructions"
     [ testCase "historical admissions preserve JSON and cannot acquire a native file profile" $ do
         bundle <- right (mkInstructionBundle 65536 repository base [])
-        let admission = WorkspaceAdmission (WorkspaceRef "provider" "resource") "binding" "run" (fixtureAssignment "assignment") (fixtureRootId "root") (CompatibilityIdentity (fixtureAgentName "worker")) (fixtureRevision 0) bundle Nothing
-            historical = Aeson.object ["workspace" .= admission.workspace, "bindingDigest" .= admission.bindingDigest, "runId" .= admission.runId, "assignmentId" .= Aeson.String "assignment", "rootId" .= admission.rootId, "owner" .= admission.owner, "epoch" .= admission.epoch, "instructions" .= bundle]
+        let admission = WorkspaceAdmission (WorkspaceRef "provider" "resource") "binding" (WorkflowId "run") (fixtureAssignment "assignment") (fixtureRootId "root") (CompatibilityIdentity (fixtureAgentName "worker")) (fixtureRevision 0) bundle Nothing
+            historical = Aeson.object ["workspace" .= admission.workspace, "bindingDigest" .= admission.bindingDigest, "runId" .= admission.runId.unWorkflowId, "assignmentId" .= Aeson.String "assignment", "rootId" .= admission.rootId, "owner" .= admission.owner, "epoch" .= admission.epoch, "instructions" .= bundle]
         Aeson.fromJSON historical @?= Aeson.Success admission
         Aeson.toJSON admission @?= historical
         Aeson.encode admission @?= Aeson.encode historical

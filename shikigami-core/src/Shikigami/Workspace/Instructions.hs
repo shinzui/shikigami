@@ -21,13 +21,14 @@ module Shikigami.Workspace.Instructions
   )
 where
 
-import Data.Aeson ((.:), (.=))
+import Data.Aeson ((.:), (.:?), (.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as Bytes
 import Data.ByteString.Lazy qualified as Lazy
 import Data.List (nub, sortOn)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
+import Keiro.Workflow.Types (WorkflowId (..))
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.AssignmentKey (AssignmentKey)
@@ -116,7 +117,7 @@ instructionPrompt bundle =
 data WorkspaceAdmission = WorkspaceAdmission
   { workspace :: !WorkspaceRef,
     bindingDigest :: !Text,
-    runId :: !Text,
+    runId :: !WorkflowId,
     assignmentId :: !AssignmentKey,
     rootId :: !ExecutionRootId,
     owner :: !AgentIdentity,
@@ -125,12 +126,14 @@ data WorkspaceAdmission = WorkspaceAdmission
     filePolicy :: !(Maybe Text)
   }
   deriving stock (Eq, Generic)
-  deriving anyclass (FromJSON)
+
+instance FromJSON WorkspaceAdmission where
+  parseJSON = Aeson.withObject "WorkspaceAdmission" \fields -> WorkspaceAdmission <$> fields .: "workspace" <*> fields .: "bindingDigest" <*> (WorkflowId <$> fields .: "runId") <*> fields .: "assignmentId" <*> fields .: "rootId" <*> fields .: "owner" <*> fields .: "epoch" <*> fields .: "instructions" <*> fields .:? "filePolicy"
 
 -- Historical admissions carry no native filesystem qualification. Omission
 -- preserves their protected snapshot identity when decoded and re-encoded.
 instance ToJSON WorkspaceAdmission where
-  toJSON = Aeson.genericToJSON Aeson.defaultOptions {Aeson.omitNothingFields = True}
+  toJSON value = Aeson.object (["workspace" .= value.workspace, "bindingDigest" .= value.bindingDigest, "runId" .= value.runId.unWorkflowId, "assignmentId" .= value.assignmentId, "rootId" .= value.rootId, "owner" .= value.owner, "epoch" .= value.epoch, "instructions" .= value.instructions] <> ["filePolicy" .= policy | Just policy <- [value.filePolicy]])
 
 nativeFilePolicy :: Text
 nativeFilePolicy = "ascii-exact-v1"

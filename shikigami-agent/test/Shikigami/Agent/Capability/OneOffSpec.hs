@@ -31,6 +31,7 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Data.Vector qualified as Vector
 import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Capability.OneOff
 import Shikigami.Agent.Capability.Workspace (workspaceReadId)
 import Shikigami.Agent.Decl
@@ -40,6 +41,7 @@ import Shikigami.Agent.Decl
     Trigger (..),
     defaultMemoryPolicy,
   )
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
@@ -47,6 +49,7 @@ import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv, runBehavior, tr
 import Shikigami.Capability.Catalog (CapabilityResolutionError (MissingCapabilityIdentity))
 import Shikigami.Capability.Overlay (CapabilityId, capabilityIdText)
 import Shikigami.Log qualified as Log
+import Shikigami.Trigger.Schedule (parseCron)
 import Shikumi.Tool qualified as Tool
 import System.Directory
   ( createDirectory,
@@ -149,8 +152,8 @@ tests =
           base <- newBehaviorEnv
           let optedBase = (base & #model .~ (toolModel optedApi))
               emptyBase = (base & #model .~ (toolModel emptyApi))
-              optedDecl = (declFor [workspaceReadId]) {behavior = Skill {path = Text.pack (root </> "agents" </> "skills" </> "triage-note")}}
-              emptyDecl = (declFor []) {behavior = Skill {path = Text.pack (root </> "agents" </> "skills" </> "triage-note")}}
+              optedDecl = (declFor [workspaceReadId]) {behavior = Skill {path = declarationCoordinate (Text.pack (root </> "agents" </> "skills" </> "triage-note"))}}
+              emptyDecl = (declFor []) {behavior = Skill {path = declarationCoordinate (Text.pack (root </> "agents" </> "skills" </> "triage-note"))}}
           opted <-
             withOneOffCapabilityOverlays logger allowAllActionAuthorizerForTests (Just repository) optedDecl optedBase \derived ->
               runBehavior derived optedDecl (triggerOnly (object ["task" .= ("read the fixture" :: Text)]))
@@ -189,15 +192,15 @@ tests =
     ]
 
 declFor :: [CapabilityId] -> AgentDecl
-declFor = declForIdentity (Just IdentityDecl {principal = "principal_workspace_scripted"})
+declFor = declForIdentity (Just IdentityDecl {principal = declarationCoordinate ("principal_workspace_scripted")})
 
 declForIdentity :: Maybe IdentityDecl -> [CapabilityId] -> AgentDecl
 declForIdentity identity capabilityOverlays =
   AgentDecl
     { name = fixtureAgentName "workspace-scripted-agent",
       description = "workspace scripted agent",
-      trigger = Event {eventType = "test"},
-      behavior = Skill {path = "unused"},
+      trigger = Event {eventType = declarationCoordinate ("test")},
+      behavior = Skill {path = declarationCoordinate ("unused")},
       sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
@@ -205,7 +208,7 @@ declForIdentity identity capabilityOverlays =
       capabilityOverlays,
       identity,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,

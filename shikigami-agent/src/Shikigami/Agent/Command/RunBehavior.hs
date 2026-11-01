@@ -18,6 +18,7 @@ import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Payload (readPayloadArgument)
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
+import Shikigami.Attestation.Profile (ProfileId (..))
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Behavior.Run (triggerOnly)
 import Shikigami.Execution.Ephemeral (EphemeralResult (..), runEphemeralBehavior)
@@ -86,6 +87,6 @@ profileRequirementRefusal AgentDecl {sanctionedProfile} =
     Just ProfileRequirement {profileId} ->
       Just
         ( "agent requires sanctioned profile "
-            <> profileId
+            <> profileId.value
             <> "; use shikigami-agent-run so it can resolve the profile before dispatch"
         )

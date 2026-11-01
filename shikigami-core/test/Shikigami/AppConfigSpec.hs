@@ -53,8 +53,10 @@ import Settei.Env (EnvName (..), EnvSnapshot, bindingKey, bindingName, bindingsL
 import Settei.Key (parseKey)
 import Settei.Optparse (CliOverride, cliOverride, cliSources)
 import Settei.Yaml (decodeYamlSource, yamlSourceOptions)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa, ViaKizashi))
 import Shikigami.Agent.Decl (delegationBudgetNatural)
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Principal (principalText)
 import Shikigami.App.Config
 import Shikigami.App.Config.Load
@@ -65,7 +67,7 @@ import Shikigami.Objective.Types (ObjectiveService (..), ObjectiveSettings (..),
 import Shikigami.PracticeReview.Capability (renderAttentionRecipientMap)
 import Shikigami.Sink.Auth (TokenSource (..), credentialToken, matchesBearerHeader, staticTokenSource)
 import Shikigami.Sink.Permission (SinkKind (..))
-import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
+import Shikigami.Trigger.Schedule (CatchUpPolicy (..), parseCron)
 import Shikigami.Workspace.Settings (WorkspaceSettings (..), WorkspaceSupervisorSettings (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))

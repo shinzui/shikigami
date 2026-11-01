@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RankNTypes #-}
 
 module Shikigami.Flow
@@ -26,6 +27,7 @@ import Effectful (Eff, (:>))
 import Keiro.Workflow (Workflow)
 import Shikigami.Agent.Approval (ApprovalEnv)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate (DelegationRequest (..))
 import Shikigami.Agent.Name (agentNameFromNonEmpty, agentNameText)
 import Shikigami.Decision.Contract (DecisionSlot)
@@ -112,7 +114,7 @@ data LifecycleDiagram = LifecycleDiagram
   deriving stock (Eq, Show)
 
 data FlowDef = FlowDef
-  { name :: !Text,
+  { name :: !(DeclarationCoordinate "flow"),
     lifecycle :: !LifecycleDiagram,
     decisionSlots :: ![DecisionSlot],
     requiresDefaultModel :: !Bool,
@@ -145,21 +147,21 @@ atRiskCustomerLifecycleDiagram =
 flowRegistry :: [FlowDef]
 flowRegistry =
   [ FlowDef
-      { name = "shikumi-decision-example",
+      { name = declarationCoordinate "shikumi-decision-example",
         decisionSlots = exampleSlots,
         requiresDefaultModel = False,
         lifecycle = LifecycleDiagram "flowchart LR\n Request --> Triage --> Investigation --> Specialist" [],
         run = shikumiDecisionExample
       },
     FlowDef
-      { name = "at-risk-customer",
+      { name = declarationCoordinate "at-risk-customer",
         decisionSlots = [],
         requiresDefaultModel = True,
         lifecycle = atRiskCustomerLifecycleDiagram,
         run = atRiskCustomerFlow
       },
     FlowDef
-      { name = "delegation-proof",
+      { name = declarationCoordinate "delegation-proof",
         decisionSlots = [],
         requiresDefaultModel = True,
         lifecycle =
@@ -170,7 +172,7 @@ flowRegistry =
         run = delegationProofFlow
       },
     FlowDef
-      { name = "architecture-practice-router",
+      { name = declarationCoordinate "architecture-practice-router",
         decisionSlots = [],
         requiresDefaultModel = True,
         lifecycle =
@@ -181,7 +183,7 @@ flowRegistry =
         run = architecturePracticeRouterFlow
       },
     FlowDef
-      { name = opentelemetryPracticeReviewFlowName,
+      { name = declarationCoordinate opentelemetryPracticeReviewFlowName,
         decisionSlots = [],
         requiresDefaultModel = True,
         lifecycle =
@@ -240,10 +242,10 @@ architecturePracticeRouterFlow payload = do
 -- This is what an agent manifest's @Behavior.Flow { name }@ must match. Before
 -- it existed the only check happened inside a running workflow, so a typo in a
 -- manifest became a failed agent run rather than a refused deployment.
-registeredFlowNames :: [Text]
+registeredFlowNames :: [DeclarationCoordinate "flow"]
 registeredFlowNames = [name | FlowDef {name} <- flowRegistry]
 
-lookupFlow :: Text -> Maybe FlowDef
+lookupFlow :: DeclarationCoordinate "flow" -> Maybe FlowDef
 lookupFlow requested =
   find (\FlowDef {name} -> name == requested) flowRegistry
 
@@ -262,9 +264,9 @@ flowDeclarationErrors declaration@AgentDecl {behavior} =
     Flow {name = flowName}
       | flowName `notElem` registeredFlowNames ->
           [ "unknown flow "
-              <> flowName
+              <> declarationCoordinateText flowName
               <> "; registered flows: "
-              <> Text.intercalate ", " registeredFlowNames
+              <> Text.intercalate ", " (map declarationCoordinateText registeredFlowNames)
           ]
     Flow {name = flowName} ->
       case lookupFlow flowName of

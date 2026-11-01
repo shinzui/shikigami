@@ -14,7 +14,9 @@ import Data.Aeson (Value (..), eitherDecode)
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Text qualified as Text
 import Network.HTTP.Types.Header (Header)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (Sink (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (KizashiConfig (..))
@@ -53,12 +55,12 @@ buildSignalReq KizashiConfig {defaultRecipient = fallbackRecipient} resolvedReci
         Right
           CreateSignalReq
             { actor = nm,
-              recipient = recipientFor fallbackRecipient resolvedRecipient mrec,
-              source = src,
+              recipient = recipientFor fallbackRecipient resolvedRecipient (declarationCoordinateText <$> mrec),
+              source = activityCoordinateText src,
               signalType = st,
               intent = tmpl,
               priority = pr,
-              importance = fromIntegral imp,
+              importance = signalImportanceInt imp,
               contextTags = tags <> activityRefTags output
             }
     _ -> Left "buildSignalReq: not a KizashiSignal sink"

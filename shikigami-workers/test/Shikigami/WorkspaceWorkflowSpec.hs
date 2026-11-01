@@ -23,12 +23,15 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (preparable)
 import Hasql.Transaction qualified as Tx
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as Approval
 import Shikigami.Agent.Decl
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
 import Shikigami.Agent.Loader (loadAgent)
@@ -67,6 +70,7 @@ import Shikigami.Sink.Config
 import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
+import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.WorkerSession.Input (SessionLimit (..))
 import Shikigami.WorkerSession.Input qualified as WorkerInput
 import Shikigami.WorkerSession.Store qualified as Sessions
@@ -125,7 +129,7 @@ tests fixture =
           catalog <- right (WorkspaceCatalog.mkWorkspaceCatalog [WorkspaceCatalog.RepositoryPolicy binding.repository binding.source [binding.base] binding.base binding.policyRevision])
           repository <- right (WorkspaceCatalog.resolveRepository catalog binding.repository Nothing)
           run env (runTransaction (Store.reserveWorkspaceTx root binding.request repository)) >>= (@?= Left WorkspaceBindingConflict)
-          (foreignBinding, _) <- right =<< run env (runTransaction (Store.reserveWorkspaceTx (root <> "-other") (binding.request & #runId .~ "foreign-workspace") repository))
+          (foreignBinding, _) <- right =<< run env (runTransaction (Store.reserveWorkspaceTx (root <> "-other") (binding.request & #runId .~ WorkflowId "foreign-workspace") repository))
           listing <- right =<< listWorkspaces runtime job.identity Nothing
           assertBool "operator listing omits other storage roots, local paths and private instructions" (all (\secret -> not (secret `Text.isInfixOf` Text.pack (show (Aeson.encode listing)))) [Text.pack root, Text.pack binding.source, "PRIVATE_WORKFLOW_POLICY", foreignBinding.workspace.resource])
           Agent.runAgentRunWorkflow deps job >>= assertCompleted,
@@ -172,7 +176,7 @@ tests fixture =
       testCase "terminal cleanup refuses unsettled effects and a live idle session" $
         withWorkflow fixture \env root job _ deps _ -> do
           binding <- finishWorkspace env job deps
-          parentSession <- pure binding.request.runId
+          parentSession <- pure binding.request.runId.unWorkflowId
           parent <- right =<< loadAgent "../agents/heartbeat.dhall"
           access <- right =<< run env (Execution.authorizeReplay (executionIdFor (assignmentIdFor (runJobWorkflowId job).unWorkflowId)) job.identity (pure (Right ())))
           (snapshot, _) <- right =<< run env (Execution.loadExecution access)
@@ -339,7 +343,7 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
   principal <- right (identityText (CompatibilityIdentity (fixtureAgentName "workspace-worker")))
   let settings = WorkspaceSettings root [WorkspaceRepository "mori://fixture/repo" source [WorkspaceRevision (repositoryBase repository) (bundleDigest expected)] (repositoryBase repository) "policy-1" [""] ["dependency.txt"]] [WorkspaceGrant "workspace-worker" principal "mori://fixture/repo" Nothing] Nothing
   host <- right (configuredWorkspaceHost env store.pool disabledDirectoryHandle authorizer (configure settings))
-  let declaration = original & #name .~ fixtureAgentName "workspace-worker" & #behavior .~ Skill (Text.pack skill) & #identity .~ Just (IdentityDecl "workspace-principal") & #capabilityOverlays .~ [workspaceEditDescriptor.capability] & #sinks .~ []
+  let declaration = original & #name .~ fixtureAgentName "workspace-worker" & #behavior .~ Skill (declarationCoordinate ((Text.pack skill))) & #identity .~ Just (IdentityDecl (declarationCoordinate ("workspace-principal"))) & #capabilityOverlays .~ [workspaceEditDescriptor.capability] & #sinks .~ []
       identity = CompatibilityIdentity (fixtureAgentName "workspace-worker")
       rootId = fixtureRootId "workflow-root"
       job = RunJob (fixtureAgentName "workspace-worker") identity TriggeredBySchedule now Aeson.Null (fixtureRunKey "workspace-workflow-fixture") Nothing Nothing Nothing [] Nothing Nothing (Just rootId) Nothing AgentWorkflowRoute

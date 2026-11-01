@@ -24,7 +24,9 @@ import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (defaultDelegationBudget)
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
 import Shikigami.Agent.Loader (loadAgent)
@@ -54,6 +56,7 @@ import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.StateRevision (StateRevision, advanceRevision, parseRevision)
 import Shikigami.StateRevision qualified as Generation
+import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.WorkerSession.Checkpoint (ObjectiveVersion (..))
 import Shikigami.WorkerSession.Input (InstructionText, SessionLimit (..), parseInstructionText)
 import Shikigami.WorkerSession.Input qualified as WorkerInput
@@ -100,7 +103,7 @@ tests fixture =
         let digest = "sha256:" <> Text.replicate 64 "a"
             policy = ProcessPolicy ProcessPolicyV1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") properties [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] [""]
         withWorkspacePolicy False (Just policy) fixture \env binding context _ _ -> do
-          original <- (\admission -> admission & #filePolicy .~ Just transferableFilePolicy) <$> (right =<< loadWorkspaceAdmission binding (Selection.assignmentIdFor binding.request.runId) 65536)
+          original <- (\admission -> admission & #filePolicy .~ Just transferableFilePolicy) <$> (right =<< loadWorkspaceAdmission binding (Selection.assignmentIdFor binding.request.runId.unWorkflowId) 65536)
           (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest original.instructions) policy (IdentityRange 62000 62001)))
           run env (runTransaction (readyProcessProfileTx binding profile)) >>= (@?= Right ())
           let runtime = FileRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ _ _ -> pure (Right ()))
@@ -118,10 +121,10 @@ tests fixture =
           Just (idle, _) <- right =<< run env (Sessions.inspectSession context.sessionId)
           (_, message) <- right =<< run env (Sessions.acceptMessage parent idle.revision (fixtureRevision 0) (fixtureOperationId "follow-up") (Instruction V1 FollowUp (fixtureInstruction "continue accepted work") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
           (_, started) <- right =<< run env (Sessions.startAssignment parent (advanceRevision idle.revision) (fixtureRevision 0) (fixtureOperationId "start-follow-up") message.assignmentId)
-          child <- maybe (fail "missing follow-up child") (pure . (.unWorkflowId)) started.childWorkflowId
+          child <- maybe (fail "missing follow-up child") pure started.childWorkflowId
           now <- getCurrentTime
           memory <- genSessionId
-          selection <- right (resolveExecutionSelection (Selection.assignmentIdFor child) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just context.rootId) now)
+          selection <- right (resolveExecutionSelection (Selection.assignmentIdFor child.unWorkflowId) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just context.rootId) now)
           let assignment = SkillAssignment child (fixtureAgentName "worker") binding.request.owner memory selection Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host cannot dispatch models")
           catalog <- right (mkWorkspaceCatalog [RepositoryPolicy binding.repository binding.source [binding.base] binding.base binding.policyRevision])
           repository <- right (resolveRepository catalog binding.repository Nothing)
@@ -170,8 +173,8 @@ tests fixture =
             Just (idle, _) <- right =<< run env (Sessions.inspectSession context.sessionId)
             (_, third) <- right =<< run env (Sessions.acceptMessage parent idle.revision (fixtureRevision 0) (fixtureOperationId "third-message") (Instruction V1 FollowUp (fixtureInstruction "continue again") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
             (_, started) <- right =<< run env (Sessions.startAssignment parent (advanceRevision idle.revision) (fixtureRevision 0) (fixtureOperationId "third-start") third.assignmentId)
-            thirdRun <- maybe (fail "missing third child") (pure . (.unWorkflowId)) started.childWorkflowId
-            selection <- right (resolveExecutionSelection (Selection.assignmentIdFor thirdRun) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just context.rootId) now)
+            thirdRun <- maybe (fail "missing third child") pure started.childWorkflowId
+            selection <- right (resolveExecutionSelection (Selection.assignmentIdFor thirdRun.unWorkflowId) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just context.rootId) now)
             let next = assignment & #runId .~ thirdRun & #selection .~ selection
             host.load next >>= \case Left _ -> pure (); Right _ -> assertFailure "a session result hid an active prior execution"
             (_, state) <- right =<< run env (Execution.loadExecution access)
@@ -187,7 +190,7 @@ tests fixture =
         let digest = "sha256:" <> Text.replicate 64 "a"
             policy = ProcessPolicy ProcessPolicyV1 (ProcessImage "/qualified/root" digest "/bin/env" "/bin/deadline" "/qualified/collector") properties [CommandRule "validate" "/bin/validate" [] "" Map.empty 30 1024] [""] [""]
         withTransferPolicy (Just policy) fixture \env binding intent supervisor _ -> do
-          original <- right =<< loadWorkspaceAdmission binding (Selection.assignmentIdFor binding.request.runId) 65536
+          original <- right =<< loadWorkspaceAdmission binding (Selection.assignmentIdFor binding.request.runId.unWorkflowId) 65536
           (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest original.instructions) policy (IdentityRange 62000 62001)))
           run env (runTransaction (readyProcessProfileTx binding profile)) >>= (@?= Right ())
           -- Mutable instruction proposals cannot replace the pinned base.
@@ -198,7 +201,7 @@ tests fixture =
           now <- getCurrentTime
           selection <- right (resolveExecutionSelection (Selection.assignmentIdFor childRun) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just intent.rootId) now)
           let fileRuntime = FileRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ admission _ kind _ -> pure (if kind == "admit" && map (.text) (bundleFiles admission.instructions) /= ["PINNED_ROOT_POLICY: validate before committing"] then Left "changed instruction identity" else Right ()))
-              assignment = SkillAssignment childRun intent.newWorker intent.newOwner session selection Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host loading cannot call a model")
+              assignment = SkillAssignment (WorkflowId childRun) intent.newWorker intent.newOwner session selection Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host loading cannot call a model")
           catalog <- right (mkWorkspaceCatalog [RepositoryPolicy binding.repository binding.source [binding.base] binding.base binding.policyRevision])
           repository <- right (resolveRepository catalog binding.repository Nothing)
           let hostFor runtime = right (governedWorkspaceHostWithTransfers runtime [transferredWorkspaceEditAdapter runtime] [workspaceEditAdapter runtime, supervisedWorkspaceEditAdapter runtime] (\_ _ admission -> pure (Right admission)) binding.storageRoot (const (pure (Right repository))) (const (pure (Right ()))))
@@ -209,7 +212,7 @@ tests fixture =
           admission <- right =<< host.load assignment
           admission.owner @?= intent.newOwner
           admission.epoch @?= (fixtureRevision 1)
-          admission.runId @?= childRun
+          admission.runId @?= WorkflowId childRun
           admission.filePolicy @?= Just transferableFilePolicy
           host.load assignment >>= (@?= Right admission)
           token <- UUID4.nextRandom
@@ -235,7 +238,7 @@ tests fixture =
             nextRun <- maybe (fail "missing successor followup child") (pure . (.unWorkflowId)) nextStarted.childWorkflowId
             nextSelection <- right (resolveExecutionSelection (Selection.assignmentIdFor nextRun) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just intent.rootId) now)
             let nextAssignment = assignmentFor nextRun nextSelection
-                assignmentFor run selected = SkillAssignment run intent.newWorker intent.newOwner session selected Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host cannot call models")
+                assignmentFor run selected = SkillAssignment (WorkflowId run) intent.newWorker intent.newOwner session selected Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host cannot call models")
             host.load nextAssignment >>= \case Left _ -> pure (); Right _ -> assertFailure "live prior successor execution admitted followup"
             _ <- right =<< run env (Execution.stopExecution snapshot.identity snapshot.executionId state.revision StopAsFailure (ExecutionPolicyRefused "fixture terminal"))
             nextAdmission <- right =<< host.load nextAssignment
@@ -335,7 +338,7 @@ withWorkspacePolicy transferring policy fixture callback = Fixture.withFixture f
   access <- right =<< run env (Sessions.authorizeSession (sessionIdFor session) actor (pure (Right ())))
   (_, message) <- right =<< run env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send") (Instruction V1 FollowUp (fixtureInstruction "fixture") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
   (_, started) <- right =<< run env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId "start") message.assignmentId)
-  child <- maybe (fail "missing child") (pure . (.unWorkflowId)) started.childWorkflowId
+  child <- maybe (fail "missing child") pure started.childWorkflowId
   (binding, _) <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx storage (WorkspaceRequest child (Just (sessionIdFor session, message.assignmentId)) root old old (fixtureRevision 0)) repository))
   allocateWorkspace storage binding Reserved >>= (@?= Right ())
   run env (runTransaction (Workspaces.markWorkspaceReadyTx binding)) >>= (@?= Right ())

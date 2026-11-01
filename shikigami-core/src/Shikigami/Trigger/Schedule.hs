@@ -3,7 +3,10 @@
 -- @isDue cron now@. (rei's enum-based evaluator cannot express arbitrary cron strings
 -- and is not a library — see the Decision Log.)
 module Shikigami.Trigger.Schedule
-  ( CronSchedule,
+  ( CronExpressionClaim,
+    cronExpressionClaim,
+    cronExpressionText,
+    CronSchedule,
     parseCron,
     isDue,
     nextDue,
@@ -11,11 +14,28 @@ module Shikigami.Trigger.Schedule
   )
 where
 
+import Data.Aeson (FromJSON, ToJSON)
 import Data.Text qualified as Text
 import Data.Time.Clock (addUTCTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime, utcTimeToPOSIXSeconds)
+import Dhall (FromDhall (..))
+import Dhall qualified
 import Shikigami.Prelude
 import System.Cron qualified as Cron
+
+-- | An exact operator declaration. The scheduler owns parsing and its existing
+-- strict/lenient diagnostics before a claim becomes an admitted timer schedule.
+newtype CronExpressionClaim = CronExpressionClaim Text
+  deriving stock (Eq, Show)
+  deriving newtype (ToJSON, FromJSON)
+
+cronExpressionClaim :: Text -> CronExpressionClaim
+cronExpressionClaim = CronExpressionClaim
+
+cronExpressionText :: CronExpressionClaim -> Text
+cronExpressionText (CronExpressionClaim value) = value
+
+instance FromDhall CronExpressionClaim where autoWith _ = CronExpressionClaim <$> Dhall.strictText
 
 -- | A parsed cron schedule (opaque; construct via 'parseCron').
 newtype CronSchedule = CronSchedule Cron.CronSchedule

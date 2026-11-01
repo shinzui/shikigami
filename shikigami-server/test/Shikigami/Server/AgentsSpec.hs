@@ -4,7 +4,9 @@ import Data.List (find)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Loader (loadAgentsReport)
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Principal (mkAgentPrincipal)
@@ -27,6 +29,7 @@ import Shikigami.Server.Command.Agents
     buildAgentInventory,
     reconcileAgentAliases,
   )
+import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
@@ -40,13 +43,13 @@ tests databaseFixture =
           newDirectoryHandle
             ( staticDirectorySource
                 [ PrincipalRecord
-                    { principalId = "agent_heartbeat",
-                      handle = "heartbeat",
+                    { principalId = declarationCoordinate ("agent_heartbeat"),
+                      handle = declarationCoordinate ("heartbeat"),
                       lifecycle = Paused
                     },
                   PrincipalRecord
-                    { principalId = "agent_directory_only",
-                      handle = "directory-only",
+                    { principalId = declarationCoordinate ("agent_directory_only"),
+                      handle = declarationCoordinate ("directory-only"),
                       lifecycle = Active
                     }
                 ]
@@ -56,7 +59,7 @@ tests databaseFixture =
         heartbeat <- findDeclared "heartbeat" inventory
         assertEqual
           "joined principal"
-          (Just "agent_heartbeat")
+          (Just (declarationCoordinate "agent_heartbeat"))
           ((.principalId) <$> (.principal) heartbeat)
         triage <- findDeclared "triage-note" inventory
         assertEqual "declared-only principal" Nothing ((.principal) triage)
@@ -142,16 +145,16 @@ directoryWithPrincipals principals = do
 heartbeatPrincipal :: PrincipalRecord
 heartbeatPrincipal =
   PrincipalRecord
-    { principalId = "agent_heartbeat",
-      handle = "heartbeat",
+    { principalId = declarationCoordinate ("agent_heartbeat"),
+      handle = declarationCoordinate ("heartbeat"),
       lifecycle = Active
     }
 
 triagePrincipal :: PrincipalRecord
 triagePrincipal =
   PrincipalRecord
-    { principalId = "agent_triage_note",
-      handle = "triage-note",
+    { principalId = declarationCoordinate ("agent_triage_note"),
+      handle = declarationCoordinate ("triage-note"),
       lifecycle = Active
     }
 
@@ -170,5 +173,5 @@ isFailure _ = False
 
 isDirectoryOnly :: AgentInventoryEntry -> Bool
 isDirectoryOnly AgentInventoryEntry {declaration = Nothing, principal = Just joined} =
-  (.principalId) joined == "agent_directory_only"
+  (.principalId) joined == declarationCoordinate "agent_directory_only"
 isDirectoryOnly _ = False

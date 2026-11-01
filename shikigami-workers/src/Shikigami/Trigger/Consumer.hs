@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
 
 -- | Durable Kafka consumers for stream and public integration-event triggers.
@@ -79,6 +80,7 @@ import Shibuya.Policy (Concurrency (Serial), OrderingPolicy (StrictInOrder))
 import Shibuya.Telemetry.Effect (runTracing)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), StreamMatch, Trigger (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkAgentPrincipal)
 
@@ -655,7 +657,7 @@ prepareTrigger directory detail agent job hit = do
   pure case decision of
     Directory.AllowRun Nothing -> EnqueueTrigger ((job & #identity .~ (compatibilityIdentity (agent ^. #name)))) hit
     Directory.AllowRun (Just principal) ->
-      case mkAgentPrincipal ((.principalId) principal) of
+      case mkAgentPrincipal (declarationCoordinateText ((.principalId) principal)) of
         Right admittedPrincipal -> EnqueueTrigger ((job & #identity .~ (VerifiedIdentity admittedPrincipal))) hit
         Left reason -> refused (Just ((.principalId) principal)) reason
     Directory.SkipRun principal reason -> refused (Just ((.principalId) principal)) reason
@@ -666,7 +668,7 @@ prepareTrigger directory detail agent job hit = do
       SkipTrigger
         RunSkip
           { agentName = agent ^. #name,
-            principalId = reportedPrincipalClaim <$> resolvedPrincipalId,
+            principalId = (reportedPrincipalClaim . declarationCoordinateText) <$> resolvedPrincipalId,
             stage = TriggerStage,
             detail,
             reason,
@@ -696,14 +698,14 @@ reportCommitted logger prefix onHit = \case
         Log.runIdKey .= idempotencyKey
       ]
 
-principalIdOf :: AgentDecl -> Maybe Text
+principalIdOf :: AgentDecl -> Maybe (DeclarationCoordinate "principal")
 principalIdOf AgentDecl {identity} = declared <$> identity
   where
     declared IdentityDecl {principal} = principal
 
 eventTriggerTypeOf :: AgentDecl -> Maybe Text
 eventTriggerTypeOf agent = case agent ^. #trigger of
-  Event {eventType} -> Just eventType
+  Event {eventType} -> Just (declarationCoordinateText eventType)
   _ -> Nothing
 
 -- | The declared event type is the honest source of the conversation/agent-run

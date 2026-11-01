@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.Trigger.Scheduler
   ( SchedulerEnv (..),
     scheduleTimerKind,
@@ -30,6 +32,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Conversation qualified as Conversation
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.App (AppEnv (..))
@@ -45,7 +48,7 @@ data SchedulerEnv = SchedulerEnv
   { pool :: !Pool,
     schedules :: !(Map AgentName CronSchedule),
     -- | Declaration principal ids keyed by scheduled agent name.
-    principalIds :: !(Map AgentName (Maybe Text)),
+    principalIds :: !(Map AgentName (Maybe (DeclarationCoordinate "principal"))),
     directory :: !Directory.DirectoryHandle,
     -- | What to do about cron minutes that passed while the process was down.
     catchUpPolicy :: !CatchUpPolicy,
@@ -154,7 +157,7 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
           let runSkip =
                 RunSkip
                   { agentName = agent,
-                    principalId = reportedPrincipalClaim <$> resolvedPrincipalId,
+                    principalId = (reportedPrincipalClaim . declarationCoordinateText) <$> resolvedPrincipalId,
                     stage = TriggerStage,
                     detail = "schedule",
                     reason,
@@ -184,11 +187,11 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
                   ]
               advance
 
-admittedIdentity :: AgentName -> Maybe Text -> Directory.LifecycleDecision -> Either (Maybe Text, Text) AgentIdentity
+admittedIdentity :: AgentName -> Maybe (DeclarationCoordinate "principal") -> Directory.LifecycleDecision -> Either (Maybe (DeclarationCoordinate "principal"), Text) AgentIdentity
 admittedIdentity agent declaredPrincipalId = \case
   Directory.AllowRun Nothing -> Right (compatibilityIdentity agent)
   Directory.AllowRun (Just principal) ->
-    case mkAgentPrincipal ((.principalId) principal) of
+    case mkAgentPrincipal (declarationCoordinateText ((.principalId) principal)) of
       Left reason -> Left (Just ((.principalId) principal), reason)
       Right admittedPrincipal -> Right (VerifiedIdentity admittedPrincipal)
   Directory.SkipRun principal reason -> Left (Just ((.principalId) principal), reason)

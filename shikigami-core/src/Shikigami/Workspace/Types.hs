@@ -17,15 +17,16 @@ module Shikigami.Workspace.Types
   )
 where
 
-import Data.Aeson (withText)
+import Data.Aeson (object, withObject, withText, (.:), (.:?), (.=))
 import Data.Bifunctor (first)
 import Data.KindID.V7 qualified as KindID
 import Data.Text qualified as Text
 import Data.UUID (UUID)
+import Keiro.Workflow.Types (WorkflowId (..))
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId)
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Transfer (WorkspaceRef)
 import Shikigami.WorkerSession.Types (AssignmentId, WorkerSessionId)
@@ -67,7 +68,7 @@ instance FromJSON WorkspaceId where
   parseJSON = withText "workspace ID" (either (fail . Text.unpack) pure . parseWorkspaceId)
 
 data WorkspaceRequest = WorkspaceRequest
-  { runId :: !Text,
+  { runId :: !WorkflowId,
     assignment :: !(Maybe (WorkerSessionId, AssignmentId)),
     rootId :: !ExecutionRootId,
     principal :: !AgentIdentity,
@@ -75,7 +76,12 @@ data WorkspaceRequest = WorkspaceRequest
     epoch :: !(StateRevision "worker-owner")
   }
   deriving stock (Eq, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+
+instance ToJSON WorkspaceRequest where
+  toJSON value = object ["runId" .= value.runId.unWorkflowId, "assignment" .= value.assignment, "rootId" .= value.rootId, "principal" .= value.principal, "owner" .= value.owner, "epoch" .= value.epoch]
+
+instance FromJSON WorkspaceRequest where
+  parseJSON = withObject "WorkspaceRequest" \fields -> WorkspaceRequest <$> (WorkflowId <$> fields .: "runId") <*> fields .:? "assignment" <*> fields .: "rootId" <*> fields .: "principal" <*> fields .: "owner" <*> fields .: "epoch"
 
 instance Show WorkspaceRequest where show _ = "WorkspaceRequest <protected>"
 
@@ -116,5 +122,5 @@ matchesWorkspaceAdmission binding admission =
     && bundleRepository admission.instructions == binding.repository
     && bundleBase admission.instructions == binding.base
     && ( (admission.runId == binding.request.runId && admission.owner == binding.request.owner && admission.epoch == binding.request.epoch)
-           || (admission.filePolicy == Just transferableFilePolicy && admission.epoch >= binding.request.epoch && (admission.epoch /= binding.request.epoch || admission.owner == binding.request.owner) && revisionNumber admission.epoch < 9223372036854775808 && admission.runId /= binding.request.runId && admission.runId /= "")
+           || (admission.filePolicy == Just transferableFilePolicy && admission.epoch >= binding.request.epoch && (admission.epoch /= binding.request.epoch || admission.owner == binding.request.owner) && revisionNumber admission.epoch < 9223372036854775808 && admission.runId /= binding.request.runId && admission.runId.unWorkflowId /= "")
        )

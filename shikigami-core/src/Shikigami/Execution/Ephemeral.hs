@@ -18,6 +18,7 @@ import Data.Vector qualified as Vector
 import Effectful (runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Behavior.Compatibility (renderResponseCompatibilityError, validateResponseRequest)
 import Shikigami.Behavior.Error (RunError (..), boundedBehaviorDetail)
 import Shikigami.Behavior.Run (BehaviorEnv (..), BehaviorInput, completeBehaviorRequest, runBehavior)
@@ -57,7 +58,7 @@ runEphemeralBehavior duration base env decl input = case narrowHarnessPolicy bas
     | Set.fromList decl.capabilityOverlays /= env.activeOverlays || length decl.capabilityOverlays /= Set.size env.activeOverlays -> pure (Left (CapabilityOverlayMismatch decl.capabilityOverlays (Set.toAscList env.activeOverlays)))
     | otherwise -> case decl.behavior of
         Skill {path} -> do
-          loaded <- loadSkillManifest (SkillDir (Text.unpack path))
+          loaded <- loadSkillManifest (SkillDir (Text.unpack (declarationCoordinateText path)))
           case loaded of
             Left err -> pure (Left err)
             Right manifest -> loop [] policy 0 0 0 ModelTurn (ReplayContext RequestContext (Just manifest.description) [RequestTurn [TextBlock (skillRequestText manifest input)] Nothing]) Nothing

@@ -42,6 +42,13 @@ import Shikigami.Agent.Name qualified as Name
 import Shikigami.Router.SelectionLimit qualified as Limit
 import Shikigami.Objective.Types qualified as Objective
 import Shikigami.Agent.Decl (AgentDecl)
+import Shikigami.Agent.DeclarationValue qualified as DeclValue
+import Shikigami.Activity qualified as Activity
+import Shikigami.Activity.Coordinate qualified as ActivityValue
+import Shikigami.Directory qualified as Directory
+import Shikigami.Trigger.Schedule qualified as Schedule
+import Shikigami.Execution.Start qualified as Start
+import Shikigami.Capability.Provider qualified as Capability
 import Shikigami.Agent.Principal qualified as Principal
 import Shikigami.App.Config qualified as Config
 import Shikigami.Attestation.Compliance qualified as Compliance
@@ -95,7 +102,27 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''executionIdentity :: Text -> Transcript.ExecutionId
+POSITIVE = '''declarationTask :: Text -> DeclValue.DeclarationCoordinate "task"
+declarationTask = DeclValue.declarationCoordinate
+activityVerb :: Text -> ActivityValue.ActivityCoordinate "verb"
+activityVerb = ActivityValue.activityCoordinate
+signalImportance :: Natural -> Either Text DeclValue.SignalImportance
+signalImportance = DeclValue.parseSignalImportance
+contextReference :: Text -> Either Text ActivityValue.ContextReference
+contextReference = ActivityValue.parseContextReference
+directoryVersion :: Text -> Either Text Directory.DirectorySnapshotVersion
+directoryVersion = Directory.parseDirectorySnapshotVersion
+cronClaim :: Text -> Schedule.CronExpressionClaim
+cronClaim = Schedule.cronExpressionClaim
+cron :: Text -> Either Text Schedule.CronSchedule
+cron = Schedule.parseCron
+executionWorkflow :: Transcript.ExecutionSnapshot -> WorkflowId
+executionWorkflow value = value.runId
+workspaceWorkflow :: Workspace.WorkspaceRequest -> WorkflowId
+workspaceWorkflow value = value.runId
+capabilityPrincipal :: Capability.CapabilityScope -> DeclValue.DeclarationCoordinate "principal"
+capabilityPrincipal value = value.principal
+executionIdentity :: Text -> Transcript.ExecutionId
 executionIdentity = ExecutionValue.executionIdentity
 executionRead :: Transcript.ExecutionId -> Text
 executionRead value = value.value
@@ -335,6 +362,12 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('DeclValue.DeclarationCoordinate "task"', 'generic'),
+    ('ActivityValue.ActivityCoordinate "verb"', 'generic'),
+    ('DeclValue.SignalImportance', 'generic'),
+    ('ActivityValue.ContextReference', 'generic'),
+    ('Directory.DirectorySnapshotVersion', 'generic'),
+    ('Schedule.CronExpressionClaim', 'generic'),
     ('Transcript.ExecutionId', 'generic'),
     ('ExecutionValue.ExecutionCoordinate "tool-name"', 'generic'),
     ('ExecutionValue.ExecutionCoordinate "tool-revision"', 'generic'),
@@ -490,6 +523,17 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         ('execution identity record update', 'Transcript.ExecutionId -> Text -> Transcript.ExecutionId', '\\value raw -> value { ExecutionValue.value = raw }'),
         ('execution identity coercion', 'Text -> Transcript.ExecutionId', 'coerce'),
         ('execution coordinate raw coercion', 'Text -> ExecutionValue.ExecutionCoordinate "tool-name"', 'coerce'),
+        ('declaration task/skill substitution', 'DeclValue.DeclarationCoordinate "task" -> DeclValue.DeclarationCoordinate "skill-path"', 'coerce'),
+        ('declaration channel/action substitution', 'DeclValue.DeclarationCoordinate "channel" -> DeclValue.DeclarationCoordinate "channel-action"', 'coerce'),
+        ('activity source/verb substitution', 'ActivityValue.ActivityCoordinate "source" -> ActivityValue.ActivityCoordinate "verb"', 'coerce'),
+        ('activity actor/subject substitution', 'ActivityValue.ActivityCoordinate "actor-id" -> ActivityValue.ActivityCoordinate "subject-id"', 'coerce'),
+        ('declaration enablement boolean substitution', 'Bool -> DeclValue.AgentEnablement', 'id'),
+        ('signal importance raw coercion', 'Int -> DeclValue.SignalImportance', 'coerce'),
+        ('activity context reference raw coercion', 'Text -> ActivityValue.ContextReference', 'coerce'),
+        ('directory snapshot raw coercion', 'Text -> Directory.DirectorySnapshotVersion', 'coerce'),
+        ('cron claim raw coercion', 'Text -> Schedule.CronExpressionClaim', 'coerce'),
+        ('execution workflow raw substitution', 'Transcript.ExecutionSnapshot -> Text', '\\value -> value.runId'),
+        ('workspace workflow raw substitution', 'Workspace.WorkspaceRequest -> Text', '\\value -> value.runId'),
         ('execution coordinate role substitution', 'ExecutionValue.ExecutionCoordinate "tool-name" -> ExecutionValue.ExecutionCoordinate "tool-revision"', 'coerce'),
         ('execution digest role substitution', 'ExecutionValue.ExecutionDigest "input" -> ExecutionValue.ExecutionDigest "policy"', 'coerce'),
         ('context position coercion', 'Int -> ExecutionValue.ContextPosition', 'coerce'),

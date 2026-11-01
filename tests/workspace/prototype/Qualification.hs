@@ -21,11 +21,14 @@ import Effectful (Eff)
 import FixtureIdentity (fixtureRootId)
 import GHC.Generics (Generic)
 import GHC.Stack (HasCallStack, callStack, prettyCallStack)
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
+import Shikigami.Activity.Coordinate
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
@@ -49,6 +52,7 @@ import Shikigami.Execution.Start (SkillAssignment (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
 import Shikigami.Log qualified as Log
+import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Workspace.Admission (WorkspaceHost (..))
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.ConfiguredHost
@@ -108,7 +112,7 @@ loadAssignment q root runId owner = do
   now <- getCurrentTime
   session <- genSessionId
   selection <- right (resolveExecutionSelection (assignmentIdFor runId) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just root) now)
-  let assignment = SkillAssignment runId (fixtureAgentName "fixture") owner session selection Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host cannot dispatch a model")
+  let assignment = SkillAssignment (WorkflowId runId) (fixtureAgentName "fixture") owner session selection Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host cannot dispatch a model")
   let awaitAdmission remaining = do
         result <- q.host.load assignment
         case result of

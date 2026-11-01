@@ -14,6 +14,7 @@ import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..))
@@ -141,7 +142,7 @@ tests fixture =
 withGit :: DatabaseFixture -> (AppEnv -> WorkspaceBinding -> GitRecord -> IO a) -> IO a
 withGit fixture use = Fixture.withFixture fixture \env _ root repository -> do
   let owner = CompatibilityIdentity (fixtureAgentName "git-worker")
-      request = WorkspaceRequest "git-run" Nothing (fixtureRootId "git-root") owner owner (fixtureRevision 0)
+      request = WorkspaceRequest (WorkflowId "git-run") Nothing (fixtureRootId "git-root") owner owner (fixtureRevision 0)
   (binding, _) <- right =<< run env (Store.reserveWorkspaceTx root request repository)
   allocateWorkspace root binding Reserved >>= (@?= Right ())
   run env (Store.markWorkspaceReadyTx binding) >>= (@?= Right ())

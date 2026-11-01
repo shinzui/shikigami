@@ -22,6 +22,7 @@ import En.Check (CheckDecision (Allowed))
 import En.Revision qualified as En
 import En.Schema (ObjectType (..), RelationName (..))
 import En.Tuple (ObjectRef (..), Subject (SubjectId))
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kikan.En.Action qualified as Kikan
 import Kikan.En.Client (newActionProofVerifier, verifyIssuedAction)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
@@ -77,7 +78,7 @@ tests =
         workspaceId <- newWorkspaceId
         otherWorkspaceId <- newWorkspaceId
         let owner = VerifiedIdentity actor
-            request = WorkspaceRequest "run" Nothing (fixtureRootId "root") owner owner (fixtureRevision 0)
+            request = WorkspaceRequest (WorkflowId "run") Nothing (fixtureRootId "root") owner owner (fixtureRevision 0)
             binding = WorkspaceBinding workspaceId request (WorkspaceRef "shikigami.workspace/1" "resource") "mori://fixture/repo" (Text.replicate 40 "a") "policy-1" "/private/workspaces" "/operator/source"
             logical = OperationContext (executionIdentity "execution") (fixtureOperationId "operation") (fixtureOperationId "operation") (ExecutionValue.executionDigest "fingerprint") (ExecutionValue.executionDigest "scope")
             dispatch = DispatchContext logical (fixtureAttemptId "attempt") (fixtureOwner "claim-owner") (fixtureGeneration 1)
@@ -98,7 +99,7 @@ tests =
         checkedAt <- right (Kikan.mkConsistencyToken "snapshot-1")
         let issued = Kikan.IssuedActionProof proof minted.expiresAt [] checkedAt
         _ <- right =<< verifyIssuedAction verifier now actionRequest issued
-        let changedBindings = [binding & #id .~ otherWorkspaceId, binding & #repository .~ "mori://fixture/other", binding & #base .~ Text.replicate 40 "b", binding & #policyRevision .~ "policy-2", binding & #workspace . #resource .~ "other-resource", binding & #request . #rootId .~ fixtureRootId "other-root", binding & #request . #epoch .~ (fixtureRevision 1), binding & #request . #runId .~ "other-run"]
+        let changedBindings = [binding & #id .~ otherWorkspaceId, binding & #repository .~ "mori://fixture/other", binding & #base .~ Text.replicate 40 "b", binding & #policyRevision .~ "policy-2", binding & #workspace . #resource .~ "other-resource", binding & #request . #rootId .~ fixtureRootId "other-root", binding & #request . #epoch .~ (fixtureRevision 1), binding & #request . #runId .~ WorkflowId "other-run"]
         bindingActions <- mapM (\b -> admissionFor b >>= \a -> right (workspaceFileAction b a dispatch "replace" "src/file" "device:parent" "input-hash")) changedBindings
         changedPolicy <- right (mkInstructionBundle 65536 binding.repository binding.base [("AGENTS.md", "changed policy")])
         coordinateActions <-
@@ -328,7 +329,7 @@ tests =
         writeAdmission <- right (workspaceWriteAdmissionAction transferBinding transferBinding.workspace workerSession intent.newOwner (fixtureRevision 1) (fixtureOperationId "write"))
         mapM_ (\action -> verifyIssuedAction verifier now (fenceRequest & #action .~ action) fenceIssued >>= \answer -> assertBool "fence proof binds complete transfer and cannot authorize writes" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) (writeAdmission : changedFences)
         workspaceTransferAction provisionBinding intent @?= Left FileEffectRefused
-        let successorAdmission = provisionAdmission & #bindingDigest .~ workspaceBindingDigest transferBinding & #runId .~ "successor-run" & #assignmentId .~ (fixtureAssignment "successor-assignment") & #owner .~ intent.newOwner & #epoch .~ (fixtureRevision 1) & #filePolicy .~ Just transferableFilePolicy
+        let successorAdmission = provisionAdmission & #bindingDigest .~ workspaceBindingDigest transferBinding & #runId .~ WorkflowId "successor-run" & #assignmentId .~ (fixtureAssignment "successor-assignment") & #owner .~ intent.newOwner & #epoch .~ (fixtureRevision 1) & #filePolicy .~ Just transferableFilePolicy
             retainedProfile = profile & #bindingDigest .~ workspaceBindingDigest transferBinding
             successorProcess = recordFor transferBinding successorAdmission dispatch command & #routing .~ Just (ProcessRouting ProcessRoutingV1 logical.executionId intent.newOwner (fixturePayloadDigest command.profile) NeedModel)
             successorGit raw = let changed = raw & #bindingDigest .~ workspaceBindingDigest transferBinding & #profileDigest .~ Git.gitProfileDigest retainedProfile & #routing . #identity .~ intent.newOwner in changed & #fingerprint .~ Git.gitFingerprint transferBinding changed
@@ -347,7 +348,7 @@ tests =
             right
             [ workspaceTransferredFileAction retainedProfile transferBinding (successorAdmission & #epoch .~ (fixtureRevision 2)) dispatch "replace" "src/file" "device:parent" "input-hash",
               workspaceTransferredFileAction retainedProfile transferBinding (successorAdmission & #owner .~ CompatibilityIdentity (fixtureAgentName "other-successor")) dispatch "replace" "src/file" "device:parent" "input-hash",
-              workspaceTransferredFileAction retainedProfile transferBinding (successorAdmission & #runId .~ "other-run") dispatch "replace" "src/file" "device:parent" "input-hash",
+              workspaceTransferredFileAction retainedProfile transferBinding (successorAdmission & #runId .~ WorkflowId "other-run") dispatch "replace" "src/file" "device:parent" "input-hash",
               workspaceTransferredFileAction retainedProfile transferBinding successorAdmission dispatch "replace" "src/file" "device:other-parent" "input-hash"
             ]
         verifyTargets successorFile (fileAction : changedSuccessorFiles)
@@ -370,17 +371,17 @@ tests =
         workspaceProvisionAction transferBinding successorAdmission retainedProfile boot "device:files" "device:scratch" @?= Left FileEffectRefused
         let followup = successorAdmission & #owner .~ transferBinding.request.owner & #epoch .~ transferBinding.request.epoch
         followupAction <- right (workspaceFollowupAdmissionAction transferBinding followup retainedProfile)
-        nextFollowupAction <- right (workspaceFollowupAdmissionAction transferBinding (followup & #runId .~ "next-followup" & #assignmentId .~ (fixtureAssignment "next-assignment")) retainedProfile)
+        nextFollowupAction <- right (workspaceFollowupAdmissionAction transferBinding (followup & #runId .~ WorkflowId "next-followup" & #assignmentId .~ (fixtureAssignment "next-assignment")) retainedProfile)
         verifyTargets followupAction [successorAction, nextFollowupAction]
         workspaceSuccessorAdmissionAction transferBinding followup retainedProfile @?= Left FileEffectRefused
-        let sourceBinding suffix = provisionBinding & #workspace . #resource .~ Text.replicate 64 suffix & #request . #runId .~ ("artifact-" <> suffix)
+        let sourceBinding suffix = provisionBinding & #workspace . #resource .~ Text.replicate 64 suffix & #request . #runId .~ WorkflowId ("artifact-" <> suffix)
             sourceRecord source = let raw = gitRecord & #bindingDigest .~ workspaceBindingDigest source & #phase .~ Git.GitApplied in raw & #fingerprint .~ Git.gitFingerprint source raw
             sourceOne = sourceBinding "d"
             sourceTwo = sourceBinding "e"
             sources = [(sourceOne, sourceRecord sourceOne), (sourceTwo, sourceRecord sourceTwo)]
             integrationAction admission selected = workspaceIntegrationAction transferBinding admission gitDispatch retainedProfile (fixturePayloadDigest command.profile) "device:files" selected
         exactIntegration <- right (integrationAction successorAdmission sources)
-        changedIntegrationRun <- right (integrationAction (successorAdmission & #runId .~ "other-integration-run") sources)
+        changedIntegrationRun <- right (integrationAction (successorAdmission & #runId .~ WorkflowId "other-integration-run") sources)
         let changedArtifact = (sourceOne, let raw = sourceRecord sourceOne & #candidate .~ Just (candidate & #result .~ Text.replicate 40 "f") in raw & #fingerprint .~ Git.gitFingerprint sourceOne raw)
         changedIntegrationSource <- right (integrationAction successorAdmission (changedArtifact : tail sources))
         verifyTargets exactIntegration [successorStatus, changedIntegrationRun, changedIntegrationSource]

@@ -64,6 +64,8 @@ import Baikai.Evidence (EvidenceStrength (..), commitmentDigest)
 import Baikai.ThinkingLevel (ThinkingLevel (..))
 import Data.Aeson (withText)
 import Data.Text qualified as Text
+import Dhall (FromDhall (..))
+import Dhall qualified
 import Shikigami.Attestation.PolicyValue
 import Shikigami.Behavior.Provider.Coordinate
 import Shikigami.Prelude
@@ -82,6 +84,10 @@ newtype ProfileId = ProfileId {value :: Text}
 newtype ProfileVersion = ProfileVersion {value :: Text}
   deriving stock (Eq, Ord, Show, Generic)
   deriving newtype (ToJSON, FromJSON)
+
+instance FromDhall ProfileId where autoWith _ = ProfileId <$> Dhall.strictText
+
+instance FromDhall ProfileVersion where autoWith _ = ProfileVersion <$> Dhall.strictText
 
 -- | The digest of a profile's canonical content.
 --

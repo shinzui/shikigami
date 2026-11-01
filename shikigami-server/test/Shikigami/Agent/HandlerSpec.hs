@@ -16,9 +16,11 @@ import Relay.Pagination
 import Relay.Pagination.Conformance
 import Relay.Pagination.Servant (RelayPageError (..))
 import Servant.Health (ProbeVerdict (Healthy))
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Api (AgentView (..))
 import Shikigami.Agent.Catalog (AgentCatalog (..))
 import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Api.Problem qualified
@@ -28,6 +30,7 @@ import Shikigami.Log qualified as Log
 import Shikigami.Prelude
 import Shikigami.Server.App (shikigamiApplication)
 import Shikigami.Server.Boot (newServerEnvWith)
+import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -48,7 +51,7 @@ tests =
           disabled.runnable @?= False
           (missing, _) <- get "/agents/absent"
           missing @?= 404
-        directory <- Directory.newDirectoryHandle (Directory.staticDirectorySource [Directory.PrincipalRecord "agent_a" "a" Directory.Paused])
+        directory <- Directory.newDirectoryHandle (Directory.staticDirectorySource [Directory.PrincipalRecord (declarationCoordinate ("agent_a")) (declarationCoordinate ("a")) Directory.Paused])
         _ <- Directory.refreshDirectory directory
         withCatalog directory \get -> do
           (_, bytes) <- get "/agents/a"
@@ -88,7 +91,7 @@ decodeBody = either (assertFailure . show) pure . eitherDecode
 withCatalog :: Directory.DirectoryHandle -> ((String -> IO (Int, LBS.ByteString)) -> IO a) -> IO a
 withCatalog directory body = do
   declaration <- loadAgent "../agents/heartbeat.dhall" >>= either (assertFailure . show) pure
-  let declarations = Map.fromList [(fixtureAgentName name, declaration & #name .~ fixtureAgentName name & #enabled .~ (name /= "g")) | name <- ["a", "b", "c", "d", "e", "f", "g"]]
+  let declarations = Map.fromList [(fixtureAgentName name, declaration & #name .~ fixtureAgentName name & #enabled .~ agentEnablement (name /= "g")) | name <- ["a", "b", "c", "d", "e", "f", "g"]]
   pool <- Pool.acquire (PoolConfig.settings [])
   provider <- Trace.createTracerProvider [] Trace.emptyTracerProviderOptions
   let tracer = Trace.makeTracer provider "catalog-test" Trace.tracerOptions

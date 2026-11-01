@@ -40,6 +40,7 @@ import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), lookupAwakeable, registerAwakeableTx)
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
 import Keiro.Workflow.Child (runChildWorkflow)
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Error (StoreError)
@@ -47,8 +48,10 @@ import Kiroku.Store.Transaction (runTransaction)
 import Network.HTTP.Types (status200, status500)
 import Network.Wai qualified as Wai
 import Network.Wai.Handler.Warp (testWithApplication)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult)
@@ -99,6 +102,7 @@ import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (SinkKind (SDanwaConversation))
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
+import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
@@ -174,7 +178,7 @@ tests fixture =
               selection = select now root catalog "coordinator"
               selectedRuntime = runtime app store base catalog
               execution = Replay.executionIdFor selection.assignmentId
-              snapshot = Replay.ExecutionSnapshot V1 execution "prepared-http" (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (Replay.SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "body") (Replay.ReplayContext Replay.LegacyContext (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
+              snapshot = Replay.ExecutionSnapshot V1 execution (WorkflowId "prepared-http") (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (Replay.SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "body") (Replay.ReplayContext Replay.LegacyContext (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
               operationId = Replay.operationIdFor execution (fixtureRevision 0)
               specification = Replay.OperationSpec operationId Replay.ModelTurn RepeatableObservation (ExecutionValue.executionCoordinate "model") (ExecutionValue.executionDigestFor "shikigami.harness-policy/1" (toJSON snapshot.policy)) (ExecutionValue.executionDigest "scope") Nothing
               context = systemUser "system" "marker"
@@ -220,7 +224,7 @@ tests fixture =
               selection = select now root catalog "coordinator"
               selectedRuntime = runtime app store base catalog
               execution = Replay.executionIdFor selection.assignmentId
-              snapshot = Replay.ExecutionSnapshot V1 execution "executor-http" (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (Replay.SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "body") (Replay.ReplayContext Replay.LegacyContext (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
+              snapshot = Replay.ExecutionSnapshot V1 execution (WorkflowId "executor-http") (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (Replay.SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "body") (Replay.ReplayContext Replay.LegacyContext (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
               operationId = Replay.operationIdFor execution (fixtureRevision 0)
               specification = Replay.OperationSpec operationId Replay.ModelTurn RepeatableObservation (ExecutionValue.executionCoordinate "model") (ExecutionValue.executionDigestFor "shikigami.harness-policy/1" (toJSON snapshot.policy)) (ExecutionValue.executionDigest "scope") Nothing
               executor authority = Executor.ExecutionRuntime app (const authority) (const authority) (const selectedRuntime) (\_ _ _ use -> Right <$> use []) 5
@@ -460,7 +464,7 @@ aliases :: [Text]
 aliases = ["coordinator", "worker-a", "worker-b"]
 
 workerDecl :: AgentDecl
-workerDecl = Fixture.routerDecl & #behavior .~ Skill "../agents/skills/triage-note" & #routing .~ Nothing & #delegates .~ map fixtureAgentName [] & #execution .~ Just (ExecutionPolicy (fixtureModelAlias "coordinator") (map fixtureModelAlias aliases))
+workerDecl = Fixture.routerDecl & #behavior .~ Skill (declarationCoordinate ("../agents/skills/triage-note")) & #routing .~ Nothing & #delegates .~ map fixtureAgentName [] & #execution .~ Just (ExecutionPolicy (fixtureModelAlias "coordinator") (map fixtureModelAlias aliases))
 
 workflowDeps :: AppEnv -> KirokuStore -> BehaviorEnv -> ModelCatalog -> AgentDecl -> Agent.AgentRunDeps
 workflowDeps app store base catalog declaration =

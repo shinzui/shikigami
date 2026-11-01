@@ -30,7 +30,9 @@ import Kioku.Id (genSessionId)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization
 import Shikigami.Action.Authorization qualified as Action
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (Behavior (Skill))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
@@ -68,6 +70,7 @@ import Shikigami.Prelude ((&), (.~))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.StateRevision qualified as Generation
+import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.ContainedFile (withWorkspaceLock)
@@ -399,7 +402,7 @@ withEffectAdapterPolicyInput processPolicy toolCount qualify install wire logica
       right (resolveRepository catalog (repositoryIdentity originalRepository) Nothing)
   let identity = CompatibilityIdentity (fixtureAgentName "worker")
       rootId = fixtureRootId "file-root"
-      request = WorkspaceRequest "file-run" Nothing rootId identity identity (fixtureRevision 0)
+      request = WorkspaceRequest (WorkflowId "file-run") Nothing rootId identity identity (fixtureRevision 0)
       runtime = FileRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ _ _ -> pure (Right ()))
       assignment = fixtureAssignment "file-execution"
   (binding, _) <- right =<< run env (runTransaction (Store.reserveWorkspaceTx root request repository))
@@ -425,7 +428,7 @@ withAcceptedWorkspaceTool toolCount install agent wire token env admission runti
   let adapter = install runtime
   registry <- right (installDurableAdapters [adapter] emptyCapabilityProviderRegistry)
   catalog <- right (mkCapabilityCatalog [adapter.descriptor])
-  capabilities <- right (resolveGovernedCapabilityOverlays (durableAdapterInstalled registry) catalog (\_ _ -> Right ()) (ResolutionSubject (Just (agentNameText agent)) Durable (Skill "fixture") Nothing) [adapter.descriptor.capability])
+  capabilities <- right (resolveGovernedCapabilityOverlays (durableAdapterInstalled registry) catalog (\_ _ -> Right ()) (ResolutionSubject (fmap declarationCoordinate ((Just (agentNameText agent)))) Durable (Skill (declarationCoordinate ("fixture"))) Nothing) [adapter.descriptor.capability])
   let initial = ExecutionSnapshot V1 (executionIdFor assignment) admission.runId agent identity session selection Nothing (SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "body") (ReplayContext RequestContext (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "edit fixture"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
       native = Tools.NativeToolFactory (\_ -> pure (Right [])) (\_ _ _ -> pure (Right []))
   menu <- right =<< Tools.describeExecutionTools Log.silentLogger allowAllActionAuthorizerForTests registry native initial

@@ -13,6 +13,7 @@ import Baikai.Response qualified as Response
 import Baikai.StopReason (StopReason (..))
 import Baikai.Tool qualified as BaikaiTool
 import Baikai.Usage (zeroUsage)
+import Data.Aeson ((.!=), (.:), (.:?), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy qualified as Lazy
@@ -45,7 +46,7 @@ import Shikigami.Execution.Progress
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.ToolPosition
 import Shikigami.FormatVersion (FormatVersion (V1))
-import Shikigami.Prelude hiding (Options)
+import Shikigami.Prelude hiding (Options, (.=))
 import Shikigami.StateRevision
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), instructionPrompt)
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
@@ -229,7 +230,7 @@ data PermissionBinding = PermissionBinding
 data ExecutionSnapshot = ExecutionSnapshot
   { format :: !(FormatVersion "execution-snapshot"),
     executionId :: !ExecutionId,
-    runId :: !Text,
+    runId :: !WorkflowId,
     agent :: !AgentName,
     identity :: !AgentIdentity,
     sessionId :: !SessionId,
@@ -246,16 +247,31 @@ data ExecutionSnapshot = ExecutionSnapshot
   deriving stock (Eq, Generic)
 
 instance ToJSON ExecutionSnapshot where
-  toJSON snapshot = case Aeson.genericToJSON Aeson.defaultOptions snapshot of
-    Aeson.Object fields -> Aeson.Object ((if isNothing snapshot.workspace then KeyMap.delete "workspace" else id) ((if null snapshot.toolBindings then KeyMap.delete "toolBindings" else id) fields))
-    value -> value
+  toJSON snapshot =
+    Aeson.object
+      ( [ "format" .= snapshot.format,
+          "executionId" .= snapshot.executionId,
+          "runId" .= snapshot.runId.unWorkflowId,
+          "agent" .= snapshot.agent,
+          "identity" .= snapshot.identity,
+          "sessionId" .= snapshot.sessionId,
+          "selection" .= snapshot.selection,
+          "sanctionedProfile" .= snapshot.sanctionedProfile,
+          "instructions" .= snapshot.instructions,
+          "initialContext" .= snapshot.initialContext,
+          "capabilities" .= snapshot.capabilities,
+          "offeredTools" .= snapshot.offeredTools,
+          "policy" .= snapshot.policy
+        ]
+          <> ["toolBindings" .= snapshot.toolBindings | not (null snapshot.toolBindings)]
+          <> ["workspace" .= value | Just value <- [snapshot.workspace]]
+      )
 
 instance Show ExecutionSnapshot where show snapshot = "ExecutionSnapshot " <> show snapshot.executionId <> " <protected>"
 
 instance FromJSON ExecutionSnapshot where
   parseJSON = Aeson.withObject "ExecutionSnapshot" \fields -> do
-    let defaults = (if KeyMap.member "workspace" fields then id else KeyMap.insert "workspace" Aeson.Null) (if KeyMap.member "toolBindings" fields then fields else KeyMap.insert "toolBindings" (toJSON ([] :: [ToolBinding])) fields)
-    snapshot <- Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object defaults)
+    snapshot <- ExecutionSnapshot <$> fields .: "format" <*> fields .: "executionId" <*> (WorkflowId <$> fields .: "runId") <*> fields .: "agent" <*> fields .: "identity" <*> fields .: "sessionId" <*> fields .: "selection" <*> fields .:? "sanctionedProfile" <*> fields .: "instructions" <*> fields .: "initialContext" <*> fields .: "capabilities" <*> fields .: "offeredTools" <*> fields .: "policy" <*> (fields .:? "toolBindings" .!= []) <*> fields .:? "workspace"
     unless (snapshot.format == V1 && snapshot.executionId == executionIdFor snapshot.selection.assignmentId && snapshot.selection.profile == (((.ref) . resolvedProfileView) <$> snapshot.sanctionedProfile)) (fail "unsupported execution snapshot version or identity")
     case snapshot.selection.effectiveOptions of
       Aeson.Object options -> unless (all (\key -> case KeyMap.lookup key options of Nothing -> True; Just Aeson.Null -> True; Just (Aeson.Object fields) -> KeyMap.null fields; _ -> False) ["headers", "metadata", "apiKey"]) (fail "execution snapshot contains unsupported private model options")

@@ -51,7 +51,7 @@ resolveRecipient strategy activity =
     SubjectOwner -> Nothing
     AreaOwner -> Nothing
   where
-    actorIdOf Activity.ActivityEnvelope {Activity.actor = Activity.Actor {Activity.id = actorId}} = actorId
+    actorIdOf Activity.ActivityEnvelope {Activity.actor = Activity.Actor {Activity.id = actorId}} = Activity.activityCoordinateText actorId
 
 -- | 'resolveRecipient' for a whole sink: a non-signal sink has no recipient to
 -- resolve, so it contributes nothing to the intent.

@@ -78,6 +78,15 @@ precedes constructor, coercion, record-update and Generic refusal probes in
 the filesystem can change after scope resolution. No entity ID or second root
 wrapper is introduced, and no serialized workflow representation changes.
 
+Nominal capture of a foreign or operator claim preserves its existing spelling
+until the established owner validates it. A private nominal carrier does not
+justify adding a universal UUID/digest grammar or moving validation to a different
+boundary. `CronExpressionClaim` feeds the existing checked `CronSchedule` parser
+and preserves strict/lenient scheduler diagnostics. Activity envelopes also carry
+synthetic trigger references under their original run keys, so typing them must
+not allocate replacement activity IDs. Capability leases distinguish native
+workflow references from process-local one-off run references explicitly.
+
 ## References
 
 [ADR-74](0074-domain-state-revisions-keep-their-scope-at-application-boundaries.md),

@@ -32,7 +32,7 @@ import Keiro.Integration.Event (IntegrationEvent (..))
 import Keiro.PGMQ qualified as Job
 import Pgmq (MessageBody (..), MessageId, QueueName, SendMessage (..), createQueue, parseQueueName, sendMessage)
 import Pgmq.Hasql.Statements.Message qualified as PgmqStatements
-import Shikigami.Activity (ActivityEnvelope (..))
+import Shikigami.Activity (ActivityEnvelope (..), activityCoordinateText)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
@@ -59,7 +59,7 @@ runQueueName = case parseQueueName queuePhysical of
 -- before every real one, and nothing anywhere says why.
 envelopeOccurredAt :: ActivityEnvelope -> Maybe UTCTime
 envelopeOccurredAt ActivityEnvelope {occurredAt = envOccurredAt} =
-  iso8601ParseM (Text.unpack envOccurredAt)
+  iso8601ParseM (Text.unpack (activityCoordinateText envOccurredAt))
 
 -- | Build a stream-trigger run job from a matched agent + the matching envelope.
 --

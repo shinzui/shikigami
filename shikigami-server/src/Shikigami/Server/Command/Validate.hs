@@ -7,6 +7,7 @@ import Control.Monad (when)
 import Data.Foldable (traverse_)
 import Data.Text qualified as Text
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Loader (LoadError (..), loadAgent)
 import Shikigami.Agent.Skill (validateSkill)
 import Shikigami.Flow (flowDeclarationErrors)
@@ -36,7 +37,7 @@ runValidate path = do
       exitFailure
     Right decl -> do
       print decl -- the Show-rendered manifest
-      when (not ((.enabled) decl)) $ hPutStrLn stderr "note: agent is disabled (enabled = False)"
+      when (not (agentEnabled ((.enabled) decl))) $ hPutStrLn stderr "note: agent is disabled (enabled = False)"
       case routerDeclarationErrors decl of
         errors@(_ : _) -> do
           traverse_ (\err -> hPutStrLn stderr ("validate: router error: " <> Text.unpack (renderRouterDeclarationError err))) errors
@@ -58,7 +59,7 @@ runValidate path = do
             _ -> Nothing
       case skillPath of
         Just skillDir -> do
-          let skillDir' = Text.unpack skillDir
+          let skillDir' = Text.unpack (declarationCoordinateText skillDir)
           skillResult <- validateSkill skillDir'
           case skillResult of
             Left err -> do

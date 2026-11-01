@@ -33,6 +33,7 @@ import Data.Text.Encoding qualified as Encoding
 import Effectful (Eff)
 import Effectful.Dispatch.Static (unsafeEff_)
 import Hasql.Transaction (Transaction)
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.Principal (identityText)
@@ -336,7 +337,7 @@ replaceFileFor mode checkpoint runtime snapshot dispatch input = case parseEithe
     replace profile binding admission check prepare complete file identity replacement = do
       let fingerprint = case profile of
             Nothing -> versionedDigest "shikigami.workspace-replacement/1" (toJSON (workspaceBindingDigest binding, dispatch.operation, input, identity))
-            Just retained | mode == Transferred -> versionedDigest "shikigami.workspace-replacement/3" (toJSON (workspaceBindingDigest binding, admission.runId, admission.assignmentId, admission.owner, admission.epoch, dispatch.operation, input, identity, retained))
+            Just retained | mode == Transferred -> versionedDigest "shikigami.workspace-replacement/3" (toJSON (workspaceBindingDigest binding, admission.runId.unWorkflowId, admission.assignmentId, admission.owner, admission.epoch, dispatch.operation, input, identity, retained))
             Just retained -> versionedDigest "shikigami.workspace-replacement/2" (toJSON (workspaceBindingDigest binding, dispatch.operation, input, identity, retained))
           receipt = FileReceipt dispatch.operation.operationId dispatch.attemptId dispatch.generation fingerprint (workspaceBindingDigest binding) (bundleDigest admission.instructions) replacement.path identity replacement.expected (contentDigest replacement.content) EditPrepared
           metadata = workspaceMetadata binding.storageRoot binding

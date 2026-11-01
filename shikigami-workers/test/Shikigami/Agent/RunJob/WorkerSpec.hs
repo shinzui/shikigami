@@ -47,8 +47,10 @@ import Keiro.Workflow (WorkflowOutcome (..))
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Connection qualified as StoreConnection
 import Shibuya.App (ShutdownConfig (..), SupervisionStrategy (IgnoreFailures), stopAppGracefully)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, meiboPrincipal, principalText)
 import Shikigami.Agent.Run.Key (RunKey, parseRunKey, runKeyText)
@@ -62,6 +64,7 @@ import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Trigger.Enqueue qualified as Enqueue
+import Shikigami.Trigger.Schedule (parseCron)
 import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
@@ -161,7 +164,7 @@ tests databaseFixture =
             deactivated <- admitRunJobWith pool deactivatedDirectory [drainAgent] (jobWith "deactivated")
             assertSkipped "deactivated" deactivated
 
-            unknownDirectory <- directoryWith [PrincipalRecord {principalId = "agent_other", handle = "codec-agent", lifecycle = Active}]
+            unknownDirectory <- directoryWith [PrincipalRecord {principalId = declarationCoordinate ("agent_other"), handle = declarationCoordinate ("codec-agent"), lifecycle = Active}]
             unknown <- admitRunJobWith pool unknownDirectory [drainAgent] (jobWith "unknown")
             assertSkipped "explicit unknown id does not fall back to handle" unknown
 
@@ -392,16 +395,16 @@ drainAgent =
   AgentDecl
     { name = fixtureAgentName "codec-agent",
       description = "drain lifecycle fixture",
-      trigger = Event {eventType = "fixture.event"},
+      trigger = Event {eventType = declarationCoordinate ("fixture.event")},
       behavior = Deterministic {rule = "test", params = Map.empty},
       sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
-      identity = Just IdentityDecl {principal = "agent_codec"},
+      identity = Just IdentityDecl {principal = declarationCoordinate ("agent_codec")},
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,
@@ -410,7 +413,7 @@ drainAgent =
     }
 
 principalRecord :: Lifecycle -> PrincipalRecord
-principalRecord lifecycle = PrincipalRecord {principalId = "agent_codec", handle = "codec-agent", lifecycle}
+principalRecord lifecycle = PrincipalRecord {principalId = declarationCoordinate ("agent_codec"), handle = declarationCoordinate ("codec-agent"), lifecycle}
 
 directoryWith :: [PrincipalRecord] -> IO DirectoryHandle
 directoryWith principals = do

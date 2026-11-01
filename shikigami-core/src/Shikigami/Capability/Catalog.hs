@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 
@@ -26,6 +27,7 @@ import Data.Map.Strict qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Shikigami.Agent.Decl (Behavior (..))
+import Shikigami.Agent.DeclarationValue (DeclarationCoordinate)
 import Shikigami.Attestation.Resolve (ResolvedProfile)
 import Shikigami.Capability.Overlay
 import Shikigami.Prelude hiding ((.=))
@@ -79,7 +81,7 @@ data ExecutionMode = Durable | OneOff
   deriving anyclass (ToJSON, FromJSON)
 
 data ResolutionSubject = ResolutionSubject
-  { principal :: !(Maybe Text),
+  { principal :: !(Maybe (DeclarationCoordinate "principal")),
     mode :: !ExecutionMode,
     behavior :: !Behavior,
     -- | The already journaled sanctioned-profile snapshot, when the agent

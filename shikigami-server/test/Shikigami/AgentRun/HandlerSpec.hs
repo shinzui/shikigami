@@ -22,7 +22,9 @@ import Relay.Pagination (Connection (..), Direction (..), PageRequest (..), curs
 import Relay.Pagination.Conformance (checkConformance, conformancePassed, defaultConformanceConfig, renderConformanceReport)
 import Relay.Pagination.Servant (RelayPageError (..))
 import Servant.Health (ProbeVerdict (Healthy))
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Catalog (AgentCatalog (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
@@ -39,6 +41,7 @@ import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Server.App (shikigamiApplication)
 import Shikigami.Server.Boot (newServerEnvWith)
 import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
+import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -141,7 +144,7 @@ tests fixture =
           _ <- right =<< Pool.use pool (Session.script "DROP TABLE shikigami.agent_run_requests")
           post "POST" "/agents/heartbeat/runs" (Aeson.object ["idempotencyKey" .= ("store-down" :: Text), "payload" .= Aeson.object []]) >>= assertProblem 503 "unavailable",
       testCase "paused identities cannot request runs" do
-        directory <- Directory.newDirectoryHandle (Directory.staticDirectorySource [Directory.PrincipalRecord "agent_heartbeat" "heartbeat" Directory.Paused])
+        directory <- Directory.newDirectoryHandle (Directory.staticDirectorySource [Directory.PrincipalRecord (declarationCoordinate ("agent_heartbeat")) (declarationCoordinate ("heartbeat")) Directory.Paused])
         _ <- Directory.refreshDirectory directory
         withRunServer fixture directory \_ post ->
           post "POST" "/agents/heartbeat/runs" (Aeson.object ["idempotencyKey" .= ("paused" :: Text), "payload" .= Aeson.object []]) >>= assertProblem 409 "agent_not_runnable",
@@ -172,7 +175,7 @@ withRunServerStore fixture directory body =
   withShikigamiFreshDatabase fixture \connection -> withStore (defaultConnectionSettings connection) \store -> do
     _ <- right =<< ensureRunQueue store.pool
     declaration <- loadAgent "../agents/heartbeat.dhall" >>= right
-    let catalog = AgentCatalog (Map.fromList [(fixtureAgentName "heartbeat", declaration), (fixtureAgentName "disabled-heartbeat", declaration & #name .~ fixtureAgentName "disabled-heartbeat" & #enabled .~ False)]) 0
+    let catalog = AgentCatalog (Map.fromList [(fixtureAgentName "heartbeat", declaration), (fixtureAgentName "disabled-heartbeat", declaration & #name .~ fixtureAgentName "disabled-heartbeat" & #enabled .~ AgentDisabled)]) 0
     provider <- Trace.createTracerProvider [] Trace.emptyTracerProviderOptions
     let tracer = Trace.makeTracer provider "run-test" Trace.tracerOptions
         env = newServerEnvWith tracer defaultAppConfig store.pool Log.silentLogger catalog directory (pure Healthy) (pure Healthy) & #readRunStatus .~ deriveRunStatus store

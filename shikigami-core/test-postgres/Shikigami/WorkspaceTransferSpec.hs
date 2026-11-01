@@ -69,7 +69,7 @@ tests fixture =
       testCase "cleanup listing refuses a corrupt member beside a valid allocation and rolls back" $ withWorkspace fixture \env _ _ binding _ -> do
         catalog <- right (mkWorkspaceCatalog [RepositoryPolicy binding.repository binding.source [binding.base] binding.base binding.policyRevision])
         repository <- right (resolveRepository catalog binding.repository Nothing)
-        (second, _) <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx binding.storageRoot (binding.request & #runId .~ "cleanup-list-second" & #assignment .~ Nothing) repository))
+        (second, _) <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx binding.storageRoot (binding.request & #runId .~ WorkflowId "cleanup-list-second" & #assignment .~ Nothing) repository))
         listed <- right =<< run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing))
         length listed @?= 2
         let replace value = run env (runTransaction (Tx.statement (second.workspace.resource, value) (preparable "UPDATE shikigami.workspace_bindings SET binding=$2 WHERE resource=$1" (contrazip2 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.jsonb))) D.noResult)))
@@ -100,7 +100,7 @@ tests fixture =
             child.owner @?= original.owner
             child.epoch @?= (fixtureRevision 0)
           Nothing -> assertFailure "missing actual session child"
-        run env (runTransaction (lookupSessionChildTx "payload-selected-session")) >>= (@?= Right Nothing),
+        run env (runTransaction (lookupSessionChildTx (WorkflowId "payload-selected-session"))) >>= (@?= Right Nothing),
       testCase "freeze deduplicates concurrent delivery and conflicting intents cannot change ownership" $ withWorkspace fixture \env session access binding _ -> do
         intent <- request env session access binding
         let begin = run env (runTransaction (beginTransferTx binding intent))
@@ -155,8 +155,8 @@ tests fixture =
         established <- sessionState env session
         (_, message) <- right =<< run env (Sessions.acceptMessage access established.revision (fixtureRevision 1) (fixtureOperationId "successor-message") instruction)
         (_, started) <- right =<< run env (Sessions.startAssignment access (advanceRevision established.revision) (fixtureRevision 1) (fixtureOperationId "successor-start") message.assignmentId)
-        runId <- maybe (fail "missing successor child") (pure . (.unWorkflowId)) started.childWorkflowId
-        let admission = original & #runId .~ runId & #assignmentId .~ Selection.assignmentIdFor runId & #owner .~ successor & #epoch .~ (fixtureRevision 1)
+        runId <- maybe (fail "missing successor child") pure started.childWorkflowId
+        let admission = original & #runId .~ runId & #assignmentId .~ Selection.assignmentIdFor runId.unWorkflowId & #owner .~ successor & #epoch .~ (fixtureRevision 1)
         Right (Just child) <- run env (runTransaction (lookupSessionChildTx runId))
         run env (runTransaction (successorWorkspaceTx child)) >>= (@?= Right binding)
         run env (runTransaction (checkWorkspaceAdmissionTx binding admission (fixtureOperationId "before-admission"))) >>= (@?= Left WorkspaceBindingConflict)
@@ -193,7 +193,7 @@ tests fixture =
               fmap Workspaces.workspaceFrozen current @?= Just False
               run env (runTransaction (admitSuccessorTx binding admission)) >>= (@?= Right ())
           )
-          [Aeson.Null, Aeson.toJSON (admission & #runId .~ "wrong-retained-run")]
+          [Aeson.Null, Aeson.toJSON (admission & #runId .~ WorkflowId "wrong-retained-run")]
     ]
 
 successor :: AgentIdentity
@@ -206,7 +206,7 @@ withWorkspace :: DatabaseFixture -> (AppEnv -> SessionAdmission -> Sessions.Sess
 withWorkspace fixture callback = Fixture.withConfiguredFixture fixture (\admission -> admission & #delegator . #delegates .~ map fixtureAgentName ["worker", "successor"]) \env session access -> do
   (_, message) <- right =<< run env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "initial-message") instruction)
   (_, started) <- right =<< run env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId "initial-start") message.assignmentId)
-  runId <- maybe (fail "missing original child") (pure . (.unWorkflowId)) started.childWorkflowId
+  runId <- maybe (fail "missing original child") pure started.childWorkflowId
   root <- maybe (fail "missing root") pure session.context.executionRootId
   let base = Text.replicate 40 "a"
   catalog <- right (mkWorkspaceCatalog [RepositoryPolicy "mori://fixture/repository" "/approved/source" [base] base "policy-1"])
@@ -214,7 +214,7 @@ withWorkspace fixture callback = Fixture.withConfiguredFixture fixture (\admissi
   (binding, _) <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx "/private/owned-workspaces" (WorkspaceRequest runId (Just (sessionIdFor session, started.assignmentId)) root session.identity session.identity (fixtureRevision 0)) repository))
   run env (runTransaction (Workspaces.markWorkspaceReadyTx binding)) >>= (@?= Right ())
   instructions <- right (mkInstructionBundle 65536 binding.repository binding.base [("AGENTS.md", "validate before committing")])
-  let original = WorkspaceAdmission binding.workspace (workspaceBindingDigest binding) runId (Selection.assignmentIdFor runId) root session.identity (fixtureRevision 0) instructions (Just transferableFilePolicy)
+  let original = WorkspaceAdmission binding.workspace (workspaceBindingDigest binding) runId (Selection.assignmentIdFor runId.unWorkflowId) root session.identity (fixtureRevision 0) instructions (Just transferableFilePolicy)
   callback env session access binding original
 
 request :: AppEnv -> SessionAdmission -> Sessions.SessionAccess -> WorkspaceBinding -> IO TransferIntent
@@ -339,7 +339,7 @@ corruptTransferReads fixture = withWorkspace fixture \env session access binding
 corruptChildMapping :: DatabaseFixture -> IO ()
 corruptChildMapping fixture = withWorkspace fixture \env _ _ binding _ -> do
   Right (Just original) <- run env (runTransaction (lookupSessionChildTx binding.request.runId))
-  run env (runTransaction (lookupSessionChildTx "unrelated-standalone-run")) >>= (@?= Right Nothing)
+  run env (runTransaction (lookupSessionChildTx (WorkflowId "unrelated-standalone-run"))) >>= (@?= Right Nothing)
   retained <- run env (runTransaction (Tx.statement () (preparable "SELECT state FROM shikigami.worker_session_messages" E.noParams (D.singleRow (D.column (D.nonNullable D.jsonb))))))
   let replace value = run env (runTransaction (Tx.statement value (preparable "UPDATE shikigami.worker_session_messages SET state=$1" (E.param (E.nonNullable E.jsonb)) D.noResult)))
       lostChild = case retained of Aeson.Object fields -> Aeson.Object (KeyMap.delete "childWorkflowId" fields); _ -> error "complete message metadata was not an object"
@@ -363,9 +363,9 @@ workspacePages fixture = withWorkspace fixture \env _ _ binding _ -> do
   catalog <- right (mkWorkspaceCatalog [RepositoryPolicy binding.repository binding.source [binding.base] binding.base binding.policyRevision])
   repository <- right (resolveRepository catalog binding.repository Nothing)
   siblings <- forM [1 .. 21 :: Int] \number -> do
-    let request = binding.request & #runId .~ ("list-page-" <> Text.pack (show number)) & #assignment .~ Nothing
+    let request = binding.request & #runId .~ WorkflowId ("list-page-" <> Text.pack (show number)) & #assignment .~ Nothing
     fst <$> (right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx binding.storageRoot request repository)))
-  (foreignRoot, _) <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx (binding.storageRoot <> "-other") (binding.request & #runId .~ "foreign-root-page" & #assignment .~ Nothing) repository))
+  (foreignRoot, _) <- right =<< run env (runTransaction (Workspaces.reserveWorkspaceTx (binding.storageRoot <> "-other") (binding.request & #runId .~ WorkflowId "foreign-root-page" & #assignment .~ Nothing) repository))
   first <- right =<< run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing))
   length first @?= 20
   let cursor = (.workspace.resource) (last first)

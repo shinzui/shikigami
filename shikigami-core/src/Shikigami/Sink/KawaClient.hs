@@ -26,6 +26,7 @@ import Data.Text qualified as Text
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Network.HTTP.Types.Header (Header)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), ContextRef (..), Subject (..))
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Agent.Principal (identityText)
 import Shikigami.Prelude
@@ -43,7 +44,7 @@ renderKawaError (KawaDecodeError t) = "decode IngestResponse: " <> t
 renderKawaError (KawaPayloadError t) = "invalid Kawa payload: " <> t
 
 -- | Build the nine-field C1 envelope for a @KawaDigest@ sink: mint the @act_@ id,
--- @actor.kind = "agent"@, @source = "shinzui/shikigami"@, @idempotency_key@ = the
+-- @actor.kind = "agent"@, @source = activityCoordinate "shinzui/shikigami"@, @idempotency_key@ = the
 -- deterministic @source_event_id@.
 buildEnvelope :: SinkContext -> Sink -> Value -> IO (Either KawaError ActivityEnvelope)
 buildEnvelope ctx@SinkContext {identity = ctxIdentity, occurredAt = ctxOccurredAt} sink output =
@@ -58,15 +59,15 @@ buildEnvelope ctx@SinkContext {identity = ctxIdentity, occurredAt = ctxOccurredA
           pure
             ( Right
                 ActivityEnvelope
-                  { activityId = toText actId,
-                    occurredAt = Text.pack (iso8601Show now),
-                    source = "shinzui/shikigami",
-                    actor = Actor {kind = "agent", id = nm, session = Nothing},
-                    subject = Subject {kind = sty, subjectId = subjectIdFromOutput output nm},
+                  { activityId = activityCoordinate (toText actId),
+                    occurredAt = activityCoordinate (Text.pack (iso8601Show now)),
+                    source = activityCoordinate "shinzui/shikigami",
+                    actor = Actor {kind = AgentActor, id = activityCoordinate nm, session = Nothing},
+                    subject = Subject {kind = sty, subjectId = activityCoordinate (subjectIdFromOutput output nm)},
                     verb = vb,
                     payload = output,
                     contextRefs,
-                    idempotencyKey = mkSourceEventId ctx
+                    idempotencyKey = activityCoordinate (mkSourceEventId ctx)
                   }
             )
     _ -> error "Shikigami.Sink.KawaClient.buildEnvelope: not a KawaDigest sink"
@@ -78,18 +79,10 @@ contextRefsFromOutput (Object objectValue) =
     Just raw -> do
       refs <- firstText (parseEither Aeson.parseJSON raw)
       whenEither (length refs <= maximumContextRefs) ("context_refs exceeds " <> Text.pack (show maximumContextRefs) <> " entries")
-      traverse_ validateContextRef refs
       pure (dedupeContextRefs refs)
   where
     firstText = either (Left . Text.pack) Right
 contextRefsFromOutput _ = Right []
-
-validateContextRef :: ContextRef -> Either Text ()
-validateContextRef ContextRef {scheme, ref}
-  | scheme `notElem` kawaContextRefSchemes = Left ("unknown context_refs scheme: " <> scheme)
-  | Text.null (Text.strip ref) = Left "context_refs ref must not be empty"
-  | Text.length ref > maximumContextRefLength = Left "context_refs ref is too long"
-  | otherwise = Right ()
 
 dedupeContextRefs :: [ContextRef] -> [ContextRef]
 dedupeContextRefs = reverse . snd . foldl add (Set.empty, [])
@@ -124,13 +117,13 @@ subjectIdFromOutput _ fallback = fallback
 projectIngest :: ActivityEnvelope -> IngestRequest
 projectIngest (ActivityEnvelope {verb = vb, actor = ac, subject = sj, payload = pl, contextRefs = crs, occurredAt = oat, idempotencyKey = ik}) =
   IngestRequest
-    { verb = vb,
+    { verb = activityCoordinateText vb,
       actor = ac,
       subject = sj,
       payload = pl,
       contextRefs = crs,
-      sourceEventId = ik,
-      occurredAt = oat
+      sourceEventId = activityCoordinateText ik,
+      occurredAt = activityCoordinateText oat
     }
 
 -- | POST the envelope (projected to an @IngestRequest@) to @/v1/sources/{source}/events@

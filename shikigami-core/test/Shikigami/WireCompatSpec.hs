@@ -18,12 +18,14 @@ import Data.Time (UTCTime (..), fromGregorian)
 import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
 import Kioku.Id qualified as SinkSession
 import Shibuya.Core.Types (Attempt (..), Envelope (..), mkEnvelope)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl
   ( Priority (High),
     RecipientFrom (SubjectOwner),
     SignalType (Alert),
     Sink (..),
   )
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity), compatibilityIdentity)
 import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
@@ -52,6 +54,7 @@ import Shikigami.Sink.Types
     SinkOutcome (Delivered, SkippedLifecycle, Stubbed),
     SinkResult (..),
   )
+import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertEqual, assertFailure, testCase, (@?=))
 
@@ -284,12 +287,12 @@ sampleSinkIntent =
 sampleSink :: Sink
 sampleSink =
   KizashiSignal
-    { source = "shikigami",
+    { source = activityCoordinate ("shikigami"),
       signalType = Alert,
       priority = High,
-      importance = 7,
+      importance = either (error . show) id (parseSignalImportance (7)),
       recipientFrom = SubjectOwner,
-      defaultRecipient = Just "ops",
+      defaultRecipient = fmap declarationCoordinate (Just "ops"),
       intentTemplate = "escalate",
       extraContextTags = ["a"]
     }

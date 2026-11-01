@@ -17,7 +17,9 @@ import Network.HTTP.Types.Header (Header)
 import Network.Wai (Application, Request, Response, ResponseReceived, pathInfo, requestHeaders, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), ContextRef (..), Subject (..))
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.AgentLoaderSpec qualified as AgentLoaderSpec
@@ -183,19 +185,19 @@ scheduleTests =
 envelopeWith :: Text -> Text -> Text -> Text -> ActivityEnvelope
 envelopeWith actorKind verbV sourceV subjType =
   ActivityEnvelope
-    { activityId = "act_seed",
-      occurredAt = "2026-06-20T07:00:00Z",
-      source = sourceV,
-      actor = Actor {kind = actorKind, id = "someone", session = Nothing},
-      subject = Subject {kind = subjType, subjectId = "i-1"},
-      verb = verbV,
+    { activityId = activityCoordinate ("act_seed"),
+      occurredAt = activityCoordinate ("2026-06-20T07:00:00Z"),
+      source = activityCoordinate (sourceV),
+      actor = Actor {kind = either (error . show) id (parseActorKind (actorKind)), id = activityCoordinate ("someone"), session = fmap activityCoordinate (Nothing)},
+      subject = Subject {kind = activityCoordinate (subjType), subjectId = activityCoordinate ("i-1")},
+      verb = activityCoordinate (verbV),
       payload = object [],
       contextRefs = [],
-      idempotencyKey = "act_seed"
+      idempotencyKey = activityCoordinate ("act_seed")
     }
 
 matchAll :: StreamMatch
-matchAll = StreamMatch {verb = Just "intention.declared", source = Nothing, subjectType = Just "intention", verbs = []}
+matchAll = StreamMatch {verb = fmap activityCoordinate (Just "intention.declared"), source = fmap activityCoordinate (Nothing), subjectType = fmap activityCoordinate (Just "intention"), verbs = map activityCoordinate ([])}
 
 streamTests :: TestTree
 streamTests =
@@ -260,12 +262,12 @@ stubKizashiApp ref req respond =
 sampleKizashiSink :: Sink
 sampleKizashiSink =
   KizashiSignal
-    { source = "shinzui/shikigami",
+    { source = activityCoordinate ("shinzui/shikigami"),
       signalType = Reminder,
       priority = Normal,
-      importance = 50,
+      importance = either (error . show) id (parseSignalImportance (50)),
       recipientFrom = SubjectOwner,
-      defaultRecipient = Just "recipient_x",
+      defaultRecipient = fmap declarationCoordinate (Just "recipient_x"),
       intentTemplate = "triage this",
       extraContextTags = ["verb:x"]
     }
@@ -350,7 +352,7 @@ kawaTests =
           let kw = KawaConfig {baseUrl = testBaseUrl port, sourceSegment = "shinzui/shikigami"}
               dummyKz = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = "r"}
               ctx = ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) dummyKz kw
-              sink = KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}
+              sink = KawaDigest {subjectType = activityCoordinate ("heartbeat"), verb = activityCoordinate ("heartbeat.tick")}
           r1 <- Sink.dispatch ctx sink sampleOutput
           r2 <- Sink.dispatch ctx sink sampleOutput
           case ((.outcome) r1, (.outcome) r2) of
@@ -362,7 +364,7 @@ kawaTests =
           assertEqual "exactly one stored (source, source_event_id)" 1 (Map.size m),
       testCase "context refs are bounded to closed schemes and deduplicated before ingest" do
         let ctx = ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) dummyKizashi dummyKawa
-            sink = KawaDigest {subjectType = "practice-review", verb = "practice-review.completed"}
+            sink = KawaDigest {subjectType = activityCoordinate ("practice-review"), verb = activityCoordinate ("practice-review.completed")}
             output =
               object
                 [ "context_refs"
@@ -375,15 +377,15 @@ kawaTests =
           Left problem -> assertFailure (show problem)
           Right ActivityEnvelope {contextRefs} ->
             contextRefs
-              @?= [ ContextRef {scheme = "mori://", ref = "shinzui/example"},
-                    ContextRef {scheme = "activity://", ref = "practice-review/review-1"}
+              @?= [ ContextRef {scheme = MoriContext, ref = either (error . show) id (parseContextReference ("shinzui/example"))},
+                    ContextRef {scheme = ActivityContext, ref = either (error . show) id (parseContextReference ("practice-review/review-1"))}
                   ],
       testCase "malformed context refs fail permanently before HTTP" do
         store <- newIORef (Map.empty :: Map (Text, Text) Text)
         testWithApplication (pure (kawaDoorwayApplication store)) $ \port -> do
           let kw = KawaConfig {baseUrl = testBaseUrl port, sourceSegment = "shinzui/shikigami"}
               ctx = ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) dummyKizashi kw
-              sink = KawaDigest {subjectType = "practice-review", verb = "practice-review.completed"}
+              sink = KawaDigest {subjectType = activityCoordinate ("practice-review"), verb = activityCoordinate ("practice-review.completed")}
               output = object ["context_refs" .= [object ["scheme" .= ("https://" :: Text), "ref" .= ("example.invalid" :: Text)]]]
           result <- Sink.dispatch ctx sink output
           case (.outcome) result of
@@ -501,7 +503,7 @@ traceHeaderTests =
         testWithApplication (pure (captureHeaders headers (kawaDoorwayApplication store))) \port -> do
           let kw = KawaConfig {baseUrl = testBaseUrl port, sourceSegment = "shinzui/shikigami"}
               ctx = (ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) dummyKizashi kw) {traceHeaders = sampleTraceHeaders}
-              sink = KawaDigest {subjectType = "heartbeat", verb = "heartbeat.tick"}
+              sink = KawaDigest {subjectType = activityCoordinate ("heartbeat"), verb = activityCoordinate ("heartbeat.tick")}
           _ <- Sink.dispatch ctx sink sampleOutput
           assertCapturedTraceHeaders headers,
       testCase "kizashi receives only the generated W3C trace headers" do
@@ -520,7 +522,7 @@ traceHeaderTests =
                   { rei = Sink.ReiConfig {baseUrl = Just (testBaseUrl port)},
                     traceHeaders = sampleTraceHeaders
                   }
-              sink = ReiAction {intentionId = "int_trace", note = "trace this action"}
+              sink = ReiAction {intentionId = declarationCoordinate ("int_trace"), note = "trace this action"}
           _ <- Sink.dispatch ctx sink sampleOutput
           assertCapturedTraceHeaders headers,
       testCase "danwa receives only the generated W3C trace headers" do

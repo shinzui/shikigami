@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | A small, atomically refreshed view of Meibo principals.
 --
 -- The runtime deliberately consumes a narrow projection rather than Meibo's
@@ -11,7 +13,9 @@ module Shikigami.Directory
     DirectoryView,
     DirectorySource,
     DirectoryHandle,
-    DirectorySnapshotVersion (..),
+    DirectorySnapshotVersion,
+    parseDirectorySnapshotVersion,
+    directorySnapshotVersionText,
     DirectorySourceKind (..),
     DirectorySnapshot (..),
     LifecycleDecision (..),
@@ -41,6 +45,7 @@ import Control.Lens ((&), (.~))
 import Control.Monad (forever)
 import Data.Aeson (FromJSON (..), withObject, withText, (.:), (.=))
 import Data.Aeson qualified as Aeson
+import Data.Bits ((.&.))
 import Data.ByteString qualified as BS
 import Data.Generics.Labels ()
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
@@ -53,6 +58,7 @@ import Data.Time (NominalDiffTime, UTCTime, getCurrentTime, nominalDiffTimeToSec
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
 import GHC.Generics (Generic)
+import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, declarationCoordinate, declarationCoordinateText)
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal
   ( AgentIdentity (..),
@@ -77,8 +83,8 @@ instance FromJSON Lifecycle where
 
 -- | The exact principal projection needed by lifecycle gates and attribution.
 data PrincipalRecord = PrincipalRecord
-  { principalId :: !Text,
-    handle :: !Text,
+  { principalId :: !(DeclarationCoordinate "principal"),
+    handle :: !(DeclarationCoordinate "directory-handle"),
     lifecycle :: !Lifecycle
   }
   deriving stock (Generic, Eq, Show)
@@ -101,8 +107,8 @@ data DirectorySettings
 
 -- | One immutable, fully validated directory snapshot.
 data DirectoryView = DirectoryView
-  { byPrincipalId :: !(Map Text PrincipalRecord),
-    byHandle :: !(Map Text PrincipalRecord),
+  { byPrincipalId :: !(Map (DeclarationCoordinate "principal") PrincipalRecord),
+    byHandle :: !(Map (DeclarationCoordinate "normalized-directory-handle") PrincipalRecord),
     loadedAt :: !UTCTime
   }
 
@@ -125,14 +131,27 @@ data DirectoryHandle
 
 -- | A stable identifier for the semantic contents of one directory snapshot.
 -- Refresh timestamps and source errors are deliberately excluded.
-newtype DirectorySnapshotVersion = DirectorySnapshotVersion {value :: Text}
-  deriving stock (Generic, Eq, Ord, Show)
+newtype DirectorySnapshotVersion = DirectorySnapshotVersion Text
+  deriving stock (Eq, Ord, Show)
 
 instance Aeson.ToJSON DirectorySnapshotVersion where
   toJSON (DirectorySnapshotVersion version) = Aeson.String version
 
 instance FromJSON DirectorySnapshotVersion where
-  parseJSON = withText "directory snapshot version" (pure . DirectorySnapshotVersion)
+  parseJSON = withText "directory snapshot version" (either (fail . Text.unpack) pure . parseDirectorySnapshotVersion)
+
+directorySnapshotVersionText :: DirectorySnapshotVersion -> Text
+directorySnapshotVersionText (DirectorySnapshotVersion value) = value
+
+parseDirectorySnapshotVersion :: Text -> Either Text DirectorySnapshotVersion
+parseDirectorySnapshotVersion raw = case UUID.fromText raw of
+  Just value
+    | let (_, version, variant, _) = UUID.toWords value,
+      raw == UUID.toText value,
+      version .&. 0xf000 == 0x5000,
+      variant .&. 0xc0000000 == 0x80000000 ->
+        Right (DirectorySnapshotVersion raw)
+  _ -> Left "directory snapshot version requires a canonical RFC 4122 UUIDv5"
 
 -- | Honest attribution for the lifecycle policy consulted by a catalog.
 data DirectorySourceKind
@@ -274,7 +293,7 @@ startDirectoryWithHeartbeat logger heartbeat (DirectoryFile filePath interval)
 -- A declared principal id is authoritative.  Handle fallback is used only when
 -- the declaration has no principal id, so a typo cannot accidentally bind to a
 -- different principal with a matching human-readable handle.
-consultLifecycle :: DirectoryHandle -> Maybe Text -> Text -> IO LifecycleDecision
+consultLifecycle :: DirectoryHandle -> Maybe (DeclarationCoordinate "principal") -> Text -> IO LifecycleDecision
 consultLifecycle DisabledDirectory _ _ = pure (AllowRun Nothing)
 consultLifecycle directoryHandle@(ConfiguredDirectory _ _ stateRef) declaredPrincipalId agentHandle = do
   state <- readIORef stateRef
@@ -283,7 +302,7 @@ consultLifecycle directoryHandle@(ConfiguredDirectory _ _ stateRef) declaredPrin
     Just _ -> do
       found <- lookupPrincipal directoryHandle declaredPrincipalId agentHandle
       pure case found of
-        Nothing -> UnknownPrincipal (maybe agentHandle id declaredPrincipalId)
+        Nothing -> UnknownPrincipal (maybe agentHandle declarationCoordinateText declaredPrincipalId)
         Just principal -> case (.lifecycle) principal of
           Active -> AllowRun (Just principal)
           Paused -> SkipRun principal "principal lifecycle is paused"
@@ -291,12 +310,12 @@ consultLifecycle directoryHandle@(ConfiguredDirectory _ _ stateRef) declaredPrin
 
 -- | Collapse a lifecycle decision into the shape side-effect gates need.
 -- The successful value is the principal id to carry into durable work.
-lifecycleAdmission :: DirectoryHandle -> Maybe Text -> Text -> IO (Either Text (Maybe Text))
+lifecycleAdmission :: DirectoryHandle -> Maybe (DeclarationCoordinate "principal") -> Text -> IO (Either Text (Maybe Text))
 lifecycleAdmission directoryHandle declaredPrincipalId agentHandle =
   fmap
     ( \case
-        AllowRun Nothing -> Right declaredPrincipalId
-        AllowRun (Just principal) -> Right (Just ((.principalId) principal))
+        AllowRun Nothing -> Right (declarationCoordinateText <$> declaredPrincipalId)
+        AllowRun (Just principal) -> Right (Just (declarationCoordinateText ((.principalId) principal)))
         SkipRun _ reason -> Left reason
         UnknownPrincipal identifier -> Left ("unknown principal: " <> identifier)
         DirectoryUnavailable problem -> Left ("directory unavailable: " <> problem)
@@ -308,12 +327,12 @@ lifecycleAdmission directoryHandle declaredPrincipalId agentHandle =
 -- Disabled mode never upgrades a declaration's unverified text into a Meibo
 -- assertion. Configured mode records the exact active principal returned by the
 -- validated snapshot.
-identityAdmission :: DirectoryHandle -> Maybe Text -> AgentName -> IO (Either Text AgentIdentity)
+identityAdmission :: DirectoryHandle -> Maybe (DeclarationCoordinate "principal") -> AgentName -> IO (Either Text AgentIdentity)
 identityAdmission directoryHandle declaredPrincipalId agentHandle =
   fmap
     ( \case
         AllowRun Nothing -> Right (compatibilityIdentity agentHandle)
-        AllowRun (Just principal) -> VerifiedIdentity <$> mkAgentPrincipal ((.principalId) principal)
+        AllowRun (Just principal) -> VerifiedIdentity <$> mkAgentPrincipal (declarationCoordinateText ((.principalId) principal))
         SkipRun _ reason -> Left reason
         UnknownPrincipal identifier -> Left ("unknown principal: " <> identifier)
         DirectoryUnavailable problem -> Left ("directory unavailable: " <> problem)
@@ -330,7 +349,7 @@ consultIdentityLifecycle DisabledDirectory UnresolvedLegacyIdentity =
   pure (UnknownPrincipal "unresolved legacy identity")
 consultIdentityLifecycle directoryHandle@(ConfiguredDirectory {}) recordedIdentity =
   case recordedIdentity of
-    VerifiedIdentity principal -> consultLifecycle directoryHandle (Just (principalText principal)) (principalText principal)
+    VerifiedIdentity principal -> consultLifecycle directoryHandle (Just (declarationCoordinate (principalText principal))) (principalText principal)
     CompatibilityIdentity agentName -> pure (UnknownPrincipal ("compatibility identity " <> agentNameText agentName))
     UnresolvedLegacyIdentity -> pure (UnknownPrincipal "unresolved legacy identity")
 
@@ -353,14 +372,14 @@ identityLifecycleAdmission directoryHandle recordedIdentity =
 -- succeeds in normal operation. The fallback preserves disabled-mode behavior
 -- and keeps a declared id authoritative if attribution is retried around a
 -- snapshot change.
-principalAttribution :: DirectoryHandle -> Maybe Text -> Text -> IO Text
+principalAttribution :: DirectoryHandle -> Maybe (DeclarationCoordinate "principal") -> Text -> IO Text
 principalAttribution directoryHandle declaredPrincipalId agentHandle = do
   found <- lookupPrincipal directoryHandle declaredPrincipalId agentHandle
-  pure (maybe (maybe agentHandle id declaredPrincipalId) (.principalId) found)
+  pure (maybe (maybe agentHandle declarationCoordinateText declaredPrincipalId) (declarationCoordinateText . (.principalId)) found)
 
 -- | Look up by authoritative principal id, or by normalized handle only when
 -- no id was declared.
-lookupPrincipal :: DirectoryHandle -> Maybe Text -> Text -> IO (Maybe PrincipalRecord)
+lookupPrincipal :: DirectoryHandle -> Maybe (DeclarationCoordinate "principal") -> Text -> IO (Maybe PrincipalRecord)
 lookupPrincipal DisabledDirectory _ _ = pure Nothing
 lookupPrincipal (ConfiguredDirectory _ _ stateRef) declaredPrincipalId agentHandle = do
   state <- readIORef stateRef
@@ -436,27 +455,27 @@ buildDirectoryView loadedAt principals = do
 
 validatePrincipal :: PrincipalRecord -> Either Text PrincipalRecord
 validatePrincipal principal
-  | not ("agent_" `Text.isPrefixOf` (.principalId) principal) =
-      Left ("principal id must begin with agent_: " <> (.principalId) principal)
-  | Text.null (normalizeHandle (principalHandle principal)) =
-      Left ("principal handle must not be empty: " <> (.principalId) principal)
+  | not ("agent_" `Text.isPrefixOf` declarationCoordinateText ((.principalId) principal)) =
+      Left ("principal id must begin with agent_: " <> declarationCoordinateText ((.principalId) principal))
+  | Text.null (declarationCoordinateText (normalizeHandle (principalHandle principal))) =
+      Left ("principal handle must not be empty: " <> declarationCoordinateText ((.principalId) principal))
   | otherwise = Right principal
 
-uniqueIndex :: Text -> (PrincipalRecord -> Text) -> [PrincipalRecord] -> Either Text (Map Text PrincipalRecord)
+uniqueIndex :: Text -> (PrincipalRecord -> DeclarationCoordinate scope) -> [PrincipalRecord] -> Either Text (Map (DeclarationCoordinate scope) PrincipalRecord)
 uniqueIndex label key = go Map.empty
   where
     go index [] = Right index
     go index (principal : rest) =
       let value = key principal
        in if Map.member value index
-            then Left ("duplicate " <> label <> ": " <> value)
+            then Left ("duplicate " <> label <> ": " <> declarationCoordinateText value)
             else go (Map.insert value principal index) rest
 
-normalizeHandle :: Text -> Text
-normalizeHandle = Text.toCaseFold . Text.strip
+normalizeHandle :: Text -> DeclarationCoordinate "normalized-directory-handle"
+normalizeHandle = declarationCoordinate . Text.toCaseFold . Text.strip
 
 principalHandle :: PrincipalRecord -> Text
-principalHandle PrincipalRecord {handle = value} = value
+principalHandle PrincipalRecord {handle = value} = declarationCoordinateText value
 
 directorySnapshotVersion :: DirectorySourceKind -> Text -> [PrincipalRecord] -> DirectorySnapshotVersion
 directorySnapshotVersion sourceKind state principals =
@@ -477,7 +496,7 @@ directorySnapshotVersion sourceKind state principals =
     )
   where
     principalValues PrincipalRecord {principalId, handle, lifecycle} =
-      [principalId, normalizeHandle handle, renderLifecycle lifecycle]
+      [declarationCoordinateText principalId, declarationCoordinateText (normalizeHandle (declarationCoordinateText handle)), renderLifecycle lifecycle]
 
 canonicalValues :: [Text] -> Text
 canonicalValues = Text.concat . fmap canonicalValue

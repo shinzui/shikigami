@@ -8,6 +8,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Hasql.Transaction (Transaction)
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (CompatibilityIdentity))
@@ -108,7 +109,7 @@ withProfiles fixture use = Fixture.withFixture fixture \env source root reposito
   selected <- right (resolveRepository catalog (repositoryIdentity repository) Nothing)
   let create name = do
         let owner = CompatibilityIdentity (fixtureAgentName "profile-worker")
-            request = WorkspaceRequest name Nothing (fixtureRootId ("profile-root-" <> name)) owner owner (fixtureRevision 0)
+            request = WorkspaceRequest (WorkflowId name) Nothing (fixtureRootId ("profile-root-" <> name)) owner owner (fixtureRevision 0)
         (binding, state) <- right =<< run env (Workspaces.reserveWorkspaceTx root request selected)
         allocateWorkspace root binding state >>= (@?= Right ())
         run env (Workspaces.markWorkspaceReadyTx binding) >>= (@?= Right ())

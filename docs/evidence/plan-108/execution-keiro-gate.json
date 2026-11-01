@@ -1,0 +1,9 @@
+{
+  "sourceRevision": "b57cbd8",
+  "since": "cd10844",
+  "command": "nix develop --no-write-lock-file -c just keiro-gate cd10844",
+  "status": "passed",
+  "findings": 0,
+  "replayVerdict": "replay-neutral",
+  "conformanceControls": 156
+}

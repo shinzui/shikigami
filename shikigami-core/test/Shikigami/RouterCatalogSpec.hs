@@ -6,6 +6,7 @@ import Data.IORef (newIORef, readIORef, writeIORef)
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text.Encoding
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl
   ( AgentDecl (..),
     AmbiguousPolicy (ReturnAmbiguous),
@@ -18,6 +19,7 @@ import Shikigami.Agent.Decl
     Trigger (..),
     defaultMemoryPolicy,
   )
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.ExpertiseKey (ExpertiseKey, parseExpertiseKey)
 import Shikigami.Agent.Loader
   ( AgentLoadEntry (AgentLoadFailed, AgentLoaded),
@@ -41,6 +43,7 @@ import Shikigami.Prelude
 import Shikigami.Router.Catalog
 import Shikigami.Router.Declaration (ValidatedRouterDeclaration, validateRouterDeclaration)
 import Shikigami.Router.SelectionLimit (SelectionLimit, parseSelectionLimit)
+import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -188,7 +191,7 @@ routerDeclarationFixture delegates =
   AgentDecl
     { name = fixtureAgentName "architecture-practice-router",
       description = "Routes architecture practice reviews",
-      trigger = Event {eventType = "proof.architecture-practice"},
+      trigger = Event {eventType = declarationCoordinate ("proof.architecture-practice")},
       behavior = Deterministic {rule = "route", params = Map.empty},
       sinks = [],
       delegates = map fixtureAgentName delegates,
@@ -197,7 +200,7 @@ routerDeclarationFixture delegates =
       capabilityOverlays = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,
@@ -220,16 +223,16 @@ specialistWithDescription description name enabled declaredPrincipal =
   AgentDecl
     { name = fixtureAgentName name,
       description,
-      trigger = Event {eventType = "proof.specialist"},
+      trigger = Event {eventType = declarationCoordinate ("proof.specialist")},
       behavior = Deterministic {rule = "review", params = Map.empty},
       sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
-      identity = IdentityDecl <$> declaredPrincipal,
+      identity = (IdentityDecl . declarationCoordinate) <$> declaredPrincipal,
       memory = defaultMemoryPolicy,
-      enabled,
+      enabled = agentEnablement enabled,
       expertise =
         [ ExpertiseDecl
             { key = fixtureExpertiseKey name,
@@ -247,8 +250,8 @@ specialistWithDescription description name enabled declaredPrincipal =
 principalRecord :: Text -> Lifecycle -> PrincipalRecord
 principalRecord handle lifecycle =
   PrincipalRecord
-    { principalId = "agent_" <> handle,
-      handle,
+    { principalId = declarationCoordinate ("agent_" <> handle),
+      handle = declarationCoordinate handle,
       lifecycle
     }
 

@@ -28,9 +28,11 @@ import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as Approval
 import Shikigami.Agent.Decl
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (identityText)
@@ -65,6 +67,7 @@ import Shikigami.Sink.Config
 import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
 import Shikigami.StateRevision (initialRevision, revisionNumber)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
+import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Workspace.Admission (WorkspaceHost (..))
 import Shikigami.Workspace.Allocation
 import Shikigami.Workspace.ConfiguredHost
@@ -140,7 +143,7 @@ workflowCase configFile prefix stage = do
     providers <- Provider.newProviderRegistryFrom [provider]
     now <- getCurrentTime
     http <- right =<< newSinkHttp (HttpLimits config.httpRequestMaxBytes config.httpResponseMaxBytes) (credentialsFromConfig config) (DanwaConfig "http://localhost:1" "fixture")
-    let declaration = original & #name .~ fixtureAgentName "workspace-upgrade" & #behavior .~ Skill (Text.pack skill) & #identity .~ Just (IdentityDecl principal) & #capabilityOverlays .~ map (.capability) [supervisedWorkspaceEditDescriptor, workspaceExecDescriptor, workspaceGitDescriptor] & #sinks .~ []
+    let declaration = original & #name .~ fixtureAgentName "workspace-upgrade" & #behavior .~ Skill (declarationCoordinate ((Text.pack skill))) & #identity .~ Just (IdentityDecl (declarationCoordinate principal)) & #capabilityOverlays .~ map (.capability) [supervisedWorkspaceEditDescriptor, workspaceExecDescriptor, workspaceGitDescriptor] & #sinks .~ []
         rootId = fixtureRootId "workflow-upgrade-root"
         job = RunJob (fixtureAgentName "workspace-upgrade") initial.binding.request.owner TriggeredBySchedule now Aeson.Null (fixtureRunKey "workspace-durable-upgrade") Nothing Nothing Nothing [] Nothing Nothing (Just rootId) Nothing AgentWorkflowRoute
         deps =

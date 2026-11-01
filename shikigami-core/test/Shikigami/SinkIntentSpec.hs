@@ -12,12 +12,14 @@ import Data.Time (UTCTime (..), fromGregorian)
 import Data.UUID qualified as UUID
 import Keiro.Integration.Event (IntegrationEvent (..))
 import Kioku.Id qualified as SinkSession
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl
   ( Priority (High),
     RecipientFrom (SubjectOwner),
     SignalType (Alert),
     Sink (..),
   )
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name qualified as Name
 import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity, VerifiedIdentity), mkAgentPrincipal)
 import Shikigami.Sink.Coordinate (parseSinkOrdinal, parseSinkSession, sinkOrdinalInt, zeroSinkOrdinal)
@@ -28,6 +30,7 @@ import Shikigami.Sink.Intent
     sinkIntentEvent,
   )
 import Shikigami.Sink.Types (DanwaTarget (..))
+import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertFailure, testCase, (@?=))
 
@@ -122,28 +125,28 @@ egressIntent =
       resolvedRecipient = Nothing,
       conversationKey = Just "conv_55012",
       triggeringActivityId = Just "act_1",
-      sink = ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing},
+      sink = ChannelEgress {channel = declarationCoordinate ("intercom"), action = declarationCoordinate ("reply_to_conversation"), conversationKey = fmap declarationCoordinate (Nothing)},
       output = outputValue
     }
 
 representativeSinks :: [Sink]
 representativeSinks =
-  [ KawaDigest {subjectType = "customer", verb = "relationship.at_risk"},
+  [ KawaDigest {subjectType = activityCoordinate ("customer"), verb = activityCoordinate ("relationship.at_risk")},
     canonicalSink,
-    ReiAction {intentionId = "intention_01sink", note = "Escalate the customer risk"},
+    ReiAction {intentionId = declarationCoordinate ("intention_01sink"), note = "Escalate the customer risk"},
     DanwaConversation {topic = "At-risk customer review"},
-    ChannelEgress {channel = "intercom", action = "reply_to_conversation", conversationKey = Nothing}
+    ChannelEgress {channel = declarationCoordinate ("intercom"), action = declarationCoordinate ("reply_to_conversation"), conversationKey = fmap declarationCoordinate (Nothing)}
   ]
 
 canonicalSink :: Sink
 canonicalSink =
   KizashiSignal
-    { source = "shikigami",
+    { source = activityCoordinate ("shikigami"),
       signalType = Alert,
       priority = High,
-      importance = 7,
+      importance = either (error . show) id (parseSignalImportance (7)),
       recipientFrom = SubjectOwner,
-      defaultRecipient = Just "ops",
+      defaultRecipient = fmap declarationCoordinate (Just "ops"),
       intentTemplate = "escalate",
       extraContextTags = ["a"]
     }

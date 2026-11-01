@@ -35,6 +35,7 @@ library
     Shikigami.Action.Authorization
     Shikigami.Action.Authorization.Config
     Shikigami.Activity
+    Shikigami.Activity.Coordinate
     Shikigami.Agent.Approval
     Shikigami.Agent.Approval.Notification
     Shikigami.Agent.Approval.Workflow
@@ -42,6 +43,7 @@ library
     Shikigami.Agent.Conversation
     Shikigami.Agent.Conversation.SessionIndex
     Shikigami.Agent.Decl
+    Shikigami.Agent.DeclarationValue
     Shikigami.Agent.Delegate
     Shikigami.Agent.Delegate.Context
     Shikigami.Agent.Delegate.Depth

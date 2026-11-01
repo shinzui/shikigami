@@ -29,9 +29,12 @@ import Data.Vector qualified as V
 import Effectful.Dispatch.Static (unsafeEff_)
 import Effectful.Error.Static (throwError)
 import GHC.Generics (Generic)
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kikan.En.Action (AgentAction (InvokeCapabilityTool))
 import Shikigami.Action.Authorization (ActionAuthorizationFailure (ActionPolicyDenied), ActionAuthorizer (..), allowAllActionAuthorizerForTests)
+import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (Event), defaultMemoryPolicy)
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Behavior.Error (FailureClass (Permanent), RunError (..), classifyRunError)
 import Shikigami.Behavior.Input (triggerOnly)
@@ -45,6 +48,7 @@ import Shikigami.Execution.Ephemeral (EphemeralResult (..), runEphemeralBehavior
 import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
 import Shikigami.Execution.Policy.Types
 import Shikigami.Log qualified as Log
+import Shikigami.Trigger.Schedule (parseCron)
 import Shikumi.Error (ShikumiError (BudgetExceeded))
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Tool (SomeTool (..), ToolRegistry, mkRegistry, mkTool, registryNames)
@@ -153,7 +157,7 @@ ephemeralFixture registry complete = do
   let api = Custom "shikigami-ephemeral-fixture"
   providers <- newProviderRegistryFrom [apiProviderWith api (liftCompleteToStream complete) complete]
   base <- newBehaviorEnv
-  pure (base & #model .~ toolModel api & #providerRegistry .~ Just providers & #tools .~ registry, declFor [] (Skill (Text.pack (root </> "agents" </> "skills" </> "triage-note"))))
+  pure (base & #model .~ toolModel api & #providerRegistry .~ Just providers & #tools .~ registry, declFor [] (Skill (declarationCoordinate ((Text.pack (root </> "agents" </> "skills" </> "triage-note"))))))
 
 emptyRegistryTests :: TestTree
 emptyRegistryTests =
@@ -311,13 +315,13 @@ bracketedTraceTest =
     registerApiProvider (apiProviderWith api (liftCompleteToStream handler) handler)
     base <- newBehaviorEnv
     let tracedBase = base & #model .~ model & #traceSink .~ Just sink
-        decl = declFor [workspaceReadId] (Skill {path = Text.pack (root </> "agents" </> "skills" </> "triage-note")})
+        decl = declFor [workspaceReadId] (Skill {path = declarationCoordinate (Text.pack (root </> "agents" </> "skills" </> "triage-note"))})
     result <-
       withCapabilityOverlays
         Log.silentLogger
         allowAllActionAuthorizerForTests
         providers
-        CapabilityScope {runId = "run-e2e", principal = "principal-e2e", mode = Durable}
+        CapabilityScope {runId = WorkflowRun (WorkflowId "run-e2e"), principal = declarationCoordinate "principal-e2e", mode = Durable}
         resolvedRead
         (mkRegistry [])
         (\registry _active -> runBehavior (withCapabilityTools resolvedRead registry tracedBase) decl (triggerOnly Aeson.Null))
@@ -396,13 +400,13 @@ toolInvocationAuthorizationCase dynamic =
     registerApiProvider (apiProviderWith api (liftCompleteToStream handler) handler)
     base <- newBehaviorEnv
     let env = base & #model .~ model
-        decl = declFor [workspaceReadId] (Skill {path = Text.pack (root </> "agents" </> "skills" </> "triage-note")})
+        decl = declFor [workspaceReadId] (Skill {path = declarationCoordinate (Text.pack (root </> "agents" </> "skills" </> "triage-note"))})
     result <-
       withCapabilityOverlays
         Log.silentLogger
         authorizer
         providers
-        CapabilityScope {runId = "run-denied", principal = "principal-denied", mode = Durable}
+        CapabilityScope {runId = WorkflowRun (WorkflowId "run-denied"), principal = declarationCoordinate "principal-denied", mode = Durable}
         resolvedRead
         (mkRegistry [])
         (\registry _active -> runBehavior (withCapabilityTools resolvedRead registry env) decl (triggerOnly Aeson.Null))
@@ -500,7 +504,7 @@ declFor capabilityOverlays behavior =
   AgentDecl
     { name = fixtureAgentName "behavior-tool-test",
       description = "exercise run-local model tools",
-      trigger = Event "test",
+      trigger = Event (declarationCoordinate ("test")),
       behavior,
       sinks = [],
       delegates = map fixtureAgentName [],
@@ -509,7 +513,7 @@ declFor capabilityOverlays behavior =
       capabilityOverlays,
       identity = Nothing,
       memory = defaultMemoryPolicy,
-      enabled = True,
+      enabled = agentEnablement (True),
       expertise = [],
       execution = Nothing,
       harness = Nothing,

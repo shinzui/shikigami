@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | What every worker loop needs, and how each loop's own environment is derived
 -- from it.
 --
@@ -47,6 +49,7 @@ import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), DelegationBudget, IdentityDecl (..), Trigger (..))
+import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Loader (AgentLoadReport)
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
@@ -68,7 +71,7 @@ import Shikigami.Sink (DanwaConfig, GrantSource, KanmonConfig, KawaConfig, Kizas
 import Shikigami.Sink.GrantStore (withActionAuthorizer)
 import Shikigami.Sink.Http (SinkHttp)
 import Shikigami.Telemetry.Metrics (ShikigamiMetrics)
-import Shikigami.Trigger.Schedule (CatchUpPolicy, CronSchedule, parseCron)
+import Shikigami.Trigger.Schedule (CatchUpPolicy, CronSchedule, cronExpressionText, parseCron)
 import Shikigami.Trigger.Scheduler qualified as Scheduler
 import Shikigami.Workspace.Admission (WorkspaceHost (..))
 import System.Exit (exitFailure)
@@ -274,7 +277,7 @@ schedulerSchedules logger strictMode declarations = do
         [ (agentName, cron)
         | AgentDecl {name = agentName, trigger = Schedule {cron}} <- declarations
         ]
-      parsed = [(agentName, parseCron cron) | (agentName, cron) <- scheduled]
+      parsed = [(agentName, parseCron (cronExpressionText cron)) | (agentName, cron) <- scheduled]
       invalid = [(agentName, err) | (agentName, Left err) <- parsed]
   traverse_ reportInvalid invalid
   unless (null invalid) do
@@ -310,7 +313,7 @@ schedulerEnv env =
 envSchedules :: WorkerEnv -> Map AgentName CronSchedule
 envSchedules WorkerEnv {schedules = s} = s
 
-principalIdsByAgent :: [AgentDecl] -> Map AgentName (Maybe Text)
+principalIdsByAgent :: [AgentDecl] -> Map AgentName (Maybe (DeclarationCoordinate "principal"))
 principalIdsByAgent =
   Map.fromList . fmap (\AgentDecl {name, identity} -> (name, declaredPrincipal <$> identity))
   where
