@@ -669,3 +669,23 @@ Review of `Attestation.Resolve` also found that a well-formed candidate with a
 matching hash can disagree with its reference's profile id/version or the
 requested lookup coordinates. That ownership gap remains explicit pending its
 own construction/owner batch; digest syntax tests do not certify it.
+
+
+The full `cabal build all --enable-tests -j1` succeeds on `5a63443`; the refreshed
+census has 323 modules, 925 module declarations, fourteen entrypoints and 4,026
+keys. All snapshot/source/compiler/interface/tool identities are fresh. Semantic
+rereview of Profile, Envelope, Resolve and Provider.Call renews only their
+reviewed entries, resolves the six old commitment/schema findings, and migrates
+the two private digest representation keys. SchemaVersion's former primitive
+member disappears because the supported vocabulary is now closed. The profile
+lookup function wrapper is explicitly excluded as an ephemeral injected handle.
+ResolvedProfile's whole-binding entry is corrected to an explicit violation for
+the newly found coordinate mismatch, rather than retaining its earlier
+composition-only verdict.
+
+Classification contains 764 entries: 690 compliant, 28 not applicable and 46
+violations, with 3,262 missing keys. Both checker modes correctly refuse those
+missing keys; no milestone is complete. The unchanged frozen 124-source/93-item
+upgrade inventory and all 21 mutation controls pass. Earlier 24 domain-tool tests
+remain applicable because neither the checker nor census tools changed. The guide
+stays deferred and its frozen hashes/release identities are preserved.

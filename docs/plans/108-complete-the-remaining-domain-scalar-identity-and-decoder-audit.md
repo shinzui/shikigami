@@ -63,9 +63,9 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 
 Implementation is under way. The schema-2 census and coverage/freshness checker
 pass 24 positive/mutation tests against a successful full GHC 9.12.4 macOS build.
-The current census has 4,027 declaration/member keys. Semantic classification
-covers 764 keys: 686 compliant entries, 27 exclusions and 51 explicit violations;
-3,263 keys remain unreviewed, and both coverage modes correctly refuse completion.
+The current census has 4,026 declaration/member keys. Semantic classification
+covers 764 keys: 690 compliant entries, 28 exclusions and 46 explicit violations;
+3,262 keys remain unreviewed, and both coverage modes correctly refuse completion.
 
 Process-profile, Objective, cleanup/listing, directory, sink, HTTP acceptance and
 workspace binding/file/transfer read boundaries now have owning transactional
@@ -111,9 +111,11 @@ The attestation commitment/schema source candidate passes 50 unit, 133
 PostgreSQL and 103 public compiler controls. Canonical bytes and the pinned
 payload digest remain unchanged; malformed commitment and unsupported schema
 admission now refuse. See
-`docs/evidence/plan-108/attestation-commitments-source.json`. Coherent build/census
-reconciliation follows this checkpoint. A newly found resolver profile/reference
-and requested-coordinate ownership gap remains open for the next owner batch.
+`docs/evidence/plan-108/attestation-commitments-source.json`. The coherent full build and fresh census pass on `5a63443`: 323 modules,
+925 module declarations and 4,026 keys. The six commitment/schema findings are
+resolved; the old primitive schema member is removed by the closed vocabulary,
+not exempted. The resolver ownership gap is now an explicit violation and
+remains open for the next owner batch.
 
 The native workflow gate passes on `400cdc0` against `af76f1b`, with no findings
 and a replay-neutral native verdict. Exact reports accompany the current evidence.
