@@ -186,3 +186,16 @@ follow-up writes and terminal cleanup bound to the latest retained execution,
 while preserving the pinned instruction bundle, Unix identity and metadata.
 This does not waive the separate real ownership/successor gate or activate the
 new production composition.
+
+Plan 108 retains workspace admission freeze as the closed `AdmissionOpen` /
+`AdmissionFrozen` state. The SQL `frozen` boolean and its JSON projection retain
+exact false/true encoding. Conditional owner checks and transfer establishment
+compare the explicit state; supervisor cancellation projects its existing
+boolean observation at that boundary. Unknown JSON kinds refuse instead of
+becoming an open default. Freezing is still a control on new effects, not a
+reason to hide accepted facts: retained inspection, settlement, cleanup and
+transfer recovery keep their separate conditions. This representation change
+adds no workflow step or identity namespace and makes no new Linux containment
+claim. Existing fixture-only rollback controls still inspect a tentative frozen
+state, condemn on unreadable retained metadata and observe the original open
+state after transaction rollback.

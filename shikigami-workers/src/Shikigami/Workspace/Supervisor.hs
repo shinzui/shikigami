@@ -342,7 +342,7 @@ stopControlled runtime binding record directory = do
   root <- runAppIO runtime.appEnv (Roots.inspectRoot binding.request.rootId)
   control <- runAppIO runtime.appEnv (runTransaction (Workspaces.inspectWorkspaceControlTx binding))
   let controlled =
-        either (const False) (either (const False) (maybe False (.frozen))) control || now >= record.deadline || case root of
+        either (const False) (either (const False) (maybe False Workspaces.workspaceFrozen)) control || now >= record.deadline || case root of
           Right (Right currentRoot) -> isLeft (Resources.checkRoot now currentRoot.revision currentRoot)
           _ -> False
   when controlled do

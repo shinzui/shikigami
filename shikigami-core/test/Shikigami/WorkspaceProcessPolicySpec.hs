@@ -14,6 +14,7 @@ import Shikigami.Workspace.Catalog (repositoryPolicyRevision, resolveRepository)
 import Shikigami.Workspace.Process
 import Shikigami.Workspace.ProcessPolicy
 import Shikigami.Workspace.Settings qualified as Settings
+import Shikigami.Workspace.Store qualified as Store
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -21,7 +22,13 @@ tests :: TestTree
 tests =
   testGroup
     "workspace retained process policies"
-    [ testCase "complete policy and profile retain numeric format bytes and policy identity" $ do
+    [ testCase "admission freeze retains boolean storage and rejects other JSON kinds" $ do
+        Aeson.encode Store.AdmissionOpen @?= "false"
+        Aeson.encode Store.AdmissionFrozen @?= "true"
+        Aeson.eitherDecode @Store.FreezeState "false" @?= Right Store.AdmissionOpen
+        Aeson.eitherDecode @Store.FreezeState "true" @?= Right Store.AdmissionFrozen
+        mapM_ (assertDecodeRefused @Store.FreezeState) [Aeson.Null, Aeson.Number 0, Aeson.String "false", Aeson.object []],
+      testCase "complete policy and profile retain numeric format bytes and policy identity" $ do
         Aeson.toJSON policy @?= legacyPolicy
         Aeson.encode policy @?= Aeson.encode legacyPolicy
         Aeson.eitherDecode @ProcessPolicy (Aeson.encode legacyPolicy) @?= Right policy

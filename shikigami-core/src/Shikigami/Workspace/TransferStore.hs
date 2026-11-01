@@ -99,7 +99,7 @@ beginTransferTx binding intent = do
     Right Nothing -> do
       session <- retainedTransferTx intent
       let associated = maybe False ((== intent.sessionId) . fst) binding.request.assignment
-      if validIntent binding intent && associated && session && control == Right (Just (Store.WorkspaceControl intent.oldOwner intent.oldEpoch False))
+      if validIntent binding intent && associated && session && control == Right (Just (Store.WorkspaceControl intent.oldOwner intent.oldEpoch Store.AdmissionOpen))
         then do
           frozen <- Store.freezeWorkspaceTx binding intent.oldOwner intent.oldEpoch
           case frozen of
@@ -131,7 +131,7 @@ retainFenceTx binding intent = do
     Right (Just (original, Nothing)) | original == intent -> do
       session <- retainedTransferTx intent
       settled <- workspaceSettledTx binding
-      if control == Right (Just (Store.WorkspaceControl intent.oldOwner intent.oldEpoch True)) && session && settled == Right True
+      if control == Right (Just (Store.WorkspaceControl intent.oldOwner intent.oldEpoch Store.AdmissionFrozen)) && session && settled == Right True
         then do
           let proof = FenceProof 1 binding.workspace intent.operationId (transferFingerprint intent) intent.oldEpoch intent.newEpoch (versionedDigest "shikigami.workspace-fence/1" (toJSON (workspaceBindingDigest binding, intent)))
           Tx.statement (binding.workspace.resource, intent.oldEpoch, proof) saveFence
@@ -164,8 +164,8 @@ admitSuccessorTx binding admission = do
           Right (Just (intent, Just proof)) | matchesFence intent proof && intent.sessionId == current.session && intent.operationId == progress.operationId && intent.newOwner == current.owner && intent.newEpoch == current.epoch && intent.rootId == current.rootId -> do
             settled <- workspaceSettledTx binding
             earlier <- priorAdmissionsSettledTx binding current
-            let old = Store.WorkspaceControl intent.oldOwner intent.oldEpoch True
-                new = Store.WorkspaceControl intent.newOwner intent.newEpoch False
+            let old = Store.WorkspaceControl intent.oldOwner intent.oldEpoch Store.AdmissionFrozen
+                new = Store.WorkspaceControl intent.newOwner intent.newEpoch Store.AdmissionOpen
             if settled == Right True && earlier == Right True && (control == Right (Just old) || control == Right (Just new))
               then do
                 Tx.statement (admission.runId, binding.workspace.resource, current.session.value, current.assignment.value, current.sequence, admission) insertAdmission
@@ -192,7 +192,7 @@ admitFollowupTx binding admission = do
           earlier <- priorAdmissionsSettledTx binding current
           let prior = (&&) <$> original <*> earlier
           settled <- workspaceSettledTx binding
-          if prior == Right True && settled == Right True && control == Right (Just (Store.WorkspaceControl current.owner current.epoch False))
+          if prior == Right True && settled == Right True && control == Right (Just (Store.WorkspaceControl current.owner current.epoch Store.AdmissionOpen))
             then do
               Tx.statement (admission.runId, binding.workspace.resource, session.value, current.assignment.value, current.sequence, admission) insertAdmission
               actual <- inspectAdmissionTx binding admission.runId

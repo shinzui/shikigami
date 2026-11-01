@@ -3,7 +3,7 @@
 
 -- | Reserve before filesystem effects. Matching duplicate requests converge;
 -- reservation metadata remains immutable after the workspace becomes ready.
-module Shikigami.Workspace.Store (inspectWorkspaceBindingsTx, workspaceEffectsSettledTx, workspaceRefForAssignment, reserveWorkspaceTx, inspectWorkspaceTx, markWorkspaceReadyTx, checkWorkspaceOwnerTx, checkWorkspaceOperationTx, reserveWorkspaceEffectTx, recordWorkspaceReceiptTx, freezeWorkspaceTx, registerFileTx, registerFileForOwnerTx, inspectRegisteredFileTx, inspectFilePageTx, WorkspaceControl (..), inspectWorkspaceControlTx) where
+module Shikigami.Workspace.Store (inspectWorkspaceBindingsTx, workspaceEffectsSettledTx, workspaceRefForAssignment, reserveWorkspaceTx, inspectWorkspaceTx, markWorkspaceReadyTx, checkWorkspaceOwnerTx, checkWorkspaceOperationTx, reserveWorkspaceEffectTx, recordWorkspaceReceiptTx, freezeWorkspaceTx, registerFileTx, registerFileForOwnerTx, inspectRegisteredFileTx, inspectFilePageTx, WorkspaceControl (..), FreezeState (..), workspaceFrozen, inspectWorkspaceControlTx) where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4)
 import Data.Aeson qualified as Aeson
@@ -176,7 +176,7 @@ checkWorkspaceOwnerTx binding owner epoch = do
   retained <- inspectWorkspaceTx binding.workspace
   control <- Tx.statement binding.workspace.resource lockControl >>= checkedRead . sequence
   pure case (retained, control) of
-    (Right (Just (actual, Ready)), Right (Just current)) | actual == binding && current.owner == owner && current.epoch == epoch && not current.frozen -> Right ()
+    (Right (Just (actual, Ready)), Right (Just current)) | actual == binding && current.owner == owner && current.epoch == epoch && current.frozen == AdmissionOpen -> Right ()
     _ -> Left WorkspaceBindingConflict
 
 -- An unresolved effect blocks reuse by another logical operation, including
@@ -258,7 +258,21 @@ freezeWorkspaceTx binding owner epoch = do
     Left err -> pure (Left err)
     Right () -> Tx.statement binding.workspace.resource freezeControl >> pure (Right ())
 
-data WorkspaceControl = WorkspaceControl {owner :: !AgentIdentity, epoch :: !(StateRevision "worker-owner"), frozen :: !Bool}
+-- | Admission is permanently closed by cleanup or transfer. This state does
+-- not suppress factual inspection/recovery of already accepted effects.
+data FreezeState = AdmissionOpen | AdmissionFrozen
+  deriving stock (Eq, Show)
+
+instance FromJSON FreezeState where
+  parseJSON value = (\flag -> if flag then AdmissionFrozen else AdmissionOpen) <$> Aeson.parseJSON value
+
+instance ToJSON FreezeState where
+  toJSON state = Aeson.toJSON (state == AdmissionFrozen)
+
+workspaceFrozen :: WorkspaceControl -> Bool
+workspaceFrozen control = control.frozen == AdmissionFrozen
+
+data WorkspaceControl = WorkspaceControl {owner :: !AgentIdentity, epoch :: !(StateRevision "worker-owner"), frozen :: !FreezeState}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromJSON)
 

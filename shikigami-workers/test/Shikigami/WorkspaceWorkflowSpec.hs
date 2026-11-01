@@ -150,7 +150,7 @@ tests fixture =
                   pure ()
               )
             control <- right =<< run env (runTransaction (Store.inspectWorkspaceControlTx binding))
-            fmap (.frozen) control @?= Just True
+            fmap Store.workspaceFrozen control @?= Just True
             cleanupWorkspace runtime job.identity binding.workspace >>= (@?= Left CleanupRefused)
             listWorkspaces runtime job.identity Nothing >>= (@?= Left CleanupRefused)
             doesPathExist (workspaceScratch root binding) >>= (@?= True)
@@ -195,7 +195,7 @@ tests fixture =
                 )
             refused @?= Left WorkspaceBindingConflict
             control <- right =<< run env (runTransaction (Store.inspectWorkspaceControlTx binding))
-            fmap (.frozen) control @?= Just False
+            fmap Store.workspaceFrozen control @?= Just False
             cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
             doesPathExist (workspaceFiles root binding) >>= (@?= True)
             replaceSession retainedSession
@@ -449,7 +449,7 @@ corruptTerminalMetadata fixture = withWorkflow fixture \env root job _ deps _ ->
         )
     refused @?= Left WorkspaceBindingConflict
     control <- right =<< run env (runTransaction (Store.inspectWorkspaceControlTx binding))
-    fmap (.frozen) control @?= Just False
+    fmap Store.workspaceFrozen control @?= Just False
     cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
     doesPathExist (workspaceFiles root binding) >>= (@?= True)
     doesPathExist (workspaceScratch root binding) >>= (@?= True)
@@ -470,7 +470,7 @@ corruptTerminalMetadata fixture = withWorkflow fixture \env root job _ deps _ ->
           )
       refused @?= Left WorkspaceBindingConflict
       control <- right =<< run env (runTransaction (Store.inspectWorkspaceControlTx binding))
-      fmap (.frozen) control @?= Just False
+      fmap Store.workspaceFrozen control @?= Just False
       cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
       doesPathExist (workspaceFiles root binding) >>= (@?= True)
       run env (runTransaction (Tx.statement receipt (preparable "UPDATE shikigami.workspace_effects SET receipt=$1 WHERE kind='file' AND settled" (E.param (E.nonNullable E.jsonb)) D.noResult)))

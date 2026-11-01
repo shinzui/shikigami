@@ -60,6 +60,7 @@ import Shikigami.PracticeReview.Evidence qualified as Evidence
 import Shikigami.Router.Declaration qualified as Declaration
 import Shikigami.Workspace.Instructions qualified as Instructions
 import Shikigami.Workspace.Types qualified as Workspace
+import Shikigami.Workspace.Store qualified as WorkspaceStore
 import Shikigami.Workspace.ProcessPolicy qualified as ProcessPolicy
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Behavior.Provider.Coordinate qualified as ProviderCoordinate
@@ -68,7 +69,9 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''sinkMessage :: Text -> Delivery.SinkMessageId
+POSITIVE = '''openWorkspace :: WorkspaceStore.FreezeState
+openWorkspace = WorkspaceStore.AdmissionOpen
+sinkMessage :: Text -> Delivery.SinkMessageId
 sinkMessage = Delivery.sinkMessageId
 receiptKey :: Text -> Delivery.ReceiptKey
 receiptKey = Delivery.deliveryReceiptKey
@@ -322,6 +325,8 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         assert result.returncode != 0 and 'RunDisposition' in result.stderr, (source_kind, result.stderr)
         print('opaque boundary: run disposition ' + source_kind + ' substitution refused: passed', flush=True)
     for label, signature, expression in [
+        ('freeze boolean substitution', 'Bool -> WorkspaceStore.FreezeState', 'id'),
+        ('freeze boolean coercion', 'Bool -> WorkspaceStore.FreezeState', 'coerce'),
         ('sink message raw coercion', 'Text -> Delivery.SinkMessageId', 'coerce'),
         ('receipt key raw coercion', 'Text -> Delivery.ReceiptKey', 'coerce'),
         ('receipt/message substitution', 'Delivery.SinkMessageId -> Delivery.ReceiptKey', 'coerce'),

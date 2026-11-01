@@ -196,7 +196,7 @@ malformedGitMetadata fixture corrupt = withGit fixture \env binding proposed -> 
     frozen <- Store.freezeWorkspaceTx binding binding.request.owner (fixtureRevision 0)
     control <- Store.inspectWorkspaceControlTx binding
     inspected <- inspectGitTx proposed.operation.operationId
-    pure (frozen, fmap (fmap (.frozen)) control, inspected)
+    pure (frozen, fmap (fmap Store.workspaceFrozen) control, inspected)
   during @?= (Right (), Right (Just True), Left WorkspaceBindingConflict)
   run env (Store.checkWorkspaceOwnerTx binding binding.request.owner (fixtureRevision 0)) >>= (@?= Right ())
   assertBlocked env binding

@@ -86,7 +86,7 @@ tests fixture =
           frozen @?= Right ()
           refused @?= Left WorkspaceBindingConflict
           control <- right =<< run env (runTransaction (Workspaces.inspectWorkspaceControlTx binding))
-          fmap (.frozen) control @?= Just False
+          fmap Workspaces.workspaceFrozen control @?= Just False
           replace (Aeson.toJSON second)
           recovered <- right =<< run env (runTransaction (listWorkspacesTx binding.storageRoot Nothing))
           length recovered @?= 2,
@@ -188,7 +188,7 @@ tests fixture =
               refused @?= Left WorkspaceBindingConflict
               replaceAdmission (Aeson.toJSON admission)
               current <- right =<< run env (runTransaction (Workspaces.inspectWorkspaceControlTx binding))
-              fmap (.frozen) current @?= Just False
+              fmap Workspaces.workspaceFrozen current @?= Just False
               run env (runTransaction (admitSuccessorTx binding admission)) >>= (@?= Right ())
           )
           [Aeson.Null, Aeson.toJSON (admission & #runId .~ "wrong-retained-run")]
@@ -273,7 +273,7 @@ corruptWorkspaceReads fixture = withWorkspace fixture \env _ _ binding _ -> do
         refused @?= Left WorkspaceBindingConflict
         replace "UPDATE shikigami.workspace_bindings SET binding=$1" (Aeson.toJSON binding)
         control <- right =<< run env (runTransaction (Workspaces.inspectWorkspaceControlTx binding))
-        fmap (.frozen) control @?= Just False
+        fmap Workspaces.workspaceFrozen control @?= Just False
         run env (runTransaction (Workspaces.inspectWorkspaceTx binding.workspace)) >>= (@?= Right (Just (binding, Ready)))
     )
     [Aeson.Null, Aeson.toJSON (binding & #workspace . #resource .~ "wrong-address")]
@@ -289,7 +289,7 @@ corruptWorkspaceReads fixture = withWorkspace fixture \env _ _ binding _ -> do
   ignored @?= Left WorkspaceBindingConflict
   replace "UPDATE shikigami.workspace_controls SET owner=$1" (Aeson.toJSON binding.request.owner)
   restored <- right =<< run env (runTransaction (Workspaces.inspectWorkspaceControlTx binding))
-  fmap (.frozen) restored @?= Just False
+  fmap Workspaces.workspaceFrozen restored @?= Just False
   -- A genuine SQL error still escapes through the store boundary and rolls back
   -- the task-local table rename, independently of the domain refusal path.
   unavailable <-
@@ -324,7 +324,7 @@ corruptTransferReads fixture = withWorkspace fixture \env session access binding
       )
   ignored @?= Left WorkspaceBindingConflict
   control <- right =<< run env (runTransaction (Workspaces.inspectWorkspaceControlTx binding))
-  fmap (.frozen) control @?= Just True
+  fmap Workspaces.workspaceFrozen control @?= Just True
   replace "intent" (Aeson.toJSON intent)
   proof <- right =<< run env (runTransaction (retainFenceTx binding intent))
   replace "proof" Aeson.Null
@@ -353,7 +353,7 @@ corruptChildMapping fixture = withWorkspace fixture \env _ _ binding _ -> do
   ignored @?= Left WorkspaceBindingConflict
   replace retained
   control <- right =<< run env (runTransaction (Workspaces.inspectWorkspaceControlTx binding))
-  fmap (.frozen) control @?= Just False
+  fmap Workspaces.workspaceFrozen control @?= Just False
   run env (runTransaction (lookupSessionChildTx binding.request.runId)) >>= (@?= Right (Just original))
 
 workspacePages :: DatabaseFixture -> IO ()

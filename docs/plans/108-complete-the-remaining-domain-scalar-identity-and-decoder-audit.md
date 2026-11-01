@@ -157,6 +157,14 @@ reference; that independent primitive violation remains open. See
 `docs/evidence/plan-108/sink-locators-source.json`. Coherent census reconciliation
 follows this source checkpoint; the remaining receipt scalar roles stay open.
 
+The workspace freeze source candidate retains explicit open/frozen admission
+states with the original boolean SQL/JSON codec. All 9 selected unit, 17 core
+PostgreSQL and 79 worker cases pass, including freeze rollback and accepted
+factual recovery. Three focused public compiler controls pass; the final suite
+contains the new Bool substitution/coercion controls. See
+`docs/evidence/plan-108/workspace-freeze-source.json`. Full build/census
+reconciliation follows; this does not add Linux qualification or a workflow step.
+
 The native workflow gate passes on `400cdc0` against `af76f1b`, with no findings
 and a replay-neutral native verdict. Exact reports accompany the current evidence.
 The full build, fresh census and focused checks are checkpoints, not milestone

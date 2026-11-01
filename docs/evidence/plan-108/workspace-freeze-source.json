@@ -1,0 +1,18 @@
+{
+  "sourceParent": "281a4e8",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "files": {
+    "shikigami-core/src/Shikigami/Workspace/Store.hs": "bfd9170a6ac445f7d0b7f08053c0827a661b9bf24b015be6be87342b0c03a150",
+    "shikigami-core/src/Shikigami/Workspace/TransferStore.hs": "f74c8f1c44d76d5f7680410f31a5e1999ee048383287d46a2ec27f85c6118558",
+    "shikigami-core/test-postgres/Shikigami/WorkspaceProcessProfileStoreSpec.hs": "aa76614fd689083ba0542307ecf059bfbcf1ffc6f42380bada5e35bf7148c577",
+    "shikigami-core/test-postgres/Shikigami/WorkspaceTransferSpec.hs": "cdc8116dd6718c3734f55381609eecfe6e7f495855b8df8d43b24337a9067e60",
+    "shikigami-core/test/Shikigami/WorkspaceProcessPolicySpec.hs": "2b0fd766ec24c32e18d55f3b3b718388b1f056c2b46decbb67698042519a77a6",
+    "shikigami-workers/src/Shikigami/Workspace/Supervisor.hs": "183d7c11937c04bb5b35851003fc2079cf5707ce881067067854f1fe8753945e",
+    "shikigami-workers/test/Shikigami/WorkspaceFileProviderSpec.hs": "96402a35320057b5420d254239ee8a2a0009b3f60b88e957717b1acdae63aaed",
+    "shikigami-workers/test/Shikigami/WorkspaceGitStoreSpec.hs": "5683978c61b4595e953ec0bef6322f09daeafd1c868b3b97190938aa6c327e55",
+    "shikigami-workers/test/Shikigami/WorkspaceProcessStoreSpec.hs": "45b8e2ca71d0b1b053fd7646715d06cf59785ef035111c55d7a3888914867dce",
+    "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs": "7c5241aee2ce289362aa39de05600396e64b7064a7d588f4db026ecfbc6139a4",
+    "tests/types/opaque-values.py": "f0341525381d54e6c6d705f13703a0c3b7688616a2cf612689b8edda67dddd40"
+  }
+}

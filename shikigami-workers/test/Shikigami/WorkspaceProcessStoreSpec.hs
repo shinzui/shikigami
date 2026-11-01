@@ -330,7 +330,7 @@ malformedProcessMetadata fixture corrupt = withProcess fixture \env binding orig
     frozen <- Store.freezeWorkspaceTx binding binding.request.owner (fixtureRevision 0)
     control <- Store.inspectWorkspaceControlTx binding
     inspected <- inspectProcessTx proposed.operationId
-    pure (frozen, fmap (fmap (.frozen)) control, inspected)
+    pure (frozen, fmap (fmap Store.workspaceFrozen) control, inspected)
   during @?= (Right (), Right (Just True), Left WorkspaceBindingConflict)
   run env (Store.checkWorkspaceOwnerTx binding binding.request.owner (fixtureRevision 0)) >>= (@?= Right ())
   run env (Store.checkWorkspaceOperationTx binding binding.request.owner (fixtureRevision 0) (fixtureOperationId "successor")) >>= (@?= Left WorkspaceBindingConflict)

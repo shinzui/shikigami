@@ -937,3 +937,35 @@ agent and ordinal findings remain open for their own producer/consumer review.
 All 123 public compiler controls pass: public factories compile before generic,
 coercion and cross-coordinate substitution refusals. Coherent build/census
 reconciliation follows; all plan milestones remain open.
+
+## Explicit workspace admission freeze
+
+`workspace-freeze-source.json` binds the source candidate to `281a4e8` on arm64
+macOS/GHC 9.12.4. WorkspaceControl.frozen retains closed FreezeState rather than
+an interchangeable Bool. Its codec preserves exact false/true bytes; other JSON
+kinds refuse. SQL remains the existing boolean column/projection. Conditional
+owner and transfer checks compare AdmissionOpen/AdmissionFrozen; the independent
+supervisor projects the same cancellation observation at its boolean boundary.
+The factual read/recovery gates and existing effect settlement remain separate.
+
+The exact selected tests were listed first: 9 core unit, 17 core PostgreSQL and
+79 worker cases. All 105 pass serially, including tentative freeze/ignored-read
+rollback, owner transfer, successor/follow-up admission, cleanup, frozen write
+refusal, process cancellation, independent recovery and historical file/Git
+receipts. These are macOS database/instrumented provider controls, not new Linux
+containment or supervisor qualification. Three focused public compiler controls
+pass: both states compile, while Bool substitution and coercion fail. Those two
+negative controls are also added to the final opaque-value suite; the prior
+123-control sink result remains identified separately.
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-test shikigami-core-postgres-test shikigami-workers-test -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/workspace retained process policies/||/workspace transfer store/||/workspace process profile store/||/workspace governed parent and child/||/workspace process registrations/||/workspace Git registrations/||/workspace real file provider/||/workspace accepted process supervisor/'
+python3 tools/style/check_haskell.py
+git diff --check
+```
+
+Style and whitespace checks pass. ADR-63 records the admission/factual recovery
+separation. No core Agent/Flow workflow body, migration, dependency, identity
+formula or valid wire representation changes. Coherent full build, fresh census
+and classification reconciliation follow this source checkpoint; all milestones
+and the deferred guide disposition remain open.

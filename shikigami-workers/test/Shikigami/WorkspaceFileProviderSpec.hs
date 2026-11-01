@@ -541,7 +541,7 @@ corruptRegisteredFile fixture = withEffect fixture \env binding snapshot access 
             )
         ignored @?= Left WorkspaceBindingConflict
         control <- right =<< run env (runTransaction (Store.inspectWorkspaceControlTx binding))
-        fmap (.frozen) control @?= Just False
+        fmap Store.workspaceFrozen control @?= Just False
         publishFileReceipt env reference.operationId >>= (@?= Left FileEffectUnresolved)
         (_, after) <- right =<< run env (Execution.loadExecution access)
         after @?= before
