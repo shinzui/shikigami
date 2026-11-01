@@ -3,6 +3,7 @@
 -- | Complete compliance roll-up over one closed run-evidence set.
 module Shikigami.Attestation.Compliance
   ( ComplianceRollUp (..),
+    ComplianceDecision (..),
     evaluateCompliance,
     evaluateComplianceFacts,
     evaluateCallFacts,
@@ -17,6 +18,7 @@ import Data.Foldable (toList)
 import Data.Generics.Labels ()
 import Data.List (find)
 import Data.Text qualified as Text
+import Keiro.Workflow.Types (StepName (..))
 import Shikigami.Attestation.CallFacts
 import Shikigami.Attestation.Evidence
 import Shikigami.Attestation.PolicyValue
@@ -28,6 +30,7 @@ import Shikigami.Attestation.Reviewed
     ReviewedArtifact (..),
   )
 import Shikigami.Behavior.Provider.Coordinate
+import Shikigami.Decision.ModelAlias (modelAliasText)
 import Shikigami.Log.Correlation
   ( CallCorrelationId,
     RunCorrelationId,
@@ -37,7 +40,7 @@ import Shikigami.Log.Correlation
 import Shikigami.Prelude
 
 data ComplianceRollUp = ComplianceRollUp
-  { sanctioned :: !Bool,
+  { sanctioned :: !ComplianceDecision,
     reasons :: ![NonConformingReason],
     accountedCalls :: ![CallCorrelationId]
   }
@@ -62,19 +65,19 @@ evaluateComplianceFacts sanctionedProfile runEvidence facts =
           <> artifactReasons runEvidence
           <> resultReasons runEvidence
           <> limitReasons sanctionedProfile runEvidence facts
-          <> (NotApplicable <$> runEvidence.deterministicSteps)
-   in ComplianceRollUp (all isAnnotation allReasons) allReasons callReport.accountedCalls
+          <> (NotApplicable . (.unStepName) <$> runEvidence.deterministicSteps)
+   in ComplianceRollUp (if all isAnnotation allReasons then ComplianceSanctioned else ComplianceNonConforming) allReasons callReport.accountedCalls
 
 evaluateCallFacts :: Profile.SanctionedExecutionProfile -> [ExpectedCall] -> [CallComplianceFacts] -> ComplianceRollUp
 evaluateCallFacts sanctionedProfile expected facts =
   let ids = map (\fact -> fact.callId) facts
       missing = [missingReason call | call <- expected, call.callId `notElem` ids]
       missingReason ExpectedCall {callId, relationship, attempt} = case relationship of
-        RetryOf _ -> MissingRetryEvidence (renderCallCorrelationId callId) (fromIntegral attempt)
+        RetryOf _ -> MissingRetryEvidence (renderCallCorrelationId callId) (fromIntegral (providerAttemptNumber attempt))
         ContinuationOf _ -> MissingContinuationEvidence (renderCallCorrelationId callId)
         _ -> MissingCallEvidence (renderCallCorrelationId callId)
       reasons = concatMap (callReasons sanctionedProfile facts) facts <> missing <> callLimitReasons sanctionedProfile facts
-   in ComplianceRollUp (all isAnnotation reasons) reasons ids
+   in ComplianceRollUp (if all isAnnotation reasons then ComplianceSanctioned else ComplianceNonConforming) reasons ids
 
 -- | Close child accounting, evaluate every rule, then choose the lifecycle
 -- outcome atomically: sanctioned sets become evidence-sealed; any failure
@@ -88,7 +91,7 @@ finalizeCompliance ::
 finalizeCompliance sanctionedProfile behavior relevantChildren runEvidence = do
   closed <- prepareEvidenceClosure runEvidence behavior relevantChildren
   let rollUp@ComplianceRollUp {sanctioned} = evaluateCompliance sanctionedProfile closed
-      target = if sanctioned then EvidenceSealed else NonConforming
+      target = if sanctioned == ComplianceSanctioned then EvidenceSealed else NonConforming
   finalized <-
     either
       (const (Left (EvidenceNotRunning Running)))
@@ -105,7 +108,7 @@ finalizeComplianceFacts profile behavior children evidence facts = do
   closed <- prepareEvidenceClosure evidence behavior children
   let combined = foldl' (\seen fact -> if any (\old -> old.callId == fact.callId) seen then seen else seen <> [fact]) facts (callComplianceFacts <$> closed.calls)
       rollUp = evaluateComplianceFacts profile closed combined
-      target = if rollUp.sanctioned then EvidenceSealed else NonConforming
+      target = if rollUp.sanctioned == ComplianceSanctioned then EvidenceSealed else NonConforming
   finalized <- either (const (Left (EvidenceNotRunning Running))) Right (transitionEvidence closed target)
   pure (finalized, rollUp)
 
@@ -139,10 +142,10 @@ callReasons
         provider = providerCoordinate rawProvider
         api = providerCoordinate rawApi
         endpointClass = providerCoordinate (endpointClassOf endpoint)
-        resolvedCoordinate = providerCoordinate resolvedModelId
+        resolvedCoordinate = resolvedModelId
         permitted = toList allowedCalls
         modelReasons =
-          [ ModelNotPermitted renderedCallId resolvedModelId
+          [ ModelNotPermitted renderedCallId (providerCoordinateText resolvedModelId)
           | not (any (\allowed -> (.modelId) allowed == resolvedCoordinate) permitted)
           ]
         endpointReasons =
@@ -151,7 +154,7 @@ callReasons
           ]
         thinkingReasons = thinkingTranslationReasons renderedCallId provider api endpointClass resolvedCoordinate permitted prohibitions thinking
         aliasReasons =
-          [ ProhibitedAlias renderedCallId alias resolvedModelId
+          [ ProhibitedAlias renderedCallId (modelAliasText alias) (providerCoordinateText resolvedModelId)
           | Just alias <- [requestedAlias],
             not (permissionAllowed ((.aliasesAllowed) prohibitions))
           ]
@@ -267,7 +270,7 @@ relationshipReasons prohibitions allCalls current@CallComplianceFacts {callId, r
               | previousProvider /= currentProvider,
                 not (permissionAllowed ((.providerFallbackAllowed) prohibitions))
               ]
-                <> [ ProhibitedModelFallback renderedCallId previousModel resolvedModelId
+                <> [ ProhibitedModelFallback renderedCallId (providerCoordinateText previousModel) (providerCoordinateText resolvedModelId)
                    | previousModel /= resolvedModelId,
                      not (permissionAllowed ((.modelFallbackAllowed) prohibitions))
                    ]
@@ -291,7 +294,7 @@ renderTransport = \case
 
 hasCorrelationField :: Text -> CallComplianceFacts -> Bool
 hasCorrelationField requested facts =
-  Text.toLower (Text.filter (`notElem` ['-', '_', '.']) requested) `elem` facts.correlationFields
+  Text.toLower (Text.filter (`notElem` ['-', '_', '.']) requested) `elem` map correlationFieldText facts.correlationFields
 
 childAccountingReasons :: RunEvidence -> [NonConformingReason]
 childAccountingReasons RunEvidence {expectedChildRunIds, delegatedChildren} = concatMap missingChild expectedChildRunIds
@@ -319,13 +322,13 @@ resultReasons RunEvidence {resultEvidence} =
 callLimitReasons :: Profile.SanctionedExecutionProfile -> [CallComplianceFacts] -> [NonConformingReason]
 callLimitReasons Profile.SanctionedExecutionProfile {Profile.limits} calls =
   concat
-    [ [UnknownCallUsage (renderCallCorrelationId fact.callId) "retry-relationship" | isJust limits.maxRetries, fact <- calls, not fact.relationshipKnown],
+    [ [UnknownCallUsage (renderCallCorrelationId fact.callId) "retry-relationship" | isJust limits.maxRetries, fact <- calls, fact.relationshipKnown == RelationshipUnknown],
       exceeded "maxCalls" limits.maxCalls (length calls),
       exceeded "maxRetries" limits.maxRetries (length [() | CallComplianceFacts {relationship = RetryOf _} <- calls]),
-      exceeded "maxTokens" limits.maxTokens (sum [tokens | CallComplianceFacts {tokens = Just tokens} <- calls]),
-      exceededInteger "maxCostMicroUsd" limits.maxCostMicroUsd (sum [cost | CallComplianceFacts {costMicroUsd = Just cost} <- calls]),
+      exceeded "maxTokens" limits.maxTokens (sum [measuredTokensNumber tokens | CallComplianceFacts {tokens = Just tokens} <- calls]),
+      exceededInteger "maxCostMicroUsd" limits.maxCostMicroUsd (sum [measuredMicroUsdAmount cost | CallComplianceFacts {costMicroUsd = Just cost} <- calls]),
       [UnknownCallUsage (renderCallCorrelationId fact.callId) "tokens" | isJust limits.maxTokens, fact <- calls, isNothing fact.tokens],
-      [UnknownCallUsage (renderCallCorrelationId fact.callId) "cost" | isJust limits.maxCostMicroUsd, fact <- calls, fact.costUncertain || isNothing fact.costMicroUsd]
+      [UnknownCallUsage (renderCallCorrelationId fact.callId) "cost" | isJust limits.maxCostMicroUsd, fact <- calls, fact.costUncertain == CostUncertain || isNothing fact.costMicroUsd]
     ]
 
 limitReasons :: Profile.SanctionedExecutionProfile -> RunEvidence -> [CallComplianceFacts] -> [NonConformingReason]
@@ -349,3 +352,13 @@ exceededInteger name limit observed =
 
 showText :: (Show value) => value -> Text
 showText = Text.pack . show
+
+data ComplianceDecision = ComplianceSanctioned | ComplianceNonConforming
+  deriving stock (Eq, Show)
+
+instance ToJSON ComplianceDecision where
+  toJSON value = toJSON (value == ComplianceSanctioned)
+  toEncoding value = toEncoding (value == ComplianceSanctioned)
+
+instance FromJSON ComplianceDecision where
+  parseJSON value = (\accepted -> if accepted then ComplianceSanctioned else ComplianceNonConforming) <$> parseJSON @Bool value

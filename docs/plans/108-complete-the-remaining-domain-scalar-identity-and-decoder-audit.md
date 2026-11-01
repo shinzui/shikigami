@@ -246,6 +246,18 @@ compiler controls. The old origin encoder supplied exact byte goldens. Complete
 build/census reconciliation follows; the recorded 493-key baseline inventory
 has not yet been refreshed to this candidate.
 
+The following attestation batch addresses all 25 remaining findings in
+Attestation.CallFacts, Evidence, Envelope, Compliance and Reviewed together.
+It reuses model/alias, run-correlation, native session and step-name types;
+private quantities and explicit evidence/verdict states preserve their original
+codecs. Exact signed scope labels and opaque Merkle/signature claims retain
+nominal wrappers without invented normalization or cryptographic algorithms.
+The native provider attempt remains its actual nonnegative Natural domain
+(default one); the earlier inventory's inferred positivity is not an extra
+consumer admission rule. The candidate passes 51 attestation contract tests,
+85 PostgreSQL controls and all 197 public compiler controls, including two added transactional corruption/repair
+controls. Inventory reconciliation will account for both source batches together.
+
 ## Surprises & Discoveries
 
 

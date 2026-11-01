@@ -26,7 +26,7 @@ import Pgmq (MessageId)
 import Kioku.Id (SessionId)
 import Numeric.Natural (Natural)
 import GHC.Generics qualified as Generic
-import Keiro.Workflow.Types (WorkflowId, WorkflowName)
+import Keiro.Workflow.Types (WorkflowId, WorkflowName, StepName)
 import Shikigami.Agent.Delegate.Depth qualified as Depth
 import Shikigami.Agent.ExpertiseKey qualified as Expertise
 import Shikigami.Agent.Name qualified as Name
@@ -35,6 +35,9 @@ import Shikigami.Objective.Types qualified as Objective
 import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Agent.Principal qualified as Principal
 import Shikigami.App.Config qualified as Config
+import Shikigami.Attestation.Compliance qualified as Compliance
+import Shikigami.Attestation.CallFacts qualified as CallFacts
+import Shikigami.Attestation.Evidence qualified as RunEvidence
 import Shikigami.Attestation.Envelope qualified as Attestation
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve qualified as Snapshot
@@ -77,7 +80,17 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''objectiveCaller :: Text -> Either Text Objective.CallerId
+POSITIVE = '''nativeAttestationSession :: Attestation.AttestationPayload -> Maybe SessionId
+nativeAttestationSession value = value.sessionId
+nativeEvidenceSteps :: RunEvidence.RunEvidence -> [StepName]
+nativeEvidenceSteps value = value.deterministicSteps
+providerAttempt :: Natural -> RunEvidence.ProviderAttempt
+providerAttempt = RunEvidence.providerAttempt
+measuredTokens :: Natural -> CallFacts.MeasuredTokens
+measuredTokens = CallFacts.measuredTokens
+measuredCost :: Rational -> CallFacts.MeasuredMicroUsd
+measuredCost = CallFacts.measuredMicroUsd
+objectiveCaller :: Text -> Either Text Objective.CallerId
 objectiveCaller = Objective.parseCallerId
 objectiveConversation :: Text -> Either Text Objective.ConversationRef
 objectiveConversation = Objective.parseConversationRef
@@ -265,6 +278,14 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('Reviewed.PullRequestRef', 'generic'),
+    ('Reviewed.ReviewPath', 'generic'),
+    ('Attestation.ReviewClass', 'generic'),
+    ('Attestation.AttestationSignature', 'generic'),
+    ('Attestation.MerkleCommitment', 'generic'),
+    ('RunEvidence.ProviderAttempt', 'generic'),
+    ('CallFacts.MeasuredTokens', 'generic'),
+    ('CallFacts.MeasuredMicroUsd', 'generic'),
     ('Inspection.InspectionLimit "maxViews"', 'generic'),
     ('Inspection.InspectionPort', 'generic'),
     ('Inspection.InspectionHost', 'generic'),
@@ -409,6 +430,18 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         ('inspection port raw coercion', 'Int -> Inspection.InspectionPort', 'coerce'),
         ('inspection origin raw coercion', 'Text -> Inspection.InspectionOrigin', 'coerce'),
         ('inspection host raw coercion', 'Text -> Inspection.InspectionHost', 'coerce'),
+        ('provider attempt coercion', 'Natural -> RunEvidence.ProviderAttempt', 'coerce'),
+        ('measured token coercion', 'Natural -> CallFacts.MeasuredTokens', 'coerce'),
+        ('measured cost coercion', 'Rational -> CallFacts.MeasuredMicroUsd', 'coerce'),
+        ('provider attempt/token substitution', 'RunEvidence.ProviderAttempt -> CallFacts.MeasuredTokens', 'coerce'),
+        ('evidence knowledge/cost substitution', 'CallFacts.RelationshipKnowledge -> CallFacts.CostCertainty', 'id'),
+        ('Attestation.MerkleCommitment raw coercion', 'Text -> Attestation.MerkleCommitment', 'coerce'),
+        ('Attestation.AttestationSignature raw coercion', 'Text -> Attestation.AttestationSignature', 'coerce'),
+        ('Attestation.ReviewClass raw coercion', 'Text -> Attestation.ReviewClass', 'coerce'),
+        ('Reviewed.ReviewPath raw coercion', 'Text -> Reviewed.ReviewPath', 'coerce'),
+        ('Reviewed.PullRequestRef raw coercion', 'Text -> Reviewed.PullRequestRef', 'coerce'),
+        ('compliance/journey verdict substitution', 'Compliance.ComplianceDecision -> Objective.JourneyEvidence', 'id'),
+        ('attestation/review label substitution', 'Attestation.ReviewClass -> Reviewed.ReviewPath', 'coerce'),
         ('sink ordinal raw substitution', 'Int -> SinkCoordinate.SinkOrdinal', 'id'),
         ('sink session/workflow substitution', 'SessionId -> WorkflowId', 'id'),
         ('freeze boolean substitution', 'Bool -> WorkspaceStore.FreezeState', 'id'),

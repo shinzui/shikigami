@@ -38,7 +38,7 @@ import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
-import Shikigami.Attestation.Compliance (ComplianceRollUp (..))
+import Shikigami.Attestation.Compliance (ComplianceDecision (..), ComplianceRollUp (..))
 import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile, resolvedProfileFor)
@@ -288,7 +288,7 @@ tests fixture =
           _ <- assertCompleted =<< Agent.runAgentRunWorkflow runtime (job "decision-profile-both")
           observed >>= (\calls -> length calls @?= 3)
           evidence <- report store "decision-profile-both"
-          assertBool "all actual calls assessed" (case evidence.assessment of Just assessment -> assessment.sanctioned && length assessment.accountedCalls == 3; _ -> False),
+          assertBool "all actual calls assessed" (case evidence.assessment of Just assessment -> assessment.sanctioned == ComplianceSanctioned && length assessment.accountedCalls == 3; _ -> False),
       testCase "a one-model profile rejects the unpermitted slot before any provider dispatch" $
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned

@@ -39,6 +39,7 @@ import Shikigami.Attestation.Agent
     ToolCatalogDigest (..),
     declarationOnlyArtifacts,
   )
+import Shikigami.Attestation.CallFacts qualified as Facts
 import Shikigami.Attestation.Envelope
   ( AgentRunAttestation (..),
     AttestationPayload (..),
@@ -55,6 +56,8 @@ import Shikigami.Attestation.Envelope
     payloadDigestText,
     schemaVersionText,
   )
+import Shikigami.Attestation.Envelope qualified as Envelope
+import Shikigami.Attestation.Evidence qualified as Evidence
 import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile
   ( AllowedCall (..),
@@ -86,6 +89,8 @@ import Shikigami.Attestation.Reviewed
     ReviewedArtifact (..),
     fullCommitText,
     mkFullCommit,
+    pullRequestRef,
+    reviewPath,
   )
 import Shikigami.Attestation.Strength
   ( AttestationStrength (..),
@@ -93,6 +98,7 @@ import Shikigami.Attestation.Strength
     renderAttestationStrength,
   )
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
+import Shikigami.Log.Correlation (runCorrelationId)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
 
@@ -100,7 +106,36 @@ tests :: TestTree
 tests =
   testGroup
     "attestation contracts"
-    [ profileTests,
+    [ testCase "complete attestation decoding retains native sessions and refuses foreign identity domains" do
+        let complete raw = case toJSON samplePayload of
+              Object fields -> Object (KeyMap.insert "sessionId" (String raw) fields)
+              value -> value
+            valid = "kioku_session_01kvxa7d2cezhs874g3n8dfgme"
+        case fromJSON (complete valid) :: Result AttestationPayload of
+          Success payload -> toJSON payload @?= complete valid
+          Error problem -> assertBool problem False
+        mapM_ (\raw -> assertBool "native session domain refused" (case fromJSON (complete raw) :: Result AttestationPayload of Error _ -> True; _ -> False)) ["", "session-1", "kioku_session_00000000008000000000000000", "shikigami_objective_01kvxa7d2cezhs874g3n8dfgme"],
+      testCase "signed review labels preserve exact non-normalized bytes without granting path access" do
+        encode (reviewPath "src//./module") @?= "\"src//./module\""
+        encode (Envelope.merkleCommitment "sha256:merkle") @?= "\"sha256:merkle\""
+        encode (pullRequestRef "4173") @?= "\"4173\"",
+      testCase "provider evidence scalar roles preserve native encodings and unknown states" do
+        encode (Evidence.providerAttempt 0) @?= "0"
+        encode (Evidence.providerAttempt 2) @?= "2"
+        encode (Facts.measuredTokens 42) @?= "42"
+        encode (Facts.measuredMicroUsd (3 / 2)) @?= encode (3 / 2 :: Rational)
+        encode Facts.RelationshipKnown @?= "true"
+        encode Facts.RelationshipUnknown @?= "false"
+        encode Facts.CostKnown @?= "false"
+        encode Facts.CostUncertain @?= "true"
+        fromJSON (Bool False) @?= Success Facts.RelationshipUnknown
+        fromJSON (Bool True) @?= Success Facts.CostUncertain
+        assertBool "negative native token count refused" (case fromJSON (Number (-1)) :: Result Facts.MeasuredTokens of Error _ -> True; _ -> False)
+        assertBool "closed correlation vocabulary refuses unknown fields" (case fromJSON (String "made-up") :: Result Facts.CorrelationField of Error _ -> True; _ -> False)
+        case fromJSON (String "providerrequestid") of
+          Success field -> Facts.correlationFieldText field @?= "providerrequestid"
+          Error problem -> assertBool problem False,
+      profileTests,
       agentTests,
       reviewedTests,
       strengthTests,
@@ -452,7 +487,7 @@ reviewedTests =
       -- A pull request is decoration. Setting one changes nothing about the
       -- commits, which is the point: it can never be what a verdict rests on.
       testCase "a pull-request identity does not substitute for the commits" do
-        let withPr = (sampleReviewedArtifact & #pullRequest .~ (Just "4173"))
+        let withPr = (sampleReviewedArtifact & #pullRequest .~ (Just (pullRequestRef "4173")))
         assertEqual "base is unchanged" ((.baseCommit) sampleReviewedArtifact) ((.baseCommit) withPr)
         assertEqual "head is unchanged" ((.headCommit) sampleReviewedArtifact) ((.headCommit) withPr)
         roundTrips "artifact with a pull request" withPr,
@@ -496,7 +531,7 @@ sampleReviewedArtifact =
       baseCommit = either (error . Text.unpack) id (mkFullCommit baseHash),
       headCommit = either (error . Text.unpack) id (mkFullCommit headHash),
       diffDigest = DiffDigest "sha256:diff",
-      pathScope = ["shikigami-core/src"],
+      pathScope = [reviewPath "shikigami-core/src"],
       pullRequest = Nothing
     }
 
@@ -690,7 +725,7 @@ envelopeTests =
       -- A signature covers a payload and cannot cover itself. The split types
       -- make hashing the signature inexpressible; this checks the consequence.
       testCase "the digest ignores the signature and key" do
-        let signed = (sampleAttestation & #signature .~ (Just "sig") & #keyId .~ (Just "key-1"))
+        let signed = (sampleAttestation & #signature .~ (Just (Envelope.attestationSignature "sig")) & #keyId .~ (Just (PV.policyCoordinate "key-1")))
         assertEqual
           "signing does not change the payload digest"
           (attestationPayloadDigest ((.payload) sampleAttestation))
@@ -698,7 +733,7 @@ envelopeTests =
       -- Changing any covered field must change the digest, or the binding is
       -- worthless.
       testCase "changing a covered field changes the digest" do
-        let tampered = (samplePayload & #reviewClass .~ ("something-else"))
+        let tampered = (samplePayload & #reviewClass .~ Envelope.reviewClass "something-else")
         assertBool
           "a different payload digests differently"
           (attestationPayloadDigest samplePayload /= attestationPayloadDigest tampered),
@@ -710,7 +745,7 @@ envelopeTests =
             NonConforming {reasons = [ProhibitedDefaultThinking {callId = "call-1"}]},
             Indeterminate {reasons = [MissingCallEvidence {callId = "call-2"}]}
           ]
-        mapM_ (roundTrips "evidence set") [CallEvidenceMerkleRoot {merkleRoot = "sha256:merkle"}, CallEvidenceRecords {records = []}]
+        mapM_ (roundTrips "evidence set") [CallEvidenceMerkleRoot {merkleRoot = Envelope.merkleCommitment "sha256:merkle"}, CallEvidenceRecords {records = []}]
     ]
 
 samplePayload :: AttestationPayload
@@ -720,14 +755,14 @@ samplePayload =
       issuer = Issuer "shinzui/shikigami",
       issuedAt = UTCTime (fromGregorian 2026 8 5) 0,
       expiresAt = Nothing,
-      runId = "run-1",
+      runId = runCorrelationId "run-1",
       sessionId = Nothing,
-      reviewClass = "architecture-practice",
+      reviewClass = Envelope.reviewClass "architecture-practice",
       profile = sampleProfileRef,
       reviewed = sampleReviewedArtifact,
       agentVersion = sampleAgentVersionRef,
       agentArtifacts = declarationOnlyArtifacts (DeclarationDigest "sha256:decl"),
-      callEvidence = CallEvidenceMerkleRoot {merkleRoot = "sha256:merkle"},
+      callEvidence = CallEvidenceMerkleRoot {merkleRoot = Envelope.merkleCommitment "sha256:merkle"},
       reviewResultDigest = ResultDigest "sha256:result",
       completeness = EvidenceComplete,
       sanctioned = Sanctioned,

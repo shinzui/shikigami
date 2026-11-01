@@ -19,7 +19,7 @@ import Keiro.Command qualified as Command
 import Keiro.Projection.Catalog.Operations qualified as CatalogOps
 import Keiro.ReadModel.Rebuild qualified as Rebuild
 import Keiro.ReplayAudit qualified as ReplayAudit
-import Keiro.Workflow.Types (WorkflowId (..))
+import Keiro.Workflow.Types (StepName (..), WorkflowId (..))
 import Kioku.Id qualified as NominalId
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Error (StoreError)
@@ -40,6 +40,7 @@ import Shikigami.Attestation.Profile
 import Shikigami.Attestation.Reviewed
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
+import Shikigami.Decision.ModelAlias (ModelAlias, parseModelAlias)
 import Shikigami.Log.Correlation
   ( CallCorrelationId,
     RunCorrelationId,
@@ -204,7 +205,7 @@ tests databaseFixture =
             evidence <- runningWith [compliantCall]
             assertRollUp False [ProhibitedDefaultThinking parentCall0Text] (profileWithProhibitions (permissiveProhibitions & #defaultedThinkingAllowed .~ PV.Prohibited)) evidence,
           testCase "alias mutation" do
-            evidence <- runningWith [compliantCall & #requestedAlias .~ Just "friendly-model"]
+            evidence <- runningWith [compliantCall & #requestedAlias .~ Just (fixtureAlias "friendly-model")]
             assertRollUp False [ProhibitedAlias parentCall0Text "friendly-model" "model-a"] (profileWithProhibitions (permissiveProhibitions & #aliasesAllowed .~ PV.Prohibited)) evidence,
           testCase "provider fallback mutation" do
             evidence <- runningWith [compliantCall, providerFallbackCall]
@@ -267,15 +268,15 @@ tests databaseFixture =
               evidence,
           testCase "missing call mutation" do
             running <- runningEvidence
-            let evidence = expectCall (ExpectedCall parentCall0 RootCall 1) running
+            let evidence = expectCall (ExpectedCall parentCall0 RootCall (providerAttempt 1)) running
             assertRollUp False [MissingCallEvidence parentCall0Text] baselineProfile evidence,
           testCase "missing retry mutation" do
             running <- runningEvidence
-            let evidence = expectCall (ExpectedCall parentCall1 (RetryOf parentCall0) 2) running
+            let evidence = expectCall (ExpectedCall parentCall1 (RetryOf parentCall0) (providerAttempt 2)) running
             assertRollUp False [MissingRetryEvidence parentCall1Text 2] baselineProfile evidence,
           testCase "missing continuation mutation" do
             running <- runningEvidence
-            let evidence = expectCall (ExpectedCall parentCall1 (ContinuationOf parentCall0) 1) running
+            let evidence = expectCall (ExpectedCall parentCall1 (ContinuationOf parentCall0) (providerAttempt 1)) running
             assertRollUp False [MissingContinuationEvidence parentCall1Text] baselineProfile evidence,
           testCase "missing delegated child mutation" do
             running <- runningEvidence
@@ -310,7 +311,7 @@ tests databaseFixture =
               evidence,
           testCase "deterministic step is not-applicable, not a fabricated call" do
             running <- runningEvidence
-            let evidence = recordDeterministicStep "deterministic-rule" running
+            let evidence = recordDeterministicStep (StepName "deterministic-rule") running
             assertRollUp True [NotApplicable "deterministic-rule"] baselineProfile evidence
             assertCallIds [] evidence,
           testCase "two permitted models remain sanctioned" do
@@ -404,7 +405,7 @@ tests databaseFixture =
               running <- withEvidenceRuntime connectionString \store -> do
                 profiled <- liftIO . assertPersisted =<< persistEvidenceTransition store sampleEvidence ProfileResolved Nothing
                 liftIO . assertPersisted =<< persistEvidenceTransition store profiled Running Nothing
-              let expected = expectCall (ExpectedCall parentCall0 RootCall 1) running
+              let expected = expectCall (ExpectedCall parentCall0 RootCall (providerAttempt 1)) running
                   facts = callComplianceFacts compliantCall
                   recovered = [(facts, toJSON compliantCall.evidence)]
               (_closed, rollUp) <- either (assertFailure . show) pure (finalizeComplianceFacts baselineProfile BehaviorSucceeded [] expected [facts])
@@ -435,8 +436,8 @@ tests databaseFixture =
 
               let withExpectedCalls =
                     running
-                      & expectCall (ExpectedCall parentCall0 RootCall 1)
-                      & expectCall (ExpectedCall parentCall1 (RetryOf parentCall0) 2)
+                      & expectCall (ExpectedCall parentCall0 RootCall (providerAttempt 1))
+                      & expectCall (ExpectedCall parentCall1 (RetryOf parentCall0) (providerAttempt 2))
                       & expectDelegatedChild fixtureChildRunId
                       & recordCall retryOriginal
                       & recordCall retryAttempt
@@ -729,8 +730,8 @@ fixtureRecorded callId relationship requestedAlias evidence =
   RecordedCallEvidence
     { callId,
       relationship,
-      resolvedModelId = evidence ^. #requestedModel,
-      requestedAlias,
+      resolvedModelId = Coordinate.providerCoordinate (evidence ^. #requestedModel),
+      requestedAlias = fixtureAlias <$> requestedAlias,
       evidence
     }
 
@@ -808,11 +809,11 @@ runningWith terminalCalls = do
 assertRollUp :: Bool -> [NonConformingReason] -> SanctionedExecutionProfile -> RunEvidence -> IO ()
 assertRollUp expectedSanctioned expectedReasons sanctionedProfile evidence = do
   let ComplianceRollUp {sanctioned, reasons} = evaluateCompliance sanctionedProfile evidence
-  assertEqual "sanctioned verdict" expectedSanctioned sanctioned
+  assertEqual "sanctioned verdict" expectedSanctioned (sanctioned == ComplianceSanctioned)
   assertEqual "all reasons" expectedReasons reasons
 
 rollSanctioned :: ComplianceRollUp -> Bool
-rollSanctioned ComplianceRollUp {sanctioned} = sanctioned
+rollSanctioned ComplianceRollUp {sanctioned} = sanctioned == ComplianceSanctioned
 
 parentCall0Text :: Text
 parentCall0Text = renderCallCorrelationId parentCall0
@@ -1086,3 +1087,6 @@ completeScenarioEvidence connectionString correlation key =
 
 fixtureRunKey :: Text -> RunKey
 fixtureRunKey = either (error . show) id . parseRunKey
+
+fixtureAlias :: Text -> ModelAlias
+fixtureAlias = either (error . show) id . parseModelAlias

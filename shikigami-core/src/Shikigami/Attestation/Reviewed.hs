@@ -26,6 +26,10 @@ module Shikigami.Attestation.Reviewed
 
     -- * The reviewed artifact
     ReviewedArtifact (..),
+    ReviewPath,
+    reviewPath,
+    PullRequestRef,
+    pullRequestRef,
 
     -- * Non-conformance
     NonConformingReason (..),
@@ -133,14 +137,14 @@ data ReviewedArtifact = ReviewedArtifact
     headCommit :: !FullCommit,
     diffDigest :: !DiffDigest,
     -- | The paths the review covered. Empty means the whole tree.
-    pathScope :: ![Text],
+    pathScope :: ![ReviewPath],
     -- | __Decoration, never load-bearing.__ A pull-request number is useful for
     -- a human following a link back to a discussion, and worthless for
     -- verification: it can be force-pushed, retargeted, or reopened against
     -- different code. Nothing about a verdict may depend on this field. It is
     -- 'Maybe' because a review need not have a pull request at all, and because
     -- its absence must not change the bytes of the surrounding record.
-    pullRequest :: !(Maybe Text)
+    pullRequest :: !(Maybe PullRequestRef)
   }
   deriving stock (Eq, Show, Generic)
 
@@ -237,3 +241,20 @@ instance FromJSON NonConformingReason where parseJSON = genericParseJSON eventAe
 -- 'eventAesonOptions' instead, matching the rest of the repository.
 reviewedAesonOptions :: Options
 reviewedAesonOptions = defaultOptions {omitNothingFields = True}
+
+-- Advisory external discussion locator; it never supplies review authority.
+newtype PullRequestRef = PullRequestRef Text
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON, FromJSON)
+
+pullRequestRef :: Text -> PullRequestRef
+pullRequestRef = PullRequestRef
+
+-- Exact signed review-author scope labels. Interpretation for content access
+-- belongs to Repository.RelativePath; do not normalize an attestation's bytes.
+newtype ReviewPath = ReviewPath Text
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON, FromJSON)
+
+reviewPath :: Text -> ReviewPath
+reviewPath = ReviewPath

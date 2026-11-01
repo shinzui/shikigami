@@ -37,11 +37,11 @@ import Keiro.Workflow.Types (WorkflowId (..))
 import Numeric.Natural (Natural)
 import Shikigami.Attestation.CallFacts
 import Shikigami.Attestation.Compliance (ComplianceRollUp, evaluateCallFacts)
-import Shikigami.Attestation.Evidence (CallRelationship (RootCall), ExpectedCall (..))
+import Shikigami.Attestation.Evidence (CallRelationship (RootCall), ExpectedCall (..), providerAttempt)
 import Shikigami.Attestation.PolicyValue
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileView)
-import Shikigami.Behavior.Provider.Coordinate (providerCoordinateText)
+import Shikigami.Behavior.Provider.Coordinate (providerCoordinate, providerCoordinateText)
 import Shikigami.Decision.Contract
 import Shikigami.Log.Correlation (CallCorrelationId, RunCorrelationId, callCorrelationId, renderCallCorrelationId, renderRunCorrelationId, runCorrelationId)
 
@@ -225,12 +225,12 @@ decisionCallHooks store profile = DecisionCallHooks begin finish
                 factsFromTerminal
                   correlation
                   RootCall
-                  (fromMaybe (providerCoordinateText model.modelId) (Baikai.observedValue ev.observedModel))
+                  (fromMaybe model.modelId (providerCoordinate <$> Baikai.observedValue ev.observedModel))
                   Nothing
                   ev
             )
               <$> evidence
-          normalized = (\fact -> (fact & #relationshipKnown .~ (False))) <$> facts
+          normalized = (\fact -> (fact & #relationshipKnown .~ RelationshipUnknown)) <$> facts
           payload = object ["terminal" .= terminal, "facts" .= normalized, "evidence" .= (toJSON <$> evidence)]
       if actual.ordinal /= attemptOrdinal token
         then pure (refuse ContractMismatch "decision attempt ordinal differs")
@@ -256,9 +256,9 @@ admit now started profile calls
             facts = [fact | call <- calls, Just fact <- [call.facts]]
             unresolved = any (isNothing . (\call -> call.terminal)) calls
             unknownTokens = unresolved || length facts /= length calls || any (isNothing . (\fact -> fact.tokens)) facts
-            unknownCost = unresolved || length facts /= length calls || any (\fact -> fact.costUncertain || isNothing fact.costMicroUsd) facts
-            tokens = sum [n | fact <- facts, Just n <- [fact.tokens]]
-            cost = sum [n | fact <- facts, Just n <- [fact.costMicroUsd]]
+            unknownCost = unresolved || length facts /= length calls || any (\fact -> fact.costUncertain == CostUncertain || isNothing fact.costMicroUsd) facts
+            tokens = sum [measuredTokensNumber n | fact <- facts, Just n <- [fact.tokens]]
+            cost = sum [measuredMicroUsdAmount n | fact <- facts, Just n <- [fact.costMicroUsd]]
         check (maybe False (length calls >=) (ceilingValue <$> limits.maxCalls)) "decision run call budget exhausted"
         check (maybe False (\seconds -> diffUTCTime now started >= fromIntegral seconds) (ceilingValue <$> limits.maxDurationSeconds)) "decision run duration exhausted"
         check (isJust limits.maxTokens && (unknownTokens || maybe False (tokens >=) (fromIntegral . ceilingValue <$> limits.maxTokens))) "decision token accounting is exhausted or uncertain"
@@ -299,7 +299,7 @@ reportTx runId = do
         validateInvocationPolicies profile verified
         mapM_ (validateCallBinding (invocationIndex verified)) calls
         let facts = [facts | call <- calls, Just facts <- [call.facts]]
-            expected = [ExpectedCall (callCorrelationId runId (decisionCallIdText call.callId) 0) RootCall (decisionCallOrdinalNumber call.ordinal) | call <- calls]
+            expected = [ExpectedCall (callCorrelationId runId (decisionCallIdText call.callId) 0) RootCall (providerAttempt (decisionCallOrdinalNumber call.ordinal)) | call <- calls]
         Right
           ( Just
               ( DecisionEvidenceReport
@@ -368,7 +368,7 @@ decodeCall raw = do
           then refuse UnsupportedVersion "inconsistent retained decision terminal columns"
           else do
             facts <- traverse decode raw.facts
-            if (envelope.terminal == CallSucceeded && isNothing raw.evidence) || isJust facts /= isJust raw.evidence || any (\fact -> fact.callId /= correlation || fact.relationship /= RootCall || fact.relationshipKnown) facts
+            if (envelope.terminal == CallSucceeded && isNothing raw.evidence) || isJust facts /= isJust raw.evidence || any (\fact -> fact.callId /= correlation || fact.relationship /= RootCall || fact.relationshipKnown == RelationshipKnown) facts
               then refuse UnsupportedVersion "inconsistent retained decision terminal facts"
               else Right (StoredDecisionCall identifier correlation invocation ordinal model (Just envelope.terminal) facts raw.evidence)
 

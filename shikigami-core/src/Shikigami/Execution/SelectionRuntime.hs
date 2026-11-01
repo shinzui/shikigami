@@ -34,14 +34,14 @@ import Hasql.Transaction (Transaction)
 import Hasql.Transaction.Sessions qualified as Sessions
 import Kiroku.Store.Transaction qualified as StoreTransaction
 import Shikigami.App (AppEnv, runAppIO)
-import Shikigami.Attestation.CallFacts (CallComplianceFacts (..), factsFromTerminal)
+import Shikigami.Attestation.CallFacts (CallComplianceFacts (..), RelationshipKnowledge (..), factsFromTerminal)
 import Shikigami.Attestation.Evidence (CallRelationship (RootCall), configureEvidenceCall)
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, ResolvedProfileView (..), resolvedProfileView)
 import Shikigami.Behavior.Compatibility (validateResponseRequest)
 import Shikigami.Behavior.Provider (withModelBinding)
 import Shikigami.Behavior.Provider.Call (providerCallFor, validateProfileCall)
-import Shikigami.Behavior.Provider.Coordinate (providerCoordinateText)
+import Shikigami.Behavior.Provider.Coordinate (providerCoordinate, providerCoordinateText)
 import Shikigami.Behavior.Run (BehaviorEnv (..))
 import Shikigami.Decision.Contract (ModelDescriptor (..), modelAliasText, versionedDigest)
 import Shikigami.Decision.ModelCatalog
@@ -280,8 +280,8 @@ buildExecutionEnvWith preparedCall env@SelectionRuntime {transact} selection = c
     transaction action = transact action >>= either (const (ioError (userError "execution call store unavailable"))) pure
     finishTerminal receipt failed evidence response =
       let attempt = attemptIdText receipt.request.attemptId
-          alias = modelAliasText selection.descriptor.alias
-          normalized = (\ev -> factsFromTerminal (callCorrelationId env.runId attempt 0) RootCall (fromMaybe (providerCoordinateText selection.descriptor.modelId) (Evidence.observedValue ev.observedModel)) (Just alias) ev & #relationshipKnown .~ False) <$> evidence
+          alias = selection.descriptor.alias
+          normalized = (\ev -> factsFromTerminal (callCorrelationId env.runId attempt 0) RootCall (fromMaybe selection.descriptor.modelId (providerCoordinate <$> Evidence.observedValue ev.observedModel)) (Just alias) ev & #relationshipKnown .~ RelationshipUnknown) <$> evidence
           outcome = outcomeFor failed evidence & #compliance .~ normalized
        in case preparedCall of
             Just prepared -> prepared.commit receipt outcome response

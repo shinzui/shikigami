@@ -25,8 +25,8 @@ import Hasql.Transaction qualified as Tx
 import Hasql.Transaction.Sessions qualified as Sessions
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
-import Shikigami.Attestation.Compliance (ComplianceRollUp (..), evaluateCallFacts)
-import Shikigami.Attestation.Evidence (CallRelationship (RootCall), ExpectedCall (..))
+import Shikigami.Attestation.Compliance (ComplianceDecision (..), ComplianceRollUp (..), evaluateCallFacts)
+import Shikigami.Attestation.Evidence (CallRelationship (RootCall), ExpectedCall (..), providerAttempt)
 import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile qualified as P
 import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileFor, resolvedProfileView)
@@ -264,9 +264,9 @@ tests fixture =
                 hooks = decisionCallHooks store (Just policy)
             report <- expectReport =<< readDecisionReport store prepared.runId
             let facts = [fact | call <- report.calls, Just fact <- [call.facts]]
-                expected = [ExpectedCall (callCorrelationId prepared.runId (decisionCallIdText call.callId) 0) RootCall (decisionCallOrdinalNumber call.ordinal) | call <- report.calls]
+                expected = [ExpectedCall (callCorrelationId prepared.runId (decisionCallIdText call.callId) 0) RootCall (providerAttempt (decisionCallOrdinalNumber call.ordinal)) | call <- report.calls]
             report.assessment @?= Just (evaluateCallFacts (resolvedProfileView policy).profile expected facts)
-            assertBool "uncertain cost blocks a clean assessment" (maybe False (not . (\assessment -> assessment.sanctioned)) report.assessment)
+            assertBool "uncertain cost blocks a clean assessment" (maybe False (\assessment -> assessment.sanctioned == ComplianceNonConforming) report.assessment)
             hooks.beginCall pinnedContext >>= (assertBool "uncertainty is not reset" . isLeft)
     ]
 
@@ -284,6 +284,8 @@ metadataCases =
         ("missing complete-envelope facts member refuses", "terminal=terminal-'facts'"),
         ("orphan facts cannot become an unresolved expectation", "terminal=NULL,finished_at=NULL"),
         ("matching columns still reject unsupported facts", "facts=jsonb_set(facts,'{format}','999'),terminal=jsonb_set(terminal,'{facts,format}','999')"),
+        ("unknown provider correlation field refuses", "facts=jsonb_set(facts,'{correlationFields}','[\"unknown\"]'),terminal=jsonb_set(terminal,'{facts,correlationFields}','[\"unknown\"]')"),
+        ("empty requested model alias refuses", "facts=jsonb_set(facts,'{requestedAlias}','\"\"'),terminal=jsonb_set(terminal,'{facts,requestedAlias}','\"\"')"),
         ("invented known retry lineage refuses", "facts=jsonb_set(facts,'{relationshipKnown}','true'),terminal=jsonb_set(terminal,'{facts,relationshipKnown}','true')"),
         ("unrelated local facts correlation refuses", "facts=jsonb_set(facts,'{callId}','\"unrelated\"'),terminal=jsonb_set(terminal,'{facts,callId}','\"unrelated\"')"),
         ("denormalized evidence disagreement refuses", "evidence='\"substituted\"'::jsonb"),

@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | The signed document, and exactly what gets hashed.
 --
 -- The separation between 'AttestationPayload' and 'AgentRunAttestation' is the
@@ -21,6 +23,12 @@ module Shikigami.Attestation.Envelope
 
     -- * Verdicts
     CallEvidenceSet (..),
+    MerkleCommitment,
+    merkleCommitment,
+    AttestationSignature,
+    attestationSignature,
+    ReviewClass,
+    reviewClass,
     CompletenessVerdict (..),
     SanctionedVerdict (..),
 
@@ -39,14 +47,19 @@ module Shikigami.Attestation.Envelope
 where
 
 import Baikai.Evidence (canonicalEncode, commitmentDigest)
-import Data.Aeson (Value, withText)
+import Data.Aeson (Value, withText, (.:?))
+import Data.Aeson qualified as Aeson
 import Data.ByteString (ByteString)
 import Data.Text qualified as Text
+import Kioku.Id (SessionId)
 import Shikigami.Attestation.Agent (AgentArtifactSet, AgentVersionRef)
+import Shikigami.Attestation.PolicyValue (PolicyCoordinate)
 import Shikigami.Attestation.Profile (Issuer, ProfileDigest, SanctionedExecutionProfile, SanctionedExecutionProfileRef, profileContentDigest)
 import Shikigami.Attestation.Reviewed (NonConformingReason, ResultDigest, ReviewedArtifact)
 import Shikigami.Attestation.Strength (AttestationStrength)
+import Shikigami.Log.Correlation (RunCorrelationId)
 import Shikigami.Prelude
+import Shikigami.Sink.Coordinate (parseSinkSession)
 
 -- ---------------------------------------------------------------------------
 -- Schema identity
@@ -129,7 +142,7 @@ data CallEvidenceSet
   = -- | Every terminal call, in order, complete.
     CallEvidenceRecords {records :: ![Value]}
   | -- | A Merkle root over the ordered set, held elsewhere.
-    CallEvidenceMerkleRoot {merkleRoot :: !Text}
+    CallEvidenceMerkleRoot {merkleRoot :: !MerkleCommitment}
   deriving stock (Eq, Show, Generic)
 
 instance ToJSON CallEvidenceSet where toJSON = genericToJSON eventAesonOptions
@@ -192,11 +205,11 @@ data AttestationPayload = AttestationPayload
     issuedAt :: !UTCTime,
     -- | Absent means the attestation does not expire on its own.
     expiresAt :: !(Maybe UTCTime),
-    runId :: !Text,
-    sessionId :: !(Maybe Text),
+    runId :: !RunCorrelationId,
+    sessionId :: !(Maybe SessionId),
     -- | What kind of review this was, e.g. @architecture-practice@. A gate uses
     -- it to check the attestation answers the question it asked.
-    reviewClass :: !Text,
+    reviewClass :: !ReviewClass,
     profile :: !SanctionedExecutionProfileRef,
     reviewed :: !ReviewedArtifact,
     agentVersion :: !AgentVersionRef,
@@ -214,7 +227,11 @@ data AttestationPayload = AttestationPayload
 
 instance ToJSON AttestationPayload where toJSON = genericToJSON envelopeAesonOptions
 
-instance FromJSON AttestationPayload where parseJSON = genericParseJSON envelopeAesonOptions
+instance FromJSON AttestationPayload where
+  parseJSON value = do
+    -- Check the exact boundary spelling before the native decoder can lower it.
+    void (Aeson.withObject "attestation session" (\o -> o .:? "sessionId" >>= traverse (either (fail . Text.unpack) pure . parseSinkSession)) value)
+    genericParseJSON envelopeAesonOptions value
 
 -- | The payload, its digest, and the signature over it.
 --
@@ -226,8 +243,8 @@ instance FromJSON AttestationPayload where parseJSON = genericParseJSON envelope
 data AgentRunAttestation = AgentRunAttestation
   { payload :: !AttestationPayload,
     payloadDigest :: !PayloadDigest,
-    signature :: !(Maybe Text),
-    keyId :: !(Maybe Text)
+    signature :: !(Maybe AttestationSignature),
+    keyId :: !(Maybe (PolicyCoordinate "signing-key-id"))
   }
   deriving stock (Eq, Show, Generic)
 
@@ -303,3 +320,30 @@ profileDigest = profileContentDigest
 -- 'eventAesonOptions'.
 envelopeAesonOptions :: Options
 envelopeAesonOptions = defaultOptions {omitNothingFields = True}
+
+-- The producing protocol owns this vocabulary; retain exact bytes without
+-- imposing an unratified algorithm or encoding grammar.
+newtype MerkleCommitment = MerkleCommitment Text
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON, FromJSON)
+
+merkleCommitment :: Text -> MerkleCommitment
+merkleCommitment = MerkleCommitment
+
+-- The producing protocol owns this vocabulary; retain exact bytes without
+-- imposing an unratified algorithm or encoding grammar.
+newtype AttestationSignature = AttestationSignature Text
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON, FromJSON)
+
+attestationSignature :: Text -> AttestationSignature
+attestationSignature = AttestationSignature
+
+-- The producing protocol owns this vocabulary; retain exact bytes without
+-- imposing an unratified algorithm or encoding grammar.
+newtype ReviewClass = ReviewClass Text
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON, FromJSON)
+
+reviewClass :: Text -> ReviewClass
+reviewClass = ReviewClass

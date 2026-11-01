@@ -1443,3 +1443,46 @@ passes. A coherent full build and source/interface census reconciliation remains
 necessary before renewing inventory freshness; this is a tested source candidate,
 not final exhaustive acceptance. No workflow body, identity recipe, schema, HTTP
 wire representation or Linux qualification is changed by this batch.
+
+
+## Batched attestation values (2026-11-01)
+
+The next source candidate addresses all 25 remaining attestation findings.
+Provider model coordinates, requested aliases, run correlation, session identities
+and deterministic step names reuse existing types. Private nominal wrappers
+retain exact native attempt/token/cost quantities; relationship knowledge, cost
+certainty, correlation-field vocabulary and the compliance decision become
+explicit domains. Native provider attempts are Natural counters with a default
+of one; zero is representable by the producer API, so capture preserves it
+rather than inventing a stricter rule. No Num/Integral/IsString/Generic bypass is
+added. Actual accounting explicitly extracts quantities for its existing sums.
+
+Envelope signing-key references reuse their policy coordinate. Opaque signature,
+Merkle, review-class, review-scope and pull-request labels have separate nominal
+types with unchanged exact-string codecs. Review scope labels are signed claims,
+not filesystem access capabilities: normalizing them through RelativePath would
+change preexisting signed bytes. Actual content access retains its existing
+checked Repository.RelativePath boundary. The existing canonical payload bytes
+and pinned digest remain unchanged. A complete payload with a real native
+UUIDv7 session round-trips; wrong prefixes, former synthetic labels and wrong
+UUID versions refuse. Invalid historical session labels are not rewritten.
+
+The candidate passes 51 attestation contract cases and 85 PostgreSQL cases on
+arm64 macOS/GHC 9.12.4. The latter include live-versus-decoded compliance parity,
+unknown usage/accounting, retry/fallback completeness, native projections and
+restart recovery. Two new complete-facts corruption controls inject an unknown
+correlation field or empty model alias; owner reads refuse, ignored reads condemn
+earlier/later tentative writes, the pending provider is not called, and exact
+repair restores original calls and reports.
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-test shikigami-core-postgres-test -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/attestation contracts/||/run evidence/||/decision evidence/||/execution selection/'
+```
+
+Both batched source candidates require one coherent full build and census
+reconciliation. Their source changes do not alter workflow bodies, step order,
+identity recipes, valid journal bytes, SQL schema or the selected macOS scope.
+
+The extended public compiler suite also passes all 197 controls, including
+native attestation session/step access, opaque quantity/label coercion and Generic
+refusal, independent evidence states, and cross-role verdict substitution.

@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Durable run-evidence lifecycle and the immutable facts bound to it.
 --
 -- The lifecycle is executed by the checked Keiro aggregate generated from
@@ -11,6 +13,9 @@ module Shikigami.Attestation.Evidence
     CallRelationship (..),
     RecordedCallEvidence (..),
     ExpectedCall (..),
+    ProviderAttempt,
+    providerAttempt,
+    providerAttemptNumber,
     ResultEvidence (..),
     EvidenceSource (..),
     configureEvidenceCall,
@@ -53,7 +58,7 @@ import Data.List (find)
 import Data.Map.Strict qualified as Map
 import Keiki.Core (RegFile)
 import Keiki.Core qualified as Keiki
-import Keiro.Workflow.Types (WorkflowId)
+import Keiro.Workflow.Types (StepName, WorkflowId)
 import Kioku.Id (SessionId)
 import Numeric.Natural (Natural)
 import Shikigami.Agent.Approval (ReviewRequestId (..))
@@ -61,6 +66,8 @@ import Shikigami.Agent.Run.Key (RunKey)
 import Shikigami.Attestation.Agent (AgentArtifactSet, AgentVersionRef)
 import Shikigami.Attestation.Profile (SanctionedExecutionProfileRef)
 import Shikigami.Attestation.Reviewed (DiffDigest, ResultDigest, ReviewedArtifact)
+import Shikigami.Behavior.Provider.Coordinate
+import Shikigami.Decision.ModelAlias (ModelAlias)
 import Shikigami.Generated.Nominals (RunEvidenceId, mkRunEvidenceId, parseRunEvidenceId, runEvidenceIdText)
 import Shikigami.Log.Correlation
   ( CallCorrelationId,
@@ -110,8 +117,8 @@ data CallRelationship
 data RecordedCallEvidence = RecordedCallEvidence
   { callId :: !CallCorrelationId,
     relationship :: !CallRelationship,
-    resolvedModelId :: !Text,
-    requestedAlias :: !(Maybe Text),
+    resolvedModelId :: !(ProviderCoordinate "provider-model-id"),
+    requestedAlias :: !(Maybe ModelAlias),
     evidence :: !Baikai.ModelCallEvidence
   }
   deriving stock (Eq, Show, Generic)
@@ -120,7 +127,7 @@ data RecordedCallEvidence = RecordedCallEvidence
 data ExpectedCall = ExpectedCall
   { callId :: !CallCorrelationId,
     relationship :: !CallRelationship,
-    attempt :: !Natural
+    attempt :: !ProviderAttempt
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -215,7 +222,7 @@ recordCall recorded runEvidence@RunEvidence {calls = currentCalls} =
     & #calls
     .~ upsertBy recordedCallId recorded currentCalls
 
-recordDeterministicStep :: Text -> RunEvidence -> RunEvidence
+recordDeterministicStep :: StepName -> RunEvidence -> RunEvidence
 recordDeterministicStep step runEvidence =
   runEvidence
     & #deterministicSteps
@@ -329,9 +336,10 @@ correlateEvidence runId stepName firstOrdinal = go firstOrdinal Map.empty
               Just previous -> RetryOf previous
               Nothing -> RootCall
           resolvedModelId =
-            fromMaybe
-              (Baikai.requestedModel terminal)
-              (Baikai.observedValue (Baikai.observedModel terminal))
+            providerCoordinate $
+              fromMaybe
+                (Baikai.requestedModel terminal)
+                (Baikai.observedValue (Baikai.observedModel terminal))
           recorded =
             RecordedCallEvidence
               { callId = correlationId,
@@ -384,7 +392,7 @@ data RunEvidence = RunEvidence
     idempotencyKey :: !RunKey,
     expectedCalls :: ![ExpectedCall],
     calls :: ![RecordedCallEvidence],
-    deterministicSteps :: ![Text],
+    deterministicSteps :: ![StepName],
     expectedChildRunIds :: ![RunCorrelationId],
     delegatedChildren :: ![RelevantChild],
     observedArtifactDigest :: !(Maybe DiffDigest),
@@ -525,3 +533,15 @@ phaseFromVertex = \case
   Generated.RunEvidenceNonConforming -> NonConforming
   Generated.RunEvidenceIncomplete -> Incomplete
   Generated.RunEvidenceFailed -> Failed
+
+-- Exact nonnegative counter supplied by the native provider evidence. The
+-- provider defaults to one; capture does not invent an extra admission rule.
+newtype ProviderAttempt = ProviderAttempt Natural
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON, FromJSON)
+
+providerAttempt :: Natural -> ProviderAttempt
+providerAttempt = ProviderAttempt
+
+providerAttemptNumber :: ProviderAttempt -> Natural
+providerAttemptNumber (ProviderAttempt value) = value

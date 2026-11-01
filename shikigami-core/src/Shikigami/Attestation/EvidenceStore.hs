@@ -35,15 +35,17 @@ import Keiro.Projection.Catalog qualified as ProjectionCatalog
 import Keiro.ReadModel (runQuery)
 import Keiro.ReadModel.Rebuild (RebuildRunId)
 import Keiro.Stream qualified as Stream
-import Keiro.Workflow.Types (WorkflowId (..))
+import Keiro.Workflow.Types (StepName (..), WorkflowId (..))
 import Kiroku.Store.Connection (KirokuStore)
 import Kiroku.Store.Effect (Store, runStorePool)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.App (CommandEffects, commandOptions)
 import Shikigami.Attestation.CallFacts (CallComplianceFacts (..))
-import Shikigami.Attestation.Compliance (ComplianceRollUp (..))
+import Shikigami.Attestation.Compliance (ComplianceDecision (..), ComplianceRollUp (..))
 import Shikigami.Attestation.Evidence
+import Shikigami.Behavior.Provider.Coordinate (providerCoordinateText)
+import Shikigami.Decision.ModelAlias (modelAliasText)
 import Shikigami.Log.Correlation (CallCorrelationId, RunCorrelationId, renderCallCorrelationId, renderRunCorrelationId)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
@@ -187,10 +189,10 @@ validateVerdict :: EvidencePhase -> Maybe ComplianceRollUp -> Either EvidencePer
 validateVerdict target rollUp =
   case (target, (.sanctioned) <$> rollUp) of
     (EvidenceSealed, Nothing) -> Left (MissingComplianceRollUp target)
-    (EvidenceSealed, Just False) -> Left (VerdictDoesNotMatchPhase target False)
-    (Attested, Just False) -> Left (VerdictDoesNotMatchPhase target False)
+    (EvidenceSealed, Just ComplianceNonConforming) -> Left (VerdictDoesNotMatchPhase target False)
+    (Attested, Just ComplianceNonConforming) -> Left (VerdictDoesNotMatchPhase target False)
     (NonConforming, Nothing) -> Left (MissingComplianceRollUp target)
-    (NonConforming, Just True) -> Left (VerdictDoesNotMatchPhase target True)
+    (NonConforming, Just ComplianceSanctioned) -> Left (VerdictDoesNotMatchPhase target True)
     _ -> Right ()
 
 persistProjection :: RunProjection -> [CallProjection] -> Tx.Transaction ()
@@ -215,8 +217,8 @@ runProjection runEvidence@RunEvidence {runEvidenceId, runId, phase, expectedCall
 verdictFor :: EvidencePhase -> Maybe ComplianceRollUp -> Maybe ComplianceVerdict
 verdictFor phase rollUp =
   case (.sanctioned) <$> rollUp of
-    Just True -> Just VerdictSanctioned
-    Just False -> Just VerdictNotSanctioned
+    Just ComplianceSanctioned -> Just VerdictSanctioned
+    Just ComplianceNonConforming -> Just VerdictNotSanctioned
     Nothing -> case phase of
       EvidenceSealed -> Just VerdictSanctioned
       Attested -> Just VerdictSanctioned
@@ -258,7 +260,7 @@ observationsValue
     } =
     Aeson.object
       [ "expectedCalls" .= expectedCalls,
-        "deterministicSteps" .= deterministicSteps,
+        "deterministicSteps" .= map (.unStepName) deterministicSteps,
         "expectedChildRunIds" .= (renderRunCorrelationId <$> expectedChildRunIds),
         "delegatedChildren" .= (childValue <$> delegatedChildren),
         "observedArtifactDigest" .= observedArtifactDigest,
@@ -294,8 +296,8 @@ callProjection ownerRunId RecordedCallEvidence {callId, relationship, resolvedMo
           sourceRunId,
           relationship = relationshipText,
           relatedCallId,
-          resolvedModelId,
-          requestedAlias,
+          resolvedModelId = providerCoordinateText resolvedModelId,
+          requestedAlias = modelAliasText <$> requestedAlias,
           baikaiCallId,
           attempt = fromIntegral attempt,
           callStatus = jsonString status,
@@ -309,13 +311,13 @@ factsProjection ownerRunId facts raw =
    in CallProjection
         { runId = ownerRunId,
           callId = renderCallCorrelationId facts.callId,
-          sourceRunId = facts.providerRunId,
+          sourceRunId = providerCoordinateText facts.providerRunId,
           relationship = relationshipText,
           relatedCallId,
-          resolvedModelId = facts.resolvedModelId,
-          requestedAlias = facts.requestedAlias,
-          baikaiCallId = facts.providerCallId,
-          attempt = fromIntegral facts.attempt,
+          resolvedModelId = providerCoordinateText facts.resolvedModelId,
+          requestedAlias = modelAliasText <$> facts.requestedAlias,
+          baikaiCallId = providerCoordinateText facts.providerCallId,
+          attempt = fromIntegral (providerAttemptNumber facts.attempt),
           callStatus = jsonString facts.status,
           evidenceStrength = jsonString facts.strength,
           evidence = raw
