@@ -173,7 +173,7 @@ admitRunJobWith storePool directory declarations job =
       let runSkip =
             DirectoryStore.RunSkip
               { DirectoryStore.agentName = ((.agentName) job),
-                DirectoryStore.principalId = resolvedPrincipalId,
+                DirectoryStore.principalId = DirectoryStore.reportedPrincipalClaim <$> resolvedPrincipalId,
                 DirectoryStore.stage = DirectoryStore.DrainStage,
                 DirectoryStore.detail = routeKindText ((.routeKind) job),
                 DirectoryStore.reason = skipReason,

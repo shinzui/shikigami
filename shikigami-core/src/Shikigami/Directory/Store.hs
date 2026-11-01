@@ -6,6 +6,9 @@
 -- evidence can commit together.
 module Shikigami.Directory.Store
   ( SkipStage (..),
+    ReportedPrincipalClaim,
+    reportedPrincipalClaim,
+    reportedPrincipalClaimText,
     RunSkip (..),
     recordLoadStates,
     recordRunSkip,
@@ -18,6 +21,7 @@ module Shikigami.Directory.Store
 where
 
 import Control.Lens (view)
+import Data.Aeson (ToJSON)
 import Data.Bifunctor (first)
 import Data.Foldable (traverse_)
 import Data.Functor.Contravariant ((>$<))
@@ -43,11 +47,25 @@ import Shikigami.Agent.Run.Key (RunKey, parseRunKey, runKeyText)
 data SkipStage = TriggerStage | DrainStage
   deriving stock (Generic, Eq, Ord, Show)
 
+-- | Exact reported attribution, including a malformed or empty claim that
+-- explains refusal. Capturing it neither parses nor admits a principal.
+newtype ReportedPrincipalClaim = ReportedPrincipalClaim Text
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (ToJSON)
+
+reportedPrincipalClaim :: Text -> ReportedPrincipalClaim
+reportedPrincipalClaim = ReportedPrincipalClaim
+
+reportedPrincipalClaimText :: ReportedPrincipalClaim -> Text
+reportedPrincipalClaimText (ReportedPrincipalClaim value) = value
+
 -- | One idempotent trigger or queue-drain refusal.
 data RunSkip = RunSkip
   { agentName :: !AgentName,
-    principalId :: !(Maybe Text),
+    principalId :: !(Maybe ReportedPrincipalClaim),
     stage :: !SkipStage,
+    -- | Advisory source/route text for inspection and logging. Routing and
+    -- admission precede this record; skip deduplication uses stage/run key.
     detail :: !Text,
     reason :: !Text,
     idempotencyKey :: !RunKey
@@ -197,7 +215,7 @@ recordRunSkipStatement =
     ON CONFLICT (stage, idempotency_key) DO NOTHING
     """
     ( (agentNameText . view #agentName >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> (view #principalId >$< Encoders.param (Encoders.nullable Encoders.text))
+        <> (fmap reportedPrincipalClaimText . view #principalId >$< Encoders.param (Encoders.nullable Encoders.text))
         <> (renderSkipStage . view #stage >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> (view #detail >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> (view #reason >$< Encoders.param (Encoders.nonNullable Encoders.text))
@@ -227,7 +245,7 @@ runSkipRow =
     <*> Decoders.column (Decoders.nonNullable Decoders.text)
   where
     assemble agent principal stage detail reason key =
-      RunSkip <$> mkAgentName agent <*> pure principal <*> parseSkipStage stage <*> pure detail <*> pure reason <*> parseRunKey key
+      RunSkip <$> mkAgentName agent <*> pure (reportedPrincipalClaim <$> principal) <*> parseSkipStage stage <*> pure detail <*> pure reason <*> parseRunKey key
 
 checkedRead :: Either Text a -> Transaction (Either Text a)
 checkedRead = \case

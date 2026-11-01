@@ -1,0 +1,18 @@
+{
+  "sourceParent": "2d832dc",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "files": {
+    "shikigami-core/shikigami-core.cabal": "8bb88ca7d7af3aa2603db9a3287e1490d9f365c64d1567471cdaa7ed29907335",
+    "shikigami-core/src/Shikigami/Directory/Store.hs": "8578a932045e7d31b2c185936467e17c2432ba32b22df37abba8261e8c8181db",
+    "shikigami-core/test-postgres/Shikigami/DirectoryStoreSpec.hs": "2d07094aef5eea60c22371ff3c27d7eef092b7eeb120cc30854f756cb00be277",
+    "shikigami-core/test/Main.hs": "6f662f39bc4a379cc5e4247ef737d512578e242bd5a4c21d246b11c7138afa1e",
+    "shikigami-core/test/Shikigami/DirectoryValueSpec.hs": "2329a00286c5c7f2d022b9aa7d27aab81cd694aed210da6ad17281c35b75e8ce",
+    "shikigami-workers/src/Shikigami/Agent/RunJob/Worker.hs": "3b7c8a03e81643da0bd0fda7f73005b6bc6ca91683f8ab143630d7fad247ee4c",
+    "shikigami-workers/src/Shikigami/Trigger/Consumer.hs": "f4b8f509376fbf8f25193b51f1b7faf7829ba66fe65ecc1407a9dada85d223a6",
+    "shikigami-workers/src/Shikigami/Trigger/Scheduler.hs": "5bc2825defc6625d872f3b11378914ed1f7ab7205a9a3faf9b526384c67861a2",
+    "shikigami-workers/test/Shikigami/SchedulerSpec.hs": "7818833054e9fc8634c9646311049b615b83ef656570ee9983be7e1704d0e01e",
+    "shikigami-workers/test/Shikigami/StreamInboxSpec.hs": "4628aea88d95a907b8984feb177f823822c45ccfee5dd7f463ef72aae5a7bfc5",
+    "tests/types/opaque-values.py": "56636d20b60e1bc7a91deabcae2e5e0d167a9cd5ef5f8bd0672a50d75cf0c597"
+  }
+}

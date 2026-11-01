@@ -55,7 +55,7 @@ tests databaseFixture =
           let triggerSkip =
                 RunSkip
                   { agentName = fixtureAgentName "heartbeat",
-                    principalId = Just "agent_heartbeat",
+                    principalId = Just (reportedPrincipalClaim "agent_heartbeat"),
                     stage = TriggerStage,
                     detail = "schedule",
                     reason = "principal lifecycle is paused",
@@ -166,7 +166,7 @@ fixtureRunKey = either (error . show) id . parseRunKey
 -- another valid member. No decoder error may turn it into a shorter list.
 corruptSkips :: DatabaseFixture -> IO ()
 corruptSkips fixture = withPool fixture \pool -> do
-  let original = RunSkip (fixtureAgentName "heartbeat") (Just "agent_heartbeat") DrainStage "agent-run" "paused" (fixtureRunKey "corrupt-control")
+  let original = RunSkip (fixtureAgentName "heartbeat") (Just (reportedPrincipalClaim "agent_heartbeat")) DrainStage "agent-run" "paused" (fixtureRunKey "corrupt-control")
       sibling = original & #stage .~ TriggerStage & #idempotencyKey .~ fixtureRunKey "valid-sibling"
       transaction action = expectPoolRight "transaction" =<< Pool.use pool (Transactions.transaction Transactions.ReadCommitted Transactions.Write action)
       sql query = expectPoolRight "SQL" =<< Pool.use pool (Session.statement () (preparable query Encoders.noParams Decoders.noResult))
@@ -191,7 +191,7 @@ corruptSkips fixture = withPool fixture \pool -> do
         if admitted
           then do
             rows <- expectRight "external principal control" =<< listRunSkips pool
-            rows @?= [original & #principalId .~ Just "", sibling]
+            rows @?= [original & #principalId .~ Just (reportedPrincipalClaim ""), sibling]
           else do
             listRunSkips pool >>= (@?= Left "corrupt retained directory run skip")
             ignored <- transaction do

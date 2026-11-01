@@ -141,7 +141,7 @@ tests databaseFixture =
             case skips of
               [runSkip] -> do
                 assertEqual "agent" (fixtureAgentName "heartbeat") ((.agentName) runSkip)
-                assertEqual "principal" (Just "agent_heartbeat") ((.principalId) runSkip)
+                assertEqual "principal" (Just "agent_heartbeat") (fmap DirectoryStore.reportedPrincipalClaimText ((.principalId) runSkip))
                 assertEqual "trigger boundary" DirectoryStore.TriggerStage ((.stage) runSkip)
                 assertEqual "source" "schedule" ((.detail) runSkip)
                 assertEqual "same key the run would use" (fixtureRunKey "schedule-run-v2:sha256:fc2f27254279da17338ac783aadd4fde27e2d75c79a9036f16b720a6c60ac4a6") ((.idempotencyKey) runSkip)

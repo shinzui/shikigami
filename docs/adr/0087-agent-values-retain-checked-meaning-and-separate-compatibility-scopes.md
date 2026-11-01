@@ -53,6 +53,23 @@ and attribution coordinate, not an allocated entity or a TypeID-v7 principal.
 Verified identities retain the exact directory-issued principal and all existing
 lifecycle and grant checks. Compatibility grant lookup remains name-keyed.
 
+
+Directory refusal evidence retains `ReportedPrincipalClaim`, a private nominal
+capture of the exact reported Text, rather than an admitted principal. Its
+factory is deliberately total: malformed and empty claims can explain why
+admission refused and must not disappear or become successful identities.
+Its JSON and SQL adapters preserve the original text. Capturing or reading the
+claim grants no directory authority and applies no new identity grammar.
+
+`RunSkip.detail` is advisory source/route text. Scheduler supplies `schedule`,
+trigger preparation supplies `stream`/`event`, and drain recording renders the
+already chosen RunRouteKind. Consumers persist it for inspection or log it;
+AgentRun.Status classifies the refusal from the recorded skip and reason and
+never routes work using detail. This is an explicit incidental diagnostic
+exclusion, not a blanket exemption for persistence. Stage and RunKey remain the
+actual skip deduplication coordinates. This claim/diagnostic refinement changes
+no identity namespace or valid bytes and uses no first-release exception.
+
 ## Alternatives rejected
 
 Restricting valid agent names would discard admitted input without fixing the

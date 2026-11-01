@@ -139,6 +139,14 @@ The coherent full build and refreshed census pass on `f556e24`: 323 modules,
 930 module declarations and 4,038 keys. All four ledger scalar findings are
 resolved and the two new private scalar types are classified.
 
+The directory claim source candidate passes its value control, 4 core
+PostgreSQL, 34 worker and 118 compiler cases. Reported principals now keep a
+nominal claim type while malformed/empty evidence remains exact. Source review
+establishes detail as advisory logging/inspection text and corrects that finding
+without weakening admission or key obligations. See
+`docs/evidence/plan-108/directory-claims-source.json`; coherent census
+reconciliation follows this source checkpoint.
+
 The native workflow gate passes on `400cdc0` against `af76f1b`, with no findings
 and a replay-neutral native verdict. Exact reports accompany the current evidence.
 The full build, fresh census and focused checks are checkpoints, not milestone

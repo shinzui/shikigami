@@ -40,6 +40,7 @@ import Shikigami.Attestation.PolicyValue qualified as Policy
 import Shikigami.Attestation.Reviewed qualified as Reviewed
 import Shikigami.Capability.Overlay qualified as Overlay
 import Shikigami.AgentRun.Ledger qualified as Ledger
+import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Sink.Delivery qualified as Delivery
 import Shikigami.AgentRun.RequestKey qualified as Request
 import Shikigami.Agent.Run.Key qualified as FullKey
@@ -67,7 +68,9 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''requestFingerprint :: Text -> Either Text Ledger.PayloadFingerprint
+POSITIVE = '''reportedPrincipal :: Text -> DirectoryStore.ReportedPrincipalClaim
+reportedPrincipal = DirectoryStore.reportedPrincipalClaim
+requestFingerprint :: Text -> Either Text Ledger.PayloadFingerprint
 requestFingerprint = Ledger.parsePayloadFingerprint
 requestCaller :: Text -> Ledger.CallerAttribution
 requestCaller = Ledger.callerAttribution
@@ -221,6 +224,7 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('DirectoryStore.ReportedPrincipalClaim', 'generic'),
     ('Ledger.PayloadFingerprint', 'generic'),
     ('Ledger.CallerAttribution', 'generic'),
     ('Snapshot.ResolvedProfile', 'generic'),
@@ -312,6 +316,7 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         assert result.returncode != 0 and 'RunDisposition' in result.stderr, (source_kind, result.stderr)
         print('opaque boundary: run disposition ' + source_kind + ' substitution refused: passed', flush=True)
     for label, signature, expression in [
+        ('reported principal raw coercion', 'Text -> DirectoryStore.ReportedPrincipalClaim', 'coerce'),
         ('payload fingerprint UUID coercion', 'UUID -> Ledger.PayloadFingerprint', 'coerce'),
         ('payload fingerprint raw coercion', 'Text -> Ledger.PayloadFingerprint', 'coerce'),
         ('caller attribution raw coercion', 'Text -> Ledger.CallerAttribution', 'coerce'),
@@ -338,6 +343,7 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         assert result.returncode != 0 and 'Not in scope' not in result.stderr, (label, result.stderr)
         print('opaque boundary: ' + label + ' substitution refused: passed', flush=True)
     for kind, representation in [
+        ('DirectoryStore.ReportedPrincipalClaim', 'Text'),
         ('Ledger.PayloadFingerprint', 'Text'),
         ('Ledger.CallerAttribution', 'Text'),
         ('Snapshot.ResolvedProfile', 'Snapshot.ResolvedProfileView'),

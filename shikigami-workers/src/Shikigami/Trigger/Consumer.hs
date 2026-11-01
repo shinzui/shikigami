@@ -86,7 +86,7 @@ import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (Trig
 import Shikigami.Agent.RunJob qualified as RunJob
 import Shikigami.App (AppEnv (..), runAppIO)
 import Shikigami.Directory qualified as Directory
-import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), recordRunSkipTx)
+import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), recordRunSkipTx, reportedPrincipalClaim)
 import Shikigami.Inspection.Consumer (ConsumerInspection, withConsumerInspection)
 import Shikigami.Integration.ConsumerRuntime (consumerAppConfig, withConsumerApp)
 import Shikigami.Integration.Danwa qualified as Danwa
@@ -666,7 +666,7 @@ prepareTrigger directory detail agent job hit = do
       SkipTrigger
         RunSkip
           { agentName = agent ^. #name,
-            principalId = resolvedPrincipalId,
+            principalId = reportedPrincipalClaim <$> resolvedPrincipalId,
             stage = TriggerStage,
             detail,
             reason,

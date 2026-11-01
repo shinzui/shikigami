@@ -137,7 +137,7 @@ tests databaseFixture =
           skips <- either (assertFailure . Text.unpack) pure =<< DirectoryStore.listRunSkips pool
           case skips of
             [runSkip] -> do
-              assertEqual "principal" (Just "agent_risk") ((.principalId) runSkip)
+              assertEqual "principal" (Just "agent_risk") (fmap DirectoryStore.reportedPrincipalClaimText ((.principalId) runSkip))
               assertEqual "trigger boundary" DirectoryStore.TriggerStage ((.stage) runSkip)
               assertEqual "source" "stream" ((.detail) runSkip)
               assertEqual "same key the run would use" (fixtureRunKey "stream-run-v2:sha256:d5c5840b1bb985d45b79cb5e3034694f28435fd5ce27e2cc39df39e9db25f667") ((.idempotencyKey) runSkip)

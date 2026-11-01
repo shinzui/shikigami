@@ -458,6 +458,7 @@ test-suite shikigami-core-test
     Shikigami.DelegateContextSpec
     Shikigami.DelegationBatchSpec
     Shikigami.DirectorySpec
+    Shikigami.DirectoryValueSpec
     Shikigami.EnqueueHardeningSpec
     Shikigami.ExecutionPolicySpec
     Shikigami.ExecutionPositionSpec

@@ -34,7 +34,7 @@ import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.App (AppEnv (..))
 import Shikigami.Directory qualified as Directory
-import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), recordRunSkip)
+import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), recordRunSkip, reportedPrincipalClaim)
 import Shikigami.Execution.Timer qualified as ExecutionTimer
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude hiding ((.=))
@@ -154,7 +154,7 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
           let runSkip =
                 RunSkip
                   { agentName = agent,
-                    principalId = resolvedPrincipalId,
+                    principalId = reportedPrincipalClaim <$> resolvedPrincipalId,
                     stage = TriggerStage,
                     detail = "schedule",
                     reason,

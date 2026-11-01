@@ -38,6 +38,7 @@ import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
 import Shikigami.DelegationBatchSpec qualified as DelegationBatchSpec
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.DirectorySpec qualified as DirectorySpec
+import Shikigami.DirectoryValueSpec qualified as DirectoryValueSpec
 import Shikigami.EnqueueHardeningSpec qualified as EnqueueHardeningSpec
 import Shikigami.ExecutionPolicySpec qualified as ExecutionPolicySpec
 import Shikigami.ExecutionPositionSpec qualified as ExecutionPositionSpec
@@ -126,6 +127,7 @@ main =
           WorkerSessionPositionSpec.tests,
           ExecutionSelectionSpec.tests,
           DirectorySpec.tests,
+          DirectoryValueSpec.tests,
           EnqueueHardeningSpec.tests,
           KeiroSpecificationSpec.tests,
           KanmonClientSpec.tests,

@@ -849,3 +849,49 @@ required source checkpoints. Source is committed before the final coherent build
 and the census follows all Cabal gates; a later evidence-only commit does not
 claim a new executable test candidate. This preserves freshness while avoiding
 avoidable repeated builds. Friction remains to be triaged at plan completion.
+
+
+## Reported directory claims and advisory refusal context
+
+`directory-claims-source.json` binds this arm64 macOS/GHC 9.12.4 candidate to
+parent `2d832dc`. RunSkip retains a private nominal ReportedPrincipalClaim,
+distinct from admitted principal identity. The total capture/renderer and
+newtype JSON codec preserve every reported byte, including malformed and empty
+claims that explain refusal. Producers wrap at the scheduler, stream/event
+admission and queue-drain evidence boundary; SQL and logging keep their old text.
+No directory admission, identity namespace, key derivation or valid wire value
+changes, and no first-release exception is used.
+
+Source review corrects RunSkip.detail's old domain-value violation to an
+incidental diagnostic exclusion. Scheduler supplies `schedule`; Consumer's
+prepareTrigger supplies `stream`/`event`; drain recording renders the already
+chosen RunRouteKind. Directory.Store persists/reads the advisory text and
+worker reporting logs it. AgentRun.Status classifies a skip from its presence
+and reason, without selecting a route from detail. SQL deduplication uses the
+typed stage/run key. This is a specific producer/consumer explanation, not a
+persistence exemption; principal claims and the other domain coordinates retain
+their independent obligations.
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-test -j1 --test-show-details=direct --test-option=-p --test-option='/reported directory claims/'
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test shikigami-workers-test -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/directory store/||/Scheduler/||/StreamInbox/||/run status composition/'
+nix develop --no-write-lock-file -c python3 tests/types/opaque-values.py
+python3 tools/style/check_haskell.py
+git diff --check
+```
+
+The value control, all 4 core PostgreSQL directory cases, all 34 selected worker
+cases and 118 public compiler controls pass. The consumers were first listed
+(38 nonzero cases). Complete SQL round trips still preserve the intentionally
+invalid legacy claim and empty principal text. Corrupt stage/name/key metadata
+still refuses complete lists and drain reads, rolls back ignored earlier/later
+writes and recovers the exact original rows. Scheduler, inbox and drain behavior
+and atomic skip publication remain passing. Public claim capture compiles before
+constructor, coercion and Generic bypass controls.
+
+The private LoadState remains its previously reviewed explicit outbound SQL
+transfer record, from loadStateRows to upsertLoadStateStatement; no domain
+permission is inferred from that DTO. No workflow body, durable identity,
+migration, dependency or valid HTTP representation changes. A coherent full
+build/census reconciliation follows this source checkpoint. All milestones and
+the deferred guide disposition stay open.
