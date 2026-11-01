@@ -46,6 +46,7 @@ import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.ToolPosition (ToolPosition, parseToolPosition, toolPositionNumber)
 import Shikigami.Execution.Tools qualified as Tools
 import Shikigami.Execution.Transcript
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
@@ -78,7 +79,7 @@ preparePlan upgrade env authorizer current client binding admission mode = do
       descriptors = [supervisedWorkspaceEditDescriptor, (workspaceExecAdapter client).descriptor] <> [workspaceGitDescriptor | upgrade]
   catalog <- right (mkCapabilityCatalog descriptors)
   capabilities <- right (resolveGovernedCapabilityOverlays (durableAdapterInstalled providers) catalog (\_ _ -> Right ()) (ResolutionSubject (Just "fixture") Durable (Skill "fixture") Nothing) (map (.capability) descriptors))
-  let initial = ExecutionSnapshot 1 (executionIdFor admission.assignmentId) binding.request.runId (fixtureAgentName "fixture") admission.owner session selection Nothing (SkillInstructions "fixture" "system" "body") (ReplayContext 2 (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "fixture edit and validation"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
+  let initial = ExecutionSnapshot V1 (executionIdFor admission.assignmentId) binding.request.runId (fixtureAgentName "fixture") admission.owner session selection Nothing (SkillInstructions "fixture" "system" "body") (ReplayContext 2 (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "fixture edit and validation"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
   menu <- right =<< Tools.describeExecutionTools Log.silentLogger authorizer providers native initial
   let edit = only (filter (\tool -> tool.name == "overlay__workspace-edit__replace") menu.toolBindings)
       validate = only (filter (\tool -> tool.name == "overlay__workspace-exec__validate") menu.toolBindings)
@@ -91,7 +92,7 @@ preparePlan upgrade env authorizer current client binding admission mode = do
       editInput = Aeson.toJSON (if upgrade then Replacement "src/dependency.txt" (Just (contentDigest "old dependency\n")) "new dependency\n" else Replacement "src/mode" (Just (contentDigest "complete\n")) (mode <> "\n"))
       validateInput = Aeson.object ["rule" Aeson..= ("validate" :: Text.Text)]
       commitInput = Aeson.toJSON (GitCommitRequest binding.base "chore(deps): upgrade fixture dependency")
-      assistant = ReplayAssistant 1 ([ToolBlock (ToolInvocation "edit-mode" edit.name editInput), ToolBlock (ToolInvocation "validate-mode" validate.name validateInput)] <> [ToolBlock (ToolInvocation "commit-upgrade" commit.name commitInput) | upgrade]) ToolUse Nothing Nothing (Aeson.object []) Nothing
+      assistant = ReplayAssistant V1 ([ToolBlock (ToolInvocation "edit-mode" edit.name editInput), ToolBlock (ToolInvocation "validate-mode" validate.name validateInput)] <> [ToolBlock (ToolInvocation "commit-upgrade" commit.name commitInput) | upgrade]) ToolUse Nothing Nothing (Aeson.object []) Nothing
       model = OperationSpec (operationIdFor snapshot.executionId (fixtureRevision 0)) ModelTurn RepeatableObservation "model" (policyDigest snapshot) "scope" Nothing
   void (right =<< run env Catalog.registerProjectionCatalog)
   void (right =<< run env (Execution.admitExecution snapshot))
@@ -136,7 +137,7 @@ submit env snapshot access input = do
   let position = state.cursor
       specification = OperationSpec (operationIdFor snapshot.executionId position) ToolOperation input.binding.recovery input.binding.name (policyDigest snapshot) (toolScopeDigest input.binding) (Just input.position)
       key = operationIdText specification.operationId
-      reference = Attempt.JobReference 1 snapshot.executionId specification.operationId (fixtureAttemptId ("tool:" <> key))
+      reference = Attempt.JobReference V1 snapshot.executionId specification.operationId (fixtureAttemptId ("tool:" <> key))
   void (right =<< run env (Execution.acceptOperation access state.revision specification (Aeson.toJSON input)))
   (_, accepted) <- right =<< run env (Execution.loadExecution access)
   awakeable <- UUID.nextRandom
@@ -191,7 +192,7 @@ prepareTools env authorizer current client admission calls = do
       descriptors = map (.descriptor) adapters
   catalog <- right (mkCapabilityCatalog descriptors)
   capabilities <- right (resolveGovernedCapabilityOverlays (durableAdapterInstalled providers) catalog (\_ _ -> Right ()) (ResolutionSubject (Just "fixture") Durable (Skill "fixture") Nothing) (map (.capability) descriptors))
-  let initial = ExecutionSnapshot 1 (executionIdFor admission.assignmentId) admission.runId (fixtureAgentName "fixture") admission.owner session selection Nothing (SkillInstructions "fixture" "system" "body") (ReplayContext 2 (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "qualified workspace operation"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
+  let initial = ExecutionSnapshot V1 (executionIdFor admission.assignmentId) admission.runId (fixtureAgentName "fixture") admission.owner session selection Nothing (SkillInstructions "fixture" "system" "body") (ReplayContext 2 (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "qualified workspace operation"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
   menu <- right =<< Tools.describeExecutionTools Log.silentLogger authorizer providers native initial
   let snapshot = initial & #offeredTools .~ menu.offeredTools & #toolBindings .~ menu.toolBindings
   void (right =<< run env Catalog.registerProjectionCatalog)
@@ -208,7 +209,7 @@ appendTools env current snapshot calls = do
   (_, state) <- right =<< run env (Execution.loadExecution access)
   unless (state.next == NeedModel) (fail "fixture did not reach model boundary")
   let invocations = [ToolInvocation ("fixture-call-" <> Text.pack (show index)) name input | (index, (name, input)) <- zip [0 :: Int ..] calls]
-      assistant = ReplayAssistant 1 (map ToolBlock invocations) ToolUse Nothing Nothing (Aeson.object []) Nothing
+      assistant = ReplayAssistant V1 (map ToolBlock invocations) ToolUse Nothing Nothing (Aeson.object []) Nothing
       model = OperationSpec (operationIdFor snapshot.executionId state.cursor) ModelTurn RepeatableObservation "model" (policyDigest snapshot) "fixture-model" Nothing
   (_, operation) <- right =<< run env (Execution.acceptOperation access state.revision model (Aeson.object []))
   now <- getCurrentTime

@@ -51,6 +51,8 @@
     "shikigami-workers/test/Shikigami/WorkspaceTransferSpec.hs": "405ec2addedebc234511f98b6cefdeb126186326d1626e5ccd49175bb10b28b3",
     "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs": "a2541b023e7697da9cc3ed1b5434833d580790a8c6f11f94476fb95074aa1e6a",
     "tests/types/opaque-values.py": "c12993c83b4a33f26f5a38fb45392fae1efa562da2b18d12b4f6c1c11bebccab",
+    "tests/workspace/prototype/Accepted.hs": "31cbadca048c5a2d3cbf7d72cba47020e2ac512d964a17f4d6835c182bba6db1",
+    "tests/workspace/prototype/Continuing.hs": "813c78e502b8fd4ff21134399a5c545adf70d094b84c3909361394d5e1312573",
     "tools/style/module-ownership.json": "06548cca32f9b53e2f72bc456c04aa1c90987fa506b4aea1eddacc4d5a07e21a"
   }
 }

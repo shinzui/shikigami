@@ -31,6 +31,7 @@ import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.StateRevision (StateRevision, advanceRevision, parseRevision)
@@ -136,9 +137,9 @@ followup q = do
   access <- right =<< run q.env (Sessions.authorizeSession session actor (q.lifecycle actor))
   Just (active, _) <- right =<< run q.env (Sessions.inspectSession session)
   originalAssignment <- maybe (fail "original assignment absent") pure active.activeAssignment
-  void (right =<< run q.env (Sessions.recordResult access active.revision (fixtureRevision 0) (fixtureOperationId "followup-original-result") (AssignmentResult 1 originalAssignment AssignmentFailed (Just first.snapshot.executionId) Aeson.Null [])))
+  void (right =<< run q.env (Sessions.recordResult access active.revision (fixtureRevision 0) (fixtureOperationId "followup-original-result") (AssignmentResult V1 originalAssignment AssignmentFailed (Just first.snapshot.executionId) Aeson.Null [])))
   Just (idle, _) <- right =<< run q.env (Sessions.inspectSession session)
-  (_, message) <- right =<< run q.env (Sessions.acceptMessage access idle.revision (fixtureRevision 0) (fixtureOperationId "followup-next-message") (Instruction 1 FollowUp (fixtureInstruction "continue accepted repository") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+  (_, message) <- right =<< run q.env (Sessions.acceptMessage access idle.revision (fixtureRevision 0) (fixtureOperationId "followup-next-message") (Instruction V1 FollowUp (fixtureInstruction "continue accepted repository") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
   (_, started) <- right =<< run q.env (Sessions.startAssignment access (advanceRevision idle.revision) (fixtureRevision 0) (fixtureOperationId "followup-next-start") message.assignmentId)
   nextRun <- maybe (fail "followup child absent") pure started.childWorkflowId
   next <- loadAssignment q root nextRun original.owner
@@ -151,7 +152,7 @@ followup q = do
   unless (after == before) (fail "followup changed the ready Unix profile")
   terminal q secondLast
   Just (running, _) <- right =<< run q.env (Sessions.inspectSession session)
-  void (right =<< run q.env (Sessions.recordResult access running.revision (fixtureRevision 0) (fixtureOperationId "followup-result") (AssignmentResult 1 message.assignmentId AssignmentFailed (Just second.snapshot.executionId) Aeson.Null [])))
+  void (right =<< run q.env (Sessions.recordResult access running.revision (fixtureRevision 0) (fixtureOperationId "followup-result") (AssignmentResult V1 message.assignmentId AssignmentFailed (Just second.snapshot.executionId) Aeson.Null [])))
   let maintenance = MaintenanceRuntime q.env binding.storageRoot q.authorizer q.lifecycle (pure ())
   retained <- cleanupWorkspace maintenance actor binding.workspace
   unless (retained == Left CleanupRefused) (fail "idle continuing session was cleaned")
@@ -179,12 +180,12 @@ openNativeSession q name = do
   actor <- VerifiedIdentity <$> right (mkAgentPrincipal "agent_01h000000000000000coordinator")
   let root = fixtureRootId ("continuing-" <> name <> "-root")
       owner = q.initial.binding.request.owner
-      admission = SessionAdmission 1 (SessionScope ("native-" <> name) "fixture") (ObjectiveRef "uninstalled-objective-provider" name) (original & #name .~ fixtureAgentName "coordinator" & #delegates .~ map fixtureAgentName ["fixture", "successor"]) (DelegateCtx (fixtureDelegationDepth 0) actor (Just parentMemory) Nothing (Just (WorkflowId ("continuing-parent-" <> name))) [fixtureAgentName "coordinator"] Nothing (Just root) Nothing defaultDelegationBudget) (fixtureAgentName "fixture") owner (fixtureLimit 10) (fixtureLimit 4)
+      admission = SessionAdmission V1 (SessionScope ("native-" <> name) "fixture") (ObjectiveRef "uninstalled-objective-provider" name) (original & #name .~ fixtureAgentName "coordinator" & #delegates .~ map fixtureAgentName ["fixture", "successor"]) (DelegateCtx (fixtureDelegationDepth 0) actor (Just parentMemory) Nothing (Just (WorkflowId ("continuing-parent-" <> name))) [fixtureAgentName "coordinator"] Nothing (Just root) Nothing defaultDelegationBudget) (fixtureAgentName "fixture") owner (fixtureLimit 10) (fixtureLimit 4)
   void (right =<< run q.env Catalog.registerProjectionCatalog)
   void (right =<< run q.env (Roots.enrollRoot root (Resources.Envelope (Map.fromList [(dimension, Resources.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now))))
   void (right =<< run q.env (Sessions.openSession admission))
   access <- right =<< run q.env (Sessions.authorizeSession (sessionIdFor admission) actor (q.lifecycle actor))
-  (_, message) <- right =<< run q.env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId (name <> "-message")) (Instruction 1 FollowUp (fixtureInstruction "native workspace fixture") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
+  (_, message) <- right =<< run q.env (Sessions.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId (name <> "-message")) (Instruction V1 FollowUp (fixtureInstruction "native workspace fixture") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
   (_, started) <- right =<< run q.env (Sessions.startAssignment access (fixtureRevision 1) (fixtureRevision 0) (fixtureOperationId (name <> "-start")) message.assignmentId)
   child <- maybe (fail "native child absent") pure started.childWorkflowId
   pure (sessionIdFor admission, actor, child, root)
