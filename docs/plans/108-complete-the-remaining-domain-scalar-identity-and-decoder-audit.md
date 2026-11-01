@@ -63,9 +63,9 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 
 Implementation is under way. The schema-2 census and coverage/freshness checker
 pass 24 positive/mutation tests against a successful full GHC 9.12.4 macOS build.
-The current census has 4,040 declaration/member keys. Semantic classification
-covers 778 keys: 710 compliant entries, 29 exclusions and 39 explicit violations;
-3,262 keys remain unreviewed, and both coverage modes correctly refuse completion.
+The current census has 4,045 declaration/member keys. Semantic classification
+covers 838 keys: 751 compliant entries, 35 exclusions and 52 explicit violations;
+3,207 keys remain unreviewed, and both coverage modes correctly refuse completion.
 
 Process-profile, Objective, cleanup/listing, directory, sink, HTTP acceptance and
 workspace binding/file/transfer read boundaries now have owning transactional
@@ -154,16 +154,26 @@ coordinates preserve the existing key recipes; the native SinkKind survives SQL
 and unsupported kind metadata refuses publication with owning rollback/recovery.
 Source tracing corrects the runId attribution to the producer's Kioku session
 reference; that independent primitive violation remains open. See
-`docs/evidence/plan-108/sink-locators-source.json`. Coherent census reconciliation
-follows this source checkpoint; the remaining receipt scalar roles stay open.
+`docs/evidence/plan-108/sink-locators-source.json`. The coherent full build and
+fresh census on `21379a2` reconcile its three findings and four new nominal keys.
+The remaining receipt scalar roles stay open.
 
 The workspace freeze source candidate retains explicit open/frozen admission
 states with the original boolean SQL/JSON codec. All 9 selected unit, 17 core
 PostgreSQL and 79 worker cases pass, including freeze rollback and accepted
 factual recovery. Three focused public compiler controls pass; the final suite
 contains the new Bool substitution/coercion controls. See
-`docs/evidence/plan-108/workspace-freeze-source.json`. Full build/census
-reconciliation follows; this does not add Linux qualification or a workflow step.
+`docs/evidence/plan-108/workspace-freeze-source.json`. The full build and fresh
+census on `21379a2` pass: 323 modules, 934 declarations and 4,045 keys. The
+freeze finding is resolved and its closed state classified. This does not add
+Linux qualification or a workflow step.
+
+Source/consumer review adds all 55 previously missing keys from Sink.Intent,
+Sink.Types and Sink.Permission: 32 compliant compositions/native handles/content
+adapters, 6 diagnostic exclusions and 17 explicit reference/ordinal findings.
+These are new reviewed findings, not regressions in the four remediated fields.
+Both classification modes correctly refuse the remaining 3,207 missing keys;
+coverage and remediation milestones remain open.
 
 The native workflow gate passes on `400cdc0` against `af76f1b`, with no findings
 and a replay-neutral native verdict. Exact reports accompany the current evidence.

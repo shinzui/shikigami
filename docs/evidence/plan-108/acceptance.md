@@ -935,8 +935,9 @@ SessionId there, independently of the workflow-owned outbox message id. This
 correction leaves the primitive reference violation explicit. Receipt detail,
 agent and ordinal findings remain open for their own producer/consumer review.
 All 123 public compiler controls pass: public factories compile before generic,
-coercion and cross-coordinate substitution refusals. Coherent build/census
-reconciliation follows; all plan milestones remain open.
+coercion and cross-coordinate substitution refusals. The coherent full build and fresh census on `21379a2`
+reconcile all three findings and the four private coordinate keys. All plan
+milestones remain open.
 
 ## Explicit workspace admission freeze
 
@@ -966,6 +967,35 @@ git diff --check
 
 Style and whitespace checks pass. ADR-63 records the admission/factual recovery
 separation. No core Agent/Flow workflow body, migration, dependency, identity
-formula or valid wire representation changes. Coherent full build, fresh census
-and classification reconciliation follow this source checkpoint; all milestones
-and the deferred guide disposition remain open.
+formula or valid wire representation changes. The coherent full build and fresh
+census on `21379a2` pass: 323 modules, 934 declarations and 4,045 keys. Freeze
+and the three receipt-coordinate/kind findings are resolved; all five new scalar
+keys are classified. All milestones and the guide disposition remain open.
+
+
+## Review of the remaining sink declaration surface
+
+Source/consumer review adds the 55 previously missing declaration/member keys in
+Sink.Intent, Sink.Types and Sink.Permission. The 32 compliant entries cover
+explicitly named composition, native time and process handles, header adapters
+and behavior-content transfer. They do not certify nested payloads or grant
+lifetime. Six exclusions identify diagnostic text after an outcome is chosen.
+Seventeen explicit violations cover agent/session references, ordinals,
+recipient/conversation/activity identities, sub-receipt function signatures and
+the downstream/enqueued reference payloads. These were previously unreviewed;
+recording them does not undo the four independently remediated fields.
+
+The Danwa source checkout now has nominal ids, whereas this repository's actual
+build pins `mori://shinzui/danwa` revision
+`301bc1b381fb1baa253b9ba5fce5735e6d0a8ca9`. Reading that exact revision's
+`danwa-api/src/Danwa/Conversation/Api.hs`,
+`danwa-api/src/Danwa/Message/Api.hs` and client captures establishes Text ids in
+the used API (symbol artifact URI pending). No dependency change or inferred
+current-checkout API is used. Existing transport text must remain externally
+owned at this boundary during the next representation-preserving batch.
+
+The source-bound classification totals 838 keys: 751 compliant, 35 excluded and
+52 explicit violations. Both normal and require-resolved modes correctly fail
+only at 3,207 missing keys after source/build/tool/entry validation. The frozen
+124-source/93-item inventory and 21 mutation controls pass; the unchanged-tool
+24-case result remains applicable. M1/M2/M3 and the guide deferral remain open.
