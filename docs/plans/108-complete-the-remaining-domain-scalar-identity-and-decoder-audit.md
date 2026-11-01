@@ -95,6 +95,15 @@ refresh pass on `92fdf2e`: 922 module declarations and 4,022 keys. The private
 SQL/terminal adapters have concrete typed conversions; the report
 retains exact raw JSON only after validation.
 
+The profile-policy batch introduces checked scoped ceilings, independent
+permissions and documentary policy coordinates while preserving valid JSON and
+commitment inputs. It passes 77 focused unit, 131 PostgreSQL and 92 compiler
+controls, including negative pinned-policy rollback/recovery and an actual retry
+at the maximum Int ceiling. Negative previously unchecked limits now refuse;
+invalid historical snapshots are not rewritten or claimed replay-compatible.
+See `profile-policy-source.json`; coherent census reconciliation follows this
+source checkpoint. Profile/payload commitments and schema remain open findings.
+
 The native workflow gate passes on `400cdc0` against `af76f1b`, with no findings
 and a replay-neutral native verdict. Exact reports accompany the current evidence.
 The full build, fresh census and focused checks are checkpoints, not milestone

@@ -28,6 +28,7 @@ import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, wit
 import Shikigami.Attestation.Compliance (ComplianceRollUp (..), evaluateCallFacts)
 import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Evidence (CallRelationship (RootCall), ExpectedCall (..))
+import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile qualified as P
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
@@ -93,7 +94,7 @@ profile limits = ResolvedProfile content (P.SanctionedExecutionProfileRef (P.Pro
           validFrom = epoch,
           validUntil = Nothing,
           allowedCalls = P.AllowedCall (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "in-process") (Coordinate.providerCoordinate "model-a") P.ThinkingHigh :| [],
-          prohibitions = (P.defaultProhibitions & #defaultedThinkingAllowed .~ (True)),
+          prohibitions = (P.defaultProhibitions & #defaultedThinkingAllowed .~ (PV.Permitted)),
           limits,
           minimumEvidenceStrength = P.EvidenceRequestedOnly,
           requiredCorrelationFields = [],
@@ -228,7 +229,7 @@ tests fixture =
           hooks.beginCall context >>= (\result -> either (Right . failureCode) (const (Left ())) result @?= Right UnsupportedVersion),
       testCase "run-wide call ceilings survive store reconstruction" $
         withShikigamiFreshDatabase fixture \connection -> do
-          let policy = profile ((P.unlimitedProfileLimits & #maxCalls .~ (Just 1)))
+          let policy = profile ((P.unlimitedProfileLimits & #maxCalls .~ (Just (either (error . show) id (PV.mkCeiling 1)))))
               pinned = (prepared & #policy .~ (Just policy.ref)) :: PreparedDecision
               pinnedContext = DecisionCallContext pinned model
           withPool connection \pool -> do
@@ -239,7 +240,7 @@ tests fixture =
             hooks.beginCall pinnedContext >>= (assertBool "old expectation still consumes call capacity" . isLeft),
       testCase "concurrent admissions serialize against the same run ceiling" $
         withShikigamiFreshDatabase fixture \connection -> withPool connection \pool -> do
-          let policy = profile ((P.unlimitedProfileLimits & #maxCalls .~ (Just 1)))
+          let policy = profile ((P.unlimitedProfileLimits & #maxCalls .~ (Just (either (error . show) id (PV.mkCeiling 1)))))
               pinned = (prepared & #policy .~ (Just policy.ref)) :: PreparedDecision
               hooks = decisionCallHooks (postgresDecisionEvidenceStore pool) (Just policy)
           a <- newEmptyMVar
@@ -252,7 +253,7 @@ tests fixture =
           map (\call -> decisionCallOrdinalNumber call.ordinal) report.calls @?= [1],
       testCase "unknown cost cannot become zero after a restart and live/resumed assessments agree" $
         withShikigamiFreshDatabase fixture \connection -> do
-          let policy = profile ((P.unlimitedProfileLimits & #maxCostMicroUsd .~ (Just 1000)))
+          let policy = profile ((P.unlimitedProfileLimits & #maxCostMicroUsd .~ (Just (either (error . show) id (PV.mkCeiling 1000)))))
               pinned = (prepared & #policy .~ (Just policy.ref)) :: PreparedDecision
               pinnedContext = DecisionCallContext pinned model
           withPool connection \pool -> do
@@ -305,7 +306,10 @@ metadataCases =
     profileCases =
       [ ("missing pinned profile cannot become an unconstrained run", "'null'::jsonb"),
         ("profile content cannot change behind its commitment", "jsonb_set(profile,'{profile,version}','\"changed\"')"),
-        ("profile reference must name the same content", "jsonb_set(profile,'{ref,profileId}','\"different\"')")
+        ("profile reference must name the same content", "jsonb_set(profile,'{ref,profileId}','\"different\"')"),
+        ("negative pinned policy ceiling refuses", "jsonb_set(profile,'{profile,limits,maxCalls}','-1')"),
+        ("negative retained duration refuses", "jsonb_set(profile,'{profile,limits,maxDurationSeconds}','-1')"),
+        ("negative retained retention refuses", "jsonb_set(profile,'{profile,signerRequirements,retentionDays}','-1')")
       ]
 
 metadataRefusal :: DatabaseFixture -> Maybe ResolvedProfile -> Text -> IO ()

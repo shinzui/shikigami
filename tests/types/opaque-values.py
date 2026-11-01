@@ -30,6 +30,7 @@ import Shikigami.Router.SelectionLimit qualified as Limit
 import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Agent.Principal qualified as Principal
 import Shikigami.App.Config qualified as Config
+import Shikigami.Attestation.PolicyValue qualified as Policy
 import Shikigami.Attestation.Reviewed qualified as Reviewed
 import Shikigami.Capability.Overlay qualified as Overlay
 import Shikigami.AgentRun.Ledger qualified as Ledger
@@ -60,7 +61,13 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''preparation :: Text -> Either Text Decision.DecisionPreparationId
+POSITIVE = '''policyCeiling :: Int -> Either Text (Policy.Ceiling "calls" Int)
+policyCeiling = Policy.mkCeiling
+policyPermission :: Policy.Permission "aliasesAllowed"
+policyPermission = Policy.Permitted
+policyCoordinate :: Text -> Policy.PolicyCoordinate "signing-key-id"
+policyCoordinate = Policy.policyCoordinate
+preparation :: Text -> Either Text Decision.DecisionPreparationId
 preparation = Decision.parseDecisionPreparationId
 slotLabel :: Text -> Either Text Decision.DecisionSlotLabel
 slotLabel = Decision.parseDecisionSlotLabel
@@ -186,6 +193,9 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('Policy.Ceiling "calls" Int', 'generic'),
+    ('Policy.Permission "aliasesAllowed"', 'generic'),
+    ('Policy.PolicyCoordinate "signing-key-id"', 'generic'),
     ('Decision.DecisionPreparationId', 'generic'),
     ('Decision.DecisionSlotLabel', 'generic'),
     ('Decision.DecisionGeneration', 'generic'),
@@ -257,6 +267,9 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
     result = compile(POSITIVE)
     assert result.returncode == 0, (result.stdout, result.stderr)
     print('opaque boundary: public factories/adapters: passed', flush=True)
+    result = compile('bypass :: Int -> Policy.Ceiling "calls" Int\nbypass = Policy.Ceiling\n')
+    assert result.returncode != 0 and 'Ceiling' in result.stderr and any(fragment in result.stderr.lower() for fragment in ['not in scope', 'does not export', 'illegal term-level use']), result.stderr
+    print('opaque boundary: policy ceiling constructor refused: passed', flush=True)
     for source_kind, body in [
         ('Text', 'bypass :: Text -> Ledger.RunDisposition\nbypass = id\n'),
         ('Text coercion', 'bypass :: Text -> Ledger.RunDisposition\nbypass = coerce\n'),
@@ -265,6 +278,12 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         assert result.returncode != 0 and 'RunDisposition' in result.stderr, (source_kind, result.stderr)
         print('opaque boundary: run disposition ' + source_kind + ' substitution refused: passed', flush=True)
     for label, signature, expression in [
+        ('ceiling raw coercion', 'Int -> Policy.Ceiling "calls" Int', 'coerce'),
+        ('ceiling unit substitution', 'Policy.Ceiling "calls" Int -> Policy.Ceiling "tokens" Int', 'id'),
+        ('ceiling unit coercion', 'Policy.Ceiling "calls" Int -> Policy.Ceiling "tokens" Int', 'coerce'),
+        ('permission axis substitution', 'Policy.Permission "aliasesAllowed" -> Policy.Permission "providerFallbackAllowed"', 'id'),
+        ('permission axis coercion', 'Policy.Permission "aliasesAllowed" -> Policy.Permission "providerFallbackAllowed"', 'coerce'),
+        ('coordinate scope coercion', 'Policy.PolicyCoordinate "signing-key-id" -> Policy.PolicyCoordinate "signature-algorithm"', 'coerce'),
         ('preparation Text', 'Text -> Decision.DecisionPreparationId', 'id'),
         ('preparation coercion', 'Text -> Decision.DecisionPreparationId', 'coerce'),
         ('slot Text', 'Text -> Decision.DecisionSlotLabel', 'id'),

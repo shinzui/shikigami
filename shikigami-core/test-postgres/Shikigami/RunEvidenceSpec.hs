@@ -35,6 +35,7 @@ import Shikigami.Attestation.Compliance
 import Shikigami.Attestation.Compliance qualified as Compliance
 import Shikigami.Attestation.Evidence
 import Shikigami.Attestation.EvidenceStore
+import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile
 import Shikigami.Attestation.Reviewed
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
@@ -201,10 +202,10 @@ tests databaseFixture =
             assertRollUp False [ThinkingTranslationNotPermitted parentCall0Text "high" "adaptive"] baselineProfile evidence,
           testCase "defaulted thinking mutation" do
             evidence <- runningWith [compliantCall]
-            assertRollUp False [ProhibitedDefaultThinking parentCall0Text] (profileWithProhibitions (permissiveProhibitions & #defaultedThinkingAllowed .~ False)) evidence,
+            assertRollUp False [ProhibitedDefaultThinking parentCall0Text] (profileWithProhibitions (permissiveProhibitions & #defaultedThinkingAllowed .~ PV.Prohibited)) evidence,
           testCase "alias mutation" do
             evidence <- runningWith [compliantCall & #requestedAlias .~ Just "friendly-model"]
-            assertRollUp False [ProhibitedAlias parentCall0Text "friendly-model" "model-a"] (profileWithProhibitions (permissiveProhibitions & #aliasesAllowed .~ False)) evidence,
+            assertRollUp False [ProhibitedAlias parentCall0Text "friendly-model" "model-a"] (profileWithProhibitions (permissiveProhibitions & #aliasesAllowed .~ PV.Prohibited)) evidence,
           testCase "provider fallback mutation" do
             evidence <- runningWith [compliantCall, providerFallbackCall]
             assertRollUp
@@ -212,7 +213,7 @@ tests databaseFixture =
               [ProhibitedProviderFallback parentCall1Text "fixture" "other-provider"]
               ( profileWith
                   (allowedCall "fixture" "https" "model-a" :| [allowedCall "other-provider" "https" "model-a"])
-                  (permissiveProhibitions & #providerFallbackAllowed .~ False)
+                  (permissiveProhibitions & #providerFallbackAllowed .~ PV.Prohibited)
                   Baikai.EvidenceRequestedOnly
                   []
                   unlimitedProfileLimits
@@ -225,7 +226,7 @@ tests databaseFixture =
               [ProhibitedModelFallback parentCall1Text "model-a" "model-b"]
               ( profileWith
                   (allowedCall "fixture" "https" "model-a" :| [allowedCall "fixture" "https" "model-b"])
-                  (permissiveProhibitions & #modelFallbackAllowed .~ False)
+                  (permissiveProhibitions & #modelFallbackAllowed .~ PV.Prohibited)
                   Baikai.EvidenceRequestedOnly
                   []
                   unlimitedProfileLimits
@@ -236,7 +237,7 @@ tests databaseFixture =
             assertRollUp
               False
               [ProhibitedEffortClamping parentCall0Text "medium" "low"]
-              (profileWithProhibitions (permissiveProhibitions & #effortClampingAllowed .~ False))
+              (profileWithProhibitions (permissiveProhibitions & #effortClampingAllowed .~ PV.Prohibited))
               evidence,
           testCase "transport mutation" do
             evidence <- runningWith [withEndpoint cliEndpoint compliantCall]
@@ -245,7 +246,7 @@ tests databaseFixture =
               [ProhibitedTransport parentCall0Text "subprocess"]
               ( profileWith
                   (allowedCall "fixture" "cli" "model-a" :| [])
-                  (permissiveProhibitions & #cliTransportsAllowed .~ False)
+                  (permissiveProhibitions & #cliTransportsAllowed .~ PV.Prohibited)
                   Baikai.EvidenceRequestedOnly
                   []
                   unlimitedProfileLimits
@@ -305,7 +306,7 @@ tests databaseFixture =
             assertRollUp
               False
               [LimitExceeded "maxCalls" "0" "1"]
-              (profileWithLimits (unlimitedProfileLimits & #maxCalls .~ Just 0))
+              (profileWithLimits (unlimitedProfileLimits & #maxCalls .~ Just (either (error . show) id (PV.mkCeiling 0))))
               evidence,
           testCase "deterministic step is not-applicable, not a fabricated call" do
             running <- runningEvidence
@@ -903,7 +904,7 @@ profileWithProhibitions :: Prohibitions -> SanctionedExecutionProfile
 profileWithProhibitions restrictions = baselineProfile & #prohibitions .~ restrictions
 
 profileWithRequiredCorrelation :: [Text] -> SanctionedExecutionProfile
-profileWithRequiredCorrelation fields = baselineProfile & #requiredCorrelationFields .~ fields
+profileWithRequiredCorrelation fields = baselineProfile & #requiredCorrelationFields .~ map PV.policyCoordinate fields
 
 profileWithMinimumStrength :: Baikai.EvidenceStrength -> SanctionedExecutionProfile
 profileWithMinimumStrength strength = baselineProfile & #minimumEvidenceStrength .~ strength
@@ -930,7 +931,7 @@ profileWith allowedCalls prohibitions minimumEvidenceStrength requiredCorrelatio
       prohibitions,
       limits,
       minimumEvidenceStrength,
-      requiredCorrelationFields,
+      requiredCorrelationFields = map PV.policyCoordinate requiredCorrelationFields,
       signerRequirements = noSignerRequirements
     }
 
@@ -947,12 +948,12 @@ allowedCall provider endpointClass modelId =
 permissiveProhibitions :: Prohibitions
 permissiveProhibitions =
   Prohibitions
-    { aliasesAllowed = True,
-      defaultedThinkingAllowed = True,
-      providerFallbackAllowed = True,
-      modelFallbackAllowed = True,
-      effortClampingAllowed = True,
-      cliTransportsAllowed = True
+    { aliasesAllowed = PV.Permitted,
+      defaultedThinkingAllowed = PV.Permitted,
+      providerFallbackAllowed = PV.Permitted,
+      modelFallbackAllowed = PV.Permitted,
+      effortClampingAllowed = PV.Permitted,
+      cliTransportsAllowed = PV.Permitted
     }
 
 assertLiteralEvidence :: String -> ByteString -> RecordedCallEvidence -> IO ()

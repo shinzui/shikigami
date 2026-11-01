@@ -17,6 +17,7 @@ import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Attestation.Envelope (profileDigest)
+import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile
 import Shikigami.Attestation.Resolve
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
@@ -116,7 +117,7 @@ sampleProfile lifecycle validUntil version =
       prohibitions = defaultProhibitions,
       limits = unlimitedProfileLimits,
       minimumEvidenceStrength = EvidenceModelObserved,
-      requiredCorrelationFields = ["request-id"],
+      requiredCorrelationFields = [PV.policyCoordinate "request-id"],
       signerRequirements = noSignerRequirements
     }
 

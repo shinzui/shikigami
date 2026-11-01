@@ -22,6 +22,7 @@ import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.App.Config (AppConfig (..), Role (RunBehaviorRole), environmentBindings)
 import Shikigami.App.Config.Load (ConfigOptions (..), ConfigRun (..), appConfigRun)
 import Shikigami.Attestation.Envelope (profileDigest)
+import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Provider.Call (providerCallFor)
@@ -130,7 +131,7 @@ profile exact = ResolvedProfile content (Profile.SanctionedExecutionProfileRef (
           validFrom = UTCTime (fromGregorian 2026 1 1) 0,
           validUntil = Nothing,
           allowedCalls = Profile.AllowedCall (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "in-process") (Coordinate.providerCoordinate exact) Profile.ThinkingHigh :| [],
-          prohibitions = (Profile.defaultProhibitions & #defaultedThinkingAllowed .~ (True)),
+          prohibitions = (Profile.defaultProhibitions & #defaultedThinkingAllowed .~ (PV.Permitted)),
           limits = Profile.unlimitedProfileLimits,
           minimumEvidenceStrength = Profile.EvidenceModelObserved,
           requiredCorrelationFields = [],

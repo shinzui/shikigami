@@ -21,6 +21,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict qualified as Map
 import Data.Maybe (catMaybes)
 import Data.Text qualified as Text
+import Shikigami.Attestation.PolicyValue
 import Shikigami.Attestation.Profile (SanctionedExecutionProfileRef)
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
@@ -154,7 +155,7 @@ validPermission permission = permission.defaultAlias `elem` permission.permitted
 effectiveBindingOptions :: Maybe ResolvedProfile -> ModelBinding -> Options
 effectiveBindingOptions profile binding =
   let base = bindingOptions binding
-      caps = catMaybes [Options.maxTokens base, fromIntegral . max 0 <$> (profile >>= (\p -> p.profile.limits.maxTokens))]
+      caps = catMaybes [Options.maxTokens base, fromIntegral . ceilingValue <$> (profile >>= (\p -> p.profile.limits.maxTokens))]
    in (base & #maxTokens .~ (case caps of [] -> Nothing; xs -> Just (minimum xs)))
 
 -- These settings are explicitly secret in the operator configuration. A

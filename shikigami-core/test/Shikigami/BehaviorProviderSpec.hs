@@ -86,6 +86,7 @@ import Shikigami.App.Config
   )
 import Shikigami.App.Config.Load (ConfigOptions (..), ConfigRun (..), appConfigRun)
 import Shikigami.Attestation.Envelope (profileDigest)
+import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Compatibility
@@ -235,7 +236,7 @@ profileConstraintTests =
                   call@(ProviderCall vendor api endpoint model _) = providerCall actual
                   allowed = Profile.AllowedCall vendor api endpoint model Profile.ThinkingHigh
                   profileFor permitsCli value =
-                    let template = stubProfile (Coordinate.providerCoordinateText model) ((Profile.defaultProhibitions & #cliTransportsAllowed .~ (permitsCli)))
+                    let template = stubProfile (Coordinate.providerCoordinateText model) ((Profile.defaultProhibitions & #cliTransportsAllowed .~ (PV.permissionFromBool permitsCli)))
                         content = (template.profile & #allowedCalls .~ (NonEmpty.singleton value))
                      in (template & #profile .~ (content) & #ref .~ ((template.ref & #digest .~ (profileDigest content))))
               Coordinate.providerCoordinateText api @?= expectedApi
@@ -348,12 +349,12 @@ stubProfile allowedModel prohibitions =
 defaultThinkingProhibitions :: Profile.Prohibitions
 defaultThinkingProhibitions =
   Profile.Prohibitions
-    { Profile.aliasesAllowed = False,
-      Profile.defaultedThinkingAllowed = True,
-      Profile.providerFallbackAllowed = False,
-      Profile.modelFallbackAllowed = False,
-      Profile.effortClampingAllowed = False,
-      Profile.cliTransportsAllowed = False
+    { Profile.aliasesAllowed = PV.Prohibited,
+      Profile.defaultedThinkingAllowed = PV.Permitted,
+      Profile.providerFallbackAllowed = PV.Prohibited,
+      Profile.modelFallbackAllowed = PV.Prohibited,
+      Profile.effortClampingAllowed = PV.Prohibited,
+      Profile.cliTransportsAllowed = PV.Prohibited
     }
 
 stubProfileId :: Profile.ProfileId

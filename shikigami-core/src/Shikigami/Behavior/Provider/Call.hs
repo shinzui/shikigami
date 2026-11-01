@@ -21,6 +21,7 @@ import Data.Aeson (FromJSON, ToJSON)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import GHC.Generics (Generic)
+import Shikigami.Attestation.PolicyValue
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Provider.Coordinate
@@ -52,10 +53,10 @@ validateProfileCall :: ResolvedProfile -> ProviderCall -> Either ProfileViolatio
 validateProfileCall ResolvedProfile {profile, ref} call =
   let restrictions = profile.prohibitions
       permitted = any (matchesCall restrictions call) profile.allowedCalls
-   in if call.endpointClass == providerCoordinate "cli" && not restrictions.cliTransportsAllowed
+   in if call.endpointClass == providerCoordinate "cli" && not (permissionAllowed restrictions.cliTransportsAllowed)
         then Left (CliTransportForbidden call ref)
         else case call.thinking of
-          Nothing | not restrictions.defaultedThinkingAllowed -> Left (DefaultedThinkingForbidden call ref)
+          Nothing | not (permissionAllowed restrictions.defaultedThinkingAllowed) -> Left (DefaultedThinkingForbidden call ref)
           _
             | permitted -> Right ()
             | otherwise -> Left (ForbiddenCall call ref)
@@ -107,7 +108,7 @@ matchesCall restrictions call allowed =
     && (.modelId) call == (.modelId) allowed
     && case (.thinking) call of
       Just requested -> requested == (.thinking) allowed
-      Nothing -> (.defaultedThinkingAllowed) restrictions
+      Nothing -> permissionAllowed ((.defaultedThinkingAllowed) restrictions)
 
 renderProviderCall :: ProviderCall -> Text
 renderProviderCall call =

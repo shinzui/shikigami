@@ -31,13 +31,14 @@ import Data.Aeson (ToJSON, toJSON)
 import Data.Generics.Labels ()
 import Data.IORef (atomicModifyIORef', newIORef)
 import Data.Map.Strict qualified as Map
-import Data.Maybe (catMaybes, fromMaybe, isJust)
+import Data.Maybe (catMaybes, isJust)
 import Data.Text (Text)
 import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
 import Handan.Runtime (Runtime (..), runProgramWith)
 import Numeric.Natural (Natural)
 import Shikigami.Attestation.Evidence (configureEvidenceCall)
+import Shikigami.Attestation.PolicyValue
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Compatibility (validateResponseRequest)
@@ -103,7 +104,7 @@ runDecisionProgram env prepared ref input =
             effective <- finalOptions env binding model context nodeOptions
             unless (null (evidenceRefusals handler model effective)) (abort ForbiddenModel "provider cannot uphold required decision evidence")
             ordinal <- atomicModifyIORef' count (\n -> (n + 1, n + 1))
-            let localLimit = maybe env.callLimit (min env.callLimit . fromIntegral . max 0) (env.profile >>= (\p -> p.profile.limits.maxCalls))
+            let localLimit = maybe env.callLimit (min env.callLimit . fromIntegral . ceilingValue) (env.profile >>= (\p -> p.profile.limits.maxCalls))
             when (ordinal > localLimit) (abort CallLimitExceeded "decision provider call limit exceeded")
             token <- callback (env.hooks.beginCall (DecisionCallContext prepared prepared.model))
             let correlation = callCorrelationId prepared.runId (decisionCallIdText (attemptId token)) 0
@@ -162,7 +163,7 @@ runDecisionProgram env prepared ref input =
       privateRegistry <- newProviderRegistryFrom [wrapper]
       let config = env.runtime.runtimeConfig
           retry = config.retryPolicy
-          maxAttempts = maybe retry.maxAttempts (min retry.maxAttempts . (+ 1) . fromMaybe (retry.maxAttempts - 1) . (\p -> p.profile.limits.maxRetries)) env.profile
+          maxAttempts = maybe retry.maxAttempts (maybe retry.maxAttempts (fromInteger . min (toInteger retry.maxAttempts) . (+ 1) . toInteger . ceilingValue) . (\p -> p.profile.limits.maxRetries)) env.profile
           invocation =
             env.runtime
               { runtimeDefaultModel = selected,
@@ -210,7 +211,7 @@ finalOptions env binding actual context node = do
       limits = (\p -> p.profile.limits) <$> env.profile
       floorStrength = maybe Evidence.EvidenceRequestedOnly (\p -> p.profile.minimumEvidenceStrength) env.profile
       minCap values = case catMaybes values of [] -> Nothing; xs -> Just (minimum xs)
-      profileTokens = (>>= (fmap fromIntegral . (\l -> l.maxTokens))) limits
+      profileTokens = (>>= (fmap (fromIntegral . ceilingValue) . (\l -> l.maxTokens))) limits
       effective =
         ( node
             & #apiKey .~ (ApiKeyLiteral . revealCredential <$> bindingCredential binding)

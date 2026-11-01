@@ -34,6 +34,7 @@ import GHC.Generics (Generic)
 import Handan.Runtime (Runtime (..))
 import Keiro.Workflow.Types (WorkflowId (..))
 import Shikigami.Attestation.Envelope (profileDigest)
+import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Error (TransientBehaviorFailure)
@@ -182,6 +183,30 @@ tests =
         runDecisionProgram env (preparedFor twoNodes bindingB) (programRef twoNodes) input >>= (@?= Right input)
         observed >>= (\requests -> length requests @?= 3)
         inspect >>= (\calls -> Map.size calls @?= 3),
+      testCase "a maximum Int retry ceiling preserves the native retry budget" do
+        (hooks, inspect) <- newMemoryCallHooks
+        (handler, observed) <-
+          fixture
+            0
+            ( \n model options ->
+                if n == 1
+                  then do
+                    now <- getCurrentTime
+                    pure (errorResponse model now 0 (Error.httpError 503 Nothing "retry edge"))
+                  else success model options input
+            )
+        env <- environment twoNodes handler hooks
+        let content =
+              forbiddenProfile.profile
+                & #allowedCalls
+                .~ (Profile.AllowedCall (Coordinate.providerCoordinate "anthropic") (Coordinate.providerCoordinate "messages") (Coordinate.providerCoordinate "https") (Coordinate.providerCoordinate (Model.modelId (bindingModel bindingB))) Profile.ThinkingHigh :| [])
+                & #limits
+                .~ (Profile.unlimitedProfileLimits & #maxRetries .~ Just (mustRight (PV.mkCeiling (maxBound :: Int))))
+            policy = ResolvedProfile content (Profile.SanctionedExecutionProfileRef content.profileId content.version (profileDigest content))
+            prepared = (preparedFor twoNodes bindingB) {policy = Just policy.ref} :: PreparedDecision
+        runDecisionProgram (env & #profile .~ Just policy) prepared (programRef twoNodes) input >>= (@?= Right input)
+        observed >>= (\requests -> length requests @?= 3)
+        inspect >>= (\calls -> Map.size calls @?= 3),
       testCase "pinned state and input mismatches dispatch nothing" do
         (hooks, _) <- newMemoryCallHooks
         (handler, observed) <- fixture 0 (\_ model options -> success model options input)
@@ -327,7 +352,7 @@ forbiddenProfile = ResolvedProfile content (Profile.SanctionedExecutionProfileRe
           validFrom = UTCTime (fromGregorian 2026 1 1) 0,
           validUntil = Nothing,
           allowedCalls = Profile.AllowedCall (Coordinate.providerCoordinate "anthropic") (Coordinate.providerCoordinate "messages") (Coordinate.providerCoordinate "https") (Coordinate.providerCoordinate "forbidden-selected-model") Profile.ThinkingHigh :| [],
-          prohibitions = (Profile.defaultProhibitions & #defaultedThinkingAllowed .~ (True)),
+          prohibitions = (Profile.defaultProhibitions & #defaultedThinkingAllowed .~ (PV.Permitted)),
           limits = Profile.unlimitedProfileLimits,
           minimumEvidenceStrength = Profile.EvidenceRequestedOnly,
           requiredCorrelationFields = [],

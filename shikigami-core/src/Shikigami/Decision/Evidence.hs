@@ -39,6 +39,7 @@ import Shikigami.Attestation.CallFacts
 import Shikigami.Attestation.Compliance (ComplianceRollUp, evaluateCallFacts)
 import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.Evidence (CallRelationship (RootCall), ExpectedCall (..))
+import Shikigami.Attestation.PolicyValue
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Provider.Coordinate (providerCoordinateText)
@@ -259,11 +260,11 @@ admit now started profile calls
             unknownCost = unresolved || length facts /= length calls || any (\fact -> fact.costUncertain || isNothing fact.costMicroUsd) facts
             tokens = sum [n | fact <- facts, Just n <- [fact.tokens]]
             cost = sum [n | fact <- facts, Just n <- [fact.costMicroUsd]]
-        check (maybe False (length calls >=) limits.maxCalls) "decision run call budget exhausted"
-        check (maybe False (\seconds -> diffUTCTime now started >= fromIntegral seconds) limits.maxDurationSeconds) "decision run duration exhausted"
-        check (isJust limits.maxTokens && (unknownTokens || maybe False (tokens >=) (fromIntegral <$> limits.maxTokens))) "decision token accounting is exhausted or uncertain"
-        check (isJust limits.maxCostMicroUsd && (unknownCost || maybe False (cost >=) (fromInteger <$> limits.maxCostMicroUsd))) "decision cost accounting is exhausted or uncertain"
-        check (maybe False (\maximum -> length [() | call <- calls, isNothing call.terminal] >= maximum) limits.maxConcurrency) "decision run concurrency limit reached"
+        check (maybe False (length calls >=) (ceilingValue <$> limits.maxCalls)) "decision run call budget exhausted"
+        check (maybe False (\seconds -> diffUTCTime now started >= fromIntegral seconds) (ceilingValue <$> limits.maxDurationSeconds)) "decision run duration exhausted"
+        check (isJust limits.maxTokens && (unknownTokens || maybe False (tokens >=) (fromIntegral . ceilingValue <$> limits.maxTokens))) "decision token accounting is exhausted or uncertain"
+        check (isJust limits.maxCostMicroUsd && (unknownCost || maybe False (cost >=) (fromInteger . ceilingValue <$> limits.maxCostMicroUsd))) "decision cost accounting is exhausted or uncertain"
+        check (maybe False (\maximum -> length [() | call <- calls, isNothing call.terminal] >= maximum) (ceilingValue <$> limits.maxConcurrency)) "decision run concurrency limit reached"
   where
     check True detail = refuse CallLimitExceeded detail
     check False _ = Right ()

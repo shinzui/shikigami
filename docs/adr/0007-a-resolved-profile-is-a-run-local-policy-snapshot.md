@@ -73,6 +73,24 @@ Concretely:
   profiled declaration before it constructs a provider environment.
 
 
+Policy limits retain their units in `Ceiling scope amount`, whose private,
+non-Generic constructor and JSON decoder admit only nonnegative values. Each
+permission axis uses `Permission scope`, with `Permitted` and `Prohibited` encoded
+as the original booleans. Calls, retries, child runs, tokens, micro-dollar costs,
+seconds, concurrency and retention days cannot substitute for one another. The
+six Int ceilings and retention keep the host Int range; costs keep Integer's
+unbounded range. Nothing still means unlimited and zero still forbids consumption.
+The decision runner adds the initial attempt in Integer before capping to the
+native retry budget, avoiding overflow for a maximum Int retry ceiling.
+
+Signing key names, signature algorithm names and required provider correlation
+field names retain their separate nominal scopes and exact authored Text bytes.
+These documentary coordinates select no signing implementation and confer no
+trust. The shared signing contract remains proposed in
+`mori://shinzui/kikan/okf/improvement-requests/concepts/IR-6`; no new regular
+expression or algorithm allow-list is inferred from that proposal.
+
+
 ## Alternatives rejected
 
 **Journal only the profile reference and re-read content when dispatching.**
@@ -128,6 +146,15 @@ renamed or removed independently of its runtime branch.
 Plans that record call evidence or judge compliance consume this same pinned
 snapshot. They must not independently resolve the profile and create a second
 answer to which policy governed the run.
+
+
+All nonnegative profile JSON, numeric/boolean encodings and canonical commitment
+inputs remain unchanged. Negative ceilings previously admitted by generic JSON
+are now rejected, including inside pinned snapshots. This is a deliberately
+narrower invalid-metadata domain: it does not rewrite historical policy, replace a
+pinned reference, or claim an existing journal with invalid limits can resume.
+Owning transaction corruption tests preserve the original row and require exact
+repair before recovery. No first-release exception is used for this change.
 
 
 ## References

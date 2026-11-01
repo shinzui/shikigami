@@ -565,3 +565,48 @@ correction based only on representation or missing platform tests.
 The complete classifier still refuses missing coverage in both modes. These
 focused results qualify the named macOS read boundaries and do not close M1,
 M2, M3, the remaining policy scalars or native Linux/cross-build qualification.
+
+
+## Scoped profile quantities and permissions
+
+The source candidate is bound by `profile-policy-source.json`, relative to parent
+`84c3f2b`, on arm64 macOS with GHC 9.12.4. Profile resource limits now retain
+independent units in private checked `Ceiling scope amount` values. Each policy
+permission retains its own scope and encodes as the existing boolean. Key names,
+algorithm names and provider correlation-field keys retain their exact Text bytes
+behind separate nominal scopes; signing remains unimplemented.
+
+Negative ceilings, including retention days, now refuse when a complete profile
+is decoded. Six resource quantities and retention retain their Int ranges; cost
+remains unbounded Integer. Zero and absent limits stay distinct. This deliberately
+narrows previously unchecked invalid metadata; no journal, profile commitment or
+pinned content is rewritten, and invalid historical policy is not claimed to
+resume. The runtime retry seam adds one in Integer before applying the native
+cap, fixing the maximum-Int overflow that previously disabled retries.
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-test -j1 --test-show-details=direct --test-option=-p --test-option='/attestation contracts/||/governed decision runner/||/ExecutionSelection/||/a pinned profile/'
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/profile resolution/||/durable decision evidence/||/run evidence/||/durable typed decisions/||/ExecutionSelectionWorkflow/||/profile/'
+nix develop --no-write-lock-file -c python3 tests/types/opaque-values.py
+python3 tools/style/check_haskell.py
+git diff --check
+```
+
+All 77 selected unit cases, 131 selected PostgreSQL cases and 92 public compiler
+controls pass. The unit cases include valid complete profiles before each
+single-field negative mutation, host-Int overflow refusal, unbounded cost,
+zero/unlimited distinction, opaque-name preservation, the unchanged pinned
+profile/payload bytes and the maximum-Int actual provider retry. The PostgreSQL
+cases include negative pinned call/duration/retention values through the existing
+multi-call corruption fixture: public owner reads refuse, ignored refusals roll
+back earlier/later writes, tentative invocation insertion rolls back, and exact
+repair recovers original identities and report bytes. Existing decision workflows,
+profile resolution, execution selection and compliance cases remain passing.
+Compiler controls start from compiling public factories and reject constructor,
+raw/scoped coercion, unit/permission substitution and Generic bypasses.
+
+No workflow source, label, identity formula, migration, dependency or valid HTTP
+representation changes in this batch. The existing native gate reports remain
+historical applicable evidence. The next coherent full build/census refresh must
+reconcile source-bound classification before using these results as audit
+coverage. M1/M2/M3 remain open.

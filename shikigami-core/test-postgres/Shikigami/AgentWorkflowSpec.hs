@@ -79,6 +79,7 @@ import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunFailure (..), AgentR
 import Shikigami.AgentRun.Status qualified as RunStatus
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Attestation.Envelope (profileDigest)
+import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile
   ( AllowedCall (..),
     EvidenceStrength (EvidenceModelObserved),
@@ -3047,19 +3048,19 @@ workflowProfileWith prohibitions version =
       prohibitions,
       limits = unlimitedProfileLimits,
       minimumEvidenceStrength = EvidenceModelObserved,
-      requiredCorrelationFields = ["request-id"],
+      requiredCorrelationFields = [PV.policyCoordinate "request-id"],
       signerRequirements = noSignerRequirements
     }
 
 defaultThinkingProhibitions :: Prohibitions
 defaultThinkingProhibitions =
   Prohibitions
-    { aliasesAllowed = False,
-      defaultedThinkingAllowed = True,
-      providerFallbackAllowed = False,
-      modelFallbackAllowed = False,
-      effortClampingAllowed = False,
-      cliTransportsAllowed = False
+    { aliasesAllowed = PV.Prohibited,
+      defaultedThinkingAllowed = PV.Permitted,
+      providerFallbackAllowed = PV.Prohibited,
+      modelFallbackAllowed = PV.Prohibited,
+      effortClampingAllowed = PV.Prohibited,
+      cliTransportsAllowed = PV.Prohibited
     }
 
 resolvedWorkflowProfile :: SanctionedExecutionProfile -> ProfileDigest -> ResolvedProfile

@@ -19,6 +19,7 @@ import Data.List (find)
 import Data.Text qualified as Text
 import Shikigami.Attestation.CallFacts
 import Shikigami.Attestation.Evidence
+import Shikigami.Attestation.PolicyValue
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Reviewed
   ( DiffDigest (..),
@@ -152,12 +153,12 @@ callReasons
         aliasReasons =
           [ ProhibitedAlias renderedCallId alias resolvedModelId
           | Just alias <- [requestedAlias],
-            not ((.aliasesAllowed) prohibitions)
+            not (permissionAllowed ((.aliasesAllowed) prohibitions))
           ]
         transportReasons =
           [ ProhibitedTransport renderedCallId (renderTransport transport)
           | transport == Baikai.TransportSubprocess,
-            not ((.cliTransportsAllowed) prohibitions)
+            not (permissionAllowed ((.cliTransportsAllowed) prohibitions))
           ]
         fallbackReasons = relationshipReasons prohibitions allCalls recorded
         strengthReasons =
@@ -165,9 +166,9 @@ callReasons
           | strength < minimumEvidenceStrength
           ]
         correlationReasons =
-          [ MissingCorrelationField renderedCallId required
+          [ MissingCorrelationField renderedCallId (policyCoordinateText required)
           | required <- requiredCorrelationFields,
-            not (hasCorrelationField required recorded)
+            not (hasCorrelationField (policyCoordinateText required) recorded)
           ]
      in modelReasons
           <> endpointReasons
@@ -198,7 +199,7 @@ thinkingTranslationReasons callId provider api endpointClass modelId permitted p
     defaultReasons =
       [ ProhibitedDefaultThinking callId
       | isNothing requested,
-        not ((.defaultedThinkingAllowed) prohibitions)
+        not (permissionAllowed ((.defaultedThinkingAllowed) prohibitions))
       ]
     tupleReasons =
       [ ThinkingTranslationNotPermitted callId requestedText (effectiveThinkingText translation)
@@ -217,7 +218,7 @@ thinkingTranslationReasons callId provider api endpointClass modelId permitted p
     adjustmentReasons =
       [ ProhibitedEffortClamping callId requestedText effective
       | adjustment <- adjustments,
-        not ((.effortClampingAllowed) prohibitions),
+        not (permissionAllowed ((.effortClampingAllowed) prohibitions)),
         Just (requestedText, effective) <- [renderAdjustment adjustment]
       ]
 
@@ -264,11 +265,11 @@ relationshipReasons prohibitions allCalls current@CallComplianceFacts {callId, r
               renderedCallId = renderCallCorrelationId callId
            in [ ProhibitedProviderFallback renderedCallId previousProvider currentProvider
               | previousProvider /= currentProvider,
-                not ((.providerFallbackAllowed) prohibitions)
+                not (permissionAllowed ((.providerFallbackAllowed) prohibitions))
               ]
                 <> [ ProhibitedModelFallback renderedCallId previousModel resolvedModelId
                    | previousModel /= resolvedModelId,
-                     not ((.modelFallbackAllowed) prohibitions)
+                     not (permissionAllowed ((.modelFallbackAllowed) prohibitions))
                    ]
     _ -> []
 
@@ -335,14 +336,14 @@ limitReasons Profile.SanctionedExecutionProfile {Profile.limits} RunEvidence {de
       maybe [] (\(PeakConcurrency observed) -> exceeded "maxConcurrency" limits.maxConcurrency observed) peakConcurrency
     ]
 
-exceeded :: (Integral quantity, Show quantity) => Text -> Maybe Int -> quantity -> [NonConformingReason]
+exceeded :: (Integral quantity, Show quantity) => Text -> Maybe (Ceiling scope Int) -> quantity -> [NonConformingReason]
 exceeded name limit observed =
-  [LimitExceeded name (showText maximumValue) (showText observed) | Just maximumValue <- [limit], toInteger observed > toInteger maximumValue]
+  [LimitExceeded name (showText maximumValue) (showText observed) | Just maximumValue <- [ceilingValue <$> limit], toInteger observed > toInteger maximumValue]
 
-exceededInteger :: Text -> Maybe Integer -> Rational -> [NonConformingReason]
+exceededInteger :: Text -> Maybe (Ceiling scope Integer) -> Rational -> [NonConformingReason]
 exceededInteger name limit observed =
   [ LimitExceeded name (showText maximumValue) (showText observed)
-  | Just maximumValue <- [limit],
+  | Just maximumValue <- [ceilingValue <$> limit],
     observed > fromInteger maximumValue
   ]
 

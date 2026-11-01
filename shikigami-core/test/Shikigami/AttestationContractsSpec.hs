@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Contract tests for the sanctioned-execution attestation vocabulary.
 --
 -- These records exist to be written down, hashed, and compared across
@@ -16,6 +18,7 @@ import Data.Aeson (FromJSON, Result (..), ToJSON, Value (..), encode, fromJSON, 
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Lazy (ByteString)
+import Data.Either (isLeft)
 import Data.Generics.Labels ()
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
@@ -48,6 +51,7 @@ import Shikigami.Attestation.Envelope
     canonicalPayloadBytes,
     currentAttestationSchemaVersion,
   )
+import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile
   ( AllowedCall (..),
     EvidenceStrength (..),
@@ -82,7 +86,7 @@ import Shikigami.Attestation.Strength
   )
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (assertBool, assertEqual, testCase)
+import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
 
 tests :: TestTree
 tests =
@@ -103,7 +107,38 @@ profileTests :: TestTree
 profileTests =
   testGroup
     "sanctioned execution profile"
-    [ testCase "a fully populated profile round-trips" do
+    [ testCase "complete profiles reject negative quantities at every policy axis" do
+        roundTrips "valid complete profile" fullProfile
+        let mutate section key value = case toJSON fullProfile of
+              Object fields -> case KeyMap.lookup section fields of
+                Just (Object nested) -> Object (KeyMap.insert section (Object (KeyMap.insert key value nested)) fields)
+                _ -> error "complete profile lacks its section"
+              _ -> error "complete profile is not an object"
+        mapM_
+          (\(section, key) -> assertBool (show key) (case fromJSON (mutate section key (toJSON (-1 :: Int))) :: Result SanctionedExecutionProfile of Error _ -> True; Success _ -> False))
+          ([("limits", key) | key <- ["maxCalls", "maxRetries", "maxDelegatedChildRuns", "maxTokens", "maxCostMicroUsd", "maxDurationSeconds", "maxConcurrency"]] <> [("signerRequirements", "retentionDays")])
+        mapM_
+          (\key -> assertBool "host Int range retained" (case fromJSON (mutate "limits" key (toJSON (toInteger (maxBound :: Int) + 1))) :: Result SanctionedExecutionProfile of Error _ -> True; Success _ -> False))
+          ["maxCalls", "maxRetries", "maxDelegatedChildRuns", "maxTokens", "maxDurationSeconds", "maxConcurrency"]
+        case fromJSON (mutate "limits" "maxCostMicroUsd" (toJSON (10 ^ (100 :: Int) :: Integer))) :: Result SanctionedExecutionProfile of
+          Success decoded -> roundTrips "unbounded integer cost" decoded
+          Error err -> error err,
+      testCase "zero and unlimited ceilings remain distinct, with the original numeric encoding" do
+        let zero = either (error . show) id (PV.mkCeiling (0 :: Int)) :: PV.Ceiling "calls" Int
+        assertBool "negative factory input refused" (isLeft (PV.mkCeiling (-1 :: Int) :: Either Text (PV.Ceiling "calls" Int)))
+        encode zero @?= "0"
+        fromJSON (toJSON zero) @?= Success zero
+        assertBool "unlimited remains different" (toJSON (unlimitedProfileLimits & #maxCalls .~ Just zero) /= toJSON unlimitedProfileLimits),
+      testCase "documentary policy coordinates preserve arbitrary original bytes" do
+        mapM_
+          ( \raw -> do
+              let coordinate = PV.policyCoordinate raw :: PV.PolicyCoordinate "signature-algorithm"
+              PV.policyCoordinateText coordinate @?= raw
+              encode coordinate @?= encode raw
+              roundTrips "coordinate" coordinate
+          )
+          ["", "ed25519", "custom/v2", "日本", " key "],
+      testCase "a fully populated profile round-trips" do
         roundTrips "profile" fullProfile,
       testCase "a profile reference round-trips" do
         roundTrips "profile ref" sampleProfileRef,
@@ -136,12 +171,12 @@ profileTests =
         assertBool
           "every prohibition is in force"
           ( not
-              ( aliasesAllowed
-                  || defaultedThinkingAllowed
-                  || providerFallbackAllowed
-                  || modelFallbackAllowed
-                  || effortClampingAllowed
-                  || cliTransportsAllowed
+              ( PV.permissionAllowed aliasesAllowed
+                  || PV.permissionAllowed defaultedThinkingAllowed
+                  || PV.permissionAllowed providerFallbackAllowed
+                  || PV.permissionAllowed modelFallbackAllowed
+                  || PV.permissionAllowed effortClampingAllowed
+                  || PV.permissionAllowed cliTransportsAllowed
               )
           ),
       -- Resolution has to refuse these three differently, and the refusal
@@ -178,7 +213,7 @@ minimalProfile =
       prohibitions = defaultProhibitions,
       limits = unlimitedProfileLimits,
       minimumEvidenceStrength = EvidenceModelObserved,
-      requiredCorrelationFields = ["request-id"],
+      requiredCorrelationFields = [PV.policyCoordinate "request-id"],
       signerRequirements = noSignerRequirements
     }
 
@@ -191,21 +226,21 @@ fullProfile =
       & #lifecycle .~ (Withdrawn)
       & #limits
         .~ ( ProfileLimits
-               { maxCalls = Just 20,
-                 maxRetries = Just 2,
-                 maxDelegatedChildRuns = Just 1,
-                 maxTokens = Just 400000,
-                 maxCostMicroUsd = Just 2500000,
-                 maxDurationSeconds = Just 900,
-                 maxConcurrency = Just 4
+               { maxCalls = Just (either (error . show) id (PV.mkCeiling 20)),
+                 maxRetries = Just (either (error . show) id (PV.mkCeiling 2)),
+                 maxDelegatedChildRuns = Just (either (error . show) id (PV.mkCeiling 1)),
+                 maxTokens = Just (either (error . show) id (PV.mkCeiling 400000)),
+                 maxCostMicroUsd = Just (either (error . show) id (PV.mkCeiling 2500000)),
+                 maxDurationSeconds = Just (either (error . show) id (PV.mkCeiling 900)),
+                 maxConcurrency = Just (either (error . show) id (PV.mkCeiling 4))
                }
            )
       & #signerRequirements
         .~ ( SignerRequirements
                { requiredIssuer = Just (Issuer "shinzui/shikigami"),
-                 allowedKeyIds = ["key-2026-08"],
-                 requiredAlgorithm = Just "ed25519",
-                 retentionDays = Just 3650
+                 allowedKeyIds = [PV.policyCoordinate "key-2026-08"],
+                 requiredAlgorithm = Just (PV.policyCoordinate "ed25519"),
+                 retentionDays = Just (either (error . show) id (PV.mkCeiling 3650))
                }
            )
   )

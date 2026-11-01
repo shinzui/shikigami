@@ -40,6 +40,7 @@ import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Attestation.Compliance (ComplianceRollUp (..))
 import Shikigami.Attestation.Envelope (profileDigest)
+import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile (..))
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
@@ -455,7 +456,7 @@ profileFor models = ResolvedProfile content (Profile.SanctionedExecutionProfileR
           validFrom = UTCTime (fromGregorian 2026 1 1) 0,
           validUntil = Nothing,
           allowedCalls = case allowed of x : xs -> x :| xs; [] -> error "profile needs an allowed model",
-          prohibitions = (Profile.defaultProhibitions & #defaultedThinkingAllowed .~ (True)),
+          prohibitions = (Profile.defaultProhibitions & #defaultedThinkingAllowed .~ (PV.Permitted)),
           limits = Profile.unlimitedProfileLimits,
           minimumEvidenceStrength = Profile.EvidenceRequestedOnly,
           requiredCorrelationFields = [],

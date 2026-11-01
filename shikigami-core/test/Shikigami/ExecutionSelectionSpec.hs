@@ -21,6 +21,7 @@ import Data.Time (UTCTime (..), fromGregorian)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Attestation.Envelope (profileDigest)
+import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile), ResolvedProfile (..))
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
@@ -95,15 +96,18 @@ tests =
           )
           ["", Text.replicate 257 "x"],
       testCase "call-limit codecs retain numbers and factory admission refuses negative protocol ceilings" do
-        let wire = Profile.unlimitedProfileLimits & #maxCalls .~ Just 3 & #maxRetries .~ Just 2 & #maxConcurrency .~ Just 1 & #maxTokens .~ Just 10
+        let wire = Profile.unlimitedProfileLimits & #maxCalls .~ Just (either (error . show) id (PV.mkCeiling 3)) & #maxRetries .~ Just (either (error . show) id (PV.mkCeiling 2)) & #maxConcurrency .~ Just (either (error . show) id (PV.mkCeiling 1)) & #maxTokens .~ Just (either (error . show) id (PV.mkCeiling 10))
             make limits = Calls.callLimitsFor (select "worker-a") (Just (profileFor "stub-worker-a" limits))
             limits = mustRight (make wire)
             expected = Aeson.object ["calls" .= (3 :: Integer), "retries" .= (2 :: Integer), "concurrency" .= (1 :: Integer), "cutoff" .= Aeson.Null, "tokens" .= (10 :: Integer)]
         Aeson.fromJSON (Aeson.toJSON limits) @?= Aeson.Success limits
         Aeson.encode limits @?= Aeson.encode expected
-        mapM_
-          (\invalid -> assertBool "invalid protocol limit refused" (case make invalid of Left (Resources.InvalidResourceRequest _) -> True; _ -> False))
-          [wire & #maxCalls .~ Just (-1), wire & #maxRetries .~ Just (-1), wire & #maxConcurrency .~ Just (-1), wire & #maxTokens .~ Just (-1), wire & #maxDurationSeconds .~ Just (-1)]
+        case Aeson.toJSON wire of
+          Aeson.Object fields ->
+            mapM_
+              (\key -> assertBool "invalid protocol ceiling refused" (case Aeson.fromJSON (Aeson.Object (KeyMap.insert key (Aeson.toJSON (-1 :: Int)) fields)) :: Aeson.Result Profile.ProfileLimits of Aeson.Error _ -> True; _ -> False))
+              ["maxCalls", "maxRetries", "maxConcurrency", "maxTokens", "maxDurationSeconds"]
+          _ -> assertFailure "profile limits were not an object"
         case Aeson.toJSON limits of
           Aeson.Object fields ->
             mapM_
@@ -178,7 +182,7 @@ tests =
       testCase "profile tuple conflicts and unenforceable cost ceilings refuse admission" do
         let resolve profile = resolveExecutionSelection (fixtureAssignment "profile-assignment") catalog (Right fallback) (Just permission) Nothing Nothing (Just profile) Nothing fixedTime
         resolve (profileFor "other-model" Profile.unlimitedProfileLimits) @?= Left ExecutionProfileConflict
-        resolve (profileFor "stub-coordinator" (Profile.unlimitedProfileLimits & #maxCostMicroUsd .~ Just 1)) @?= Left ExecutionResourceBoundUnsupported
+        resolve (profileFor "stub-coordinator" (Profile.unlimitedProfileLimits & #maxCostMicroUsd .~ Just (either (error . show) id (PV.mkCeiling 1)))) @?= Left ExecutionResourceBoundUnsupported
         let pinned = mustRight (resolve (profileFor "stub-coordinator" Profile.unlimitedProfileLimits))
         assertBool "profile reference pinned" (pinned.profile /= Nothing),
       testCase "fresh profile authority rechecks the exact pinned version without replacement" do
@@ -225,7 +229,7 @@ profileFor exact limits =
             validFrom = fixedTime,
             validUntil = Nothing,
             allowedCalls = Profile.AllowedCall (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "stub") (Coordinate.providerCoordinate "in-process") (Coordinate.providerCoordinate exact) Profile.ThinkingHigh :| [],
-            prohibitions = Profile.defaultProhibitions & #defaultedThinkingAllowed .~ True,
+            prohibitions = Profile.defaultProhibitions & #defaultedThinkingAllowed .~ PV.Permitted,
             limits,
             minimumEvidenceStrength = Profile.EvidenceRequestedOnly,
             requiredCorrelationFields = [],

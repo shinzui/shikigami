@@ -59,6 +59,7 @@ where
 
 import Baikai.Evidence (EvidenceStrength (..))
 import Baikai.ThinkingLevel (ThinkingLevel (..))
+import Shikigami.Attestation.PolicyValue
 import Shikigami.Behavior.Provider.Coordinate
 import Shikigami.Prelude
 
@@ -151,21 +152,21 @@ instance FromJSON AllowedCall where parseJSON = genericParseJSON profileAesonOpt
 -- __disallowed__ in 'defaultProhibitions'. That direction is the point: the
 -- request this module serves is specific that an omitted SDK default is not
 -- evidence of compliance, so a hand-written profile that forgets a field must
--- fail closed rather than open. Read a 'True' as "this profile went out of its
+-- fail closed rather than open. Read 'Permitted' (encoded as @true@) as "this profile went out of its
 -- way to permit this".
 data Prohibitions = Prohibitions
   { -- | May a call name a model by a mutable alias instead of an exact id?
-    aliasesAllowed :: !Bool,
+    aliasesAllowed :: !(Permission "aliasesAllowed"),
     -- | May a call leave the thinking level unset and take the SDK default?
-    defaultedThinkingAllowed :: !Bool,
+    defaultedThinkingAllowed :: !(Permission "defaultedThinkingAllowed"),
     -- | May the runtime complete a call against a different provider?
-    providerFallbackAllowed :: !Bool,
+    providerFallbackAllowed :: !(Permission "providerFallbackAllowed"),
     -- | May the runtime complete a call against a different model?
-    modelFallbackAllowed :: !Bool,
+    modelFallbackAllowed :: !(Permission "modelFallbackAllowed"),
     -- | May a provider clamp the requested effort down to one it supports?
-    effortClampingAllowed :: !Bool,
+    effortClampingAllowed :: !(Permission "effortClampingAllowed"),
     -- | May a call be made over a command-line transport rather than an API?
-    cliTransportsAllowed :: !Bool
+    cliTransportsAllowed :: !(Permission "cliTransportsAllowed")
   }
   deriving stock (Eq, Show, Generic)
 
@@ -181,33 +182,33 @@ instance FromJSON Prohibitions where parseJSON = genericParseJSON profileAesonOp
 defaultProhibitions :: Prohibitions
 defaultProhibitions =
   Prohibitions
-    { aliasesAllowed = False,
-      defaultedThinkingAllowed = False,
-      providerFallbackAllowed = False,
-      modelFallbackAllowed = False,
-      effortClampingAllowed = False,
-      cliTransportsAllowed = False
+    { aliasesAllowed = Prohibited,
+      defaultedThinkingAllowed = Prohibited,
+      providerFallbackAllowed = Prohibited,
+      modelFallbackAllowed = Prohibited,
+      effortClampingAllowed = Prohibited,
+      cliTransportsAllowed = Prohibited
     }
 
 -- | Ceilings on what a run may consume.
 --
 -- Every field is a 'Maybe', and __absent means no ceiling__ — a deliberate
 -- "unlimited", never a zero. A zero is a real limit that forbids everything; if
--- you mean that, say @Just 0@.
+-- you mean that, use a zero ceiling.
 data ProfileLimits = ProfileLimits
-  { maxCalls :: !(Maybe Int),
-    maxRetries :: !(Maybe Int),
-    maxDelegatedChildRuns :: !(Maybe Int),
-    maxTokens :: !(Maybe Int),
+  { maxCalls :: !(Maybe (Ceiling "calls" Int)),
+    maxRetries :: !(Maybe (Ceiling "retries" Int)),
+    maxDelegatedChildRuns :: !(Maybe (Ceiling "delegated-child-runs" Int)),
+    maxTokens :: !(Maybe (Ceiling "tokens" Int)),
     -- | A cost ceiling in millionths of a US dollar.
     --
     -- Integer micro-dollars rather than a fractional type on purpose: this
     -- record is covered by a digest that a different repository — possibly in a
     -- different language — has to reproduce byte for byte, and a decimal
     -- fraction is the classic way for two such encoders to disagree.
-    maxCostMicroUsd :: !(Maybe Integer),
-    maxDurationSeconds :: !(Maybe Int),
-    maxConcurrency :: !(Maybe Int)
+    maxCostMicroUsd :: !(Maybe (Ceiling "cost-micro-usd" Integer)),
+    maxDurationSeconds :: !(Maybe (Ceiling "duration-seconds" Int)),
+    maxConcurrency :: !(Maybe (Ceiling "concurrency" Int))
   }
   deriving stock (Eq, Show, Generic)
 
@@ -236,11 +237,11 @@ data SignerRequirements = SignerRequirements
     requiredIssuer :: !(Maybe Issuer),
     -- | Key identifiers the signature may use. Empty means the profile does not
     -- constrain the key beyond 'requiredIssuer'.
-    allowedKeyIds :: ![Text],
+    allowedKeyIds :: ![PolicyCoordinate "signing-key-id"],
     -- | The signature algorithm the attestation must use, when pinned.
-    requiredAlgorithm :: !(Maybe Text),
+    requiredAlgorithm :: !(Maybe (PolicyCoordinate "signature-algorithm")),
     -- | How long the attestation must remain retrievable, in days.
-    retentionDays :: !(Maybe Int)
+    retentionDays :: !(Maybe (Ceiling "retention-days" Int))
   }
   deriving stock (Eq, Show, Generic)
 
@@ -292,7 +293,7 @@ data SanctionedExecutionProfile = SanctionedExecutionProfile
     -- | Provider correlation fields that must be present on every call's
     -- evidence, e.g. @request-id@. A call missing one of these is
     -- non-conforming even if everything else about it was permitted.
-    requiredCorrelationFields :: ![Text],
+    requiredCorrelationFields :: ![PolicyCoordinate "correlation-field"],
     signerRequirements :: !SignerRequirements
   }
   deriving stock (Eq, Show, Generic)
