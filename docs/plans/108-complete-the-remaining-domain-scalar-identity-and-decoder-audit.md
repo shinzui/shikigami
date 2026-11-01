@@ -57,15 +57,33 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 ## Progress
 
 
-- [ ] M1: Deliver a complete declaration/field classification and coverage checker; every entry has an authority and disposition, and known violations remain explicit.
+- [x] M1a: Deliver the schema-2 census and independent coverage/freshness checker; all 24 positive/mutation tests pass, and the checker detects the current incomplete classification.
+- [ ] M1b: Complete semantic classification of every declaration/member. Current coherent snapshot: 1,056 of 4,053 keys reviewed; 2,997 keys across 151 source modules remain. Every entry needs authority, rationale and disposition; known violations remain explicit.
 - [ ] M2: Resolve applicable scalar/identity/decoder findings in cohesive concept batches and verify actual refusal, rollback and recovery behavior.
 - [ ] M3: Accept the refreshed classification with zero unresolved violations, passing final behavioral evidence, and an updated guide disposition.
+
+Execution order correction (2026-10-31): finish M1b's remaining inventory before
+starting another M2 source refactor. Earlier small remediation batches produced
+tested fixes but repeatedly paid full build/census costs without closing the
+exhaustive classification milestone. M1a now exposes the already verified
+infrastructure deliverable separately; M1 as a whole remains unfinished until
+M1b passes. No acceptance requirement or classification check is relaxed.
+
+The first inventory-only pass reviews 192 more keys from the foreground/client/
+server boundaries, operator reports, worker wiring and trigger consumer. It adds
+164 compliant entries, 12 exclusions and 16 concrete findings. The source/consumer
+rationales distinguish immediate library/wire DTO conversion from values that
+control admission, identity, retry or liveness. A public compiled parser probe
+confirms the missing native UUID-domain check at the CLI inspection boundary.
+All 24 coverage-infrastructure tests pass again. Both coverage modes still
+correctly refuse 2,997 missing keys; no runtime source, interface or census rebuild
+is needed for this documentation-only review pass.
 
 Implementation is under way. The schema-2 census and coverage/freshness checker
 pass 24 positive/mutation tests against a successful full GHC 9.12.4 macOS build.
 The current census has 4,053 declaration/member keys. Semantic classification
-covers 864 keys: 785 compliant entries, 35 exclusions and 44 explicit violations;
-3,189 keys remain unreviewed, and both coverage modes correctly refuse completion.
+covers 1,056 keys: 949 compliant entries, 47 exclusions and 60 explicit violations;
+2,997 keys remain unreviewed, and both coverage modes correctly refuse completion.
 
 Process-profile, Objective, cleanup/listing, directory, sink, HTTP acceptance and
 workspace binding/file/transfer read boundaries now have owning transactional

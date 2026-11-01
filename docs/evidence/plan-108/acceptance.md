@@ -1080,3 +1080,37 @@ classified after producer/consumer review. The classification totals 864 keys
 3,189 missing keys after source/build/tool/entry validation. The frozen 124-source/
 93-item inventory and 21 mutation checks pass; the earlier unchanged-tool 24-case
 result remains applicable. All milestones and the guide deferral remain open.
+
+## M1 inventory-first execution and process boundaries
+
+Execution now completes the remaining semantic inventory before another M2 source
+refactor. Progress separates verified M1a infrastructure from unfinished M1b
+coverage, without marking M1 as a whole accepted or changing its requirements.
+The 24 positive/mutation infrastructure tests pass again on the unchanged tools.
+
+This source/consumer review adds 192 keys across 20 source modules: 164 compliant,
+12 excluded and 16 findings. It covers foreground vendor adapters, API caller
+attribution, client/listener/native telemetry/handler wiring, operator agent/run
+reports, hermetic stub controls, worker supervision/configuration and the trigger
+consumer. Each entry records its actual producer/consumer and authority. Immediate
+native-library/explicit wire transfers are distinguished from policy thresholds,
+allow-lists, receipt keys and identity-bearing callbacks; persisted status alone
+is never an exemption. Named component entries preserve composition without
+certifying nested fields or permission lifetime.
+
+The findings include raw workflow status callback identity, the CLI inspector's
+missing native UUIDv7 check, the Kanmon stub's actual allow-list/idempotency map,
+resume bounds/overflow and scalar roles, liveness/worker policy durations,
+reported scheduler principal claims and flattened native DLQ/inbox references.
+The CLI parser finding has a public compiled counterexample retained in
+`native-session-parser-probe.json`: native parseId accepts the v4 and wrong-variant
+session examples, while the checked sink refiner rejects them. Source review
+establishes sessionStep uses only parseId. No live CLI corruption or remediation
+is claimed by that probe.
+
+The current source-bound classification has 1,056 of 4,053 keys: 949 compliant,
+47 excluded and 60 findings. Both checker modes correctly refuse 2,997 remaining
+keys across 151 source modules after validating all existing source/build/tool
+hashes and evidence paths. The executable candidate/census remains `abb2cf0`;
+this pass changes documentation only and does not repeat a full Cabal build or
+claim new runtime qualification. M1b, M2, M3 and the guide deferral remain open.

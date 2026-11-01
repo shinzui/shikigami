@@ -1,0 +1,22 @@
+{
+  "sourceCandidate": "abb2cf0",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "program": "{-# LANGUAGE ImportQualifiedPost #-}\nimport Data.KindID.V7 qualified as KindID\nimport Data.UUID qualified as UUID\nimport Data.Text qualified\nimport Kioku.Id qualified as Id\nimport Shikigami.Sink.Coordinate (parseSinkSession)\nmain :: IO ()\nmain = mapM_ probe [(\"v4\", UUID.fromWords 0 0x4000 0x80000000 1), (\"wrong-variant\", UUID.fromWords 0 0x7000 0 1)]\n  where\n    probe (label, uuid) =\n      let raw = KindID.toText (KindID.decorateKindID uuid :: Id.SessionId)\n       in print (label, raw, either (const False) (const True) (Id.parseId raw :: Either Data.Text.Text Id.SessionId), either (const False) (const True) (parseSinkSession raw))\n",
+  "execution": "nix develop --no-write-lock-file -c cabal exec -- ghc -package-id <current shikigami-core library unit> -package-id <its mmzk-typeid unit> -package-id <its kioku-api unit> -package-id <its uuid unit> <program.hs> -e main",
+  "cases": [
+    {
+      "case": "UUIDv4",
+      "text": "kioku_session_00000000008008000000000001",
+      "nativeParseAccepts": true,
+      "checkedSinkParseAccepts": false
+    },
+    {
+      "case": "wrong RFC variant",
+      "text": "kioku_session_0000000000e000000000000001",
+      "nativeParseAccepts": true,
+      "checkedSinkParseAccepts": false
+    }
+  ],
+  "limitations": "Public parser execution plus source review of Command.Runs.sessionStep. This does not claim a live CLI/database corruption test or a remediation of that inspector."
+}
