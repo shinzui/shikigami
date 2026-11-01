@@ -58,8 +58,8 @@ these outcomes; a complete, source-bound classification demonstrates audit cover
 
 
 - [x] M1a: Deliver the schema-2 census and independent coverage/freshness checker; all 24 positive/mutation tests pass, and the checker detects the current incomplete classification.
-- [x] M1b (2026-11-01): Complete semantic classification. Latest coherent census on `0d93ca6`: all 4,054 keys classified; 3,214 compliant, 288 exclusions and 552 explicit findings. Coverage/freshness and all 24 checker tests pass with zero missing or pending entries. The initial M1 checkpoint covered 4,053 keys before M2 added the closed format type.
-- [ ] M2: Resolve applicable scalar/identity/decoder findings in cohesive concept batches and verify actual refusal, rollback and recovery behavior.
+- [x] M1b (2026-11-01): Complete semantic classification. Latest coherent census on `be89d58`: all 4,060 keys classified; 3,225 compliant, 288 exclusions and 547 explicit findings. Coverage/freshness and all 24 checker tests pass with zero missing or pending entries. The initial M1 checkpoint covered 4,053 keys before M2 added the closed format type.
+- [ ] M2: Resolve applicable scalar/identity/decoder findings in cohesive concept batches and verify actual refusal, rollback and recovery behavior. Since complete M1 acceptance, 28 findings are resolved; 547 remain explicit in the current fresh inventory.
 - [ ] M3: Accept the refreshed classification with zero unresolved violations, passing final behavioral evidence, and an updated guide disposition.
 
 Execution order correction (2026-10-31): finish M1b's remaining inventory before
@@ -86,8 +86,8 @@ remain explicit; source/interface/tool hashes and evidence paths validate before
 the checker refuses the remaining 2,372 missing keys. No runtime sources change.
 
 M1 was accepted on the `abb2cf0` snapshot with all 4,053 keys classified. After
-the first inventory-complete M2 batch, the coherent `0d93ca6` build/census has
-4,054 classified keys and 552 remaining findings. Normal coverage/freshness and
+the closed-format and resume-policy M2 batches, the coherent `be89d58` build/census
+has 4,060 classified keys and 547 remaining findings. Normal coverage/freshness and
 all 24 infrastructure tests pass; resolved-only acceptance correctly fails.
 M2 and M3 stay open; complete inventory coverage is not final guide acceptance.
 
@@ -328,10 +328,10 @@ holds this durable owner boundary; it does not exempt the remaining scalars.
 ## Outcomes & Retrospective
 
 
-M1 is complete and refreshed: the entire 4,054-key inventory and its
+M1 is complete and refreshed: the entire 4,060-key inventory and its
 source/build/tool freshness check pass, as do all 24 infrastructure tests. The
-closed-format batch resolves 23 of the initial 575 findings, leaving 552 explicit
-findings for M2. Resolved-only acceptance correctly fails. Earlier tested owner/value
+closed-format and resume-policy batches resolve 28 of the initial 575 findings,
+leaving 547 explicit findings for M2. Resolved-only acceptance correctly fails. Earlier tested owner/value
 remediations remain recorded in [the current evidence](../evidence/plan-108/acceptance.md).
 M2, M3 and the frozen guide disposition remain open. FRIC-36 and FRIC-37 remain
 logged for triage when the plan completes.
@@ -674,3 +674,11 @@ scalar roles close the constructor/bounds gap; capped Integer doubling removes
 Int overflow. Seven actual loop tests and four public compiler controls pass,
 with explicit zero policies preserved. Source snapshot: `resume-policy-source.json`.
 Full build/census reconciliation remains pending before resolving its five findings.
+
+
+M2 resume policy reconciliation (2026-11-01): the full workspace build and fresh
+census pass on `be89d58`: 325 modules, 940 declarations and 4,060 keys. All five
+policy findings are resolved and the six new private scalar keys are classified.
+Normal coverage and 24 infrastructure tests pass; resolved-only mode correctly
+refuses the remaining 547 findings. No core workflow body or retained codec
+changes, so this batch needs no new native compatibility or PostgreSQL gate.

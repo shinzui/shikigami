@@ -1252,3 +1252,15 @@ This process-local runtime policy changes no core Agent/Flow workflow body,
 serialized record, native DSL declaration or identity recipe. The existing native
 workflow gate evidence therefore remains applicable. There is no new retained
 decoder owner or PostgreSQL schema to qualify for this batch.
+
+
+The full workspace build and fresh census pass on resume source commit `be89d58`:
+325 modules, 940 declarations, fourteen entrypoints and 4,060 keys. The five
+ResumeRetry findings are resolved; all six keys of its three private scalar types
+are classified. Current totals are 3,225 compliant, 288 excluded and 547 explicit
+violations, with zero missing or pending entries. Normal coverage/freshness and
+all 24 infrastructure tests pass; resolved-only mode correctly refuses exactly
+547 findings. The unchanged upgrade inventory passes its 124-source/93-item check.
+All five source/test/tool/ADR hashes in `resume-policy-source.json` match. Earlier
+closed-format native and behavioral evidence remains applicable; no new core
+workflow body, serialization or retained decoder boundary changed in this batch.

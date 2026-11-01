@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "censusSha256": "71fbfd910f8c4f9a23f6ac78aa8bb3076241955fde52242d8f5e4319a409d887",
+  "censusSha256": "6fed0756be9e3e3cad0a9b8fe63c4d5bfffb99c18a3f0bc894ff5cd437b0b218",
   "source": "mori://shinzui/keiro-runtime-patterns/docs/architecture-domain-newtypes-and-typeids",
   "sourceRevision": "62531b00b415785be61584a3c44b569fdfb35c4e",
   "sourcePath": "runtime-patterns/architecture/domain-newtypes-and-typeids.md",
@@ -65138,18 +65138,143 @@
     {
       "sourcePath": "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
       "module": "Shikigami.Agent.Workflow.Resume",
-      "declaration": "ResumeRetry",
+      "declaration": "BackoffMicros",
       "member": "$self",
-      "sourceSha256": "1032b1f6a093678240cf92fc537e10651290183e6276ee436faf52b4de8ac0a7",
+      "sourceSha256": "4e8b3fb20533f46ec48e0d0160bc00271efe83cec10e971b8eaf266d5c01f614",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Bounded restart policy: initial/capped backoff, consecutive-failure limit and healthy-duration reset.",
-      "authority": "Agent.Workflow.Resume.runResumeLoopWith/defaultResumeRetry; docs/adr/0019-a-loop-that-stops-stops-the-process.md",
+      "disposition": "compliant",
+      "invariant": "Nonnegative native Int microseconds with nominal initial/maximum scope, admitted only within mkResumeRetry.",
+      "authority": "mkResumeRetry and the native timing boundary in runResumeLoopWith",
       "boundaryOwner": "Shikigami.Agent.Workflow.Resume",
-      "rationale": "The public record has no refining constructor or aggregate bound check. Initial delay can exceed its declared cap, and backoffMicros*2 can overflow before min applies. Preserve current default/valid timing behavior while making construction and arithmetic enforce the policy.",
+      "rationale": "The constructor remains private without Num, Generic or JSON construction. The aggregate factory checks scalar and cross-field bounds before packaging these values. Unwrapping is local to bounded counter/backoff calculations and the actual sleeper/clock comparison; no public primitive field can be substituted into an admitted policy.",
       "evidence": [
         "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "shikigami-workers/test/Shikigami/Health/SupervisionSpec.hs",
+        "tests/types/resume-policy.py",
+        "docs/evidence/plan-108/resume-policy-source.json",
+        "docs/adr/0078-execution-policy-and-durable-progress-use-checked-distinct-values.md"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
+      "module": "Shikigami.Agent.Workflow.Resume",
+      "declaration": "BackoffMicros",
+      "member": "BackoffMicros.#1",
+      "sourceSha256": "4e8b3fb20533f46ec48e0d0160bc00271efe83cec10e971b8eaf266d5c01f614",
+      "classification": "domain-value",
+      "disposition": "compliant",
+      "invariant": "Nonnegative native Int microseconds with nominal initial/maximum scope, admitted only within mkResumeRetry.",
+      "authority": "mkResumeRetry and the native timing boundary in runResumeLoopWith",
+      "boundaryOwner": "Shikigami.Agent.Workflow.Resume",
+      "rationale": "The constructor remains private without Num, Generic or JSON construction. The aggregate factory checks scalar and cross-field bounds before packaging these values. Unwrapping is local to bounded counter/backoff calculations and the actual sleeper/clock comparison; no public primitive field can be substituted into an admitted policy.",
+      "evidence": [
+        "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
+        "shikigami-workers/test/Shikigami/Health/SupervisionSpec.hs",
+        "tests/types/resume-policy.py",
+        "docs/evidence/plan-108/resume-policy-source.json",
+        "docs/adr/0078-execution-policy-and-durable-progress-use-checked-distinct-values.md"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
+      "module": "Shikigami.Agent.Workflow.Resume",
+      "declaration": "FailureCeiling",
+      "member": "$self",
+      "sourceSha256": "4e8b3fb20533f46ec48e0d0160bc00271efe83cec10e971b8eaf266d5c01f614",
+      "classification": "domain-value",
+      "disposition": "compliant",
+      "invariant": "Positive native Int consecutive-failure ceiling, admitted only by mkResumeRetry.",
+      "authority": "mkResumeRetry and the native timing boundary in runResumeLoopWith",
+      "boundaryOwner": "Shikigami.Agent.Workflow.Resume",
+      "rationale": "The constructor remains private without Num, Generic or JSON construction. The aggregate factory checks scalar and cross-field bounds before packaging these values. Unwrapping is local to bounded counter/backoff calculations and the actual sleeper/clock comparison; no public primitive field can be substituted into an admitted policy.",
+      "evidence": [
+        "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
+        "shikigami-workers/test/Shikigami/Health/SupervisionSpec.hs",
+        "tests/types/resume-policy.py",
+        "docs/evidence/plan-108/resume-policy-source.json",
+        "docs/adr/0078-execution-policy-and-durable-progress-use-checked-distinct-values.md"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
+      "module": "Shikigami.Agent.Workflow.Resume",
+      "declaration": "FailureCeiling",
+      "member": "FailureCeiling.#1",
+      "sourceSha256": "4e8b3fb20533f46ec48e0d0160bc00271efe83cec10e971b8eaf266d5c01f614",
+      "classification": "domain-value",
+      "disposition": "compliant",
+      "invariant": "Positive native Int consecutive-failure ceiling, admitted only by mkResumeRetry.",
+      "authority": "mkResumeRetry and the native timing boundary in runResumeLoopWith",
+      "boundaryOwner": "Shikigami.Agent.Workflow.Resume",
+      "rationale": "The constructor remains private without Num, Generic or JSON construction. The aggregate factory checks scalar and cross-field bounds before packaging these values. Unwrapping is local to bounded counter/backoff calculations and the actual sleeper/clock comparison; no public primitive field can be substituted into an admitted policy.",
+      "evidence": [
+        "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
+        "shikigami-workers/test/Shikigami/Health/SupervisionSpec.hs",
+        "tests/types/resume-policy.py",
+        "docs/evidence/plan-108/resume-policy-source.json",
+        "docs/adr/0078-execution-policy-and-durable-progress-use-checked-distinct-values.md"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
+      "module": "Shikigami.Agent.Workflow.Resume",
+      "declaration": "HealthyRunWindow",
+      "member": "$self",
+      "sourceSha256": "4e8b3fb20533f46ec48e0d0160bc00271efe83cec10e971b8eaf266d5c01f614",
+      "classification": "domain-value",
+      "disposition": "compliant",
+      "invariant": "Nonnegative native NominalDiffTime healthy-run threshold, retaining the explicit zero/immediate policy.",
+      "authority": "mkResumeRetry and the native timing boundary in runResumeLoopWith",
+      "boundaryOwner": "Shikigami.Agent.Workflow.Resume",
+      "rationale": "The constructor remains private without Num, Generic or JSON construction. The aggregate factory checks scalar and cross-field bounds before packaging these values. Unwrapping is local to bounded counter/backoff calculations and the actual sleeper/clock comparison; no public primitive field can be substituted into an admitted policy.",
+      "evidence": [
+        "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
+        "shikigami-workers/test/Shikigami/Health/SupervisionSpec.hs",
+        "tests/types/resume-policy.py",
+        "docs/evidence/plan-108/resume-policy-source.json",
+        "docs/adr/0078-execution-policy-and-durable-progress-use-checked-distinct-values.md"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
+      "module": "Shikigami.Agent.Workflow.Resume",
+      "declaration": "HealthyRunWindow",
+      "member": "HealthyRunWindow.#1",
+      "sourceSha256": "4e8b3fb20533f46ec48e0d0160bc00271efe83cec10e971b8eaf266d5c01f614",
+      "classification": "domain-value",
+      "disposition": "compliant",
+      "invariant": "Nonnegative native NominalDiffTime healthy-run threshold, retaining the explicit zero/immediate policy.",
+      "authority": "mkResumeRetry and the native timing boundary in runResumeLoopWith",
+      "boundaryOwner": "Shikigami.Agent.Workflow.Resume",
+      "rationale": "The constructor remains private without Num, Generic or JSON construction. The aggregate factory checks scalar and cross-field bounds before packaging these values. Unwrapping is local to bounded counter/backoff calculations and the actual sleeper/clock comparison; no public primitive field can be substituted into an admitted policy.",
+      "evidence": [
+        "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
+        "shikigami-workers/test/Shikigami/Health/SupervisionSpec.hs",
+        "tests/types/resume-policy.py",
+        "docs/evidence/plan-108/resume-policy-source.json",
+        "docs/adr/0078-execution-policy-and-durable-progress-use-checked-distinct-values.md"
+      ]
+    },
+    {
+      "sourcePath": "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
+      "module": "Shikigami.Agent.Workflow.Resume",
+      "declaration": "ResumeRetry",
+      "member": "$self",
+      "sourceSha256": "4e8b3fb20533f46ec48e0d0160bc00271efe83cec10e971b8eaf266d5c01f614",
+      "classification": "domain-value",
+      "disposition": "compliant",
+      "invariant": "Privately admitted restart policy: distinct nonnegative initial/maximum microsecond roles, initial <= maximum, positive failure ceiling and nonnegative healthy-run window.",
+      "authority": "mkResumeRetry/runResumeLoopWith in Shikigami.Agent.Workflow.Resume",
+      "boundaryOwner": "Shikigami.Agent.Workflow.Resume",
+      "rationale": "The private constructor and absence of Generic/JSON bypass make checked factory admission authoritative. Independent private scalar types preserve units/roles until the native timing/counter calculations. Zero policies retain their explicit immediate semantics. Doubling occurs in Integer and applies the admitted Int cap before conversion, so maxBound cannot overflow into a negative sleep. Seven actual loop tests and four public compiler controls pass.",
+      "evidence": [
+        "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
+        "docs/evidence/plan-108/acceptance.md",
+        "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
+        "shikigami-workers/test/Shikigami/Health/SupervisionSpec.hs",
+        "tests/types/resume-policy.py",
+        "docs/evidence/plan-108/resume-policy-source.json",
+        "docs/adr/0078-execution-policy-and-durable-progress-use-checked-distinct-values.md"
       ]
     },
     {
@@ -65157,16 +65282,21 @@
       "module": "Shikigami.Agent.Workflow.Resume",
       "declaration": "ResumeRetry",
       "member": "ResumeRetry.failureCeiling",
-      "sourceSha256": "1032b1f6a093678240cf92fc537e10651290183e6276ee436faf52b4de8ac0a7",
+      "sourceSha256": "4e8b3fb20533f46ec48e0d0160bc00271efe83cec10e971b8eaf266d5c01f614",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Consecutive short-run count at which the process exits.",
-      "authority": "Agent.Workflow.Resume.runResumeLoopWith/defaultResumeRetry; docs/adr/0019-a-loop-that-stops-stops-the-process.md",
+      "disposition": "compliant",
+      "invariant": "Privately admitted restart policy: distinct nonnegative initial/maximum microsecond roles, initial <= maximum, positive failure ceiling and nonnegative healthy-run window.",
+      "authority": "mkResumeRetry/runResumeLoopWith in Shikigami.Agent.Workflow.Resume",
       "boundaryOwner": "Shikigami.Agent.Workflow.Resume",
-      "rationale": "This is an operational policy quantity used in delay/termination/reset decisions, not a displayed counter or raw threadDelay adapter DTO. Primitive Int/generic duration representation loses the admitted role and construction constraints; inspect current producers/tests before selecting bounds.",
+      "rationale": "The private constructor and absence of Generic/JSON bypass make checked factory admission authoritative. Independent private scalar types preserve units/roles until the native timing/counter calculations. Zero policies retain their explicit immediate semantics. Doubling occurs in Integer and applies the admitted Int cap before conversion, so maxBound cannot overflow into a negative sleep. Seven actual loop tests and four public compiler controls pass.",
       "evidence": [
         "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
+        "shikigami-workers/test/Shikigami/Health/SupervisionSpec.hs",
+        "tests/types/resume-policy.py",
+        "docs/evidence/plan-108/resume-policy-source.json",
+        "docs/adr/0078-execution-policy-and-durable-progress-use-checked-distinct-values.md"
       ]
     },
     {
@@ -65174,16 +65304,21 @@
       "module": "Shikigami.Agent.Workflow.Resume",
       "declaration": "ResumeRetry",
       "member": "ResumeRetry.healthyRunSeconds",
-      "sourceSha256": "1032b1f6a093678240cf92fc537e10651290183e6276ee436faf52b4de8ac0a7",
+      "sourceSha256": "4e8b3fb20533f46ec48e0d0160bc00271efe83cec10e971b8eaf266d5c01f614",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Elapsed-run duration threshold that resets the consecutive-failure tally.",
-      "authority": "Agent.Workflow.Resume.runResumeLoopWith/defaultResumeRetry; docs/adr/0019-a-loop-that-stops-stops-the-process.md",
+      "disposition": "compliant",
+      "invariant": "Privately admitted restart policy: distinct nonnegative initial/maximum microsecond roles, initial <= maximum, positive failure ceiling and nonnegative healthy-run window.",
+      "authority": "mkResumeRetry/runResumeLoopWith in Shikigami.Agent.Workflow.Resume",
       "boundaryOwner": "Shikigami.Agent.Workflow.Resume",
-      "rationale": "This is an operational policy quantity used in delay/termination/reset decisions, not a displayed counter or raw threadDelay adapter DTO. Primitive Int/generic duration representation loses the admitted role and construction constraints; inspect current producers/tests before selecting bounds.",
+      "rationale": "The private constructor and absence of Generic/JSON bypass make checked factory admission authoritative. Independent private scalar types preserve units/roles until the native timing/counter calculations. Zero policies retain their explicit immediate semantics. Doubling occurs in Integer and applies the admitted Int cap before conversion, so maxBound cannot overflow into a negative sleep. Seven actual loop tests and four public compiler controls pass.",
       "evidence": [
         "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
+        "shikigami-workers/test/Shikigami/Health/SupervisionSpec.hs",
+        "tests/types/resume-policy.py",
+        "docs/evidence/plan-108/resume-policy-source.json",
+        "docs/adr/0078-execution-policy-and-durable-progress-use-checked-distinct-values.md"
       ]
     },
     {
@@ -65191,16 +65326,21 @@
       "module": "Shikigami.Agent.Workflow.Resume",
       "declaration": "ResumeRetry",
       "member": "ResumeRetry.initialBackoffMicros",
-      "sourceSha256": "1032b1f6a093678240cf92fc537e10651290183e6276ee436faf52b4de8ac0a7",
+      "sourceSha256": "4e8b3fb20533f46ec48e0d0160bc00271efe83cec10e971b8eaf266d5c01f614",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Initial retry delay in microseconds.",
-      "authority": "Agent.Workflow.Resume.runResumeLoopWith/defaultResumeRetry; docs/adr/0019-a-loop-that-stops-stops-the-process.md",
+      "disposition": "compliant",
+      "invariant": "Privately admitted restart policy: distinct nonnegative initial/maximum microsecond roles, initial <= maximum, positive failure ceiling and nonnegative healthy-run window.",
+      "authority": "mkResumeRetry/runResumeLoopWith in Shikigami.Agent.Workflow.Resume",
       "boundaryOwner": "Shikigami.Agent.Workflow.Resume",
-      "rationale": "This is an operational policy quantity used in delay/termination/reset decisions, not a displayed counter or raw threadDelay adapter DTO. Primitive Int/generic duration representation loses the admitted role and construction constraints; inspect current producers/tests before selecting bounds.",
+      "rationale": "The private constructor and absence of Generic/JSON bypass make checked factory admission authoritative. Independent private scalar types preserve units/roles until the native timing/counter calculations. Zero policies retain their explicit immediate semantics. Doubling occurs in Integer and applies the admitted Int cap before conversion, so maxBound cannot overflow into a negative sleep. Seven actual loop tests and four public compiler controls pass.",
       "evidence": [
         "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
+        "shikigami-workers/test/Shikigami/Health/SupervisionSpec.hs",
+        "tests/types/resume-policy.py",
+        "docs/evidence/plan-108/resume-policy-source.json",
+        "docs/adr/0078-execution-policy-and-durable-progress-use-checked-distinct-values.md"
       ]
     },
     {
@@ -65208,16 +65348,21 @@
       "module": "Shikigami.Agent.Workflow.Resume",
       "declaration": "ResumeRetry",
       "member": "ResumeRetry.maxBackoffMicros",
-      "sourceSha256": "1032b1f6a093678240cf92fc537e10651290183e6276ee436faf52b4de8ac0a7",
+      "sourceSha256": "4e8b3fb20533f46ec48e0d0160bc00271efe83cec10e971b8eaf266d5c01f614",
       "classification": "domain-value",
-      "disposition": "violation",
-      "invariant": "Maximum retry delay in microseconds, including the first delay.",
-      "authority": "Agent.Workflow.Resume.runResumeLoopWith/defaultResumeRetry; docs/adr/0019-a-loop-that-stops-stops-the-process.md",
+      "disposition": "compliant",
+      "invariant": "Privately admitted restart policy: distinct nonnegative initial/maximum microsecond roles, initial <= maximum, positive failure ceiling and nonnegative healthy-run window.",
+      "authority": "mkResumeRetry/runResumeLoopWith in Shikigami.Agent.Workflow.Resume",
       "boundaryOwner": "Shikigami.Agent.Workflow.Resume",
-      "rationale": "This is an operational policy quantity used in delay/termination/reset decisions, not a displayed counter or raw threadDelay adapter DTO. Primitive Int/generic duration representation loses the admitted role and construction constraints; inspect current producers/tests before selecting bounds.",
+      "rationale": "The private constructor and absence of Generic/JSON bypass make checked factory admission authoritative. Independent private scalar types preserve units/roles until the native timing/counter calculations. Zero policies retain their explicit immediate semantics. Doubling occurs in Integer and applies the admitted Int cap before conversion, so maxBound cannot overflow into a negative sleep. Seven actual loop tests and four public compiler controls pass.",
       "evidence": [
         "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
-        "docs/evidence/plan-108/acceptance.md"
+        "docs/evidence/plan-108/acceptance.md",
+        "shikigami-workers/src/Shikigami/Agent/Workflow/Resume.hs",
+        "shikigami-workers/test/Shikigami/Health/SupervisionSpec.hs",
+        "tests/types/resume-policy.py",
+        "docs/evidence/plan-108/resume-policy-source.json",
+        "docs/adr/0078-execution-policy-and-durable-progress-use-checked-distinct-values.md"
       ]
     },
     {
