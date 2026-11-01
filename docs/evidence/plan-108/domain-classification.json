@@ -11353,10 +11353,10 @@
       "sourceSha256": "d129446f6af156161541efcc973948a67144dcfb224814ab938cda73d3fd0f75",
       "classification": "runtime-opaque",
       "disposition": "violation",
-      "invariant": "Workflow ID copied from the retained SinkIntent.",
-      "authority": "SinkIntent.runId -> deliveryReceiptFor",
+      "invariant": "The producer-supplied session/run correlation reference copied from SinkIntent; current agent, conversation and flow producers render their Kioku SessionId.",
+      "authority": "Sink.Intent.enqueueSinkIntents; Agent.Conversation.prepareConversationReplySinkIntent; Agent.Workflow FlowCapability.SinkEnv construction; mori://shinzui/kioku/packages/kioku-api",
       "boundaryOwner": "Shikigami.Sink.Delivery",
-      "rationale": "Raw Text erases the native workflow identity distinction; no fresh entity identity should be allocated.",
+      "rationale": "Source tracing corrects the former WorkflowId attribution: the outbox message identity uses the workflow id independently, whereas this field is idText sessionId. Text still erases the distinct session/run correlation role; historical intent admission and pinned bytes require separate review before choosing its representation.",
       "evidence": [
         "shikigami-core/src/Shikigami/Sink/Delivery.hs#DeliveryReceipt",
         "shikigami-core/test-postgres/Shikigami/SinkDeliverySpec.hs#corruptDelivery"

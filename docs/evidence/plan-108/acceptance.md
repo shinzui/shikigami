@@ -897,3 +897,43 @@ fresh census pass on `4983d4c`: 323 modules, 931 declarations and 4,040 keys.
 The reviewed classifications total 778 (710 compliant, 29 excluded, 39 known
 violations); both modes correctly refuse 3,262 missing keys. All milestones and
 the deferred guide disposition stay open.
+
+## Receipt locators and retained transport vocabulary
+
+`sink-locators-source.json` binds the source candidate to parent `1c66762` on
+arm64 macOS/GHC 9.12.4. ReceiptKey and SinkMessageId are distinct private,
+non-Generic coordinates. Keiro IntegrationEvent explicitly defines messageId as
+opaque application text. Capture preserves existing producer bytes, including
+workflow-owned UUIDv5 OutboxId derivation and legacy step-shaped message ids.
+Parent receipt keys remain the exact message id; substep keys append `#` and the
+existing substep. No new entity or identity namespace is allocated.
+
+DeliveryReceipt retains the existing SinkKind enum through SQL. Unknown retained
+kind labels join unsupported status labels at the existing typed read refusal;
+lookup condemns the owning transaction, including callers that ignore the value.
+The complete corruption control prevents another actual HTTP send, rolls back
+earlier/later receipt writes, preserves the original row and recovers the same
+send guard after exact repair. Missing rows and real SQL errors remain distinct.
+
+The five SinkIntent unit cases pass, including opaque-coordinate byte controls,
+the pinned complete intent wire fixture and integration-event identity. All 20
+SinkDelivery PostgreSQL cases pass, including ChannelEgress, authorization,
+conversation adoption/retry, receipt gaps and unknown terminal reconciliation.
+
+```bash
+nix develop --no-write-lock-file -c cabal test shikigami-core-test -j1 --test-show-details=direct --test-option=-p --test-option='/SinkIntent/'
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test -j1 --test-show-details=direct --test-option=--num-threads=1 --test-option=-p --test-option='/SinkDelivery/'
+nix develop --no-write-lock-file -c python3 tests/types/opaque-values.py
+python3 tools/style/check_haskell.py
+git diff --check
+```
+
+No workflow body, migration, dependency or valid wire representation changes.
+ADR-22 records the coordinate meaning. Source tracing corrects the old runId
+finding: current agent, conversation and flow producers render their Kioku
+SessionId there, independently of the workflow-owned outbox message id. This
+correction leaves the primitive reference violation explicit. Receipt detail,
+agent and ordinal findings remain open for their own producer/consumer review.
+All 123 public compiler controls pass: public factories compile before generic,
+coercion and cross-coordinate substitution refusals. Coherent build/census
+reconciliation follows; all plan milestones remain open.

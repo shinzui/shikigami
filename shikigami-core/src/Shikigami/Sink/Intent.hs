@@ -75,7 +75,6 @@ import Shikigami.Sink.KanmonClient (resolveConversationKey)
 import Shikigami.Sink.Permission
   ( Denied (..),
     SinkKind,
-    sinkKindText,
   )
 import Shikigami.Sink.Recipient (resolveSinkRecipient)
 
@@ -446,15 +445,15 @@ enqueuePreparedSinkIntentTx PreparedSinkIntent {outboxMessage, deliveryReceipt} 
 deliveryReceiptFor :: Text -> SinkKind -> Delivery.DeliveryStatus -> Maybe Text -> UTCTime -> SinkIntent -> Delivery.DeliveryReceipt
 deliveryReceiptFor messageId kind = deliveryReceiptForKey (Delivery.deliveryReceiptKey messageId) messageId kind
 
-deliveryReceiptForKey :: Text -> Text -> SinkKind -> Delivery.DeliveryStatus -> Maybe Text -> UTCTime -> SinkIntent -> Delivery.DeliveryReceipt
+deliveryReceiptForKey :: Delivery.ReceiptKey -> Text -> SinkKind -> Delivery.DeliveryStatus -> Maybe Text -> UTCTime -> SinkIntent -> Delivery.DeliveryReceipt
 deliveryReceiptForKey key messageId kind receiptStatus receiptDetail now SinkIntent {agent, runId, ordinal} =
   Delivery.DeliveryReceipt
     { Delivery.receiptKey = key,
-      Delivery.outboxMessageId = messageId,
+      Delivery.outboxMessageId = Delivery.sinkMessageId messageId,
       Delivery.runId = runId,
       Delivery.agent = agent,
       Delivery.ordinal = ordinal,
-      Delivery.sinkKind = sinkKindText kind,
+      Delivery.sinkKind = kind,
       Delivery.status = receiptStatus,
       Delivery.detail = receiptDetail,
       Delivery.updatedAt = now

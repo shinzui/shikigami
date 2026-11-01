@@ -1,0 +1,12 @@
+{
+  "sourceParent": "1c66762",
+  "platform": "aarch64-darwin",
+  "compiler": "9.12.4",
+  "files": {
+    "shikigami-core/src/Shikigami/Sink/Delivery.hs": "400a9b920361f4830be1e993060efa9245f6a444d2618a01a19fc6c62db6a637",
+    "shikigami-core/src/Shikigami/Sink/Intent.hs": "1846222a8231a1dbc04c5d8dd7d157b46dbe15b95bfd67f5947e412d52f3a9d7",
+    "shikigami-core/test-postgres/Shikigami/SinkDeliverySpec.hs": "05df065b483cdc7f15bcc2c3aef3524c77c1af19bb05cb1d06b51606544034b8",
+    "shikigami-core/test/Shikigami/SinkIntentSpec.hs": "c9ad4d1ee935af1fe13358c7d7f276df562af8882dd4b90fb5124e9b1d99464b",
+    "tests/types/opaque-values.py": "ff1d86a9bb2528491162d1dd855dd1a3944f3fe6fe310793930e294886c4b044"
+  }
+}

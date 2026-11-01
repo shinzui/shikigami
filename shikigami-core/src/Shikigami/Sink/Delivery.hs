@@ -10,6 +10,11 @@
 module Shikigami.Sink.Delivery
   ( DeliveryStatus (..),
     DeliveryReceipt (..),
+    ReceiptKey,
+    receiptKeyText,
+    SinkMessageId,
+    sinkMessageId,
+    sinkMessageIdText,
     deliveryReceiptKey,
     subReceiptKey,
     lookupDelivery,
@@ -32,6 +37,7 @@ import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Tx
 import Hasql.Transaction.Sessions qualified as Transactions
 import Shikigami.Prelude
+import Shikigami.Sink.Permission (SinkKind, parseSinkKind, sinkKindText)
 
 -- | The observable lifecycle of one downstream delivery.
 data DeliveryStatus
@@ -44,18 +50,37 @@ data DeliveryStatus
   | ConversationStarted
   deriving stock (Eq, Show, Generic)
 
+-- | A receipt locator preserves the existing parent or substep namespace. It
+-- is a technical lookup coordinate, not a newly allocated entity identity.
+newtype ReceiptKey = ReceiptKey Text
+  deriving stock (Eq, Ord, Show)
+
+receiptKeyText :: ReceiptKey -> Text
+receiptKeyText (ReceiptKey value) = value
+
+-- | Exact message id supplied by Keiro's integration-event boundary. Keiro
+-- owns its grammar; workflow producers may use their existing stable recipes.
+newtype SinkMessageId = SinkMessageId Text
+  deriving stock (Eq, Ord, Show)
+
+sinkMessageId :: Text -> SinkMessageId
+sinkMessageId = SinkMessageId
+
+sinkMessageIdText :: SinkMessageId -> Text
+sinkMessageIdText (SinkMessageId value) = value
+
 -- | One queryable publisher receipt.
 --
 -- @detail@ is the downstream id for successful deliveries and a bounded
 -- diagnostic for failures. A Danwa fresh-conversation sub-receipt stores its
 -- conversation id there with status 'ConversationStarted'.
 data DeliveryReceipt = DeliveryReceipt
-  { receiptKey :: !Text,
-    outboxMessageId :: !Text,
+  { receiptKey :: !ReceiptKey,
+    outboxMessageId :: !SinkMessageId,
     runId :: !Text,
     agent :: !Text,
     ordinal :: !Int,
-    sinkKind :: !Text,
+    sinkKind :: !SinkKind,
     status :: !DeliveryStatus,
     detail :: !(Maybe Text),
     updatedAt :: !UTCTime
@@ -63,22 +88,22 @@ data DeliveryReceipt = DeliveryReceipt
   deriving stock (Eq, Show, Generic)
 
 -- | The receipt that governs whether the whole sink intent may be sent.
-deliveryReceiptKey :: Text -> Text
-deliveryReceiptKey = id
+deliveryReceiptKey :: Text -> ReceiptKey
+deliveryReceiptKey = ReceiptKey
 
 -- | A stable namespace for an intermediate effect within one sink intent.
-subReceiptKey :: Text -> Text -> Text
-subReceiptKey messageId kind = messageId <> "#" <> kind
+subReceiptKey :: Text -> Text -> ReceiptKey
+subReceiptKey messageId kind = ReceiptKey (messageId <> "#" <> kind)
 
 -- | Read one receipt by its durable key.
-lookupDelivery :: Pool -> Text -> IO (Either Text (Maybe DeliveryReceipt))
+lookupDelivery :: Pool -> ReceiptKey -> IO (Either Text (Maybe DeliveryReceipt))
 lookupDelivery pool key = do
   result <- Pool.use pool (Transactions.transaction Transactions.ReadCommitted Transactions.Write (lookupDeliveryTx key))
   pure (renderUsage result >>= id)
 
 -- | Unreadable delivery truth cannot authorize another downstream send, even
 -- when a caller ignores the refusal after an earlier tentative write.
-lookupDeliveryTx :: Text -> Tx.Transaction (Either Text (Maybe DeliveryReceipt))
+lookupDeliveryTx :: ReceiptKey -> Tx.Transaction (Either Text (Maybe DeliveryReceipt))
 lookupDeliveryTx key = do
   retained <- Tx.statement key lookupStatement
   case sequence retained of
@@ -96,7 +121,7 @@ recordDelivery pool receipt =
 recordDeliveryTx :: DeliveryReceipt -> Tx.Transaction ()
 recordDeliveryTx receipt = Tx.statement receipt recordStatement
 
-lookupStatement :: Statement Text (Maybe (Either Text DeliveryReceipt))
+lookupStatement :: Statement ReceiptKey (Maybe (Either Text DeliveryReceipt))
 lookupStatement =
   preparable
     """
@@ -105,7 +130,7 @@ lookupStatement =
       FROM shikigami.sink_deliveries
      WHERE receipt_key = $1
     """
-    (Encoders.param (Encoders.nonNullable Encoders.text))
+    (receiptKeyText >$< Encoders.param (Encoders.nonNullable Encoders.text))
     (Decoders.rowMaybe deliveryReceiptRow)
 
 recordStatement :: Statement DeliveryReceipt ()
@@ -126,12 +151,12 @@ recordStatement =
           detail = EXCLUDED.detail,
           updated_at = EXCLUDED.updated_at
     """
-    ( ((.receiptKey) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-        <> ((.outboxMessageId) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+    ( (receiptKeyText . (.receiptKey) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> (sinkMessageIdText . (.outboxMessageId) >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> ((.runId) >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> ((.agent) >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> (fromIntegral . (.ordinal) >$< Encoders.param (Encoders.nonNullable Encoders.int4))
-        <> ((.sinkKind) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> (sinkKindText . (.sinkKind) >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> (renderDeliveryStatus . (.status) >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> ((.detail) >$< Encoders.param (Encoders.nullable Encoders.text))
         <> ((.updatedAt) >$< Encoders.param (Encoders.nonNullable Encoders.timestamptz))
@@ -152,7 +177,10 @@ deliveryReceiptRow =
     <*> Decoders.column (Decoders.nonNullable Decoders.timestamptz)
   where
     assemble key message run agent ordinal kind status detail updated =
-      (\parsed -> DeliveryReceipt key message run agent ordinal kind parsed detail updated) <$> parseDeliveryStatus status
+      do
+        parsedStatus <- parseDeliveryStatus status
+        parsedKind <- maybe (Left ("unknown sink kind: " <> kind)) Right (parseSinkKind kind)
+        pure (DeliveryReceipt (ReceiptKey key) (SinkMessageId message) run agent ordinal parsedKind parsedStatus detail updated)
 
 renderDeliveryStatus :: DeliveryStatus -> Text
 renderDeliveryStatus = \case

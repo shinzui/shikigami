@@ -148,6 +148,15 @@ without weakening admission or key obligations. See
 fresh census pass on `4983d4c`: 323 modules, 931 declarations and 4,040 keys.
 Both directory findings are resolved/corrected and the two claim keys classified.
 
+The receipt-coordinate source candidate passes 5 SinkIntent unit cases, all 20
+SinkDelivery PostgreSQL cases and 123 compiler controls. Private receipt/message
+coordinates preserve the existing key recipes; the native SinkKind survives SQL
+and unsupported kind metadata refuses publication with owning rollback/recovery.
+Source tracing corrects the runId attribution to the producer's Kioku session
+reference; that independent primitive violation remains open. See
+`docs/evidence/plan-108/sink-locators-source.json`. Coherent census reconciliation
+follows this source checkpoint; the remaining receipt scalar roles stay open.
+
 The native workflow gate passes on `400cdc0` against `af76f1b`, with no findings
 and a replay-neutral native verdict. Exact reports accompany the current evidence.
 The full build, fresh census and focused checks are checkpoints, not milestone

@@ -14,6 +14,7 @@ import Shikigami.Agent.Decl
     Sink (..),
   )
 import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity, VerifiedIdentity), mkAgentPrincipal)
+import Shikigami.Sink.Delivery qualified as Delivery
 import Shikigami.Sink.Intent
   ( SinkIntent (..),
     decodeSinkIntentEvent,
@@ -27,7 +28,15 @@ tests :: TestTree
 tests =
   testGroup
     "SinkIntent"
-    [ testCase "round-trips every sink constructor through the outbox event" do
+    [ testCase "receipt coordinates retain legacy opaque bytes and substep spelling" do
+        traverse_
+          ( \raw -> do
+              Delivery.sinkMessageIdText (Delivery.sinkMessageId raw) @?= raw
+              Delivery.receiptKeyText (Delivery.deliveryReceiptKey raw) @?= raw
+              Delivery.receiptKeyText (Delivery.subReceiptKey raw "conv") @?= raw <> "#conv"
+          )
+          ["", "legacy:step", "a#b", "日本"],
+      testCase "round-trips every sink constructor through the outbox event" do
         traverse_ assertRoundTrip representativeSinks,
       testCase "canonical intent encodes to the pinned wire bytes" do
         encode (intentFor canonicalSink) @?= canonicalWireBytes,

@@ -68,7 +68,11 @@ import Shikigami.Repository qualified as Repository
 import Shikigami.Router.Decision qualified as Router
 import Shikigami.Sink.Auth qualified as Auth
 '''
-POSITIVE = '''reportedPrincipal :: Text -> DirectoryStore.ReportedPrincipalClaim
+POSITIVE = '''sinkMessage :: Text -> Delivery.SinkMessageId
+sinkMessage = Delivery.sinkMessageId
+receiptKey :: Text -> Delivery.ReceiptKey
+receiptKey = Delivery.deliveryReceiptKey
+reportedPrincipal :: Text -> DirectoryStore.ReportedPrincipalClaim
 reportedPrincipal = DirectoryStore.reportedPrincipalClaim
 requestFingerprint :: Text -> Either Text Ledger.PayloadFingerprint
 requestFingerprint = Ledger.parsePayloadFingerprint
@@ -224,6 +228,8 @@ ordinaryPinnedRecord :: Evidence.PinnedDiffView -> ()
 ordinaryPinnedRecord value = Generic.from value `seq` ()
 '''
 CASES = [
+    ('Delivery.SinkMessageId', 'generic'),
+    ('Delivery.ReceiptKey', 'generic'),
     ('DirectoryStore.ReportedPrincipalClaim', 'generic'),
     ('Ledger.PayloadFingerprint', 'generic'),
     ('Ledger.CallerAttribution', 'generic'),
@@ -316,6 +322,9 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
         assert result.returncode != 0 and 'RunDisposition' in result.stderr, (source_kind, result.stderr)
         print('opaque boundary: run disposition ' + source_kind + ' substitution refused: passed', flush=True)
     for label, signature, expression in [
+        ('sink message raw coercion', 'Text -> Delivery.SinkMessageId', 'coerce'),
+        ('receipt key raw coercion', 'Text -> Delivery.ReceiptKey', 'coerce'),
+        ('receipt/message substitution', 'Delivery.SinkMessageId -> Delivery.ReceiptKey', 'coerce'),
         ('reported principal raw coercion', 'Text -> DirectoryStore.ReportedPrincipalClaim', 'coerce'),
         ('payload fingerprint UUID coercion', 'UUID -> Ledger.PayloadFingerprint', 'coerce'),
         ('payload fingerprint raw coercion', 'Text -> Ledger.PayloadFingerprint', 'coerce'),

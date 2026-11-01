@@ -127,3 +127,30 @@ enforcement point.
   procedure.
 * `mori://shinzui/keiro/plans/165-add-terminal-outbox-publication-rejection-outcomes`
   — the released upstream terminal-rejection contract consumed here.
+
+## Receipt coordinates retain their owner meaning
+
+Plan 108 keeps receipt locators and integration message ids as separate private,
+non-Generic nominal values. The message boundary captures Keiro's explicitly
+opaque application text without imposing the canonical producer's grammar on
+workflow-owned producers. Parent keys remain the message id and substep keys
+remain `<message-id>#<substep>`. The existing workflow UUIDv5 OutboxId recipe and
+all SQL key bytes stay unchanged; these are deterministic technical coordinates,
+not fresh entities to allocate. The low-level process-manager outbox pattern is
+supported by
+[messaging outbox guidance](mori://shinzui/keiro-runtime-patterns/docs/messaging-outbox).
+The exact upstream contract is `mori://shinzui/keiro`, project-relative
+`keiro-core/src/Keiro/Integration/Event.hs#IntegrationEvent` (symbol URI pending).
+
+Receipts retain the existing SinkKind enum through their SQL boundary. The SQL
+encoder renders the original labels; the owning reader rejects an unknown kind,
+condemns the composed transaction and refuses publication before another send.
+Exact row repair recovers the original send guard. This adds no workflow step,
+changes no source identity and uses no first-release exception.
+
+Source tracing also corrects the earlier audit's description of receipt runId:
+agent enqueue, conversation replies and flow SinkEnv producers supply the Kioku
+session id rendered by idText, rather than the native Keiro WorkflowId. The
+existing primitive and historical wire-admission obligations remain explicit in
+Plan 108 until independently resolved. A nominal receipt locator does not certify
+that independent field or the overloaded downstream-id/diagnostic detail.
