@@ -9,6 +9,9 @@ module Shikigami.Objective.Store
     read,
     readVersion,
     admitConversationTurn,
+    readConversationTurn,
+    lookupCreatedObjective,
+    lookupCreatedInScope,
     execute,
     lookupCommandReceipt,
     readReceipt,
@@ -150,6 +153,62 @@ readVersion access reference = protected do
   key <- requireDecoded (parseObjectiveAssignmentId assignment)
   require (versionFor current key)
 
+-- | Look up a turn that was already admitted; origin validation must never
+-- manufacture an association for an execution that is already running.
+readConversationTurn :: (ObjectiveEffects es) => Access -> RunReference -> TurnReference -> ConversationRef -> Eff es (Either ObjectiveError (Maybe Conversation.TurnAdmission))
+readConversationTurn access run turn conversation = case access.actor of
+  RecordedAgent participant -> protectedTurn do
+    now <- Tx.statement () currentTime
+    unless (now < access.expiresAt && access.settings.enabled == ObjectivesEnabled) (abort ObjectiveDenied)
+    saved <- Conversation.lookupTurn run turn conversation participant >>= require
+    forM_ saved \admission -> forM_ admission.binding \binding -> locked binding.receipt.objectiveId >>= checkAccess access
+    pure saved
+  _ -> pure (Left ObjectiveDenied)
+
+-- Receipt-backed lookup supports commands on an objective created within a
+-- frozen scope. It grants no access to arbitrary objective selectors.
+lookupCreatedObjective :: (ObjectiveEffects es) => Access -> OperationId -> CreationOrigin -> Eff es (Either ObjectiveError (Maybe Receipt))
+lookupCreatedObjective access operation origin = protected do
+  now <- Tx.statement () currentTime
+  unless (now < access.expiresAt && access.settings.enabled == ObjectivesEnabled && origin.operationId == operation) (abort ObjectiveDenied)
+  case access.actor of
+    RecordedAgent _ -> pure ()
+    _ -> abort ObjectiveDenied
+  let creator = versionedDigest "shikigami.objective-creator/1" (toJSON access.actor)
+  saved <- readRow (creator, operationKey operation) selectCreated
+  case saved of
+    Nothing -> pure Nothing
+    Just (actual, receipt) -> do
+      unless (actual == Just origin && receipt.operationId == operation) (abort ObjectiveDenied)
+      current <- locked receipt.objectiveId
+      checkAccess access current
+      original <- readRow (objectiveIdText receipt.objectiveId, operationKey operation) selectReceipt
+      unless (original == Just (receipt.fingerprint, Right receipt)) (abort ObjectiveConflict)
+      pure (Just receipt)
+
+-- | Runtime adapters supply a pure predicate from frozen source coordinates.
+-- The model supplies only the selector; creator attribution and current access
+-- are checked by this owner before returning a receipt.
+lookupCreatedInScope :: (ObjectiveEffects es) => Access -> ObjectiveId -> (CreationOrigin -> Bool) -> Eff es (Either ObjectiveError (Maybe Receipt))
+lookupCreatedInScope access objective within = protected do
+  case access.actor of
+    RecordedAgent _ -> pure ()
+    _ -> abort ObjectiveDenied
+  now <- Tx.statement () currentTime
+  unless (now < access.expiresAt && access.settings.enabled == ObjectivesEnabled) (abort ObjectiveDenied)
+  let creator = versionedDigest "shikigami.objective-creator/1" (toJSON access.actor)
+  saved <- readRow (objectiveIdText objective, creator) selectCreatedById
+  case saved of
+    Nothing -> pure Nothing
+    Just (origin, receipt) -> do
+      current <- locked objective
+      checkAccess access current
+      source <- maybe (abort ObjectiveDenied) pure origin
+      unless (receipt.objectiveId == objective && source.operationId == receipt.operationId && within source) (abort ObjectiveDenied)
+      original <- readRow (objectiveIdText objective, operationKey receipt.operationId) selectReceipt
+      unless (original == Just (receipt.fingerprint, Right receipt)) (abort ObjectiveConflict)
+      pure (Just receipt)
+
 -- | Called only by authenticated runtime admission. Absence is retained too;
 -- accepted turns never acquire a later conversation binding on retry.
 admitConversationTurn :: (ObjectiveEffects es) => Access -> RunReference -> TurnReference -> ConversationRef -> Eff es (Either ObjectiveError Conversation.TurnAdmission)
@@ -208,7 +267,6 @@ lookupCommandReceipt access objective operation mutation = protected do
 
 create :: (ObjectiveEffects es) => Access -> OperationId -> Maybe CreationOrigin -> CreateRequest -> IO (Either ObjectiveError ()) -> Eff es (Either ObjectiveError Receipt)
 create access operation origin request verifyOrigin = guarded do
-  unless (creationAllowed access.settings access.actor) (throwIO (Abort ObjectiveDenied))
   unless (validKey (operationKey operation)) (throwIO (Abort (ObjectiveInvalid "invalid operation key")))
   allocated <- KindID.toText <$> KindID.genKindID @"shikigami_objective"
   identifier <- either (const (throwIO (Abort ObjectiveUnavailable))) pure (parseObjectiveId allocated)
@@ -220,19 +278,24 @@ create access operation origin request verifyOrigin = guarded do
       receipt = Receipt identifier operation fingerprint initialRevision digest
       lookupOriginal = protected do
         now <- Tx.statement () currentTime
-        unless (now < access.expiresAt && creationAllowed access.settings access.actor) (abort ObjectiveDenied)
+        unless (now < access.expiresAt && access.settings.enabled == ObjectivesEnabled && validPrincipal access.actor) (abort ObjectiveDenied)
         stored <- readRow (creator, (operationKey operation)) selectOrigin
         case stored of
           Nothing -> pure Nothing
           Just (actual, old) -> do
             current <- locked old.objectiveId
             checkAccess access current
-            unless (actual == fingerprint) (abort ObjectiveConflict)
+            unless (actual == fingerprint && old.operationId == operation) (abort ObjectiveConflict)
             pure (Just old)
   original <- lookupOriginal >>= either (throwIO . Abort) pure
   case original of
     Just old -> pure (Right old)
     Nothing -> do
+      unless (creationAllowed access.settings access.actor) (throwIO (Abort ObjectiveDenied))
+      case access.actor of
+        RecordedAgent _ | isNothing origin -> throwIO (Abort ObjectiveDenied)
+        _ -> pure ()
+      forM_ origin \source -> unless (source.operationId == operation) (throwIO (Abort ObjectiveDenied))
       verified <- liftIO verifyOrigin
       either (throwIO . Abort) pure verified
       either (throwIO . Abort) pure (validateSnapshot initial)
@@ -571,8 +634,26 @@ selectReceipt = preparable "SELECT fingerprint,outcome FROM shikigami.objective_
 insertReceipt :: Statement (Text, Text, Text, Either ObjectiveError Receipt) ()
 insertReceipt = preparable "INSERT INTO shikigami.objective_receipts(objective_id,operation_key,fingerprint,outcome) VALUES ($1,$2,$3,$4)" (contrazip4 textParam textParam textParam jsonParam) D.noResult
 
+-- Validate the physical keys as well as the JSON before a creation receipt can
+-- authorize continuation. A well-typed receipt for another row is corruption.
+originDetails :: D.Row (Either () (MutationFingerprint, Maybe CreationOrigin, Receipt))
+originDetails = assemble <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> jsonRow <*> jsonRow
+  where
+    assemble objective operation raw origin receipt = do
+      fingerprint <- either (const (Left ())) Right (parseMutationFingerprint raw)
+      source <- origin
+      saved <- receipt
+      unless (objectiveIdText saved.objectiveId == objective && operationKey saved.operationId == operation && saved.fingerprint == fingerprint) (Left ())
+      pure (fingerprint, source, saved)
+
 selectOrigin :: Statement (Text, Text) (Maybe (Either () (MutationFingerprint, Receipt)))
-selectOrigin = preparable "SELECT fingerprint,receipt FROM shikigami.objective_origins WHERE creator_key=$1 AND operation_key=$2" (contrazip2 textParam textParam) (D.rowMaybe ((\raw value -> do fingerprint <- either (const (Left ())) Right (parseMutationFingerprint raw); (fingerprint,) <$> value) <$> D.column (D.nonNullable D.text) <*> jsonRow))
+selectOrigin = preparable "SELECT objective_id,operation_key,fingerprint,origin,receipt FROM shikigami.objective_origins WHERE creator_key=$1 AND operation_key=$2" (contrazip2 textParam textParam) (D.rowMaybe (fmap (fmap (\(fingerprint, _, receipt) -> (fingerprint, receipt))) originDetails))
+
+selectCreated :: Statement (Text, Text) (Maybe (Either () (Maybe CreationOrigin, Receipt)))
+selectCreated = preparable "SELECT objective_id,operation_key,fingerprint,origin,receipt FROM shikigami.objective_origins WHERE creator_key=$1 AND operation_key=$2" (contrazip2 textParam textParam) (D.rowMaybe (fmap (fmap (\(_, origin, receipt) -> (origin, receipt))) originDetails))
+
+selectCreatedById :: Statement (Text, Text) (Maybe (Either () (Maybe CreationOrigin, Receipt)))
+selectCreatedById = preparable "SELECT objective_id,operation_key,fingerprint,origin,receipt FROM shikigami.objective_origins WHERE objective_id=$1 AND creator_key=$2" (contrazip2 textParam textParam) (D.rowMaybe (fmap (fmap (\(_, origin, receipt) -> (origin, receipt))) originDetails))
 
 insertOrigin :: Statement (Text, Text, Text, Text, Aeson.Value, Receipt) ()
 insertOrigin = preparable "INSERT INTO shikigami.objective_origins(creator_key,operation_key,objective_id,fingerprint,origin,receipt) VALUES ($1,$2,$3,$4,$5,$6)" (contrazip6 textParam textParam textParam textParam jsonParam jsonParam) D.noResult

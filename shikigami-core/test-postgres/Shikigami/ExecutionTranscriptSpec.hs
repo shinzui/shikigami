@@ -48,27 +48,30 @@ import Keiro.Projection (DomainProjectionCommandOutcome (DomainProjectionCommand
 import Keiro.ReadModel.Rebuild qualified as Rebuild
 import Keiro.Stream qualified as Stream
 import Keiro.Timer qualified as Timer
-import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), continueAsNew, currentRunGeneration, defaultWorkflowRunOptions, loadStepIndex, runWorkflow)
+import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), continueAsNew, currentRunGeneration, defaultWorkflowRunOptions, loadStepIndex, runWorkflow, step)
 import Keiro.Workflow.Awakeable (AwakeableId (..), awakeableIdText, awakeableNamed)
 import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), countPendingAwakeables, lookupAwakeable, registerAwakeableTx)
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
 import Keiro.Workflow.Child (runChildWorkflow)
 import Keiro.Workflow.Types (WorkflowId (..))
-import Kioku.Id (genSessionId)
+import Kioku.Id (genSessionId, idText)
+import Kioku.Session qualified as Memory
+import Kioku.Session.Domain (RecordTurnData (..), StartSessionData (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Read qualified as StoreRead
 import Kiroku.Store.Transaction (runTransaction)
-import Kiroku.Store.Types (GlobalPosition (..), StreamInfo (version), StreamVersion)
+import Kiroku.Store.Types (CategoryName (..), GlobalPosition (..), StreamInfo (version), StreamVersion)
 import Pgmq (QueueMetrics (queueLength))
 import Pgmq.Hasql.Statements.Message qualified as PgmqMessage
 import Pgmq.Hasql.Statements.QueueObservability qualified as PgmqQueue
-import Shikigami.Action.Authorization (denyAllActionAuthorizer)
+import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests, denyAllActionAuthorizer)
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalRequest (..), approvalWorkflowId, resolveApproval)
 import Shikigami.Agent.Approval.Workflow qualified as Approval
+import Shikigami.Agent.Conversation.SessionIndex qualified as ConversationIndex
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
-import Shikigami.Agent.Principal (compatibilityIdentity)
+import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), compatibilityIdentity, identityText, mkAgentPrincipal, resolveAgentIdentity)
 import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
 import Shikigami.Agent.RunJob (RunRouteKind (..))
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
@@ -85,7 +88,7 @@ import Shikigami.Capability.Tools (overlayToolName)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Decision.ModelCatalog (modelCatalog)
 import Shikigami.Duration
-import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
+import Shikigami.Execution.AssignmentKey (AssignmentKey, conversationAssignmentIdFor, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Catalog qualified as ExecutionCatalog
 import Shikigami.Execution.Claim qualified as Claim
@@ -119,7 +122,13 @@ import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Log.Correlation (runCorrelationId)
+import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
+import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.Objective.Association (TurnAdmission (..))
+import Shikigami.Objective.Capability qualified as Objective
+import Shikigami.Objective.Origin qualified as Origin
+import Shikigami.Objective.Types qualified as Objective
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.RunEvidence.Catalog qualified as Catalog
@@ -139,7 +148,10 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "ExecutionTranscript"
-    [ testCase "assignment admission freezes Skill and native menu once before starting its driver" $
+    [ testCase "objective conversation origin requires its already admitted owning turn" (objectiveConversationOriginCase fixture),
+      testCase "objective Flow origin uses native workflow generation and static label" (objectiveFlowOriginCase fixture),
+      testCase "objective creation verifies an accepted operation and recovers its atomic origin" (objectiveOriginCase fixture),
+      testCase "assignment admission freezes Skill and native menu once before starting its driver" $
         withConfiguredResourceFixture fixture id (Map.insert R.Tokens R.ExplicitlyUnbounded) \env original _ -> do
           (executor, _, _) <- driverRuntime env False
           described <- newIORef (0 :: Int)
@@ -1540,3 +1552,154 @@ zeroPayloadBytes = preparable "UPDATE shikigami.execution_payloads SET bytes=0 W
 
 corruptSnapshotReference :: Statement Text ()
 corruptSnapshotReference = preparable "UPDATE shikigami.executions SET state=jsonb_set(state,'{snapshot,digest}','\"invalid\"'::jsonb) WHERE execution_id=$1" (E.param (E.nonNullable E.text)) D.noResult
+
+objectiveOriginCase :: DatabaseFixture -> IO ()
+objectiveOriginCase fixture = withConfiguredFixture fixture objectiveSourceConfiguration \env snapshot access -> do
+  (response, assistant) <- commitToolRequest env snapshot access
+  (invocation, followingInvocation) <- case toolInvocations assistant of [first, second] -> pure (first, second); _ -> assertFailure "two tool requests expected"
+  let binding = observationBinding & #recovery .~ IdempotentEffect
+      input = ToolOperationInput response (fixtureToolPosition 0) invocation binding
+      specification = toolSpec snapshot 1 input
+      key = specification.operationId
+      request = objectiveSourceRequest
+      baseHost = objectiveSourceHost snapshot.identity
+      countRetained table = run env (runTransaction (Tx.statement () (preparable ("SELECT count(*) FROM shikigami." <> table) E.noParams (D.singleRow (D.column (D.nonNullable D.int8))))))
+      countGoals = countRetained "objectives"
+      countOriginEvents = length <$> run env (StoreRead.readCategory (CategoryName "objectiveLifecycle") (GlobalPosition 0) 20)
+  _ <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
+  authority <- expectRight =<< run env (Origin.executionAuthority access key)
+  let origin = Origin.authorityOrigin authority
+      host = baseHost & #verifyOrigin .~ (\actor source -> run env (Origin.verifyCreationOrigin authority actor source))
+      changed = case origin of Objective.ExecutionOrigin _ execution operation -> Objective.ExecutionOrigin (Objective.runReference "forged-run") execution operation; _ -> error "execution source expected"
+  run env (Origin.verifyCreationOrigin authority (Objective.RecordedAgent snapshot.identity) changed) >>= (@?= Left Objective.ObjectiveDenied)
+  run env (Origin.verifyCreationOrigin authority (Objective.VerifiedCaller (mustRight (Objective.parseCallerId "forged-actor"))) origin) >>= (@?= Left Objective.ObjectiveDenied)
+  run env (Objective.createObjective host (fixtureOperationId "substituted-operation") (Just origin) request) >>= (@?= Left Objective.ObjectiveDenied)
+  countGoals >>= (@?= 0)
+  -- The origin row is written last in the same command transaction. Injecting
+  -- failure there must roll back the objective, its event and its receipt too.
+  run env (runTransaction (Tx.sql "CREATE FUNCTION shikigami.reject_origin_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected origin publication failure'; END $$; CREATE TRIGGER reject_origin_fixture BEFORE INSERT ON shikigami.objective_origins FOR EACH ROW EXECUTE FUNCTION shikigami.reject_origin_fixture()"))
+  run env (Objective.createObjective host key (Just origin) request) >>= (@?= Left Objective.ObjectiveUnavailable)
+  countGoals >>= (@?= 0)
+  countRetained "objective_origins" >>= (@?= 0)
+  countRetained "objective_receipts" >>= (@?= 0)
+  countOriginEvents >>= (@?= 0)
+  run env (runTransaction (Tx.sql "DROP TRIGGER reject_origin_fixture ON shikigami.objective_origins"))
+  receipt <- expectRight =<< run env (Objective.createObjective host key (Just origin) request)
+  run env (Objective.createObjective (host & #verifyOrigin .~ (\_ _ -> assertFailure "accepted retry rechecked its origin")) key (Just origin) request) >>= (@?= Right receipt)
+  countGoals >>= (@?= 1)
+  countOriginEvents >>= (@?= 1)
+  run env (Objective.createObjective (host & #settings . #agentCreation .~ [] & #verifyOrigin .~ (\_ _ -> assertFailure "accepted creation rechecked retired policy")) key (Just origin) request) >>= (@?= Right receipt)
+  run env (Objective.lookupCreatedObjective (baseHost & #settings . #agentCreation .~ []) key origin) >>= (@?= Right (Just receipt))
+  run env (Objective.lookupCreatedObjective baseHost key changed) >>= (@?= Left Objective.ObjectiveDenied)
+  run env (Objective.lookupCreatedObjective (baseHost & #actions .~ denyAllActionAuthorizer) key origin) >>= (@?= Left Objective.ObjectiveDenied)
+  run env (Store.recordOutcomeAndAdvance access (fixtureRevision 3) key (ToolReturned [] ExecutionValue.ToolSucceeded) (NeedTool response (fixtureToolPosition 1)) Nothing) >>= (@?= Right R.Accepted)
+  run env (Origin.verifyCreationOrigin authority (Objective.RecordedAgent snapshot.identity) origin) >>= (@?= Left Objective.ObjectiveDenied)
+  run env (Objective.lookupCreatedObjective baseHost key origin) >>= (@?= Right (Just receipt))
+  (retained, _) <- expectRight =<< run env (Store.loadExecution access)
+  retained @?= snapshot
+  run env (Origin.lookupCreatedInScope authority baseHost receipt.objectiveId) >>= (@?= Left Objective.ObjectiveDenied)
+  let secondInput = ToolOperationInput response (fixtureToolPosition 1) followingInvocation binding
+      secondSpec = toolSpec snapshot 2 secondInput
+  _ <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 4) secondSpec (toJSON secondInput))
+  nextAuthority <- expectRight =<< run env (Origin.executionAuthority access secondSpec.operationId)
+  run env (Origin.lookupCreatedInScope nextAuthority baseHost receipt.objectiveId) >>= (@?= Right (Just receipt))
+  -- The same principal also owns this other goal, but a different native scope
+  -- created it. Ownership cannot widen the current execution's frozen scope.
+  let foreignBody = do
+        flow <- Origin.flowAuthority snapshot.identity (Objective.originLabel "other-goal") >>= either (liftIO . assertFailure . show) pure
+        let source = Origin.authorityOrigin flow
+            sourceHost = baseHost & #verifyOrigin .~ (\actor candidate -> run env (Origin.verifyCreationOrigin flow actor candidate))
+        step (StepName "create-other-goal") (Objective.createObjective sourceHost source.operationId (Just source) objectiveSourceRequest)
+  Completed other <- run env (runWorkflow (WorkflowName "ForeignObjectiveOriginFixture") (WorkflowId "foreign-goal-scope") foreignBody)
+  otherReceipt <- expectRight other
+  run env (Origin.lookupCreatedInScope nextAuthority baseHost otherReceipt.objectiveId) >>= (@?= Left Objective.ObjectiveDenied)
+
+objectiveSourceConfiguration :: ExecutionSnapshot -> ExecutionSnapshot
+objectiveSourceConfiguration snapshot = toolConfiguration snapshot & #identity .~ VerifiedIdentity (mustRight (mkAgentPrincipal "agent_objective_origin")) & #toolBindings .~ [observationBinding & #recovery .~ IdempotentEffect]
+
+objectiveSourceRequest :: Objective.CreateRequest
+objectiveSourceRequest = Objective.CreateRequest (mustRight (Objective.parseTitle "created by a tool")) (mustRight (Objective.parseGoal "qualify source attribution")) (mustRight (Objective.parseInstructions "work")) [Objective.Criterion (mustRight (Objective.parseCriterionKey "review")) (mustRight (Objective.parseCriterionDescription "review integrated result")) Objective.HumanVerifiable Objective.JourneyOptional] []
+
+objectiveSourceHost :: AgentIdentity -> Objective.ObjectiveHost
+objectiveSourceHost identity = Objective.ObjectiveHost settings (pure (Right (Objective.RecordedAgent identity))) allowAllActionAuthorizerForTests (\_ _ -> pure (Left Objective.ObjectiveDenied)) (\_ _ -> pure (Left Objective.ObjectiveDenied)) (\_ -> pure (Left Objective.ObjectiveInvalidEvidence))
+  where
+    settings = Objective.defaultObjectiveSettings & #enabled .~ Objective.ObjectivesEnabled & #agentCreation .~ (case identity of VerifiedIdentity principal -> [principal]; _ -> [])
+
+objectiveConversationOriginCase :: DatabaseFixture -> IO ()
+objectiveConversationOriginCase fixture = withConfiguredFixture fixture configure \env snapshot access -> do
+  now <- getCurrentTime
+  resolved <- expectRight (resolveAgentIdentity snapshot.identity)
+  let context = shikigamiWriteContext resolved
+      conversation = mustRight (Objective.parseConversationRef "origin-conversation")
+      turn = Objective.turnReference "danwa:user:origin-message"
+      baseHost = objectiveSourceHost snapshot.identity
+  _ <- expectRight =<< run env (Memory.startWithContext context (StartSessionData snapshot.sessionId shikigamiMemorySpace (agentActor resolved) Nothing (mustRight (identityText snapshot.identity)) "conversation" (agentScope resolved) (Just (Objective.conversationRefText conversation)) Nothing Nothing 0 now))
+  _ <- expectRight =<< run env (Memory.recordTurnWithContext context (RecordTurnData snapshot.sessionId shikigamiMemorySpace (agentActor resolved) "danwa:user:origin-message" 0 "user" "create an objective" Nothing Nothing Nothing now))
+  run env (ConversationIndex.rememberConversationSession (Objective.conversationRefText conversation) (idText snapshot.sessionId) now)
+  (response, assistant) <- commitToolRequest env snapshot access
+  invocation <- case toolInvocations assistant of first : _ -> pure first; [] -> assertFailure "tool request expected"
+  let input = ToolOperationInput response (fixtureToolPosition 0) invocation (observationBinding & #recovery .~ IdempotentEffect)
+      specification = toolSpec snapshot 1 input
+      key = specification.operationId
+      runId = Objective.runReference snapshot.runId.unWorkflowId
+  _ <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
+  missing <- run env (Origin.conversationAuthority baseHost access conversation turn key)
+  assertBool "origin lookup never admits a missing turn" (case missing of Left Objective.ObjectiveDenied -> True; _ -> False)
+  admitted <- expectRight =<< run env (Objective.admitConversationTurn baseHost runId turn conversation)
+  admitted.binding @?= Nothing
+  _ <- expectRight =<< run env (Memory.recordTurnWithContext context (RecordTurnData snapshot.sessionId shikigamiMemorySpace (agentActor resolved) "danwa:user:previous-message" 1 "user" "earlier work" Nothing Nothing Nothing now))
+  let priorTurn = Objective.turnReference "danwa:user:previous-message"
+  _ <- expectRight =<< run env (Objective.admitConversationTurn baseHost runId priorTurn conversation)
+  unrelated <- run env (Origin.conversationAuthority baseHost access conversation priorTurn key)
+  assertBool "another admitted turn in the same session is not this execution's origin" (case unrelated of Left Objective.ObjectiveDenied -> True; _ -> False)
+  authority <- expectRight =<< run env (Origin.conversationAuthority baseHost access conversation turn key)
+  let origin = Origin.authorityOrigin authority
+      host = baseHost & #verifyOrigin .~ (\actor source -> run env (Origin.verifyCreationOrigin authority actor source))
+  receipt <- expectRight =<< run env (Objective.createObjective host key (Just origin) objectiveSourceRequest)
+  run env (Objective.lookupCreatedObjective baseHost key origin) >>= (@?= Right (Just receipt))
+  -- Creating an objective never retroactively associates the current turn.
+  run env (Objective.readConversationTurn baseHost runId turn conversation) >>= (@?= Right (Just admitted))
+  where
+    configure snapshot =
+      let assignment = conversationAssignmentIdFor snapshot.runId.unWorkflowId "origin-message"
+       in objectiveSourceConfiguration snapshot & #executionId .~ executionIdFor assignment & #selection . #assignmentId .~ assignment
+
+objectiveFlowOriginCase :: DatabaseFixture -> IO ()
+objectiveFlowOriginCase fixture = withFixture fixture \env _ _ -> do
+  let identity = VerifiedIdentity (mustRight (mkAgentPrincipal "agent_objective_origin"))
+      baseHost = objectiveSourceHost identity
+      label = Objective.originLabel "create-goal"
+      workflow = WorkflowId "objective-flow-origin"
+      body = do
+        badLabel <- Origin.flowAuthority identity (Objective.originLabel "model:label")
+        liftIO (assertBool "Flow labels must be static workflow words" (case badLabel of Left Objective.ObjectiveInvalid {} -> True; _ -> False))
+        authority <- Origin.flowAuthority identity label >>= either (liftIO . assertFailure . show) pure
+        again <- Origin.flowAuthority identity label >>= either (liftIO . assertFailure . show) pure
+        let origin = Origin.authorityOrigin authority
+            key = origin.operationId
+            host = baseHost & #verifyOrigin .~ (\actor source -> run env (Origin.verifyCreationOrigin authority actor source))
+        liftIO (Origin.authorityOrigin again @?= origin)
+        result <- step (StepName "create-goal") (Objective.createObjective host key (Just origin) objectiveSourceRequest)
+        receipt <- either (liftIO . assertFailure . show) pure result
+        repeated <- step (StepName "recover-goal") (Objective.createObjective host key (Just origin) objectiveSourceRequest)
+        liftIO (repeated @?= Right receipt)
+        followup <- Origin.flowAuthority identity (Objective.originLabel "continue-goal") >>= either (liftIO . assertFailure . show) pure
+        found <- step (StepName "lookup-created-goal") (liftIO (run env (Origin.lookupCreatedInScope followup baseHost receipt.objectiveId)))
+        liftIO (found @?= Right (Just receipt))
+        pure (origin, receipt)
+  Completed (origin, receipt) <- run env (runWorkflow (WorkflowName "ObjectiveFlowOriginFixture") workflow body)
+  case origin of
+    Objective.FlowOrigin owner generation staticLabel _ -> do
+      owner @?= workflow
+      generation @?= fixtureRevision 0
+      staticLabel @?= label
+    _ -> assertFailure "Flow origin expected"
+  run env (Objective.lookupCreatedObjective baseHost origin.operationId origin) >>= (@?= Right (Just receipt))
+
+  let otherBody = do
+        authority <- Origin.flowAuthority identity label >>= either (liftIO . assertFailure . show) pure
+        step (StepName "check-foreign-scope") (liftIO (run env (Origin.lookupCreatedInScope authority baseHost receipt.objectiveId)))
+  -- Workflow ids are scoped by native workflow name. Matching only id and
+  -- generation would incorrectly admit this other workflow's commands.
+  Completed refused <- run env (runWorkflow (WorkflowName "OtherObjectiveFlowOriginFixture") workflow otherBody)
+  refused @?= Left Objective.ObjectiveDenied

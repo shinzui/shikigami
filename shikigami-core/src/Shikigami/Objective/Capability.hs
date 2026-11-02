@@ -11,6 +11,9 @@ module Shikigami.Objective.Capability
     executeInternal,
     readCommandReceipt,
     admitConversationTurn,
+    readConversationTurn,
+    lookupCreatedObjective,
+    lookupCreatedInScope,
   )
 where
 
@@ -129,6 +132,25 @@ readCommandReceipt :: (Store.ObjectiveEffects es) => ObjectiveHost -> ObjectiveI
 readCommandReceipt host objective operation = do
   grant <- liftIO (admit host "read-receipt" (toJSON (objective, operation)))
   either (pure . Left) (\access -> Store.readReceipt access objective operation) grant
+
+readConversationTurn :: (Store.ObjectiveEffects es) => ObjectiveHost -> RunReference -> TurnReference -> ConversationRef -> Eff es (Either ObjectiveError (Maybe Conversation.TurnAdmission))
+readConversationTurn host run turn conversation = do
+  grant <- liftIO (admit host "read-conversation-turn" (toJSON (run, turn, conversation)))
+  either (pure . Left) (\access -> Store.readConversationTurn access run turn conversation) grant
+
+lookupCreatedObjective :: (Store.ObjectiveEffects es) => ObjectiveHost -> OperationId -> CreationOrigin -> Eff es (Either ObjectiveError (Maybe Receipt))
+lookupCreatedObjective host operation origin = do
+  grant <- liftIO (admit host "lookup-created" (toJSON (operation, origin)))
+  either (pure . Left) (\access -> Store.lookupCreatedObjective access operation origin) grant
+
+-- This predicate is a trusted runtime value, never decoded from tool JSON.
+lookupCreatedInScope :: (Store.ObjectiveEffects es) => ObjectiveHost -> AccessPrincipal -> ObjectiveId -> CreationOrigin -> (CreationOrigin -> Bool) -> Eff es (Either ObjectiveError (Maybe Receipt))
+lookupCreatedInScope host expectedActor objective scope within = do
+  grant <- liftIO (admit host "lookup-created-in-scope" (toJSON (objective, scope)))
+  case grant of
+    Right access | access.actor == expectedActor -> Store.lookupCreatedInScope access objective within
+    Right _ -> pure (Left ObjectiveDenied)
+    Left err -> pure (Left err)
 
 -- | Runtime-only turn admission. Run/turn coordinates never come from a model
 -- tool's JSON; this freezes the association before that turn can dispatch work.

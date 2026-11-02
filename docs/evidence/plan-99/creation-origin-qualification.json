@@ -1,0 +1,29 @@
+{
+  "scope": "Plan 99 milestone 1 complete: trusted run associations, verified conversation binding/admission primitives, source-verified creation origins and receipt-backed continuation lookup. Frozen scope admission and durable tools remain plan 101.",
+  "baseline": "42907293a9a61198b0f4090fa82cbdcfdc8a722e",
+  "qualified_at": "2026-11-02 UTC",
+  "suites": {
+    "shikigami-core-test": 632,
+    "shikigami-core-postgres-test": 478,
+    "shikigami-server-test": 96,
+    "shikigami-workers-test": 280,
+    "shikigami-agent-test": 37
+  },
+  "checks": [
+    "cabal build all --offline",
+    "just keiro-gate 4290729",
+    "python3 tools/style/check_haskell.py",
+    "bash tools/check-migration-schema-isolation.sh"
+  ],
+  "native_conformance_checks": 168,
+  "native_diff": "neutral; no findings",
+  "notes": [
+    "Full suites pass before the final creator-policy retry guard relocation; the focused objective cases rerun that adjustment.",
+    "Source proofs are private runtime values without wire decoders; no workflow step or input changes."
+  ],
+  "remaining": [
+    "checkpoint and ownership providers",
+    "retained coordination scopes and explicit conflict reconciliation",
+    "production wiring and later MasterPlan children"
+  ]
+}

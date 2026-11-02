@@ -74,8 +74,7 @@ objective lock before returning an associated receipt, including a conflict.
 Fresh acceptance additionally checks the assigned agent's current membership and
 ownership. Receipt recovery retains the accepted selector after assignment changes
 and cannot downgrade to the unassociated entry point. Development-mode anonymous
-HTTP access cannot admit an association. Conversation, creation-origin and worker
-provider qualification remain separate acceptance gates in plan 99.
+HTTP access cannot admit an association. Worker provider qualification remains a separate acceptance gate in plan 99.
 
 Conversation binding resolves the Shikigami-owned index and verifies the session
 through Kioku's owning read-model query, including memory space, namespace,
@@ -94,6 +93,14 @@ produces a visible conflict before writing. The snapshot and its technical Objec
 their own live-only, preserved projection group. The original objective writer
 and query retain their target sets and lifecycle identities;
 workflow wiring and frozen tool scopes remain plan 101's responsibility.
+
+Fresh creation by a recorded agent requires a verified origin whose operation matches
+its creation key. Accepted creation receipts are recovered before applying new source
+checks or creation-policy checks, while current membership and exact action authority
+remain required. Origin lookup checks the physical objective and operation keys, the
+receipt fingerprint and the original command receipt before returning authority for
+continuation. Private runtime proofs have no wire decoder. Plan 101 still owns the
+frozen scope's permitted operation set and the durable invocation boundary.
 
 ## Alternatives rejected
 

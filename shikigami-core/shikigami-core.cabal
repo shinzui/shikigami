@@ -169,6 +169,7 @@ library
     Shikigami.Objective.Content
     Shikigami.Objective.Keys
     Shikigami.Objective.Live
+    Shikigami.Objective.Origin
     Shikigami.Objective.Reference
     Shikigami.Objective.Store
     Shikigami.Objective.Types

@@ -2,7 +2,7 @@
 
 Date: 2026-10-29
 
-Status: accepted; persistence implemented by plan 98, runtime adapters pending MasterPlan 17
+Status: accepted; persistence and runtime-origin primitives implemented; frozen scope admission pending plan 101
 
 ## Context
 
@@ -56,7 +56,7 @@ Creation and access to existing objectives have distinct authority checks within
 command owner. Recovery tests must start with no objective, lose the creation
 acknowledgement, recover exactly one receipt and origin, and continue through the same
 frozen binding. Denied creation and unrelated objective selectors must fail. Later-run
-and conversation continuity must work with memory recall disabled. Plan 98 now qualifies creator-scoped persistence, origin/receipt atomicity, default-deny creation and recovery after process exit. Frozen scope admission, runtime-origin validation and later-run/conversation continuity remain acceptance for plans 99–102.
+and conversation continuity must work with memory recall disabled. Plan 98 now qualifies creator-scoped persistence, origin/receipt atomicity, default-deny creation and recovery after process exit. Plan 99 also qualifies opaque runtime-origin proofs and receipt-backed continuation lookup against accepted execution operations, already admitted conversation turns and native Flow workflow/generation/static-label coordinates. Flow operation commitments include the workflow name because workflow IDs are scoped by name. Conversation proofs check the addressed message against the execution assignment, rather than accepting another turn in the same session. A later operation may find the original creation receipt within the same scope; current membership and exact action authority are still required. Frozen scope admission, durable tool invocation and later-run/conversation continuity remain acceptance for plans 101–102.
 
 ## References
 

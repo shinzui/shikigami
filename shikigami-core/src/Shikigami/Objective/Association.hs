@@ -6,6 +6,7 @@ module Shikigami.Objective.Association
     lookupRunTx,
     ConversationBinding (..),
     TurnAdmission (..),
+    module Shikigami.Objective.Origin,
   )
 where
 
@@ -21,6 +22,7 @@ import Keiro.Workflow.Types (WorkflowId (..))
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Objective.Authority (Access (..))
 import Shikigami.Objective.Conversation (ConversationBinding (..), TurnAdmission (..))
+import Shikigami.Objective.Origin
 import Shikigami.Objective.Reference
 import Shikigami.Objective.Store qualified as Store
 import Shikigami.Objective.Types

@@ -134,6 +134,20 @@ tests fixture =
           objectiveEventCount env >>= (@?= beforeEvents)
           sql env ("UPDATE shikigami.objective_receipts SET fingerprint='" <> mutationFingerprintText receipt.fingerprint <> "' WHERE operation_key LIKE '%edit%'")
           run env retry >>= (@?= Right receipt),
+      testCase "objective creation origin lookup rejects a typed receipt substituted across physical operation keys" $
+        withDatabase fixture \env -> do
+          let principal = either (error . show) id (mkAgentPrincipal "agent_origin_reader")
+              actor = RecordedAgent (VerifiedIdentity principal)
+              creator = host actor & #settings . #agentCreation .~ [principal]
+              operation = fixtureOperationId "create"
+          receipt <- right =<< run env (O.createObjective creator operation (Just origin) request)
+          let corrupt = receipt & #operationId .~ fixtureOperationId "different-operation"
+          replaceJson env "UPDATE shikigami.objective_origins SET receipt=$1" (toJSON corrupt)
+          run env (O.lookupCreatedObjective creator operation origin) >>= (@?= Left ObjectiveConflict)
+          run env (O.createObjective creator operation (Just origin) request) >>= (@?= Left ObjectiveConflict)
+          count env "shikigami.objectives" >>= (@?= 1)
+          replaceJson env "UPDATE shikigami.objective_origins SET receipt=$1" (toJSON receipt)
+          run env (O.lookupCreatedObjective creator operation origin) >>= (@?= Right (Just receipt)),
       testCase "malformed creation fingerprint cannot allocate a replacement objective" $
         withObjective fixture \env _ objective -> do
           let recover = O.createObjective ownerHost (fixtureOperationId "create") (Just origin) request
@@ -316,7 +330,8 @@ tests fixture =
           run env (O.createObjective agentHost (fixtureOperationId "create") Nothing request) >>= (@?= Left ObjectiveDenied)
           run env (O.createObjective ((ownerHost & #settings .~ (defaultObjectiveSettings))) (fixtureOperationId "create") Nothing request) >>= (@?= Left ObjectiveDenied)
           run env (O.createObjective ((granted & #actions .~ (denyAllActionAuthorizer))) (fixtureOperationId "create") Nothing request) >>= (@?= Left ObjectiveDenied)
-          first <- right =<< run env (O.createObjective granted (fixtureOperationId "create") Nothing request)
+          run env (O.createObjective granted (fixtureOperationId "create") Nothing request) >>= (@?= Left ObjectiveDenied)
+          first <- right =<< run env (O.createObjective granted (fixtureOperationId "create") (Just origin) request)
           run env (O.readObjective ownerHost first.objectiveId) >>= (@?= Left ObjectiveDenied),
       testCase "graphs, stale epochs, assignment identity reuse and terminal progress fail without changing state" $
         withObjective fixture \env _ objective -> do
@@ -482,7 +497,7 @@ tests fixture =
           hClose input
           waitForProcess child >>= (@?= ExitFailure 91)
           fresh <- environment connection
-          receipt <- right =<< run fresh (O.createObjective ownerHost (fixtureOperationId "lost-create") (Just origin) request)
+          receipt <- right =<< run fresh (O.createObjective ownerHost (fixtureOperationId "lost-create") (Just (origin & #operationId .~ fixtureOperationId "lost-create")) request)
           current <- right =<< run fresh (O.readObjective ownerHost receipt.objectiveId)
           current.revision @?= revision 1
           replay <- right =<< run fresh (O.executeCommand ownerHost receipt.objectiveId (revision 0) (fixtureOperationId "lost-edit") (ReviseInstructions (instructions "committed-before-exit")))
@@ -505,7 +520,7 @@ request :: CreateRequest
 request = CreateRequest (title "deliver") (goal "integrated goal") (instructions "instructions") [Criterion (criterionKey "human") (description "review integration") HumanVerifiable JourneyOptional] []
 
 origin :: CreationOrigin
-origin = ExecutionOrigin (runReference "recorded-run") (executionIdentity "recorded-execution") (fixtureOperationId "accepted-operation")
+origin = ExecutionOrigin (runReference "recorded-run") (executionIdentity "recorded-execution") (fixtureOperationId "create")
 
 draft :: UTCTime -> Text -> AssignmentDraft
 draft now key = AssignmentDraft (objectiveAssignment key) (instructions "work") [] (compatibilityIdentity (fixtureAgentName "worker")) Pending Nothing (Just (fixtureRootId "session-root")) (Just (addUTCTime 3600 now))
@@ -590,7 +605,7 @@ crashWriter :: IO ()
 crashWriter = do
   connection <- right . Aeson.eitherDecode =<< Lazy.getContents
   env <- environment connection
-  created <- right =<< run env (O.createObjective ownerHost (fixtureOperationId "lost-create") (Just origin) request)
+  created <- right =<< run env (O.createObjective ownerHost (fixtureOperationId "lost-create") (Just (origin & #operationId .~ fixtureOperationId "lost-create")) request)
   _ <- right =<< run env (O.executeCommand ownerHost created.objectiveId (revision 0) (fixtureOperationId "lost-edit") (ReviseInstructions (instructions "committed-before-exit")))
   exitWith (ExitFailure 91)
 
