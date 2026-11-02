@@ -11,6 +11,9 @@ module Shikigami.Objective.Store
     resolveAssignment,
     currentCheckpoint,
     readMutationReceipt,
+    lookupCoordinationScope,
+    coordinatorParentScope,
+    coordinatorBudgetId,
     admitConversationTurn,
     readConversationTurn,
     lookupCreatedObjective,
@@ -50,12 +53,16 @@ import Keiro.Command (CommandError (..))
 import Keiro.Projection (ProjectionCommandOutcome (..), runCommandWithCatalogProjections)
 import Keiro.ReadModel (ReadModel, runQuery)
 import Keiro.Stream qualified as Stream
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
-import Shikigami.Agent.Principal (identityText, principalText)
+import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationBudgetId)
+import Shikigami.Agent.Principal (AgentIdentity, identityText, principalText)
 import Shikigami.App (CommandEffects, commandOptions)
 import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Delegation.BudgetStore qualified as Budgets
+import Shikigami.Execution.Coordinate (ExecutionDigest, executionDigestText)
 import Shikigami.Execution.Identity (OperationId, operationIdText)
 import Shikigami.Execution.Progress (noPendingReceipts)
 import Shikigami.Execution.Resources qualified as Resources
@@ -77,6 +84,7 @@ import Shikigami.ObjectiveTurnAdmission.Generated.Domain qualified as Turn
 import Shikigami.ObjectiveTurnAdmission.Generated.EventStream (objectiveTurnAdmissionCategory, objectiveTurnAdmissionEventStream)
 import Shikigami.ObjectiveTurnLookup.Generated.ReadModel (objectiveTurnLookupReadModel)
 import Shikigami.Prelude
+import Shikigami.WorkerSession.Capability qualified as Coordination
 import Shikigami.WorkerSession.Checkpoint qualified as CP
 import Shikigami.WorkerSession.Input qualified as WorkerInput
 import Shikigami.WorkerSession.Store qualified as Sessions
@@ -112,7 +120,7 @@ administrates access = case access.actor of
   _ -> False
 
 canRead :: Access -> Objective -> Bool
-canRead access objective = access.settings.enabled == ObjectivesEnabled && validPrincipal access.actor && (administrates access || not (null (rolesFor objective access.actor)))
+canRead access objective = validPrincipal access.actor && (administrates access || not (null (rolesFor objective access.actor)))
 
 mayCoordinate :: Access -> Objective -> Bool
 mayCoordinate access objective = canRead access objective && (administrates access || objective.owner == access.actor && Owner `elem` roles || Coordinator `elem` roles)
@@ -139,6 +147,7 @@ authorized access objective mutation = canRead access objective && (administrate
         _ -> manage
       Internal (IngestCheckpoint _ _ _ _) -> manage
       Internal ProjectCheckpoint {} -> manage
+      Internal RetainCoordination {} -> manage
       Internal TransferSessionOwnership {} -> manage
       Internal TransferOwnership {} -> manage
 
@@ -180,6 +189,7 @@ resolveAssignmentTx access reference = do
 -- cutoff cannot outlive the retained resource envelope.
 currentCheckpoint :: (ObjectiveEffects es) => Access -> WS.ObjectiveRef -> Eff es (Either ObjectiveError CP.ObjectiveVersion)
 currentCheckpoint access reference = protected do
+  unless (access.settings.enabled == ObjectivesEnabled) (abort ObjectiveDenied)
   (current, key) <- resolveAssignmentTx access reference
   unless (mayCoordinate access current) (abort ObjectiveDenied)
   version <- require (versionFor current key)
@@ -189,13 +199,30 @@ currentCheckpoint access reference = protected do
       active = if version.active == WorkerInput.ObjectiveActive && root.cancelled == Resources.ContinueWork && root.overage == Resources.NoOverage && now < cutoff then WorkerInput.ObjectiveActive else WorkerInput.ObjectiveInactive
   pure (version & #cutoff .~ cutoff & #active .~ active)
 
+-- Recovery reads the retained body by fingerprint/run; it never derives a
+-- replacement from mutable agent declarations or a newer resource root.
+lookupCoordinationScope :: (ObjectiveEffects es) => Access -> Coordination.CoordinatorRun -> Maybe (ExecutionDigest "coordination-scope") -> Eff es (Either ObjectiveError (Maybe Coordination.CoordinationScope))
+lookupCoordinationScope access run pinned = protected do
+  rows <- case pinned of
+    Just fingerprint -> Tx.statement (executionDigestText fingerprint) selectScope
+    Nothing -> Tx.statement run.runId.unWorkflowId selectRunScope
+  case rows of
+    [] -> pure Nothing
+    [(fingerprint, identifier, parsed)] -> do
+      scope <- requireDecoded parsed
+      objective <- requireDecoded (parseObjectiveId identifier) >>= locked
+      checkAccess access objective
+      unless (mayCoordinate access objective && access.actor == RecordedAgent run.identity && scope.run == run && isJust scope.context.delegationBudgetId && scope.parentScope == coordinatorParentScope objective.objectiveId run.identity && all (\slot -> any ((== slot.objective) . referenceFor objective.objectiveId . (.definition.assignmentId)) objective.assignments) scope.workers && executionDigestText (Coordination.scopeFingerprint scope) == fingerprint && maybe True (== Coordination.scopeFingerprint scope) pinned) (abort ObjectiveDenied)
+      pure (Just scope)
+    _ -> abort ObjectiveConflict
+
 -- | Look up a turn that was already admitted; origin validation must never
 -- manufacture an association for an execution that is already running.
 readConversationTurn :: (ObjectiveEffects es) => Access -> RunReference -> TurnReference -> ConversationRef -> Eff es (Either ObjectiveError (Maybe Conversation.TurnAdmission))
 readConversationTurn access run turn conversation = case access.actor of
   RecordedAgent participant -> protectedTurn do
     now <- Tx.statement () currentTime
-    unless (now < access.expiresAt && access.settings.enabled == ObjectivesEnabled) (abort ObjectiveDenied)
+    unless (now < access.expiresAt) (abort ObjectiveDenied)
     saved <- Conversation.lookupTurn run turn conversation participant >>= require
     forM_ saved \admission -> forM_ admission.binding \binding -> locked binding.receipt.objectiveId >>= checkAccess access
     pure saved
@@ -206,7 +233,7 @@ readConversationTurn access run turn conversation = case access.actor of
 lookupCreatedObjective :: (ObjectiveEffects es) => Access -> OperationId -> CreationOrigin -> Eff es (Either ObjectiveError (Maybe Receipt))
 lookupCreatedObjective access operation origin = protected do
   now <- Tx.statement () currentTime
-  unless (now < access.expiresAt && access.settings.enabled == ObjectivesEnabled && origin.operationId == operation) (abort ObjectiveDenied)
+  unless (now < access.expiresAt && origin.operationId == operation) (abort ObjectiveDenied)
   case access.actor of
     RecordedAgent _ -> pure ()
     _ -> abort ObjectiveDenied
@@ -231,7 +258,7 @@ lookupCreatedInScope access objective within = protected do
     RecordedAgent _ -> pure ()
     _ -> abort ObjectiveDenied
   now <- Tx.statement () currentTime
-  unless (now < access.expiresAt && access.settings.enabled == ObjectivesEnabled) (abort ObjectiveDenied)
+  unless (now < access.expiresAt) (abort ObjectiveDenied)
   let creator = versionedDigest "shikigami.objective-creator/1" (toJSON access.actor)
   saved <- readRow (objectiveIdText objective, creator) selectCreatedById
   case saved of
@@ -254,6 +281,7 @@ admitConversationTurn access run turn conversation = guarded case access.actor o
     case original of
       Left err -> pure (Left err)
       Right (Just admission) -> pure (Right admission)
+      Right Nothing | access.settings.enabled == ObjectivesDisabled -> pure (Left ObjectiveDenied)
       Right Nothing -> do
         models <- Conversation.checkMemoryModels
         case models of
@@ -276,7 +304,8 @@ admitConversationTurn access run turn conversation = guarded case access.actor o
   _ -> pure (Left ObjectiveDenied)
   where
     recover participant = protectedTurn do
-      checkFresh
+      now <- Tx.statement () currentTime
+      unless (now < access.expiresAt) (abort ObjectiveDenied)
       saved <- Conversation.lookupTurn run turn conversation participant >>= require
       forM_ saved \admission -> forM_ admission.binding (\binding -> check binding >>= require)
       pure saved
@@ -323,7 +352,7 @@ create access operation origin request verifyOrigin = guarded do
       receipt = Receipt identifier operation fingerprint initialRevision digest
       lookupOriginal = protected do
         now <- Tx.statement () currentTime
-        unless (now < access.expiresAt && access.settings.enabled == ObjectivesEnabled && validPrincipal access.actor) (abort ObjectiveDenied)
+        unless (now < access.expiresAt && validPrincipal access.actor) (abort ObjectiveDenied)
         stored <- readRow (creator, (operationKey operation)) selectOrigin
         case stored of
           Nothing -> pure Nothing
@@ -374,6 +403,7 @@ execute access identifier expected operation mutation = guarded do
       old <- readRow ((objectiveIdText identifier), (operationKey operation)) selectReceipt
       case old of
         Just (digest, outcome) -> pure (Left (if digest == fingerprint then outcome else Left ObjectiveConflict))
+        Nothing | access.settings.enabled == ObjectivesDisabled -> abort ObjectiveDenied
         Nothing -> do
           now <- Tx.statement () currentTime
           next <- prepareTransition now access expected mutation current
@@ -402,6 +432,13 @@ execute access identifier expected operation mutation = guarded do
                 when (isJust old) (throw Retry)
                 now <- Tx.statement () currentTime
                 next <- prepareTransition now access expected mutation current >>= require
+                case mutation of
+                  Internal (RetainCoordination _ scope) -> do
+                    root <- maybe (abort ObjectiveDenied) pure scope.run.rootId
+                    budget <- maybe (abort ObjectiveDenied) pure scope.context.delegationBudgetId
+                    let seed = if budget == coordinatorBudgetId identifier scope.run.identity then Just (scope.run.runId, scope.context.budgetLimit) else Nothing
+                    Budgets.enrollDelegationBudgetTx root budget seed now >>= either (const (abort ObjectiveDenied)) pure
+                  _ -> pure ()
                 let payload = toJSON (access.actor, mutation, next)
                     digest = objectivePayloadDigest payload
                     receipt = Receipt identifier operation fingerprint next.revision digest
@@ -410,6 +447,10 @@ execute access identifier expected operation mutation = guarded do
                 case mutation of
                   Internal (IngestCheckpoint assignment intent _ _) -> Tx.statement ((objectiveIdText identifier), (objectiveAssignmentIdText assignment), intent.sessionId.value, fromInteger (revisionNumber intent.throughCursor)) saveCursor
                   Internal (ProjectCheckpoint assignment intent) -> Tx.statement ((objectiveIdText identifier), (objectiveAssignmentIdText assignment), intent.sessionId.value, fromInteger (revisionNumber intent.throughCursor)) saveCursor
+                  Internal (RetainCoordination _ scope) -> do
+                    let fingerprint = executionDigestText (Coordination.scopeFingerprint scope)
+                    Tx.statement (fingerprint, objectiveIdText identifier, scope) insertScope
+                    Tx.statement (scope.run.runId.unWorkflowId, objectiveIdText identifier, toJSON (Coordination.scopeFingerprint scope)) insertScopePointer
                   Public (BindConversation conversation) -> Conversation.publishBinding next conversation receipt >>= require
                   _ -> pure ()
                 writeReceipt receipt (Right receipt)
@@ -515,6 +556,25 @@ validateTransition _now access expected mutation current = do
           pure (current & #members %~ filter ((/= principal) . (.principal)))
         BindConversation conversation -> editable >> (if validKey (conversationRefText conversation) then Right current else Left (ObjectiveInvalid "invalid conversation"))
         LinkExternal reference -> editable >> pure (current & #external %~ (\refs -> nub (refs <> [reference])))
+      Internal (RetainCoordination key scope) -> do
+        unless (scope.parentScope == coordinatorParentScope current.objectiveId scope.run.identity) (Left ObjectiveDenied)
+        unless (access.actor == RecordedAgent scope.run.identity && scope.format == V1 && scope.context.identity == scope.run.identity && scope.context.sessionId == Just scope.run.sessionId && scope.context.executionRootId == scope.run.rootId && scope.context.executionPermissions == scope.run.permittedAliases && isJust scope.context.delegationBudgetId) (Left ObjectiveDenied)
+        active
+        parent <- maybe (Left ObjectiveMissing) Right (find ((== key) . (.definition.assignmentId)) current.assignments)
+        unless (parent.definition.owner == scope.run.identity && parent.definition.state `notElem` [Done, Withdrawn] && not (null scope.workers) && length scope.workers <= WorkerInput.sessionLimit scope.maximumSessions && length (nub (map (.workerKey) scope.workers)) == length scope.workers) (Left ObjectiveConflict)
+        forM_ scope.workers \slot -> do
+          assignment <- maybe (Left ObjectiveMissing) Right (find (\candidate -> referenceFor current.objectiveId candidate.definition.assignmentId == slot.objective) current.assignments)
+          unless (assignment.definition.owner == slot.identity && assignment.definition.state `notElem` [Done, Withdrawn] && any (`elem` rolesFor current (RecordedAgent slot.identity)) [Owner, Coordinator, Worker]) (Left ObjectiveDenied)
+        let selected assignment = assignment.definition.assignmentId == key || any ((== referenceFor current.objectiveId assignment.definition.assignmentId) . (.objective)) scope.workers
+        assignments <- forM current.assignments \assignment ->
+          if not (selected assignment)
+            then pure assignment
+            else do
+              root <- maybe (Left ObjectiveDenied) Right scope.run.rootId
+              unless (isNothing assignment.definition.rootId || assignment.definition.rootId == Just root) (Left ObjectiveConflict)
+              -- The transaction supplies the root's authoritative cutoff below.
+              pure assignment
+        pure (current & #assignments .~ assignments)
       Internal (TransferSessionOwnership key intent proof) -> do
         unless (access.actor == RecordedAgent intent.actor && intent.format == V1 && Transfer.matchesFence intent proof && intent.newEpoch == advanceRevision intent.oldEpoch && intent.oldOwner /= intent.newOwner && intent.actor /= intent.newOwner) (Left ObjectiveDenied)
         actual <- versionFor current key
@@ -541,6 +601,13 @@ validateTransition _now access expected mutation current = do
 prepareTransition :: UTCTime -> Access -> StateRevision "objective" -> Mutation -> Objective -> Transaction (Either ObjectiveError Objective)
 prepareTransition now access expected mutation current = do
   checked <- validateSources current mutation
+  bounded <- case mutation of
+    Internal (RetainCoordination key scope) -> do
+      rootId <- maybe (abort ObjectiveDenied) pure scope.run.rootId
+      root <- Roots.inspectRootTx rootId >>= either (const (abort ObjectiveUnavailable)) pure
+      either (const (abort ObjectiveDenied)) pure (Resources.checkRoot now root.revision root)
+      pure (Just (key, scope, rootId, root.envelope.cutoff))
+    _ -> pure Nothing
   reports <- case mutation of
     Internal (ProjectCheckpoint key intent) -> traverse (reportedResult key intent) [receipt | WS.EventReceipt {event = WS.ResultAvailable receipt} <- intent.events]
     _ -> pure []
@@ -549,8 +616,21 @@ prepareTransition now access expected mutation current = do
     next <- validateTransition now access expected mutation current
     sources <- sequence reports
     let withReports = foldl' (\objective result -> objective & #reportedResults %~ (\previous -> filter ((/= result.assignmentId) . (.assignmentId)) previous <> [result])) next sources
-    validateSnapshot withReports
-    pure withReports
+    let bound = case bounded of
+          Nothing -> withReports
+          Just (key, scope, root, cutoff) ->
+            withReports
+              & #assignments
+              %~ map
+                ( \assignment ->
+                    if assignment.definition.assignmentId == key || any ((== referenceFor current.objectiveId assignment.definition.assignmentId) . (.objective)) scope.workers
+                      then
+                        let draft = assignment.definition & #rootId .~ Just root & #cutoff .~ Just (maybe cutoff (min cutoff) assignment.definition.cutoff)
+                         in if draft == assignment.definition then assignment else assignment & #definition .~ draft & #revision %~ advanceRevision
+                      else assignment
+                )
+    validateSnapshot bound
+    pure bound
 
 reportedResult :: ObjectiveAssignmentId -> CP.CheckpointIntent -> WS.ResultReceipt -> Transaction (Either ObjectiveError ReportedResult)
 reportedResult assignment intent receipt = do
@@ -654,6 +734,7 @@ locked :: ObjectiveId -> Transaction Objective
 locked identifier = do
   current <- readRow (objectiveIdText identifier) lockObjective >>= maybe (abort ObjectiveMissing) pure
   requireDecoded (validateSnapshot current)
+  unless (current.objectiveId == identifier) (abort ObjectiveConflict)
   pure current
 
 saveSnapshot :: Objective -> Transaction ()
@@ -805,3 +886,22 @@ selectSourceEvents = preparable "SELECT cursor,state FROM shikigami.worker_sessi
       receipt <- value
       unless (revisionNumber receipt.cursor == toInteger cursor) (Left ())
       pure receipt
+
+selectScope, selectRunScope :: Statement Text [(Text, Text, Either () Coordination.CoordinationScope)]
+selectScope = preparable "SELECT fingerprint,objective_id,scope FROM shikigami.objective_scopes WHERE fingerprint=$1" textParam (D.rowList ((,,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> jsonRow))
+selectRunScope = preparable "SELECT s.fingerprint,s.objective_id,s.scope FROM shikigami.objective_associations a JOIN shikigami.objective_scopes s ON s.objective_id=a.objective_id AND a.binding=to_jsonb(s.fingerprint) WHERE a.kind='coordination-scope-v1' AND a.source_id=$1 LIMIT 2" textParam (D.rowList ((,,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> jsonRow))
+
+insertScope :: Statement (Text, Text, Coordination.CoordinationScope) ()
+insertScope = preparable "INSERT INTO shikigami.objective_scopes(fingerprint,objective_id,scope) VALUES ($1,$2,$3)" (contrazip3 textParam textParam jsonParam) D.noResult
+
+insertScopePointer :: Statement (Text, Text, Aeson.Value) ()
+insertScopePointer = preparable "INSERT INTO shikigami.objective_associations(kind,source_id,objective_id,binding) VALUES ('coordination-scope-v1',$1,$2,$3)" (contrazip3 textParam textParam jsonParam) D.noResult
+
+coordinatorParentScope :: ObjectiveId -> AgentIdentity -> WorkerInput.WorkerCoordinate "parent-scope"
+coordinatorParentScope objective identity = WorkerInput.workerCoordinate (versionedDigest "shikigami.objective-coordinator-parent/1" (toJSON (objective, identity)))
+
+-- This is a stable technical commitment for an objective/principal scope, not
+-- a claim that the coordinate names another running workflow. The budget row
+-- records the actual first native run as its origin when admitted.
+coordinatorBudgetId :: ObjectiveId -> AgentIdentity -> DelegationBudgetId
+coordinatorBudgetId objective identity = Budgets.delegationBudgetIdFor (WorkflowId ("objective-coordinator:" <> WorkerInput.workerCoordinateText (coordinatorParentScope objective identity)))

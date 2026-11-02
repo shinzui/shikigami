@@ -168,11 +168,13 @@ library
     Shikigami.Objective.Checkpoint
     Shikigami.Objective.Command
     Shikigami.Objective.Content
+    Shikigami.Objective.Coordination
     Shikigami.Objective.Keys
     Shikigami.Objective.Live
     Shikigami.Objective.Origin
     Shikigami.Objective.Ownership
     Shikigami.Objective.Reference
+    Shikigami.Objective.Runtime
     Shikigami.Objective.Store
     Shikigami.Objective.Types
     Shikigami.ObjectiveLifecycle.BehaviorHoles
@@ -281,6 +283,7 @@ library
   -- integration; the union of both module lists matches the generated inventory.
   other-modules:
     Paths_shikigami_core
+    Shikigami.Agent.CoordinationSource
     Shikigami.AgentRun.Generated.WorkflowFacts
     Shikigami.AgentRun.Generated.WorkflowRuntime
     Shikigami.Approval.Generated.WorkflowFacts

@@ -19,8 +19,7 @@ model permissions, delegation lineage/budget, finite worker slots and objective
 references. It retains that scope by fingerprint while durable references use
 it. Reacquisition validates the pinned run and fingerprint; it never substitutes
 current instructions, another root or a newly generated scope. A declaration
-requests capabilities but supplies no grant. Production defaults to no source
-or objective/workspace provider.
+requests capabilities but supplies no grant. Production installs objective-backed scope, checkpoint and ownership adapters. Disabled tracking yields no fresh scope, and missing workspace fencing remains unavailable.
 
 One closed command owner serves Flow, Skill and operator callers. Every command
 checks current lifecycle, scope membership and fresh exact C13 authorization.
@@ -85,6 +84,41 @@ refusals produce one bounded retained failure; infrastructure uncertainty is not
 converted into a successful or cancelled effect. These repairs retain existing
 parent labels and result codecs.
 
+Plan 99 supplies the objective-backed source. `Agent/CoordinationSource.hs` reads
+accepted native run steps through Keiro's owner API, checking run identity, recorded
+agent declaration, memory session, root and permission bounds. The first admission
+also checks the immutable run/objective association, current coordinator authority,
+allowed worker declarations and identities, membership and operator-bounded slots.
+The retained scope, its indexed run pointer, original root/cutoff attachments and
+command receipt publish in the objective owner's checked transaction. It never
+allocates a root. Its parent coordinate binds objective and principal, preserving
+session reuse without silently rotating the principal.
+
+Scope publication also enrolls one delegation ledger with the original resource
+root in that transaction. Descendants keep their inherited ledger; otherwise a
+stable objective/principal commitment selects it. The ledger records the actual
+first native run as origin. Reacquisition and coordinator rotation never reseed
+its limit or consumption. Root accounting and the shared ledger both bound every
+child reservation, and replaying an accepted reservation consumes neither again.
+Publication failure rolls back ledger creation as well as assignment attachments.
+
+Reacquisition reads the exact fingerprinted body under current membership and
+coordination permission. It does not consult the source journal, replacement
+configuration or a newly generated root. Accepted scopes therefore survive source
+workflow GC and worker restarts. Each fresh child/message still checks the current
+objective assignment, owner/epoch, root, cutoff, target identity and exact action.
+Runtime callback factories select the parent recorded in the retained session;
+submitted intent actors cannot select another authenticated host.
+
+Disabling tracking refuses new scope admission, current versions for fresh worker
+work and new mutations. Authenticated readers, retained scopes and matching accepted
+receipts remain available under current permission. Recovery never selects an older
+unassociated path or allocates replacement capacity. Worker and operator composition
+share these adapters; the operator's existing-session bootstrap cannot create another
+slot. Workspace transfer remains unavailable without its independently configured,
+qualified fence provider. A deterministic fence fixture qualifies only the objective
+side of the handoff contract.
+
 ## Alternatives rejected
 
 Global mutation overlays would widen unrelated tools. Model-supplied operation
@@ -96,10 +130,8 @@ facts with terminal workflow journals would erase continuity.
 
 ## Consequences
 
-Scope providers must qualify retention, current mandate checks and exact action
-authority against the real IR-13 owner. Workspace providers must qualify fences,
-late processes and conditional writes under IR-11. The deterministic fixtures
-exercise consumer mechanics and do not satisfy those production gates. Plan 84
+Plan 99 qualifies retention, current mandate checks and exact action authority against the real IR-13 owner. Workspace providers must qualify fences,
+late processes and conditional writes under IR-11. The remaining deterministic workspace fixtures exercise consumer mechanics and do not satisfy the real workspace/joint handoff gate. Plan 84
 cannot be Complete until the real integrations pass; dependent plans keep their
 whole-child start gates. Roll forward across the new session events/phase.
 

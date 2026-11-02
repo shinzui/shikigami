@@ -66,6 +66,8 @@ import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), LoopStaleness, beat, loopStaleness)
 import Shikigami.Inspection.Consumer (ConsumerInspection)
 import Shikigami.Log qualified as Log
+import Shikigami.Objective.Runtime qualified as Objectives
+import Shikigami.Objective.Types (ObjectiveSettings)
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RuntimePolicy
@@ -150,6 +152,7 @@ data WorkerEnv = WorkerEnv
     heartbeats :: !Heartbeats,
     directory :: !DirectoryHandle,
     directoryRefresher :: !(Maybe (IO ())),
+    objectiveSettings :: !ObjectiveSettings,
     practiceReviewAttentionRecipients :: !PracticeReviewCapability.AttentionRecipientMap
   }
 
@@ -218,7 +221,7 @@ agentRunDeps env =
       AgentWorkflow.actionAuthorizer = (.actionAuthorizer) env,
       AgentWorkflow.capabilities = maybe emptyCapabilityRuntime (.capabilities) env.workspace,
       AgentWorkflow.workspace = env.workspace,
-      AgentWorkflow.coordination = Nothing,
+      AgentWorkflow.coordination = Just (Objectives.coordinationHost env.appEnv env.objectiveSettings env.directory env.actionAuthorizer env.agents env.delegationBudget Nothing),
       AgentWorkflow.agents = (.agents) env,
       AgentWorkflow.kizashi = (.kizashi) env,
       AgentWorkflow.kawa = (.kawa) env,

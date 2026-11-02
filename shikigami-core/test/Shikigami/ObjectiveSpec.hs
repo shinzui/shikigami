@@ -97,7 +97,7 @@ tests =
       testCase "dense acyclic graph stays bounded and validates" do
         validateGraph [draft (showText n) [objectiveAssignment (showText p) | p <- [1 .. n - 1]] | n <- [1 .. 128 :: Int]] @?= Right (),
       testCase "internal checkpoint and transfer tags are absent from public JSON" do
-        forM_ ["IngestCheckpoint", "ProjectCheckpoint", "TransferSessionOwnership", "TransferOwnership"] \tag ->
+        forM_ ["IngestCheckpoint", "ProjectCheckpoint", "RetainCoordination", "TransferSessionOwnership", "TransferOwnership"] \tag ->
           assertBool "private command refused" (case Aeson.fromJSON (Aeson.object ["tag" .= (tag :: Text)]) :: Aeson.Result Command of Aeson.Error _ -> True; _ -> False),
       testCase "criteria require unique, nonempty structured keys" do
         validateCriteria [Criterion (criterionKey "build") (description "build passes") Automatic JourneyOptional] @?= Right ()

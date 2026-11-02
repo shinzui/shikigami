@@ -1,6 +1,7 @@
 -- | Bounded operator inspection and explicitly keyed control commands.
 -- The protected accepted session supplies scope; CLI text never supplies a root
--- or delegation grant. Missing objective/workspace providers stay unavailable.
+-- or delegation grant. Objective providers use the configured authority; absent
+-- workspace fencing stays unavailable.
 module Shikigami.Server.Command.Workers (runWorkersInspect, runWorkersControl, runWorkersSend, runWorkersInterrupt, executeWorkerControl) where
 
 import Data.Aeson qualified as Aeson
@@ -23,6 +24,7 @@ import Shikigami.Execution.Identity (OperationId)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
+import Shikigami.Objective.Runtime qualified as Objectives
 import Shikigami.StateRevision (StateRevision)
 import Shikigami.WorkerSession.Capability
 import Shikigami.WorkerSession.Handoff (TransferServices (..))
@@ -75,15 +77,15 @@ runWorkersControl key command config = do
   let run = CoordinatorRun (WorkflowId ("operator-workers:" <> session.value)) admission.context.identity memory admission.context.executionRootId admission.context.executionPermissions
       scope = CoordinationScope V1 run admission.scope.parent admission.delegator admission.context [WorkerSlot admission.scope.workerKey admission.worker admission.identity admission.objective (Just session)] maximumSessionCapacity admission.maximumAssignments admission.mailboxLimit
       authority = CoordinationAuthority (\requested -> pure (if requested == run then Right (Just scope) else Left "foreign control scope")) (\requested pinned -> pure (if requested == run && pinned == scopeFingerprint scope then Right scope else Left "control scope unavailable"))
-      sessions = SessionRuntime env agents directory.handle (Directory.identityLifecycleAdmission directory.handle) Nothing Nothing
-      host = CoordinationHost (TransferServices sessions Nothing Nothing) authority
+      configured = Objectives.coordinationHost env config.objectiveSettings directory.handle authorizer agents config.delegationBudget Nothing
+      host = CoordinationHost configured.services authority
   result <- executeWorkerControl host authorizer scope key command
   case result of
     Right reply -> LazyChar.putStrLn (Aeson.encode reply)
     Left _ -> die "worker command refused; fresh parent authority and any required objective/workspace providers must be configured"
 
 -- | Qualified hosts use the exact same owner as Flow and Skill calls. The
--- default CLI composition has no invented IR-11/IR-13 provider.
+-- CLI composition uses the real objective provider and refuses missing workspace fencing.
 executeWorkerControl :: CoordinationHost -> ActionAuthorizer -> CoordinationScope -> OperationId -> WorkerCommand -> IO (Either SessionError WorkerReply)
 executeWorkerControl host authorizer scope key command = do
   result <- runAppIO host.services.sessions.appEnv do

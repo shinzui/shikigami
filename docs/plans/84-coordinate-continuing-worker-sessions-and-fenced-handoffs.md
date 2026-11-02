@@ -38,6 +38,11 @@ provenance:
       at: 2026-10-30T16:34:26Z
       mode: "update"
       note: "Record plan 96 workspace provider readiness while retaining the real joint handoff and IR-13 gates"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-02T06:00:10Z
+      mode: "implement"
+      note: "Record objective-backed provider acceptance from plan 99 while retaining the IR-11 joint qualification gate."
 ---
 
 # Coordinate continuing worker sessions and fenced handoffs
@@ -68,9 +73,7 @@ and implemented the concrete workspace transfer owner, retained successor
 admission and exact artifact integration. Transfer-aware adapter activation and
 native successor writes remain gated. Consume
 `Shikigami.Workspace.TransferClient.workspaceTransferClient` through the private
-peer-checked supervisor RPC; session results alone supply no fence. IR-13's
-real ownership/checkpoint provider remains unimplemented in plans 98–99 under
-MasterPlan 17. Plan 96's complete workspace-owned native matrix now passes 22
+peer-checked supervisor RPC; session results alone supply no fence. IR-13's objective-backed checkpoint, ownership and retained-scope providers are now qualified by plans 98–99 under MasterPlan 17; the separate workspace/joint qualification below remains open. Plan 96's complete workspace-owned native matrix now passes 22
 cases,
 including integration, same-owner follow-up/cleanup and a real late old-owner
 edit refusal across provider restart. See its
@@ -78,6 +81,8 @@ edit refusal across provider restart. See its
 This plan's real verified-epoch successor/ownership integration and full IR-15
 acceptance stay open; workspace-only facts cannot close them.
 
+
+2026-11-02 UTC IR-13 completion-gate evidence: [plan 99](99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md) qualifies and installs the real objective adapters. [Provider completion qualification](../evidence/plan-99/provider-completion-qualification.json) covers simultaneous sibling commits, lost acknowledgement plus local cursor failure, instruction/criteria invalidation and explicit non-commit reconciliation, immutable accepted-result references, stale checkpoint refusal after fenced owner change, and retained scopes after source workflow GC. The actual command owner opens distinct worker scopes with original roots and limits. Eleven provider cases and the full suites pass (632 core, 490 PostgreSQL, 280 worker, 96 server, 37 agent); the native gate is neutral with 168 conformance checks. The deterministic fence qualifies only objective-side receipt recovery. The IR-11 and joint real successor/late-writer/restart gate remains open, this plan remains In Progress, and plan 85 still waits for this whole child.
 
 ## Surprises & Discoveries
 
@@ -196,11 +201,7 @@ actual coordinator admission and old/new deployment branches. Session fixtures
 also repair a registered child missing its input and acknowledge a result
 committed before handoff without consulting a replacement owner.
 
-Completion remains explicitly gated on a real IR-13 current-objective and
-checkpoint/ownership provider, a trusted retained coordination association
-source, and real IR-11 workspace/process fencing with late-write/restart
-qualification. The requests remain proposed with no selected implementation
-owners. This plan does not supply a task store or repository provider. Plan 85
+The IR-13 current-objective, checkpoint/ownership and retained coordination source gate is satisfied by plan 99. Completion remains gated on real IR-11 workspace/process fencing with joint late-write/restart and verified successor qualification. The requests remain separately owned; this does not close IR-15 or change the child start gates. This plan does not supply a task store or repository provider. Plan 85
 requires this whole child Complete, so it and its dependents cannot start at
 this checkpoint.
 

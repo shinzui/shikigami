@@ -19,7 +19,7 @@ fresh exact action authority for recorded agents. Its access value is private to
 `shikigami-core` and has no JSON decoder. Verified API callers, recorded agents
 and configured local operators remain distinct identities. Development HTTP
 authentication being disabled never constructs a verified objective caller.
-Objective tracking defaults to disabled; agent creation defaults to denied.
+Objective tracking defaults to disabled for fresh work; agent creation defaults to denied. Disabling tracking retains authenticated inspection and accepted-receipt recovery under current membership and exact action authority. Fresh creation and mutations still refuse, and current worker versions are unavailable for admitting new work.
 
 `Shikigami.Objective.Store` is the single conditional persistence owner. It checks
 current membership and command permission under the objective row lock before

@@ -44,6 +44,7 @@ admitRunTx admission settings actor identity run reference = do
         Right () <- Store.validateSnapshot current,
         current.objectiveId == reference.objectiveId,
         Store.mayCoordinate (Access actor settings now [] Nothing) current,
+        admission == RetainedRun || settings.enabled == ObjectivesEnabled,
         admission == RetainedRun || current.status `elem` [Open, Blocked],
         Just assignment <- find ((== reference.assignmentId) . (.definition.assignmentId)) current.assignments,
         admission == RetainedRun || assignment.definition.owner == identity,

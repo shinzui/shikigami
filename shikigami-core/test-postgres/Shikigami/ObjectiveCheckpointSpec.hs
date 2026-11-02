@@ -1,39 +1,58 @@
 module Shikigami.ObjectiveCheckpointSpec (tests) where
 
 import Contravariant.Extras (contrazip2)
+import Control.Concurrent.Async (concurrently)
+import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString (ByteString)
 import Data.Either (isLeft)
 import Data.Generics.Labels ()
 import Data.IORef
-import Data.List (find)
+import Data.List (find, nub)
 import Data.Time (addUTCTime)
 import Effectful (Eff)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (preparable)
 import Hasql.Transaction qualified as Tx
+import Keiro.Workflow (StepName (..), runWorkflowWith, step)
+import Keiro.Workflow qualified as Native
+import Keiro.Workflow.Gc (WorkflowGcPolicy (..), gcWorkflowsOnce)
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests, denyAllActionAuthorizer)
+import Shikigami.Agent.Decl (AgentDecl (..), defaultDelegationBudget)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
+import Shikigami.Agent.Run.Key (parseRunKey)
+import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent), runJobWorkflowId)
+import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
+import Shikigami.Delegation.BudgetStore qualified as Budgets
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
+import Shikigami.Execution.Selection (ExecutionSelection, ExecutionSelectionFailure)
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
+import Shikigami.Objective.Association qualified as Association
 import Shikigami.Objective.Capability qualified as O
 import Shikigami.Objective.Checkpoint (checkpointOperation, checkpointProvider, checkpointRejection)
 import Shikigami.Objective.Command
+import Shikigami.Objective.Coordination (coordinationAuthority)
 import Shikigami.Objective.Ownership (ownershipProvider)
+import Shikigami.Objective.Reference (ObjectiveAssociation (..))
+import Shikigami.Objective.Runtime qualified as ObjectiveRuntime
 import Shikigami.Objective.Store qualified as Objectives
 import Shikigami.Objective.Types
 import Shikigami.Prelude
+import Shikigami.RouterWorkflowSpec qualified as RouterFixture
+import Shikigami.WorkerSession.Capability qualified as Worker
 import Shikigami.WorkerSession.Checkpoint qualified as CP
+import Shikigami.WorkerSession.Handoff (TransferServices (..))
 import Shikigami.WorkerSession.Handoff qualified as Handoff
 import Shikigami.WorkerSession.Input qualified as Input
 import Shikigami.WorkerSession.Integration qualified as Integration
@@ -42,6 +61,7 @@ import Shikigami.WorkerSession.Transfer qualified as Transfer
 import Shikigami.WorkerSession.Types qualified as WS
 import Shikigami.WorkerSession.Workflow (SessionRuntime (..))
 import Shikigami.WorkerSessionStoreSpec qualified as Fixture
+import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Shikigami.Workspace.Value (workspaceCoordinate)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
@@ -97,10 +117,54 @@ tests fixture =
           _ <- right =<< run env (O.executeCommand ownerHost objective final.revision (fixtureOperationId "changed") (ReviseInstructions (instructions "changed")))
           restarted.commit first >>= (@?= CP.CheckpointAccepted acceptedA)
           restarted.commit second >>= (@?= CP.CheckpointAccepted acceptedB)
+          let retired = checkpointProvider env actor (host (RecordedAgent actor) & #settings . #enabled .~ ObjectivesDisabled)
+          retired.commit first >>= (@?= CP.CheckpointAccepted acceptedA)
+          retired.current a.objective >>= \value -> assertBool "disabled tracking admits no fresh checkpoint version" (isLeft value)
           integrate restarted a >>= (@?= Right (Integration.EventsIntegrated acceptedA (revision 3)))
           current <- get env objective
           current.reportedResults @?= final.reportedResults
           current.revision @?= advanceRevision final.revision,
+      testCase "concurrent sibling consumers preserve both results and explicitly reconcile a raced criteria change" $
+        withPair fixture \env objective actor a b -> do
+          let agentHost = host (RecordedAgent actor)
+              provider = checkpointProvider env actor agentHost
+              services = runtime env provider & #rejections .~ Just (\identity -> checkpointRejection env identity agentHost)
+              integrate admission key = run env (Integration.integrateEvents services (WS.sessionIdFor admission) key)
+          first <- prepare env provider a
+          second <- prepare env provider b
+          first.expected.revision @?= second.expected.revision
+          (left, rightResult) <- concurrently (integrate a first.operationId) (integrate b second.operationId)
+          receiptA <- integrated left
+          receiptB <- integrated rightResult
+          assertBool "independent commits have distinct increasing revisions" (receiptA.revision /= receiptB.revision && min receiptA.revision receiptB.revision == advanceRevision first.expected.revision)
+          retained <- get env objective
+          length retained.reportedResults @?= 2
+          next <- prepareFollowing env provider a
+          gate <- newEmptyMVar
+          let criteria = [Criterion (checked parseCriterionKey "review") (checked parseCriterionDescription "review under revised integration criteria") HumanVerifiable JourneyOptional]
+          (_, outcome) <-
+            concurrently
+              (do changed <- run env (O.executeCommand ownerHost objective retained.revision (fixtureOperationId "criteria-change") (ReviseCriteria criteria)); putMVar gate (); right changed)
+              (takeMVar gate >> integrate a next.operationId)
+          outcome @?= Right Integration.EventsConflict
+          consumed env a >>= (@?= revision 3)
+          changed <- get env objective
+          changed.reportedResults @?= retained.reportedResults
+          version <- right =<< provider.current a.objective
+          metadata <- state env a
+          let replacement = fixtureOperationId "criteria-revalidated"
+              decision = CP.CheckpointRevalidation version.revision version.assignmentRevision version.criteriaRevision (checked Input.parseInstructionText "Revalidated the retained output against the changed criteria; it remains an observation")
+          run env (Integration.reconcileEvents services (WS.sessionIdFor a) metadata.revision metadata.epoch replacement next.operationId decision) >>= (@?= Right replacement)
+          result <- right =<< integrate a (fixtureOperationId "recover-revalidated-criteria")
+          case result of
+            Integration.EventsIntegrated receipt cursor -> do
+              cursor @?= revision 6
+              receipt.operationId @?= replacement
+            _ -> assertFailure (show result)
+          final <- get env objective
+          length final.reportedResults @?= 2
+          assertBool "the sibling's already accepted result is unchanged" (filter ((== assignment "b") . (.assignmentId)) final.reportedResults == filter ((== assignment "b") . (.assignmentId)) retained.reportedResults)
+          assertBool "revalidated observations cannot complete the objective" (isNothing final.acceptance && null final.evidence),
       testCase "instruction changes and reverts retain definitive conflicts without source consumption" $
         withPair fixture \env objective actor a _ -> do
           let provider = checkpointProvider env actor (host (RecordedAgent actor))
@@ -265,6 +329,69 @@ tests fixture =
           current <- state env a
           current.owner @?= intent.newOwner
           current.epoch @?= intent.newEpoch,
+      testCase "coordination scopes retain native admission, root and limits across source GC and configuration changes" $
+        withPair fixture \env objective actor a _ -> do
+          (coordinator, sourceAgent) <- retainCoordinatorSource env objective actor a
+          let settings = defaultObjectiveSettings & #enabled .~ ObjectivesEnabled
+              workers = map RouterFixture.successSpecialist ["worker-a", "worker-b"]
+              authority = coordinationAuthority env settings disabledDirectoryHandle allowAllActionAuthorizerForTests workers defaultDelegationBudget
+          initial <- right =<< authority.admit coordinator
+          scope <- maybe (fail "objective coordinator scope absent") pure initial
+          let configured = ObjectiveRuntime.coordinationHost env settings disabledDirectoryHandle allowAllActionAuthorizerForTests workers defaultDelegationBudget Nothing
+          grant <- right =<< run env (Worker.resolveGrant configured allowAllActionAuthorizerForTests coordinator (Just (Worker.scopeFingerprint scope)))
+          permit <- maybe (fail "configured coordinator grant missing") pure grant
+          found <- forM (zip scope.workers ["find-a", "find-b"]) \(slot, key) -> do
+            reply <- right =<< run env (Worker.executeCommand configured allowAllActionAuthorizerForTests permit (fixtureOperationId key) (Worker.FindWorker slot.workerKey))
+            case reply of Worker.WorkerFound state -> pure state; _ -> fail "configured worker was not found"
+          assertBool "configured workers have distinct private session scopes" (length (nub (map (.sessionId) found)) == 2)
+          map (.owner) found @?= map (.identity) scope.workers
+          scope.run @?= coordinator
+          scope.agent @?= sourceAgent
+          scope.context.executionRootId @?= coordinator.rootId
+          budget <- maybe (fail "shared budget was not retained") pure scope.context.delegationBudgetId
+          budget @?= Objectives.coordinatorBudgetId objective actor
+          let rootId = fromMaybe (error "missing root") coordinator.rootId
+              child = WorkflowId "scope-budget-child"
+          reservedAt <- getCurrentTime
+          _ <- right =<< run env (Budgets.reserveEnrolledDelegationSlots rootId budget Nothing (child :| []) reservedAt)
+          beforeReacquire <- right =<< run env (Roots.inspectRoot rootId)
+          map (.identity) scope.workers @?= map (compatibilityIdentity . checked mkAgentName) ["worker-a", "worker-b"]
+          assertBool "workers address separate assignment references" (length (nub (map (.objective) scope.workers)) == 2)
+          goal <- get env objective
+          assertBool "scope admission binds only the original resource root" (all ((== coordinator.rootId) . (.definition.rootId)) goal.assignments)
+          root <- right =<< run env (Roots.inspectRoot (fromMaybe (error "missing root") coordinator.rootId))
+          assertBool "assignment cutoffs stay within the resource envelope" (all (maybe False (<= root.envelope.cutoff) . (.definition.cutoff)) goal.assignments)
+          now <- getCurrentTime
+          _ <- run env (gcWorkflowsOnce (addUTCTime 1 now) (WorkflowGcPolicy 0 10))
+          let changed = coordinationAuthority env settings disabledDirectoryHandle allowAllActionAuthorizerForTests [] defaultDelegationBudget
+          changed.reacquire coordinator (Worker.scopeFingerprint scope) >>= (@?= Right scope)
+          changed.admit coordinator >>= (@?= Right (Just scope))
+          _ <- right =<< run env (Budgets.reserveEnrolledDelegationSlots rootId budget Nothing (child :| []) now)
+          run env (Roots.inspectRoot rootId) >>= (@?= Right beforeReacquire)
+          let retired = coordinationAuthority env (settings & #enabled .~ ObjectivesDisabled) disabledDirectoryHandle allowAllActionAuthorizerForTests [] defaultDelegationBudget
+          retired.reacquire coordinator (Worker.scopeFingerprint scope) >>= (@?= Right scope)
+          retired.admit coordinator >>= (@?= Right Nothing)
+          changed.reacquire (coordinator & #permittedAliases .~ Nothing) (Worker.scopeFingerprint scope) >>= assertScopeLeft
+          _ <- right =<< run env (O.executeCommand ownerHost objective goal.revision (fixtureOperationId "revoke-coordinator") (RevokeMember (RecordedAgent actor)))
+          changed.reacquire coordinator (Worker.scopeFingerprint scope) >>= assertScopeLeft,
+      testCase "scope publication rolls back root attachment and refuses forged native coordinates" $
+        withPair fixture \env objective actor a _ -> do
+          (coordinator, _) <- retainCoordinatorSource env objective actor a
+          let settings = defaultObjectiveSettings & #enabled .~ ObjectivesEnabled
+              authority = coordinationAuthority env settings disabledDirectoryHandle allowAllActionAuthorizerForTests (map RouterFixture.successSpecialist ["worker-a", "worker-b"]) defaultDelegationBudget
+          authority.admit (coordinator & #identity .~ compatibilityIdentity (checked mkAgentName "worker-a")) >>= assertScopeLeft
+          authority.admit (coordinator & #rootId .~ Nothing) >>= assertScopeLeft
+          authority.admit (coordinator & #permittedAliases .~ Nothing) >>= assertScopeLeft
+          before <- get env objective
+          sql env "CREATE FUNCTION shikigami.reject_scope_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected scope publication failure'; END $$; CREATE TRIGGER reject_scope_fixture BEFORE INSERT ON shikigami.objective_scopes FOR EACH ROW EXECUTE FUNCTION shikigami.reject_scope_fixture()"
+          authority.admit coordinator >>= assertScopeLeft
+          get env objective >>= (@?= before)
+          now <- getCurrentTime
+          let budget = Objectives.coordinatorBudgetId objective actor
+          run env (Budgets.reserveDelegationSlot budget Nothing (WorkflowId "rollback-budget-probe") now) >>= (@?= Left (Budgets.DelegationBudgetLedgerMissing budget))
+          sql env "DROP TRIGGER reject_scope_fixture ON shikigami.objective_scopes"
+          scope <- right =<< authority.admit coordinator
+          assertBool "same admission recovers after rollback" (isJust scope),
       testCase "old objective JSON omits observations and decodes without inventing them" $
         withPair fixture \env objective _ _ _ -> do
           current <- get env objective
@@ -355,3 +482,48 @@ revision = checked parseRevision
 
 assertLeft :: (Show a) => Either WS.SessionError a -> IO ()
 assertLeft = either (const (pure ())) (assertFailure . show)
+
+-- The fixture publishes the native owner's accepted step values through Keiro,
+-- using real association admission and a real resource root. No model input
+-- supplies this context; scope persistence/recovery uses the production owner.
+retainCoordinatorSource :: AppEnv -> ObjectiveId -> AgentIdentity -> WS.SessionAdmission -> IO (Worker.CoordinatorRun, AgentDecl)
+retainCoordinatorSource env objective actor worker = do
+  current <- get env objective
+  let parent = AssignmentDraft (assignment "coordinator") (instructions "coordinate") [] actor Pending Nothing Nothing Nothing
+      declaration = worker.delegator
+  _ <- right =<< run env (O.executeCommand ownerHost objective current.revision (fixtureOperationId "parent-assignment") (SetAssignments (map (.definition) current.assignments <> [parent])))
+  forM_ (zip ["worker-a", "worker-b"] [4, 5]) \(name, next) -> do
+    void (right =<< run env (O.executeCommand ownerHost objective (revision (next - 1)) (fixtureOperationId ("grant-" <> name)) (GrantMember (RecordedAgent (compatibilityIdentity (checked mkAgentName name))) [Worker])))
+  now <- getCurrentTime
+  memory <- maybe (fail "source session missing") pure worker.context.sessionId
+  let reference = ObjectiveAssociation objective parent.assignmentId
+      job = RunJob declaration.name actor TriggeredByEvent now Aeson.Null (checked parseRunKey "objective-coordinator-source") Nothing Nothing Nothing [declaration.name] Nothing worker.context.executionPermissions worker.context.executionRootId Nothing (Just reference) AgentWorkflowRoute
+      workflow = runJobWorkflowId job
+      coordinator = Worker.CoordinatorRun workflow actor memory worker.context.executionRootId worker.context.executionPermissions
+  right =<< run env (runTransaction (Association.admitRunTx Association.NewRun (defaultObjectiveSettings & #enabled .~ ObjectivesEnabled) (VerifiedCaller (checked parseCallerId "owner")) actor workflow reference))
+  outcome <-
+    run
+      env
+      ( runWorkflowWith (shikigamiWorkflowRunOptions env) agentRunWorkflowName workflow do
+          _ <- step (StepName "ingest-job") (pure job)
+          _ <- step (StepName "lookup-agent") (pure (Just declaration))
+          _ <- step (StepName "resolve-execution-selection") (pure (Right Nothing :: Either ExecutionSelectionFailure (Maybe ExecutionSelection)))
+          _ <- step (StepName "open-session") (pure memory)
+          pure ()
+      )
+  case outcome of Native.Completed () -> pure (); _ -> assertFailure "native source fixture did not complete"
+  pure (coordinator, declaration)
+
+assertScopeLeft :: (Show a) => Either Text a -> IO ()
+assertScopeLeft = either (const (pure ())) (assertFailure . show)
+
+prepareFollowing :: AppEnv -> CP.CheckpointProvider -> WS.SessionAdmission -> IO CP.CheckpointIntent
+prepareFollowing env provider admission = do
+  let session = WS.sessionIdFor admission
+  access <- right =<< run env (Sessions.authorizeSession session admission.context.identity (pure (Right ())))
+  before <- state env admission
+  version <- right =<< provider.current admission.objective
+  (_, message) <- right =<< run env (Sessions.acceptMessage access before.revision before.epoch (fixtureOperationId "following-send") (WS.Instruction V1 WS.FollowUp (checked Input.parseInstructionText "follow-up") version.revision version.assignmentRevision version.criteriaRevision Nothing))
+  _ <- right =<< run env (Sessions.startAssignment access (advanceRevision before.revision) before.epoch (fixtureOperationId "following-start") message.assignmentId)
+  _ <- right =<< run env (Sessions.recordResult access (advanceRevision (advanceRevision before.revision)) before.epoch (fixtureOperationId "following-result") (WS.AssignmentResult V1 message.assignmentId WS.AssignmentSucceeded Nothing Aeson.Null [Input.artifactReference "following-artifact"]))
+  snd <$> (right =<< run env (Sessions.prepareCheckpoint access (advanceRevisions 3 before.revision) before.epoch (fixtureOperationId "following-checkpoint") version before.consumedCursor (advanceRevisions 3 before.eventCursor)))

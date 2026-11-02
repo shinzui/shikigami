@@ -10,6 +10,7 @@ module Shikigami.Objective.Capability
     resolveAssignment,
     readCheckpointVersion,
     readInternalReceipt,
+    lookupCoordinationScope,
     executeCommand,
     executeInternal,
     readCommandReceipt,
@@ -31,6 +32,7 @@ import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Principal (identityText)
 import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Execution.Coordinate (ExecutionDigest)
 import Shikigami.Execution.Identity (OperationId)
 import Shikigami.Objective.Authority (Access (..))
 import Shikigami.Objective.Command
@@ -39,6 +41,7 @@ import Shikigami.Objective.Reference (ObjectiveAssociation)
 import Shikigami.Objective.Store qualified as Store
 import Shikigami.Objective.Types
 import Shikigami.Prelude
+import Shikigami.WorkerSession.Capability qualified as Coordination
 import Shikigami.WorkerSession.Checkpoint qualified as CP
 import Shikigami.WorkerSession.Types qualified as WS
 
@@ -58,7 +61,7 @@ admit host label semantic = do
     authenticated <- host.authenticate
     case authenticated of
       Left err -> pure (Left err)
-      Right actor | host.settings.enabled == ObjectivesEnabled && validPrincipal actor -> do
+      Right actor | validPrincipal actor -> do
         exact <- case actor of
           RecordedAgent identity -> case (identityText identity, mkCapabilityToolTarget "shikigami.objectives" "1" (label <> "-" <> Text.replace ":" "-" (versionedDigest "shikigami.objective-action/1" semantic))) of
             (Right principal, Right target) -> host.actions.authorize (declarationCoordinate principal) (InvokeCapabilityTool target) <&> either (const (Left ObjectiveDenied)) (const (Right ()))
@@ -108,6 +111,11 @@ readInternalReceipt host objective expected operation command = do
   grant <- liftIO (admit host (commandTag (Internal command)) (toJSON (objective, expected, operation, Internal command)))
   either (pure . Left) (\access -> Store.readMutationReceipt access objective expected operation (Internal command)) grant
 
+lookupCoordinationScope :: (Store.ObjectiveEffects es) => ObjectiveHost -> Coordination.CoordinatorRun -> Maybe (ExecutionDigest "coordination-scope") -> Eff es (Either ObjectiveError (Maybe Coordination.CoordinationScope))
+lookupCoordinationScope host run pinned = do
+  grant <- liftIO (admit host "lookup-coordination-scope" (toJSON (run, pinned)))
+  either (pure . Left) (\access -> Store.lookupCoordinationScope access run pinned) grant
+
 executeCommand :: (Store.ObjectiveEffects es) => ObjectiveHost -> ObjectiveId -> StateRevision "objective" -> OperationId -> Command -> Eff es (Either ObjectiveError Receipt)
 executeCommand host objective expected operation command = execute host objective expected operation (Public command)
 
@@ -124,6 +132,7 @@ execute host objective expected operation command = do
       case original of
         Left err -> pure (Left err)
         Right (Just _) -> Store.execute access objective expected operation command
+        Right Nothing | host.settings.enabled == ObjectivesDisabled -> pure (Left ObjectiveDenied)
         Right Nothing -> do
           models <- case command of
             Public BindConversation {} -> Conversation.checkMemoryModels

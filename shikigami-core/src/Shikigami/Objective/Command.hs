@@ -6,6 +6,7 @@ import Data.Aeson qualified as Aeson
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Objective.Types
 import Shikigami.Prelude
+import Shikigami.WorkerSession.Capability (CoordinationScope)
 import Shikigami.WorkerSession.Checkpoint (CheckpointIntent)
 import Shikigami.WorkerSession.Transfer (FenceProof, TransferIntent)
 
@@ -37,6 +38,7 @@ instance FromJSON Command where
 data InternalCommand
   = IngestCheckpoint !ObjectiveAssignmentId !CheckpointIntent ![EvidenceInput] ![UnresolvedOperation]
   | ProjectCheckpoint !ObjectiveAssignmentId !CheckpointIntent
+  | RetainCoordination !ObjectiveAssignmentId !CoordinationScope
   | TransferSessionOwnership !ObjectiveAssignmentId !TransferIntent !FenceProof
   | TransferOwnership !ObjectiveAssignmentId !(StateRevision "worker-owner") !AgentIdentity
   deriving stock (Eq, Show, Generic)
@@ -65,6 +67,7 @@ commandTag = \case
     LinkExternal {} -> "link-external"
   Internal IngestCheckpoint {} -> "ingest-checkpoint"
   Internal ProjectCheckpoint {} -> "project-checkpoint"
+  Internal RetainCoordination {} -> "retain-coordination"
   Internal TransferSessionOwnership {} -> "transfer-session-ownership"
   Internal TransferOwnership {} -> "transfer-ownership"
 

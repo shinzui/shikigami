@@ -20,6 +20,7 @@ module Shikigami.Delegation.BudgetStore
     reserveDelegationSlot,
     reserveDelegationSlots,
     reserveEnrolledDelegationSlots,
+    enrollDelegationBudgetTx,
   )
 where
 
@@ -152,6 +153,26 @@ reserveDelegationSlotsTx enrolled budgetId seed childWorkflowIds now = do
             )
   where
     uniqueChildWorkflowIds = NonEmpty.toList (NonEmpty.nub childWorkflowIds)
+
+-- | Admit a shared budget without inventing a child reservation. Composing
+-- owners publish this enrollment with their retained scope in one transaction.
+-- A supplied descendant budget must already belong to the same resource root.
+-- Existing limits and consumption are never replaced by the supplied seed.
+enrollDelegationBudgetTx :: ExecutionRootId -> DelegationBudgetId -> Maybe (WorkflowId, DelegationBudget) -> UTCTime -> Tx.Transaction (Either BudgetReservationError ())
+enrollDelegationBudgetTx root budgetId seed now = do
+  inspected <- Resources.inspectRootTx root
+  case inspected of
+    Left err -> Tx.condemn >> pure (Left (DelegationResourceRefused err))
+    Right _ -> do
+      traverse_ (\(workflow, limit) -> Tx.statement (budgetId, workflow, limit, now) insertBudgetStatement) seed
+      stored <- Tx.statement budgetId lockBudgetStatement
+      case stored of
+        Nothing -> Tx.condemn >> pure (Left (DelegationBudgetLedgerMissing budgetId))
+        Just (_, _, Just (Right bound)) | bound == root -> pure (Right ())
+        Just (_, _, Nothing) | isJust seed -> do
+          bound <- Tx.statement (budgetId, executionRootIdText root, True) bindRootStatement
+          if bound then pure (Right ()) else Tx.condemn >> pure (Left (DelegationResourceRefused Resources.IdentityConflict))
+        _ -> Tx.condemn >> pure (Left (DelegationResourceRefused Resources.IdentityConflict))
 
 -- | Acquire the resource root first, then the historical ledger. Failure at
 -- either ceiling rolls both owners back before any child can be spawned.

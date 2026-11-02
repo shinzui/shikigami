@@ -1,0 +1,39 @@
+{
+  "scope": "Plan 99 EP-2 completion: trusted associations/origins, real checkpoint and ownership adapters, explicit reconciliation, retained native-source coordination scopes, and worker/operator production composition.",
+  "baseline": "d24fdb9",
+  "qualified_at": "2026-11-02 UTC",
+  "suites": {
+    "shikigami-core-test": 632,
+    "shikigami-core-postgres-test": 490,
+    "shikigami-server-test": 96,
+    "shikigami-workers-test": 280,
+    "shikigami-agent-test": 37
+  },
+  "provider_scenarios": 11,
+  "checks": [
+    "just keiro-gate d24fdb9",
+    "python3 tools/style/check_haskell.py",
+    "bash tools/check-migration-schema-isolation.sh",
+    "cabal build all --offline",
+    "git diff --check"
+  ],
+  "native_conformance_checks": 168,
+  "native_diff": "neutral; no findings",
+  "replay_impact": "replay-neutral",
+  "notes": [
+    "Native accepted-run input fixture uses the Keiro owner API; scope, objective, session, resource, receipt and integration owners are real.",
+    "Simultaneous sibling consumers and a held criteria-change race qualify assignment-scoped concurrency and explicit revalidation.",
+    "Scope rollback, source workflow GC, configuration changes, revoked membership, forged coordinates, private worker sessions and disabled-feature receipt recovery are covered.",
+    "Shared budget enrollment rolls back with rejected scope publication; source GC and configuration changes preserve the same ledger and replayed reservations consume no new root or delegation capacity.",
+    "Workspace fencing is absent in production composition; the deterministic fence qualifies only objective-side handoff receipts."
+  ],
+  "gate_updates": [
+    "Plan 84 IR-13 provider gate satisfied; IR-11/joint qualification remains open.",
+    "MasterPlan 14 EP-4 remains In Progress; later whole-child dependencies unchanged."
+  ],
+  "remaining": [
+    "plans 100 and 101 user-facing/durable capabilities",
+    "plan 102 complete no-Rei and IR-13 lifecycle qualification",
+    "real IR-11/joint workspace qualification outside this MasterPlan"
+  ]
+}

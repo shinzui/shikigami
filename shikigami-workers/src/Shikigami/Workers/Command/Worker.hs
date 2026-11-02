@@ -201,6 +201,7 @@ runWorkerCmdWith resumeBudget config = do
                 heartbeats = registry,
                 directory,
                 directoryRefresher,
+                objectiveSettings = config.objectiveSettings,
                 practiceReviewAttentionRecipients = (.practiceReviewAttentionRecipients) config
               }
       case resumeBudget of
